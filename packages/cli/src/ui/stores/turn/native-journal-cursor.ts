@@ -9,16 +9,27 @@ import {
   rowTreeRootOf,
   type RowTreeRootRef,
 } from '@vybestack/llxprt-code-core/journal/rowTreeReader.js';
-import { readStoredRow } from '@vybestack/llxprt-code-core/journal/rowReads.js';
-import { ROW_SPEAKER } from '@vybestack/llxprt-code-core/journal/rowRecord.js';
+import {
+  readRowIds,
+  readStoredRow,
+} from '@vybestack/llxprt-code-core/journal/rowReads.js';
+import {
+  ROW_ID_KIND,
+  ROW_SPEAKER,
+} from '@vybestack/llxprt-code-core/journal/rowRecord.js';
 import { decodeStoredRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RowEntry } from '@vybestack/llxprt-code-core/journal/rowEntry.js';
+import {
+  ROW_ENTRY_NO_CHRONOLOGY_SEQ,
+  type RowEntry,
+} from '@vybestack/llxprt-code-core/journal/rowEntry.js';
 import type { HistoryItem } from '../../types.js';
 import { iContentToHistoryItems } from '../../utils/iContentToHistoryItems.js';
 import { rowIdentityKey } from '../../utils/rowIdentity.js';
 import type { DisplayJournalEntry } from './journal-page-file.js';
 import type { ProjectedJournalOptions } from './projected-journal-source.js';
+import { entryByLabel } from '@vybestack/llxprt-code-core/journal/rowTreeQueries.js';
+import { NativeResponseIndex } from './native-response-index.js';
 
 interface Position {
   readonly row: number;
@@ -37,6 +48,8 @@ export class NativeJournalCursor {
   private retained: HistoryItem[] = [];
   private firstOffset: number | null = null;
   private initialPage: LocatedEntry[] | undefined;
+  private responseIndex: NativeResponseIndex;
+  private group: { readonly start: number; readonly end: number } | undefined;
 
   private constructor(
     private reader: JournalReader,
@@ -44,6 +57,7 @@ export class NativeJournalCursor {
   ) {
     this.start = { row: this.rows, item: 0 };
     this.end = this.start;
+    this.responseIndex = new NativeResponseIndex(reader);
   }
   static async open(
     path: string,
@@ -113,6 +127,8 @@ export class NativeJournalCursor {
     }
   }
   private async groupStart(row: number): Promise<number> {
+    if (this.group && row >= this.group.start && row < this.group.end)
+      return this.group.start;
     while (
       row > 0 &&
       (await entryAt(this.reader, this.root(), row)).speaker ===
@@ -122,6 +138,7 @@ export class NativeJournalCursor {
     return row;
   }
   private async groupEnd(row: number): Promise<number> {
+    if (this.group?.start === row) return this.group.end;
     let end = row + 1;
     for await (const entry of iterateRowEntries(
       this.reader,
@@ -131,6 +148,7 @@ export class NativeJournalCursor {
       if (entry.speaker !== ROW_SPEAKER.tool) break;
       end++;
     }
+    this.group = { start: row, end };
     return end;
   }
   private displayEntry(
@@ -159,13 +177,30 @@ export class NativeJournalCursor {
         }
       : { ...common, kind: 'projected', rows, item };
   }
-  private async responsesFor(
-    wanted: ReadonlySet<string>,
+  private async responseEntries(
+    calls: ReadonlySet<string>,
     from: number,
     end: number,
-  ): Promise<Map<string, IContent>> {
-    const responses = new Map<string, IContent>();
-    if (wanted.size === 0) return responses;
+  ): Promise<Map<string, RowEntry>> {
+    const responses = new Map<string, RowEntry>();
+    if (calls.size === 0 || from === end) return responses;
+    if (this.reader.trailer?.rootAggregate.curated === this.rows) {
+      const first = await entryAt(this.reader, this.root(), from);
+      const last = await entryAt(this.reader, this.root(), end - 1);
+      for (const id of calls) {
+        const label = await this.responseIndex.last(
+          id,
+          first.label,
+          last.label + 1n,
+        );
+        if (label === undefined) continue;
+        const entry = await entryByLabel(this.reader, this.root(), label);
+        if (entry === undefined)
+          throw new Error('Indexed native response row is absent');
+        responses.set(id, entry);
+      }
+      return responses;
+    }
     let ordinal = from;
     for await (const entry of iterateRowEntries(
       this.reader,
@@ -173,13 +208,42 @@ export class NativeJournalCursor {
       from,
     )) {
       if (ordinal++ >= end) break;
-      const response = await this.read(entry);
-      for (const block of response.blocks) {
-        if (block.type === 'tool_response' && wanted.has(block.callId))
-          responses.set(block.callId, { ...response, blocks: [block] });
-      }
+      this.options.signal?.throwIfAborted();
+      const ids = await readRowIds(this.reader, entry);
+      for (const [index, id] of ids.rawIds.entries())
+        if (
+          ids.header.ids[index].kind === ROW_ID_KIND.response &&
+          calls.has(id)
+        )
+          responses.set(id, entry);
     }
     return responses;
+  }
+  private async responsesFor(
+    wanted: ReadonlySet<string>,
+    entries: ReadonlyMap<string, RowEntry>,
+  ): Promise<Map<string, IContent>> {
+    const responses = new Map<string, IContent>();
+    for (const id of wanted) {
+      const entry = entries.get(id);
+      if (entry === undefined) continue;
+      const response = await this.read(entry);
+      for (const block of response.blocks)
+        if (block.type === 'tool_response' && block.callId === id)
+          responses.set(id, { ...response, blocks: [block] });
+    }
+    return responses;
+  }
+  private responseSpan(
+    entries: ReadonlyMap<string, RowEntry>,
+  ): number | undefined {
+    let end: number | undefined;
+    for (const entry of entries.values()) {
+      if (entry.chronologySeq === ROW_ENTRY_NO_CHRONOLOGY_SEQ) continue;
+      const seq = Number(entry.chronologySeq);
+      end = Math.max(end ?? seq, seq);
+    }
+    return end;
   }
   private async *projectGroup(from: number): AsyncGenerator<LocatedEntry> {
     const first = await entryAt(this.reader, this.root(), from);
@@ -189,6 +253,13 @@ export class NativeJournalCursor {
     let itemIndex = 0;
     try {
       const calls = opener.blocks.filter((block) => block.type === 'tool_call');
+      const callIds = new Set(calls.map((call) => call.id));
+      const responseEntries = await this.responseEntries(
+        callIds,
+        from + 1,
+        end,
+      );
+      const spanEnd = this.responseSpan(responseEntries);
       for (
         let callStart = 0;
         callStart === 0 || callStart < calls.length;
@@ -197,8 +268,7 @@ export class NativeJournalCursor {
         const selected = calls.slice(callStart, callStart + 16);
         const responses = await this.responsesFor(
           new Set(selected.map((call) => call.id)),
-          from + 1,
-          end,
+          responseEntries,
         );
         const page: IContent = {
           ...opener,
@@ -212,8 +282,14 @@ export class NativeJournalCursor {
         const items = iContentToHistoryItems([page, ...responses.values()]);
         for (const item of items) {
           const identity = item.rowIdentity;
+          const spanStart = opener.metadata?.chronology?.seq;
           const projected: HistoryItem = {
             ...item,
+            ...(item.type === 'tool_group' &&
+            spanStart !== undefined &&
+            spanEnd !== undefined
+              ? { seqSpan: [spanStart, Math.max(spanStart, spanEnd)] }
+              : {}),
             ...(identity && identity.kind !== 'pending'
               ? {
                   rowIdentity: {
@@ -336,8 +412,11 @@ export class NativeJournalCursor {
   async refreshFileEnd(): Promise<void> {
     this.options.signal?.throwIfAborted();
     const next = await openJournalReadOnly(this.reader.path);
+    if (next.trailer?.groupTag !== this.reader.trailer?.groupTag)
+      this.group = undefined;
     await this.reader.close();
     this.reader = next;
+    this.responseIndex = new NativeResponseIndex(next);
   }
   clearBoundaryOffset(): number | null {
     return null;

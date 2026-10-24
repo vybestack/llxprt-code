@@ -1,9 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import { createScrollbackPagerStore } from './scrollbackPager.js';
 import { streamHistoryItems } from '../../utils/streamHistoryItems.js';
 import type { HistoryItem } from '../../types.js';
@@ -109,24 +110,16 @@ async function initialJournalProjection(): Promise<{
   initial: HistoryItem[];
 }> {
   const source = fixture();
-  const filePath = join(directory, 'journal.jsonl');
-  const lines = source.map(
-    (content, index) =>
-      JSON.stringify({
-        v: 1,
-        seq: index + 1,
-        ts: '',
-        type: 'content',
-        payload: { content },
-      }) + '\n',
-  );
-  await writeFile(filePath, lines.join(''));
-  let offset = 0;
-  const offsets = lines.map((line) => {
-    const start = offset;
-    offset += Buffer.byteLength(line);
-    return start;
-  });
+  const filePath = join(directory, 'journal.llxj');
+  const session = await JournalSession.create(filePath);
+  const offsets: number[] = [];
+  try {
+    await session.append(source);
+    for await (const entry of session.store.rows())
+      offsets.push(entry.recordOffset);
+  } finally {
+    await session.close();
+  }
   const initial: HistoryItem[] = [];
   async function* fixtureRows(): AsyncGenerator<IContent> {
     yield* source;

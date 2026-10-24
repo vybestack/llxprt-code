@@ -32,6 +32,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import {
   createScrollbackPagerStore,
   type ScrollbackPagerStore,
@@ -43,8 +44,6 @@ import {
   rowIdentityKey,
 } from '../../utils/rowIdentity.js';
 import type { HistoryItem } from '../../types.js';
-
-const TS = '2026-01-01T00:00:00.000Z';
 
 /**
  * Uniform row size: text is padded so every resident row's serialized size
@@ -64,10 +63,11 @@ class FakeViewport implements ScrollbackViewportReporter {
 
 interface Fixture {
   filePath: string;
-  add(line: string): Promise<number>;
+  add(content: IContent): Promise<number>;
   addUser(seq: number, padChars?: number): Promise<number>;
   addCompressed(seq: number): Promise<number>;
-  addRewind(seq: number): Promise<number>;
+  addRewind(seq: number): Promise<void>;
+  stageUser(seq: number): Promise<() => Promise<void>>;
 }
 
 function chronology(seq: number) {
@@ -82,43 +82,58 @@ function userText(text: string, seq: number): IContent {
   };
 }
 
-function envelope(seq: number, type: string, payload: unknown): string {
-  return JSON.stringify({ v: 1, seq, ts: TS, type, payload });
-}
-
 async function createJournalFixture(): Promise<Fixture> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'scrollback-pager-'));
-  const filePath = path.join(dir, 'session-under-test.jsonl');
-  let offset = 0;
+  const filePath = path.join(dir, 'session-under-test.llxj');
+  await (await JournalSession.create(filePath)).close();
   const fixture: Fixture = {
     filePath,
-    async add(line: string): Promise<number> {
-      const at = offset;
-      await fs.appendFile(filePath, `${line}\n`, 'utf8');
-      offset += Buffer.byteLength(line, 'utf8') + 1;
-      return at;
+    async add(content: IContent): Promise<number> {
+      const session = await JournalSession.open(filePath);
+      try {
+        await session.append([content]);
+        for await (const entry of session.store.rows(
+          (session.store.published?.rows ?? 1) - 1,
+        ))
+          return entry.recordOffset;
+        throw new Error('Missing appended native row');
+      } finally {
+        await session.close();
+      }
     },
     async addUser(seq: number, padChars: number = ROW_PAD_CHARS) {
-      const pad = 'x'.repeat(padChars);
-      return fixture.add(
-        envelope(seq, 'content', { content: userText(`r-${seq}${pad}`, seq) }),
-      );
+      return fixture.add(userText(`r-${seq}${'x'.repeat(padChars)}`, seq));
     },
     async addCompressed(seq: number) {
-      return fixture.add(
-        envelope(seq, 'compressed', {
-          summary: {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'summary' }],
-          },
-          itemsCompressed: 3,
-        }),
-      );
+      return fixture.add({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'summary' }],
+        metadata: { isSummary: true, chronology: chronology(seq) },
+      });
     },
-    async addRewind(seq: number) {
-      return fixture.add(
-        envelope(seq, 'rewind', { itemsRemoved: 3, cutSeq: 2 }),
-      );
+    async addRewind(_seq: number): Promise<void> {
+      const session = await JournalSession.open(filePath);
+      try {
+        for await (const entry of session.store.rows(1)) {
+          await session.store.commit([
+            { kind: 'pop', cutLabel: entry.label, expectedRemoved: 3 },
+          ]);
+          return;
+        }
+        throw new Error('Missing native rewind cut');
+      } finally {
+        await session.close();
+      }
+    },
+    async stageUser(seq: number): Promise<() => Promise<void>> {
+      const before = (await fs.stat(filePath)).size;
+      await fixture.addUser(seq);
+      const bytes = await fs.readFile(filePath);
+      await fs.truncate(filePath, before);
+      await fs.appendFile(filePath, bytes.subarray(before, bytes.length - 1));
+      return async (): Promise<void> => {
+        await fs.appendFile(filePath, bytes.subarray(bytes.length - 1));
+      };
     },
   };
   return fixture;
@@ -417,15 +432,11 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
     store.setLiveTail([pendingItem]);
     expect(rowTexts(store)).toContain('streaming-pending');
 
-    const committedOffset = await fixture.add(
-      envelope(9, 'content', {
-        content: {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'journal-text' }],
-          metadata: { chronology: chronology(9) },
-        },
-      }),
-    );
+    const committedOffset = await fixture.add({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'journal-text' }],
+      metadata: { chronology: chronology(9) },
+    });
     await store.pageForward();
 
     const committedIdentity = rowIdentity(
@@ -506,10 +517,7 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
     ]);
     expect(initialState.atFileEnd).toBe(true);
 
-    const nextLine = envelope(13, 'content', {
-      content: userText('r-13', 13),
-    });
-    await fs.appendFile(fixture.filePath, nextLine, 'utf8');
+    await fixture.stageUser(13);
     await store.pageBack();
     const tornState = store.getState();
     expect(tornState.rows.map((row) => row.seq)).toStrictEqual([
@@ -524,13 +532,10 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
     }
     const store = makeStore();
     await store.pageBack();
-    const nextLine = envelope(13, 'content', {
-      content: userText('r-13', 13),
-    });
-    await fs.appendFile(fixture.filePath, nextLine, 'utf8');
+    const complete = await fixture.stageUser(13);
     await store.pageBack();
 
-    await fs.appendFile(fixture.filePath, String.fromCharCode(10), 'utf8');
+    await complete();
     await store.pageBack();
     expect(store.getState().rows.map((row) => row.seq)).toStrictEqual([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
