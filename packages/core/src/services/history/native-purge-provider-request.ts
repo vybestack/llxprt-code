@@ -181,6 +181,7 @@ export function nativePurgeProviderRequest(
       release,
       candidate.snapshot.prepareRequestFormat,
       candidate.snapshot.mediaStore,
+      candidate.snapshot.prepareRequestKimi,
     );
   };
 }

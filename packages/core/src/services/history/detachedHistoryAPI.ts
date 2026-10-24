@@ -115,6 +115,7 @@ async function openSemanticPurge(
   return {
     requestSnapshot: snapshot.requestSnapshot,
     prepareRequestFormat: snapshot.prepareRequestFormat,
+    prepareRequestKimi: snapshot.prepareRequestKimi,
     holdRequestFormats: snapshot.holdRequestFormats,
     mediaStore: snapshot.mediaStore,
     length: snapshot.length,

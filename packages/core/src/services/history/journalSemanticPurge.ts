@@ -28,6 +28,7 @@ export async function openJournalSemanticPurge(
   return {
     requestSnapshot: snapshot,
     prepareRequestFormat: formats.prepare,
+    prepareRequestKimi: resources.prepareRequestKimi,
     holdRequestFormats: () => formats.hold(),
     mediaStore: resources.mediaStore,
     length: dump.rawLength,

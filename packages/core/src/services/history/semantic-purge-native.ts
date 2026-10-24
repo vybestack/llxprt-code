@@ -1,6 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from './IContent.js';
-import type { PrepareNativeRequestFormat } from './native-provider-format.js';
+import type {
+  PrepareNativeRequestFormat,
+  PrepareNativeRequestKimi,
+} from './native-provider-format.js';
 import type { LocalMediaStore } from '../../storage/local-media-store.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
@@ -21,6 +24,7 @@ import {
 export interface SemanticPurgeSnapshot extends SemanticPurgeRowSource {
   readonly requestSnapshot?: VersionSnapshot;
   readonly prepareRequestFormat?: PrepareNativeRequestFormat;
+  readonly prepareRequestKimi?: PrepareNativeRequestKimi;
   readonly mediaStore?: LocalMediaStore;
   readonly holdRequestFormats?: () => () => Promise<void>;
   readRow(index: number): Promise<IContent>;
@@ -154,7 +158,8 @@ export class NativeSemanticPurgeCandidate
             return replacement === undefined ? [] : [replacement];
           })
         : row.blocks;
-    if (blocks.length === 0) return undefined;
+    if (sourceOrdinal === this.location.contentIndex && blocks.length === 0)
+      return undefined;
     const metadata = { ...row.metadata };
     if (
       index >= this.location.contentIndex &&

@@ -117,11 +117,13 @@ export function nativeRequestPreparations(host: NativeRequestHost): {
 
 export function nativeRequestResources(store: JournalStore): {
   readonly prepareRequestFormat: PrepareNativeRequestFormat;
+  readonly prepareRequestKimi: PrepareNativeRequestKimi;
   readonly mediaStore: LocalMediaStore | undefined;
 } {
   return {
     prepareRequestFormat: (snapshot, registration) =>
       store.prepareSnapshotFormat(snapshot, registration),
+    prepareRequestKimi: (snapshot) => store.prepareSnapshotKimi(snapshot),
     mediaStore: store.mediaPins.mediaStore,
   };
 }
