@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { LocalMediaStore } from '../storage/local-media-store.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { JournalSession } from '../services/history/journalSession.js';
+import { openJournalReadOnly } from '../journal/journalReader.js';
 import { JournalResumeBoot, resumePointOf } from './journalResume.js';
 import { encodeContentRow } from '../services/history/journalRowCodec.js';
 import { projectRecordedContentIds } from './janitor/mediaReclamation.js';
@@ -267,9 +268,9 @@ describe('native recording media archive', () => {
       expect(await archive.readVerified(reference)).toStrictEqual(
         new Uint8Array([9, 7, 5]),
       );
-      const observer = await JournalSession.open(session.path);
+      const observer = await openJournalReadOnly(session.path);
       try {
-        expect(observer.store.published?.rows).toBe(26);
+        expect(observer.trailer?.rootAggregate.rows).toBe(26);
       } finally {
         await observer.close();
       }

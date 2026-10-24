@@ -9,7 +9,8 @@ import { RowOwnership } from './rowOwnership.js';
 import type { IContent } from '../services/history/IContent.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { encodeContentRow } from '../services/history/journalRowCodec.js';
-import { JournalSession } from '../services/history/journalSession.js';
+import type { JournalSession } from '../services/history/journalSession.js';
+import { readOnlyJournalRows } from './__tests__/support/read-only-journal-rows.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { recordingConfig } from './__tests__/support/journalRecordingFixture.js';
 
@@ -51,15 +52,10 @@ function imageRow(index: number, bytes: number): IContent {
 }
 
 async function assertReopened(file: string, size: number): Promise<void> {
-  const reopened = await JournalSession.open(file);
-  try {
-    let count = 0;
-    for await (const row of reopened.rows())
-      expect(row.content).toStrictEqual(imageRow(count++, 2048));
-    expect(count).toBe(size);
-  } finally {
-    await reopened.close();
-  }
+  let count = 0;
+  for await (const row of readOnlyJournalRows(file))
+    expect(row.content).toStrictEqual(imageRow(count++, 2048));
+  expect(count).toBe(size);
 }
 async function verifyCancellation(
   history: HistoryService,

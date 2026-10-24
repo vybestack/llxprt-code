@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdir, mkdtemp } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { JournalSession } from '../../../services/history/journalSession.js';
+import { readOnlyJournalRows } from './read-only-journal-rows.js';
 import type { IContent } from '../../../services/history/IContent.js';
 import type { JournalRecordingConfig } from '../../journalRecordingService.js';
 import { journalSeams, PROJECT } from './recordedJournals.js';
@@ -32,12 +32,7 @@ export function remainderConfig(
 }
 
 export async function remainderRows(filePath: string): Promise<IContent[]> {
-  const session = await JournalSession.open(filePath, journalSeams());
-  try {
-    const rows: IContent[] = [];
-    for await (const row of session.rows()) rows.push(row.content);
-    return rows;
-  } finally {
-    await session.close();
-  }
+  const rows: IContent[] = [];
+  for await (const row of readOnlyJournalRows(filePath)) rows.push(row.content);
+  return rows;
 }

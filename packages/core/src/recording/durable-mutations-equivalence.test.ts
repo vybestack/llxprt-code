@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
-import { JournalSession } from '../services/history/journalSession.js';
+import { readOnlyJournalRows } from './__tests__/support/read-only-journal-rows.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { makeDensityResult } from './durable-mutations.test.helpers.js';
 import { readJournalSnapshot } from './__tests__/support/journalSnapshot.js';
@@ -113,16 +113,9 @@ describe('durable native mutations preserve membership and chronology', () => {
     ]);
     const file = recording.getFilePath();
     if (file === null) throw new Error('Missing journal');
-    const session = await JournalSession.open(file);
-    try {
-      const stored = await Array.fromAsync(session.rows());
-      expect(new Set(stored.map((row) => row.entry.label)).size).toBe(3);
-      expect(stored[2].entry.recordOffset).not.toBe(
-        stored[1].entry.recordOffset,
-      );
-    } finally {
-      await session.close();
-    }
+    const stored = await Array.fromAsync(readOnlyJournalRows(file));
+    expect(new Set(stored.map((row) => row.entry.label)).size).toBe(3);
+    expect(stored[2].entry.recordOffset).not.toBe(stored[1].entry.recordOffset);
   });
   it('retains density removal and synthetic response after a prefix rewind', async () => {
     await history.addBatch([
