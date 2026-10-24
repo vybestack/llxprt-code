@@ -697,10 +697,9 @@ export async function selectGoogleCredentialClient(
   }
   if (environment.credentialsFile) {
     const json = await readCredentialFile(environment.credentialsFile, false);
-    return buildCredentialClient(
-      json,
-      transporter,
-      environment.credentialsFile,
+    return withEnvironmentQuotaProject(
+      buildCredentialClient(json, transporter, environment.credentialsFile),
+      environment,
     );
   }
   if (environment.wellKnownFile) {

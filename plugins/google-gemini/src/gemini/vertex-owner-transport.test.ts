@@ -198,7 +198,7 @@ describe('Vertex credentials through the owner transport', () => {
     }
   });
 
-  it('reads the well-known file and applies the environment quota project only there', async () => {
+  it('reads the well-known file and applies the environment quota project', async () => {
     const a = await transportFor('a');
     const b = await transportFor('b');
     const wellKnownFile = writeJson('adc.json', authorizedUser());
@@ -213,6 +213,45 @@ describe('Vertex credentials through the owner transport', () => {
     expect(modelRequest(a).headers['authorization']).toBe('Bearer tok-a');
     expect(modelRequest(a).headers['x-goog-user-project']).toBe('quota-a');
     expect(modelRequest(b).headers['x-goog-user-project']).toBeUndefined();
+  });
+
+  it('lets the environment quota project override the quota project of a credentialsFile', async () => {
+    const a = await transportFor('a');
+    const b = await transportFor('b');
+    const withFileQuota = writeJson(
+      'file-quota.json',
+      authorizedUser({ quota_project_id: 'file-quota' }),
+    );
+    const withoutFileQuota = writeJson('no-quota.json', authorizedUser());
+    await Promise.all([
+      generate(a, {
+        credentialEnvironment: environment({
+          credentialsFile: withFileQuota,
+          quotaProject: 'env-quota-a',
+        }),
+      }),
+      generate(b, {
+        credentialEnvironment: environment({
+          credentialsFile: withoutFileQuota,
+          quotaProject: 'env-quota-b',
+        }),
+      }),
+    ]);
+    expect(modelRequest(a).headers['x-goog-user-project']).toBe('env-quota-a');
+    expect(modelRequest(b).headers['x-goog-user-project']).toBe('env-quota-b');
+  });
+
+  it('keeps the quota project of explicit credential JSON apart from the environment', async () => {
+    const a = await transportFor('a');
+    await generate(a, {
+      credentials: authorizedUser({
+        quota_project_id: 'explicit-quota',
+      }) as GoogleCredentialJson,
+      credentialEnvironment: environment({ quotaProject: 'env-quota' }),
+    });
+    expect(modelRequest(a).headers['x-goog-user-project']).toBe(
+      'explicit-quota',
+    );
   });
 
   it('lets an explicit quota project header win in any letter case and uses the credential quota project otherwise', async () => {
