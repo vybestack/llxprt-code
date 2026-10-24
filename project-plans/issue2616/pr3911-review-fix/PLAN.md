@@ -1055,7 +1055,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T2.2 A3 wrapper-created invocations and manager transport
 - [x] T2.2b A3 load-balancer delegate and provider normalization keep the owner fetch
 - [x] T2.2c A3 RuntimeProviderManager.fetchNetwork required (contract only)
-- [ ] T2.3a A3 lifecycle network phase and pre-release actions
+- [x] T2.3a A3 lifecycle network phase and pre-release actions
 - [ ] T2.3b A3 root networks for the three Config roots
 - [ ] T2.3c A3 preflight root network and transfer
 - [ ] T2.3d A3 sessions borrow root network, child runtime loader
