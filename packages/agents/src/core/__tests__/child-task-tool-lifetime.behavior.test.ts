@@ -141,22 +141,15 @@ describe('child task tool lifetime', () => {
         messageBus: bus,
         readMcpInstructions: fixture.readMcpInstructions,
       });
-      const originalFetch = globalThis.fetch;
       let requests = 0;
       const requestBodies: string[] = [];
-      globalThis.fetch = async (
-        input: Parameters<typeof fetch>[0],
-        init?: Parameters<typeof fetch>[1],
-      ): Promise<Response> => {
-        if (String(input).includes('/child/')) {
-          requestBodies.push(await new Response(init?.body).text());
-          requests += 1;
-          if (requests === 1) return modelResponse('first', 'first');
-          if (requests === 2) return modelResponse('sibling', 'sibling');
-          return modelResponse('sibling completed');
-        }
-        return originalFetch(input, init);
-      };
+      const clearScript = fixture.scriptChildRequests(async (request) => {
+        requestBodies.push(request.body);
+        requests += 1;
+        if (requests === 1) return modelResponse('first', 'first');
+        if (requests === 2) return modelResponse('sibling', 'sibling');
+        return modelResponse('sibling completed');
+      });
       const first = await orchestrator.launch({ name: 'disposal-child' });
       const sibling = await orchestrator.launch({ name: 'disposal-child' });
       const running = first.scope.runNonInteractive(new ContextState());
@@ -196,7 +189,7 @@ describe('child task tool lifetime', () => {
         await settled;
         await first.dispose();
         await sibling.dispose();
-        globalThis.fetch = originalFetch;
+        clearScript();
       }
       expect(credentials().keySnapshot()).toStrictEqual([1, 1]);
     });

@@ -66,7 +66,7 @@ import { AgentClient } from '../../core/client.js';
 
 describe('Session owner cleanup joining', () => {
   const credentials = useOwnedCredentials();
-  it('keeps owned fetch open until client cleanup joins and then closes it', async () => {
+  it('keeps the borrowed root fetch open through client cleanup and closes it when the root release closes', async () => {
     const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
     process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
       new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
@@ -247,19 +247,25 @@ describe('Session owner cleanup joining', () => {
     );
     const closing = owner.dispose();
     void closing.catch(() => undefined);
+    let engineClosed = false;
     try {
       await entered.promise;
       expect(new Set([owner.dispose(), closing]).size).toBe(1);
       released.release();
       await closing;
       expect(received).toBe(new URL(url).pathname);
+      expect(await (await owner.operations.fetch(url)).text()).toBe(
+        new URL(url).pathname,
+      );
+      engineClosed = true;
+      await closeEngine();
       await expect(owner.operations.fetch(url)).rejects.toThrow(
         'Root fetch is closed',
       );
     } finally {
       released.release();
       await closing.catch(() => undefined);
-      await closeEngine();
+      if (!engineClosed) await closeEngine();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
       });

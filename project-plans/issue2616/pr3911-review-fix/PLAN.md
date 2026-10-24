@@ -1058,7 +1058,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T2.3a A3 lifecycle network phase and pre-release actions
 - [x] T2.3b A3 root networks for the three Config roots
 - [x] T2.3c A3 preflight root network and transfer
-- [ ] T2.3d A3 sessions borrow root network, child runtime loader
+- [x] T2.3d A3 sessions borrow root network, child runtime loader
 - [ ] T2.4 A3 compression profile root transport
 - [ ] T2.5a-n A3 test-built invocations pass fetch (ids added by T2.0)
   - [ ] T2.5a A3 test-built invocations pass fetch: packages/core, 8 files (file list in inventory-phase2.md)

@@ -15,7 +15,11 @@ import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/
 import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 import { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
 
-import { createServer } from 'node:http';
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -84,12 +88,44 @@ function responseChunk(child: boolean, launch: boolean): string {
   );
 }
 
-export interface DisposalJoinFixture {
+/** A held model request observed at the local responder. */
+export interface HeldWork {
+  readonly entered: ReturnType<typeof gate>;
+  readonly releaseWork: () => void;
+  readonly workSettled: Promise<void>;
+  readonly isWorkSettled: () => boolean;
+  readonly signal: () => AbortSignal | undefined;
+  /** Settles once the child's connection to the held route has closed. */
+  readonly aborted: Promise<void>;
+}
+
+/** A child model request as the local responder received it. */
+export interface ChildModelRequest {
+  readonly body: string;
+  /** Aborts when the child closes its connection before the response ends. */
+  readonly signal: AbortSignal;
+}
+
+export type ChildModelScript = (
+  request: ChildModelRequest,
+) => Promise<Response>;
+
+type RouteHandler = (
+  request: IncomingMessage,
+  response: ServerResponse,
+) => Promise<void>;
+
+export interface DisposalJoinFixture extends HeldWork {
   readonly manager: AsyncTaskManager;
   readonly agent: Agent;
   readonly client: AgentClientContract;
   readonly adoptSibling: () => Promise<Agent>;
-  readonly siblingWork: ReturnType<typeof createHeldFetch>;
+  readonly siblingWork: HeldWork;
+  /**
+   * Answers child model requests from the script instead of holding them.
+   * The returned function removes the script; teardown removes it too.
+   */
+  readonly scriptChildRequests: (script: ChildModelScript) => () => void;
   readonly config: Config;
   readonly settingsOwner: ReturnType<
     typeof createSessionSettingsFixture
@@ -98,94 +134,170 @@ export interface DisposalJoinFixture {
   readonly workspaceTrust: McpRuntimeOwner['trust'];
   readonly instructionReads: McpRuntimeOwner['workspaceMemory']['operations'];
   readonly readMcpInstructions: McpRuntimeOwner['readInstructions'];
-  readonly entered: ReturnType<typeof gate>;
-  readonly releaseWork: () => void;
-  readonly workSettled: Promise<void>;
   readonly childStatus: Promise<string>;
   readonly timeline: string[];
-  readonly isWorkSettled: () => boolean;
-  readonly signal: () => AbortSignal | undefined;
 }
 
-function createHeldFetch(
-  childUrl: string,
-  timeline: string[],
-): Omit<
-  DisposalJoinFixture,
-  | 'manager'
-  | 'client'
-  | 'agent'
-  | 'childStatus'
-  | 'timeline'
-  | 'adoptSibling'
-  | 'siblingWork'
-  | 'settingsOwner'
-  | 'config'
-  | 'workspacePaths'
-  | 'workspaceTrust'
-  | 'instructionReads'
-  | 'readMcpInstructions'
-> & {
-  restore: () => void;
+async function readRequestBody(request: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) {
+    chunks.push(Buffer.from(z.instanceof(Uint8Array).parse(chunk)));
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+/**
+ * The signal aborts when the client drops the connection before the response
+ * is written, which is how a child's own network reports a cancelled request.
+ */
+function watchClientAbort(
+  request: IncomingMessage,
+  response: ServerResponse,
+): AbortSignal {
+  const controller = new AbortController();
+  const abort = (): void => controller.abort();
+  response.once('close', () => {
+    if (!response.writableFinished) abort();
+  });
+  request.socket.once('close', abort);
+  return controller.signal;
+}
+
+async function writeWebResponse(
+  response: ServerResponse,
+  webResponse: Response,
+): Promise<void> {
+  const text = await webResponse.text();
+  if (response.destroyed) return;
+  response.writeHead(
+    webResponse.status,
+    Object.fromEntries(webResponse.headers),
+  );
+  response.end(text);
+}
+
+/**
+ * Holds a model request at a real local route until the test releases it, so
+ * the request travels over the child's own root network.
+ */
+function createHeldRoute(timeline: string[]): {
+  work: HeldWork;
+  handle: RouteHandler;
 } {
-  const original = globalThis.fetch;
   const entered = gate();
   const released = gate();
   const settled = gate();
+  const aborted = gate();
   let workSettled = false;
   let signal: AbortSignal | undefined;
-  const heldFetch: typeof fetch = async (input, init) => {
-    const url = input instanceof Request ? input.url : String(input);
-    if (url !== `${childUrl}/chat/completions`) return original(input, init);
+  const handle: RouteHandler = async (request, response) => {
     const body = z
       .object({ model: z.literal('child-model') })
-      .parse(await new Request(input, init).json());
+      .parse(JSON.parse(await readRequestBody(request)));
     timeline.push(`fetch-entered:${body.model}`);
-    signal =
-      init?.signal ?? (input instanceof Request ? input.signal : undefined);
-    if (signal === undefined)
-      throw new Error('Child fetch has no abort signal');
+    const requestSignal = watchClientAbort(request, response);
+    signal = requestSignal;
     const onAbort = (): void => {
       timeline.push('fetch-abort-observed');
     };
-    signal.addEventListener('abort', onAbort, { once: true });
+    requestSignal.addEventListener('abort', onAbort, { once: true });
+    requestSignal.addEventListener('abort', aborted.release, { once: true });
     entered.release();
     try {
       await released.promise;
-      if (signal.aborted) throw signal.reason;
-      return new Response(responseChunk(true, false), {
-        headers: { 'Content-Type': 'text/event-stream' },
-      });
+      if (!requestSignal.aborted) {
+        response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        response.end(responseChunk(true, false));
+      }
     } finally {
-      signal.removeEventListener('abort', onAbort);
+      requestSignal.removeEventListener('abort', onAbort);
       workSettled = true;
       timeline.push('fetch-settled');
       settled.release();
     }
   };
-  globalThis.fetch = heldFetch;
   return {
-    entered,
-    releaseWork: (): void => {
-      timeline.push('fetch-release');
-      released.release();
+    work: {
+      entered,
+      releaseWork: (): void => {
+        timeline.push('fetch-release');
+        released.release();
+      },
+      workSettled: settled.promise,
+      isWorkSettled: (): boolean => workSettled,
+      signal: (): AbortSignal | undefined => signal,
+      aborted: aborted.promise,
     },
-    workSettled: settled.promise,
-    isWorkSettled: (): boolean => workSettled,
-    signal: (): AbortSignal | undefined => signal,
-    restore: (): void => {
-      globalThis.fetch = original;
+    handle,
+  };
+}
+
+interface ChildModelRoute {
+  readonly handle: RouteHandler;
+  readonly work: HeldWork;
+  readonly script: (script: ChildModelScript) => () => void;
+  readonly clearScript: () => void;
+}
+
+/** The child's model route: held by default, scripted when a test asks. */
+function createChildModelRoute(timeline: string[]): ChildModelRoute {
+  const held = createHeldRoute(timeline);
+  let scripted: ChildModelScript | undefined;
+  return {
+    work: held.work,
+    handle: async (request, response): Promise<void> => {
+      if (scripted === undefined) {
+        await held.handle(request, response);
+        return;
+      }
+      const body = await readRequestBody(request);
+      const signal = watchClientAbort(request, response);
+      await writeWebResponse(response, await scripted({ body, signal }));
+    },
+    script: (script): (() => void) => {
+      scripted = script;
+      return (): void => {
+        if (scripted === script) scripted = undefined;
+      };
+    },
+    clearScript: (): void => {
+      scripted = undefined;
     },
   };
 }
 
-async function createParentServer(): Promise<{
+async function startModelServer(timeline: string[]): Promise<{
+  server: Awaited<ReturnType<typeof createParentServer>>;
+  childRoute: ChildModelRoute;
+  siblingWork: HeldWork;
+}> {
+  const childRoute = createChildModelRoute(timeline);
+  const siblingRoute = createHeldRoute([]);
+  const server = await createParentServer(
+    new Map<string, RouteHandler>([
+      ['/v1/child/chat/completions', childRoute.handle],
+      ['/v1/sibling/chat/completions', siblingRoute.handle],
+    ]),
+  );
+  return { server, childRoute, siblingWork: siblingRoute.work };
+}
+
+async function createParentServer(
+  routes: ReadonlyMap<string, RouteHandler>,
+): Promise<{
   baseUrl: string;
   close: () => Promise<void>;
 }> {
   let requests = 0;
   const server = createServer((request, response) => {
     void (async () => {
+      const route = routes.get(
+        new URL(request.url ?? '/', 'http://127.0.0.1').pathname,
+      );
+      if (route !== undefined) {
+        await route(request, response);
+        return;
+      }
       for await (const _chunk of request) {
         // Consume the request before returning a keep-alive response.
       }
@@ -246,10 +358,9 @@ export async function withDisposalJoinFixture(
   extraTools: readonly string[] = [],
 ): Promise<void> {
   const directory = await createFixtureDirectory();
-  const server = await createParentServer();
   const timeline: string[] = [];
-  const external = createHeldFetch(`${server.baseUrl}/child`, timeline);
-  const siblingWork = createHeldFetch(`${server.baseUrl}/sibling`, []);
+  const { server, childRoute, siblingWork } = await startModelServer(timeline);
+  const external = childRoute.work;
   const siblings: Agent[] = [];
   const manager = new AsyncTaskManager(5);
   let mcpRuntime: McpRuntimeOwner | undefined;
@@ -280,6 +391,7 @@ export async function withDisposalJoinFixture(
       client: fixtureAgentResources(agent).publishedClient(agent),
       manager,
       ...external,
+      scriptChildRequests: childRoute.script,
       timeline,
       childStatus,
       siblingWork,
@@ -294,6 +406,7 @@ export async function withDisposalJoinFixture(
   } catch (error) {
     errors.push(error);
   } finally {
+    childRoute.clearScript();
     external.releaseWork();
     siblingWork.releaseWork();
     await collectFixtureReleases(errors, [
@@ -313,8 +426,6 @@ export async function withDisposalJoinFixture(
       async (): Promise<void> =>
         rm(directory, { recursive: true, force: true }),
     ]);
-    siblingWork.restore();
-    external.restore();
   }
   if (errors.length > 0)
     throw new AggregateError(errors, 'Disposal join fixture failed');

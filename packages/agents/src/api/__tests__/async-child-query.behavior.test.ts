@@ -64,27 +64,23 @@ describe('public async child query ownership', () => {
       ).toBeUndefined();
       await fixture.siblingWork.entered.promise;
       const siblingId = sibling.tasks.list()[0].id;
-      const original = globalThis.fetch;
       const toolResults: string[] = [];
       let requests = 0;
-      globalThis.fetch = async (input, init) => {
-        const url = input instanceof Request ? input.url : String(input);
-        if (!url.endsWith('/child/chat/completions'))
-          return original(input, init);
+      const clearScript = fixture.scriptChildRequests(async (request) => {
         const body = z
           .object({
             messages: z.array(
               z.object({ role: z.string(), content: z.unknown().optional() }),
             ),
           })
-          .parse(await new Request(input, init).json());
+          .parse(JSON.parse(request.body));
         for (const message of body.messages) {
           if (message.role === 'tool')
             toolResults.push(JSON.stringify(message.content));
         }
         requests += 1;
         return response(requests === 1);
-      };
+      });
       try {
         expect(
           (
@@ -106,7 +102,7 @@ describe('public async child query ownership', () => {
         expect(toolResults[0]).not.toContain(siblingId);
         expect(fixture.siblingWork.signal()?.aborted).toBe(false);
       } finally {
-        globalThis.fetch = original;
+        clearScript();
         fixture.siblingWork.releaseWork();
         await sibling.dispose();
       }

@@ -106,14 +106,10 @@ describe('admitted child tool acquisition lifetime', () => {
             await fixture.siblingWork.entered.promise;
             const peerIds = sibling.tasks.list().map((task) => task.id);
             expect(peerIds).toHaveLength(2);
-            const original = globalThis.fetch;
             const queryResults: string[] = [];
             let requests = 0;
             let childSignal: AbortSignal | undefined;
-            globalThis.fetch = async (input, init) => {
-              const url = input instanceof Request ? input.url : String(input);
-              if (!url.endsWith('/child/chat/completions'))
-                return original(input, init);
+            const clearScript = fixture.scriptChildRequests(async (request) => {
               const body = z
                 .object({
                   messages: z.array(
@@ -123,7 +119,7 @@ describe('admitted child tool acquisition lifetime', () => {
                     }),
                   ),
                 })
-                .parse(await new Request(input, init).json());
+                .parse(JSON.parse(request.body));
               requests += 1;
               if (requests === 3) {
                 const results = body.messages.filter(
@@ -138,21 +134,14 @@ describe('admitted child tool acquisition lifetime', () => {
                   is_background: true,
                 });
               if (requests === 2) return modelResponse('check_async_tasks', {});
-              childSignal =
-                init?.signal ??
-                (input instanceof Request ? input.signal : undefined);
-              if (childSignal === undefined)
-                throw new Error(
-                  'Held child fetch requires its admitted signal',
-                );
+              childSignal = request.signal;
               childSignal.addEventListener('abort', aborted.release, {
                 once: true,
               });
               held.release();
               await released.promise;
-              if (childSignal.aborted) throw childSignal.reason;
               return modelResponse();
-            };
+            });
             try {
               expect(
                 (
@@ -218,7 +207,7 @@ describe('admitted child tool acquisition lifetime', () => {
                 await closing;
               }
             } finally {
-              globalThis.fetch = original;
+              clearScript();
               released.release();
               fixture.siblingWork.releaseWork();
               await sibling.dispose();

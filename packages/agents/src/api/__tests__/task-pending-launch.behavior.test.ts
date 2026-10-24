@@ -266,6 +266,7 @@ describe('public Agent pending launch lifetime', () => {
       const tasks = fixture.agent.tasks.listRunning();
       expect(tasks).toHaveLength(1);
       const disposal = fixture.agent.dispose();
+      await fixture.siblingWork.aborted;
       expect(fixture.siblingWork.signal()?.aborted).toBe(true);
       fixture.siblingWork.releaseWork();
       await disposal;

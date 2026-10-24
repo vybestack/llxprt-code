@@ -25,7 +25,7 @@ import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/servic
 import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { randomUUID } from 'node:crypto';
 import type {
   Agent,
@@ -94,11 +94,10 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
   protected abstract readonly borrowedClient?: AgentClientContract;
   abstract readonly toolCatalog: SessionToolCatalogOwner;
   abstract readonly modelRegistry: ModelRegistry;
-  protected get fetch(): OwnedFetch['fetch'] {
-    return this.network.fetch;
+  protected get fetch(): NetworkFetch {
+    return this.manager.fetchNetwork;
   }
-  protected initializeClientNetwork(): void {
-    this.network = new OwnedFetch(this.config.getProxy());
+  protected initializeTextGeneration(): void {
     this.textGeneration = new SessionTextGeneration(
       this.settingsOwner,
       () => this.manager.getActiveProvider(),
@@ -107,7 +106,7 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
       this.contentGeneratorFactory,
       (state) => this.createClient(state),
       this.ownedClients,
-      this.network.fetch,
+      this.fetch,
       this.auxiliary,
     );
   }
@@ -129,7 +128,7 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
         () => this.ownedClients.dispose(this.client),
         () => {
           this.modelRegistry.dispose();
-          return this.network.dispose();
+          return Promise.resolve();
         },
       );
       this.initialBindingComplete = true;
@@ -139,9 +138,6 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     OwnedClientLedger['settleOwnedClients']
   > {
     return this.ownedClients.settleOwnedClients();
-  }
-  protected disposeClientNetwork(): ReturnType<OwnedFetch['dispose']> {
-    return this.network.dispose();
   }
   protected disposeSessionExecution(): Promise<void> | undefined {
     return this.execution?.dispose();
@@ -332,8 +328,6 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
   readonly readHistory = (): Promise<readonly AgentMessage[]> =>
     this.work.enqueue(() => this.client.getHistory());
 
-  private network!: OwnedFetch;
-
   private initialBindingComplete = false;
 
   protected assertConversationOpen(): void {
@@ -428,7 +422,7 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
       this.settingsOwner,
       state.runtimeId,
       state.sessionId,
-      this.network.fetch,
+      this.fetch,
     );
     this.fileBinding.bindClient(client);
     bindClientModels(client, this.manager, this.tokenizerFactory);

@@ -46,6 +46,7 @@ export function buildSubagentRuntimeLoaderOptions(
           parameters,
           signal,
           runtimeState.sessionId,
+          providerManager.fetchNetwork,
         ),
       readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
       readToolGovernance: () =>

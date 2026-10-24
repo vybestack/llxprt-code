@@ -76,6 +76,7 @@ describe('public Agent async child disposal join', () => {
           );
           try {
             await setImmediate();
+            await fixture.aborted;
             expect(fixture.signal()?.aborted).toBe(true);
             expect(finished).toBe(false);
             fixture.releaseWork();
@@ -201,6 +202,7 @@ describe('public Agent async child disposal join', () => {
       expect(fixture.siblingWork.signal()?.aborted).toBe(false);
 
       const disposed = fixture.agent.dispose();
+      await fixture.aborted;
       expect(fixture.signal()?.aborted).toBe(true);
       expect(fixture.siblingWork.signal()?.aborted).toBe(false);
       fixture.releaseWork();
@@ -237,7 +239,9 @@ describe('public Agent async child disposal join', () => {
       await fixture.siblingWork.entered.promise;
       expect(fixture.agent.tasks.listRunning()).toHaveLength(2);
       const disposal = fixture.agent.dispose();
+      await fixture.aborted;
       expect(fixture.signal()?.aborted).toBe(true);
+      await fixture.siblingWork.aborted;
       expect(fixture.siblingWork.signal()?.aborted).toBe(true);
       fixture.releaseWork();
       fixture.siblingWork.releaseWork();
@@ -262,6 +266,7 @@ describe('public Agent async child disposal join', () => {
       expect(accepted.error).toBeUndefined();
       await fixture.entered.promise;
       const disposal = fixture.agent.dispose();
+      await fixture.aborted;
       expect(fixture.signal()?.aborted).toBe(true);
       fixture.releaseWork();
       await disposal;
@@ -382,6 +387,7 @@ describe('public Agent async child disposal join', () => {
         }
         expect(containsFailure(publicFailure)).toBe(true);
         expect(fixture.agent.dispose()).toBe(disposal);
+        await fixture.aborted;
         expect(fixture.signal()?.aborted).toBe(true);
         expect(() => fixture.agent.tools.openClientChannel()).toThrow(
           'disposed',
@@ -412,6 +418,7 @@ describe('public Agent async child disposal join', () => {
         { once: true },
       );
       const shared = fixture.agent.dispose();
+      await fixture.aborted;
       expect(fixture.signal()?.aborted).toBe(true);
       expect(fixture.agent.dispose()).toBe(shared);
       expect(reentrant).toBe(shared);

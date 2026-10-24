@@ -276,7 +276,7 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
       manager,
       mediaStore,
     );
-    this.initializeClientNetwork();
+    this.initializeTextGeneration();
     this.modelRegistry = new ModelRegistry(this.fetch);
     manager.bindModelRegistry?.(this.modelRegistry);
     this.toolCatalog = new SessionToolCatalogOwner(
@@ -536,7 +536,6 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
       ]);
       const clients = await this.settleClientReleases();
       this.modelRegistry.dispose();
-      const network = await Promise.allSettled([this.disposeClientNetwork()]);
       const writes = await this.policyWrites.settleWrites();
       const policy = await Promise.allSettled([
         this.ownsSessionPolicy ? this.sessionPolicy?.dispose() : undefined,
@@ -548,7 +547,6 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
         services,
         binding,
         clients,
-        network,
         writes,
         policy,
       );

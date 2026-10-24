@@ -44,22 +44,26 @@ describe('child acquired resource lifetime', () => {
         goalPrompt: 'Observe direct child disposal',
         abortController: new AbortController(),
       });
+      const events: string[] = [];
+      let credentialsAtRunSettled: readonly number[] | undefined;
       const running = first.scope.runNonInteractive(new ContextState());
-      const settled = running.catch(() => undefined);
+      const recordRunSettled = (): void => {
+        credentialsAtRunSettled = credentials().keySnapshot();
+        events.push('run-settled');
+      };
+      const settled = running.then(recordRunSettled, recordRunSettled);
       try {
         await fixture.entered.promise;
-        let closed = false;
-        const closing = first.dispose().then(() => {
-          closed = true;
+        await first.dispose().then(() => {
+          events.push('dispose-closed');
         });
-        await new Promise<void>((resolve) => setTimeout(resolve, 20));
-        expect(closed).toBe(false);
-        expect(credentials().keySnapshot()).toStrictEqual([0, 0]);
-        expect(fixture.signal()?.aborted).toBe(true);
-        fixture.releaseWork();
         await settled;
-        await closing;
+        await fixture.aborted;
+        expect(fixture.signal()?.aborted).toBe(true);
+        expect(events).toStrictEqual(['run-settled', 'dispose-closed']);
+        expect(credentialsAtRunSettled).toStrictEqual([0, 0]);
         expect(credentials().keySnapshot()).toStrictEqual([1, 0]);
+        fixture.releaseWork();
         await sibling.scope.runNonInteractive(new ContextState());
         expect(sibling.scope.output.terminate_reason).not.toBe('ERROR');
         expect(sibling.scope.output.final_message).toContain('child completed');
