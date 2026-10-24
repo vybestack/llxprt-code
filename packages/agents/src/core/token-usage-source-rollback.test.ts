@@ -1,10 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
+import { nativeRequestFixture } from './__tests__/support/native-request-fixture.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
-import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   fallbackCount,
   seedTool,
@@ -17,7 +15,6 @@ function failureMessage(failure: string): string {
   if (failure === 'counter') return 'counter-failure';
   return failure;
 }
-const root = sourceRootSetup();
 describe('source shape transactional session state', () => {
   it.each(['counter', 'abort-row', 'abort-finish', 'disk'])(
     'preserves cache FIFO, fingerprint and sent ids after %s failure',
@@ -31,7 +28,7 @@ describe('source shape transactional session state', () => {
       });
       const before = { state: shapeState(memory) };
       expect(before.state).toMatchObject({ measurementCount: 1 });
-      const rows = await prepareProviderContentSnapshot(
+      const rows = await nativeRequestFixture(
         {
           async *[Symbol.asyncIterator](): AsyncGenerator<
             IContent,
@@ -43,8 +40,6 @@ describe('source shape transactional session state', () => {
           },
         },
         [],
-        new DebugLogger('source-shape-rollback'),
-        { root: root() },
       );
       const controller = new AbortController();
       let count = 0;
@@ -52,7 +47,7 @@ describe('source shape transactional session state', () => {
         if (++count === 10) {
           if (failure === 'counter') throw new Error('counter-failure');
           if (failure === 'abort-row') controller.abort(new Error('abort-row'));
-          if (failure === 'disk') rows.close();
+          if (failure === 'disk') void rows.close();
         }
         if (failure === 'abort-finish' && text === 'finish')
           controller.abort(new Error('abort-finish'));
@@ -82,7 +77,7 @@ describe('source shape transactional session state', () => {
           baseline.newToolResultTokens,
         );
       } finally {
-        rows.close();
+        await rows.close();
       }
     },
   );

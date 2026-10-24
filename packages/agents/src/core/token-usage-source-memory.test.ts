@@ -3,20 +3,17 @@ import { describe, expect, it } from 'bun:test';
 import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { TokenCountFn } from './tokenUsageRequestShape.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { nativeRequestFixture } from './__tests__/support/native-request-fixture.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
-import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   fallbackCount,
   sourceTextUnit,
   shapePending,
 } from './__tests__/support/token-usage-source-fixture.js';
 
-const root = sourceRootSetup();
 const settled = settledHeap;
 // JSC can keep a just-finished async generator, and the last yielded row,
 // alive across a few collections (stack and continuation roots drain lazily).
@@ -174,7 +171,7 @@ async function makeSnapshot(
   facts: Census,
   ownership: RowOwnership,
 ) {
-  return prepareProviderContentSnapshot(
+  return nativeRequestFixture(
     {
       async *[Symbol.asyncIterator](): AsyncGenerator<IContent, void, unknown> {
         for (let index = 0; index < 64; index++) {
@@ -185,8 +182,7 @@ async function makeSnapshot(
       },
     },
     [shapePending(0)],
-    new DebugLogger('source-shape-memory'),
-    { root: root(), ownership },
+    { ownership },
   );
 }
 async function trapReader(
@@ -250,7 +246,7 @@ async function warmSourcePath(
         countTokens: estimate,
       });
   } finally {
-    snapshot.close();
+    await snapshot.close();
   }
 }
 async function measure(
@@ -309,7 +305,7 @@ async function measure(
     return result;
   } finally {
     for (const reader of facts.retainedReaders) await reader.return();
-    snapshot.close();
+    await snapshot.close();
   }
 }
 describe('bounded disk shape release', () => {

@@ -4,7 +4,7 @@ import { streamCuratedProviderHistory } from '@vybestack/llxprt-code-core/servic
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { JournalProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/journal-provider-request.js';
-import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
+import { callerOwnedProviderRequest } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import type {
   ProviderRequestRows,
   ProviderRequestSnapshot,
@@ -37,7 +37,7 @@ describe('native purge request normalization', () => {
     { mode: 'summary', explicit: false },
     { mode: 'summary', explicit: true },
   ])(
-    'matches legacy units and pending membership for %j without scratch',
+    'matches caller-owned units and pending membership for %j without scratch',
     async ({ mode, explicit }) => {
       const history = new HistoryService({});
       history.setTokenizerFactory(exactTokenizer());
@@ -87,10 +87,11 @@ describe('native purge request normalization', () => {
           { speaker: 'human', blocks: [{ type: 'text', text: 'pending' }] },
         ];
         const logger = new DebugLogger('purge-normalization-test');
-        const old = await prepareProviderContentSnapshot(
-          streamCuratedProviderHistory(logger, override, false),
+        const old = await callerOwnedProviderRequest(
+          await Array.fromAsync(
+            streamCuratedProviderHistory(logger, override, false),
+          ),
           tail,
-          logger,
         );
         try {
           const creates = await operationFileCreates(async () => {

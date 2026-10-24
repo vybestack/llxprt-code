@@ -3,17 +3,16 @@ import { describe, expect, it } from 'bun:test';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { nativeRequestFixture } from './__tests__/support/native-request-fixture.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { TokenUsageLogger } from './TokenUsageLogger.js';
 import {
   recordSourceRequestShapeContext,
   recordProviderOrModelSwitch,
 } from './tokenUsageEstimateLogger.js';
-import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   shapeRow,
   shapeHead,
@@ -26,7 +25,7 @@ import {
 
 const root = sourceRootSetup();
 async function rows(mode: ShapeCase, send: number) {
-  return prepareProviderContentSnapshot(
+  return nativeRequestFixture(
     {
       async *[Symbol.asyncIterator](): AsyncGenerator<IContent, void, unknown> {
         for (let index = 0; index < 64; index++)
@@ -34,8 +33,6 @@ async function rows(mode: ShapeCase, send: number) {
       },
     },
     [shapePending(send)],
-    new DebugLogger('source-shape-context'),
-    { root: root() },
   );
 }
 function records(path: string) {
@@ -112,7 +109,7 @@ async function contextualSends(providerChange: boolean) {
       const observedState: unknown = shapeState(logger.getShapeMemory());
       expect(observedState).toStrictEqual(expected.state);
     } finally {
-      source.close();
+      await source.close();
     }
   }
   const all = records(file);

@@ -1,10 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
+
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
-import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   shapeCases,
   shapeRow,
@@ -18,20 +17,20 @@ import {
   type ShapeCase,
 } from './__tests__/support/token-usage-source-fixture.js';
 
-const root = sourceRootSetup();
-
-async function snapshot(mode: ShapeCase, send: number) {
-  return prepareProviderContentSnapshot(
-    {
-      async *[Symbol.asyncIterator](): AsyncGenerator<IContent, void, unknown> {
-        for (let index = 0; index < 64; index++)
-          yield shapeRow(mode, index, send);
-      },
-    },
-    [shapePending(send)],
-    new DebugLogger('source-shape-test'),
-    { root: root() },
-  );
+async function snapshot(
+  mode: ShapeCase,
+  send: number,
+): Promise<ProviderRequestSnapshot> {
+  const rows = [
+    ...Array.from({ length: 64 }, (_, index) => shapeRow(mode, index, send)),
+    shapePending(send),
+  ];
+  return {
+    ...inMemoryRequestSelection(rows),
+    callerOwned: true,
+    pending: { inputCount: 1, firstOutputIndex: 64 },
+    isPending: (index) => index === 64,
+  };
 }
 async function parity(mode: ShapeCase, tokenizer: string) {
   const memory = new RequestShapeSessionMemory(shapeCapacity(mode));
@@ -63,7 +62,7 @@ async function parity(mode: ShapeCase, tokenizer: string) {
         chars: counts.chars,
       });
     } finally {
-      rows.close();
+      await rows.close();
     }
   }
   const shape = memory.recordRequestShape({
@@ -84,7 +83,7 @@ async function parity(mode: ShapeCase, tokenizer: string) {
   return observations;
 }
 
-describe('exact disk-backed normalized TEXT request shape', () => {
+describe('exact caller-owned TEXT request shape', () => {
   for (const tokenizer of ['fallback', 'tiktoken']) {
     it.each([...shapeCases])(
       'matches all original array fields and session after two sends, %s / ' +
