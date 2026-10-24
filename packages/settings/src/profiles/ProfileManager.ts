@@ -75,6 +75,20 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map((name) => String(name)) : [];
 }
 
+function isFileNotFound(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+}
+
+export class ProfileNotFoundError extends Error {
+  readonly profileName: string;
+
+  constructor(profileName: string, options?: ErrorOptions) {
+    super(`Profile '${profileName}' not found`, options);
+    this.name = 'ProfileNotFoundError';
+    this.profileName = profileName;
+  }
+}
+
 /**
  * Manages saving and loading of configuration profiles.
  * Profiles are stored in <global llxprt dir>/profiles/<profileName>.json
@@ -248,8 +262,8 @@ export class ProfileManager {
 
       return profile;
     } catch (error) {
-      if (error instanceof Error && error.message.includes('ENOENT')) {
-        throw new Error(`Profile '${profileName}' not found`);
+      if (isFileNotFound(error)) {
+        throw new ProfileNotFoundError(profileName, { cause: error });
       }
       if (error instanceof SyntaxError) {
         // Name the profile AND say why. Malformed JSON and dangerous-key
@@ -342,8 +356,8 @@ export class ProfileManager {
     try {
       await deleteProfileFile(this.profilesDir, profileName);
     } catch (error) {
-      if (error instanceof Error && error.message.includes('ENOENT')) {
-        throw new Error(`Profile '${profileName}' not found`);
+      if (isFileNotFound(error)) {
+        throw new ProfileNotFoundError(profileName, { cause: error });
       }
       throw error;
     }

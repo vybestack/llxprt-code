@@ -13,7 +13,10 @@ import {
   type LoadBalancerProfile,
   type Profile,
 } from '@vybestack/llxprt-code-settings';
-import type { ProfileManager } from '@vybestack/llxprt-code-settings';
+import {
+  ProfileNotFoundError,
+  type ProfileManager,
+} from '@vybestack/llxprt-code-settings';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings/profiles/types.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 
@@ -54,9 +57,16 @@ async function loadReferencedSubProfile(
 ): Promise<Profile> {
   try {
     return await deps.profileManagerInstance.loadProfile(profileName);
-  } catch {
+  } catch (error) {
+    if (error instanceof ProfileNotFoundError) {
+      throw new Error(
+        `Load balancer profile "${deps.lbName}" references profile "${profileName}" which does not exist`,
+        { cause: error },
+      );
+    }
     throw new Error(
-      `Load balancer profile "${deps.lbName}" references profile "${profileName}" which does not exist`,
+      `Load balancer profile "${deps.lbName}" could not load profile "${profileName}"`,
+      { cause: error },
     );
   }
 }

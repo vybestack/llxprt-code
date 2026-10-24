@@ -58,6 +58,7 @@ export type {
 
 export {
   ProfileManager,
+  ProfileNotFoundError,
   applyProfileSettings,
 } from './profiles/ProfileManager.js';
 // Cohesive public profile-lock and write API. Internal lock handle/path/read/
