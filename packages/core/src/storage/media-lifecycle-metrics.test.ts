@@ -203,7 +203,10 @@ describe('MediaLifecycleMetrics', () => {
     expect(active.process.arrayBuffers).toBeGreaterThanOrEqual(0);
     expect(active.process.rss).toBeGreaterThan(0);
     const peakFootprint = requireAvailableMetric(active.osPeakFootprintBytes);
-    expect(peakFootprint).toBeGreaterThanOrEqual(active.process.rss);
+    // The peak counter has KiB granularity while rss is in bytes, so at the
+    // high-water mark the peak can sit up to 1023 bytes below the exact rss.
+    const rssFlooredToKiB = Math.floor(active.process.rss / 1024) * 1024;
+    expect(peakFootprint).toBeGreaterThanOrEqual(rssFlooredToKiB);
     expect(peakFootprint).toBeLessThan(active.process.rss * 10);
 
     await resolved.release();
