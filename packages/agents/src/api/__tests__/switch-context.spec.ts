@@ -44,6 +44,7 @@ import type {
 import {
   buildAgent,
   buildProfileAgent,
+  registerFakeProviders,
   drain,
   typesOf,
   countType,
@@ -100,6 +101,11 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
       'provider-switch-two-turn.jsonl',
     );
     try {
+      registerFakeProviders(
+        agent,
+        ['openai'],
+        'provider-switch-second-turn.jsonl',
+      );
       // first turn establishes a session
       const first = await drain(agent.stream('turn one'));
       expect(countType(first, 'done')).toBe(1);
@@ -189,6 +195,11 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
       'provider-switch-two-turn.jsonl',
     );
     try {
+      registerFakeProviders(
+        agent,
+        ['openai'],
+        'provider-switch-second-turn.jsonl',
+      );
       const first = await drain(agent.stream('turn one'));
       expect(countType(first, 'done')).toBe(1);
 
@@ -213,6 +224,11 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
       'provider-switch-two-turn.jsonl',
     );
     try {
+      registerFakeProviders(
+        agent,
+        ['openai'],
+        'provider-switch-second-turn.jsonl',
+      );
       // capture the HistoryService identity BEFORE the switch
       const existingHistoryService = captureHistoryServiceIdentity(agent);
 
@@ -286,6 +302,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
   it('T4f switching INTO a provider that cannot accept the prior provider thinking blocks applies stripThoughts normalization @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-005', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
+      registerFakeProviders(agent, ['openai'], 'plain-text.jsonl');
       // Seed a history that explicitly carries a model thinking block WITH a
       // signature — the exact field stripThoughts must delete. Post-P21 the
       // history is IContent (speaker/blocks), so the thinking block carries
@@ -316,8 +333,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
       const beforeSerialized = JSON.stringify(beforeRoundTrip);
       expect(beforeSerialized.includes('sig-from-prior-provider')).toBe(true);
 
-      // Switch into a provider that cannot accept thinking blocks. Under the
-      // fake-provider seam setProvider('openai',...) is swallowed, but the
+      // Switch into a provider that cannot accept thinking blocks; the
       // subsequent setHistory({stripThoughts:true}) is the normalization the
       // switch path applies and is what we verify here.
       await agent.setProvider('openai', 'gpt-4o');
@@ -488,6 +504,11 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
               'provider-switch-two-turn.jsonl',
             );
             try {
+              registerFakeProviders(
+                agent,
+                ['openai'],
+                'provider-switch-second-turn.jsonl',
+              );
               // seed history with generated messages via the public setHistory
               const seeded: AgentMessage[] = generatedTurns.map((t) => ({
                 speaker: 'human' as const,

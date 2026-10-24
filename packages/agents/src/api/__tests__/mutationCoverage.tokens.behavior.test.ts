@@ -38,6 +38,7 @@ import {
   isTextEvent,
   ASYNC_PROPERTY_TIMEOUT_MS,
   buildPropertyAgent,
+  registerFakeProviders,
 } from './helpers/agentHarness.js';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 
@@ -242,6 +243,11 @@ describe('mutation P23.b — restoreChatVisibility switch continuity (REQ-005)',
       'provider-switch-two-turn.jsonl',
     );
     try {
+      registerFakeProviders(
+        agent,
+        ['newprov'],
+        'provider-switch-second-turn.jsonl',
+      );
       const e1: AgentEvent[] = await drain(agent.stream('turn one'));
       expect(countType(e1, 'done')).toBe(1);
       await agent.setProvider('newprov', 'newmodel');

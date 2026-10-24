@@ -117,9 +117,9 @@ export async function extractExistingState(
   const existingHistory = hasInitializedChat
     ? agentClient.getChat().getHistory()
     : await agentClient.getHistory();
-  const existingHistoryService = hasInitializedChat
-    ? null
-    : agentClient.getHistoryService();
+  // getHistoryService() prefers the live chat's service over a stored one, so
+  // this is the instance the conversation is actually using in both cases.
+  const existingHistoryService = agentClient.getHistoryService();
   logger.debug('Retrieved existing state', {
     historyLength: existingHistory.length,
     hasHistoryService: !!existingHistoryService,
@@ -171,7 +171,9 @@ export function buildNewContentGeneratorConfig(
 
 /**
  * Transfers existing history to the new agent client, stripping thought
- * signatures when migrating from GenAI to Vertex.
+ * signatures when migrating from GenAI to Vertex. The live HistoryService is
+ * reused by the new client except for that migration: the signatures live in
+ * the service's own content, so the stripped copy needs a fresh service.
  */
 export async function transferHistoryToNewClient(
   logger: DebugLogger,
@@ -183,11 +185,15 @@ export async function transferHistoryToNewClient(
 ): Promise<void> {
   const fromGenaiToVertex =
     previousVertexai === false && newContentGeneratorConfig.vertexai === true;
-  if (existingHistoryService) {
-    logger.debug('Skipping existing HistoryService reuse', {
+  if (existingHistoryService && !fromGenaiToVertex) {
+    // Hand the live HistoryService to the new client so the conversation keeps
+    // one identity across a rebuild (REQ-005). The caller must detach the
+    // previous client from this instance before disposing it, or its
+    // clearHistory() would empty the shared service.
+    logger.debug('Storing existing HistoryService for reuse', {
       historyLength: existingHistory.length,
-      fromGenaiToVertex,
     });
+    newAgentClient.storeHistoryServiceForReuse(existingHistoryService);
   }
   if (existingHistory.length === 0) {
     return;

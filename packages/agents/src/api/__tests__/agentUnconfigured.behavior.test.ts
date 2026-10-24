@@ -4,6 +4,7 @@ import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
+  FakeProvider,
   ProviderManager,
   ProviderFileLifecycle,
 } from '@vybestack/llxprt-code-providers';
@@ -102,6 +103,7 @@ function makeRecordingClient(): AgentClientContract & {
     addDirectoryContext: async () => {},
     getChat,
     getHistoryService: () => null,
+    getContentGeneratorConfig: () => undefined,
     storeHistoryServiceForReuse: () => {},
     hasChatInitialized: () => false,
     startChat,
@@ -345,20 +347,15 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
 
   const observeSetProviderFromUnconfiguredReturnsPreviousProviderNullNotSentinel2481 =
     async () => {
-      // Under the fake seam, switchActiveProvider throws (no registered runtime)
-      // but the error is swallowed — the sentinel must NOT leak as previousProvider.
-      const prevFake = process.env.LLXPRT_FAKE_RESPONSES;
-      process.env.LLXPRT_FAKE_RESPONSES = '/tmp/fake-unconfigured-test.jsonl';
-      try {
-        const result = await agent.setProvider('openai');
+      // The switch succeeds for real against a registered provider; the
+      // unconfigured sentinel must NOT leak as previousProvider.
+      const provider = new FakeProvider(
+        join(import.meta.dir, 'fixtures/plain-text.jsonl'),
+      );
+      provider.name = 'openai';
+      manager.registerProvider(provider);
+      const result = await agent.setProvider('openai');
 
-        return { result };
-      } finally {
-        if (prevFake === undefined) {
-          delete process.env.LLXPRT_FAKE_RESPONSES;
-        } else {
-          process.env.LLXPRT_FAKE_RESPONSES = prevFake;
-        }
-      }
+      return { result };
     };
 });

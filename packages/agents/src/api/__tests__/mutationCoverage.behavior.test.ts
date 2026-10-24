@@ -48,6 +48,7 @@ import {
   internalConfig,
   ASYNC_PROPERTY_TIMEOUT_MS,
   buildPropertyAgent,
+  registerFakeProviders,
 } from './helpers/agentHarness.js';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
@@ -230,6 +231,11 @@ describe('mutation P23 — target 5: provider-switch model-change guard (agentIm
 
       // Switch provider + model. The model-change guard executes (model is
       // defined AND differs from current) → getModel reflects the new value.
+      registerFakeProviders(
+        agent,
+        ['other-provider'],
+        'provider-switch-two-turn.jsonl',
+      );
       await agent.setProvider('other-provider', 'switched-model');
       expect(agent.getProvider()).toBe('other-provider');
       expect(agent.getModel()).toBe('switched-model');
@@ -326,12 +332,12 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
   }
 
   it(
-    'PROP target-5: model switches reflect nonblank selections and blank models use the configured default (REQ-005)',
+    'PROP target-5: for any nonblank model differing from the current one, a provider switch selects exactly that model (REQ-005)',
     async () => {
       await expect(
         fc.assert(
           createPROPTarget5ForAnyModelStringDifferingFromTheCurrentSetProviderProperty(),
-          { examples: [[' '], ['  switched-model  ']] },
+          { examples: [['  switched-model  ']] },
         ),
       ).resolves.toBeUndefined();
     },
@@ -342,17 +348,15 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
     return fc.asyncProperty(
       fc
         .string({ minLength: 1, maxLength: 40 })
-        .filter((m) => m !== 'fake-model'),
+        .filter((m) => m.trim() !== '' && m !== 'fake-model'),
       async (model) => {
         const { agent, cleanup } = await buildPropertyAgent(
           'provider-switch-two-turn.jsonl',
         );
         try {
+          registerFakeProviders(agent, ['p'], 'provider-switch-two-turn.jsonl');
           await agent.setProvider('p', model);
-          const selectedModel = model.trim() ? model : 'fake-model';
-          return (
-            agent.getModel() === selectedModel && agent.getProvider() === 'p'
-          );
+          return agent.getModel() === model && agent.getProvider() === 'p';
         } finally {
           await cleanup();
         }
@@ -434,13 +438,15 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
   }
 
   it(
-    'setProvider without a model preserves the current model (kills 1139 ConditionalExpression true) (REQ-005)',
+    'setProvider without a model adopts the new provider default model and never clobbers it with undefined (kills 1139 ConditionalExpression true) (REQ-005)',
     async () => {
       const { agent, cleanup } = await buildAgent('plain-text.jsonl');
       try {
-        const beforeModel = agent.getModel();
-        await agent.setProvider('openai');
-        expect(agent.getModel()).toBe(beforeModel);
+        registerFakeProviders(agent, ['openai'], 'plain-text.jsonl');
+        const result = await agent.setProvider('openai');
+        // A real switch selects the new provider's default model.
+        expect(result.defaultModel).toBeDefined();
+        expect(result.defaultModel).toBe(agent.getModel());
       } finally {
         await cleanup();
       }
@@ -449,33 +455,35 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
   );
 
   it(
-    'PROP setProvider model preservation: for any provider switch name under the fake seam, setProvider without model preserves the current model (REQ-005)',
+    'PROP setProvider model selection: for any registered provider name, setProvider without a model yields the provider default or keeps the current model (REQ-005)',
     async () => {
       await expect(
         fc.assert(
-          createPROPSetProviderModelPreservationForAnyProviderSwitchNameUnderTheFakeProperty(),
+          createPROPSetProviderModelSelectionForAnyRegisteredProviderNameProperty(),
         ),
       ).resolves.toBeUndefined();
     },
     ASYNC_PROPERTY_TIMEOUT_MS,
   );
 
-  function createPROPSetProviderModelPreservationForAnyProviderSwitchNameUnderTheFakeProperty() {
+  function createPROPSetProviderModelSelectionForAnyRegisteredProviderNameProperty() {
     return fc.asyncProperty(
-      // Under the fake seam only 'fake' is registered, so any other name
-      // triggers the provider-not-found path in applyProviderSwitch (which
-      // is suppressed as a no-op when the fake seam is active). Constrain to
-      // realistic provider names — this exercises the same code path as the
-      // sibling concrete test above across multiple distinct values without
-      // relying on arbitrary strings that widen the env-var race window.
+      // Each name is registered on the agent before the switch, so every
+      // value performs a real provider switch. Constrain to realistic
+      // provider names rather than arbitrary strings.
       fc.constantFrom('openai', 'anthropic', 'gemini', 'ollama', 'fake'),
       async (providerName) => {
         const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
         try {
+          registerFakeProviders(
+            agent,
+            ['openai', 'anthropic', 'gemini', 'ollama'],
+            'plain-text.jsonl',
+          );
           const beforeModel = agent.getModel();
-          await agent.setProvider(providerName);
+          const result = await agent.setProvider(providerName);
           return (
-            agent.getModel() === beforeModel &&
+            agent.getModel() === (result.defaultModel ?? beforeModel) &&
             agent.getProvider() === providerName
           );
         } finally {
@@ -547,6 +555,7 @@ describe('mutation P23 — target 7: rebuild propagates approvalHandler (agentIm
         },
       );
       try {
+        registerFakeProviders(agent, ['openai'], 'tool-call-then-answer.jsonl');
         await drain(agent.stream('turn1'));
         await agent.setProvider('openai');
         const events = await drain(agent.stream('turn2'));

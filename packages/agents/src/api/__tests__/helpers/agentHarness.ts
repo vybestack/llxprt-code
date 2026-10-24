@@ -151,14 +151,20 @@ export {
   FIXTURES_DIR as fixturesDir,
 };
 
-export async function buildProfileAgent(
+/**
+ * Registers one FakeProvider per name on the agent's provider manager, each
+ * replaying `fixtureRelPath` from its first line. A test that switches to one
+ * of these names performs a real provider switch, the way production does for
+ * a registered provider.
+ */
+export function registerFakeProviders(
+  agent: Agent,
+  names: readonly string[],
   fixtureRelPath: string,
-): Promise<BuiltAgent> {
-  const built = await buildAgent(fixtureRelPath);
-  const config = internalConfig(built.agent);
-  const manager = fixtureAgentResources(built.agent).manager;
-
-  for (const name of ['openai', 'anthropic']) {
+): void {
+  const config = internalConfig(agent);
+  const manager = fixtureAgentResources(agent).manager;
+  for (const name of names) {
     const provider = new FakeProvider(
       resolve(FIXTURES_DIR, fixtureRelPath),
       config.getTargetDir(),
@@ -166,6 +172,13 @@ export async function buildProfileAgent(
     provider.name = name;
     manager.registerProvider(provider);
   }
+}
+
+export async function buildProfileAgent(
+  fixtureRelPath: string,
+): Promise<BuiltAgent> {
+  const built = await buildAgent(fixtureRelPath);
+  registerFakeProviders(built.agent, ['openai', 'anthropic'], fixtureRelPath);
   const keys = vi
     .spyOn(internalConfig(built.agent).getProviderKeys(), 'getKey')
     .mockImplementation(async (name) => {

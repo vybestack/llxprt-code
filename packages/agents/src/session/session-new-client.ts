@@ -15,6 +15,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   extractExistingState,
   prepareAgentClientReplacement,
@@ -123,7 +124,13 @@ export async function replaceSessionClient(
   next.getHistoryService()?.setTokenizerFactory({
     getTokenizer: (provider, model) => tokenizer.getTokenizer(provider, model),
   });
-  if (previous !== borrowed) await ledger.dispose(previous);
+  if (previous !== borrowed) {
+    // The new client reuses the previous client's HistoryService. Rebind the
+    // previous chat to a throwaway service so disposing it clears that one
+    // instead of the shared conversation.
+    previous.prepareHistoryRebind(new HistoryService())();
+    await ledger.dispose(previous);
+  }
 }
 
 export async function prepareBoundProfileClient(
