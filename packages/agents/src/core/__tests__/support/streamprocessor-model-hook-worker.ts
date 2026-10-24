@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
+import { callerOwnedProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -106,15 +107,7 @@ async function oracle(
   mode: ModelHookMode,
 ): Promise<Awaited<ReturnType<typeof estimatePromptEnvelope>>> {
   const projection = await setup.provider.projectPromptEnvelope({
-    contents: {
-      async *[Symbol.asyncIterator](): AsyncGenerator<IContent, void, unknown> {
-        if (mode === 'large') {
-          for (let index = 0; index < 64; index++)
-            yield diskTextRow(index, true);
-          yield sourcePending;
-        } else yield* expectedRows(mode);
-      },
-    },
+    contents: callerOwnedProviderSource(expectedRows(mode)),
     tools: oracleTools(mode),
     invocation: captureProviderInvocation(
       createProviderRuntimeContext({

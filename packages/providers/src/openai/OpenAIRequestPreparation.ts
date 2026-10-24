@@ -475,6 +475,13 @@ export async function prepareRequest(
   rowInput: ChatRowInput = {},
   withEstimate = false,
 ): Promise<RequestContext> {
+  if (
+    options.requestRows?.native === undefined &&
+    options.requestRows?.callerOwned !== true
+  )
+    throw new Error(
+      'OpenAI Chat requires a native or caller-owned request selection',
+    );
   const model = options.resolved.model || defaultModel;
   const ephemeralSettings = readInvocationRecord(options.invocation.ephemerals);
   const resolvedProviderName = providerName ?? 'openai';
@@ -521,7 +528,7 @@ export async function prepareRequest(
   };
   const nativeRows = options.requestRows;
   const body =
-    nativeRows?.native !== undefined || nativeRows?.callerOwned === true
+    nativeRows.native !== undefined || nativeRows.callerOwned === true
       ? await prepareNativePlainRequest(
           envelope,
           nativeRows,

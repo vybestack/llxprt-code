@@ -261,6 +261,7 @@ export function rowsSelection(
   rows: readonly IContent[],
 ): ProviderRequestSelection {
   return Object.freeze({
+    callerOwned: true,
     count: rows.length,
     readAt: readAtOf(rows),
     openReader: (signal?: AbortSignal) =>

@@ -244,11 +244,13 @@ export async function modelHookWorker(
       env: { ...process.env, TMPDIR: runtime },
       stdin: 'ignore',
       stdout: 'ignore',
-      stderr: 'ignore',
+      stderr: 'pipe',
     },
   );
+  const stderr = new Response(child.stderr).text();
   if ((await child.exited) !== 0)
-    throw new Error(`Model-hook worker failed: ${child.pid}`);
+    throw new Error(`Model-hook worker failed: ${child.pid}\n${await stderr}`);
+  await stderr;
   const facts = modelFactsSchema.parse(
     JSON.parse(readFileSync(result, 'utf8')),
   );

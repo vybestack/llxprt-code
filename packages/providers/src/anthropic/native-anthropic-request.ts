@@ -2,6 +2,7 @@
 import {
   callerOwnedAnthropicEngine,
   callerOwnedAnthropicCache,
+  callerOwnedPurgeCache,
 } from './caller-owned-anthropic.js';
 import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { readAnthropicMediaLedger } from './anthropic-media-ledger.js';
@@ -442,13 +443,22 @@ async function prepareCallerOwnedAnthropic(
     strip: plan.reasoningSettings.stripFromContext,
     includeInContext: plan.reasoningSettings.includeInContext,
   });
-  const cache = plan.wantCaching
+  let cache = plan.wantCaching
     ? await callerOwnedAnthropicCache(
         engine,
         settings,
         plan.requestSettings.ttl,
       )
     : undefined;
+  if (cache !== undefined && plan.wantMediaPurgeCacheAnchor)
+    cache = await callerOwnedPurgeCache(
+      engine,
+      cache,
+      Number(
+        params.placement === 'context-prefix' &&
+          (params.options.systemInstruction ?? '') !== '',
+      ),
+    );
   let bytes = 0;
   let recoveredImages = 0;
   for await (const piece of resolveAnthropicWireMedia(
@@ -500,6 +510,10 @@ export async function prepareAnthropicRequestRows(
   mediaStage: MediaStage | undefined,
   options: SpooledRequestOptions = {},
 ): Promise<PreparedAnthropicRequest> {
+  if (rows.native === undefined && rows.callerOwned !== true)
+    throw new Error(
+      'Anthropic requires a native or caller-owned request selection',
+    );
   if (rows.callerOwned === true)
     return prepareCallerOwnedAnthropic(params, rows, mediaStage, options);
   if (rows.native !== undefined)

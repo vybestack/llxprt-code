@@ -205,6 +205,10 @@ function requireDiskTextRows(
     throw new Error(
       'Explicit Responses disk text selection identity/count is required',
     );
+  if (rows.native === undefined && rows.callerOwned !== true)
+    throw new Error(
+      'Responses requires a native or caller-owned request selection',
+    );
   return rows;
 }
 

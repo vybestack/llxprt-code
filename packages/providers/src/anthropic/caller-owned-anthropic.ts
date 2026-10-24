@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { selectLastCacheableBlockIndex } from './AnthropicRequestBuilder.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { CallerOwnedToolQuery } from '../utils/caller-owned-tool-query.js';
@@ -65,7 +66,14 @@ class CallerOwnedAnthropicIndex implements AnthropicRequestRepairIndex {
       yield* this.source.messages(from);
       return;
     }
-    for (const message of this.entries) if (message.end >= from) yield message;
+    let low = 0;
+    let high = this.entries.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (this.entries[middle].end < from) low = middle + 1;
+      else high = middle;
+    }
+    for (let at = low; at < this.entries.length; at++) yield this.entries[at];
   }
   async decision(
     message: RepairMessage,
@@ -205,4 +213,53 @@ export async function callerOwnedAnthropicCache(
     state = finishAnthropicCacheAtom(state, anchored, before);
   }
   return anthropicCachePlan(state, settings, ttl);
+}
+
+export async function callerOwnedPurgeCache(
+  engine: Pick<AnthropicStreamRepair<AnthropicRepairRows>, 'cacheBlocks'>,
+  cache: AnthropicCachePlan,
+  prefixBreakpoints: number,
+): Promise<AnthropicCachePlan> {
+  type Target = AnthropicCachePlan['targets'][number];
+  let previous: Target | undefined;
+  let expected: Target | undefined;
+  let tagged: Target | undefined;
+  let tags = 0;
+  let image = false;
+  let breakpoints = prefixBreakpoints + cache.targets.length;
+  const same = (left: Target, right: Target): boolean =>
+    left.run === right.run && left.block === right.block;
+  for await (const entry of engine.cacheBlocks()) {
+    const cached = cache.targets.some((target) => same(target, entry.target));
+    if ('cache_control' in entry.block && !cached) breakpoints++;
+    if (entry.purge !== undefined && !(entry.target.string && cached)) {
+      tags++;
+      tagged = entry.target;
+    }
+    if (!image && entry.block.type === 'image') {
+      image = true;
+      expected = previous;
+    }
+    if (selectLastCacheableBlockIndex([entry.block]) === 0)
+      previous = entry.target;
+  }
+  if (tags !== 1 || tagged === undefined || expected === undefined)
+    return cache;
+  if (
+    !same(tagged, expected) ||
+    breakpoints >= 3 ||
+    cache.targets.some((target) => same(target, tagged))
+  )
+    return cache;
+  const markerBytes =
+    Buffer.byteLength(
+      JSON.stringify({ cache_control: { type: 'ephemeral', ttl: cache.ttl } }),
+    ) - 1;
+  const blockify =
+    Buffer.byteLength(JSON.stringify([{ type: 'text', text: '' }])) - 2;
+  return {
+    ...cache,
+    targets: [...cache.targets, tagged],
+    bytes: cache.bytes + markerBytes + (tagged.string ? blockify : 0),
+  };
 }

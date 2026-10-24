@@ -33,6 +33,10 @@ import {
 import type { MediaStage } from './message-table/wire-builder.js';
 import type { ImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
 import {
+  readPurgeBlockTag,
+  tagMediaPurgeBoundaryBlock,
+} from './AnthropicMediaPurgeCache.js';
+import {
   resolveAnthropicWireMedia,
   type AnthropicWirePiece,
 } from './anthropic-wire-media.js';
@@ -60,6 +64,7 @@ export interface LazyRepairAtom {
   openPieces(redact?: boolean): AsyncGenerator<RepairPiece>;
 }
 interface Run {
+  readonly atom: LazyRepairAtom;
   readonly start: number;
   readonly end: number;
   readonly role: 'assistant' | 'user';
@@ -243,7 +248,13 @@ export class AnthropicStreamRepair<
     let count = 0;
     for await (const atom of this.atoms()) {
       if (start !== undefined && start.role !== atom.role) {
-        yield { start: start.key, end, role: start.role, merged: count > 1 };
+        yield {
+          atom: start,
+          start: start.key,
+          end,
+          role: start.role,
+          merged: count > 1,
+        };
         start = undefined;
         count = 0;
       }
@@ -252,7 +263,13 @@ export class AnthropicStreamRepair<
       count++;
     }
     if (start !== undefined)
-      yield { start: start.key, end, role: start.role, merged: count > 1 };
+      yield {
+        atom: start,
+        start: start.key,
+        end,
+        role: start.role,
+        merged: count > 1,
+      };
   }
   private async *runPieces(run: Run): AsyncGenerator<RepairPiece> {
     for await (const atom of this.atoms(run.start)) {
@@ -294,6 +311,60 @@ export class AnthropicStreamRepair<
       }
     }
   }
+  private async *taggedRunBlocks(
+    run: Run,
+  ): AsyncGenerator<AnthropicMessageBlock> {
+    for await (const atom of this.atoms(run.start)) {
+      if (atom.key > run.end) break;
+      for await (const piece of atom.openPieces())
+        yield* typeof piece === 'string'
+          ? [await this.taggedText(atom, piece)]
+          : piece;
+    }
+  }
+  private async taggedText(
+    atom: LazyRepairAtom,
+    text: string,
+  ): Promise<AnthropicMessageBlock> {
+    const block: AnthropicMessageBlock = { type: 'text', text };
+    if (atom.repair) return block;
+    const row = await this.source.query.readAt(
+      atom.end ?? Math.floor(atom.key / 4),
+    );
+    const tag = row.metadata?.semanticMediaPurgeBoundary;
+    if (tag?.blockIndex === row.blocks.length - 1)
+      tagMediaPurgeBoundaryBlock(block, tag.boundaryId);
+    return block;
+  }
+  private async *orderedTaggedBlocks(
+    run: Run,
+  ): AsyncGenerator<AnthropicMessageBlock> {
+    for (let pass = 0; pass < (run.merged ? 2 : 1); pass++)
+      for await (const block of this.taggedRunBlocks(run))
+        if (
+          (block.type !== 'text' || block.text.trim() !== '') &&
+          (!run.merged || Number(!leading(block, run.role)) === pass)
+        )
+          yield block;
+  }
+  async *cacheBlocks(): AsyncGenerator<{
+    readonly target: AnthropicCachePlan['targets'][number];
+    readonly block: AnthropicMessageBlock;
+    readonly purge: object | undefined;
+  }> {
+    let ordinal = 0;
+    for await (const run of this.runs()) {
+      const shape = await this.shape(run);
+      let blockIndex = 0;
+      for await (const block of this.orderedTaggedBlocks(run))
+        yield {
+          target: { run: ordinal, block: blockIndex++, string: shape.string },
+          block,
+          purge: readPurgeBlockTag(block),
+        };
+      ordinal++;
+    }
+  }
   private cachedText(
     text: string,
     run: number,
@@ -303,12 +374,66 @@ export class AnthropicStreamRepair<
       ? [sanitizeBlockForCacheControl({ type: 'text', text }, cache.ttl)]
       : text;
   }
+  private async *singleRowContent(
+    run: Run,
+    transform: (value: unknown) => unknown,
+    ordinal: number,
+    cache: AnthropicCachePlan | undefined,
+  ): AsyncGenerator<AnthropicWirePiece> {
+    for await (const piece of run.atom.openPieces()) {
+      if (typeof piece === 'string') {
+        yield JSON.stringify(
+          transform(
+            this.cachedText(
+              piece.trim() === ''
+                ? getEmptyMessagePlaceholder(run.role)
+                : piece,
+              ordinal,
+              cache,
+            ),
+          ),
+        );
+        return;
+      }
+      const blocks = piece.filter(
+        (block) => block.type !== 'text' || block.text.trim() !== '',
+      );
+      if (blocks.length === 0) break;
+      yield '[';
+      for (let at = 0; at < blocks.length; at++) {
+        if (at > 0) yield ',';
+        const block = blocks[at];
+        const value =
+          cache !== undefined && hasAnthropicCacheTarget(cache, ordinal, at)
+            ? sanitizeBlockForCacheControl(block, cache.ttl)
+            : block;
+        copyAnthropicWireMedia(block, value);
+        yield value;
+      }
+      yield ']';
+      return;
+    }
+    yield JSON.stringify(
+      transform(
+        this.cachedText(getEmptyMessagePlaceholder(run.role), ordinal, cache),
+      ),
+    );
+  }
   private async *content(
     run: Run,
     transform: (value: unknown) => unknown,
     ordinal: number,
     cache?: AnthropicCachePlan,
   ): AsyncGenerator<AnthropicWirePiece> {
+    if (
+      !run.merged &&
+      !run.atom.repair &&
+      run.atom.chain !== true &&
+      run.atom.end === Math.floor(run.start / 4)
+    ) {
+      yield* this.singleRowContent(run, transform, ordinal, cache);
+      return;
+    }
     const shape = await this.shape(run);
     if (shape.blocks === 0) {
       yield JSON.stringify(

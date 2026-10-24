@@ -56,6 +56,8 @@ export class ObservedHistory extends HistoryService {
     const retained = this.retained;
     const retainsRows = (): boolean => this.retainRows;
     return {
+      ...(snapshot.native === undefined ? {} : { native: snapshot.native }),
+      ...(snapshot.callerOwned === true ? { callerOwned: true } : {}),
       count: snapshot.count,
       pending: snapshot.pending,
       isPending: (index) => snapshot.isPending(index),
@@ -67,9 +69,9 @@ export class ObservedHistory extends HistoryService {
           yield row;
         }
       },
-      close() {
+      async close() {
         owner.closed = true;
-        snapshot.close();
+        await snapshot.close();
       },
     };
   }

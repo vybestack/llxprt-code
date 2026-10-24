@@ -42,11 +42,13 @@ export class AnthropicSpanPlan {
   readonly source: AnthropicRepairSource;
   private readonly windows: AnthropicSpan[] = [];
   private readonly topology: AnthropicSpan[] = [];
+  private readonly spanSets = new Map<boolean, readonly AnthropicSpan[]>();
   async extendThinking(at: number): Promise<void> {
     for await (const message of this.source.messages(at, at + 1))
       if (message.end > at)
         this.topology.push({ start: at, end: message.end + 1 });
     this.topology.sort((left, right) => left.start - right.start);
+    this.spanSets.clear();
   }
   affected:
     | ((id: string, at: number, kind: 0 | 1) => Promise<boolean>)
@@ -239,6 +241,16 @@ export class AnthropicSpanPlan {
     return { start, end };
   }
   async *spans(holders = true): AsyncGenerator<AnthropicSpan> {
+    let spans = this.spanSets.get(holders);
+    if (spans === undefined) {
+      const selected: AnthropicSpan[] = [];
+      for await (const span of this.computeSpans(holders)) selected.push(span);
+      spans = selected;
+      this.spanSets.set(holders, spans);
+    }
+    yield* spans;
+  }
+  private async *computeSpans(holders: boolean): AsyncGenerator<AnthropicSpan> {
     let pending: AnthropicSpan | undefined;
     for await (const at of this.streams(holders)) {
       const span = await this.bounds(at);

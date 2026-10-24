@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { callerOwnedProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -47,12 +48,7 @@ async function oracle(
       (mode !== 'restrict' || tool.name.startsWith('weather')),
   );
   const projection = await setup.provider.projectPromptEnvelope({
-    contents: {
-      async *[Symbol.asyncIterator]() {
-        yield diskTextRow(0, false);
-        yield sourcePending;
-      },
-    },
+    contents: callerOwnedProviderSource([diskTextRow(0, false), sourcePending]),
     invocation: captureProviderInvocation(
       createProviderRuntimeContext({
         settingsService: setup.settings,

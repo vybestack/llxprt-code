@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { ObservedHistory } from './streamprocessor-source-fixture.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { BoundarySnapshotDisk } from '../../boundary-snapshot-disk.js';
 
 export interface ModelBodyObserver {
   firstLive(): number;
@@ -28,33 +27,22 @@ async function liveRows(references: Array<WeakRef<IContent>>): Promise<number> {
   return references.filter((row) => row.deref() !== undefined).length;
 }
 
-function observeBoundary(retainRows: boolean): {
+function observeBoundary(
+  history: ObservedHistory,
+  retainRows: boolean,
+): {
   references: Array<WeakRef<IContent>>;
   closed(): number;
   restore(): void;
 } {
-  const references: Array<WeakRef<IContent>> = [];
-  const retained: IContent[] = [];
-  const row = BoundarySnapshotDisk.prototype.row;
-  const close = BoundarySnapshotDisk.prototype.close;
-  let closed = 0;
-  BoundarySnapshotDisk.prototype.row = function (...args): IContent {
-    const result = row.apply(this, args);
-    references.push(new WeakRef(result));
-    if (retainRows) retained.push(result);
-    return result;
-  };
-  BoundarySnapshotDisk.prototype.close = function (...args): void {
-    closed++;
-    close.apply(this, args);
-  };
+  const previousRetain = history.retainRows;
+  history.retainRows = retainRows;
   return {
-    references,
-    closed: () => closed,
+    references: history.references,
+    closed: () => history.owners.filter((owner) => owner.closed).length,
     restore: () => {
-      BoundarySnapshotDisk.prototype.row = row;
-      BoundarySnapshotDisk.prototype.close = close;
-      retained.length = 0;
+      history.retainRows = previousRetain;
+      history.retained.length = 0;
     },
   };
 }
@@ -64,7 +52,7 @@ export function observeModelBody(
   retainBoundaryRows = false,
 ): ModelBodyObserver {
   const fetch = globalThis.fetch;
-  const boundary = observeBoundary(retainBoundaryRows);
+  const boundary = observeBoundary(history, retainBoundaryRows);
   let firstLive = -1;
   let lastLive = -1;
   let boundaryFirst = -1;
