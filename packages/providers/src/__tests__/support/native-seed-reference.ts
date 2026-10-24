@@ -78,18 +78,18 @@ function referenceResponsesRows(rows: readonly IContent[]): IContent[] {
     ...original.slice(lastCall + 1),
   ]);
 }
-import { frozenSettingsInputs } from '../../anthropic/message-table/__tests__/support/lengthModel/frozenInputs.js';
-import { policyOf } from '../../anthropic/message-table/__tests__/support/lengthModel/lengthChecks.js';
-import { referenceRun } from '../../anthropic/message-table/__tests__/support/lengthModel/referenceFinish.js';
+import { frozenSettingsInputs } from '../../anthropic/__tests__/wire-reference/support/lengthModel/frozenInputs.js';
+import { policyOf } from '../../anthropic/__tests__/wire-reference/support/lengthModel/lengthChecks.js';
+import { referenceRun } from '../../anthropic/__tests__/wire-reference/support/lengthModel/referenceFinish.js';
 import {
   unitFacts,
   unitOf,
   type UnitFact,
-} from '../../anthropic/message-table/__tests__/support/lengthModel/unitFacts.js';
+} from '../../anthropic/__tests__/wire-reference/support/lengthModel/unitFacts.js';
 import {
   conversionOptions,
   type WireSettings,
-} from '../../anthropic/message-table/__tests__/support/wireBuilderHarness.js';
+} from '../../anthropic/__tests__/wire-reference/support/wireBuilderHarness.js';
 import { getMaxTokensForModel } from '../../anthropic/AnthropicModelData.js';
 import { recordBody, type CaseOutcome } from './frozenWire/frozenSend.js';
 import type { FrozenFormat, FrozenSettings } from './frozenWire/frozenCases.js';

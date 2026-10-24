@@ -11,8 +11,8 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { cachedOracle } from '../../../../anthropic/message-table/__tests__/support/wireBuilderHarness.js';
-import { pngOf } from '../../../../anthropic/message-table/__tests__/support/wireBuilderCorpus.js';
+import { cachedOracle } from '../../../../anthropic/__tests__/wire-reference/support/wireBuilderHarness.js';
+import { pngOf } from '../../../../anthropic/__tests__/wire-reference/support/wireBuilderCorpus.js';
 import { formatById } from '../frozenCases.js';
 import { normalizedRows } from '../normalizedRows.js';
 import type {

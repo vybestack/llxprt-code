@@ -1,7 +1,6 @@
+import { normalizedRows } from '../../../__tests__/support/frozenWire/normalizedRows.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { writeTableMessages } from '../emit.js';
-import { MessageTable, newMessage } from '../message-table.js';
 import {
   CURRENT_BASE_URL,
   CURRENT_MODEL,
@@ -36,7 +35,7 @@ describe('writeTableMessages', () => {
     const found: string[] = [];
     for (let seed = 0; seed < 60; seed++) {
       for (const cache of CACHES) {
-        const rows = wireHistory(seed);
+        const rows = await normalizedRows(wireHistory(seed));
         const settings = settingsFor(seed);
         const expected = cachedOracle(rows, settings, cache).json;
         const actual = await emittedCandidate(rows, settings, cache);
@@ -64,10 +63,8 @@ describe('writeTableMessages', () => {
       PLAIN,
       {},
     );
-    const messages = JSON.parse(actual) as Array<{
-      role: string;
-      content: unknown;
-    }>;
+    const messages: Array<{ role: string; content: unknown }> =
+      JSON.parse(actual);
     expect(messages.map((m) => [m.role, typeof m.content])).toStrictEqual([
       ['user', 'string'],
       ['assistant', 'object'],
@@ -75,21 +72,5 @@ describe('writeTableMessages', () => {
       ['assistant', 'string'],
     ]);
     expect(Array.isArray(messages[1].content)).toBe(true);
-  });
-
-  it('refuses a block that carries the dump side lists', () => {
-    const table = new MessageTable();
-    try {
-      const message = newMessage('user');
-      table.addBlock(message, { type: 'text', text: 'x', dumpMediaHead: 0 });
-      table.messages.append(message);
-      table.head = 0;
-      table.tail = 0;
-      expect(() =>
-        writeTableMessages(table, { append: () => undefined }),
-      ).toThrow('A dump block was found in the wire message table');
-    } finally {
-      table.close();
-    }
   });
 });

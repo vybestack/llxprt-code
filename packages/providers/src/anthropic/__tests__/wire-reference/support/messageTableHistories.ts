@@ -4,12 +4,17 @@ import type {
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SeededRandom } from '../../../../openai/__tests__/support/chatBodyCorpus.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { buildProviderDumpBodyStream } from '../../../../utils/providerRequestConversion.js';
 import { streamPrettyJson } from '../../../../utils/streamPrettyJson.js';
 
 export function sourceOf(history: readonly IContent[]): HistoryDumpSource {
   return {
+    callerOwnedRows: {
+      ...inMemoryRequestSelection([...history]),
+      callerOwned: true,
+    },
     async *rows(): AsyncIterable<IContent> {
       yield* structuredClone([...history]);
     },
@@ -34,72 +39,6 @@ function tool(...blocks: ContentBlock[]): IContent {
 function range(count: number): number[] {
   return Array.from({ length: count }, (_, index) => index);
 }
-
-export interface ScaleScenario {
-  readonly name: string;
-  /** What the quadratic table did per unit of work, so a reader knows why it is here. */
-  readonly stressed: string;
-  readonly build: (units: number) => IContent[];
-}
-
-/**
- * Histories whose size grows by `units`. Each one makes a different pass of the
- * table do work for every unit: the id lookups, the displaced-result pulls,
- * the unlink inside one message, the predecessor search of a removal and the
- * existence check of the missing-result pass.
- */
-export const SCALE_SCENARIOS: readonly ScaleScenario[] = [
-  {
-    name: 'call and answer pairs',
-    stressed: 'orphan filter: one tool_use lookup per result',
-    build: (units) =>
-      range(units).flatMap((index) => [
-        human(`question ${index}`),
-        ai(call(`pair_${index}`)),
-        tool(answer(`pair_${index}`)),
-      ]),
-  },
-  {
-    name: 'parallel calls answered in one message',
-    stressed: 'one message holding every call and every result',
-    build: (units) => [
-      human('go'),
-      ai(...range(units).map((index) => call(`parallel_${index}`))),
-      tool(...range(units).map((index) => answer(`parallel_${index}`))),
-    ],
-  },
-  {
-    name: 'results displaced to the end of the history',
-    stressed: 'adjacency pass: pull each result from a later message',
-    build: (units) => [
-      ...range(units).flatMap((index) => [
-        ai(call(`late_${index}`)),
-        human(`interrupt ${index}`),
-      ]),
-      tool(...range(units).map((index) => answer(`late_${index}`))),
-    ],
-  },
-  {
-    name: 'orphan results between user messages',
-    stressed: 'orphan filter: remove each emptied message',
-    build: (units) =>
-      range(units).flatMap((index) => [
-        human(`question ${index}`),
-        tool(answer(`orphan_${index}`)),
-        ai({ type: 'text', text: `reply ${index}` }),
-      ]),
-  },
-  {
-    name: 'calls whose next message is not a user message',
-    stressed: 'missing-result pass: result existence check per call',
-    build: (units) =>
-      range(units).flatMap((index) => [
-        ai(call(`dangling_${index}`)),
-        ai({ type: 'text', text: `reply ${index}` }),
-        human(`question ${index}`),
-      ]),
-  },
-];
 
 const MODELS: ReadonlyArray<string | undefined> = [
   undefined,

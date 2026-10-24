@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { recordedMessages as emittedCandidate } from './message-table/__tests__/support/recorded-wire-oracle.js';
+import { recordedMessages as emittedCandidate } from './__tests__/wire-reference/support/recorded-wire-oracle.js';
 import { describe, expect, it } from 'bun:test';
 import { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
 import {
@@ -21,8 +21,8 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { anthropicScenarios } from '../__tests__/support/frozenWire/explicit/anthropicCases.js';
 import { normalizedRows } from '../__tests__/support/frozenWire/normalizedRows.js';
-import { type WireSettings } from './message-table/__tests__/support/wireBuilderHarness.js';
-import { wireSettingsOf } from './message-table/__tests__/support/lengthModel/frozenInputs.js';
+import { type WireSettings } from './__tests__/wire-reference/support/wireBuilderHarness.js';
+import { wireSettingsOf } from './__tests__/wire-reference/support/lengthModel/frozenInputs.js';
 import { anthropicRepairFactIndex } from './anthropic-repair-fact-writer.js';
 import {
   anthropicLengthRegistration,

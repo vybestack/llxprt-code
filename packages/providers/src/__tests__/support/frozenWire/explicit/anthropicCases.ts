@@ -14,7 +14,7 @@ import {
   callRow,
   text,
   thinkingOnly,
-} from '../../../../anthropic/message-table/__tests__/support/wireBuilderRows.js';
+} from '../../../../anthropic/__tests__/wire-reference/support/wireBuilderRows.js';
 import type { ExplicitCase, Observation } from './explicitCase.js';
 import { bodyOf, observeForms } from './explicitObserve.js';
 import type { ExplicitSend } from './explicitSend.js';

@@ -1,3 +1,4 @@
+import { normalizedRows } from '../../../__tests__/support/frozenWire/normalizedRows.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -21,8 +22,6 @@ import {
   type WireSettings,
 } from './support/wireBuilderHarness.js';
 import { settingsFor } from './support/wireBuilderSettings.js';
-import { attachTailCacheControl } from '../cache-controls.js';
-import { MessageTable } from '../message-table.js';
 import { cacheHistory } from './support/wireCacheCorpus.js';
 
 const TTLS: ReadonlyArray<CacheSettings['ttl']> = [undefined, '5m', '1h'];
@@ -52,8 +51,9 @@ async function compare(
   settings: WireSettings,
   cache: CacheSettings,
 ): Promise<Outcome> {
-  const expected = cachedOracle(rows, settings, cache);
-  const actual = await cachedCandidate(rows, settings, cache);
+  const nativeRows = await normalizedRows(rows);
+  const expected = cachedOracle(nativeRows, settings, cache);
+  const actual = await cachedCandidate(nativeRows, settings, cache);
   const difference =
     describeDifference(expected.json, actual.json) ??
     (expected.evidence?.preparation === actual.evidence?.preparation
@@ -567,28 +567,5 @@ describe('cache controls on the table over targeted histories', () => {
     expect(
       (await cachedCandidate(rows, PLAIN, free)).evidence?.preparation,
     ).toBe('added');
-  });
-});
-
-describe('a string message that takes a breakpoint', () => {
-  it('becomes one block and leaves its string-only cache tags behind', () => {
-    const table = new MessageTable();
-    try {
-      const id = table.append({ role: 'user', content: 'tail' });
-      const tagged = table.messages.read(id);
-      tagged.anchorText = true;
-      tagged.purgeText = true;
-      table.messages.replace(id, tagged);
-      attachTailCacheControl(table, '5m', { debug: () => undefined });
-      const message = table.messages.read(id);
-      expect(message.text).toBeUndefined();
-      expect(message.anchorText).toBeUndefined();
-      expect(message.purgeText).toBeUndefined();
-      expect(JSON.stringify(table.blocks.read(message.head).block)).toBe(
-        '{"type":"text","text":"tail","cache_control":{"type":"ephemeral","ttl":"5m"}}',
-      );
-    } finally {
-      table.close();
-    }
   });
 });

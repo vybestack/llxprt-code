@@ -20,7 +20,8 @@ import {
   type AnthropicMessage,
   type AnthropicMessageBlock,
 } from '../../../../AnthropicMessageNormalizer.js';
-import { projectRow } from '../../../project-row.js';
+import { sanitizeRowImages } from '../../../../AnthropicImageSanitizer.js';
+import { stripCrossModelThinking } from '../../../../crossModelThinkingStrip.js';
 import {
   readAnchorBlockTag,
   readAnchorStringTag,
@@ -216,7 +217,13 @@ export function unitFacts(
   const projection = projectionOf(settings);
   const units: UnitFact[] = [];
   for (const raw of structuredClone([...rows])) {
-    const row = projectRow(raw, projection);
+    const sized = sanitizeRowImages(raw, projection.imageBudget).row;
+    const row = stripCrossModelThinking(
+      [sized],
+      projection.currentModel,
+      projection.currentBaseURL,
+      projection.logger,
+    ).find((_row, at) => at === 0);
     if (row === undefined) continue;
     units.push(unitOf(units.length, row, settings, options));
   }

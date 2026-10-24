@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { recordedMessages as emittedCandidate } from './message-table/__tests__/support/recorded-wire-oracle.js';
+import { recordedMessages as emittedCandidate } from './__tests__/wire-reference/support/recorded-wire-oracle.js';
 import { describe, expect, it } from 'bun:test';
 import { anthropicRepairFactIndex } from './anthropic-repair-fact-writer.js';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
@@ -14,8 +14,8 @@ import { normalizedRows } from '../__tests__/support/frozenWire/normalizedRows.j
 import {
   oracleJson,
   type WireSettings,
-} from './message-table/__tests__/support/wireBuilderHarness.js';
-import { wireSettingsOf } from './message-table/__tests__/support/lengthModel/frozenInputs.js';
+} from './__tests__/wire-reference/support/wireBuilderHarness.js';
+import { wireSettingsOf } from './__tests__/wire-reference/support/lengthModel/frozenInputs.js';
 import {
   withAnthropicStreamRepair,
   type AnthropicStreamRepair,

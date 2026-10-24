@@ -6,7 +6,7 @@
  * not, between inputs that look alike.
  */
 
-import { pngOf } from '../../../../anthropic/message-table/__tests__/support/wireBuilderCorpus.js';
+import { pngOf } from '../../../../anthropic/__tests__/wire-reference/support/wireBuilderCorpus.js';
 import type { ProviderToolset } from '../../../../IProvider.js';
 import { formatById } from '../frozenCases.js';
 import type { ExplicitCase, Observation } from './explicitCase.js';

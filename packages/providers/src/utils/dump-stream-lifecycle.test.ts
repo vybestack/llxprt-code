@@ -8,7 +8,6 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
 import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { DumpScratch } from './dumpScratch.js';
-import { MessageTable } from '../anthropic/message-table/message-table.js';
 import { buildProviderDumpBodyStream } from './providerRequestConversion.js';
 import { dumpRequestContextStream } from './dumpContext.js';
 import { streamPrettyJson } from './streamPrettyJson.js';
@@ -224,7 +223,7 @@ describe('stream dump writer cleanup', () => {
   });
 });
 describe('scratch construction cleanup', () => {
-  for (const failedIndex of [1, 2])
+  for (const failedIndex of [1])
     it(`cleans scratch descriptors when index ${failedIndex} fails`, () => {
       const watch = scratchWatch();
       const open = fs.openSync;
@@ -244,9 +243,7 @@ describe('scratch construction cleanup', () => {
         },
       );
       try {
-        expect(() =>
-          failedIndex === 1 ? new DumpScratch() : new MessageTable(),
-        ).toThrow('index failure');
+        expect(() => new DumpScratch()).toThrow('index failure');
         expect(watch.directories.filter(fs.existsSync)).toStrictEqual([]);
         expect(() => fs.fstatSync(descriptor)).toThrow(/EBADF/);
       } finally {

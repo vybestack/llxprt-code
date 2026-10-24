@@ -7,12 +7,10 @@ import {
   dumpCase,
   randomHistory,
   type DumpCase,
-} from './__tests__/support/messageTableHistories.js';
+} from './support/messageTableHistories.js';
 
-const FIXTURE = new URL(
-  './__tests__/fixtures/dump-golden.json',
-  import.meta.url,
-).pathname;
+const FIXTURE = new URL('./fixtures/dump-golden.json', import.meta.url)
+  .pathname;
 const CASES = 600;
 
 interface GoldenEntry extends DumpCase {

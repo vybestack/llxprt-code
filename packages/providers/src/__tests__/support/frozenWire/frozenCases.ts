@@ -17,9 +17,9 @@ import {
   SeededRandom,
   seededHistory,
 } from '../../../openai/__tests__/support/chatBodyCorpus.js';
-import { randomHistory } from '../../../anthropic/message-table/__tests__/support/messageTableHistories.js';
-import { wireHistory } from '../../../anthropic/message-table/__tests__/support/wireBuilderCorpus.js';
-import { cacheHistory } from '../../../anthropic/message-table/__tests__/support/wireCacheCorpus.js';
+import { randomHistory } from '../../../anthropic/__tests__/wire-reference/support/messageTableHistories.js';
+import { wireHistory } from '../../../anthropic/__tests__/wire-reference/support/wireBuilderCorpus.js';
+import { cacheHistory } from '../../../anthropic/__tests__/wire-reference/support/wireCacheCorpus.js';
 import { WIRE_ROUTES, type WireRoute } from '../wireBodyCapture.js';
 import { normalizedRows } from './normalizedRows.js';
 import { responsesHistory } from './responsesHistories.js';

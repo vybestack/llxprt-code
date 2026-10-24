@@ -1,3 +1,4 @@
+import { normalizedRows } from '../../../__tests__/support/frozenWire/normalizedRows.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import type {
@@ -13,7 +14,7 @@ import {
   type RowsMediaInput,
 } from '../../../openai-responses/responses-row-media.js';
 import { resolveRequestMedia } from '../../../utils/request-media-resolution.js';
-import type { MediaStage } from '../wire-builder.js';
+import type { MediaStage } from '../../native-anthropic-media-stage.js';
 import {
   aiText,
   answerRow,
@@ -43,11 +44,12 @@ async function differences(
   rows: readonly IContent[],
   settings: readonly WireSettings[],
 ): Promise<string[]> {
+  const nativeRows = await normalizedRows(rows);
   const found: string[] = [];
   for (const [index, setting] of settings.entries()) {
     const difference = describeDifference(
-      oracleJson(rows, setting),
-      await candidateJson(rows, setting),
+      oracleJson(nativeRows, setting),
+      await candidateJson(nativeRows, setting),
     );
     if (difference !== undefined)
       found.push(

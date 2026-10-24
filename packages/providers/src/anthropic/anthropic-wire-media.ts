@@ -78,8 +78,11 @@ export async function* resolveAnthropicWireMedia(
     return;
   }
   let pending: AnthropicWirePiece | undefined;
+  const state = { complete: false };
   const rows = async function* (): AsyncGenerator<IContent> {
     for await (const piece of recovered) {
+      if (pending !== undefined)
+        throw new Error('The media stage changed the number of rows');
       pending = piece;
       yield {
         speaker: 'human',
@@ -92,6 +95,7 @@ export async function* resolveAnthropicWireMedia(
               }),
       };
     }
+    state.complete = true;
   };
   for await (const row of stage(rows())) {
     if (pending === undefined)
@@ -99,4 +103,6 @@ export async function* resolveAnthropicWireMedia(
     yield typeof pending === 'string' ? pending : resolveBlock(pending, row);
     pending = undefined;
   }
+  if (!state.complete || pending !== undefined)
+    throw new Error('The media stage changed the number of rows');
 }
