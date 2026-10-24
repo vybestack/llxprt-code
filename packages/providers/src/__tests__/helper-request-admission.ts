@@ -10,6 +10,11 @@ import type {
   ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
+
 export function normalizeRuntimeInputs(
   options: Omit<GenerateChatOptions, 'runtime'> & {
     runtime?: ProviderRuntimeContext;
@@ -35,6 +40,7 @@ export function normalizeRuntimeInputs(
           input.invocation ??
           captureProviderInvocation(
             {
+              fetch: requestFetch,
               runtimeId: owner.runtimeId,
               metadata: owner.metadata,
               globalSettings: settingsService.getAllGlobalSettings(),

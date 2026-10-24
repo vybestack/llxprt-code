@@ -34,6 +34,10 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { IModel } from '../IModel.js';
 
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function makeContent(text: string): IContent {
   return {
@@ -61,6 +65,7 @@ function buildChainOptions(contents: IContent[]): GenerateChatOptions {
 
     invocation: captureProviderInvocation(
       {
+        fetch: requestFetch,
         runtimeId: runtime.runtimeId,
         metadata: runtime.metadata,
         globalSettings: settingsService.getAllGlobalSettings(),

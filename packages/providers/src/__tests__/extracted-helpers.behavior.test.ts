@@ -49,6 +49,10 @@ import { extractSimpleContent } from '../logging/streamChunkUtils.js';
 import { accumulateTokenUsage } from '../logging/tokenAccumulator.js';
 import { extractTokenCountsFromResponse } from '../logging/tokenCounts.js';
 import { getBackendSkipReasons } from '../loadBalancing/backendRuntime.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function captureThrown(fn: () => unknown): { error: unknown } {
   try {
@@ -639,6 +643,7 @@ describe('extracted provider helper behavior', () => {
         metadata: { parent: true },
       },
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'lb-runtime',
         runtimeMetadata: { parent: true },
         providerName: 'load-balancer',
@@ -741,6 +746,7 @@ describe('normalizeRuntimeInputs: fail-closed when no provider (#2481)', () => {
     const rawOptions: GenerateChatOptions = {
       contents: [],
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'runtime-no-provider',
         providerName: 'openai',
         ephemeralsSnapshot: {},
@@ -759,6 +765,7 @@ describe('normalizeRuntimeInputs: fail-closed when no provider (#2481)', () => {
     const rawOptions: GenerateChatOptions = {
       contents: [],
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'runtime-no-provider-2',
         providerName: 'openai',
         ephemeralsSnapshot: {},

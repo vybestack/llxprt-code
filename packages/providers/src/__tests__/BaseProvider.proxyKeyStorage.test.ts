@@ -29,6 +29,10 @@ import {
 } from '../BaseProvider.js';
 import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 import { CredentialProxyServer } from '../auth/proxy/credential-proxy-server.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const userMessage = (text: string): IContent => ({
   speaker: 'human',
@@ -178,6 +182,7 @@ function buildChatOptions(settings: SettingsService) {
     contents: [userMessage('hi')],
     invocation: captureProviderInvocation(
       {
+        fetch: requestFetch,
         runtimeId: runtime.runtimeId,
         metadata: runtime.metadata,
         globalSettings: settings.getAllGlobalSettings(),

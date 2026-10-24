@@ -20,6 +20,10 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 class HarnessProvider extends BaseProvider {
   lastOptions?: NormalizedGenerateChatOptions;
@@ -107,6 +111,7 @@ describe('ProviderManager owner admission', () => {
     other.setProviderSetting('openai', 'base-url', 'http://127.0.0.1:2/v1');
     const invocation = captureProviderInvocation(
       {
+        fetch: requestFetch,
         runtimeId: 'same-label',
         globalSettings: other.getAllGlobalSettings(),
         providerSettings: other.getProviderSettings('openai'),

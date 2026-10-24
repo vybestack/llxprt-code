@@ -11,6 +11,10 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/
 import { LoadBalancingProvider } from '../LoadBalancingProvider.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { normalizeRuntimeInputs } from '../runtimeNormalizer.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function setup(): {
   settings: SettingsService;
@@ -88,6 +92,7 @@ describe('Load-balancer admission normalization', () => {
         contents: [],
         invocation: captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: 'test-owner',
             globalSettings: settings.getAllGlobalSettings(),
             providerSettings: settings.getProviderSettings('load-balancer'),

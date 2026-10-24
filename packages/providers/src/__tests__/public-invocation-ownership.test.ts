@@ -19,6 +19,10 @@ import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function gate(): { promise: Promise<void>; open(): void } {
   let open = (): void => {};
@@ -252,6 +256,7 @@ describe('public invocation ownership', () => {
     const settings = settingsFor('http://127.0.0.1:1/v1');
     settings.set('reasoning.enabled', true);
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'data-owner',
 
       providerName: 'openai',
@@ -269,6 +274,7 @@ describe('public invocation ownership', () => {
     const policy = { nested: { enabled: true }, models: ['first'] };
     const controller = new AbortController();
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'data-owner',
 
       providerName: 'openai',

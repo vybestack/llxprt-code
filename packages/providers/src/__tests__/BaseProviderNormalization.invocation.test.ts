@@ -24,6 +24,10 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const PROVIDER_NAME = 'invocation-safety';
 
@@ -199,6 +203,7 @@ describe('BaseProvider normalization invocation safety', () => {
       ephemerals: {},
     });
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: validOptions.invocation.runtimeId,
       runtimeMetadata: validOptions.invocation.metadata,
 

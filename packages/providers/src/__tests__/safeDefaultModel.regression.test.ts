@@ -24,6 +24,10 @@ import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /**
  * Minimal provider that satisfies the structural shape for generateChatCompletion
@@ -147,6 +151,7 @@ describe('safeGetDefaultModel regression', () => {
         config,
         invocation: captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: 'test-runtime',
             globalSettings: settingsService.getAllGlobalSettings(),
             providerSettings: settingsService.getProviderSettings('test'),
@@ -189,6 +194,7 @@ describe('safeGetDefaultModel regression', () => {
         config,
         invocation: captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: 'test-runtime',
             globalSettings: settingsService.getAllGlobalSettings(),
             providerSettings: settingsService.getProviderSettings('test'),

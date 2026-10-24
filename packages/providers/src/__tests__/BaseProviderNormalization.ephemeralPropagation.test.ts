@@ -16,6 +16,10 @@ import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/cor
 import { BaseProvider } from '../BaseProvider.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 class HarnessProvider extends BaseProvider {
   lastNormalizedOptions?: NormalizedGenerateChatOptions;
@@ -130,6 +134,7 @@ describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
       createHarnessWithDumpContext();
 
     const staleInvocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'ephemeral-provided-invocation',
 
       providerName: provider.name,
@@ -162,6 +167,7 @@ describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
       createHarnessWithDumpContext();
 
     const explicitInvocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'ephemeral-precedence',
 
       providerName: provider.name,
@@ -195,6 +201,7 @@ describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
     expect(runtimeContext.runtimeId).toBe('ephemeral-harness');
 
     const providedInvocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'ephemeral-provided-runtimeId',
       sessionId: 'separate-conversation-id',
 
@@ -246,6 +253,7 @@ describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
     };
 
     const providedInvocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'ephemeral-preserve-all',
 
       providerName: provider.name,

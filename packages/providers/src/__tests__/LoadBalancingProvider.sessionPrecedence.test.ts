@@ -31,6 +31,10 @@ import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type { ResolvedSubProfile } from '../LoadBalancingProvider.js';
 import { shouldDump, type DumpMode } from '../utils/dumpContext.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const noopLogger = {
   debug: () => {},
@@ -56,6 +60,7 @@ function makeUpstreamInvocation(
   settings: SettingsService,
 ): RuntimeInvocationContext {
   return createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: makeRuntime().runtimeId,
     runtimeMetadata: makeRuntime().metadata,
 
