@@ -224,6 +224,30 @@ export NODE_USE_SYSTEM_CA=1
 export NODE_EXTRA_CA_CERTS=/path/to/your/corporate-ca.crt
 ```
 
+**Bun runtime.** LLxprt Code runs on Bun, and Bun trusts its own bundled list of root CAs by default. Changing the operating system trust store does not change that list unless you ask Bun to read it. Bun 1.4.4 supports both options shown above:
+
+- `NODE_EXTRA_CA_CERTS=/path/to/ca.crt` adds the CA in that file to Bun's bundled roots. This is the most predictable choice because it does not depend on how your OS store is configured.
+- `NODE_USE_SYSTEM_CA=1` also adds the OS trust store. The value must be exactly `1`. Bun reads the same setting from its `--use-system-ca` flag, but the `llxprt` command does not forward Bun flags, so use the environment variable.
+
+What `NODE_USE_SYSTEM_CA=1` loads depends on the OS. On macOS, Bun reads certificates that your user or administrator trust settings mark as trusted, which is where a corporate CA installed by your IT team normally lives. It does not load Apple's built-in roots. A certificate that is only imported into a keychain, with no trust setting, is not loaded. On Windows, Bun reads the `ROOT`, `CA`, and `TrustedPeople` certificate stores. On Linux, it reads `SSL_CERT_FILE` or `SSL_CERT_DIR` if set, otherwise the standard system bundle locations. If `NODE_USE_SYSTEM_CA=1` does not fix the error, switch to `NODE_EXTRA_CA_CERTS`.
+
+**Minimum runtime versions.** In October 2026 several eMudhra intermediate CAs were found to have trivially weak private keys. They chain to `emSign ECC Root CA - G3` and, through a cross-signature, to Sectigo `AAA Certificate Services`. Runtimes that embed their own root store keep trusting those intermediates until they are updated. The fix is in these releases:
+
+| Runtime | Minimum version                         |
+| ------- | --------------------------------------- |
+| Bun     | 1.4.4                                   |
+| Node.js | 22.23.4, 24.22.1, or 26.12.1 (per line) |
+
+LLxprt Code pins Bun 1.4.4 and requires Node.js 24.22.1 or newer for the checkout, the `engines` fields, and the sandbox image.
+
+**Which Bun does the CLI run?** The answer depends on how you start it. A global npm install links `llxprt` to `bin/llxprt.mjs`, which only uses the Bun that ships inside the package (`node_modules/bun/bin/bun.exe`, or the matching `@oven/bun-<platform>` package) and never looks at your `PATH`. That bundled Bun can be older than the pinned version if you installed an older release, so `bun --version` in your shell tells you nothing about it. The POSIX launcher `packages/cli/bin/llxprt`, which a source checkout uses, makes one exception: on macOS it runs the Bun on your `PATH` when that Bun is at least the pinned version, and otherwise uses the bundled one. The CLI has no command that prints its Bun version, so check the running process. Start `llxprt`, then in another terminal run:
+
+```bash
+ps -axo command | grep '[l]lxprt.js'
+```
+
+The first word of the matching line is the Bun executable in use. Run that path with `--version` to see its version. Upgrade Node.js separately if you use it for npm or the tooling around the CLI.
+
 ### OAuth Troubleshooting
 
 OAuth tokens are stored in the OS keyring (same as named keys). If authentication fails:

@@ -54,23 +54,34 @@ case-sensitive value `LLXPRT_ALLOW_BROWSER_LAUNCH_IN_TESTS=true`.
 ## .bun-version
 
 The file [`.bun-version`](../.bun-version) pins the concrete Bun version to
-`1.3.14`. This is the version that has been empirically verified to install all
+`1.4.4`. This is the version that has been empirically verified to install all
 workspaces and native binaries correctly from a clean checkout. For S1,
 `.bun-version` is the **authoritative** local Bun pin for package-manager work.
 
-Later subissues that switch the runtime or build to Bun should consume this same
-version rather than introducing a second, divergent pin, and should reconcile
-the CI/release pin (below) against it.
+CI and release workflows read this same file (`bun-version-file: .bun-version`,
+and `bun-v$(cat .bun-version)` for the `bun.sh` bootstraps), so there is one
+Bun pin for local installs, CI, the release runner, and the sandbox image. The
+plugin install flows need Bun 1.4.2 or newer; the repository pin satisfies that
+floor. Bun 1.4.4 is the minimum that no longer trusts the compromised eMudhra
+intermediate CAs (issue #3930), because Bun compiles its root store into the
+runtime.
 
-> **Known divergence, reconciliation deferred:**
-> `.github/workflows/release.yml` currently pins a **different** Bun version
-> (`bun-version: '1.3.3'`) via `oven-sh/setup-bun`. This is a pre-existing pin
-> that S1 does **not** touch: aligning the CI/release toolchain with
-> `.bun-version` is explicitly **deferred** to the CI/release subissues (S6/S7),
-> which own the GitHub Actions workflows. Until then `.bun-version` (1.3.14)
-> governs local installs while `release.yml` (1.3.3) governs the release runner;
-> the two are intentionally allowed to differ during the transition. Do not
-> change `release.yml` as part of S1.
+## Dependency cooldown
+
+`bunfig.toml` sets `[install] minimumReleaseAge = 259200` (seconds, 3 days) and
+`.npmrc` sets `min-release-age=3` (days, npm 11.10 or newer). Both hold back
+package versions published in the last 3 days so a hijacked release is not
+installed before the registry and scanners react. Existing `bun.lock` and
+`package-lock.json` entries are not re-gated.
+
+The Bun runtime packages (`bun`, `@oven/bun-*`) and our own `@vybestack/*`
+packages are exempt, so version bumps and the nightly dist-tag install are never
+delayed. Bun's `minimumReleaseAgeExcludes` accepts exact package names only
+(globs are not supported), so `bunfig.toml` lists each name; npm's
+`min-release-age-exclude[]` accepts globs. `scripts/tests/supply-chain-pins.test.ts`
+fails if a new `@oven/*` or first-party package is missing from the Bun list. To
+install a security fix that is younger than 3 days, add the package (or one exact
+`name@version` for Bun) to the exclude list in the same change.
 
 ## trustedDependencies
 

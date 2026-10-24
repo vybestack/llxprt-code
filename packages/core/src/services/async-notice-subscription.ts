@@ -5,9 +5,12 @@
  */
 import { debugLogger } from '../utils/debugLogger.js';
 
+export type AsyncNoticeDeliveryOutcome = void | 'deferred';
+
 export interface AsyncNoticeUnsubscribe {
   (): void;
   drain(): Promise<void>;
+  schedule(): void;
 }
 
 export class AsyncNoticeSubscription {

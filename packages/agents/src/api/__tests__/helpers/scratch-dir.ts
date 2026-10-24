@@ -5,17 +5,17 @@
  */
 
 import { mkdir, mkdtemp } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 /**
- * Creates a unique scratch directory under `parent` (default: the gitignored
- * package-local `tmp/`). The parent is created first because it is ignored by
- * git and therefore absent on a fresh checkout such as a CI runner, where
- * `mkdtemp` alone fails with ENOENT.
+ * Creates caller-owned scratch state outside source trees. Bun package runners
+ * supply a session-isolated TMPDIR, so their teardown also owns these paths.
+ * Explicit parents are created first for fresh checkouts and nested fixtures.
  */
 export async function makeScratchDir(
   prefix: string,
-  parent: string = resolve('tmp'),
+  parent: string = tmpdir(),
 ): Promise<string> {
   await mkdir(parent, { recursive: true });
   return mkdtemp(join(parent, prefix));

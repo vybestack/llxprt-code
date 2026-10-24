@@ -148,14 +148,8 @@ export function useAgentStreamOrchestration(
   // creates useStreamEventHandlers → processAgentEvent) and useAgentEventStream
   // (which provides runStream). Each is populated synchronously during render.
   const processAgentEventRef = useRef<AgentEventRouter | null>(null);
-  const runStreamRef = useRef<
-    | ((
-        message: AgentRequestInput,
-        signal: AbortSignal,
-        promptId: string,
-      ) => Promise<void>)
-    | null
-  >(null);
+  const runStreamRef =
+    useRef<UseSubmitQueryDeps['runStreamRef']['current']>(null);
 
   const submitQueryResult = useSubmitForStream(
     args,

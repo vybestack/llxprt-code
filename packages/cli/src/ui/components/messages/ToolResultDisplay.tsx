@@ -187,6 +187,20 @@ function renderObjectContent(
 }
 
 /**
+ * Returns a copy of `text` that owns its characters.
+ *
+ * JavaScriptCore implements `slice()` as a view onto the source string, so a
+ * short tail cut from a result of up to a million characters keeps all of
+ * them alive for as long as anything holds the tail: layout caches key on the
+ * visible text, and a retained key would pin the whole discarded body. The
+ * code units are copied as they are; a text round trip would rewrite a
+ * surrogate pair that the cut happened to split.
+ */
+function detachFromSource(text: string): string {
+  return text.split('').join('');
+}
+
+/**
  * Drops source lines that cannot reach the visible window.
  *
  * `MaxSizedBox` shows the tail of its content and lays out every line it is
@@ -236,7 +250,7 @@ export function trimToVisibleTail(
     for (const line of droppedLines) {
       hiddenDisplayLines += Math.max(1, Math.ceil(line.length / usableWidth));
     }
-    kept = kept.slice(dropped);
+    kept = detachFromSource(kept.slice(dropped));
   }
 
   return { text: kept, hiddenDisplayLines };

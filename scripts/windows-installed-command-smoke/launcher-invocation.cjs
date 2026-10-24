@@ -255,6 +255,8 @@ module.exports = {
   invokeCmd,
   invokePwsh,
   cmdInvocationArgs,
+  powershellInvocationScript,
+  powershellEncodedCommand,
   cmdQuote,
   pwshQuote,
   validateSpawnResult,

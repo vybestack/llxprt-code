@@ -46,7 +46,7 @@ describe('usePermissionsModifyTrust', () => {
   });
 
   afterEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
   });
 
   // Note: Full hook testing requires renderHook with proper React context providers.

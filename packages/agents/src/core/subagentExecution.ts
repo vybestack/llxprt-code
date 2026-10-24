@@ -58,6 +58,7 @@ export interface ExecutionLoopContext {
   readonly toolsView: ToolRegistryView;
   readonly logger: DebugLogger;
   onMessage?: (message: string) => void;
+  onOutputReset?: () => void;
 }
 
 // ---------------------------------------------------------------------------

@@ -120,8 +120,11 @@ function getPackedPaths(): Set<string> {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
-  const parsed = JSON.parse(stdout);
-  const entry = parsed[0];
+  const parsed: unknown = JSON.parse(stdout);
+  const entries = Array.isArray(parsed)
+    ? parsed
+    : Object.values(asRecord(parsed));
+  const entry = asRecord(entries[0]);
   if (entry === undefined || !Array.isArray(entry.files)) {
     throw new Error(
       'npm pack --dry-run --json did not return the expected { files: [...] } shape.',
@@ -457,11 +460,7 @@ describe('published package no-compile runtime contract (S6)', () => {
     expect(cliPackage.scripts?.preinstall).toBeUndefined();
     expect(cliPackage.scripts?.install).toBeUndefined();
     expect(cliPackage.scripts?.prepare).toBeUndefined();
-    // postinstall is permitted, but only to generate the native Windows
-    // launcher shims -- never to compile or bundle anything.
-    expect(cliPackage.scripts?.postinstall).toBe(
-      'node scripts/install-native-launchers.cjs',
-    );
+    expect(cliPackage.scripts?.postinstall).toBeUndefined();
 
     // prepack runs only on the publisher's machine. If present it must build
     // the prebuilt bundle and must never compile the shipped TypeScript.

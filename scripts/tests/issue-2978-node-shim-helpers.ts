@@ -6,10 +6,13 @@
 
 import { spawnSync } from 'node:child_process';
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import * as path from 'node:path';
@@ -30,18 +33,6 @@ export const cliManifestPath = path.join(
   'cli',
   'package.json',
 );
-const stubBun = path.join(repoRoot, 'node_modules', 'bun', 'bin', 'bun.exe');
-
-function requireStubBun(): string {
-  if (!existsSync(stubBun)) {
-    throw new Error(
-      `Expected the bun package's native binary at ${stubBun}. ` +
-        'Run `npm install` to restore it before running this suite.',
-    );
-  }
-  return stubBun;
-}
-
 export const LAUNCH_TIMEOUT_MS = 30_000;
 export const LAUNCHER_FAILURE_EXIT = 43;
 export const isWin = process.platform === 'win32';
@@ -54,7 +45,14 @@ export interface Layout {
   readonly shim: string;
 }
 
-export function makeLayout(root: string): Layout {
+/**
+ * Bun >= 1.4 reports process.execPath as the long Windows path, while
+ * os.tmpdir() yields the 8.3 short form (RUNNER~1) for the same directory.
+ * Building the layout from the canonical root makes the runtime path the
+ * launcher execs and the one the entry reports spell the same file alike.
+ */
+export function makeLayout(tempRoot: string): Layout {
+  const root = realpathSync.native(tempRoot);
   const nodeModules = path.join(root, 'node_modules');
   const pkgRoot = path.join(nodeModules, '@vybestack', 'llxprt-code');
   const binDir = path.join(pkgRoot, 'bin');
@@ -114,7 +112,7 @@ export function placeBundledBun(nodeModules: string): string {
   const dir = path.join(nodeModules, 'bun', 'bin');
   mkdirSync(dir, { recursive: true });
   const exe = path.join(dir, bunExeName);
-  copyFileSync(requireStubBun(), exe);
+  copyFileSync(process.execPath, exe);
   return exe;
 }
 
@@ -145,8 +143,38 @@ export function placeOvenBun(nodeModules: string, variant: string): string {
     JSON.stringify({ name: `@oven/${variant}`, version: '1.3.14' }),
   );
   const exe = path.join(binDir, bunExeName);
-  copyFileSync(requireStubBun(), exe);
+  copyFileSync(process.execPath, exe);
   return exe;
+}
+
+export function placePlaceholder(nodeModules: string): void {
+  const placeholder = path.join(nodeModules, 'bun', 'bin', 'bun.exe');
+  mkdirSync(path.dirname(placeholder), { recursive: true });
+  writeFileSync(
+    placeholder,
+    'echo "Error: Bun\'s postinstall script was not run." >&2\nexit 1\n',
+  );
+  chmodSync(placeholder, 0o755);
+}
+
+export function placeScriptDisabledBun(
+  layout: Layout,
+  hoisted: boolean,
+): Record<string, string> {
+  const localModules = path.join(layout.pkgRoot, 'node_modules');
+  placePlaceholder(localModules);
+  placePlaceholder(layout.nodeModules);
+  for (const variant of hostOvenVariants()) {
+    placeOvenBun(hoisted ? layout.nodeModules : localModules, variant);
+  }
+  if (isWin) return {};
+  const node = spawnSync('node', ['-p', 'process.execPath'], {
+    encoding: 'utf8',
+  }).stdout.trim();
+  const nodeOnly = path.join(layout.root, 'node-only');
+  mkdirSync(nodeOnly);
+  symlinkSync(node, path.join(nodeOnly, 'node'));
+  return { PATH: nodeOnly };
 }
 
 export interface RunResult {

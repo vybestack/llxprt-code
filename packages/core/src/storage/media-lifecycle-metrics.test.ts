@@ -85,11 +85,10 @@ function observePersistenceSave(
 }
 
 function rssBehavior(): number {
-  expect(maxRssToBytes(4096, 'darwin')).toBe(4096);
-  expect(maxRssToBytes(4096, 'linux')).toBe(4_194_304);
-  expect(maxRssToBytes(4096, 'win32')).toBe(4_194_304);
-  expect(maxRssToBytes(0, 'darwin')).toBeNull();
-  return maxRssToBytes(4096, 'linux') ?? 0;
+  expect(maxRssToBytes(4096)).toBe(4_194_304);
+  expect(maxRssToBytes(0)).toBeNull();
+  expect(maxRssToBytes(Number.NaN)).toBeNull();
+  return maxRssToBytes(4096) ?? 0;
 }
 
 let directory = '';
@@ -229,7 +228,7 @@ async function cacheBehavior(): Promise<number> {
 }
 
 describe('MediaLifecycleMetrics', () => {
-  it('converts maxRSS using Darwin byte and other-platform KiB semantics', () => {
+  it('converts maxRSS from KiB to bytes', () => {
     expect(rssBehavior()).toBeGreaterThan(0);
   });
 

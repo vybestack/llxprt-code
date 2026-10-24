@@ -66,6 +66,26 @@ describe('startLocalOAuthCallback', () => {
     vi.useRealTimers();
   });
 
+  it('reports code receipt without claiming persisted authentication success', async () => {
+    const port = await findAvailablePort();
+    const server = await startLocalOAuthCallback({
+      state: 'received-state',
+      portRange: [port, port],
+      timeoutMs: 500,
+    });
+    try {
+      const response = await fetch(
+        `${server.redirectUri}?code=received-code&state=received-state`,
+      );
+      const html = await response.text();
+      expect(html).toContain('Authorization code received');
+      expect(html).toContain('Return to llxprt to finish authentication');
+      expect(html).not.toContain('Authentication Complete');
+    } finally {
+      await server.shutdown();
+    }
+  });
+
   it('captures authorization code from localhost redirect', async () => {
     const port = await findAvailablePort();
     const server = await startLocalOAuthCallback({

@@ -31,12 +31,12 @@ function hasText(part: unknown): part is { text: string } {
 describe('useQueuedSubmissions', () => {
   it('keeps a background notice pending across dequeue and retry until explicitly discarded', () => {
     const { result } = renderHook(() => useQueuedSubmissions());
-    let consumed = false;
+    const outcomes: unknown[] = [];
     act(() =>
       result.current.enqueueSubmission({
         query: 'completion',
-        onConsumed: () => {
-          consumed = true;
+        onSettled: (outcome) => {
+          outcomes.push(outcome);
         },
       }),
     );
@@ -44,31 +44,29 @@ describe('useQueuedSubmissions', () => {
     act(() => {
       notice = result.current.dequeueSubmission();
     });
-    const consumedAfterDequeue = consumed;
-    expect(consumedAfterDequeue).toBe(false);
+    expect(outcomes).toHaveLength(0);
     if (notice === undefined) throw new Error('Expected queued notice');
     const retry = notice;
     act(() => result.current.requeueSubmission(retry));
-    const consumedAfterRetry = consumed;
-    expect(consumedAfterRetry).toBe(false);
+    expect(outcomes).toHaveLength(0);
     act(() => result.current.clearSubmissions());
-    expect(consumed).toBe(true);
+    expect(outcomes).toStrictEqual([{ status: 'discarded' }]);
     expect(result.current.queuedSubmissions).toStrictEqual([]);
   });
 
   it('releases queued notification deliveries when the UI unmounts', () => {
     const { result, unmount } = renderHook(() => useQueuedSubmissions());
-    let consumed = false;
+    const outcomes: unknown[] = [];
     act(() =>
       result.current.enqueueSubmission({
         query: 'completion',
-        onConsumed: () => {
-          consumed = true;
+        onSettled: (outcome) => {
+          outcomes.push(outcome);
         },
       }),
     );
     unmount();
-    expect(consumed).toBe(true);
+    expect(outcomes).toStrictEqual([{ status: 'discarded' }]);
   });
 
   describe('initial state', () => {

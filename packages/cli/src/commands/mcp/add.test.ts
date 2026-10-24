@@ -78,7 +78,7 @@ describe('mcp add command', () => {
   let mockConsoleError: Mock<(...args: never[]) => unknown>;
 
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     // exitProcess(false) makes yargs rethrow a handler failure instead of
     // calling process.exit, which would terminate the Bun test process before
     // the remaining tests run.

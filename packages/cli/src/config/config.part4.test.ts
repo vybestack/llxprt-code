@@ -571,7 +571,7 @@ describe('loadCliConfig disableYoloMode', () => {
 
   beforeEach(() => {
     resetRuntimeSettingsState();
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     setEnv('GEMINI_API_KEY', 'test-api-key');
     (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
@@ -656,7 +656,7 @@ describe('loadCliConfig secureModeEnabled', () => {
 
   beforeEach(() => {
     resetRuntimeSettingsState();
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     setEnv('GEMINI_API_KEY', 'test-api-key');
     (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(

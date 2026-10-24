@@ -176,12 +176,15 @@ describe('Storage config root outside an isolated test process', () => {
   /**
    * The product, spawned by a suite as a smoke check, must keep working.
    *
-   * Bun's `spawnSync` with an inherited environment snapshots the ORIGINAL
-   * environment and drops `process.env` mutations made after startup, so the
-   * child sees neither the isolation marker nor the redirect this process set.
-   * It must therefore resolve the real config directory rather than throw. This
-   * case reproduces the shape that broke `scripts/tests/issue-2342.test.ts` and
-   * `scripts/tests/publish-integrity.test.ts`.
+   * Bun 1.4 `node:child_process` forwards the live `process.env` to a child
+   * that inherits the environment, so the child sees the isolation marker and
+   * the redirect together and resolves the redirect. (Bun 1.3 snapshotted the
+   * ORIGINAL environment and dropped mutations made after startup, which gave
+   * the child neither value and is the shape that broke
+   * `scripts/tests/issue-2342.test.ts` and
+   * `scripts/tests/publish-integrity.test.ts`.) Either way the guard must not
+   * fire in the child; the property is that an inherited child never fails on
+   * the guard and never resolves a directory it was not given.
    */
   it('lets a child spawned with an inherited environment resolve it', () => {
     setEnv(ISOLATION_MARKER_ENV, '1');
@@ -207,10 +210,8 @@ process.stdout.write(Storage.getGlobalConfigDir());`,
       stdout: probe.stdout,
       stderr: probe.stderr,
     }).toMatchObject({ status: 0 });
-    // Not an equality check against the platform default: a developer whose
-    // shell exports LLXPRT_CONFIG_HOME before Bun starts passes it to the child
-    // through the original environment. The property under test is that the
-    // after-startup redirect did NOT reach the child and the guard did not fire.
-    expect(probe.stdout).not.toBe(afterStartupConfigHome);
+    // The child inherited the marker and the redirect as one consistent
+    // snapshot, so it resolves exactly the redirect this process was given.
+    expect(probe.stdout).toBe(afterStartupConfigHome);
   });
 });

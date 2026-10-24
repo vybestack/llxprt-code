@@ -1,12 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { tmpdir } from 'node:os';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, expect, it } from 'bun:test';
-import { appendFileSync, mkdtempSync, rmSync } from 'node:fs';
-import { appendFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
-import { HistoryService } from './HistoryService.js';
+import { appendFileSync } from 'node:fs';
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
+import type { IContent } from './IContent.js';
 import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
 import {
   exactTokenizer,
@@ -19,45 +16,22 @@ async function compensationPressure(size: number): Promise<{
   readonly pending: number;
   readonly bytes: number;
 }> {
-  const root = mkdtempSync(join(tmpdir(), 'candidate-admission-'));
-  let release: (() => void) | undefined;
-  let reached: (() => void) | undefined;
-  let compensating = false;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const ready = new Promise<void>((resolve) => {
-    reached = resolve;
-  });
-  const recorder = new SessionRecordingService({
-    sessionId: 'candidate-admission',
-    projectHash: 'candidate-admission',
-    chatsDir: root,
-    workspaceDirs: [root],
-    provider: 'test',
-    model: 'test',
-    maxQueueBytes: Number.POSITIVE_INFINITY,
-    io: {
-      appendFile: async (filePath, data, encoding): Promise<void> => {
-        if (compensating) {
-          reached?.();
-          await gate;
-        }
-        await appendFile(filePath, data, encoding);
-      },
-    },
-  });
-  const history = new HistoryService({ recording: recorder });
-  history.setTokenizerFactory(exactTokenizer());
-  try {
-    for (let index = 0; index < size; index++) {
-      await recorder.commit('content', {
-        content: ownerFixtureRow(index, 2048),
-      });
-    }
+  return withNativeDetachedFixture(async (fixture) => {
+    const { history, io } = fixture;
+    history.setTokenizerFactory(exactTokenizer());
+    await history.detachedValues.replace(
+      (async function* (): AsyncGenerator<IContent> {
+        for (let index = 0; index < size; index++)
+          yield ownerFixtureRow(index, 2048);
+      })(),
+    );
     const primary = new Error('force compensation');
+    let writesBefore = 0;
+    let bytesBefore = 0;
     history.once('tokensUpdated', () => {
-      compensating = true;
+      writesBefore = io.descriptorWrites;
+      bytesBefore = io.descriptorWrittenBytes;
+      fixture.pauseWriter(size);
       throw primary;
     });
     const operation = rejectedValue(
@@ -71,24 +45,19 @@ async function compensationPressure(size: number): Promise<{
         },
       }),
     );
-    await ready;
-    const pending = recorder.getPendingRecordCount();
-    const bytes = recorder.getPendingByteCount();
-    release?.();
+    await fixture.writerPaused;
+    fixture.releaseWriter();
     expect(await operation).toBe(primary);
     await history.waitForCommit();
+    const pending = io.descriptorWrites - writesBefore;
+    const bytes = io.descriptorWrittenBytes - bytesBefore;
     let restored = 0;
     for await (const row of history.getRecent(0)) {
       expect(row).toStrictEqual(ownerFixtureRow(restored++, 2048));
     }
     expect(restored).toBe(size);
     return { pending, bytes };
-  } finally {
-    release?.();
-    await history.dispose();
-    await recorder.dispose();
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
 }
 
 describe('disk candidate journal admission under writer backpressure', () => {
@@ -119,7 +88,7 @@ describe('disk candidate journal admission under writer backpressure', () => {
   });
 
   for (const size of [512, 8192]) {
-    it(`bounds compensation admissions while restoring all ${size} source rows`, async () => {
+    it(`bounds compensation journal writes while restoring all ${size} source rows`, async () => {
       const result = await compensationPressure(size);
       const output = process.env.CHRONOLOGY_CANDIDATE_OUTPUT;
       if (output !== undefined)

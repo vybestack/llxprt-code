@@ -32,7 +32,7 @@ export const fixturePaths = installTestWorkspacePaths({
  * supports client tests that register their own module mocks.
  */
 
-import { vi, type Mock } from 'bun:test';
+import { afterAll, vi, type Mock } from 'bun:test';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { buildMockContentGenerator } from './chatSession-density-helpers.js';
@@ -53,6 +53,12 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+const fixtureHistories = new Set<HistoryService>();
+afterAll(async () => {
+  for (const history of fixtureHistories) await history.dispose();
+  fixtureHistories.clear();
+});
 export function createClientHistoryFixture(): Pick<
   ChatSession,
   'getHistoryService' | 'clearHistoryForDisposal'
@@ -178,15 +184,20 @@ function setupConfigMock(
   useInjectedConfig: boolean,
 ): { contentGeneratorConfig: ContentGeneratorConfig; config: Config } {
   const contentGeneratorConfig = buildClientContentGeneratorConfig(mockFns);
+  // The automocked Config constructor loses its instance-building
+  // implementation when vi.resetAllMocks() runs (Bun 1.4 resets mock
+  // implementations), so build the instance from the mocked prototype directly.
   const mockConfigObject = Object.assign(
-    new HostConfig({
-      sessionId: 'test-session-id',
-      cwd: process.cwd(),
-      targetDir: process.cwd(),
-      debugMode: false,
-      model: 'test-model',
-      telemetry: { enabled: false },
-    }),
+    useInjectedConfig
+      ? new HostConfig({
+          sessionId: 'test-session-id',
+          cwd: process.cwd(),
+          targetDir: process.cwd(),
+          debugMode: false,
+          model: 'test-model',
+          telemetry: { enabled: false },
+        })
+      : Object.create(HostConfig.prototype),
     {
       getContentGeneratorConfig: vi
         .fn()
@@ -306,6 +317,7 @@ async function createAndInitClient(
   });
 
   const historyService = new HistoryService();
+  fixtureHistories.add(historyService);
   const mockChat = {
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),

@@ -86,14 +86,14 @@ export function useQueuedSubmissions() {
 
   const clearSubmissions = useCallback((): void => {
     for (const submission of queuedSubmissionsRef.current)
-      submission.onConsumed?.();
+      submission.onSettled?.({ status: 'discarded' });
     setQueuedSubmissions([]);
   }, [queuedSubmissionsRef, setQueuedSubmissions]);
 
   useEffect(
     () => () => {
       for (const submission of queuedSubmissionsRef.current)
-        submission.onConsumed?.();
+        submission.onSettled?.({ status: 'discarded' });
     },
     [queuedSubmissionsRef],
   );

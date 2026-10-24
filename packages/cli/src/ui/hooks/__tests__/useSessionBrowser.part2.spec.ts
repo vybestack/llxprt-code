@@ -32,11 +32,12 @@ import { displayBoot } from '../../../__tests__/resumeRows.js';
  * Property-based tests use fast-check (≥30% of core state tests).
  */
 
-import { afterEach, beforeEach, describe, it, expect } from 'bun:test';
+import { afterEach, beforeEach, describe, it, expect, spyOn } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
+  SessionDiscovery,
   createSessionRecorder,
   createLockedSessionRecorder,
   type IContent,
@@ -877,41 +878,46 @@ function registerSearchName5(): void {
           contents: [makeContent('first message here')],
         });
 
-        const { result } = renderHook(() =>
+        let releasePreview: () => void = () => {};
+        const previewGate = new Promise<void>((resolve) => {
+          releasePreview = resolve;
+        });
+        const readPreview = SessionDiscovery.readFirstUserMessage;
+        const previewRead = spyOn(
+          SessionDiscovery,
+          'readFirstUserMessage',
+        ).mockImplementation(async (filePath, maxLength) => {
+          await previewGate;
+          return readPreview(filePath, maxLength);
+        });
+        const { result, unmount } = renderHook(() =>
           useSessionBrowser(makeHookProps(chatsDir)),
         );
-        for (const char of 'nomatchterm') {
-          result.current.handleKeypress(char, makeKey(char));
+
+        try {
+          for (const char of 'nomatchterm') {
+            result.current.handleKeypress(char, makeKey(char));
+          }
+
+          await waitFor(() => {
+            expect(result.current.sessions).toHaveLength(1);
+            expect(result.current.sessions[0].previewState).toBe('loading');
+            expect(
+              result.current.filteredSessions.map((s) => s.sessionId),
+            ).toStrictEqual(['slow-preview-session']);
+          });
+
+          releasePreview();
+
+          await waitFor(() => {
+            expect(result.current.sessions[0].previewState).toBe('loaded');
+            expect(result.current.filteredSessions).toHaveLength(0);
+          });
+        } finally {
+          releasePreview();
+          unmount();
+          previewRead.mockRestore();
         }
-
-        await waitFor(() => {
-          expect(
-            result.all.some(
-              (snapshot) =>
-                snapshot.sessions.length === 1 &&
-                snapshot.sessions[0].previewState === 'loading',
-            ),
-          ).toBe(true);
-        });
-        const loadingSnapshot = result.all.find(
-          (snapshot) =>
-            snapshot.sessions.length === 1 &&
-            snapshot.sessions[0].previewState === 'loading',
-        );
-        expect(
-          loadingSnapshot?.filteredSessions.some(
-            (s) => s.sessionId === 'slow-preview-session',
-          ),
-        ).toBe(true);
-
-        await waitFor(() => {
-          expect(result.current.sessions[0].previewState).toBe('loaded');
-          expect(
-            result.current.filteredSessions.some(
-              (s) => s.sessionId === 'slow-preview-session',
-            ),
-          ).toBe(false);
-        });
       });
     },
   );

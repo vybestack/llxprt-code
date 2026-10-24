@@ -686,7 +686,6 @@ export function buildNewRecordingService(
       model: config.getModel(),
     }),
     mediaStore: clientMediaStore(sessionClient.getAgentClient()),
-    maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
   });
 }
 
