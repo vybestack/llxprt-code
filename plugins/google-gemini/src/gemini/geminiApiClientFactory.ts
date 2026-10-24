@@ -10,6 +10,7 @@ import type {
   LanguageModelV4CallOptions,
   LanguageModelV4Content,
 } from '@ai-sdk/provider';
+import type { AuthClient } from 'google-auth-library';
 import { createPatternPreservingFetch } from './gemini-pattern-fetch.js';
 import {
   toCallOptions,
@@ -25,6 +26,7 @@ import type {
   GenerateContentResponse,
   Part,
 } from './geminiWireTypes.js';
+import { selectGoogleCredentialClient } from './vertexCredentialSource.js';
 
 /**
  * Builds the Gemini client on top of `@ai-sdk/google`.
@@ -56,6 +58,27 @@ function toAiSdkBaseUrl(baseUrl: string | undefined): string | undefined {
   return alreadyVersioned ? trimmed : `${trimmed}/v1beta`;
 }
 
+/**
+ * The Vertex adapter reads only the access token from the auth client, so the
+ * quota project header the library adds in `getRequestHeaders` never reaches
+ * the model request. An explicit header, in any letter case, takes precedence.
+ */
+function withQuotaProjectHeader(
+  quotaProjectId: string | null | undefined,
+  headers: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!quotaProjectId) {
+    return headers;
+  }
+  const explicit = Object.keys(headers ?? {}).some(
+    (name) => name.toLowerCase() === 'x-goog-user-project',
+  );
+  if (explicit) {
+    return headers;
+  }
+  return { 'x-goog-user-project': quotaProjectId, ...headers };
+}
+
 export async function createGeminiApiClient(
   options: GeminiApiClientOptions,
 ): Promise<GeminiApiClient> {
@@ -63,22 +86,41 @@ export async function createGeminiApiClient(
     throw new Error('Vertex AI requires explicit project and location');
   }
   const baseURL = toAiSdkBaseUrl(options.httpOptions?.baseUrl);
-  const modelFor = (
+  let selectedCredential: Promise<AuthClient | undefined> | undefined;
+  const credentialClient = (): Promise<AuthClient | undefined> => {
+    const { credentialEnvironment } = options;
+    if (credentialEnvironment === undefined) {
+      throw new Error('Vertex AI requires a Google credential environment');
+    }
+    selectedCredential ??= selectGoogleCredentialClient({
+      fetch: options.fetch,
+      credentials: options.credentials,
+      environment: credentialEnvironment,
+    }).catch((error: unknown) => {
+      selectedCredential = undefined;
+      throw error;
+    });
+    return selectedCredential;
+  };
+  const modelFor = async (
     params: GenerateContentParameters,
     tools: LanguageModelV4CallOptions['tools'],
   ) => {
     const transport = createPatternPreservingFetch(tools, options.fetch);
     if (options.vertexai) {
+      const authClient = await credentialClient();
       return createVertex({
         apiKey: '',
         project: options.project,
         location: options.location,
         baseURL: options.httpOptions?.baseUrl,
-        headers: options.httpOptions?.headers,
-        googleAuthOptions: {
-          ...options.googleAuthOptions,
-          keyFilename: options.credentialsFile,
-        },
+        headers: withQuotaProjectHeader(
+          authClient?.quotaProjectId,
+          options.httpOptions?.headers,
+        ),
+        ...(authClient !== undefined
+          ? { googleAuthOptions: { authClient } }
+          : {}),
         fetch: transport,
       }).languageModel(params.model);
     }
@@ -98,7 +140,7 @@ export async function createGeminiApiClient(
         params: GenerateContentParameters,
       ): Promise<GenerateContentResponse> {
         const callOptions = toCallOptions(params);
-        const model = modelFor(params, callOptions.tools);
+        const model = await modelFor(params, callOptions.tools);
         const result = await model.doGenerate(callOptions);
         return toGenerateContentResponse({
           content: result.content,
@@ -115,7 +157,7 @@ export async function createGeminiApiClient(
         params: GenerateContentParameters,
       ): Promise<AsyncIterable<GenerateContentResponse>> {
         const callOptions = toCallOptions(params);
-        const model = modelFor(params, callOptions.tools);
+        const model = await modelFor(params, callOptions.tools);
         const { stream } = await model.doStream(callOptions);
         return streamToGeminiChunks(stream);
       },

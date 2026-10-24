@@ -5,7 +5,11 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import { GeminiProvider } from '../gemini/GeminiProvider.js';
+import { join } from 'node:path';
+import {
+  buildGoogleCredentialEnvironment,
+  GeminiProvider,
+} from '../gemini/GeminiProvider.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
 // These assertions are about the client OPTIONS the provider builds, not about
@@ -46,6 +50,23 @@ type GeminiProviderInternals = {
     baseURL?: string,
   ) => unknown;
 };
+
+function ambientCredentialEnvironment(
+  extra: Record<string, string> = {},
+): Record<string, string> {
+  const configRoot =
+    process.platform === 'win32'
+      ? process.env.APPDATA
+      : join(String(process.env.HOME), '.config');
+  return {
+    wellKnownFile: join(
+      String(configRoot),
+      'gcloud',
+      'application_default_credentials.json',
+    ),
+    ...extra,
+  };
+}
 
 function mockVertexAISettings(
   project = 'settings-project',
@@ -231,6 +252,7 @@ describe('GeminiProvider Authentication', () => {
     expect(googleGenAIConstructor).toHaveBeenCalledWith({
       apiKey: 'USE_VERTEX_AI',
       vertexai: true,
+      credentialEnvironment: ambientCredentialEnvironment(),
       project: 'settings-project',
       location: 'europe-west4',
       httpOptions: { headers: {} },
@@ -248,6 +270,7 @@ describe('GeminiProvider Authentication', () => {
     expect(googleGenAIConstructor).toHaveBeenCalledWith({
       apiKey: 'USE_VERTEX_AI',
       vertexai: true,
+      credentialEnvironment: ambientCredentialEnvironment(),
       project: 'settings-project',
       location: 'settings-location',
       httpOptions: { headers: {} },
@@ -264,6 +287,7 @@ describe('GeminiProvider Authentication', () => {
     expect(googleGenAIConstructor).toHaveBeenCalledWith({
       apiKey: 'USE_VERTEX_AI',
       vertexai: true,
+      credentialEnvironment: ambientCredentialEnvironment(),
       project: 'env-project',
       location: 'us-central1',
       httpOptions: { headers: {} },
@@ -311,9 +335,55 @@ describe('GeminiProvider Authentication', () => {
     expect(googleGenAIConstructor).toHaveBeenCalledWith({
       apiKey: 'USE_VERTEX_AI',
       vertexai: true,
-      credentialsFile: '/path/to/credentials.json',
+      credentialEnvironment: ambientCredentialEnvironment({
+        credentialsFile: '/path/to/credentials.json',
+      }),
       httpOptions: { headers: {} },
     });
+  });
+
+  it('builds the credential environment from explicit variables without reading the process environment', () => {
+    expect(
+      buildGoogleCredentialEnvironment(
+        '/creds.json',
+        {
+          HOME: '/home/user',
+          GCE_METADATA_IP: '10.0.0.1',
+          GCE_METADATA_HOST: 'metadata.example',
+          METADATA_SERVER_DETECTION: 'ping-only',
+          GOOGLE_CLOUD_QUOTA_PROJECT: 'quota',
+        },
+        'linux',
+      ),
+    ).toStrictEqual({
+      credentialsFile: '/creds.json',
+      wellKnownFile: join(
+        '/home/user',
+        '.config',
+        'gcloud',
+        'application_default_credentials.json',
+      ),
+      metadataHost: '10.0.0.1',
+      metadataDetection: 'ping-only',
+      quotaProject: 'quota',
+    });
+    expect(
+      buildGoogleCredentialEnvironment(
+        undefined,
+        { APPDATA: 'C:/Users/u/AppData/Roaming', GCE_METADATA_HOST: 'host' },
+        'win32',
+      ),
+    ).toStrictEqual({
+      wellKnownFile: join(
+        'C:/Users/u/AppData/Roaming',
+        'gcloud',
+        'application_default_credentials.json',
+      ),
+      metadataHost: 'host',
+    });
+    expect(
+      buildGoogleCredentialEnvironment(undefined, {}, 'linux'),
+    ).toStrictEqual({});
   });
 
   it('requires project and location when only GOOGLE_API_KEY is configured for Vertex AI', async () => {

@@ -51,7 +51,7 @@ export function createPatternPreservingFetch(
   requestFetch: (
     input: RequestInfo | URL,
     init?: RequestInit,
-  ) => Promise<Response> = globalThis.fetch,
+  ) => Promise<Response>,
 ): NonNullable<GoogleGenerativeAIProviderSettings['fetch']> {
   const schemas = new Map(
     tools?.flatMap((tool) =>
