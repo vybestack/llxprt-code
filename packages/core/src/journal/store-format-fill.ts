@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { fillNeutralRowFacts } from './neutralRowFacts.js';
 import type { CommitEffect } from './commitEffect.js';
 import { densityFilePolicy } from './density-file-fill.js';
 import { fillDensityFiles } from './density-file-fill.js';
@@ -71,7 +72,7 @@ export async function finishStoreFormats(
 ): ReturnType<typeof fillRowFormats> {
   const filled = await fillStoreFormats(
     context,
-    built,
+    await fillNeutralRowFacts(context, built, appender),
     appender,
     edits,
     policies,

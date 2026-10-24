@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { FIRST_NEXT_LABEL, LABEL_STEP } from '../../journal/labels.js';
 import { JournalFormatError } from '../../journal/errors.js';
 import {
   admittedMediaSource,
@@ -108,7 +109,7 @@ export class JournalTailSource implements JournalResponseSource {
     const source = new JournalTailSource(
       snapshot,
       tail,
-      snapshot.version?.nextLabel ?? 1n,
+      snapshot.version?.nextLabel ?? FIRST_NEXT_LABEL,
       projection === undefined
         ? snapshot
         : await JournalProjectedSource.create(snapshot, projection),
@@ -133,6 +134,16 @@ export class JournalTailSource implements JournalResponseSource {
       }
     }
     return source;
+  }
+
+  measurementChanged(label: bigint): boolean {
+    return this.isTail(label) || label === this.projection?.label;
+  }
+
+  appendSequence(label: bigint): bigint {
+    return this.isTail(label)
+      ? this.firstLabel + (label - this.firstLabel) * LABEL_STEP
+      : label;
   }
 
   readonly isTail = (label: bigint): boolean => label >= this.firstLabel;

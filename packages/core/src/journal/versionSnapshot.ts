@@ -102,6 +102,28 @@ export class VersionSnapshot {
     this.kimiFacts = new KimiFactQueries(this, idDeps, this.kimi.meta);
   }
 
+  async rowMeasurementStamp(label: bigint): Promise<string> {
+    const entry = await this.entryByLabel(label);
+    if (entry === undefined)
+      throw new JournalFormatError('Measurement source row is absent');
+    const ids = await this.readIds(entry);
+    const head = ids.head;
+    if (head === undefined)
+      throw new JournalFormatError('Measurement source has no stored frame');
+    const parts: string[] = [];
+    for (const block of ids.header.blocks) {
+      const bytes = await this.read.access.readRecordRange(
+        head,
+        block.offset + block.length,
+        4,
+      );
+      parts.push(
+        `${block.length}:${new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0, true)}`,
+      );
+    }
+    return parts.join(',');
+  }
+
   async recencyFacts(revision: string): Promise<RecencyFacts> {
     this.requireOpen();
     if (this.rows === 0) return new RecencyFacts(this.facts, revision);

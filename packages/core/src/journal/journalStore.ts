@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { NeutralRowFactRegistration } from './neutralRowFacts.js';
 import { retainNamedWriter } from './named-writer-ownership.js';
 import { journalLabelSorter } from './ordered-labels.js';
 import { finishStoreFormats } from './store-format-fill.js';
@@ -102,6 +103,7 @@ export interface JournalStoreDependencies {
   readonly planOccurrences: OccurrencePlanner;
   readonly recencyFactPolicy?: RecencyFactPolicy;
   readonly contextSpanPolicy?: ContextSpanPolicy;
+  readonly neutralRowFacts?: NeutralRowFactRegistration;
   /** The aggregate algebra of the row tree for a slot table. */
   readonly algebra: (kinds: SlotKinds) => RowTreeAlgebra;
   /** One capped cache each for the id trie, the meta map and the state map. */
@@ -919,6 +921,7 @@ export class JournalStore {
       planOccurrences: this.deps.planOccurrences,
       recencyFactPolicy: this.deps.recencyFactPolicy,
       contextSpanPolicy: this.deps.contextSpanPolicy,
+      neutralRowFacts: this.deps.neutralRowFacts,
       idCache: this.idCache,
       metaCache: this.metaCache,
       stateCache: this.stateCache,

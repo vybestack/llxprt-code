@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { isNeutralRowFact } from './neutral-row-fact-codec.js';
 import { JournalFormatError } from './errors.js';
 import { frameLength, type FrameHead } from './frame.js';
 import type { GroupRecord, VectoredRecordAppender } from './groupAppender.js';
@@ -264,6 +265,7 @@ export class GroupCopier {
    * than the smallest fact, except the distinct-width ranking node.
    */
   readonly factValue = async (value: Uint8Array): Promise<Uint8Array> => {
+    if (isNeutralRowFact(value)) return value;
     if (
       value.length < ID_FACT_MIN_BYTES ||
       value.length === TOOL_RANK_NODE_BYTES

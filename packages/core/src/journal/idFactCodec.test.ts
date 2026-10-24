@@ -195,6 +195,7 @@ describe('trie keys', () => {
       chronology: 10,
       densityCall: 11,
       recency: 12,
+      neutralRow: 13,
     });
   });
 

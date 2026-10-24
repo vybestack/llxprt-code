@@ -1,4 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { estimateTokens } from '../../utils/toolOutputLimiter.js';
+import {
+  measureRequestRow,
+  type RequestRowMeasurement,
+  type TokenCountFn,
+} from './token-usage-measurement.js';
+import {
+  storedTokenUsageFacts,
+  tokenUsagePlanSignature,
+  readTokenUsagePlan,
+  tokenUsageRowFact,
+  type TokenUsageRowFact,
+} from './token-usage-facts.js';
 import type { NativeFactIndexReader } from '../../journal/nativeFactIndex.js';
 import type { DebugLogger } from '../../debug/index.js';
 import { logJournalRequestDiagnostics } from './journal-request-diagnostics.js';
@@ -62,6 +75,10 @@ export interface NativeRequestViewPlan {
 export class IndexedJournalRequestSnapshot {
   readonly viewPlan: NativeRequestViewPlan;
   private closed = false;
+  private readonly overlayMeasurements = new Map<
+    string,
+    RequestRowMeasurement
+  >();
   private kimi: Promise<JournalRequestKimi> | undefined;
   private readonly mistral = new Map<number, Promise<JournalRequestMistral>>();
   private lastOccurrences:
@@ -356,6 +373,55 @@ export class IndexedJournalRequestSnapshot {
       signal?.throwIfAborted();
       yield await this.readPlan(plan, signal);
     }
+  }
+
+  async *openTokenUsageReader(
+    countTokens: TokenCountFn = estimateTokens,
+    signal?: AbortSignal,
+  ): AsyncGenerator<TokenUsageRowFact> {
+    this.requireOpen();
+    const release = this.snapshot.hold();
+    try {
+      for (let index = 0; index < this.count; index++) {
+        signal?.throwIfAborted();
+        yield await this.tokenUsageFactAt(index, countTokens, signal);
+      }
+    } finally {
+      await release();
+    }
+  }
+
+  private async tokenUsageFactAt(
+    index: number,
+    countTokens: TokenCountFn,
+    signal?: AbortSignal,
+  ): Promise<TokenUsageRowFact> {
+    const selected = await this.locate(index);
+    const plan = await this.planAt(index, signal);
+    const signature = await tokenUsagePlanSignature(plan, async (label) =>
+      this.source.measurementChanged(label)
+        ? 'overlay'
+        : this.snapshot.rowMeasurementStamp(label),
+    );
+    const overlay =
+      this.rows.some((row) => row.entry.label === selected.entry.label) ||
+      plan.blocks.some((ref) => this.source.measurementChanged(ref.at.label));
+    const stored = overlay
+      ? this.overlayMeasurements.get(signature)
+      : (await storedTokenUsageFacts(this.snapshot, selected.entry.label)).find(
+          (unit) => unit.signature === signature,
+        )?.measurement;
+    const measurement =
+      stored ?? measureRequestRow(await readTokenUsagePlan(plan), countTokens);
+    if (overlay && stored === undefined)
+      this.overlayMeasurements.set(signature, measurement);
+    let sequence = this.source.appendSequence(selected.entry.label);
+    for (const ref of plan.blocks) {
+      const at = this.source.appendSequence(ref.at.label);
+      if (at > sequence) sequence = at;
+    }
+    signal?.throwIfAborted();
+    return tokenUsageRowFact(plan, sequence, measurement);
   }
 
   private occurrences(

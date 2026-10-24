@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { NeutralRowFactRegistration } from './neutralRowFacts.js';
 import type { LabelSorter } from './ordered-labels.js';
 import type { Aggregate } from './aggregate.js';
 import type { RecordAppender } from './groupAppender.js';
@@ -20,6 +21,7 @@ import type { slotKindsOf, Version } from './version.js';
 /** The seams a group is built with, all supplied by the store. */
 export interface BuildContext extends FactDeps {
   readonly sortedLabels: LabelSorter;
+  readonly neutralRowFacts?: NeutralRowFactRegistration;
   readonly measureFormats?: boolean;
   readonly access: RecordAccess | undefined;
   /** Reads the file up to `writtenEnd`, which reaches records the current group has written and drained. */

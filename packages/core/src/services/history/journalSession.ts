@@ -1,4 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { NEUTRAL_ROW_FACTS_READY } from '../../journal/neutralRowFacts.js';
+import { tokenUsageFactRegistration } from './token-usage-facts.js';
+import { estimateTokens } from '../../utils/toolOutputLimiter.js';
 import { journalContextSpan } from './journalContextSpan.js';
 import { RECENCY_INDEX_READY } from '../../journal/recencyFacts.js';
 import { densityRecencyFactPolicy } from './densityRecencyFacts.js';
@@ -36,6 +39,7 @@ import {
 /** What a caller may replace: the file seams (tests) and the occurrence planner (the normalizer of phase 5). */
 export interface JournalSessionOptions {
   readonly journal?: Partial<JournalOpenDependencies>;
+  readonly tokenUsageCountTokens?: (text: string) => number;
   readonly planOccurrences?: OccurrencePlanner;
   /** Where the bare store's nameless file is created; the system temp directory by default. */
   readonly unlinkedDirectory?: string;
@@ -58,6 +62,9 @@ async function storeDependencies(
     planOccurrences: options.planOccurrences ?? planSourceRowOccurrences,
     recencyFactPolicy: densityRecencyFactPolicy,
     contextSpanPolicy: journalContextSpan,
+    neutralRowFacts: tokenUsageFactRegistration(
+      options.tokenUsageCountTokens ?? estimateTokens,
+    ),
     algebra: rowAlgebra,
   };
 }
@@ -122,6 +129,8 @@ export class JournalSession {
           densityRecencyFactPolicy.revision
       )
         await store.commit([{ kind: 'recency' }]);
+      if ((await store.getMeta(NEUTRAL_ROW_FACTS_READY)) === undefined)
+        await store.commit([{ kind: 'append', rows: [] }]);
       return new JournalSession(store, true);
     } catch (error) {
       await store.close();
