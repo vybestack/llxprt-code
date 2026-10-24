@@ -27,8 +27,9 @@ import {
 } from './kimiFactCodec.js';
 
 export type AppendInput =
-  | { readonly draft: RowDraft }
-  | { readonly foreign: SourceRow };
+  | { readonly draft: RowDraft; readonly label?: bigint }
+  | { readonly foreign: SourceRow }
+  | { readonly existing: SourceRow };
 
 /** The raw tail is written once. Only entries, never content, survive a yielded row. */
 export class StreamedAppendPass {
@@ -112,8 +113,11 @@ export class StreamedAppendPass {
     for await (const input of this.inputs) {
       let entry: RowEntry;
       if ('draft' in input) {
-        const allocated = allocateAppendLabels(this.nextLabel, 1);
-        const label = allocated.labels[0];
+        const allocated = allocateAppendLabels(
+          this.nextLabel,
+          input.label === undefined ? 1 : 0,
+        );
+        const label = input.label ?? allocated.labels[0];
         this.nextLabel = allocated.nextLabel;
         const encoded = encodeRowDraft(label, input.draft);
         await this.observe(input.draft.ids.map((id) => id.rawId));
@@ -123,7 +127,7 @@ export class StreamedAppendPass {
           await this.appender.append(encoded.record),
         );
       } else {
-        const row = input.foreign;
+        const row = 'foreign' in input ? input.foreign : input.existing;
         if (row.entry.label <= previous)
           throw new JournalFormatError(
             'Rows adopted at the end must have ascending labels above the live rows',
@@ -131,7 +135,10 @@ export class StreamedAppendPass {
         const ids = await readRowIds(row.source, row.entry);
         await this.observe(ids.rawIds);
         await applyEntryRow(row.source, this.facts, this.ctx, row.entry, ids);
-        entry = await copyForeignRow(this.appender, row, ids);
+        entry =
+          'foreign' in input
+            ? await copyForeignRow(this.appender, row, ids)
+            : row.entry;
       }
       await this.facts.meta.spillWhenFull(this.appender, this.ctx.readGroup);
       previous = entry.label;

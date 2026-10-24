@@ -4,11 +4,15 @@ import type { BuildContext, BuiltGroup } from './groupBuildShared.js';
 import type { GroupPlan, Segment } from './groupPlanTypes.js';
 import { buildFromSegments } from './groupSegmentBuild.js';
 import type { MutationCode } from './recordKinds.js';
+import { rangeEntries } from './groupFacts.js';
+import { JournalFormatError } from './errors.js';
+import { buildStreamedAppend } from './streamed-append-build.js';
+import type { AppendInput } from './streamed-append-pass.js';
 
 export { mapReader } from './groupBuildShared.js';
 export type { BuildContext, BuiltGroup } from './groupBuildShared.js';
 
-export function buildGroup(
+export async function buildGroup(
   ctx: BuildContext,
   plan: GroupPlan,
   mutation: MutationCode,
@@ -16,6 +20,27 @@ export function buildGroup(
 ): Promise<BuiltGroup> {
   if (plan.segments !== undefined) {
     return buildFromSegments(ctx, plan, plan.segments, mutation, appender);
+  }
+  if (plan.range !== undefined && !plan.rebuilt) {
+    const range = plan.range;
+    const access = ctx.access;
+    if (access === undefined)
+      throw new JournalFormatError('Restoring a prefix needs committed rows');
+    const inputs = (async function* (): AsyncGenerator<AppendInput> {
+      for await (const entry of rangeEntries(access, range))
+        yield { existing: { entry, source: access } };
+      for (const { label, draft } of plan.newRows) yield { label, draft };
+    })();
+    const built = await buildStreamedAppend(
+      ctx,
+      plan,
+      mutation,
+      appender,
+      inputs,
+    );
+    if (built === undefined)
+      throw new JournalFormatError('The restored prefix tail is empty');
+    return built;
   }
   const kept: Segment[] = [
     ...(plan.base.rows === 0
