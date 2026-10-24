@@ -362,8 +362,21 @@ async function callerOwnedByteLength(
   let pdfBytes = 0;
   let items = 0;
   let counter = 0;
-  for (let at = selection.skipRows; at < rows.count; at++) {
-    const row = await rows.readAt(at, options.invocation.signal);
+  const source = resolveRowsMedia(
+    (async function* () {
+      for (let at = selection.skipRows; at < rows.count; at++)
+        yield await rows.readAt(at, options.invocation.signal);
+    })(),
+    {
+      requestId: options.mediaRequestId,
+      aggregateBudgetBytes: options.mediaBudgetBytes,
+      resolver: options.mediaResolver,
+    },
+    shell.mediaRequest,
+    options.invocation.signal,
+    rows.native,
+  );
+  for await (const row of source) {
     const pairs = await responsesUnitPairs(row, query, selection.skipRows);
     for (const item of buildOpenAIResponsesUnit(
       row,
