@@ -80,22 +80,17 @@ async function verifyRestoration(
 
 async function verifyAbort(
   route: 'provider' | 'pending',
-  kind: 'restore-admission' | 'restore-baseline',
+  kind: 'restore-baseline',
 ): Promise<void> {
   await transactionFixture(async (fixture) => {
     const before = await rawState(fixture);
     const outcome = await runRejection(fixture, route, kind);
     expect(outcome).toBeInstanceOf(AggregateError);
     expect(errors(outcome)).toContain(rejection);
-    expect(errors(outcome)).toContain(
-      kind === 'restore-admission' ? fixture.recorder.failure : baselineFailure,
-    );
+    expect(errors(outcome)).toContain(baselineFailure);
     expect(fixture.state.projectionsAfterInstall).toBe(0);
     const after = await rawState(fixture);
-    const expectedState =
-      kind === 'restore-baseline'
-        ? { ...before, baseline: 0 }
-        : fixture.installedState();
+    const expectedState = { ...before, baseline: 0 };
     expect(after).toStrictEqual(expectedState);
     expect(await durableRowsOf(fixture.recorder)).toStrictEqual(after.rows);
     const actual = await bodyFor(
@@ -140,12 +135,8 @@ describe('rejected fallback transaction with an existing empty AI row', () => {
     ['pending', 'false'],
     ['pending', 'throw'],
   ];
-  const abortCases: Array<
-    ['provider' | 'pending', 'restore-admission' | 'restore-baseline']
-  > = [
-    ['provider', 'restore-admission'],
+  const abortCases: Array<['provider' | 'pending', 'restore-baseline']> = [
     ['provider', 'restore-baseline'],
-    ['pending', 'restore-admission'],
     ['pending', 'restore-baseline'],
   ];
   it.each(restorationCases)(

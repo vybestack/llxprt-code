@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { suffixSeeder } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { createHash } from 'node:crypto';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
@@ -8,7 +9,7 @@ import {
   providerPendingFixture,
 } from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
 import {
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
   rejectedValue,
 } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
@@ -113,12 +114,11 @@ async function compareBytes(
 async function compareBodies(size: number, rollback: boolean): Promise<number> {
   return withDetachedFixture((fixture) =>
     withArrayClient(fixture, async ({ client, store }) => {
-      const { history, recorder } = fixture;
+      const { history } = fixture;
       const reference = await admittedReference(store);
-      for (let index = 0; index < size; index++)
-        await recorder.commit('content', {
-          content: bodyRow(index, reference),
-        });
+      await suffixSeeder(history)(
+        Array.from({ length: size }, (_, index) => bodyRow(index, reference)),
+      );
       const failure = new Error('client BODY rollback');
       if (rollback)
         await history.registerMediaOwner(

@@ -20,7 +20,7 @@ import { providerPendingFixture } from '../../../packages/core/src/services/hist
 import { PendingContextWindowEnforcer } from '../../../packages/agents/src/compression/pendingContextWindowEnforcement.js';
 import { runDiskProviderFallback } from '../../../packages/agents/src/compression/diskProviderFallback.js';
 import { buildCompressionMetadata } from '../../../packages/agents/src/compression/compressionContextBuilder.js';
-import { TopDownTruncationStrategy } from '../../../packages/agents/src/compression/TopDownTruncationStrategy.js';
+import { TruncationArrayOracle } from './truncation-array-oracle.js';
 import { PerformCompressionResult } from '../../../packages/core/src/core/turn.js';
 import { captureCuratedBody } from '../provider-curated-body-gemini.js';
 const logger = new DebugLogger('test:pending-window-body');
@@ -102,7 +102,7 @@ async function oracle(
     logger,
     { targetTokenCount: 0 },
   );
-  const legacy = await new TopDownTruncationStrategy().compress({
+  const legacy = await new TruncationArrayOracle().compress({
     ...metadata,
     history: curated,
   });

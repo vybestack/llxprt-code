@@ -23,7 +23,7 @@ import {
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
 import { buildRuntimeContext } from '../../packages/agents/src/core/__tests__/chatSession-density-helpers.js';
 import { buildCompressionMetadata } from '../../packages/agents/src/compression/compressionContextBuilder.js';
-import { TopDownTruncationStrategy } from '../../packages/agents/src/compression/TopDownTruncationStrategy.js';
+import { TruncationArrayOracle } from './support/truncation-array-oracle.js';
 import { captureCuratedBody } from './provider-curated-body-gemini.js';
 import type { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import { PerformCompressionResult } from '../../packages/core/src/core/turn.js';
@@ -60,7 +60,7 @@ async function oracle(
     undefined,
     logger,
   );
-  const result = await new TopDownTruncationStrategy().compress({
+  const result = await new TruncationArrayOracle().compress({
     ...metadata,
     history: rows,
     currentTokenCount: total,

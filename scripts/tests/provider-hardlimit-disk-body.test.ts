@@ -16,7 +16,7 @@ import { providerFarFixtureRow } from '../../packages/core/src/services/history/
 import { enforceWithHandler } from '../../packages/agents/src/compression/__tests__/support/enforce-with-handler.js';
 import { runDiskProviderFallback } from '../../packages/agents/src/compression/diskProviderFallback.js';
 import { buildCompressionMetadata } from '../../packages/agents/src/compression/compressionContextBuilder.js';
-import { TopDownTruncationStrategy } from '../../packages/agents/src/compression/TopDownTruncationStrategy.js';
+import { TruncationArrayOracle } from './support/truncation-array-oracle.js';
 import { middleoutSetup } from '../../packages/agents/src/compression/__tests__/middleout-disk-helpers.js';
 import { PerformCompressionResult } from '../../packages/core/src/core/turn.js';
 import { createTruncationStub } from '../../packages/agents/src/compression/toolResultTruncator.js';
@@ -68,7 +68,7 @@ async function oracle(
     logger,
     { targetTokenCount: 0 },
   );
-  const legacy = await new TopDownTruncationStrategy().compress({
+  const legacy = await new TruncationArrayOracle().compress({
     ...metadata,
     history: buildCuratedHistory(logger, raw, false),
     estimateTokens: async (rows) => rows.length,

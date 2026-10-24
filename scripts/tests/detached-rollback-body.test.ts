@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { suffixSeeder } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
 import {
@@ -12,18 +13,17 @@ import { captureCuratedBody } from './provider-curated-body-gemini.js';
 import { withDetachedFixture } from '../../packages/core/src/services/history/detached-rollback-test-helpers.js';
 
 async function rollbackBodies(size: number): Promise<number> {
-  return withDetachedFixture(async ({ history, recorder }) => {
-    for (let index = 0; index < size; index++)
-      await recorder.commit('content', {
-        content: providerFarFixtureRow(index),
-      });
+  return withDetachedFixture(async ({ history }) => {
+    await suffixSeeder(history)(
+      Array.from({ length: size }, (_, index) => providerFarFixtureRow(index)),
+    );
     const failure = new Error('rollback before provider body');
     expect(
       await rejectedValue(
         history.detachedValues.transform(
           async (source, sink) => {
             for await (const row of source.streamRows())
-              sink.appendValue({
+              await sink.appendValue({
                 ...row,
                 blocks: [{ type: 'text', text: 'discarded candidate' }],
               });

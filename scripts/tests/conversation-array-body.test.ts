@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { suffixSeeder } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,7 +11,7 @@ import {
   providerPendingFixture,
 } from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
 import {
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
   rejectedValue,
 } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
@@ -69,10 +70,11 @@ async function compareBodies(
   reference: MediaReferenceBlock,
   resolver: RequestMediaResolver,
 ): Promise<number> {
-  return withDetachedFixture(async ({ history, recorder }) => {
+  return withDetachedFixture(async ({ history }) => {
     const rowAt = (index: number): IContent => bodyRow(index, reference);
-    for (let index = 0; index < size; index++)
-      await recorder.commit('content', { content: rowAt(index) });
+    await suffixSeeder(history)(
+      Array.from({ length: size }, (_, index) => rowAt(index)),
+    );
     const failure = new Error('conversation BODY rollback');
     if (rollback)
       await history.registerMediaOwner(

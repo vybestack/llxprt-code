@@ -8,7 +8,7 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/
 import { OpenAIResponsesProvider } from '../../packages/providers/src/openai-responses/OpenAIResponsesProvider.js';
 import { AnthropicProvider } from '../../packages/providers/src/anthropic/AnthropicProvider.js';
 import { GeminiProvider } from '../../plugins/google-gemini/src/gemini/GeminiProvider.js';
-import { RetryOrchestrator } from '../../packages/providers/src/RetryOrchestrator.js';
+import { BodyRetryOrchestrator as RetryOrchestrator } from './support/body-retry-orchestrator.js';
 import { CompressionHandler } from '../../packages/agents/src/compression/CompressionHandler.js';
 import { MiddleOutArrayOracle } from '../../packages/agents/src/compression/__tests__/support/middleout-array-oracle.js';
 import { buildCompressionMetadata } from '../../packages/agents/src/compression/compressionContextBuilder.js';
