@@ -39,8 +39,8 @@ import type {
 } from '@vybestack/llxprt-code-auth';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
-const requestFetch: NetworkFetch = () =>
-  Promise.reject(new Error('This test must not make network requests'));
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 export const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 export const TEST_RUNTIME_ID = 'codex-stateful-remediation-test';
