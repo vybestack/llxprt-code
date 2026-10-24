@@ -14,7 +14,7 @@ import {
   InMemoryProviderKeyStorage,
   makeToken,
 } from './__tests__/credential-proxy-server-helpers.js';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   CredentialAuthority,
@@ -22,45 +22,69 @@ import {
   closeOwnedTokenStore,
 } from './credential-store-factory.js';
 
-const factoryPath = fileURLToPath(
-  new URL('./credential-store-factory.ts', import.meta.url),
+const childScript = fileURLToPath(
+  new URL('./__tests__/capability-fd-child.ts', import.meta.url),
 );
 
-function runCapture(token: string, socket?: string): unknown {
-  const script = `
-    const { HostCredentialOwner } = require(${JSON.stringify(factoryPath)});
-    const fs = require('node:fs');
-    let error = null;
-    let authority;
-    try { authority = new HostCredentialOwner(process.env).authority; }
-    catch (e) { error = e.message; }
-    let closed = false;
-    try { fs.readSync(3, Buffer.alloc(1), 0, 1, null); }
-    catch { closed = true; }
-    process.stdout.write(JSON.stringify({error, closed,
-      markerGone: process.env.LLXPRT_CAPABILITY_FD === undefined,
-      serialized: JSON.stringify(authority)}));
-  `;
-  const result = spawnSync(
-    'bash',
-    [
-      '--noprofile',
-      '--norc',
-      '-c',
-      `exec 3<<<"${token}"\nexec bun -e ${JSON.stringify(script.split(String.fromCharCode(10)).join(' '))}`,
-    ],
-    {
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        BASH_ENV: '',
-        LLXPRT_CREDENTIAL_SOCKET: socket ?? '',
-        LLXPRT_CAPABILITY_FD: '3',
-      },
+// The descriptor tests run only where the product delivers a descriptor: the
+// Linux sandbox entrypoint opens fd 3 and bin/llxprt.mjs forwards it to Bun
+// off Windows. A native Windows host delivers the token through capability.env
+// (sandbox-capability.test.ts), so no descriptor reader runs there.
+const descriptorDeliveryPlatform = process.platform !== 'win32';
+
+interface ChildRun {
+  readonly exit: number | null;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+/**
+ * Runs the child with the capability token on an extra stdio slot (fd 3),
+ * the way bin/llxprt.mjs forwards the descriptor to Bun. The token is written
+ * with a trailing newline, as the sandbox entrypoint's here-string does.
+ */
+async function runChild(
+  mode: 'capture' | 'requests',
+  token: string,
+  socket?: string,
+): Promise<ChildRun> {
+  const child = spawn(process.execPath, [childScript, mode], {
+    env: {
+      ...process.env,
+      LLXPRT_CREDENTIAL_SOCKET: socket ?? '',
+      LLXPRT_CAPABILITY_FD: '3',
     },
-  );
-  if (result.status !== 0) throw new Error(result.stderr);
-  return JSON.parse(result.stdout);
+    stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+  });
+  let stdout = '';
+  let stderr = '';
+  child.stdout?.on('data', (chunk: Buffer) => {
+    stdout += chunk.toString();
+  });
+  child.stderr?.on('data', (chunk: Buffer) => {
+    stderr += chunk.toString();
+  });
+  const exited = new Promise<number | null>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', resolve);
+  });
+  const descriptor = child.stdio[3];
+  if (
+    descriptor === null ||
+    descriptor === undefined ||
+    !('end' in descriptor)
+  ) {
+    throw new Error('Child has no writable descriptor 3');
+  }
+  descriptor.end(`${token}\n`);
+  return { exit: await exited, stdout, stderr };
+}
+
+async function captureReport(token: string, socket?: string): Promise<unknown> {
+  const run = await runChild('capture', token, socket);
+  expect(run.stderr).toBe('');
+  expect(run.exit).toBe(0);
+  return JSON.parse(run.stdout);
 }
 
 describe('host credential authority', () => {
@@ -140,7 +164,7 @@ describe('host credential authority', () => {
     }
   });
 
-  it.skipIf(process.platform === 'win32')(
+  it.skipIf(!descriptorDeliveryPlatform)(
     'uses the captured descriptor capability for token, key, and broker requests after scrubbing',
     async () => {
       const directory = mkdtempSync(join(tmpdir(), 'fd-owner-'));
@@ -156,60 +180,11 @@ describe('host credential authority', () => {
         capabilityToken: capability,
       });
       const socket = await server.start();
-      const script = `
-        const { HostCredentialOwner, closeOwnedTokenStore } = await import(${JSON.stringify(factoryPath)});
-        const authority = new HostCredentialOwner(process.env).authority;
-        const markerGone = process.env.LLXPRT_CAPABILITY_FD === undefined;
-        process.env.LLXPRT_CREDENTIAL_SOCKET = '/replacement.sock';
-        const store = authority.createTokenStore();
-        const keys = authority.createProviderKeyStorage();
-        const broker = authority.createGitHubBrokerSocketClient();
-        try {
-          const token = await store.getToken('test');
-          const key = await keys.getKey('primary');
-          const response = await broker.request('get_api_key', { name: 'primary' });
-          process.stdout.write(JSON.stringify({ markerGone, tokenType: token.token_type, key, brokerKey: response.data.key, serialized: JSON.stringify(authority) }));
-        } finally {
-          closeOwnedTokenStore(store);
-          keys.close();
-          broker.close();
-        }
-      `;
       try {
-        const child = spawn(
-          'bash',
-          [
-            '--noprofile',
-            '--norc',
-            '-c',
-            `exec 3<<<"${capability}"
-exec bun -e ${JSON.stringify(script.split(String.fromCharCode(10)).join(' '))}`,
-          ],
-          {
-            env: {
-              ...process.env,
-              BASH_ENV: '',
-              LLXPRT_CREDENTIAL_SOCKET: socket,
-              LLXPRT_CAPABILITY_FD: '3',
-            },
-            stdio: ['ignore', 'pipe', 'pipe'],
-          },
-        );
-        let output = '';
-        let errors = '';
-        child.stdout.on('data', (chunk: Buffer) => {
-          output += chunk.toString();
-        });
-        child.stderr.on('data', (chunk: Buffer) => {
-          errors += chunk.toString();
-        });
-        const exit = await new Promise<number | null>((resolve, reject) => {
-          child.once('error', reject);
-          child.once('close', resolve);
-        });
-        expect(exit).toBe(0);
-        expect(errors).toBe('');
-        expect(JSON.parse(output)).toStrictEqual({
+        const run = await runChild('requests', capability, socket);
+        expect(run.exit).toBe(0);
+        expect(run.stderr).toBe('');
+        expect(JSON.parse(run.stdout)).toStrictEqual({
           markerGone: true,
           tokenType: 'Bearer',
           key: 'captured-key',
@@ -230,11 +205,11 @@ exec bun -e ${JSON.stringify(script.split(String.fromCharCode(10)).join(' '))}`,
     expect(first).not.toBe(second);
   });
 
-  it.skipIf(process.platform === 'win32')(
+  it.skipIf(!descriptorDeliveryPlatform)(
     'consumes and closes inherited authority without exposing its secret',
-    () => {
+    async () => {
       const secret = 'a'.repeat(64);
-      const result = runCapture(secret, '/host.sock');
+      const result = await captureReport(secret, '/host.sock');
       expect(result).toStrictEqual({
         error: null,
         closed: true,
@@ -245,10 +220,10 @@ exec bun -e ${JSON.stringify(script.split(String.fromCharCode(10)).join(' '))}`,
     },
   );
 
-  it.skipIf(process.platform === 'win32')(
+  it.skipIf(!descriptorDeliveryPlatform)(
     'rejects malformed inherited authority and still closes the descriptor',
-    () => {
-      expect(runCapture('invalid', '/host.sock')).toStrictEqual({
+    async () => {
+      expect(await captureReport('invalid', '/host.sock')).toStrictEqual({
         error:
           'Capability descriptor does not contain a valid 64-character lowercase hex token with the transport delimiter',
         closed: true,
@@ -257,10 +232,10 @@ exec bun -e ${JSON.stringify(script.split(String.fromCharCode(10)).join(' '))}`,
     },
   );
 
-  it.skipIf(process.platform === 'win32')(
+  it.skipIf(!descriptorDeliveryPlatform)(
     'rejects a descriptor without a socket and consumes it before rejection',
-    () => {
-      expect(runCapture('b'.repeat(64))).toStrictEqual({
+    async () => {
+      expect(await captureReport('b'.repeat(64))).toStrictEqual({
         error: 'Capability transport requires LLXPRT_CREDENTIAL_SOCKET',
         closed: true,
         markerGone: true,

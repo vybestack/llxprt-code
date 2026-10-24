@@ -990,7 +990,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T1.9d E6 delete fake-seam suppression
 - [x] T1.10 E8 no-op disposal flags
 - [x] T1.11 E9b move providers specs to agents
-- [ ] T1.12 E9c real capability delivery per platform
+- [x] T1.12 E9c real capability delivery per platform
 - [ ] T1.13 E3 delete three test-only helpers
 - [ ] T2.0 A3 transport inventory
 - [ ] T2.1 forwarding proxy fixture and control

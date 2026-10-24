@@ -69,6 +69,18 @@ function restoreOsTmpdir(): void {
   });
 }
 
+/**
+ * The producer places capability files under LOCALAPPDATA/llxprt-code on
+ * native Windows and under the temporary root on macOS and on Linux without
+ * XDG_RUNTIME_DIR (sandbox-capability.ts resolveCapabilityRuntimeRoot).
+ */
+function expectedCapabilityRoot(temporaryRoot: string): string {
+  if (process.platform === 'win32') {
+    return path.join(process.env.LOCALAPPDATA ?? '', 'llxprt-code');
+  }
+  return temporaryRoot;
+}
+
 describe('host-only capability env-file (AC1, F4)', () => {
   const getTmpDir = useTempDir(beforeEach, afterEach);
   let environmentSnapshot: NodeJS.ProcessEnv;
@@ -96,30 +108,63 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.restoreAllMocks();
   });
 
+  it('writes under the platform capability root outside HOME and the session mount; raw token not in argv', () => {
+    const result = requireCapabilityResult(
+      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
+    );
+    const hostDir = path.dirname(result.envFilePath);
+
+    try {
+      expect(path.dirname(hostDir)).toBe(expectedCapabilityRoot(runtimeRoot));
+      expect(hostDir.startsWith(`${isolatedHome}${path.sep}`)).toBe(false);
+      expect(hostDir.startsWith(`${sessionMount}${path.sep}`)).toBe(false);
+      for (const arg of result.args) expect(arg).not.toContain(VALID_TOKEN);
+      expect(result.args).toStrictEqual(['--env-file', result.envFilePath]);
+    } finally {
+      result.cleanup();
+    }
+  });
+
+  it('writes the token as a single LLXPRT_CAPABILITY_TOKEN line', () => {
+    const result = requireCapabilityResult(
+      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
+    );
+    try {
+      expect(fs.readFileSync(result.envFilePath, 'utf8')).toBe(
+        `LLXPRT_CAPABILITY_TOKEN=${VALID_TOKEN}\n`,
+      );
+    } finally {
+      result.cleanup();
+    }
+  });
+
+  // Skipped on Windows: NTFS reports no POSIX mode bits for chmod to set.
   it.skipIf(process.platform === 'win32')(
-    'writes under the runtime root outside HOME and the session mount with mode 0700 dir / 0600 file; raw token not in argv',
+    'restricts the capability directory to mode 0700 and the file to 0600',
     () => {
       const result = requireCapabilityResult(
         createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
       );
-      const hostDir = path.dirname(result.envFilePath);
-
       try {
-        expect(path.dirname(hostDir)).toBe(runtimeRoot);
-        expect(hostDir.startsWith(`${isolatedHome}${path.sep}`)).toBe(false);
-        expect(hostDir.startsWith(`${sessionMount}${path.sep}`)).toBe(false);
-        expect(fs.statSync(hostDir).mode & 0o777).toBe(0o700);
+        expect(fs.statSync(path.dirname(result.envFilePath)).mode & 0o777).toBe(
+          0o700,
+        );
         expect(fs.statSync(result.envFilePath).mode & 0o777).toBe(0o600);
-        expect(fs.readFileSync(result.envFilePath, 'utf8')).toContain(
-          VALID_TOKEN,
-        );
-        for (const arg of result.args) expect(arg).not.toContain(VALID_TOKEN);
-        expect(result.args[result.args.indexOf('--env-file') + 1]).toBe(
-          result.envFilePath,
-        );
       } finally {
         result.cleanup();
       }
+    },
+  );
+
+  it.each(['has\rreturn', 'has\nnewline', 'has=equals'])(
+    'rejects a token containing a line break or equals sign (%j) before creating a directory',
+    (token) => {
+      expect(() => createHostOnlyCapabilityEnvFile(token, [])).toThrow(
+        'Capability token contains invalid characters for env file',
+      );
+      expect(fs.readdirSync(runtimeRoot)).toStrictEqual([
+        path.basename(sessionMount),
+      ]);
     },
   );
 
@@ -202,19 +247,16 @@ describe('host-only capability env-file (AC1, F4)', () => {
     expect(createHostOnlyCapabilityEnvFile(undefined, [])).toBeUndefined();
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'cleanup removes file+dir and is idempotent',
-    () => {
-      const result = requireCapabilityResult(
-        createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
-      );
-      expect(fs.existsSync(result.envFilePath)).toBe(true);
-      result.cleanup();
-      expect(fs.existsSync(result.envFilePath)).toBe(false);
-      expect(fs.existsSync(path.dirname(result.envFilePath))).toBe(false);
-      expect(() => result.cleanup()).not.toThrow();
-    },
-  );
+  it('cleanup removes file+dir and is idempotent', () => {
+    const result = requireCapabilityResult(
+      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
+    );
+    expect(fs.existsSync(result.envFilePath)).toBe(true);
+    result.cleanup();
+    expect(fs.existsSync(result.envFilePath)).toBe(false);
+    expect(fs.existsSync(path.dirname(result.envFilePath))).toBe(false);
+    expect(() => result.cleanup()).not.toThrow();
+  });
 
   it('a concurrent attacker cannot discover the host-only file via the narrowed session mount', () => {
     const result = requireCapabilityResult(
