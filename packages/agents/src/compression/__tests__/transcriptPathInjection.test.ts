@@ -30,6 +30,10 @@ import {
   generateHistory,
   testProviderRuntime,
 } from './MiddleOutStrategy-test-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const JOURNAL_PATH = '/tmp/llxprt-chats/session-2026-08-22-abcd1234.jsonl';
 
@@ -61,6 +65,7 @@ async function captureRequestText(
       ({
         invocation: captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: testProviderRuntime.runtimeId,
             metadata: testProviderRuntime.metadata,
             globalSettings: new SettingsService().getAllGlobalSettings(),

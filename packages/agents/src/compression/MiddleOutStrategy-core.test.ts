@@ -28,6 +28,10 @@ import {
   toolResponseMsg,
   testProviderRuntime,
 } from './__tests__/MiddleOutStrategy-test-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('MiddleOutStrategy core', () => {
   // -----------------------------------------------------------------------
@@ -205,6 +209,7 @@ describe('MiddleOutStrategy core', () => {
         resolveProvider: () => ({
           invocation: captureProviderInvocation(
             {
+              fetch: requestFetch,
               runtimeId: testProviderRuntime.runtimeId,
               metadata: testProviderRuntime.metadata,
               globalSettings: new SettingsService().getAllGlobalSettings(),
@@ -282,6 +287,7 @@ describe('MiddleOutStrategy core', () => {
               return {
                 invocation: captureProviderInvocation(
                   {
+                    fetch: requestFetch,
                     runtimeId: testProviderRuntime.runtimeId,
                     metadata: testProviderRuntime.metadata,
                     globalSettings:
@@ -299,6 +305,7 @@ describe('MiddleOutStrategy core', () => {
             return {
               invocation: captureProviderInvocation(
                 {
+                  fetch: requestFetch,
                   runtimeId: testProviderRuntime.runtimeId,
                   metadata: testProviderRuntime.metadata,
                   globalSettings: new SettingsService().getAllGlobalSettings(),
@@ -339,6 +346,7 @@ describe('MiddleOutStrategy core', () => {
           return {
             invocation: captureProviderInvocation(
               {
+                fetch: requestFetch,
                 runtimeId: testProviderRuntime.runtimeId,
                 metadata: testProviderRuntime.metadata,
                 globalSettings: new SettingsService().getAllGlobalSettings(),

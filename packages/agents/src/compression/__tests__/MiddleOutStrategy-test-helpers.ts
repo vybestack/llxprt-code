@@ -29,6 +29,10 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 // ---------------------------------------------------------------------------
 // IContent factories
@@ -241,6 +245,7 @@ export function buildContext(
         runtime,
         invocation: captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: runtime.runtimeId,
             metadata: runtime.metadata,
             globalSettings: settingsService.getAllGlobalSettings(),

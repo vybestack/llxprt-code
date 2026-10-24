@@ -36,6 +36,10 @@ import { toConfigParameters } from '../agentConfig.adapter.js';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 import { SubAgentScope } from '../../core/subagent.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 async function transport(): Promise<{
   url: string;
@@ -280,6 +284,8 @@ describe('MCP instruction ownership', () => {
               providerName,
               modelParameters,
               signal,
+              undefined,
+              requestFetch,
             ),
           readToolGovernance: () =>
             candidate.settingsOwner.readToolGovernance(

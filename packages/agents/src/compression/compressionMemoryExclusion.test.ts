@@ -48,6 +48,10 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.
 import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
 import { buildCompressionSystemInstruction } from './compressionSystemPrompt.js';
 import { OneShotStrategy } from './OneShotStrategy.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 // ---------------------------------------------------------------------------
 // Sentinels
@@ -169,6 +173,7 @@ function buildCompressionContext(
   const resolveProvider = (): CompressionProviderResult => ({
     invocation: captureProviderInvocation(
       {
+        fetch: requestFetch,
         runtimeId: createStubProviderRuntime().runtimeId,
         metadata: createStubProviderRuntime().metadata,
         globalSettings: settingsService.getAllGlobalSettings(),

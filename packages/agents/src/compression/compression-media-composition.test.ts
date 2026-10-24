@@ -23,6 +23,10 @@ import {
   generateHistory,
   testProviderRuntime,
 } from './__tests__/MiddleOutStrategy-test-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('compression media composition', () => {
   for (const Strategy of [MiddleOutStrategy, OneShotStrategy]) {
@@ -87,6 +91,7 @@ describe('compression media composition', () => {
           config: selectedConfig,
           invocation: captureProviderInvocation(
             {
+              fetch: requestFetch,
               runtimeId: testProviderRuntime.runtimeId,
               globalSettings: new SettingsService().getAllGlobalSettings(),
               providerSettings: new SettingsService().getProviderSettings(

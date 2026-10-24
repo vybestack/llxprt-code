@@ -39,6 +39,10 @@ import {
   CompressionLoadBalancingProvider,
   type CompressionLoadBalancerCandidate,
 } from '../core/CompressionLoadBalancingProvider.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const COMPRESSION_SYSTEM_PROMPT = 'COMPRESSION_CORE_PROMPT';
 
@@ -129,6 +133,7 @@ function buildContext(
   const resolveProvider = (): CompressionProviderResult => ({
     invocation: captureProviderInvocation(
       {
+        fetch: requestFetch,
         runtimeId: contextProviderRuntime.runtimeId,
         metadata: contextProviderRuntime.metadata,
         globalSettings: invocationSettings.getAllGlobalSettings(),

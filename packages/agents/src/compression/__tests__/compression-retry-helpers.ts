@@ -37,6 +37,10 @@ import type { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils
 import { vi } from 'bun:test';
 import { ChatSession } from '../../core/chatSession.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 // ---------------------------------------------------------------------------
 // Helper error factories
@@ -147,6 +151,8 @@ export function makeChatSession(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
     state: runtimeState,
     history: historyService,

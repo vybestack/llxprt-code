@@ -27,6 +27,10 @@ import {
   humanMsgWithMedia,
   testProviderRuntime,
 } from './__tests__/MiddleOutStrategy-test-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /**
  * Type guard for text blocks — used to extract text content from blocks.
@@ -114,6 +118,7 @@ describe('MiddleOutStrategy media sanitization', () => {
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
               {
+                fetch: requestFetch,
                 runtimeId: testProviderRuntime.runtimeId,
                 metadata: testProviderRuntime.metadata,
                 globalSettings: new SettingsService().getAllGlobalSettings(),
@@ -222,6 +227,7 @@ describe('MiddleOutStrategy media sanitization', () => {
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
               {
+                fetch: requestFetch,
                 runtimeId: testProviderRuntime.runtimeId,
                 metadata: testProviderRuntime.metadata,
                 globalSettings: new SettingsService().getAllGlobalSettings(),
@@ -323,6 +329,7 @@ describe('MiddleOutStrategy media sanitization', () => {
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
               {
+                fetch: requestFetch,
                 runtimeId: testProviderRuntime.runtimeId,
                 metadata: testProviderRuntime.metadata,
                 globalSettings: new SettingsService().getAllGlobalSettings(),
@@ -419,6 +426,7 @@ describe('MiddleOutStrategy media sanitization', () => {
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
               {
+                fetch: requestFetch,
                 runtimeId: testProviderRuntime.runtimeId,
                 metadata: testProviderRuntime.metadata,
                 globalSettings: new SettingsService().getAllGlobalSettings(),
@@ -497,6 +505,7 @@ describe('MiddleOutStrategy media sanitization', () => {
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
               {
+                fetch: requestFetch,
                 runtimeId: testProviderRuntime.runtimeId,
                 metadata: testProviderRuntime.metadata,
                 globalSettings: new SettingsService().getAllGlobalSettings(),
@@ -567,6 +576,7 @@ describe('MiddleOutStrategy media sanitization', () => {
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
               {
+                fetch: requestFetch,
                 runtimeId: testProviderRuntime.runtimeId,
                 metadata: testProviderRuntime.metadata,
                 globalSettings: new SettingsService().getAllGlobalSettings(),

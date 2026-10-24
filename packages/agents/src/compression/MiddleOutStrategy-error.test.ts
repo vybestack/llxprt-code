@@ -28,6 +28,10 @@ import {
   generateHistory,
   testProviderRuntime,
 } from './__tests__/MiddleOutStrategy-test-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /**
  * Helper: runs compress and returns the thrown error, asserting it throws.
@@ -58,6 +62,7 @@ describe('MiddleOutStrategy empty summary handling', () => {
       resolveProvider: () => ({
         invocation: captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: testProviderRuntime.runtimeId,
             metadata: testProviderRuntime.metadata,
             globalSettings: new SettingsService().getAllGlobalSettings(),
@@ -88,6 +93,7 @@ describe('MiddleOutStrategy empty summary handling', () => {
       resolveProvider: () => ({
         invocation: captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: testProviderRuntime.runtimeId,
             metadata: testProviderRuntime.metadata,
             globalSettings: new SettingsService().getAllGlobalSettings(),
@@ -150,6 +156,7 @@ describe('MiddleOutStrategy enriched EmptySummaryError diagnostics (issue #2333)
       resolveProvider: () => ({
         invocation: captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: testProviderRuntime.runtimeId,
             metadata: testProviderRuntime.metadata,
             globalSettings: new SettingsService().getAllGlobalSettings(),

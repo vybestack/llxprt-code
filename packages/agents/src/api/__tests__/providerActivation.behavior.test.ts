@@ -52,6 +52,10 @@ import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoad
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { blockTextOrEmpty } from '@vybestack/llxprt-code-test-utils';
 import { type ProviderActivationResult } from '@vybestack/llxprt-code-agents';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /**
  * @license
@@ -473,6 +477,10 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
         invocation: builtCallerSettingsOwner.prepareProviderInvocation(
           'gemini-activation',
           'gemini',
+          undefined,
+          undefined,
+          undefined,
+          requestFetch,
         ),
       })) {
         const text = chunk.blocks

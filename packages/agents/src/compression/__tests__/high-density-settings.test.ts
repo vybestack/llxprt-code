@@ -37,6 +37,10 @@ import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/c
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -82,6 +86,8 @@ function buildRuntimeContext(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
     state: runtimeState,
     settings: {

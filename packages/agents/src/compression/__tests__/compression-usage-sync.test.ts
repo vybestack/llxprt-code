@@ -31,6 +31,10 @@ import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/P
 import type { Logger } from '@vybestack/llxprt-code-core/utils/logger.js';
 import { MiddleOutStrategy } from '../MiddleOutStrategy.js';
 import { OneShotStrategy } from '../OneShotStrategy.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 // ---------------------------------------------------------------------------
 // Helpers: build IContent objects
@@ -186,6 +190,7 @@ function buildContext(
       return {
         invocation: captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: runtime.runtimeId,
             metadata: runtime.metadata,
             globalSettings: invocationSettings.getAllGlobalSettings(),
