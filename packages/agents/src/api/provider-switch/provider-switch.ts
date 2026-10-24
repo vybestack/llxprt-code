@@ -124,11 +124,7 @@ function switchOAuthOperations(
       ensureOAuthProviderRegistered(
         'claudecode',
         oauth,
-        (input, init) => {
-          if (manager.fetchNetwork === undefined)
-            throw new Error('Provider manager requires root fetch');
-          return manager.fetchNetwork(input, init);
-        },
+        (input, init) => manager.fetchNetwork(input, init),
         undefined,
         addItem,
       ),

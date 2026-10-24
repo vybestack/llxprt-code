@@ -86,10 +86,7 @@ export interface RuntimeProviderManager {
     settingsService: RuntimeSettingsState,
     config: Config | undefined,
   ): void;
-  fetchNetwork?(
-    input: RequestInfo | URL,
-    init?: RequestInit,
-  ): Promise<Response>;
+  fetchNetwork(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
   bindModelRegistry?(registry: ModelRegistry): void;
   bindNetworkFetch?(
     requestFetch: (

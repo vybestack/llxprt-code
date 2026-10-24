@@ -125,11 +125,7 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
     const requestFetch = (
       input: RequestInfo | URL,
       init?: RequestInit,
-    ): Promise<Response> => {
-      if (this.adoptManager.fetchNetwork === undefined)
-        throw new Error('Provider manager requires root fetch');
-      return this.adoptManager.fetchNetwork(input, init);
-    };
+    ): Promise<Response> => this.adoptManager.fetchNetwork(input, init);
     if (this.adoptSuppliedOAuth !== undefined) {
       registerStandardOAuthProviders(this.adoptSuppliedOAuth, requestFetch);
       this.adoptOauth = this.adoptSuppliedOAuth;

@@ -102,6 +102,10 @@ export class TestRuntimeProviderManager implements RuntimeProviderManager {
     this.runtimeContext = runtimeContext;
   }
 
+  fetchNetwork(): Promise<Response> {
+    return Promise.reject(new Error('Test manager has no network'));
+  }
+
   hasActiveProvider(): boolean {
     return this.getActiveProvider() != null;
   }
