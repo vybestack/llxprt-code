@@ -16,12 +16,12 @@ import { readStoredRow } from '@vybestack/llxprt-code-core/journal/rowReads.js';
 import { decodeStoredRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import { StreamOnlyHistory } from '../../../../agents/src/api/__tests__/helpers/public-history-fixture.js';
-import { buildAgent } from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
+import { StreamOnlyHistory } from '../../../../../../agents/src/api/__tests__/helpers/public-history-fixture.js';
+import { buildAgent } from '../../../../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
-import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import type { CommandContext } from './types.js';
+import { createMockCommandContext } from '../../../../__tests__/mockCommandContext.js';
+import type { CommandContext } from '../../types.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
 export interface ChatMutationFixture {

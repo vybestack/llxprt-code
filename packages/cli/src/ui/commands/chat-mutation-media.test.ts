@@ -10,7 +10,7 @@ import { chatCommand } from './chatCommand.js';
 import {
   recordedChatRows,
   withChatMutationFixture,
-} from './chat-mutation-test-helpers.js';
+} from './__tests__/support/chat-mutation-test-helpers.js';
 
 const image =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';

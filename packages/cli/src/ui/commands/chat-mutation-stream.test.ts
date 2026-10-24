@@ -6,7 +6,7 @@ import { chatCommand } from './chatCommand.js';
 import {
   recordedChatRows,
   withChatMutationFixture,
-} from './chat-mutation-test-helpers.js';
+} from './__tests__/support/chat-mutation-test-helpers.js';
 
 for (const size of [512, 8192]) {
   for (const name of ['clear', 'restore']) {

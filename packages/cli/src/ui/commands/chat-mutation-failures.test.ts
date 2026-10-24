@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { chatCommand } from './chatCommand.js';
-import { withChatMutationFixture } from './chat-mutation-test-helpers.js';
+import { withChatMutationFixture } from './__tests__/support/chat-mutation-test-helpers.js';
 
 const clear = chatCommand.subCommands?.find(
   (command) => command.name === 'clear',

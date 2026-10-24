@@ -2,7 +2,7 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { chatCommand } from './chatCommand.js';
-import { withChatMutationFixture } from './chat-mutation-test-helpers.js';
+import { withChatMutationFixture } from './__tests__/support/chat-mutation-test-helpers.js';
 
 const image =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
