@@ -182,14 +182,9 @@ export async function setActiveModel(
   // store keys this transition owns.
 
   // Load alias config for the current provider to apply model defaults
-  let aliasConfig;
-  try {
-    aliasConfig = loadProviderAliasEntries().find(
-      (entry) => entry.alias === activeProvider.name,
-    )?.config;
-  } catch {
-    aliasConfig = undefined;
-  }
+  const aliasConfig = loadProviderAliasEntries().find(
+    (entry) => entry.alias === activeProvider.name,
+  )?.config;
 
   selection.selectModel(modelName, aliasConfig?.modelDefaults ?? []);
 

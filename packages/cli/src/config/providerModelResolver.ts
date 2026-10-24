@@ -51,19 +51,15 @@ export interface ProviderModelResult {
  * Returns undefined if the alias is not found or has no defaultModel.
  */
 function getAliasDefaultModel(provider: string): string | undefined {
-  try {
-    const entry = loadProviderAliasEntries().find(
-      (candidate: { alias: string; config: { baseProvider: string } }) =>
-        candidate.alias === provider &&
-        candidate.alias !== candidate.config.baseProvider,
-    );
-    const candidate = entry?.config.defaultModel;
-    return typeof candidate === 'string' && candidate.trim()
-      ? candidate.trim()
-      : undefined;
-  } catch {
-    return undefined;
-  }
+  const entry = loadProviderAliasEntries().find(
+    (candidate: { alias: string; config: { baseProvider: string } }) =>
+      candidate.alias === provider &&
+      candidate.alias !== candidate.config.baseProvider,
+  );
+  const candidate = entry?.config.defaultModel;
+  return typeof candidate === 'string' && candidate.trim()
+    ? candidate.trim()
+    : undefined;
 }
 
 /**

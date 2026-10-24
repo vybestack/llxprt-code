@@ -44,14 +44,10 @@ export const DEFAULT_PRESERVE_EPHEMERALS = Object.freeze([
 ] as const);
 
 function getAliasConfig(providerName: string): ProviderAliasConfig | undefined {
-  try {
-    const alias = loadProviderAliasEntries().find(
-      (entry) => entry.alias === providerName,
-    )?.config;
-    return alias === undefined ? undefined : structuredClone(alias);
-  } catch {
-    return undefined;
-  }
+  const alias = loadProviderAliasEntries().find(
+    (entry) => entry.alias === providerName,
+  )?.config;
+  return alias === undefined ? undefined : structuredClone(alias);
 }
 
 function hasNonOAuthAuthentication(

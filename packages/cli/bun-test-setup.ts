@@ -156,6 +156,7 @@ Bun.plugin({
 // path in argv, which is what this inspects.
 const SUITES_NEEDING_REAL_ALIASES = [
   'test/providers/providerAliases.test.ts',
+  'test/providers/providerModelResolver.aliasErrors.test.ts',
   'src/ui/commands/providerCommand.test.ts',
   'src/ui/contexts/runtime-owner-bridge.test.tsx',
   'src/ui/contexts/runtime-owner-bridge-owner-2.test.tsx',
