@@ -68,6 +68,7 @@ export interface LocalMediaStoreOptions {
   readonly recordingArchive?: LocalMediaStore;
   readonly rootDirectory: string;
   readonly quotaBytes: number;
+  readonly lockLifetime?: 'operation' | 'store';
   readonly fileOperations?: LocalMediaStoreFileOperations;
   readonly lockTimeoutMs?: number;
   readonly staleLockMs?: number;

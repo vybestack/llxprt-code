@@ -157,6 +157,38 @@ describe('local-media-store-locking', () => {
     describe('LocalMediaStore quota enforcement', () => {
       const tempDirectory = useTempDirectory();
 
+      it('holds a session lock across releases and excludes another process until close', async () => {
+        const store = new LocalMediaStore({
+          rootDirectory: tempDirectory(),
+          quotaBytes: 3,
+          lockLifetime: 'store',
+        });
+        try {
+          const reference = await store.admit(admitInput(bytes(1, 2, 3)));
+          const lockPath = join(tempDirectory(), 'locks', 'store.lock');
+          const held = await stat(lockPath);
+          await store.reserveAndReadVerified(reference, 'history');
+          await store.release(reference.contentId, 'history');
+          const after = await stat(lockPath);
+          expect({ device: after.dev, inode: after.ino }).toStrictEqual({
+            device: held.dev,
+            inode: held.ino,
+          });
+          const blocked = await runChild(
+            childCommand('admit', tempDirectory(), 3, '1,2,3'),
+          );
+          expect(blocked.exitCode).not.toBe(0);
+          expect(blocked.stderr).toContain('Lock contention');
+        } finally {
+          await store.close();
+        }
+        const admitted = await runChild(
+          childCommand('admit', tempDirectory(), 3, '1,2,3'),
+        );
+        expect(admitted.exitCode).toBe(0);
+        expect(parseChildReference(admitted.stdout).byteLength).toBe(3);
+      });
+
       it('rejects a non-empty object when quota is zero', async () => {
         const store = new LocalMediaStore({
           rootDirectory: tempDirectory(),

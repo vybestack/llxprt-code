@@ -74,6 +74,11 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
   protected override readonly reservationLeaseMs: number;
   private readonly quotaScanMaxEntries: number;
   private readonly operations = new Set<Promise<unknown>>();
+  private readonly lockLifetime: 'operation' | 'store';
+  private exclusiveQueue: Promise<void> = Promise.resolve();
+  private heldLock:
+    | { readonly owner: StoreLockOwner; readonly heartbeat: LeaseHeartbeat }
+    | undefined;
   private closing: Promise<void> | undefined;
 
   constructor(options: LocalMediaStoreOptions) {
@@ -97,6 +102,7 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
     );
     this.lockTimeoutMs = lockTimeoutMs;
     this.staleLockMs = staleLockMs;
+    this.lockLifetime = options.lockLifetime ?? 'operation';
     this.reservationLeaseMs = reservationLeaseMs;
     this.quotaScanMaxEntries = quotaScanMaxEntries;
   }
@@ -108,7 +114,26 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
 
   private async joinAndClose(): Promise<void> {
     await Promise.allSettled([...this.operations]);
-    await super.close();
+    const failures: unknown[] = [];
+    try {
+      await super.close();
+    } catch (error) {
+      failures.push(error);
+    }
+    const held = this.heldLock;
+    this.heldLock = undefined;
+    if (held !== undefined) {
+      const heartbeatFailure = await held.heartbeat.stop();
+      if (heartbeatFailure !== undefined) failures.push(heartbeatFailure);
+      try {
+        await this.releaseStoreLock(held.owner, 'close store', undefined);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'Failed to close media store');
+    }
   }
 
   async runExclusive<T>(
@@ -124,7 +149,13 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
       );
     }
     this.assertOpen(operation, contentId);
-    const pending = this.executeExclusive(operation, contentId, work);
+    const pending = this.exclusiveQueue.then(() =>
+      this.executeExclusive(operation, contentId, work),
+    );
+    this.exclusiveQueue = pending.then(
+      () => undefined,
+      () => undefined,
+    );
     this.operations.add(pending);
     try {
       return await pending;
@@ -141,6 +172,17 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
     this.assertOpen(operation, contentId);
     await this.files.ensureDirectories(contentId);
     this.assertInstanceLeaseHealthy(contentId);
+    if (this.lockLifetime === 'store') {
+      if (this.heldLock === undefined) {
+        const owner = await this.acquireStoreLock(operation, contentId);
+        this.heldLock = {
+          owner,
+          heartbeat: this.startStoreLockHeartbeat(owner, operation, contentId),
+        };
+      }
+      await this.refreshStoreLock(this.heldLock.owner, operation, contentId);
+      return work();
+    }
     const owner = await this.acquireStoreLock(operation, contentId);
     const heartbeat = this.startStoreLockHeartbeat(owner, operation, contentId);
     let outcome:
