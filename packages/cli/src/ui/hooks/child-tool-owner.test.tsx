@@ -179,8 +179,10 @@ describe('Mounted CLI child execution ownership', () => {
           profileManager: profiles,
           subagentManager: subagents,
           runtimeLoader: async (options) => {
+            const history =
+              options.overrides?.historyService ?? fixtureHistory();
             const bundle = createStatelessRuntimeBundle({
-              history: fixtureHistory(),
+              history,
               toolRegistry: childRegistry,
               toolsView: {
                 listToolNames: () => ['child_record'],
@@ -195,7 +197,7 @@ describe('Mounted CLI child execution ownership', () => {
               ...options,
               overrides: {
                 ...options.overrides,
-                historyService: fixtureHistory(),
+                historyService: history,
                 toolsView: bundle.toolsView,
                 contentGenerator: bundle.contentGenerator,
               },
