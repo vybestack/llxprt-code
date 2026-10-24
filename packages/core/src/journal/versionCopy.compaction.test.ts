@@ -37,7 +37,7 @@ import {
 } from './__tests__/support/storeFixtures.js';
 import { snapshotStore } from './__tests__/support/storeSnapshot.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
-import { accessOf } from './__tests__/support/pinnedAccess.js';
+import { withPinnedAccess } from './__tests__/support/pinnedAccess.js';
 
 const IDS = ['a', 'b', 'c', 'd', 'e', 'c1-0', 'c1-1', 'c2-0', 'c2-1', 'c2-2'];
 
@@ -68,52 +68,53 @@ describe('compaction copy (design 4.11 steps 3 and 4)', () => {
     return store;
   }
 
-  it('gives a checkpoint restore before and after the copy the same history, facts and owner identities', async () => {
-    const source = await sessionWithTwoCheckpoints();
-    const deps = copyDeps();
-    const before = new Map<string, Awaited<ReturnType<typeof capture>>>();
-    for (const id of ['c1', 'c2']) {
-      const restored = await cloneCheckpoint(
+  it('gives a checkpoint restore before and after the copy the same history, facts and owner identities', async () =>
+    withPinnedAccess(async (accessOf) => {
+      const source = await sessionWithTwoCheckpoints();
+      const deps = copyDeps();
+      const before = new Map<string, Awaited<ReturnType<typeof capture>>>();
+      for (const id of ['c1', 'c2']) {
+        const restored = await cloneCheckpoint(
+          await accessOf(source),
+          current(source),
+          id,
+          file(`before-${id}.llxj`),
+          deps,
+        );
+        before.set(id, await capture(restored.path));
+      }
+      const compacted = await compactionCopy(
         await accessOf(source),
         current(source),
-        id,
-        file(`before-${id}.llxj`),
+        file('compacted.llxj'),
         deps,
       );
-      before.set(id, await capture(restored.path));
-    }
-    const compacted = await compactionCopy(
-      await accessOf(source),
-      current(source),
-      file('compacted.llxj'),
-      deps,
-    );
-    await source.close();
-    await fsp.rm(file('source.llxj'));
+      await source.close();
+      await fsp.rm(file('source.llxj'));
 
-    const store = await openStore(compacted.path);
-    for (const id of ['c1', 'c2']) {
-      const restored = await cloneCheckpoint(
-        await accessOf(store),
-        current(store),
-        id,
-        file(`after-${id}.llxj`),
-        deps,
-      );
-      const after = await capture(restored.path);
-      const earlier = before.get(id);
-      if (earlier === undefined) throw new Error(`no capture of ${id}`);
-      expect(after).toStrictEqual(earlier);
-    }
-    const c1 = before.get('c1');
-    const c2 = before.get('c2');
-    // The checkpoints differ from each other and from the current version, so the equality above says something.
-    expect(c1?.state.get('owner:4')).toBeUndefined();
-    expect(c2?.state.get('owner:4')).toBe('agent:delta');
-    expect(c1?.state.get('title')).toBe('Session title');
-    expect(c1?.rows).not.toStrictEqual(c2?.rows);
-    await store.close();
-  });
+      const store = await openStore(compacted.path);
+      for (const id of ['c1', 'c2']) {
+        const restored = await cloneCheckpoint(
+          await accessOf(store),
+          current(store),
+          id,
+          file(`after-${id}.llxj`),
+          deps,
+        );
+        const after = await capture(restored.path);
+        const earlier = before.get(id);
+        if (earlier === undefined) throw new Error(`no capture of ${id}`);
+        expect(after).toStrictEqual(earlier);
+      }
+      const c1 = before.get('c1');
+      const c2 = before.get('c2');
+      // The checkpoints differ from each other and from the current version, so the equality above says something.
+      expect(c1?.state.get('owner:4')).toBeUndefined();
+      expect(c2?.state.get('owner:4')).toBe('agent:delta');
+      expect(c1?.state.get('title')).toBe('Session title');
+      expect(c1?.rows).not.toStrictEqual(c2?.rows);
+      await store.close();
+    }));
 
   async function capture(restored: string) {
     const store = await openStore(restored);
@@ -128,154 +129,162 @@ describe('compaction copy (design 4.11 steps 3 and 4)', () => {
     return captured;
   }
 
-  it('keeps every version its own owner dictionary: each checkpoint and the current version read back the map they had', async () => {
-    const source = await sessionWithTwoCheckpoints();
-    const sourceAccess = await accessOf(source);
-    const sourceCurrent = current(source);
-    const sourceState = await mapContents(source, 'state');
-    const descriptors = new Map(
-      await Promise.all(
-        ['c1', 'c2'].map(async (id) => {
-          const raw = await source.getState(checkpointKey(id));
-          if (raw === undefined) throw new Error(`no checkpoint ${id}`);
-          return [id, parseCheckpointDescriptor(raw)] as const;
-        }),
-      ),
-    );
-    const savedStates = new Map<string, Map<string, string>>();
-    for (const [id, descriptor] of descriptors) {
-      const saved = await source.readVersion(descriptor.trailerOffset);
-      savedStates.set(
-        id,
-        await mapContentsAt(sourceAccess, saved.roots.stateRoot),
+  it('keeps every version its own owner dictionary: each checkpoint and the current version read back the map they had', async () =>
+    withPinnedAccess(async (accessOf) => {
+      const source = await sessionWithTwoCheckpoints();
+      const sourceAccess = await accessOf(source);
+      const sourceCurrent = current(source);
+      const sourceState = await mapContents(source, 'state');
+      const descriptors = new Map(
+        await Promise.all(
+          ['c1', 'c2'].map(async (id) => {
+            const raw = await source.getState(checkpointKey(id));
+            if (raw === undefined) throw new Error(`no checkpoint ${id}`);
+            return [id, parseCheckpointDescriptor(raw)] as const;
+          }),
+        ),
       );
-    }
-    const result = await compactionCopy(
-      sourceAccess,
-      sourceCurrent,
-      file('compacted.llxj'),
-      copyDeps(),
-    );
-    await source.close();
-    await fsp.rm(file('source.llxj'));
-
-    const store = await openStore(result.path);
-    const version = current(store);
-    expect(version.commitSeq).toBe(sourceCurrent.commitSeq);
-    expect(version.mutation).toBe(MUTATION.clone);
-    expect(version.parent).toBe(0);
-    expect(result.versions).toHaveLength(3);
-    const state = await mapContents(store, 'state');
-    const expectedCurrent = new Map(sourceState);
-    for (const id of ['c1', 'c2']) expectedCurrent.delete(checkpointKey(id));
-    for (const key of [...state.keys()]) {
-      if (key.startsWith('ckpt:')) state.delete(key);
-    }
-    expect(state).toStrictEqual(expectedCurrent);
-    let liveBytes = 0;
-    for (const [id, descriptor] of descriptors) {
-      const stored = await store.getState(checkpointKey(id));
-      if (stored === undefined) throw new Error(`checkpoint ${id} was dropped`);
-      const moved = parseCheckpointDescriptor(stored);
-      expect(moved).toMatchObject({
-        name: descriptor.name,
-        commitSeq: descriptor.commitSeq,
-        createdAtMs: descriptor.createdAtMs,
-        liveBytes: descriptor.liveBytes,
-      });
-      liveBytes += descriptor.liveBytes;
-      const saved = await store.readVersion(moved.trailerOffset);
-      expect(saved.commitSeq).toBe(descriptor.commitSeq);
-      expect(saved.roots.stateRoot).not.toBe(0);
-      const kept = await mapContentsAt(
-        await accessOf(store),
-        saved.roots.stateRoot,
+      const savedStates = new Map<string, Map<string, string>>();
+      for (const [id, descriptor] of descriptors) {
+        const saved = await source.readVersion(descriptor.trailerOffset);
+        savedStates.set(
+          id,
+          await mapContentsAt(sourceAccess, saved.roots.stateRoot),
+        );
+      }
+      const result = await compactionCopy(
+        sourceAccess,
+        sourceCurrent,
+        file('compacted.llxj'),
+        copyDeps(),
       );
-      expect(kept).toStrictEqual(withoutLocalKeys(savedStates.get(id)));
-      const owners = [...kept].filter(([key]) => key.startsWith('owner:'));
-      expect(owners.length).toBeGreaterThan(0);
-      expect(owners.map(([key]) => [key, sourceState.get(key)])).toStrictEqual(
-        owners,
-      );
-    }
-    expect(version.ckptBytes).toBe(liveBytes);
-    await store.close();
-  });
+      await source.close();
+      await fsp.rm(file('source.llxj'));
 
-  it('points every offset of the compacted file, for the current version and for each checkpoint, at a record written earlier in it', async () => {
-    const source = await sessionWithTwoCheckpoints();
-    const result = await compactionCopy(
-      await accessOf(source),
-      current(source),
-      file('compacted.llxj'),
-      copyDeps(),
-    );
-    await source.close();
-    await fsp.rm(file('source.llxj'));
-    const store = await openStore(result.path);
-    const audit = new OffsetAudit(await accessOf(store));
-    for (const copied of result.versions) {
-      await audit.walkVersion(await store.readVersion(copied.offset));
-    }
-    const met = [...audit.checked].map(
-      ([entry]) => `${entry.record}.${entry.field}`,
-    );
-    expect(met).toContain('CheckpointDescriptor.trailerOffset');
-    expect(met).toContain('TrailerHeader.rowRoot');
-    expect(met).toContain('StateMapEntry.valueRef');
-    await store.close();
-  });
+      const store = await openStore(result.path);
+      const version = current(store);
+      expect(version.commitSeq).toBe(sourceCurrent.commitSeq);
+      expect(version.mutation).toBe(MUTATION.clone);
+      expect(version.parent).toBe(0);
+      expect(result.versions).toHaveLength(3);
+      const state = await mapContents(store, 'state');
+      const expectedCurrent = new Map(sourceState);
+      for (const id of ['c1', 'c2']) expectedCurrent.delete(checkpointKey(id));
+      for (const key of [...state.keys()]) {
+        if (key.startsWith('ckpt:')) state.delete(key);
+      }
+      expect(state).toStrictEqual(expectedCurrent);
+      let liveBytes = 0;
+      for (const [id, descriptor] of descriptors) {
+        const stored = await store.getState(checkpointKey(id));
+        if (stored === undefined)
+          throw new Error(`checkpoint ${id} was dropped`);
+        const moved = parseCheckpointDescriptor(stored);
+        expect(moved).toMatchObject({
+          name: descriptor.name,
+          commitSeq: descriptor.commitSeq,
+          createdAtMs: descriptor.createdAtMs,
+          liveBytes: descriptor.liveBytes,
+        });
+        liveBytes += descriptor.liveBytes;
+        const saved = await store.readVersion(moved.trailerOffset);
+        expect(saved.commitSeq).toBe(descriptor.commitSeq);
+        expect(saved.roots.stateRoot).not.toBe(0);
+        const kept = await mapContentsAt(
+          await accessOf(store),
+          saved.roots.stateRoot,
+        );
+        expect(kept).toStrictEqual(withoutLocalKeys(savedStates.get(id)));
+        const owners = [...kept].filter(([key]) => key.startsWith('owner:'));
+        expect(owners.length).toBeGreaterThan(0);
+        expect(
+          owners.map(([key]) => [key, sourceState.get(key)]),
+        ).toStrictEqual(owners);
+      }
+      expect(version.ckptBytes).toBe(liveBytes);
+      await store.close();
+    }));
 
-  it('writes no relocation entry for a history with no checkpoint, and the one version equals a clone of it', async () => {
-    const source = await populatedSource(file('source.llxj'));
-    const result = await compactionCopy(
-      await accessOf(source),
-      current(source),
-      file('compacted.llxj'),
-      copyDeps(),
-    );
-    const clone = await cloneVersion(
-      await accessOf(source),
-      current(source),
-      file('clone.llxj'),
-      copyDeps(),
-    );
-    expect(result.versions).toHaveLength(1);
-    expect(result.relocation.entries).toBe(0);
-    expect(result.relocation.batches).toBe(0);
-    const compacted = await openStore(result.path);
-    const cloned = await openStore(clone.path);
-    expect(withoutOffsets(await snapshotStore(compacted, IDS))).toStrictEqual(
-      withoutOffsets(await snapshotStore(cloned, IDS)),
-    );
-    expect(current(compacted).commitSeq).toBe(current(source).commitSeq);
-    await source.close();
-    await compacted.close();
-    await cloned.close();
-  });
-
-  it('refuses a checkpoint whose descriptor and trailer disagree about the version', async () => {
-    const source = await populatedSource(file('source.llxj'));
-    await growAfterCheckpoint(source, 'c1', 1);
-    const raw = await source.getState(checkpointKey('c1'));
-    if (raw === undefined) throw new Error('no checkpoint');
-    const descriptor = parseCheckpointDescriptor(raw);
-    await source.commit([
-      setState(
-        checkpointKey('c1'),
-        JSON.stringify({ ...descriptor, commitSeq: descriptor.commitSeq + 5 }),
-      ),
-    ]);
-    await expect(
-      compactionCopy(
+  it('points every offset of the compacted file, for the current version and for each checkpoint, at a record written earlier in it', async () =>
+    withPinnedAccess(async (accessOf) => {
+      const source = await sessionWithTwoCheckpoints();
+      const result = await compactionCopy(
         await accessOf(source),
         current(source),
-        file('bad.llxj'),
+        file('compacted.llxj'),
         copyDeps(),
-      ),
-    ).rejects.toThrow('says commitSeq');
-    await source.close();
-  });
+      );
+      await source.close();
+      await fsp.rm(file('source.llxj'));
+      const store = await openStore(result.path);
+      const audit = new OffsetAudit(await accessOf(store));
+      for (const copied of result.versions) {
+        await audit.walkVersion(await store.readVersion(copied.offset));
+      }
+      const met = [...audit.checked].map(
+        ([entry]) => `${entry.record}.${entry.field}`,
+      );
+      expect(met).toContain('CheckpointDescriptor.trailerOffset');
+      expect(met).toContain('TrailerHeader.rowRoot');
+      expect(met).toContain('StateMapEntry.valueRef');
+      await store.close();
+    }));
+
+  it('writes no relocation entry for a history with no checkpoint, and the one version equals a clone of it', async () =>
+    withPinnedAccess(async (accessOf) => {
+      const source = await populatedSource(file('source.llxj'));
+      const result = await compactionCopy(
+        await accessOf(source),
+        current(source),
+        file('compacted.llxj'),
+        copyDeps(),
+      );
+      const clone = await cloneVersion(
+        await accessOf(source),
+        current(source),
+        file('clone.llxj'),
+        copyDeps(),
+      );
+      expect(result.versions).toHaveLength(1);
+      expect(result.relocation.entries).toBe(0);
+      expect(result.relocation.batches).toBe(0);
+      const compacted = await openStore(result.path);
+      const cloned = await openStore(clone.path);
+      expect(withoutOffsets(await snapshotStore(compacted, IDS))).toStrictEqual(
+        withoutOffsets(await snapshotStore(cloned, IDS)),
+      );
+      expect(current(compacted).commitSeq).toBe(current(source).commitSeq);
+      await source.close();
+      await compacted.close();
+      await cloned.close();
+    }));
+
+  it('refuses a checkpoint whose descriptor and trailer disagree about the version', async () =>
+    withPinnedAccess(async (accessOf) => {
+      const source = await populatedSource(file('source.llxj'));
+      await growAfterCheckpoint(source, 'c1', 1);
+      const raw = await source.getState(checkpointKey('c1'));
+      if (raw === undefined) throw new Error('no checkpoint');
+      const descriptor = parseCheckpointDescriptor(raw);
+      await source.commit([
+        setState(
+          checkpointKey('c1'),
+          JSON.stringify({
+            ...descriptor,
+            commitSeq: descriptor.commitSeq + 5,
+          }),
+        ),
+      ]);
+      await expect(
+        compactionCopy(
+          await accessOf(source),
+          current(source),
+          file('bad.llxj'),
+          copyDeps(),
+        ),
+      ).rejects.toThrow('says commitSeq');
+      await source.close();
+    }));
 });
 
 /** The state a checkpoint version carries: the owner dictionary and the session metadata, and no checkpoint, mirror or release entries. */
@@ -316,100 +325,102 @@ describe('memoization of shared records (design 4.8, several versions)', () => {
     return store;
   }
 
-  it('copies the records the versions share once: the file holds about one copy of the history plus a delta per version, and not one copy per version', async () => {
-    const source = await longSession();
-    const deps = copyDeps();
-    const sourceCurrent = current(source);
-    const single = await cloneVersion(
-      await accessOf(source),
-      sourceCurrent,
-      file('single.llxj'),
-      deps,
-    );
-    const compacted = await compactionCopy(
-      await accessOf(source),
-      sourceCurrent,
-      file('compacted.llxj'),
-      deps,
-    );
-    expect(compacted.versions).toHaveLength(VERSIONS + 1);
-
-    const singleBytes = (await fsp.stat(single.path)).size;
-    const compactedBytes = (await fsp.stat(compacted.path)).size;
-    expect(compactedBytes).toBeLessThan(
-      singleBytes + VERSIONS * PER_VERSION_BUDGET,
-    );
-    // Every ROW record of the history is in the file once.
-    expect(compacted.stats.copied.ROW).toBe(single.stats.copied.ROW);
-    expect(compacted.stats.memoHits).toBeGreaterThan(VERSIONS * 10);
-
-    // Control: a copy of every version on its own, with nothing shared, takes a copy of the history for each.
-    let separately = 0;
-    for (const [index, copied] of compacted.versions.entries()) {
-      const saved = await source.readVersion(copied.sourceOffset);
-      const alone = await cloneVersion(
+  it('copies the records the versions share once: the file holds about one copy of the history plus a delta per version, and not one copy per version', async () =>
+    withPinnedAccess(async (accessOf) => {
+      const source = await longSession();
+      const deps = copyDeps();
+      const sourceCurrent = current(source);
+      const single = await cloneVersion(
         await accessOf(source),
-        saved,
-        file(`alone-${index}.llxj`),
+        sourceCurrent,
+        file('single.llxj'),
         deps,
       );
-      separately += (await fsp.stat(alone.path)).size;
-    }
-    expect(separately).toBeGreaterThan(
-      singleBytes + VERSIONS * PER_VERSION_BUDGET,
-    );
-    expect(separately).toBeGreaterThan(compactedBytes * 4);
-    await source.close();
-  });
+      const compacted = await compactionCopy(
+        await accessOf(source),
+        sourceCurrent,
+        file('compacted.llxj'),
+        deps,
+      );
+      expect(compacted.versions).toHaveLength(VERSIONS + 1);
 
-  it('keeps the old-to-new offsets in a trie in the new file, and every entry it holds is the offset the row has there', async () => {
-    const source = await longSession();
-    const sourceRows = new Map<bigint, number>();
-    for await (const entry of source.rows()) {
-      sourceRows.set(entry.label, entry.recordOffset);
-    }
-    const result = await compactionCopy(
-      await accessOf(source),
-      current(source),
-      file('compacted.llxj'),
-      copyDeps(),
-    );
-    await source.close();
-    expect(result.relocation.batches).toBeGreaterThan(0);
-    expect(result.relocation.root).not.toBe(0);
+      const singleBytes = (await fsp.stat(single.path)).size;
+      const compactedBytes = (await fsp.stat(compacted.path)).size;
+      expect(compactedBytes).toBeLessThan(
+        singleBytes + VERSIONS * PER_VERSION_BUDGET,
+      );
+      // Every ROW record of the history is in the file once.
+      expect(compacted.stats.copied.ROW).toBe(single.stats.copied.ROW);
+      expect(compacted.stats.memoHits).toBeGreaterThan(VERSIONS * 10);
 
-    const store = await openStore(result.path);
-    const copiedRows = new Map<bigint, number>();
-    for await (const entry of store.rows()) {
-      copiedRows.set(entry.label, entry.recordOffset);
-    }
-    const handle = await fsp.open(result.path, 'r');
-    const reader = new IdTrieReader(
-      createRecordAccess(result.path, createFileHandleReader(handle), {
-        selfOffset: 0,
-        durableEnd: result.relocation.readableEnd,
-      }),
-      new BoundedIdNodeCache(),
-    );
-    const deps = realDeps();
-    const queries = new IdFactQueries(
-      { get: (hash) => reader.lookup(result.relocation.root, hash) },
-      deps,
-    );
-    let found = 0;
-    for (const [label, oldOffset] of sourceRows) {
-      const relocated = await queries.relocation(oldOffset);
-      if (relocated === undefined) continue;
-      found += 1;
-      const copiedOffset = copiedRows.get(label);
-      if (copiedOffset === undefined) {
-        throw new Error(`row ${label} is not in the compacted file`);
+      // Control: a copy of every version on its own, with nothing shared, takes a copy of the history for each.
+      let separately = 0;
+      for (const [index, copied] of compacted.versions.entries()) {
+        const saved = await source.readVersion(copied.sourceOffset);
+        const alone = await cloneVersion(
+          await accessOf(source),
+          saved,
+          file(`alone-${index}.llxj`),
+          deps,
+        );
+        separately += (await fsp.stat(alone.path)).size;
       }
-      expect(relocated).toBe(copiedOffset);
-    }
-    expect(found).toBeGreaterThan(result.relocation.entries / 4);
-    expect(found).toBeGreaterThan(100);
-    await handle.close();
-    await store.close();
-  });
+      expect(separately).toBeGreaterThan(
+        singleBytes + VERSIONS * PER_VERSION_BUDGET,
+      );
+      expect(separately).toBeGreaterThan(compactedBytes * 4);
+      await source.close();
+    }));
+
+  it('keeps the old-to-new offsets in a trie in the new file, and every entry it holds is the offset the row has there', async () =>
+    withPinnedAccess(async (accessOf) => {
+      const source = await longSession();
+      const sourceRows = new Map<bigint, number>();
+      for await (const entry of source.rows()) {
+        sourceRows.set(entry.label, entry.recordOffset);
+      }
+      const result = await compactionCopy(
+        await accessOf(source),
+        current(source),
+        file('compacted.llxj'),
+        copyDeps(),
+      );
+      await source.close();
+      expect(result.relocation.batches).toBeGreaterThan(0);
+      expect(result.relocation.root).not.toBe(0);
+
+      const store = await openStore(result.path);
+      const copiedRows = new Map<bigint, number>();
+      for await (const entry of store.rows()) {
+        copiedRows.set(entry.label, entry.recordOffset);
+      }
+      const handle = await fsp.open(result.path, 'r');
+      const reader = new IdTrieReader(
+        createRecordAccess(result.path, createFileHandleReader(handle), {
+          selfOffset: 0,
+          durableEnd: result.relocation.readableEnd,
+        }),
+        new BoundedIdNodeCache(),
+      );
+      const deps = realDeps();
+      const queries = new IdFactQueries(
+        { get: (hash) => reader.lookup(result.relocation.root, hash) },
+        deps,
+      );
+      let found = 0;
+      for (const [label, oldOffset] of sourceRows) {
+        const relocated = await queries.relocation(oldOffset);
+        if (relocated === undefined) continue;
+        found += 1;
+        const copiedOffset = copiedRows.get(label);
+        if (copiedOffset === undefined) {
+          throw new Error(`row ${label} is not in the compacted file`);
+        }
+        expect(relocated).toBe(copiedOffset);
+      }
+      expect(found).toBeGreaterThan(result.relocation.entries / 4);
+      expect(found).toBeGreaterThan(100);
+      await handle.close();
+      await store.close();
+    }));
 });

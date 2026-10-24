@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
+import type { JournalFileHandle } from './positionalFile.js';
 import { JournalStore } from './journalStore.js';
 import {
   draftRow,
@@ -27,6 +28,30 @@ async function summaries(
 
 describe('prepared append durable parity', () => {
   const directory = useTempDir('prepared-append-parity-');
+  it('releases digest readers before the store closes its descriptor', async () => {
+    const deps = storeDeps();
+    const handles: JournalFileHandle[] = [];
+    const store = await JournalStore.create(join(directory(), 'readers.llxj'), {
+      ...deps,
+      journal: {
+        ...deps.journal,
+        open: async (file, flags) => {
+          const handle = await deps.journal.open(file, flags);
+          handles.push(handle);
+          return handle;
+        },
+      },
+    });
+    try {
+      await store.commit([{ kind: 'append', rows: scenarioDrafts() }]);
+      expect(await rowDigests(store)).toHaveLength(scenarioDrafts().length);
+    } finally {
+      await store.close();
+    }
+    for (const handle of handles) {
+      await expect(handle.stat()).rejects.toMatchObject({ code: 'EBADF' });
+    }
+  });
   it('matches batch facts and summaries across old calls, same-group responses and adopted rows after reopening', async () => {
     const files = ['batch', 'stream', 'mirror'].map((name) =>
       join(directory(), `${name}.llxj`),
