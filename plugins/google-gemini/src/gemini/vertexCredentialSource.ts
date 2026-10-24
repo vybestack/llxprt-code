@@ -6,6 +6,8 @@
 
 import { readFile } from 'node:fs/promises';
 import {
+  AuthClient,
+  BaseExternalAccountClient,
   Compute,
   ExternalAccountAuthorizedUserClient,
   ExternalAccountClient,
@@ -14,7 +16,6 @@ import {
   Impersonated,
   JWT,
   UserRefreshClient,
-  type AuthClient,
   type Credentials,
   type ExternalAccountAuthorizedUserClientOptions,
   type ExternalAccountClientOptions,
@@ -150,11 +151,222 @@ function buildImpersonated(
   });
 }
 
+const X509_SOURCE_UNSUPPORTED =
+  'Vertex external account credentials with an X.509 certificate source are not supported: the owner transport cannot present a client certificate';
+const STS_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:token-exchange';
+const STS_REQUESTED_TOKEN_TYPE =
+  'urn:ietf:params:oauth:token-type:access_token';
+const DEFAULT_IMPERSONATION_LIFETIME_SECONDS = 3600;
+
+interface StsTokenResponse {
+  readonly access_token: string;
+  readonly expires_in?: number;
+}
+
+interface ImpersonationResponse {
+  readonly accessToken: string;
+  readonly expireTime: string;
+}
+
+function optionalString(
+  json: GoogleCredentialJson,
+  name: string,
+): string | undefined {
+  const value = json[name];
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+function oauthFailure(action: string, error: unknown): unknown {
+  if (!(error instanceof gaxios.GaxiosError) || !error.response) {
+    return error;
+  }
+  const body = error.response.data as
+    | { error?: unknown; error_description?: unknown }
+    | undefined;
+  const code = typeof body?.error === 'string' ? body.error : undefined;
+  const description =
+    typeof body?.error_description === 'string'
+      ? body.error_description
+      : undefined;
+  const detail = [code, description].filter(Boolean).join(': ');
+  return new Error(
+    `${action} failed with status ${String(error.response.status)}${detail ? `: ${detail}` : ''}`,
+    { cause: error },
+  );
+}
+
+/**
+ * The library's external account client builds its STS exchanger on a `Gaxios`
+ * it creates itself, so the exchange would bypass the owner transport. The
+ * library client is kept only for its subject token retrieval, whose file,
+ * executable, URL and AWS sources already use the transporter it was given.
+ * The RFC 8693 exchange and the optional service account impersonation are
+ * sent here through the owner's transporter.
+ */
+class OwnerExternalAccountClient extends AuthClient {
+  readonly #json: GoogleCredentialJson;
+  readonly #library: BaseExternalAccountClient;
+  readonly #tokenUrl: string;
+  #cached: Credentials | undefined;
+  #pending: Promise<Credentials> | undefined;
+
+  constructor(
+    json: GoogleCredentialJson,
+    library: BaseExternalAccountClient,
+    transporter: gaxios.Gaxios,
+  ) {
+    super({
+      transporter,
+      quotaProjectId: library.quotaProjectId,
+      universeDomain: library.universeDomain,
+    });
+    this.#json = json;
+    this.#library = library;
+    this.#tokenUrl =
+      optionalString(json, 'token_url') ??
+      `https://sts.${this.universeDomain}/v1/token`;
+  }
+
+  async getAccessToken(): Promise<{ token: string | null | undefined }> {
+    const cached = this.#cached;
+    if (cached !== undefined && !this.#isExpired(cached)) {
+      return { token: cached.access_token };
+    }
+    this.#pending ??= this.#refresh().finally(() => {
+      this.#pending = undefined;
+    });
+    return { token: (await this.#pending).access_token };
+  }
+
+  async getRequestHeaders(): Promise<Headers> {
+    const { token } = await this.getAccessToken();
+    return this.addSharedMetadataHeaders(
+      new Headers({ authorization: `Bearer ${String(token)}` }),
+    );
+  }
+
+  async request<T>(opts: gaxios.GaxiosOptions): gaxios.GaxiosPromise<T> {
+    const headers = new Headers(opts.headers);
+    for (const [name, value] of await this.getRequestHeaders()) {
+      headers.set(name, value);
+    }
+    return this.transporter.request<T>({ ...opts, headers });
+  }
+
+  #isExpired(credentials: Credentials): boolean {
+    return (
+      credentials.expiry_date != null &&
+      Date.now() >= credentials.expiry_date - this.eagerRefreshThresholdMillis
+    );
+  }
+
+  async #refresh(): Promise<Credentials> {
+    const stsToken = await this.#exchange(
+      await this.#library.retrieveSubjectToken(),
+    );
+    const impersonationUrl = optionalString(
+      this.#json,
+      'service_account_impersonation_url',
+    );
+    const credentials =
+      impersonationUrl === undefined
+        ? {
+            access_token: stsToken.access_token,
+            ...(stsToken.expires_in === undefined
+              ? {}
+              : { expiry_date: Date.now() + stsToken.expires_in * 1000 }),
+          }
+        : await this.#impersonate(impersonationUrl, stsToken.access_token);
+    this.#cached = credentials;
+    this.credentials = credentials;
+    return credentials;
+  }
+
+  async #exchange(subjectToken: string): Promise<StsTokenResponse> {
+    const clientId = optionalString(this.#json, 'client_id');
+    const userProject = optionalString(
+      this.#json,
+      'workforce_pool_user_project',
+    );
+    const form = new URLSearchParams({
+      grant_type: STS_GRANT_TYPE,
+      audience: String(this.#json['audience']),
+      scope: CLOUD_PLATFORM_SCOPE,
+      requested_token_type: STS_REQUESTED_TOKEN_TYPE,
+      subject_token: subjectToken,
+      subject_token_type: String(this.#json['subject_token_type']),
+    });
+    const headers = new Headers({
+      'content-type': 'application/x-www-form-urlencoded',
+    });
+    if (clientId !== undefined) {
+      const secret = optionalString(this.#json, 'client_secret') ?? '';
+      headers.set(
+        'authorization',
+        `Basic ${Buffer.from(`${clientId}:${secret}`).toString('base64')}`,
+      );
+    } else if (userProject !== undefined) {
+      form.set('options', JSON.stringify({ userProject }));
+    }
+    try {
+      const response = await this.transporter.request<StsTokenResponse>({
+        url: this.#tokenUrl,
+        method: 'POST',
+        headers,
+        data: form.toString(),
+        responseType: 'json',
+      });
+      return response.data;
+    } catch (error) {
+      throw oauthFailure('The Google STS token exchange', error);
+    }
+  }
+
+  async #impersonate(url: string, stsToken: string): Promise<Credentials> {
+    const impersonation = this.#json['service_account_impersonation'];
+    const configured =
+      typeof impersonation === 'object' && impersonation !== null
+        ? (impersonation as { token_lifetime_seconds?: unknown })
+            .token_lifetime_seconds
+        : undefined;
+    const lifetime =
+      typeof configured === 'number'
+        ? configured
+        : DEFAULT_IMPERSONATION_LIFETIME_SECONDS;
+    try {
+      const response = await this.transporter.request<ImpersonationResponse>({
+        url,
+        method: 'POST',
+        headers: { authorization: `Bearer ${stsToken}` },
+        data: {
+          scope: [CLOUD_PLATFORM_SCOPE],
+          lifetime: `${String(lifetime)}s`,
+        },
+        responseType: 'json',
+      });
+      return {
+        access_token: response.data.accessToken,
+        expiry_date: new Date(response.data.expireTime).getTime(),
+      };
+    } catch (error) {
+      throw oauthFailure('The Google service account impersonation', error);
+    }
+  }
+}
+
 function buildExternalAccount(
   json: GoogleCredentialJson,
   transporter: gaxios.Gaxios,
   source: string,
 ): AuthClient {
+  const credentialSource = json['credential_source'];
+  if (
+    typeof credentialSource === 'object' &&
+    credentialSource !== null &&
+    'certificate' in credentialSource
+  ) {
+    throw new Error(X509_SOURCE_UNSUPPORTED);
+  }
   const client = ExternalAccountClient.fromJSON({
     ...json,
     transporter,
@@ -165,7 +377,7 @@ function buildExternalAccount(
       `The external account Google credential in ${source} is not supported`,
     );
   }
-  return client;
+  return new OwnerExternalAccountClient(json, client, transporter);
 }
 
 function buildCredentialClient(

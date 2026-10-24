@@ -1078,7 +1078,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T2.6c A3 Codex image generation through the owner transport
 - [x] T2.7a A7 Vertex file and explicit credentials through the owner transporter
 - [x] T2.7b A7 Vertex metadata discovery and metadata tokens through the owner transport
-- [ ] T2.7c A7 Vertex external account exchange through the owner transport
+- [x] T2.7c A7 Vertex external account exchange through the owner transport
 - [ ] T3.1 A5 auxiliary generation disposal
 - [ ] T3.2 A5 workspace control and loop runner joins
 - [ ] T3.3 A5 activation preflight public work

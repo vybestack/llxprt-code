@@ -546,3 +546,327 @@ describe('Vertex metadata credentials through the owner transport', () => {
     expect(modelRequest(a).headers['authorization']).toBe('Bearer meta-a');
   });
 });
+
+const STS_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:token-exchange';
+const IMPERSONATION_URL =
+  'https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/target@example.invalid:generateAccessToken';
+
+function workloadAudience(root: string): string {
+  return `//iam.googleapis.com/projects/1234/locations/global/workloadIdentityPools/pool-${root}/providers/provider-${root}`;
+}
+
+function workforceAudience(root: string): string {
+  return `//iam.googleapis.com/locations/global/workforcePools/pool-${root}/providers/provider-${root}`;
+}
+
+function externalAccount(
+  audience: string,
+  credentialSource: Record<string, unknown>,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    type: 'external_account',
+    audience,
+    subject_token_type: 'urn:ietf:params:oauth:token-type:id_token',
+    token_url: 'https://sts.googleapis.com/v1/token',
+    credential_source: credentialSource,
+    ...extra,
+  };
+}
+
+function subjectTokenFile(name: string, token: string): string {
+  const path = join(directory, name);
+  writeFileSync(path, token);
+  return path;
+}
+
+function exchangeOf(transport: OwnerTransport): {
+  request: RecordedRequest;
+  form: URLSearchParams;
+} {
+  const exchanges = requestsOf(transport, 'sts');
+  expect(exchanges).toHaveLength(1);
+  return {
+    request: exchanges[0],
+    form: new URLSearchParams(exchanges[0].body),
+  };
+}
+
+describe('Vertex external account credentials through the owner transport', () => {
+  it('exchanges a file-sourced subject token on each root', async () => {
+    const a = await transportFor('a');
+    const b = await transportFor('b');
+    const files = {
+      a: writeJson(
+        'external-a.json',
+        externalAccount(workloadAudience('a'), {
+          file: subjectTokenFile('subject-a.txt', 'file-subject-a'),
+        }),
+      ),
+      b: writeJson(
+        'external-b.json',
+        externalAccount(workloadAudience('b'), {
+          file: subjectTokenFile('subject-b.txt', 'file-subject-b'),
+        }),
+      ),
+    };
+    await Promise.all([
+      generate(a, {
+        credentialEnvironment: environment({ credentialsFile: files.a }),
+      }),
+      generate(b, {
+        credentialEnvironment: environment({ credentialsFile: files.b }),
+      }),
+    ]);
+    for (const [transport, root] of [
+      [a, 'a'],
+      [b, 'b'],
+    ] as const) {
+      const { request, form } = exchangeOf(transport);
+      expect(request.method).toBe('POST');
+      expect(request.url).toBe('https://sts.googleapis.com/v1/token');
+      expect(request.headers['content-type']).toContain(
+        'application/x-www-form-urlencoded',
+      );
+      expect(form.get('grant_type')).toBe(STS_GRANT_TYPE);
+      expect(form.get('audience')).toBe(workloadAudience(root));
+      expect(form.get('subject_token')).toBe(`file-subject-${root}`);
+      expect(form.get('scope')).toBe(
+        'https://www.googleapis.com/auth/cloud-platform',
+      );
+      expect(modelRequest(transport).headers['authorization']).toBe(
+        `Bearer sts-${root}`,
+      );
+    }
+  });
+
+  it('fetches a URL-sourced subject token and exchanges it on the owning root', async () => {
+    const a = await transportFor('a');
+    const b = await transportFor('b');
+    const credentialsFile = (root: string): string =>
+      writeJson(
+        `url-${root}.json`,
+        externalAccount(workloadAudience(root), {
+          url: `http://subject-${root}.invalid/token`,
+        }),
+      );
+    await Promise.all([
+      generate(a, {
+        credentialEnvironment: environment({
+          credentialsFile: credentialsFile('a'),
+        }),
+      }),
+      generate(b, {
+        credentialEnvironment: environment({
+          credentialsFile: credentialsFile('b'),
+        }),
+      }),
+    ]);
+    for (const [transport, root] of [
+      [a, 'a'],
+      [b, 'b'],
+    ] as const) {
+      expect(requestsOf(transport, 'subject').map((r) => r.url)).toEqual([
+        `http://subject-${root}.invalid/token`,
+      ]);
+      expect(exchangeOf(transport).form.get('subject_token')).toBe(
+        `subject-${root}`,
+      );
+      expect(modelRequest(transport).headers['authorization']).toBe(
+        `Bearer sts-${root}`,
+      );
+    }
+  });
+
+  it('impersonates a service account with the exchanged token', async () => {
+    const a = await transportFor('a');
+    const credentialsFile = writeJson(
+      'impersonating.json',
+      externalAccount(
+        workloadAudience('a'),
+        { file: subjectTokenFile('subject-a.txt', 'file-subject-a') },
+        { service_account_impersonation_url: IMPERSONATION_URL },
+      ),
+    );
+    await generate(a, {
+      credentialEnvironment: environment({ credentialsFile }),
+    });
+    expect(exchangeOf(a).form.get('scope')).toBe(
+      'https://www.googleapis.com/auth/cloud-platform',
+    );
+    const impersonation = requestsOf(a, 'iam');
+    expect(impersonation).toHaveLength(1);
+    expect(impersonation[0].url).toBe(IMPERSONATION_URL);
+    expect(impersonation[0].headers['authorization']).toBe('Bearer sts-a');
+    expect(JSON.parse(impersonation[0].body)).toMatchObject({
+      lifetime: '3600s',
+    });
+    expect(modelRequest(a).headers['authorization']).toBe('Bearer iam-a');
+  });
+
+  it('ends a held exchange when its owner closes without disturbing another owner', async () => {
+    const a = await transportFor('a');
+    const b = await transportFor('b');
+    const credentialsFile = (root: string): string =>
+      writeJson(
+        `held-${root}.json`,
+        externalAccount(workloadAudience(root), {
+          file: subjectTokenFile(`held-${root}.txt`, `held-subject-${root}`),
+        }),
+      );
+    a.hold('sts');
+    const first = failureOf(
+      generate(a, {
+        credentialEnvironment: environment({
+          credentialsFile: credentialsFile('a'),
+        }),
+      }),
+    );
+    await a.waitForRequest('sts');
+    const second = generate(b, {
+      credentialEnvironment: environment({
+        credentialsFile: credentialsFile('b'),
+      }),
+    });
+    await a.close();
+    const failure = await first;
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain('Owner transport is closed');
+    await second;
+    expect(requestsOf(a, 'model')).toHaveLength(0);
+    expect(modelRequest(b).headers['authorization']).toBe('Bearer sts-b');
+  });
+
+  it('rejects an X.509 certificate credential source before any request', async () => {
+    const a = await transportFor('a');
+    const b = await transportFor('b');
+    const credentialsFile = writeJson(
+      'certificate.json',
+      externalAccount(workloadAudience('a'), {
+        certificate: { use_default_certificate_config: true },
+      }),
+    );
+    const failures = await Promise.all(
+      [a, b].map((transport) =>
+        failureOf(
+          generate(transport, {
+            credentialEnvironment: environment({ credentialsFile }),
+          }),
+        ),
+      ),
+    );
+    for (const failure of failures) {
+      expect((failure as Error).message).toBe(
+        'Vertex external account credentials with an X.509 certificate source are not supported: the owner transport cannot present a client certificate',
+      );
+    }
+    expect(a.requests).toHaveLength(0);
+    expect(b.requests).toHaveLength(0);
+  });
+
+  it('sends the workforce user project as the STS options field and no client authentication', async () => {
+    const a = await transportFor('a');
+    const b = await transportFor('b');
+    const credentialsFile = (root: string): string =>
+      writeJson(
+        `workforce-${root}.json`,
+        externalAccount(
+          workforceAudience(root),
+          {
+            file: subjectTokenFile(
+              `workforce-${root}.txt`,
+              `wf-subject-${root}`,
+            ),
+          },
+          { workforce_pool_user_project: `wf-project-${root}` },
+        ),
+      );
+    await Promise.all([
+      generate(a, {
+        credentialEnvironment: environment({
+          credentialsFile: credentialsFile('a'),
+        }),
+      }),
+      generate(b, {
+        credentialEnvironment: environment({
+          credentialsFile: credentialsFile('b'),
+        }),
+      }),
+    ]);
+    for (const [transport, root] of [
+      [a, 'a'],
+      [b, 'b'],
+    ] as const) {
+      const { request, form } = exchangeOf(transport);
+      expect(form.getAll('options')).toHaveLength(1);
+      expect(JSON.parse(String(form.get('options')))).toEqual({
+        userProject: `wf-project-${root}`,
+      });
+      expect(form.has('workforce_pool_user_project')).toBe(false);
+      expect(form.get('audience')).toBe(workforceAudience(root));
+      expect(form.get('subject_token')).toBe(`wf-subject-${root}`);
+      expect(request.headers['authorization']).toBeUndefined();
+      expect(modelRequest(transport).headers['authorization']).toBe(
+        `Bearer sts-${root}`,
+      );
+    }
+  });
+
+  it('authenticates the client with Basic and leaves out the options field', async () => {
+    const a = await transportFor('a');
+    const credentialsFile = writeJson(
+      'workforce-client.json',
+      externalAccount(
+        workforceAudience('a'),
+        { file: subjectTokenFile('client-subject.txt', 'client-subject') },
+        {
+          workforce_pool_user_project: 'wf-project-a',
+          client_id: 'client-a',
+          client_secret: 'secret-a',
+        },
+      ),
+    );
+    await generate(a, {
+      credentialEnvironment: environment({ credentialsFile }),
+    });
+    const { request, form } = exchangeOf(a);
+    expect(request.headers['authorization']).toBe(
+      `Basic ${Buffer.from('client-a:secret-a').toString('base64')}`,
+    );
+    expect(form.has('options')).toBe(false);
+    expect(modelRequest(a).headers['authorization']).toBe('Bearer sts-a');
+  });
+
+  it('reports the OAuth error of a rejected exchange and keeps the response as the cause', async () => {
+    const a = await transportFor('a');
+    const credentialsFile = writeJson(
+      'rejected.json',
+      externalAccount(workloadAudience('a'), {
+        file: subjectTokenFile('rejected.txt', 'rejected-subject'),
+      }),
+    );
+    const failure = await failureOf(
+      createGeminiApiClient({
+        vertexai: true,
+        project: 'project',
+        location: 'us-central1',
+        fetch: withResponder(a, (request) =>
+          new URL(request.url).hostname === 'sts.googleapis.com'
+            ? Promise.resolve(
+                Response.json(
+                  { error: 'invalid_grant', error_description: 'bad subject' },
+                  { status: 400 },
+                ),
+              )
+            : undefined,
+        ),
+        credentialEnvironment: environment({ credentialsFile }),
+      }).then((client) => client.models.generateContent(PARAMS)),
+    );
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain('invalid_grant');
+    expect((failure as Error).message).toContain('bad subject');
+    expect(((failure as Error).cause as { status?: number }).status).toBe(400);
+    expect(requestsOf(a, 'model')).toHaveLength(0);
+  });
+});
