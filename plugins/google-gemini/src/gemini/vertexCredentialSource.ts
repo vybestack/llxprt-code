@@ -503,9 +503,38 @@ async function probeMetadataBase(
 }
 
 /**
+ * Settles with the first probe that found the server, or with the first
+ * address's absence once every address has reported absent. A probe that
+ * throws (an owner abort or an unexpected error) ends the selection.
+ */
+function firstPresentProbe(
+  attempts: readonly Promise<MetadataProbe>[],
+): Promise<MetadataProbe> {
+  return new Promise((resolve, reject) => {
+    const absences: MetadataProbe[] = [];
+    let pending = attempts.length;
+    attempts.forEach((attempt, index) => {
+      attempt.then((probe) => {
+        if (probe.present) {
+          resolve(probe);
+          return;
+        }
+        absences[index] = probe;
+        pending -= 1;
+        if (pending === 0) {
+          resolve(absences[0]);
+        }
+      }, reject);
+    });
+  });
+}
+
+/**
  * Probes the metadata server through the owner transport. Without an
- * explicit host the IP and the DNS name are raced and the loser is aborted,
- * because the IP is slow to fail off GCP and DNS is slow on some GCP hosts.
+ * explicit host the IP and the DNS name are probed together: the IP is slow
+ * to fail off GCP and DNS is slow on some GCP hosts. The first address that
+ * answers wins, a failed address never cancels its peer, and the remaining
+ * probe is aborted and joined once the selection is made.
  */
 async function probeMetadataServer(
   transporter: gaxios.Gaxios,
@@ -524,11 +553,12 @@ async function probeMetadataServer(
     );
   }
   try {
-    return await Promise.race(attempts);
+    return await firstPresentProbe(attempts);
   } finally {
     for (const aborter of aborters) {
       aborter.abort();
     }
+    await Promise.allSettled(attempts);
   }
 }
 

@@ -545,6 +545,83 @@ describe('Vertex metadata credentials through the owner transport', () => {
     ]);
     expect(modelRequest(a).headers['authorization']).toBe('Bearer meta-a');
   });
+
+  describe('with the default hosts', () => {
+    const IP_HOST = '169.254.169.254';
+    const DNS_HOST = 'metadata.google.internal.';
+    const SLOW_PEER_MS = 100;
+
+    function unreachable(): Error {
+      return new TypeError('fetch failed', {
+        cause: Object.assign(new Error('Host unavailable'), {
+          code: 'ENOTFOUND',
+        }),
+      });
+    }
+
+    function discoveryFetch(
+      transport: OwnerTransport,
+      behavior: Readonly<Record<string, 'fail' | 'slow'>>,
+    ): OwnerTransport['fetch'] {
+      return withResponder(transport, (request) => {
+        const url = new URL(request.url);
+        const action = behavior[url.hostname];
+        if (url.pathname !== `/${INSTANCE_URL}` || action === undefined) {
+          return undefined;
+        }
+        if (action === 'fail') {
+          return Promise.reject(unreachable());
+        }
+        return new Promise((resolve) => setTimeout(resolve, SLOW_PEER_MS)).then(
+          () => transport.fetch(request),
+        );
+      });
+    }
+
+    function generateWith(fetch: OwnerTransport['fetch']): Promise<unknown> {
+      return createGeminiApiClient({
+        vertexai: true,
+        project: 'project',
+        location: 'us-central1',
+        fetch,
+        credentialEnvironment: environment({ metadataDetection: 'ping-only' }),
+      }).then((client) => client.models.generateContent(PARAMS));
+    }
+
+    it('uses the IP address when the DNS name fails first', async () => {
+      const a = await transportFor('a');
+
+      await generateWith(
+        discoveryFetch(a, { [DNS_HOST]: 'fail', [IP_HOST]: 'slow' }),
+      );
+
+      expect(modelRequest(a).headers['authorization']).toBe('Bearer meta-a');
+    });
+
+    it('uses the DNS name when the IP address fails first', async () => {
+      const a = await transportFor('a');
+
+      await generateWith(
+        discoveryFetch(a, { [IP_HOST]: 'fail', [DNS_HOST]: 'slow' }),
+      );
+
+      expect(modelRequest(a).headers['authorization']).toBe('Bearer meta-a');
+    });
+
+    it('reports the metadata server absent only when every address failed', async () => {
+      const a = await transportFor('a');
+
+      const failure = await failureOf(
+        generateWith(
+          discoveryFetch(a, { [IP_HOST]: 'fail', [DNS_HOST]: 'fail' }),
+        ),
+      );
+
+      expect((failure as Error).message).toBe(NO_ADC_FOUND);
+      expect(((failure as Error).cause as Error).message).toBe('fetch failed');
+      expect(a.requests).toHaveLength(0);
+    });
+  });
 });
 
 const STS_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:token-exchange';
