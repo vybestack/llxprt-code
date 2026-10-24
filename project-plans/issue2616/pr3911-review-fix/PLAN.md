@@ -1075,6 +1075,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T2.6a A3 fetch required in invocations and the manager
 - [ ] T2.6b-Bk A3 test batches for unbound providers (ids added by T2.6b's stop rule, may be none)
 - [x] T2.6b A3 provider-level ambient fetch defaults deleted
+- [x] T2.6c A3 Codex image generation through the owner transport
 - [ ] T2.7a A7 Vertex file and explicit credentials through the owner transporter
 - [ ] T2.7b A7 Vertex metadata discovery and metadata tokens through the owner transport
 - [ ] T2.7c A7 Vertex external account exchange through the owner transport

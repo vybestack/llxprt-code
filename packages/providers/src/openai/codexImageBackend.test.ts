@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import {
   CodexImageBackend,
   buildCodexImageGenerateEndpoint,
@@ -73,6 +74,9 @@ function makeStubFetch(response: { status: number; body: unknown }): {
   return { fetchImpl, captured: () => captured };
 }
 
+const unusedFetch: NetworkFetch = () =>
+  Promise.reject(new Error('No image request expected'));
+
 function makeBackend(overrides?: {
   fetchImpl?: typeof fetch;
   getBaseUrl?: () => string | undefined;
@@ -85,7 +89,7 @@ function makeBackend(overrides?: {
         accountId: 'account-xyz',
       },
     getBaseUrl: overrides?.getBaseUrl ?? (() => undefined),
-    fetchImpl: overrides?.fetchImpl ?? fetch,
+    fetchImpl: overrides?.fetchImpl ?? unusedFetch,
   });
 }
 

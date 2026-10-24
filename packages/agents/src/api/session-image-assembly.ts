@@ -55,6 +55,7 @@ export function assembleSessionImages(
   }
   const resolveBackend = createCodexImageBackendResolver({
     oauthManager,
+    fetchImpl: manager.fetchNetwork,
     getActiveProvider: () => manager.getActiveProvider(),
     getBaseUrl: () => {
       const providerName = manager.getActiveProviderName();

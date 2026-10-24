@@ -23,6 +23,7 @@ import { z } from 'zod';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { runImageOperation } from '@vybestack/llxprt-code-core/services/image/imageOperationDispatch.js';
 import { validatePngStructure } from '@vybestack/llxprt-code-core/services/image/ImageGenerationService.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { CodexImageBackend } from '@vybestack/llxprt-code-providers/openai/codexImageBackend.js';
 import { createAgent } from '../createAgent.js';
 
@@ -34,6 +35,9 @@ import {
   makeToken,
 } from './helpers/provider-auth-fixtures.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+
+const loopbackFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
@@ -127,6 +131,7 @@ async function imageWire(hold: boolean): Promise<ImageWire> {
   const backend = new CodexImageBackend({
     getBaseUrl: () => `http://127.0.0.1:${address.port}/backend-api/codex`,
     getCredential: async () => ({ ...credential }),
+    fetchImpl: loopbackFetch,
   });
   return {
     endpoint: `http://127.0.0.1:${address.port}/chatgpt.com/backend-api/codex`,
