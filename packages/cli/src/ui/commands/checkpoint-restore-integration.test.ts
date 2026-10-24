@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
 import { writeFile, readFile } from 'node:fs/promises';
-import { join, basename, resolve } from 'node:path';
+import { join, basename } from 'node:path';
 import {
   withCheckpoint,
   saveCheckpoint,
@@ -126,7 +126,7 @@ async function compatibleRestore(active: boolean): Promise<string> {
       },
     );
     context.services.git = git;
-    const cwd = resolve(import.meta.dir, '../../..');
+    const cwd = process.cwd();
     try {
       const outcome: unknown = await restoreCommand(runtime)?.action?.(
         context,
