@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { writeFile } from 'node:fs/promises';
-import { JournalResolver } from '../../packages/core/src/recording/journalResolver.js';
+import { JournalSession } from '../../packages/core/src/services/history/journalSession.js';
 import { LocalMediaStore } from '../../packages/core/src/storage/local-media-store.js';
 import { reclaimSessionMedia } from '../../packages/core/src/recording/janitor/mediaReclamation.js';
 import { collectMediaReferences } from '../../packages/core/src/storage/media-reference-lifecycle.js';
@@ -13,13 +13,13 @@ const store = new LocalMediaStore({
   rootDirectory: mediaRoot,
   quotaBytes: 1024 * 1024,
 });
-const resolver = await JournalResolver.open(file);
+const resolver = await JournalSession.open(file);
 let rows = 0;
 let verifiedMedia = 0;
 const storedRows: number[] = [];
 const chronology: Array<number | undefined> = [];
 try {
-  for await (const entry of resolver.resolve()) {
+  for await (const entry of resolver.rows()) {
     if (entry.content.metadata?.responsesStored) storedRows.push(rows);
     chronology.push(entry.content.metadata?.chronology?.seq);
     for (const reference of collectMediaReferences([entry.content])) {

@@ -13,7 +13,7 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 import { createSessionRecorder } from '../packages/core/src/recording/sessionRecorderFactory.js';
 import type { SessionRecordingPort } from '../packages/core/src/recording/recordingPort.js';
 import { requireJournalRecorder } from '../packages/core/src/services/history/recorderBackend.js';
-import { NativeRecordingProbe } from './issue-3199-native-recording-probe.js';
+import { NativeRecordingProbe } from '../packages/core/src/storage/native-recording-probe.test-support.js';
 import { HistoryService } from '../packages/core/src/services/history/HistoryService.js';
 import type { IContent } from '../packages/core/src/services/history/IContent.js';
 import { SessionPersistenceService } from '../packages/core/src/storage/SessionPersistenceService.js';

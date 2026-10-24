@@ -34,7 +34,9 @@ import * as path from 'node:path';
 import { renderHook } from '../../../../__tests__/render.js';
 import { LoadedSettings, SettingScope } from '../../../../config/settings.js';
 import type { RecordingSwapCallbacks } from '../../../../services/performResume.js';
-import type { SessionRecordingService } from '@vybestack/llxprt-code-core';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import type { IContent } from '@vybestack/llxprt-code-core';
 import type { HistoryItemWithoutId } from '../../../types.js';
 import type { ScrollbackPagerSettings } from '../../../stores/turn/scrollbackPager.js';
 import {
@@ -43,9 +45,7 @@ import {
   type UseScrollbackBootstrapOptions,
 } from './useScrollbackBootstrap.js';
 
-const TS = '2026-01-01T00:00:00.000Z';
-
-function userContent(text: string, seq: number): unknown {
+function userContent(text: string, seq: number): IContent {
   return {
     speaker: 'human',
     blocks: [{ type: 'text', text }],
@@ -65,31 +65,23 @@ async function makeJournalFixture(
 ): Promise<JournalFixture> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'scrollback-bootstrap-'));
   journalDirs.push(dir);
-  const filePath = path.join(dir, 'session-under-test.jsonl');
-  let content = '';
-  for (const [seq, text] of records) {
-    content += `${JSON.stringify({
-      v: 1,
-      seq,
-      ts: TS,
-      type: 'content',
-      payload: { content: userContent(text, seq) },
-    })}\n`;
-  }
-  if (content.length > 0) {
-    await fs.appendFile(filePath, content, 'utf8');
+  const filePath = path.join(dir, 'session-under-test.llxj');
+  const session = await JournalSession.create(filePath);
+  try {
+    for (const [seq, text] of records)
+      await session.append([userContent(text, seq)]);
+  } finally {
+    await session.close();
   }
   return {
     filePath,
     async addUser(seq: number, text: string): Promise<void> {
-      const line = JSON.stringify({
-        v: 1,
-        seq,
-        ts: TS,
-        type: 'content',
-        payload: { content: userContent(text, seq) },
-      });
-      await fs.appendFile(filePath, `${line}\n`, 'utf8');
+      const session = await JournalSession.open(filePath);
+      try {
+        await session.append([userContent(text, seq)]);
+      } finally {
+        await session.close();
+      }
     },
   };
 }
@@ -115,9 +107,15 @@ function makeSettings(ui: Record<string, unknown>): LoadedSettings {
 function makeSwapCallbacks(
   recordingPath: string | null,
 ): RecordingSwapCallbacks {
-  const recording = {
-    getFilePath: () => recordingPath,
-  } as unknown as SessionRecordingService;
+  const recording = JournalRecordingService.create({
+    sessionId: 'bootstrap',
+    projectHash: 'bootstrap',
+    chatsDir: '/unused',
+    workspaceDirs: [],
+    provider: 'test',
+    model: 'test',
+  });
+  recording.getFilePath = () => recordingPath;
   return {
     getCurrentRecording: () => recording,
     getCurrentIntegration: () => null,

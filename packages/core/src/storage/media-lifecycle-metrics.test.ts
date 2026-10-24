@@ -15,7 +15,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { SessionRecordingService } from '../recording/SessionRecordingService.js';
+import { JournalRecordingService } from '../recording/journalRecordingService.js';
+import { NativeRecordingProbe } from './native-recording-probe.test-support.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
 import { SessionPersistenceService } from './SessionPersistenceService.js';
@@ -93,7 +94,7 @@ function rssBehavior(): number {
 
 let directory = '';
 
-let recording: SessionRecordingService | undefined;
+let recording: JournalRecordingService | undefined;
 
 let persistenceSave: Promise<PersistenceSaveOutcome> | undefined;
 
@@ -128,7 +129,8 @@ async function lifecycleBehavior(): Promise<number> {
     turnId: 'turn-1',
     aggregateBudgetBytes: encoded.length * 3,
   });
-  const activeRecording = await startMetricRecording(history);
+  const probe = new NativeRecordingProbe();
+  const activeRecording = await startMetricRecording(probe);
   recording = activeRecording;
   const persistence = new SessionPersistenceService(
     {
@@ -149,14 +151,25 @@ async function lifecycleBehavior(): Promise<number> {
         store,
         history,
         requestResolver: resolver,
-        recording: activeRecording,
+        recording: probe,
         persistence,
         providerFileRetention: providerRetention,
       });
 
-      const active = await metrics.snapshot();
-
-      assertActiveMetrics(active, payload.byteLength, encoded.length);
+      const admittedHistory = contentsForAssertions.find(
+        (content) => content.blocks.length > 0,
+      );
+      assertDefined(admittedHistory, 'Expected admitted media history');
+      const session = await activeRecording.session();
+      await probe.measureWrite(
+        async () => {
+          await session.append([admittedHistory]);
+        },
+        async () => {
+          const active = await metrics.snapshot();
+          assertActiveMetrics(active, payload.byteLength, encoded.length);
+        },
+      );
 
       await resolved.release();
       await history.clear();
@@ -284,21 +297,18 @@ function assertActiveMetrics(
 }
 
 async function startMetricRecording(
-  history: HistoryService,
-): Promise<SessionRecordingService> {
-  const activeRecording = new SessionRecordingService({
+  probe: NativeRecordingProbe,
+): Promise<JournalRecordingService> {
+  const activeRecording = JournalRecordingService.create({
     sessionId: 'metrics-session',
     projectHash: 'metrics-project',
     chatsDir: join(directory, 'recording'),
+    journal: probe.options,
     workspaceDirs: [directory],
     provider: 'test',
     model: 'test',
   });
   activeRecording.recordProviderSwitch('provider', 'model');
-  const admittedHistory = (await collectRawHistory(history)).find(
-    (content) => content.blocks.length > 0,
-  );
-  assertDefined(admittedHistory, 'Expected admitted media history');
-  activeRecording.recordContent(admittedHistory);
+  await activeRecording.session();
   return activeRecording;
 }

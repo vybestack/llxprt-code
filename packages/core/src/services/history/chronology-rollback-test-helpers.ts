@@ -1,11 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import type { SessionRecordingPort } from '../../recording/recordingPort.js';
-import type {
-  SessionEventType,
-  SessionRecordLine,
-} from '../../recording/types.js';
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
 import type { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
@@ -35,27 +30,6 @@ export async function durableRowsOf(
     result.push(...rows);
   });
   return result;
-}
-
-export class AdmissionFailureRecorder extends SessionRecordingService {
-  private remaining: number | undefined;
-  readonly failure = new Error('injected journal admission failure');
-
-  failAdmissionAfter(successfulAdmissions: number): void {
-    this.remaining = successfulAdmissions;
-  }
-
-  override enqueue(
-    type: SessionEventType,
-    payload: unknown,
-  ): SessionRecordLine | null {
-    if (this.remaining === 0) {
-      this.remaining = undefined;
-      throw this.failure;
-    }
-    if (this.remaining !== undefined) this.remaining--;
-    return super.enqueue(type, payload);
-  }
 }
 
 export function rollbackRow(index: number, bytes = 0): IContent {

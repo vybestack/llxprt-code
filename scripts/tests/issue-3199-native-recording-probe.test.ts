@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { useTempDir } from '../../packages/core/src/journal/__tests__/support/useTempDir.js';
 import { createSessionRecorder } from '../../packages/core/src/recording/sessionRecorderFactory.js';
 import { requireJournalRecorder } from '../../packages/core/src/services/history/recorderBackend.js';
-import { NativeRecordingProbe } from '../issue-3199-native-recording-probe.js';
+import { NativeRecordingProbe } from '../../packages/core/src/storage/native-recording-probe.test-support.js';
 
 describe('native recording probe write bytes', () => {
   const directory = useTempDir('native-recording-probe-');

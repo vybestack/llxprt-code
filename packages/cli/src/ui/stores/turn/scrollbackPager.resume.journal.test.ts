@@ -14,44 +14,18 @@
  * limitations under the License.
  */
 
-/**
- * @plan PLAN-20260917-ISSUE854.P04
- * @requirement G1
- *
- * RED suite for bounded resume viewport projection (implementation-plan.md
- * §5 P04b): resident-after-resume is the LAST PAGE of the physical timeline
- * plus scalars (floor/tail offsets, seq watermarks) — never all
- * context-range items. The tests pin a store-level seeding API
- * (`resumeFromJournal`) that the green session adds to ScrollbackPagerStore:
- * open the cursor, seed resident = last page under the store's own
- * pageRows budget, record floor/tail offsets and seq watermarks, and leave
- * older context rows unmaterialized until pageBack pulls them on demand.
- *
- * Equivalence references: `replaySession` (ReplayEngine) over the same
- * journal, and an eager full-parse of the fixture lines (the convention the
- * P02c suite uses). Both references read the same envelopes the pager
- * reads, so text/seq equality is exact — fixture rows are compared verbatim,
- * no label normalization.
- *
- * Every test below currently fails on the missing store API only; the
- * `as ResumableScrollbackPagerStore` cast is the single intentional seam
- * marking the contract the green session implements.
- */
-
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core';
-import { replaySession } from '@vybestack/llxprt-code-core';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+
 import {
   createScrollbackPagerStore,
   type ScrollbackPagerStore,
   type ScrollbackViewportReporter,
 } from './scrollbackPager.js';
-
-const TS = '2026-01-01T00:00:00.000Z';
-const PROJECT_HASH = 'p04b-resume-hash';
 
 /**
  * Uniform row size, matching the P02c fixture: text is padded so rows have
@@ -101,14 +75,15 @@ class FakeViewport implements ScrollbackViewportReporter {
 
 interface Fixture {
   filePath: string;
-  add(line: string): Promise<number>;
   addSessionStart(): Promise<number>;
   addUser(seq: number): Promise<number>;
   addAi(seq: number): Promise<number>;
-  addRewind(seq: number, itemsRemoved: number, cutSeq: number): Promise<number>;
+  popRows(itemsRemoved: number): Promise<void>;
 }
 
-function chronology(seq: number) {
+function chronology(
+  seq: number,
+): NonNullable<NonNullable<IContent['metadata']>['chronology']> {
   return { seq, userTurn: 1, step: 1, recordedAt: 0 };
 }
 
@@ -124,59 +99,72 @@ function contentOf(
   };
 }
 
-function envelope(seq: number, type: string, payload: unknown): string {
-  return JSON.stringify({ v: 1, seq, ts: TS, type, payload });
-}
-
 async function useResumeJournalFixture(): Promise<Fixture> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'scrollback-resume-'));
-  const filePath = path.join(dir, 'session-under-resume.jsonl');
-  let offset = 0;
-  const fixture: Fixture = {
+  const filePath = path.join(dir, 'session-under-resume.llxj');
+  const created = await JournalSession.create(filePath);
+  await created.close();
+  async function append(
+    speaker: IContent['speaker'],
+    seq: number,
+  ): Promise<number> {
+    const session = await JournalSession.open(filePath);
+    try {
+      await session.append([
+        contentOf(speaker, 'r-' + seq + 'x'.repeat(ROW_PAD_CHARS), seq),
+      ]);
+      for await (const entry of session.store.rows(
+        (session.store.published?.rows ?? 1) - 1,
+      ))
+        return entry.recordOffset;
+      throw new Error('Missing appended native row');
+    } finally {
+      await session.close();
+    }
+  }
+  return {
     filePath,
-    async add(line: string): Promise<number> {
-      const at = offset;
-      await fs.appendFile(filePath, `${line}\n`, 'utf8');
-      offset += Buffer.byteLength(line, 'utf8') + 1;
-      return at;
-    },
     async addSessionStart(): Promise<number> {
-      return fixture.add(
-        envelope(0, 'session_start', {
-          sessionId: 'resume-fixture-session',
-          projectHash: PROJECT_HASH,
-          provider: 'fixture',
-          model: 'fixture-model',
-          workspaceDirs: [dir],
-          startTime: TS,
-        }),
-      );
+      const session = await JournalSession.open(filePath);
+      try {
+        const ack = await session.store.commit([
+          {
+            kind: 'setState',
+            key: 'session:id',
+            value: new TextEncoder().encode(
+              JSON.stringify('resume-fixture-session'),
+            ),
+          },
+        ]);
+        return ack.durableEnd;
+      } finally {
+        await session.close();
+      }
     },
-    async addUser(seq: number): Promise<number> {
-      const pad = 'x'.repeat(ROW_PAD_CHARS);
-      return fixture.add(
-        envelope(seq, 'content', {
-          content: contentOf('human', `r-${seq}${pad}`, seq),
-        }),
-      );
-    },
-    async addAi(seq: number): Promise<number> {
-      const pad = 'x'.repeat(ROW_PAD_CHARS);
-      return fixture.add(
-        envelope(seq, 'content', {
-          content: contentOf('ai', `r-${seq}${pad}`, seq),
-        }),
-      );
-    },
-    async addRewind(
-      seq: number,
-      itemsRemoved: number,
-      cutSeq: number,
-    ): Promise<number> {
-      return fixture.add(envelope(seq, 'rewind', { itemsRemoved, cutSeq }));
+    addUser: (seq) => append('human', seq),
+    addAi: (seq) => append('ai', seq),
+    async popRows(itemsRemoved: number): Promise<void> {
+      const session = await JournalSession.open(filePath);
+      try {
+        const remaining = (session.store.published?.rows ?? 0) - itemsRemoved;
+        if (remaining === 0) await session.store.commit([{ kind: 'clear' }]);
+        else {
+          for await (const cut of session.store.rows(remaining)) {
+            await session.store.commit([
+              {
+                kind: 'pop',
+                cutLabel: cut.label,
+                expectedRemoved: itemsRemoved,
+              },
+            ]);
+            break;
+          }
+        }
+      } finally {
+        await session.close();
+      }
     },
   };
-  return fixture;
 }
 
 interface RowLabel {
@@ -184,87 +172,23 @@ interface RowLabel {
   readonly text: string;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-/** Label of a content envelope payload, or null when it is not content. */
-function contentLabel(payload: unknown): RowLabel | null {
-  if (!isRecord(payload)) return null;
-  const content = payload['content'];
-  if (!isRecord(content)) return null;
-  const speaker = content['speaker'];
-  if (speaker !== 'human' && speaker !== 'ai' && speaker !== 'tool') {
-    return null;
-  }
-  if (!Array.isArray(content['blocks'])) return null;
-  const metadata = content['metadata'];
-  const chronologyMeta =
-    isRecord(metadata) && isRecord(metadata['chronology'])
-      ? metadata['chronology']
-      : null;
-  const seq =
-    chronologyMeta !== null && typeof chronologyMeta['seq'] === 'number'
-      ? chronologyMeta['seq']
-      : Number.NaN;
-  const texts: string[] = [];
-  for (const block of content['blocks']) {
-    if (
-      isRecord(block) &&
-      block['type'] === 'text' &&
-      typeof block['text'] === 'string'
-    ) {
-      texts.push(block['text']);
-    }
-  }
-  return { seq, text: texts.join('\n') };
-}
-
-/**
- * Eager full-parse reference: every content row in file order. A
- * crash-torn tail line does not parse and is skipped, matching what the
- * cursor's line-end limit hides from the pager.
- */
-function parseEnvelopeLine(line: string): Record<string, unknown> | null {
+async function nativeReference(filePath: string): Promise<RowLabel[]> {
+  const session = await JournalSession.open(filePath);
   try {
-    const parsed: unknown = JSON.parse(line);
-    return isRecord(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-async function eagerReference(filePath: string): Promise<RowLabel[]> {
-  const raw = await fs.readFile(filePath, 'utf8');
-  const labels: RowLabel[] = [];
-  for (const line of raw.split('\n')) {
-    const parsed = line.trim() === '' ? null : parseEnvelopeLine(line);
-    if (parsed !== null && parsed['type'] === 'content') {
-      const label = contentLabel(parsed['payload']);
-      if (label !== null) labels.push(label);
+    const labels: RowLabel[] = [];
+    for await (const { content } of session.rows()) {
+      labels.push({
+        seq: content.metadata?.chronology?.seq ?? Number.NaN,
+        text: content.blocks
+          .filter((block) => block.type === 'text')
+          .map((block) => block.text)
+          .join('\n'),
+      });
     }
+    return labels;
+  } finally {
+    await session.close();
   }
-  return labels;
-}
-
-/** ReplayEngine reference: conversation rows exactly as resume replays them. */
-async function replayReference(filePath: string): Promise<RowLabel[]> {
-  const result = await replaySession(filePath, PROJECT_HASH);
-  if (!result.ok) {
-    throw new Error(`fixture replay failed: ${result.error}`);
-  }
-  const labels: RowLabel[] = [];
-  for (const content of result.history) {
-    const texts: string[] = [];
-    for (const block of content.blocks) {
-      if (block.type === 'text') texts.push(block.text);
-    }
-    labels.push({
-      seq: content.metadata?.chronology?.seq ?? Number.NaN,
-      text: texts.join('\n'),
-    });
-  }
-  return labels;
 }
 
 describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @requirement:G1', () => {
@@ -304,7 +228,7 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
         purgeDebounceMs: 1500,
       },
       ...overrides,
-    }) as ResumableScrollbackPagerStore;
+    });
     stores.push(store);
     const summary = await store.resumeFromJournal();
     return { store, summary };
@@ -349,7 +273,7 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it('resume equivalence vs ReplayEngine: pageBack-to-floor walk reproduces the replayed conversation', async () => {
+  it('resume equivalence vs native rows: pageBack-to-floor walk reproduces the replayed conversation', async () => {
     await fixture.addSessionStart();
     for (let seq = 1; seq <= 12; seq += 1) {
       if (seq === 4 || seq === 9) {
@@ -363,11 +287,11 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
     expect(store.getState().atVisibilityFloor).toBe(true);
 
     expect(journalRowLabels(store)).toStrictEqual(
-      await replayReference(fixture.filePath),
+      await nativeReference(fixture.filePath),
     );
   });
 
-  it('resume equivalence vs eager full parse: multi-page walk over a 30-row journal matches line-for-line', async () => {
+  it('resume equivalence vs native row tree: multi-page walk over a 30-row journal matches row-for-row', async () => {
     await fixture.addSessionStart();
     for (let seq = 1; seq <= 30; seq += 1) {
       await fixture.addUser(seq);
@@ -377,8 +301,13 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
     expect(store.getState().atVisibilityFloor).toBe(true);
 
     const walked = journalRowLabels(store);
-    expect(walked).toStrictEqual(await eagerReference(fixture.filePath));
-    expect(walked).toStrictEqual(await replayReference(fixture.filePath));
+    expect(walked).toStrictEqual(await nativeReference(fixture.filePath));
+    expect(walked).toStrictEqual(
+      Array.from({ length: 30 }, (_, index) => ({
+        seq: index + 1,
+        text: `r-${index + 1}${'x'.repeat(ROW_PAD_CHARS)}`,
+      })),
+    );
     expect(walked.map((row) => row.seq)).toStrictEqual(
       Array.from({ length: 30 }, (_, i) => i + 1),
     );
@@ -389,7 +318,7 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
     for (let seq = 1; seq <= 4; seq += 1) {
       await fixture.addUser(seq);
     }
-    await fixture.addRewind(5, 2, 3);
+    await fixture.popRows(2);
     for (let seq = 6; seq <= 9; seq += 1) {
       await fixture.addUser(seq);
     }
@@ -398,7 +327,7 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
 
     const walked = journalRowLabels(store);
     expect(walked.map((row) => row.seq)).toStrictEqual([1, 2, 6, 7, 8, 9]);
-    expect(walked).toStrictEqual(await replayReference(fixture.filePath));
+    expect(walked).toStrictEqual(await nativeReference(fixture.filePath));
   });
 
   it('pageBack after resume yields only rows older than the seeded page', async () => {
@@ -474,19 +403,22 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
     expect(seqs[seqs.length - 1]).toBe(6);
   });
 
-  it('floor offset after resume is the newest full clear', async () => {
+  it('a native full clear exposes only its successor rows and no physical boundary', async () => {
     await fixture.addSessionStart();
     for (let seq = 1; seq <= 4; seq += 1) {
       await fixture.addUser(seq);
     }
-    const rewindOffset = await fixture.addRewind(5, 4, 1);
+    await fixture.popRows(4);
     for (let seq = 6; seq <= 9; seq += 1) {
       await fixture.addUser(seq);
     }
 
     const { store, summary } = await makeResumedStore({ pageRows: 4 });
-    expect(summary.floorOffset).toBe(rewindOffset);
-    expect(summary.atClearBoundary).toBe(true);
+    expect(summary.floorOffset).toBe(0);
+    expect(store.getState().rows.map((row) => row.seq)).toStrictEqual([
+      6, 7, 8, 9,
+    ]);
+    expect(summary.atClearBoundary).toBe(false);
     expect(store.getState().atVisibilityFloor).toBe(true);
   });
 
@@ -495,7 +427,7 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
     for (let seq = 1; seq <= 4; seq += 1) {
       await fixture.addUser(seq);
     }
-    await fixture.addRewind(5, 2, 3);
+    await fixture.popRows(2);
 
     const { summary } = await makeResumedStore({ pageRows: 4 });
     expect(summary.floorOffset).toBe(0);
@@ -550,15 +482,13 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
     expect(state.error).toBeNull();
   });
 
-  it('resume on a zero-byte journal seeds nothing and floors at byte 0', async () => {
-    await fs.writeFile(fixture.filePath, '', 'utf8');
-
+  it('resume on an empty native journal seeds nothing and floors at byte 0', async () => {
     const { store, summary } = await makeResumedStore({ pageRows: 4 });
     expect(summary.seededRows).toBe(0);
     expect(summary.headSeq).toBeNull();
     expect(summary.tailSeq).toBeNull();
     expect(summary.floorOffset).toBe(0);
-    expect(summary.tailOffset).toBe(0);
+    expect(summary.tailOffset).toBe((await fs.stat(fixture.filePath)).size);
     const state = store.getState();
     expect(state.rows).toHaveLength(0);
     expect(state.atVisibilityFloor).toBe(true);

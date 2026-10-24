@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -15,11 +16,28 @@ import type {
   InlineMediaBlock,
   MediaReferenceBlock,
 } from '../services/history/IContent.js';
-import { replaySession } from '../recording/ReplayEngine.js';
-import { SessionRecordingService } from '../recording/SessionRecordingService.js';
+import { JournalRecordingService } from '../recording/journalRecordingService.js';
+import {
+  JournalResumeBoot,
+  resumePointOf,
+} from '../recording/journalResume.js';
+import { JournalSession } from '../services/history/journalSession.js';
+import { readJournalFileFacts } from '../recording/journalSessionListing.js';
+import { retiredJournalMessage } from '../journal/journalRefusal.js';
 import { LocalMediaStore } from './local-media-store.js';
 import { MediaAdmissionService } from './media-admission-service.js';
 import { SessionPersistenceService } from './SessionPersistenceService.js';
+
+function diagnosticMessages(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  return [
+    error.message,
+    ...(error instanceof AggregateError
+      ? error.errors.map(diagnosticMessages)
+      : []),
+    ...(error.cause === undefined ? [] : [diagnosticMessages(error.cause)]),
+  ].join('\n');
+}
 
 describe('media-session-lifecycle', () => {
   const PNG_BASE64 =
@@ -108,7 +126,7 @@ describe('media-session-lifecycle', () => {
           { turnId: 'turn-media', source: 'clipboard' },
         );
         const chatsDir = join(tempDirectory(), 'chats');
-        const recording = new SessionRecordingService({
+        const recording = JournalRecordingService.create({
           sessionId: 'session-media',
           projectHash: 'project-hash',
           chatsDir,
@@ -117,34 +135,17 @@ describe('media-session-lifecycle', () => {
           model: 'test',
         });
         try {
-          recording.recordContent(admitted);
+          await (await recording.session()).append([admitted]);
           await recording.flush();
           const filePath = recording.getFilePath();
           assertNotNull(filePath, 'Expected materialized recording');
           const serialized = await readFile(filePath, 'utf8');
-          const replay = await replaySession(filePath, 'project-hash', {
-            mediaStore: store,
-          });
-          const versions = serialized
-            .trim()
-            .split('\n')
-            .map((line) => {
-              const parsed: unknown = JSON.parse(line);
-              if (
-                typeof parsed !== 'object' ||
-                parsed === null ||
-                !('v' in parsed)
-              ) {
-                throw new Error('Expected versioned recording line');
-              }
-              return parsed.v;
-            });
-          expect(versions).toStrictEqual([1, 2]);
+          await recording.dispose();
+          const rows = await nativeRows(filePath, store);
+          expect(serialized.slice(0, 8)).toBe('LLXJRNL\0');
           expect(serialized).not.toContain(PNG_BASE64);
           expect(serialized).not.toContain(tempDirectory());
-          expect(replay.ok).toBe(true);
-          if (!replay.ok) throw new Error(replay.error);
-          expect(referenceFrom(replay.history[0]).contentId).toBe(
+          expect(referenceFrom(rows[0]).contentId).toBe(
             referenceFrom(admitted).contentId,
           );
         } finally {
@@ -186,7 +187,7 @@ describe('media-session-lifecycle', () => {
           },
           { turnId: 'turn-private-recording', source: 'at-command' },
         );
-        const recording = new SessionRecordingService({
+        const recording = JournalRecordingService.create({
           sessionId: 'session-private-media',
           projectHash: 'project-hash',
           chatsDir: join(tempDirectory(), 'chats-private'),
@@ -196,11 +197,12 @@ describe('media-session-lifecycle', () => {
         });
 
         try {
-          recording.recordContent(admitted);
+          await (await recording.session()).append([admitted]);
           await recording.flush();
           const filePath = recording.getFilePath();
           assertNotNull(filePath, 'Expected materialized recording');
           const serialized = await readFile(filePath, 'utf8');
+          await recording.dispose();
 
           expect(serialized).toContain(JSON.stringify(caption));
           expect(serialized).toContain(JSON.stringify(filename));
@@ -212,49 +214,43 @@ describe('media-session-lifecycle', () => {
         }
       });
 
-      it('accepts legacy inline replay without a media store', async () => {
+      it('refuses retired inline recordings with the exact file diagnostic', async () => {
         const filePath = join(tempDirectory(), 'legacy.jsonl');
-        const records = [
-          {
-            v: 1,
-            seq: 1,
-            ts: '2026-08-23T00:00:00.000Z',
-            type: 'session_start',
-            payload: {
-              sessionId: 'legacy',
-              projectHash: 'project-hash',
-              workspaceDirs: [],
-              provider: 'test',
-              model: 'test',
-              startTime: '2026-08-23T00:00:00.000Z',
-            },
-          },
-          {
-            v: 1,
-            seq: 2,
-            ts: '2026-08-23T00:00:01.000Z',
-            type: 'content',
-            payload: { content: inlineContent() },
-          },
-        ];
         await writeFile(
           filePath,
-          records.map((record) => JSON.stringify(record)).join('\n'),
+          JSON.stringify({
+            v: 1,
+            seq: 1,
+            type: 'content',
+            payload: { content: inlineContent() },
+          }) + '\n',
         );
-
-        const replay = await replaySession(filePath, 'project-hash');
-
-        expect(replay.ok).toBe(true);
-        if (!replay.ok) throw new Error(replay.error);
-        expect(replay.history[0]).toStrictEqual(inlineContent());
+        await expect(JournalSession.open(filePath)).rejects.toThrow(
+          retiredJournalMessage(filePath),
+        );
       });
 
-      it('migrates legacy inline local media during replay while preserving URL media', async () => {
+      it('reads native inline media without a media store', async () => {
+        const recording = await nativeFixture(
+          tempDirectory(),
+          'inline',
+          inlineContent(),
+        );
+        try {
+          const filePath = requirePath(recording);
+          await recording.dispose();
+          const rows = await nativeRows(filePath);
+          expect(rows[0]).toStrictEqual(inlineContent());
+        } finally {
+          await recording.dispose();
+        }
+      });
+
+      it('records admitted local media while preserving URL media', async () => {
         const store = new LocalMediaStore({
           rootDirectory: join(tempDirectory(), 'replay-media'),
           quotaBytes: 1024,
         });
-        const filePath = join(tempDirectory(), 'legacy-with-store.jsonl');
         const legacyContent: IContent = {
           ...inlineContent(),
           blocks: [
@@ -267,47 +263,28 @@ describe('media-session-lifecycle', () => {
             },
           ],
         };
-        const records = [
-          {
-            v: 1,
-            seq: 1,
-            ts: '2026-08-23T00:00:00.000Z',
-            type: 'session_start',
-            payload: {
-              sessionId: 'legacy-with-store',
-              projectHash: 'project-hash',
-              workspaceDirs: [],
-              provider: 'test',
-              model: 'test',
-              startTime: '2026-08-23T00:00:00.000Z',
-            },
-          },
-          {
-            v: 1,
-            seq: 2,
-            ts: '2026-08-23T00:00:01.000Z',
-            type: 'content',
-            payload: { content: legacyContent },
-          },
-        ];
-        await writeFile(
-          filePath,
-          records.map((record) => JSON.stringify(record)).join('\n'),
+        const admitted = await new MediaAdmissionService(store).admitContent(
+          legacyContent,
+          { turnId: 'turn-media', source: 'native-recording' },
         );
-
-        const replay = await replaySession(filePath, 'project-hash', {
-          mediaStore: store,
-        });
-
-        expect(replay.ok).toBe(true);
-        if (!replay.ok) throw new Error(replay.error);
-        const localBlock = replay.history[0].blocks[0];
-        if (localBlock.type !== 'media')
-          throw new Error('Expected local media');
-        expect(localBlock.encoding).toBe('reference');
-        expect(replay.history[0].blocks[1]).toStrictEqual(
-          legacyContent.blocks[1],
+        const recording = await nativeFixture(
+          tempDirectory(),
+          'admitted',
+          admitted,
         );
+        try {
+          const filePath = requirePath(recording);
+          await recording.dispose();
+          const rows = await nativeRows(filePath, store);
+          const localBlock = rows[0].blocks[0];
+          if (localBlock.type !== 'media')
+            throw new Error('Expected local media');
+          expect(localBlock.encoding).toBe('reference');
+          expect(rows[0].blocks[1]).toStrictEqual(legacyContent.blocks[1]);
+        } finally {
+          await recording.dispose();
+          await store.close();
+        }
       });
 
       it('rejects malformed, missing, and corrupt references after closing each store before external mutation', async () => {
@@ -352,34 +329,13 @@ describe('media-session-lifecycle', () => {
           }> = [];
 
           for (const [index, content] of cases.entries()) {
-            const filePath = join(tempDirectory(), `case-${index}.jsonl`);
-            const records = [
-              {
-                v: 1,
-                seq: 1,
-                ts: '2026-08-23T00:00:00.000Z',
-                type: 'session_start',
-                payload: {
-                  sessionId: `case-${index}`,
-                  projectHash: 'project-hash',
-                  workspaceDirs: [],
-                  provider: 'test',
-                  model: 'test',
-                  startTime: '2026-08-23T00:00:00.000Z',
-                },
-              },
-              {
-                v: 1,
-                seq: 2,
-                ts: '2026-08-23T00:00:01.000Z',
-                type: 'content',
-                payload: { content },
-              },
-            ];
-            await writeFile(
-              filePath,
-              records.map((record) => JSON.stringify(record)).join('\n'),
+            const recording = await nativeFixture(
+              tempDirectory(),
+              'case-' + index,
+              content,
             );
+            const filePath = requirePath(recording);
+            await recording.dispose();
             if (index === 1) {
               await rm(objectPath);
             }
@@ -395,12 +351,13 @@ describe('media-session-lifecycle', () => {
                   })
                 : verificationStore;
             if (index === 2) stores.push(replayStore);
-            const replay = await replaySession(filePath, 'project-hash', {
-              mediaStore: replayStore,
-            });
+            const error = await nativeRows(filePath, replayStore).then(
+              () => undefined,
+              (failure: unknown) => failure,
+            );
             outcomes.push({
-              ok: replay.ok,
-              error: replay.ok ? undefined : replay.error,
+              ok: error === undefined,
+              error: error instanceof Error ? error.message : undefined,
             });
             if (index === 1) {
               await verificationStore.admit({
@@ -428,7 +385,7 @@ describe('media-session-lifecycle', () => {
         }
       });
 
-      it('preserves content and turn diagnostics when replay verification and release both fail', async () => {
+      it('preserves native read verification diagnostics without creating a replay reservation', async () => {
         const mediaRoot = join(tempDirectory(), 'aggregate-replay-media');
         const sourceStore = new LocalMediaStore({
           rootDirectory: mediaRoot,
@@ -439,7 +396,7 @@ describe('media-session-lifecycle', () => {
           mimeType: 'application/octet-stream',
           semanticMetadata: {},
         });
-        const recording = new SessionRecordingService({
+        const recording = JournalRecordingService.create({
           sessionId: 'aggregate-replay',
           projectHash: 'project-hash',
           chatsDir: join(tempDirectory(), 'aggregate-replay-chats'),
@@ -449,29 +406,66 @@ describe('media-session-lifecycle', () => {
         });
 
         try {
-          recording.recordContent({
-            speaker: 'human',
-            blocks: [reference],
-            metadata: { turnId: 'aggregate-replay-turn' },
-          });
+          await (
+            await recording.session()
+          ).append([
+            {
+              speaker: 'human',
+              blocks: [reference],
+              metadata: { turnId: 'aggregate-replay-turn' },
+            },
+          ]);
           await recording.flush();
           const filePath = recording.getFilePath();
           assertNotNull(filePath, 'Expected materialized recording');
+          await recording.dispose();
           const failingStore = new ReplayDiagnosticFailureStore({
             rootDirectory: mediaRoot,
             quotaBytes: 1024,
           });
 
-          const replay = await replaySession(filePath, 'project-hash', {
-            mediaStore: failingStore,
+          const failure = await nativeRows(filePath, failingStore).then(
+            () => undefined,
+            (error: unknown) => error,
+          );
+          expect(failure).toBeInstanceOf(Error);
+          if (!(failure instanceof Error)) throw failure;
+          expect(failure.message).toContain(reference.contentId);
+          expect(failure.message).toContain('turn=aggregate-replay-turn');
+          expect(failure.cause).toBeInstanceOf(Error);
+          if (!(failure.cause instanceof Error)) throw failure.cause;
+          expect(failure.cause.message).toContain('verification unavailable');
+          expect(await failingStore.hasReservations(reference.contentId)).toBe(
+            false,
+          );
+          const persistenceConfig = {
+            projectRoot: tempDirectory(),
+            chatsDir: join(tempDirectory(), 'aggregate-persistence'),
+          };
+          const persisted = new SessionPersistenceService(
+            persistenceConfig,
+            'aggregate-persistence',
+            { mediaStore: sourceStore },
+          );
+          await collectJournalFileRowsForAssertions(filePath, async (rows) => {
+            await persisted.save([...rows]);
           });
-
-          expect(replay.ok).toBe(false);
-          if (replay.ok) throw new Error('Expected replay failure');
-          expect(replay.error).toContain(reference.contentId);
-          expect(replay.error).toContain('turn=aggregate-replay-turn');
-          expect(replay.error).toContain('verification unavailable');
-          expect(replay.error).toContain('release unavailable');
+          const loader = new SessionPersistenceService(
+            persistenceConfig,
+            'aggregate-persistence',
+            { mediaStore: failingStore },
+          );
+          const loadFailure = await loader.loadMostRecent().then(
+            () => undefined,
+            (error: unknown) => error,
+          );
+          expect(loadFailure).toBeInstanceOf(AggregateError);
+          const diagnostics = diagnosticMessages(loadFailure);
+          expect(diagnostics).toContain(reference.contentId);
+          expect(diagnostics).toContain('turn=aggregate-replay-turn');
+          expect(diagnostics).toContain('verification unavailable');
+          expect(diagnostics).toContain('release unavailable');
+          await failingStore.close();
         } finally {
           await recording.dispose();
         }
@@ -516,3 +510,57 @@ describe('media-session-lifecycle', () => {
     });
   });
 });
+
+function requirePath(recording: JournalRecordingService): string {
+  const path = recording.getFilePath();
+  assertNotNull(path, 'Expected materialized native recording');
+  return path;
+}
+
+async function nativeFixture(
+  directory: string,
+  id: string,
+  content: IContent,
+): Promise<JournalRecordingService> {
+  const recording = JournalRecordingService.create({
+    sessionId: id,
+    projectHash: 'project-hash',
+    chatsDir: join(directory, id),
+    workspaceDirs: [],
+    provider: 'test',
+    model: 'test',
+  });
+  await (await recording.session()).append([content]);
+  return recording;
+}
+
+async function nativeRows(
+  filePath: string,
+  mediaStore?: LocalMediaStore,
+): Promise<IContent[]> {
+  const file = await readJournalFileFacts(filePath);
+  if (file === undefined) throw new Error('Missing session facts');
+  const recording = await JournalRecordingService.open(
+    {
+      sessionId: file.facts.sessionId,
+      projectHash: 'project-hash',
+      chatsDir: join(filePath, '..'),
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+      mediaStore,
+    },
+    filePath,
+  );
+  try {
+    const boot = new JournalResumeBoot(
+      recording,
+      await resumePointOf(recording),
+    );
+    const rows: IContent[] = [];
+    for await (const row of boot.streamRows()) rows.push(row);
+    return rows;
+  } finally {
+    await recording.dispose();
+  }
+}

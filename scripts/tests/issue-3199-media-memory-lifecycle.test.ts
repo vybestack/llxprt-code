@@ -12,7 +12,7 @@ import { describe, expect, it } from 'bun:test';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import { createSessionRecorder } from '../../packages/core/src/recording/sessionRecorderFactory.js';
 import { requireJournalRecorder } from '../../packages/core/src/services/history/recorderBackend.js';
-import { NativeRecordingProbe } from '../issue-3199-native-recording-probe.js';
+import { NativeRecordingProbe } from '../../packages/core/src/storage/native-recording-probe.test-support.js';
 import { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { SessionPersistenceService } from '../../packages/core/src/storage/SessionPersistenceService.js';

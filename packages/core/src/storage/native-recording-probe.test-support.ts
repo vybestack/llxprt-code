@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { open } from 'node:fs/promises';
-import type { JournalSessionOptions } from '../packages/core/src/services/history/journalSession.js';
+import type { JournalSessionOptions } from '../services/history/journalSession.js';
 
 export class NativeRecordingProbe {
   private pendingBytes = 0;
@@ -47,11 +47,15 @@ export class NativeRecordingProbe {
     this.observe = observe;
     try {
       await write();
-      if (this.observe !== undefined)
-        throw new Error('Native recording produced no write to observe');
+      this.requireObserved();
     } finally {
       this.observe = undefined;
     }
+  }
+
+  private requireObserved(): void {
+    if (this.observe !== undefined)
+      throw new Error('Native recording produced no write to observe');
   }
 
   private async withBytes<T>(
