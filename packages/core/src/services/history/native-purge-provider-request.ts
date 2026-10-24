@@ -10,7 +10,6 @@ import type {
   HistoryPrepareCuratedRequest,
   HistoryStorePort,
 } from './historyStorePort.js';
-import { oldProviderRequest } from './old-provider-request.js';
 import { callerOwnedProviderRequest } from './caller-owned-provider-request.js';
 
 export function prepareJournalProviderRequest(
@@ -33,9 +32,11 @@ export function prepareJournalProviderRequest(
         request.options,
       );
     if (override !== undefined) {
-      return isNativeProviderHistory(override)
-        ? override.prepareProviderSnapshot(request.tail, request.options)
-        : oldProviderRequest(store, request);
+      if (!isNativeProviderHistory(override))
+        throw new Error(
+          'Non-array history overrides require a provider snapshot opener',
+        );
+      return override.prepareProviderSnapshot(request.tail, request.options);
     }
     return JournalProviderRequestSnapshot.create(
       await store.settledSnapshot(() => Promise.resolve()),
