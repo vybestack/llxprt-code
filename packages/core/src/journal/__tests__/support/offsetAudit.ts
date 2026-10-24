@@ -5,6 +5,7 @@ import { decodeIdFact, ID_FACT_MIN_BYTES } from '../../idFactCodec.js';
 import { BoundedIdNodeCache } from '../../idTrieCache.js';
 import { IdTrieReader } from '../../idTrieReader.js';
 import { decodeMapRef } from '../../keyedMap.js';
+import { isNeutralRowFact } from '../../neutral-row-fact-codec.js';
 import {
   OFFSET,
   OFFSET_FIELDS,
@@ -187,6 +188,7 @@ export class OffsetAudit {
     } else if (values === 'state') {
       await this.check(OFFSET.stateValue, decodeMapRef(value), node);
     } else if (
+      !isNeutralRowFact(value) &&
       value.length >= ID_FACT_MIN_BYTES &&
       value.length !== TOOL_RANK_NODE_BYTES
     ) {
