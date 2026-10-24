@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { captureBodyAttempt } from '../../../packages/test-utils/src/body-evidence-writer.js';
+import { bodyRequestRows } from './body-request-rows.js';
 import { randomUUID } from 'node:crypto';
 import { withFetchPreconnect } from '../../../packages/test-utils/src/fetch-test-helpers.js';
 import type { IContent } from '../../../packages/core/src/services/history/IContent.js';
@@ -93,7 +94,8 @@ export async function captureTruncationBody(
       orchestrated,
       responseContents,
     );
-  const { options, rows } = prepareOpenAI(contents, caching);
+  const selection = await bodyRequestRows(contents);
+  const { options, rows } = prepareOpenAI(selection.openReader(), caching);
   const provider = new OpenAIProvider('test-key', 'https://api.openai.com/v1');
   const selected = orchestrated
     ? new RetryOrchestrator(provider, {
@@ -121,6 +123,8 @@ export async function captureTruncationBody(
     for await (const chunk of selected.generateChatCompletion({
       ...options,
       contents: rows,
+      requestRows: selection,
+      contentCount: selection.count,
     })) {
       responseContents?.push(chunk);
     }
