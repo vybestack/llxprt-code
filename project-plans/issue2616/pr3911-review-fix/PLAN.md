@@ -992,7 +992,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T1.11 E9b move providers specs to agents
 - [x] T1.12 E9c real capability delivery per platform
 - [x] T1.13 E3 delete three test-only helpers
-- [ ] T2.0 A3 transport inventory
+- [x] T2.0 A3 transport inventory
 - [ ] T2.1 forwarding proxy fixture and control
 - [ ] T2.2 A3 wrapper-created invocations and manager transport
 - [ ] T2.3a A3 lifecycle network phase and pre-release actions
@@ -1001,6 +1001,17 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [ ] T2.3d A3 sessions borrow root network, child runtime loader
 - [ ] T2.4 A3 compression profile root transport
 - [ ] T2.5a-n A3 test-built invocations pass fetch (ids added by T2.0)
+  - [ ] T2.5a A3 test-built invocations pass fetch: packages/core, 8 files (file list in inventory-phase2.md)
+  - [ ] T2.5b A3 test-built invocations pass fetch: packages/test-utils, 1 file (file list in inventory-phase2.md)
+  - [ ] T2.5c A3 test-built invocations pass fetch: packages/providers, 15 files (file list in inventory-phase2.md)
+  - [ ] T2.5d A3 test-built invocations pass fetch: packages/providers, 15 files (file list in inventory-phase2.md)
+  - [ ] T2.5e A3 test-built invocations pass fetch: packages/providers, 15 files (file list in inventory-phase2.md)
+  - [ ] T2.5f A3 test-built invocations pass fetch: packages/providers, 14 files (file list in inventory-phase2.md)
+  - [ ] T2.5g A3 test-built invocations pass fetch: packages/agents, 15 files (file list in inventory-phase2.md)
+  - [ ] T2.5h A3 test-built invocations pass fetch: packages/agents, 15 files (file list in inventory-phase2.md)
+  - [ ] T2.5i A3 test-built invocations pass fetch: packages/agents, 15 files (file list in inventory-phase2.md)
+  - [ ] T2.5j A3 test-built invocations pass fetch: packages/agents, 14 files (file list in inventory-phase2.md)
+  - [ ] T2.5k A3 test-built invocations pass fetch: plugins/google-gemini, 5 files (file list in inventory-phase2.md)
 - [ ] T2.6 A3 fetch required, fallbacks deleted
 - [ ] T2.7a A7 Vertex file and explicit credentials through the owner transporter
 - [ ] T2.7b A7 Vertex metadata discovery and metadata tokens through the owner transport
