@@ -163,7 +163,10 @@ export async function lastTurnMarkerOf(
   for (let index = snapshot.rows - 1; index >= 0; index--) {
     const entry = await snapshot.entryAt(index);
     if (entry.chronologySeq === CHRONOLOGY_SEQ_NONE) continue;
-    const row = decodeStoredRow(await snapshot.readRow(entry), resumeBoundary);
+    const row = decodeStoredRow(
+      await snapshot.readMetadata(entry),
+      resumeBoundary,
+    );
     const release = countDecodedRow(row, counters);
     try {
       return findCurrentTurnMarker([row]);

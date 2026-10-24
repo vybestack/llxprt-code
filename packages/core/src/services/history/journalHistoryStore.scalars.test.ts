@@ -118,6 +118,29 @@ describe('journal store scalars and last rows', () => {
     });
   });
 
+  it('reads a turn marker without loading message blocks', async () => {
+    const store = await created();
+    const marked = row('human', 'payload '.repeat(8192), 37);
+    marked.metadata = { ...marked.metadata, turnId: 'current-turn' };
+    store.apply({ kind: 'content', content: marked });
+    await store.waitForDurable();
+    const rows = spyOn(VersionSnapshot.prototype, 'readRow').mockImplementation(
+      () => {
+        throw new Error('Turn marker loaded message blocks');
+      },
+    );
+    try {
+      expect(await store.currentTurnMarker()).toStrictEqual({
+        turnId: 'current-turn',
+        userTurn: 1,
+        step: 37,
+        seq: 37,
+      });
+    } finally {
+      rows.mockRestore();
+    }
+  });
+
   it('reports an unknown marker when all stored rows are unmarked', async () => {
     const store = await created();
     store.apply({ kind: 'content', content: row('human', 'unmarked') });
