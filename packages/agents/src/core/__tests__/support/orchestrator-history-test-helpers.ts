@@ -134,6 +134,7 @@ export async function withOrchestratorHistory<T>(
         100_000_000,
       );
       const client = agent.agentClient;
+      const priorHistory = client.getHistoryService();
       client.storeHistoryServiceForReuse(history);
       try {
         await client.startChat([]);
@@ -141,7 +142,11 @@ export async function withOrchestratorHistory<T>(
       } finally {
         history.release.resolve();
         history.releaseConsumer();
-        await cleanup();
+        try {
+          await cleanup();
+        } finally {
+          if (priorHistory !== history) await priorHistory?.dispose();
+        }
       }
     },
     bytes,

@@ -92,6 +92,7 @@ export async function withReinitializeHistory<T>(
         accountingFactory((text) => text.length),
       );
       internalSettingsService(agent).set('context-limit', 100_000_000);
+      const priorHistory = client.getHistoryService();
       client.storeHistoryServiceForReuse(history);
       try {
         await client.startChat([]);
@@ -105,7 +106,11 @@ export async function withReinitializeHistory<T>(
       } finally {
         history.release.resolve();
         history.releaseConsumer();
-        await cleanup();
+        try {
+          await cleanup();
+        } finally {
+          if (priorHistory !== history) await priorHistory?.dispose();
+        }
       }
     },
     bytes,

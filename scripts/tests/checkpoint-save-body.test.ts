@@ -9,6 +9,7 @@ import { withBatchFixture } from '../../packages/core/src/services/history/__tes
 import { exactTokenizer } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import { exportSummaryRow } from '../../packages/core/src/services/history/export-summary-test-helpers.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
+import type { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import { RequestMediaResolver } from '../../packages/core/src/storage/request-media-resolver.js';
 import {
   buildAgent,
@@ -88,11 +89,24 @@ async function savePair(
   await writeBodyFile(join(output, `${size}-checkpoint.json`), checkpoint);
 }
 
+async function disposeAgentHistories(
+  cleanup: () => Promise<void>,
+  priorHistory: HistoryService | null,
+  history: HistoryService,
+): Promise<void> {
+  try {
+    await cleanup();
+  } finally {
+    if (priorHistory !== history) await priorHistory?.dispose();
+  }
+}
+
 async function roundTrip(size: number): Promise<void> {
   await withBatchFixture(async ({ history }) => {
     await seedRows(history, size);
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     const client = internalAgentClient(agent);
+    const priorHistory = client.getHistoryService();
     const root = await mkdtemp(join(tmpdir(), 'checkpoint-body-'));
     try {
       bindClientTokenization(client, exactTokenizer());
@@ -148,8 +162,11 @@ async function roundTrip(size: number): Promise<void> {
         saved.bytes,
       );
     } finally {
-      await cleanup();
-      await rm(root, { recursive: true, force: true });
+      try {
+        await disposeAgentHistories(cleanup, priorHistory, history);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
     }
   });
 }

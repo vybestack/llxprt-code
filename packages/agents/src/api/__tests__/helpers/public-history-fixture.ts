@@ -41,6 +41,7 @@ export async function withPublicHistory<T>(
     async (history, reader, counters) => {
       const { agent, cleanup } = await buildAgent('plain-text.jsonl');
       const client = agent.agentClient;
+      const priorHistory = client.getHistoryService();
       client.storeHistoryServiceForReuse(history);
       try {
         if (active) await client.startChat([]);
@@ -52,7 +53,11 @@ export async function withPublicHistory<T>(
           () => counters.snapshot().rowsDecoded - before,
         );
       } finally {
-        await cleanup();
+        try {
+          await cleanup();
+        } finally {
+          if (priorHistory !== history) await priorHistory?.dispose();
+        }
       }
     },
     bytes,
