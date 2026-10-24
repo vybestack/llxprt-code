@@ -1,8 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { withNativePurgeFixture } from './__tests__/support/native-purge-fixture.js';
 import { SemanticMediaPurgeStreamCoordinator } from './semantic-purge-stream.js';
+import { selectNativeSemanticPurge } from './semantic-purge-native.js';
 import type { IContent } from './IContent.js';
 
 async function collect(rows: AsyncIterable<IContent>): Promise<IContent[]> {
@@ -28,28 +28,29 @@ describe('native semantic purge row preservation and facts', () => {
       { speaker: 'ai', blocks: [] },
       { speaker: 'human', blocks: [{ type: 'text', text: 'after' }] },
     ];
-    await withSuffixFixture(
-      3,
-      async (history) => {
-        const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
-          enabled: true,
-          explicitCacheWriteRequired: false,
-        });
-        const transaction = await coordinator.begin({ mode: 'remove' });
-        if (transaction === undefined) throw new Error('Missing purge');
-        try {
-          const rows = await collect(transaction.candidate.streamRows());
-          expect(rows.map((row) => [row.speaker, row.blocks])).toStrictEqual([
-            ['ai', []],
-            ['human', [{ type: 'text', text: 'after' }]],
-          ]);
-        } finally {
-          await transaction.close();
-        }
+    const selection = await selectNativeSemanticPurge(
+      {
+        length: rows.length,
+        async *streamRows() {
+          yield* rows;
+        },
+        readRow: async (index) => rows[index],
+        isCurrent: () => true,
+        restore: async () => {},
+        close: async () => {},
       },
-      0,
-      (index) => rows[index],
+      { mode: 'remove' },
     );
+    if (selection === undefined) throw new Error('Missing purge');
+    try {
+      const candidate = await collect(selection.candidate.streamRows());
+      expect(candidate.map((row) => [row.speaker, row.blocks])).toStrictEqual([
+        ['ai', []],
+        ['human', [{ type: 'text', text: 'after' }]],
+      ]);
+    } finally {
+      await selection.candidate.close();
+    }
   });
 
   it('fills Kimi facts for both base and candidate request pins', async () => {
