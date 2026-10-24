@@ -147,6 +147,32 @@ function summaryTriggerRow(priorSnapshot: boolean): IContent {
   };
 }
 
+function compressionRowReader(
+  rows: HistoryIndexedRows,
+  scope: HistoryReaderScope,
+): {
+  read(index: number): Promise<IContent>;
+  close(): Promise<void>;
+} {
+  let current: { readonly index: number; readonly row: IContent } | undefined;
+  return {
+    async read(index) {
+      if (current?.index === index) return current.row;
+      current = undefined;
+      const row = sanitizeHistoryForCompression([await rows.readRow(index)])[0];
+      current = { index, row };
+      return row;
+    },
+    async close() {
+      try {
+        await scope.close();
+      } finally {
+        current = undefined;
+      }
+    },
+  };
+}
+
 /**
  * The complete summarization request as a repeatable selection: the security
  * preamble, the compression prompt, the sanitized journal rows in
@@ -171,8 +197,7 @@ export function diskSummaryRequestSelection(
   };
   const count = SUMMARY_FRAME_ROWS + (plan.bottom - plan.top) + tail.length;
   const journalEnd = 2 + (plan.bottom - plan.top);
-  const sanitizedAt = async (journalIndex: number): Promise<IContent> =>
-    sanitizeHistoryForCompression([await rows.readRow(journalIndex)])[0];
+  const sanitized = compressionRowReader(rows, scope);
   // The trigger row depends on every journal row, so a random read of it scans
   // the journal once; the answer is kept for later reads.
   let scannedSnapshot: boolean | undefined;
@@ -210,6 +235,7 @@ export function diskSummaryRequestSelection(
     yield summaryTriggerRow(priorSnapshot);
   }
   return {
+    callerOwned: true,
     count,
     openReader: (signal) => scope.open(readRows(signal)),
     readAt(index, signal) {
@@ -219,7 +245,7 @@ export function diskSummaryRequestSelection(
         if (index === 0) return COMPRESSION_SECURITY_PREAMBLE;
         if (index === 1) return promptRow;
         if (index < journalEnd) {
-          const row = await sanitizedAt(plan.top + index - 2);
+          const row = await sanitized.read(plan.top + index - 2);
           signal?.throwIfAborted();
           return row;
         }
@@ -229,6 +255,6 @@ export function diskSummaryRequestSelection(
         return summaryTriggerRow(found);
       });
     },
-    close: () => scope.close(),
+    close: () => sanitized.close(),
   };
 }

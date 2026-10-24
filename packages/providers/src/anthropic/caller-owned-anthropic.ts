@@ -35,9 +35,14 @@ class CallerOwnedAnthropicIndex implements AnthropicRequestRepairIndex {
   lastThinking = -1;
   constructor(
     private readonly source: AnthropicRepairSource<AnthropicRepairRows>,
+    private readonly toolFree: boolean,
   ) {}
 
   async prepare(): Promise<void> {
+    if (this.toolFree) {
+      this.lastThinking = await this.source.lastThinking();
+      return;
+    }
     for await (const message of this.source.messages())
       this.entries.push(message);
     this.lastThinking = await this.source.lastThinking();
@@ -56,6 +61,10 @@ class CallerOwnedAnthropicIndex implements AnthropicRequestRepairIndex {
     );
   }
   async *messages(from: number): AsyncGenerator<RepairMessage> {
+    if (this.toolFree) {
+      yield* this.source.messages(from);
+      return;
+    }
     for (const message of this.entries) if (message.end >= from) yield message;
   }
   async decision(
@@ -154,13 +163,11 @@ export async function callerOwnedAnthropicEngine(
   policy: RepairPolicy,
   rawDump = false,
 ): Promise<AnthropicStreamRepair<AnthropicRepairRows>> {
-  const query: AnthropicRepairRows = Object.assign(
-    await CallerOwnedToolQuery.create(rows),
-    {
-      readAt: rows.readAt,
-      ...(rawDump ? { rawChainAt: (at: number) => index.rawChainAt(at) } : {}),
-    },
-  );
+  const toolQuery = await CallerOwnedToolQuery.create(rows);
+  const query: AnthropicRepairRows = Object.assign(toolQuery, {
+    readAt: rows.readAt,
+    ...(rawDump ? { rawChainAt: (at: number) => index.rawChainAt(at) } : {}),
+  });
   const source = new AnthropicRepairSource(
     query,
     settings,
@@ -168,7 +175,7 @@ export async function callerOwnedAnthropicEngine(
     undefined,
     false,
   );
-  const index = new CallerOwnedAnthropicIndex(source);
+  const index = new CallerOwnedAnthropicIndex(source, !toolQuery.hasToolBlocks);
   await index.prepare();
   return AnthropicStreamRepair.fromSource(
     new AnthropicRepairSource(query, settings, index, undefined, false),

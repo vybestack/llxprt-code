@@ -12,6 +12,7 @@ import {
 
 export class CallerOwnedToolQuery {
   private readonly positions = new Map<string, number[]>();
+  hasToolBlocks = false;
   private constructor(readonly count: number) {}
 
   static async create(
@@ -34,6 +35,7 @@ export class CallerOwnedToolQuery {
     for (const block of row.blocks) {
       if (block.type !== 'tool_call' && block.type !== 'tool_response')
         continue;
+      this.hasToolBlocks = true;
       const call = block.type === 'tool_call';
       const rawId = call ? block.id : block.callId;
       const responseOpenAI = row.speaker === 'tool';

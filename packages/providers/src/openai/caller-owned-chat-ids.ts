@@ -15,7 +15,14 @@ export async function callerOwnedChatIds(
   const mapper = getToolIdStrategy(format).createStreamingMapper(
     createInMemoryToolIdStore(),
   );
-  for await (const row of rows.openReader()) mapper.observe(row);
+  let hasTools = false;
+  for await (const row of rows.openReader()) {
+    hasTools ||= row.blocks.some(
+      (block) => block.type === 'tool_call' || block.type === 'tool_response',
+    );
+    mapper.observe(row);
+  }
+  if (!hasTools) return undefined;
   const ids: string[][] = [];
   for await (const row of rows.openReader()) {
     ids.push(
