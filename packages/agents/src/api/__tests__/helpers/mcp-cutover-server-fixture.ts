@@ -229,3 +229,147 @@ export function listenCutoverFixtureServer(
     });
   });
 }
+
+export interface NoAuthMcpFixture {
+  readonly base: string;
+  readonly events: string[];
+  hold(method: string): void;
+  waitUntilHeld(method: string): Promise<void>;
+  release(method: string): void;
+  close(): Promise<void>;
+}
+
+interface HeldRequest {
+  readonly respond: () => void;
+}
+
+function readSessionResult(method: string): unknown {
+  if (method === 'initialize')
+    return {
+      protocolVersion: '2024-11-05',
+      capabilities: { resources: {} },
+      serverInfo: { name: 'same', version: '1' },
+    };
+  if (method === 'resources/list')
+    return { resources: [{ uri: 'test://same', name: 'same' }] };
+  if (method === 'resources/read')
+    return { contents: [{ uri: 'test://same', text: 'plain' }] };
+  return {};
+}
+
+async function listenOnLoopback(
+  server: ReturnType<typeof createServer>,
+): Promise<number> {
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address();
+  if (address === null || typeof address === 'string')
+    throw new Error('Missing server address');
+  return address.port;
+}
+
+function sendJsonRpcResult(
+  response: ServerResponse,
+  message: z.infer<typeof jsonRpcMessageSchema>,
+  sessionId: string | undefined,
+): void {
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+  };
+  if (sessionId !== undefined) headers['mcp-session-id'] = sessionId;
+  response.writeHead(200, headers);
+  response.end(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id: message.id,
+      result: readSessionResult(message.method),
+    }),
+  );
+}
+
+/**
+ * Unauthenticated streamable-HTTP MCP server. `hold(method)` withholds the
+ * response to the next JSON-RPC request with that method until `release`, and a
+ * held request whose socket closes is abandoned, so a client abort ends it.
+ * It records every request and session DELETE in `events`.
+ */
+export async function startNoAuthMcpFixture(): Promise<NoAuthMcpFixture> {
+  const events: string[] = [];
+  const armed = new Set<string>();
+  const held = new Map<string, HeldRequest>();
+  const waiters = new Map<string, Array<() => void>>();
+  let sessionCounter = 0;
+  const server = createServer((request, response) => {
+    let body = '';
+    request.on('data', (chunk: Buffer) => {
+      body += chunk.toString();
+    });
+    request.on('end', () => {
+      if (request.method === 'DELETE') {
+        events.push('delete');
+        response.writeHead(200);
+        response.end();
+        return;
+      }
+      if (request.method !== 'POST') {
+        response.writeHead(405);
+        response.end();
+        return;
+      }
+      const message = jsonRpcMessageSchema.parse(JSON.parse(body));
+      if (message.id === undefined) {
+        response.writeHead(202);
+        response.end();
+        return;
+      }
+      events.push(`request:${message.method}`);
+      const reply = (): void =>
+        sendJsonRpcResult(
+          response,
+          message,
+          message.method === 'initialize'
+            ? `session-${++sessionCounter}`
+            : undefined,
+        );
+      if (!armed.delete(message.method)) {
+        reply();
+        return;
+      }
+      events.push(`held:${message.method}`);
+      held.set(message.method, { respond: reply });
+      for (const wake of waiters.get(message.method) ?? []) wake();
+      waiters.delete(message.method);
+      response.on('close', () => held.delete(message.method));
+    });
+  });
+  const port = await listenOnLoopback(server);
+  return {
+    base: `http://127.0.0.1:${port}`,
+    events,
+    hold: (method) => {
+      armed.add(method);
+    },
+    waitUntilHeld: (method) =>
+      held.has(method)
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => {
+            waiters.set(method, [...(waiters.get(method) ?? []), resolve]);
+          }),
+    release: (method) => {
+      const request = held.get(method);
+      held.delete(method);
+      events.push(`released:${method}`);
+      request?.respond();
+    },
+    close: async () => {
+      for (const method of [...held.keys()]) {
+        held.get(method)?.respond();
+        held.delete(method);
+      }
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
