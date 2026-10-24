@@ -3,7 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { streamRecordedRows } from './__tests__/journal-recording.js';
 import {
   afterAll,
   afterEach,
@@ -237,18 +237,13 @@ describe.each(['journal'] as const)(
     }
 
     async function transcript(path: string) {
-      const session = await JournalSession.open(path);
-      try {
-        let text = '';
-        const speakers: string[] = [];
-        for await (const { content } of session.rows()) {
-          text += JSON.stringify(content);
-          speakers.push(content.speaker);
-        }
-        return { text, speakers };
-      } finally {
-        await session.close();
+      let text = '';
+      const speakers: string[] = [];
+      for await (const content of streamRecordedRows(path)) {
+        text += JSON.stringify(content);
+        speakers.push(content.speaker);
       }
+      return { text, speakers };
     }
 
     function expectStopped(

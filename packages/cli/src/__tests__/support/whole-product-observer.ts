@@ -4,7 +4,10 @@ import { readdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { getProjectHash, type IContent } from '@vybestack/llxprt-code-core';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
+import { stateReaderOf } from '@vybestack/llxprt-code-core/journal/journalReaderState.js';
+import { sha256KeyHash } from '@vybestack/llxprt-code-core/journal/idKeys.js';
+import { readRecordedRows } from '../journal-recording.js';
 import {
   readJournalFileFacts,
   readJournalCheckpoints,
@@ -38,23 +41,16 @@ export async function lockedRecordingPath(agent: Agent): Promise<string> {
 }
 
 export async function nativeRows(path: string): Promise<readonly IContent[]> {
-  const session = await JournalSession.open(path);
-  const rows: IContent[] = [];
-  try {
-    for await (const row of session.rows()) rows.push(row.content);
-    return rows;
-  } finally {
-    await session.close();
-  }
+  return readRecordedRows(path);
 }
 
 export async function nativeFact(path: string, key: string): Promise<unknown> {
-  const session = await JournalSession.open(path);
+  const reader = await openJournalReadOnly(path);
   try {
-    const value = await session.store.getState(key);
+    const value = await stateReaderOf(reader, sha256KeyHash)(key);
     return value === undefined ? undefined : decodeSessionFact(value);
   } finally {
-    await session.close();
+    await reader.close();
   }
 }
 

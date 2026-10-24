@@ -6,7 +6,7 @@ import {
   type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { readRecordedRows } from '../../__tests__/journal-recording.js';
 import {
   buildAgent,
   drain,
@@ -126,14 +126,7 @@ export async function persistedContents(
   const path = recording.getFilePath();
   if (path === null) throw new Error('Missing recording path');
 
-  const replay = await JournalSession.open(path);
-  try {
-    const persisted: IContent[] = [];
-    for await (const entry of replay.rows()) persisted.push(entry.content);
-    return persisted;
-  } finally {
-    await replay.close();
-  }
+  return readRecordedRows(path);
 }
 
 export { operationFileCreates } from '../../../../agents/src/compression/__tests__/support/operation-file-creates.js';

@@ -11,6 +11,7 @@ import {
   SESSION_KEYS,
 } from '@vybestack/llxprt-code-core/recording/sessionMetaKeys.js';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { streamRecordedRows } from '../../__tests__/journal-recording.js';
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readdir, writeFile } from 'node:fs/promises';
@@ -58,23 +59,18 @@ async function durable(path: string): Promise<{
   digest: string;
   media: MediaReferenceBlock | undefined;
 }> {
-  const journal = await JournalSession.open(path);
   const hash = createHash('sha256');
   let count = 0;
   let media: MediaReferenceBlock | undefined;
-  try {
-    for await (const row of journal.rows()) {
-      count++;
-      hash.update(JSON.stringify(row.content));
-      const reference = row.content.blocks.find(
-        (block) => block.type === 'media' && block.encoding === 'reference',
-      );
-      if (reference !== undefined) media = reference;
-    }
-    return { count, digest: hash.digest('hex'), media };
-  } finally {
-    await journal.close();
+  for await (const row of streamRecordedRows(path)) {
+    count++;
+    hash.update(JSON.stringify(row));
+    const reference = row.blocks.find(
+      (block) => block.type === 'media' && block.encoding === 'reference',
+    );
+    if (reference !== undefined) media = reference;
   }
+  return { count, digest: hash.digest('hex'), media };
 }
 
 async function recording(agent: Agent): Promise<string> {

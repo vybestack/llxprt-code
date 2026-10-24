@@ -33,18 +33,24 @@ export async function readRecordedFacts(
   }
 }
 
-export async function readRecordedRows(filePath: string): Promise<IContent[]> {
+export async function* streamRecordedRows(
+  filePath: string,
+): AsyncGenerator<IContent, void, unknown> {
   const reader = await openJournalReadOnly(filePath);
   try {
-    const rows: IContent[] = [];
     const root = rowTreeRootOf(reader.trailer);
     if (root !== undefined)
       for await (const entry of iterateRowEntries(reader, root))
-        rows.push(decodeStoredRow(await readStoredRow(reader, entry)));
-    return rows;
+        yield decodeStoredRow(await readStoredRow(reader, entry));
   } finally {
     await reader.close();
   }
+}
+
+export async function readRecordedRows(filePath: string): Promise<IContent[]> {
+  const rows: IContent[] = [];
+  for await (const row of streamRecordedRows(filePath)) rows.push(row);
+  return rows;
 }
 
 export async function seedSessionRows(
