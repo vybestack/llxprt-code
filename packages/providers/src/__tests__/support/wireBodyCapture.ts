@@ -263,7 +263,6 @@ export function rowsSelection(
   return Object.freeze({
     callerOwned: true,
     count: rows.length,
-    callerOwned: true,
     readAt: readAtOf(rows),
     openReader: (signal?: AbortSignal) =>
       (async function* (): AsyncGenerator<IContent, void> {

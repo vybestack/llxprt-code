@@ -1,18 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  callerOwnedProviderRequest,
-  callerOwnedRawProviderSource,
-} from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
-import type {
-  ProviderRequestSelection,
-  ProviderRequestSnapshot,
-} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
@@ -202,11 +195,12 @@ function assertSameFrozenBoundary(
     ).toBeUndefined();
 }
 
-function prepareSeedProvider(
+async function prepareSeedProvider(
   input: HistoryCase,
-  ownership: RowOwnership,
-): Promise<ProviderRequestSnapshot> {
-  return callerOwnedProviderRequest(input.rows, [], { ownership });
+): Promise<ProviderRequestSelection> {
+  return callerOwnedRawProviderSource(
+    await normalizedRows(input.rows),
+  ).openProviderRequest();
 }
 
 export async function checkNativeSeed(
@@ -236,7 +230,7 @@ export async function checkNativeSeed(
         history.prepareCuratedForProviderSnapshot([], { ownership }));
       const provider =
         settings.form === 'normalized'
-          ? await prepareSeedProvider(input, ownership)
+          ? await prepareSeedProvider(input)
           : undefined;
       let failure: { readonly error: unknown } | undefined;
       try {

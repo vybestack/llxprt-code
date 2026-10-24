@@ -9,6 +9,8 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
+import type { ProviderRequestSource } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { IProvider } from '../IProvider.js';
 import { ProviderManager } from '../ProviderManager.js';
 import {
@@ -50,9 +52,15 @@ describe('LoadBalancingProvider positional cancellation', () => {
     ];
     const expectedBytes = new TextEncoder().encode(JSON.stringify(request));
     let historyDrains = 0;
-    async function* history(): AsyncGenerator<IContent> {
-      historyDrains++;
-      yield* request;
+    function history(): ProviderRequestSource {
+      const source = callerOwnedRawProviderSource(request);
+      return {
+        ...source,
+        openProviderRequest(signal) {
+          historyDrains++;
+          return source.openProviderRequest(signal);
+        },
+      };
     }
 
     let attempts = 0;
