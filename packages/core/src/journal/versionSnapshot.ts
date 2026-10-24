@@ -543,7 +543,8 @@ export class VersionSnapshot {
   }
 
   /** The `index`-th live row (0-based). */
-  entryAt(index: number): Promise<RowEntry> {
+  async entryAt(index: number): Promise<RowEntry> {
+    this.requireOpen();
     const root = this.rootRef();
     if (root === undefined) {
       throw new JournalFormatError(`Row ${index} of an empty snapshot`);
