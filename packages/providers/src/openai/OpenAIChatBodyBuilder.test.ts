@@ -10,8 +10,6 @@ import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputL
 import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import { createInMemoryToolIdStore } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
-import { KeyedRowIndex } from '../utils/keyed-row-index.js';
-import { KeyedRowToolIdStore } from '../utils/keyed-row-tool-id-store.js';
 import {
   createCorpus,
   type Corpus,
@@ -87,32 +85,27 @@ async function builderBytes(
   settings: Settings,
   extra: Partial<ChatBodyOptions> = {},
 ): Promise<Buffer> {
-  const index = KeyedRowIndex.create('chat-body-test');
-  try {
-    const parts: Buffer[] = [Buffer.from('[')];
-    let messages = 0;
-    const count = await writeChatMessages(
-      sourceOf(rows),
-      {
-        reasoning: reasoningOptions(settings),
-        toolFormat: settings.toolFormat,
-        config: settings.config,
-        toolIdStore: new KeyedRowToolIdStore(index),
-        ...extra,
+  const parts: Buffer[] = [Buffer.from('[')];
+  let messages = 0;
+  const count = await writeChatMessages(
+    sourceOf(rows),
+    {
+      reasoning: reasoningOptions(settings),
+      toolFormat: settings.toolFormat,
+      config: settings.config,
+      toolIdStore: createInMemoryToolIdStore(),
+      ...extra,
+    },
+    {
+      message(chunks): void {
+        if (messages++ > 0) parts.push(Buffer.from(','));
+        for (const chunk of chunks) parts.push(Buffer.from(chunk));
       },
-      {
-        message(chunks): void {
-          if (messages++ > 0) parts.push(Buffer.from(','));
-          for (const chunk of chunks) parts.push(Buffer.from(chunk));
-        },
-      },
-    );
-    expect(count).toBe(messages);
-    parts.push(Buffer.from(']'));
-    return Buffer.concat(parts);
-  } finally {
-    index.close();
-  }
+    },
+  );
+  expect(count).toBe(messages);
+  parts.push(Buffer.from(']'));
+  return Buffer.concat(parts);
 }
 
 /** What differs, or undefined when the builder and the array route agree to the byte. */
@@ -438,16 +431,16 @@ describe('chat body builder contract', () => {
     expect(kimi.equals(oracleBytes(withCalls, settings))).toBe(true);
   });
 
-  it('gives the same bytes over an in-memory id store and the disk store', async () => {
+  it('gives the array mapper bytes over an in-memory id store', async () => {
     for (const toolFormat of ['kimi', 'mistral'] as const)
       for (let seed = 1; seed <= 10; seed++) {
         const current = { ...settings, toolFormat };
         const memory = await builderBytes(seededHistory(seed), current, {
           toolIdStore: createInMemoryToolIdStore(),
         });
-        expect(
-          memory.equals(await builderBytes(seededHistory(seed), current)),
-        ).toBe(true);
+        expect(memory.equals(oracleBytes(seededHistory(seed), current))).toBe(
+          true,
+        );
       }
   });
 
