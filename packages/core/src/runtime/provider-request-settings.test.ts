@@ -6,6 +6,10 @@
 import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from './providerRequestContext.js';
+import type { NetworkFetch } from '../utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('explicit provider invocation settings', () => {
   it('uses the session provider endpoint and model even when globals contain undefined', () => {
@@ -20,6 +24,7 @@ describe('explicit provider invocation settings', () => {
     );
     const invocation = captureProviderInvocation(
       {
+        fetch: requestFetch,
         runtimeId: 'request-settings',
         globalSettings: settingsService.getAllGlobalSettings(),
         providerSettings: settingsService.getProviderSettings('openai'),

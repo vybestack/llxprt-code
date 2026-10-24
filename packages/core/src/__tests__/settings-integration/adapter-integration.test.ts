@@ -8,6 +8,10 @@ import { describe, it, expect } from 'bun:test';
 import { createRuntimeSettingsService } from '../../runtime/settingsRuntimeAdapter.js';
 import { createProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
 import { captureProviderInvocation } from '../../runtime/providerRequestContext.js';
+import type { NetworkFetch } from '../../utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('settings runtime composition', () => {
   it('captures separately constructed settings without publishing the service in a context', () => {
@@ -18,6 +22,7 @@ describe('settings runtime composition', () => {
     });
     const invocation = captureProviderInvocation(
       {
+        fetch: requestFetch,
         runtimeId: context.runtimeId,
         globalSettings: service.getAllGlobalSettings(),
         providerSettings: service.getProviderSettings('test-provider'),

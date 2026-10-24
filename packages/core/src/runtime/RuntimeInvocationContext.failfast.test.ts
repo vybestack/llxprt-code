@@ -7,6 +7,10 @@
 import { describe, expect, it } from 'bun:test';
 import { createRuntimeInvocationContext } from './RuntimeInvocationContext.js';
 import { createProviderRuntimeContext } from './providerRuntimeContext.js';
+import type { NetworkFetch } from '../utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('RuntimeInvocationContext fail-fast requirements', () => {
   it('throws when runtimeId is missing', () => {
@@ -14,6 +18,7 @@ describe('RuntimeInvocationContext fail-fast requirements', () => {
 
     expect(() =>
       createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: runtime.runtimeId,
         runtimeMetadata: runtime.metadata,
 
@@ -29,6 +34,7 @@ describe('RuntimeInvocationContext fail-fast requirements', () => {
 
     expect(() =>
       createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: runtime.runtimeId,
         runtimeMetadata: runtime.metadata,
 

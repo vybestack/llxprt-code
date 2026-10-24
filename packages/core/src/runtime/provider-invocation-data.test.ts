@@ -5,6 +5,10 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { captureProviderInvocation } from './providerRequestContext.js';
+import type { NetworkFetch } from '../utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('provider invocation data capture', () => {
   it('captures nested request data without retaining settings services or caller mutations', () => {
@@ -19,7 +23,12 @@ describe('provider invocation data capture', () => {
       temperature: 0.25,
     };
     const invocation = captureProviderInvocation(
-      { globalSettings, providerSettings, runtimeId: 'same-label' },
+      {
+        fetch: requestFetch,
+        globalSettings,
+        providerSettings,
+        runtimeId: 'same-label',
+      },
       'openai',
     );
     globalSettings.model = 'later';
@@ -40,6 +49,7 @@ describe('provider invocation data capture', () => {
   it('captures independent selected-member data for same-label owners outside identity scope', () => {
     const a = captureProviderInvocation(
       {
+        fetch: requestFetch,
         runtimeId: 'same-label',
         globalSettings: {
           activeProvider: 'loadbalancer',
@@ -54,6 +64,7 @@ describe('provider invocation data capture', () => {
     );
     const b = captureProviderInvocation(
       {
+        fetch: requestFetch,
         runtimeId: 'same-label',
         globalSettings: {
           activeProvider: 'loadbalancer',

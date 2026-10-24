@@ -41,6 +41,10 @@ import type { RuntimeProviderManager } from './contracts/RuntimeProviderManager.
 import type { IContent } from '../services/history/IContent.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
 import { MediaAdmissionService } from '../storage/media-admission-service.js';
+import type { NetworkFetch } from '../utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function createTestConfig(): Config {
   return new Config({
@@ -170,6 +174,8 @@ describe('AgentRuntimeLoader', () => {
             provider,
             parameters,
             signal,
+            undefined,
+            requestFetch,
           ),
         readToolGovernance: () =>
           settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
@@ -258,6 +264,8 @@ describe('AgentRuntimeLoader', () => {
             provider,
             parameters,
             signal,
+            undefined,
+            requestFetch,
           ),
         readToolGovernance: () =>
           settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
@@ -323,6 +331,8 @@ describe('AgentRuntimeLoader', () => {
             provider,
             parameters,
             signal,
+            undefined,
+            requestFetch,
           ),
         readToolGovernance: () =>
           settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
@@ -398,6 +408,8 @@ describe('AgentRuntimeLoader', () => {
               provider,
               parameters,
               signal,
+              undefined,
+              requestFetch,
             ),
           readToolGovernance: () =>
             settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
@@ -452,6 +464,8 @@ describe('AgentRuntimeLoader', () => {
             provider,
             parameters,
             signal,
+            undefined,
+            requestFetch,
           ),
         readToolGovernance: () =>
           settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
@@ -517,6 +531,8 @@ describe('AgentRuntimeLoader', () => {
             provider,
             parameters,
             signal,
+            undefined,
+            requestFetch,
           ),
         readToolGovernance: () =>
           settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
@@ -594,6 +610,8 @@ describe('AgentRuntimeLoader', () => {
             provider,
             parameters,
             signal,
+            undefined,
+            requestFetch,
           ),
         readToolGovernance: () =>
           settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
@@ -635,6 +653,8 @@ describe('AgentRuntimeLoader', () => {
               provider,
               parameters,
               signal,
+              undefined,
+              requestFetch,
             ),
           readToolGovernance: () =>
             settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
@@ -712,6 +732,8 @@ describe('AgentRuntimeLoader', () => {
               provider,
               parameters,
               signal,
+              undefined,
+              requestFetch,
             ),
           readToolGovernance: () =>
             settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),

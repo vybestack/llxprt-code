@@ -16,6 +16,10 @@
 
 import { describe, it, expect } from 'bun:test';
 import { createRuntimeInvocationContext } from '../RuntimeInvocationContext.js';
+import type { NetworkFetch } from '../../utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('RuntimeInvocationContext Settings Separation', () => {
   /**
@@ -25,6 +29,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context created with temperature=0.7 in ephemerals returns 0.7 from getModelParam', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -36,6 +41,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context created with shell-replacement=none returns none from getCliSetting', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -47,6 +53,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context created with reasoning.enabled=true returns true from getModelBehavior', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -58,6 +65,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context created with custom-headers has X-Foo=bar in customHeaders', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -76,6 +84,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with shell-replacement in ephemerals does not contain shell-replacement in modelParams', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -90,6 +99,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with temperature in ephemerals does not contain temperature in cliSettings', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -104,6 +114,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with auth-key in ephemerals does not contain auth-key in modelParams', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -124,6 +135,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with max_tokens=4096 in ephemerals returns 4096 from getModelParam', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -143,6 +155,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with temperature=0.7 in ephemerals still contains temperature in ephemerals field', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -156,6 +169,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with shell-replacement=none in ephemerals still contains shell-replacement in ephemerals field', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -174,6 +188,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('cliSettings is frozen', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -187,6 +202,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('modelParams is frozen', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -200,6 +216,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('modelBehavior is frozen', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -213,6 +230,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('customHeaders is frozen', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -230,6 +248,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with empty ephemerals has empty cliSettings', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -241,6 +260,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with empty ephemerals has empty modelParams', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -252,6 +272,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with multiple settings puts temperature in modelParams', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -268,6 +289,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with multiple settings puts max_tokens in modelParams', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -285,6 +307,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with multiple settings puts shell-replacement in cliSettings', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -301,6 +324,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with multiple settings puts reasoning.enabled in modelBehavior', () => {
     const context = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'test-runtime-id',
 
       providerName: 'openai',
@@ -326,6 +350,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
   describe('issue #2182: modelParams must stay free of leaked settings', () => {
     it('does not place a nested text object into modelParams for anthropic', () => {
       const context = createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'test-runtime-id',
 
         providerName: 'anthropic',
@@ -340,6 +365,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
     it('does not place stream-idle-timeout-ms into modelParams for any provider', () => {
       for (const provider of ['anthropic', 'codex', 'openai']) {
         const context = createRuntimeInvocationContext({
+          fetch: requestFetch,
           runtimeId: 'test-runtime-id',
 
           providerName: provider,
@@ -354,6 +380,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
     it('reproduces the full opusfirst ephemeral snapshot without leaking to modelParams', () => {
       const context = createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'test-runtime-id',
 
         providerName: 'anthropic',
