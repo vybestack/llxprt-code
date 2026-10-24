@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { randomUUID } from 'node:crypto';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { HistoryMediaIndex } from '@vybestack/llxprt-code-core/storage/history-media-index.js';
 import type {
@@ -40,17 +41,15 @@ export function admitSessionHistory(
   scope: string,
 ): SessionHistoryAdmission {
   const references = new HistoryMediaIndex();
+  const ownerScope = `${scope}:${randomUUID()}`;
   return {
-    rows: admitRowsOneAtATime(history, admission, scope, references),
+    rows: admitRowsOneAtATime(history, admission, ownerScope, references),
     release: async (): Promise<void> => {
-      try {
-        for (const reference of references.values()) {
-          await admission.releaseReference(reference.contentId);
-          references.delete(reference.contentId);
-        }
-      } finally {
-        references.close();
+      for (const reference of references.values()) {
+        await admission.releaseReference(reference.contentId, ownerScope);
+        references.delete(reference.contentId);
       }
+      references.close();
     },
   };
 }
@@ -65,6 +64,8 @@ async function* admitRowsOneAtATime(
     const context: MediaAdmissionContext = {
       turnId: `${scope}:${index}`,
       source: scope,
+      reservationOwnerScope: scope,
+      heldReservations: references,
     };
     const [admitted] = await admission.admitContents([row], context);
     for (const reference of collectMediaReferences([admitted]))
