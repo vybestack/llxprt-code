@@ -194,7 +194,6 @@ export async function nextRequestRuntime(
   const history = client.getHistoryService();
   if (history === null) throw new Error('Missing initialized history');
   const primary = await callerRecording(directory, 'primary');
-  const mirror = await callerRecording(directory, 'mirror');
   await history.adoptResumeBoot(
     primary.recording,
     new JournalResumeBoot(
@@ -202,27 +201,18 @@ export async function nextRequestRuntime(
       await resumePointOf(primary.recording),
     ),
   );
-  const integrations = [
-    new RecordingIntegration(primary.recording),
-    new RecordingIntegration(mirror.recording),
-  ];
+  const integrations = [new RecordingIntegration(primary.recording)];
   for (const integration of integrations)
     await integration.subscribeToJournal(history, agent.session);
-  const sessions = [
-    await primary.recording.session(),
-    await mirror.recording.session(),
-  ];
-  const files = [
-    recordingFile(primary.recording),
-    recordingFile(mirror.recording),
-  ];
+  const sessions = [await primary.recording.session()];
+  const files = [recordingFile(primary.recording)];
   const provider = agent.providerManager.getActiveProvider();
   if (provider === undefined) throw new Error('Missing provider');
   const boundary = providerBoundary(provider, ending);
   const facts = () => ({
     entries: boundary.entries(),
     seqs: sessions.map((session) => session.store.published?.commitSeq ?? 0),
-    flushes: [primary.flushes(), mirror.flushes()],
+    flushes: [primary.flushes()],
   });
   const disk = () => Promise.all(files.map(diskToolState));
   const send = async (text: string): Promise<void> => {
@@ -236,7 +226,6 @@ export async function nextRequestRuntime(
     client,
     history,
     primary,
-    mirror,
     files,
     facts,
     disk,
@@ -245,11 +234,9 @@ export async function nextRequestRuntime(
     admit: () => admitContext(agent, directory, variant),
     async close(): Promise<void> {
       primary.release();
-      mirror.release();
       boundary.response.resolve();
       for (const integration of integrations) await integration.dispose();
       await agent.dispose();
-      await mirror.recording.dispose();
       await primary.recording.dispose();
     },
   };

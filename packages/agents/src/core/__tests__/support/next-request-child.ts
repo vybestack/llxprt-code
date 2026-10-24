@@ -32,7 +32,7 @@ async function waitEvent(
 }
 export async function nextRequestChild(
   variant: Variant,
-  role: 'primary' | 'mirror',
+  role: 'primary',
   group: number,
   ending: Ending,
 ) {

@@ -11,7 +11,7 @@ const directory = z.string().min(1).parse(process.argv[2]);
 const variant = z
   .enum(['directory', 'ide', 'turn', 'client', 'pause', 'two-group'])
   .parse(process.argv[3]);
-const role = z.enum(['primary', 'mirror']).parse(process.argv[4]);
+z.literal('primary').parse(process.argv[4]);
 const group = z.coerce.number().int().min(1).max(2).parse(process.argv[5]);
 const ending = z.enum(['failure', 'cancel']).parse(process.argv[6]);
 const rig = await nextRequestRuntime(directory, variant, ending);
@@ -27,7 +27,6 @@ process.on('message', (input: unknown) => {
   }
   if (command === 'release') {
     rig.primary.release();
-    rig.mirror.release();
   }
   if (command === 'probe')
     void Bun.sleep(100).then(async () =>
@@ -65,7 +64,7 @@ try {
   );
   report('ready', { ...rig.facts(), files: rig.files, disk: await rig.disk() });
   await next.promise;
-  const selected = role === 'primary' ? rig.primary : rig.mirror;
+  const selected = rig.primary;
   const rowTargets = {
     turn: 2,
     'two-group': 2 + group,

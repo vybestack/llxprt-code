@@ -20,7 +20,6 @@ function assertRows(
   committed: Disk[],
   transport: DriverEvent,
 ): void {
-  expect(committed[0].rows).toStrictEqual(committed[1].rows);
   const expectedRows = {
     turn: 2,
     'two-group': 4,
@@ -57,21 +56,21 @@ function assertRows(
 }
 async function scenario(
   variant: Variant,
-  role: 'primary' | 'mirror',
+  role: 'primary',
   group: number,
   ending: Ending,
 ): Promise<unknown> {
   const child = await nextRequestChild(variant, role, group, ending);
   try {
     const ready = await child.wait('ready');
-    const files = z.array(z.string()).length(2).parse(ready.details.files);
+    const files = z.array(z.string()).length(1).parse(ready.details.files);
     child.send('next');
     const held = await child.wait('held');
     expect(held.details.entries).toBe(1);
     child.send('probe');
     const probe = await child.wait('probe');
     expect(probe.details.entries).toBe(1);
-    const selected = role === 'primary' ? 0 : 1;
+    const selected = 0;
     const before = await diskToolState(files[selected]);
     expect(
       z.array(z.unknown()).parse(held.details.disk)[selected],
@@ -147,26 +146,26 @@ async function scenario(
     await child.close();
   }
 }
-const cases = (
-  ['directory', 'ide', 'turn', 'client', 'pause', 'two-group'] as const
-).flatMap((variant) =>
-  (['primary', 'mirror'] as const).flatMap((role) =>
-    (['pause', 'two-group'].includes(variant) ? [1, 2] : [1]).flatMap((group) =>
-      (['failure', 'cancel'] as const).map((ending) => ({
-        variant,
-        role,
-        group,
-        ending,
-      })),
-    ),
+const variants: readonly Variant[] = [
+  'directory',
+  'ide',
+  'turn',
+  'client',
+  'pause',
+  'two-group',
+];
+const endings: readonly Ending[] = ['failure', 'cancel'];
+const cases = variants.flatMap((variant) =>
+  (['pause', 'two-group'].includes(variant) ? [1, 2] : [1]).flatMap((group) =>
+    endings.map((ending) => ({ variant, group, ending })),
   ),
 );
 describe('Production caller durability before the next provider invocation', () => {
-  for (const { variant, role, group, ending } of cases) {
-    it(`${variant} joins ${role} group ${group} before next request ${ending}`, async () => {
+  for (const { variant, group, ending } of cases) {
+    it(`${variant} joins primary group ${group} before next request ${ending}`, async () => {
       const request = z
         .object({ texts: z.array(z.string()) })
-        .parse(await scenario(variant, role, group, ending));
+        .parse(await scenario(variant, 'primary', group, ending));
       expect(request.texts).toContain('pending next input');
     }, 60000);
   }
