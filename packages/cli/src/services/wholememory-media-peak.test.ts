@@ -19,6 +19,13 @@ class RetainingMediaConsumer extends RowOwnership {
     if (isMediaReferenceBlock(row)) {
       super.retain(row);
       this.retained.push(row);
+    } else if ('blocks' in row && Array.isArray(row.blocks)) {
+      for (const block of row.blocks) {
+        if (isMediaReferenceBlock(block)) {
+          super.retain(block);
+          this.retained.push(block);
+        }
+      }
     }
   }
 
