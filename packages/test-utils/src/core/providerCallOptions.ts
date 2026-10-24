@@ -11,6 +11,7 @@ import type {
   RuntimeProviderToolset as ProviderToolset,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
@@ -23,6 +24,11 @@ import {
 const DEFAULT_RUNTIME_SOURCE = 'test-utils#createProviderCallOptions';
 
 let runtimeSequence = 0;
+
+// Resolved at call time so tests that stub globalThis.fetch to capture requests
+// still observe them through the invocation's explicit transport.
+const globalTestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 interface SettingsOverrides {
   global?: Record<string, unknown>;
@@ -45,6 +51,7 @@ export interface ProviderCallOptionsInit {
   runtimeId?: string;
   runtimeMetadata?: Record<string, unknown>;
   invocation?: RuntimeInvocationContext;
+  fetch?: NetworkFetch;
   ephemerals?: Record<string, unknown>;
 }
 
@@ -149,6 +156,7 @@ function ensureInvocation(
 
   return createRuntimeInvocationContext({
     runtimeId: runtime.runtimeId,
+    fetch: init.fetch ?? globalTestFetch,
     runtimeMetadata: runtime.metadata,
 
     providerName,

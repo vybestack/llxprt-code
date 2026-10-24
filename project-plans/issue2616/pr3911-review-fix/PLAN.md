@@ -1062,7 +1062,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T2.4 A3 compression profile root transport
 - [ ] T2.5a-n A3 test-built invocations pass fetch (ids added by T2.0)
   - [x] T2.5a A3 test-built invocations pass fetch: packages/core, 8 files (file list in inventory-phase2.md)
-  - [ ] T2.5b A3 test-built invocations pass fetch: packages/test-utils, 1 file (file list in inventory-phase2.md)
+  - [x] T2.5b A3 test-built invocations pass fetch: packages/test-utils, 1 file (file list in inventory-phase2.md)
   - [ ] T2.5c A3 test-built invocations pass fetch: packages/providers, 15 files (file list in inventory-phase2.md)
   - [ ] T2.5d A3 test-built invocations pass fetch: packages/providers, 15 files (file list in inventory-phase2.md)
   - [ ] T2.5e A3 test-built invocations pass fetch: packages/providers, 15 files (file list in inventory-phase2.md)
