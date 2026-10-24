@@ -37,14 +37,11 @@
  *   genuinely exposes `disposed`).
  * - messageBus: probe sums `emitter.eventNames().reduce((n,name)=>n+
  *   emitter.listenerCount(name),0)` on the real private emitter. CORRECT.
- * - lsp / extensions / sessionLock (NET-NEW per dispose.md lines 70/80/81-82):
- *   these primitives have NO boolean flag AND the headless fake does not create
- *   them by default. Per dispose.md, dispose() orchestrates teardown through the
- *   OwnershipRecord via `safe(errors, fn)`. The probe reads per-resource
- *   teardown completion markers on the ownership record (`ownership.lspShutDown`
- *   / `ownership.extensionsDisposed` / `ownership.sessionLocksReleased`) that P24
- *   sets when each NET-NEW step completes. This is legitimate TDD (pins the
- *   observable behavior P24 must produce) and is uniformly GREEN-reachable.
+ * - extensions: observed through the loader's `getExtensions()` after dispose
+ *   (see the T13e cases).
+ * - sessionLock (NET-NEW per dispose.md lines 81-82): the lock handle has no
+ *   boolean flag, so the probe reads the completion marker
+ *   `ownership.sessionLocksReleased` that dispose sets after the release loop.
  * - idempotent re-dispose + AggregateDisposeError rows: CORRECT (structural
  *   predicate; failing-factory induction).
  *
@@ -73,11 +70,9 @@ import {
   captureProbe,
   confirmationCoordinatorDisposed,
   type DisposalProbe,
-  extensionsDisposed,
   type FakeExtension,
   buildExtensionDisposalAgent,
   isAggregateDisposeError,
-  lspDisposed,
   messageBusSubscriptionCount,
   schedulerDisposed,
   sessionLocksReleased,
@@ -201,44 +196,6 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
     }
   });
 
-  it('T13 lsp service is shut down on dispose (disposed flag is true) @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    try {
-      const probe: DisposalProbe = captureProbe(agent);
-      // PRE-dispose sanity read: the LSP teardown has NOT yet run. The probe
-      // reads the per-resource teardown marker `ownership.lspShutDown` that P24
-      // sets when `config.shutdownLspService()` completes. LSP shutdown is a
-      // NET-NEW step (dispose.md line 70) — `shutdownLsp()`
-      // (lspIntegration.ts:388) clears state slots but has NO boolean flag, and
-      // the headless fake never starts LSP, so the observable is the ownership
-      // record's completion marker.
-      expect(lspDisposed(probe)).toBe(false);
-      await agent.dispose();
-      expect(lspDisposed(probe)).toBe(true);
-    } finally {
-      await cleanup();
-    }
-  });
-
-  it('T13 extensions are torn down on dispose (disposed flag is true) @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    try {
-      const probe: DisposalProbe = captureProbe(agent);
-      // PRE-dispose sanity read: the extensions teardown has NOT yet run. The
-      // probe reads the per-resource teardown marker
-      // `ownership.extensionsDisposed` that P24 sets when
-      // `extensionsManager.dispose()` completes. Extensions teardown is a
-      // NET-NEW step (dispose.md line 80) — Config has NO `extensionsManager`
-      // field (only `getExtensions()` via `_extensionLoader`), so the observable
-      // is the ownership record's completion marker.
-      expect(extensionsDisposed(probe)).toBe(false);
-      await agent.dispose();
-      expect(extensionsDisposed(probe)).toBe(true);
-    } finally {
-      await cleanup();
-    }
-  });
-
   it('T13e extension teardown unloads ONLY the active extensions (inactive ones are filtered out), in encounter order @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016', async () => {
     const extensions: readonly FakeExtension[] = [
       {
@@ -266,7 +223,6 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
     const { agent, cleanup, recorder } =
       await buildExtensionDisposalAgent(extensions);
     try {
-      const probe: DisposalProbe = captureProbe(agent);
       // Install a loader carrying a mix of active and inactive extensions. The
       // observable contract (dispose.md line 80): dispose() reads
       // getExtensions(), filters to isActive, and unloads each active one. The
@@ -274,17 +230,14 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
       // assertion verifies the real filtering output — inactive extensions are
       // NEVER unloaded, active ones are unloaded in encounter order.
 
-      // Pre-dispose: nothing unloaded yet, marker not set.
+      // Pre-dispose: nothing unloaded yet.
       expect(recorder.unloaded).toStrictEqual([]);
-      expect(extensionsDisposed(probe)).toBe(false);
 
       await agent.dispose();
 
       // ONLY the two active extensions were unloaded, in encounter order; the
       // inactive 'beta-inactive' was filtered out by the isActive predicate.
       expect(recorder.unloaded).toStrictEqual(['alpha', 'gamma']);
-      // The teardown step completed and recorded its marker.
-      expect(extensionsDisposed(probe)).toBe(true);
     } finally {
       await cleanup();
     }
@@ -310,15 +263,12 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
     const { agent, cleanup, recorder } =
       await buildExtensionDisposalAgent(extensions);
     try {
-      const probe: DisposalProbe = captureProbe(agent);
       // All extensions inactive: the isActive filter yields an empty set, so
-      // unloadExtension is NEVER called, yet dispose() still completes the
-      // teardown step and records its completion marker.
+      // unloadExtension is NEVER called and dispose() still completes.
 
       await agent.dispose();
 
       expect(recorder.unloaded).toStrictEqual([]);
-      expect(extensionsDisposed(probe)).toBe(true);
     } finally {
       await cleanup();
     }
@@ -339,14 +289,11 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
       true,
     );
     try {
-      const probe: DisposalProbe = captureProbe(agent);
-
       await expect(agent.dispose()).rejects.toThrow(
         'this.unloadExtension is not a function',
       );
 
       expect(recorder.unloaded).toStrictEqual([]);
-      expect(extensionsDisposed(probe)).toBe(true);
     } finally {
       await cleanup();
     }
@@ -371,24 +318,20 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
     }
   });
 
-  it('T13 re-dispose is idempotent: a second dispose() resolves without throwing and disposed flags remain true @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', async () => {
+  it('T13 re-dispose is idempotent: a second dispose() resolves without throwing and the agentClient stays disposed @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
       const probe: DisposalProbe = captureProbe(agent);
-      // PRE-dispose sanity read: agentClient + extensions not yet torn down.
-      // agentClient reads its `handleModelChanged` handler still registered
-      // on coreEvents; extensions reads the ownership completion marker. Both
-      // are genuine pre-dispose "not-yet-torn-down" reads.
+      // PRE-dispose sanity read: agentClient not yet torn down (its
+      // `handleModelChanged` handler is still registered on coreEvents).
       expect(agentClientDisposed(probe)).toBe(false);
-      expect(extensionsDisposed(probe)).toBe(false);
       // First dispose performs the teardown; dispose.md lines 11-12 guard with
       // a disposed flag so a second dispose() is a no-op that resolves cleanly.
       await agent.dispose();
       // The second call must not throw — the idempotent guard short-circuits.
       await agent.dispose();
-      // Disposed flags remain true after the idempotent second dispose.
+      // The agentClient stays torn down after the idempotent second dispose.
       expect(agentClientDisposed(probe)).toBe(true);
-      expect(extensionsDisposed(probe)).toBe(true);
     } finally {
       await cleanup();
     }

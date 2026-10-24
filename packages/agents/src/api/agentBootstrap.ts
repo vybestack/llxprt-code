@@ -437,22 +437,6 @@ export interface OwnershipRecord {
    */
   sessionLocks: SessionLock[];
   /**
-   * Completion marker set true after the NET-NEW LSP shutdown step succeeds
-   * (dispose.md line 70). The real LspState has no boolean and the harness never
-   * starts LSP, so this is the GREEN-reachable disposed-observable T13 reads.
-   * @plan:PLAN-20260617-COREAPI.P24
-   * @requirement:REQ-016
-   */
-  lspShutDown?: boolean;
-  /**
-   * Completion marker set true after the NET-NEW extensions teardown step
-   * succeeds (dispose.md line 80). Config has no extensionsManager field and the
-   * harness creates none, so this is the GREEN-reachable disposed-observable.
-   * @plan:PLAN-20260617-COREAPI.P24
-   * @requirement:REQ-016
-   */
-  extensionsDisposed?: boolean;
-  /**
    * Completion marker set true after the NET-NEW session-lock release loop
    * completes (dispose.md lines 81-83). With zero locks the marker still flips
    * true (vacuously "all released"); this is the GREEN-reachable observable.
@@ -463,8 +447,8 @@ export interface OwnershipRecord {
   /**
    * The Config ownership origin. 'agent' when createAgent constructed the
    * Config (Agent.dispose() tears it down); 'caller' when fromConfig adopted
-   * an external Config (Agent.dispose() SKIPS the Config.dispose() +
-   * shutdownLspService() teardown so the caller retains the lifecycle).
+   * an external Config (Agent.dispose() SKIPS the Config.dispose()
+   * teardown so the caller retains the lifecycle).
    * @plan:PLAN-20260621-COREAPIREMED.P09
    * @requirement:REQ-001.3
    */
@@ -495,11 +479,8 @@ export function recordOwnership(deps: {
     // no-op that still flips sessionLocksReleased true (dispose.md lines 81-83).
     sessionLocks: deps.sessionLocks ?? [],
     // @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016
-    // NET-NEW teardown completion markers (dispose.md lines 70/80/83). Each is
-    // set true inside dispose()'s safe() closure AFTER its teardown await
-    // succeeds; pre-dispose they read false (not-yet-torn-down).
-    lspShutDown: false,
-    extensionsDisposed: false,
+    // Set true after the session-lock release loop completes (dispose.md
+    // line 83); false until then.
     sessionLocksReleased: false,
     // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001.3
     configOwnership: deps.configOwnership ?? 'agent',

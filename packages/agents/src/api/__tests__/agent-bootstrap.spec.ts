@@ -471,8 +471,6 @@ describe('Agent bootstrap helpers @plan:PLAN-20260617-COREAPI.P15 @requirement:R
         injectedSchedulerHandles: [],
       });
       expect(record.disposed).toBe(false);
-      expect(record.lspShutDown).toBe(false);
-      expect(record.extensionsDisposed).toBe(false);
       expect(record.sessionLocksReleased).toBe(false);
       expect(record.sessionLocks).toStrictEqual([]);
       expect(record.runtimeHandle).toBe(runtimeHandle);

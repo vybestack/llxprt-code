@@ -641,9 +641,8 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
    *   40-47 dispose facade-held injected-factory scheduler/coordinator handles
    *   50-52 unsubscribe every recorded bus subscription + detach hooks
    *   55    runtimeHandle.cleanup() (unregister runtime context)
-   *   60    config.dispose() (agentClient)
-   *   70    config.shutdownLspService() (NET-NEW) + set lspShutDown marker
-   *   80    extensions teardown (NET-NEW, headless no-op) + extensionsDisposed
+   *   60    config.dispose() (agentClient, LSP and extension teardown run
+   *         inside Config.dispose)
    *   81-83 release every session lock (NET-NEW) + sessionLocksReleased
    *   90-92 oauthManager.dispose?() (defensive; runtimeHandle.cleanup may own it)
    *   100   throw AggregateDisposeError(errors) if any step failed
@@ -738,9 +737,6 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
       this.facadeMediaOwner?.dispose.bind(this.facadeMediaOwner),
       errors,
     );
-    if (this.facadeOwnership.configOwnership !== 'caller')
-      this.facadeOwnership.lspShutDown = true;
-    this.facadeOwnership.extensionsDisposed = true;
     for (const lock of this.facadeOwnership.sessionLocks)
       await collectDisposalError(errors, () => lock.release());
     this.facadeOwnership.sessionLocksReleased = true;
