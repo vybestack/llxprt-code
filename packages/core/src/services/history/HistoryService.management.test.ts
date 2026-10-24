@@ -21,7 +21,7 @@ import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/cor
  * limitations under the License.
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { HistoryService } from './HistoryService.js';
 import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent.js';
@@ -470,6 +470,9 @@ describe('HistoryService - Behavioral Tests', () => {
   let service: HistoryService;
   beforeEach(() => {
     service = new HistoryService();
+  });
+  afterEach(async () => {
+    await service.dispose();
   });
 
   describe('Token Management', () => {

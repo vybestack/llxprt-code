@@ -22,7 +22,7 @@ import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core
  * history (z.ai rejects these with HTTP 400 error 1213).
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 
@@ -69,6 +69,9 @@ async function assertRejectedEmpty2(): Promise<void> {
 describe('issue #2410 – HistoryService rejects zero-block turns', () => {
   beforeEach(() => {
     service = new HistoryService();
+  });
+  afterEach(async () => {
+    await service.dispose();
   });
   it('refuses to store a zero-block human turn', async () => {
     expect(service.length()).toBe(0);

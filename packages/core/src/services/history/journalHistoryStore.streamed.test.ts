@@ -108,6 +108,7 @@ describe('a transform streamed into one replace group', () => {
     } finally {
       await reader.close();
     }
+    await expect(store.waitForDurable()).rejects.toBe(boom);
     await store.dispose();
   });
 });
@@ -147,51 +148,57 @@ describe('the transform cannot run ahead of the writer', () => {
     const store = new JournalHistoryStore(
       await JournalSession.create(path.join(directory(), 'bounded.llxj')),
     );
-    const gauge = leadGauge();
-    const baseline = await settledHeap();
+    try {
+      const gauge = leadGauge();
+      const baseline = await settledHeap();
 
-    await store.replaceStreamed(
-      counted(
-        pulledRows<IContent>(async (put) => {
-          for (let seq = 1; seq <= ROWS; seq++) {
-            const content = bigRow(seq);
-            gauge.made();
-            await put(content);
-          }
-        }),
-        gauge,
-      ),
-    );
-    const after = await settledHeap();
+      await store.replaceStreamed(
+        counted(
+          pulledRows<IContent>(async (put) => {
+            for (let seq = 1; seq <= ROWS; seq++) {
+              const content = bigRow(seq);
+              gauge.made();
+              await put(content);
+            }
+          }),
+          gauge,
+        ),
+      );
+      const after = await settledHeap();
 
-    expect(gauge.state.written).toBe(ROWS);
-    expect(gauge.state.maxLead).toBe(1);
-    expect(store.getLength()).toBe(ROWS);
-    expect(after - baseline).toBeLessThan(RETAINED_BOUND);
-    await store.dispose();
+      expect(gauge.state.written).toBe(ROWS);
+      expect(gauge.state.maxLead).toBe(1);
+      expect(store.getLength()).toBe(ROWS);
+      expect(after - baseline).toBeLessThan(RETAINED_BOUND);
+    } finally {
+      await store.dispose();
+    }
   });
 
   it('control: a channel that buffers what the transform makes shows the lead and the retained rows', async () => {
     const store = new JournalHistoryStore(
       await JournalSession.create(path.join(directory(), 'control.llxj')),
     );
-    const gauge = leadGauge();
-    const baseline = await settledHeap();
-    const buffer: IContent[] = [];
-    for (let seq = 1; seq <= ROWS; seq++) {
-      buffer.push(bigRow(seq));
-      gauge.made();
-    }
-    async function* drained(): AsyncGenerator<IContent> {
-      for (const content of buffer) yield content;
-    }
+    try {
+      const gauge = leadGauge();
+      const baseline = await settledHeap();
+      const buffer: IContent[] = [];
+      for (let seq = 1; seq <= ROWS; seq++) {
+        buffer.push(bigRow(seq));
+        gauge.made();
+      }
+      async function* drained(): AsyncGenerator<IContent> {
+        for (const content of buffer) yield content;
+      }
 
-    await store.replaceStreamed(counted(drained(), gauge));
-    const withBuffer = await settledHeap();
+      await store.replaceStreamed(counted(drained(), gauge));
+      const withBuffer = await settledHeap();
 
-    expect(buffer).toHaveLength(ROWS);
-    expect(gauge.state.maxLead).toBe(ROWS);
-    expect(withBuffer - baseline).toBeGreaterThan(ROWS * ROW_BYTES * 0.5);
-    await store.dispose();
+      expect(buffer).toHaveLength(ROWS);
+      expect(gauge.state.maxLead).toBe(ROWS);
+      expect(withBuffer - baseline).toBeGreaterThan(ROWS * ROW_BYTES * 0.5);
+    } finally {
+      await store.dispose();
+    }
   });
 });
