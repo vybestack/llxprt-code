@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { withSynchronousFixture } from '../../packages/core/src/services/history/synchronous-ticket-test-helpers.js';
+import { withNativeDetachedFixture as withSynchronousFixture } from '../../packages/core/src/services/history/__tests__/support/detached-contract-fixture.js';
 import { batchRow } from '../../packages/core/src/services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import {
   settledHeapCensus,
@@ -45,7 +45,7 @@ await withSynchronousFixture(async (fixture) => {
   const before = heapCensus(join(directory, 'before.heap.json'));
   fixture.pauseWriter();
   populate(fixture.history, size);
-  await fixture.waitForPausedWrite;
+  await fixture.writerPaused;
   await settledHeapCensus();
   const paused = heapCensus(join(directory, 'paused.heap.json'));
   fixture.releaseWriter();
@@ -65,7 +65,7 @@ await withSynchronousFixture(async (fixture) => {
     retainedExtraBytes: after.extraMemorySize - before.extraMemorySize,
     pausedBytes: paused.heapSize - before.heapSize,
     owners: fixture.owners.snapshot(),
-    writerPeakBytes: fixture.writerPeakBytes(),
+    journalWrittenBytes: fixture.io.descriptorWrittenBytes,
     retainedRows: retained.length,
     historyRows: fixture.history.length(),
   };

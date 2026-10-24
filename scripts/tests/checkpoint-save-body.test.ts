@@ -2,14 +2,12 @@
 import { tmpdir } from 'node:os';
 import { writeBodyFile } from '../../packages/test-utils/src/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
+import { seedRows } from './support/body-summary-seed.js';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { join, basename } from 'node:path';
 import { withBatchFixture } from '../../packages/core/src/services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import { exactTokenizer } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
-import {
-  exportSummaryRow,
-  seedRows,
-} from '../../packages/core/src/services/history/export-summary-test-helpers.js';
+import { exportSummaryRow } from '../../packages/core/src/services/history/export-summary-test-helpers.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import { RequestMediaResolver } from '../../packages/core/src/storage/request-media-resolver.js';
 import {
@@ -91,8 +89,8 @@ async function savePair(
 }
 
 async function roundTrip(size: number): Promise<void> {
-  await withBatchFixture(async ({ history, recorder }) => {
-    await seedRows(recorder, size);
+  await withBatchFixture(async ({ history }) => {
+    await seedRows(history, size);
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     const client = internalAgentClient(agent);
     const root = await mkdtemp(join(tmpdir(), 'checkpoint-body-'));

@@ -10,7 +10,7 @@ import {
   providerFarFixtureRow,
   providerPendingFixture,
 } from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
-import { withSynchronousFixture } from '../../packages/core/src/services/history/synchronous-ticket-test-helpers.js';
+import { withNativeDetachedFixture as withSynchronousFixture } from '../../packages/core/src/services/history/__tests__/support/detached-contract-fixture.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
 import { captureCuratedBody } from './provider-curated-body-gemini.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';

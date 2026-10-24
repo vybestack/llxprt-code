@@ -151,7 +151,7 @@ describe('existing empty AI rows and public admission', () => {
           else
             operation = history.detachedValues.transform(
               async (_source, sink) => {
-                sink.appendValue(empty);
+                await sink.appendValue(empty);
               },
               'test',
             );
