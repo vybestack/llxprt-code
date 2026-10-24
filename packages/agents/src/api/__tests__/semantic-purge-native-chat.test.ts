@@ -12,7 +12,7 @@ import { collectAgentHistory } from './helpers/collect-agent-history.js';
 describe('native public chat semantic purge trigger', () => {
   const directory = useTempDir('native-purge-chat-');
   it('purges through the next model call and durable recording without operation files', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+    const { agent, cleanup } = await buildAgent('multi-turn-text.jsonl', {
       workingDir: directory(),
     });
     try {
