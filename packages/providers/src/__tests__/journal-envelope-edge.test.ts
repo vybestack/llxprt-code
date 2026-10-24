@@ -13,6 +13,7 @@ import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/reques
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { DEFAULT_HTTP_JSON_ENVELOPE_BYTES } from '../utils/boundedJsonBody.js';
 import { journalSendFixture } from './support/journal-send-fixture.js';
+import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import { providerStreamError } from './support/provider-stream-error.js';
 import {
   localWireHashSink,
@@ -107,22 +108,47 @@ async function verifyEdge(
     (function* (): Generator<IContent> {
       yield row('x'.repeat(padding), reference);
     })(),
+    [],
+    { mediaStore: store },
   );
   let rowsRead = 0;
+  let blocksRead = 0;
+  const originalPlan = IndexedJournalRequestSnapshot.prototype.planAt;
+  IndexedJournalRequestSnapshot.prototype.planAt = async function (...args) {
+    const plan = await originalPlan.apply(this, args);
+    return {
+      ...plan,
+      async *openBlocks() {
+        for await (const block of plan.openBlocks()) {
+          blocksRead++;
+          yield block;
+        }
+      },
+    };
+  };
+  const indexed = fixture.selection.native?.indexed;
+  if (indexed === undefined) throw new Error('Expected native edge rows');
+  const indexedOpen = indexed.openReader.bind(indexed);
+  const indexedRead = indexed.readAt.bind(indexed);
+  indexed.openReader = (signal) =>
+    (async function* (): AsyncGenerator<IContent, void> {
+      for await (const content of indexedOpen(signal)) {
+        rowsRead += 1;
+        blocksRead += content.blocks.length;
+        yield content;
+      }
+    })();
+  indexed.readAt = (index, signal) => {
+    rowsRead += 1;
+    return indexedRead(index, signal);
+  };
   const selection = {
+    native: fixture.selection.native,
     count: fixture.selection.count,
     close: () => fixture.selection.close(),
-    readAt: (index: number, signal?: AbortSignal) => {
-      rowsRead += 1;
-      return fixture.selection.readAt(index, signal);
-    },
-    openReader: (signal?: AbortSignal) =>
-      (async function* (): AsyncGenerator<IContent, void> {
-        for await (const content of fixture.selection.openReader(signal)) {
-          rowsRead += 1;
-          yield content;
-        }
-      })(),
+    readAt: (index: number, signal?: AbortSignal) =>
+      fixture.selection.readAt(index, signal),
+    openReader: (signal?: AbortSignal) => fixture.selection.openReader(signal),
   };
   let received = 0;
   const sink = await localWireHashSink(route, async (bytes) => {
@@ -141,9 +167,13 @@ async function verifyEdge(
       provider.generateChatCompletion(options),
     );
     verify({ error, sink, received }, expected);
-    expect(rowsRead).toBe(route.id === 'openai-chat-plain' ? 2 : 1);
+    const expectedRows =
+      extra === 1 || route.id === 'anthropic-cache-off' ? 0 : 1;
+    expect(rowsRead).toBe(expectedRows);
+    if (extra === 0) expect(blocksRead).toBeGreaterThan(0);
     expect(resolver.accounting().activeRequestCount).toBe(0);
   } finally {
+    IndexedJournalRequestSnapshot.prototype.planAt = originalPlan;
     await sink.close();
     await fixture.close();
   }
