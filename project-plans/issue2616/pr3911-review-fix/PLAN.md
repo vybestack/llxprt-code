@@ -976,7 +976,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T1.2 C4 stale CLI boundary subpaths
 - [x] T1.3 A1 extension selection and disabled list
 - [x] T1.4 A2 skills list without preflight
-- [ ] T1.5 A6 characterize inherited trust join (no production change)
+- [x] T1.5 A6 characterize inherited trust join (no production change)
 - [ ] T1.6 E4 delete dead Config profile fallback
 - [ ] T1.7 E5 child Config uses parent workspace
 - [ ] T1.8 E6 provider alias loading surfaces malformed aliases

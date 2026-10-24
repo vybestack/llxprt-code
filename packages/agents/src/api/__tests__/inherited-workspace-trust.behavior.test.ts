@@ -12,6 +12,23 @@ import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/wo
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 
+class SubscriptionCountingTrust extends WorkspaceTrustLifecycle {
+  activeChangeSubscriptions = 0;
+
+  override subscribeTrustChange(
+    subscriber: Parameters<WorkspaceTrustLifecycle['subscribeTrustChange']>[0],
+  ): () => void {
+    const unsubscribe = super.subscribeTrustChange(subscriber);
+    this.activeChangeSubscriptions++;
+    let released = false;
+    return () => {
+      if (!released) this.activeChangeSubscriptions--;
+      released = true;
+      unsubscribe();
+    };
+  }
+}
+
 describe('Agent-owned inherited workspace trust', () => {
   const credentials = useOwnedCredentials();
   const cleanup: Array<() => void | Promise<void>> = [];
@@ -72,6 +89,38 @@ describe('Agent-owned inherited workspace trust', () => {
     await parent.setTrustedFolderLive(true);
     expect(peer.ide.isTrustedFolder()).toBe(true);
     expect(peer.getModel()).toBe('peer-model');
+  });
+
+  it('drops its parent subscription on dispose so later parent changes reach nothing', async () => {
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', record);
+    cleanup.push(() => {
+      process.off('unhandledRejection', record);
+    });
+    const parent = new SubscriptionCountingTrust({ localTrust: true });
+    cleanup.push(() => parent.dispose());
+    const agent = await createAgent({
+      provider: 'openai',
+      model: 'child-model',
+      workingDir: directory,
+      credentialAuthority: credentials().authority,
+      parentTrustPort: parent,
+      harness: { includeProcessCwd: false },
+    });
+    cleanup.push(() => agent.dispose());
+    expect(parent.activeChangeSubscriptions).toBe(1);
+    await parent.setTrustedFolderLive(false);
+    expect(agent.ide.isTrustedFolder()).toBe(false);
+    await agent.dispose();
+    expect(parent.activeChangeSubscriptions).toBe(0);
+    await parent.setTrustedFolderLive(true);
+    await parent.setTrustedFolderLive(false);
+    await new Promise<void>((turn) => setImmediate(turn));
+    expect(unhandled).toStrictEqual([]);
+    expect(parent.isTrustedFolder()).toBe(false);
   });
 
   it('rejects simultaneous borrowed and inherited trust before acquiring credential transports', async () => {
