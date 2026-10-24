@@ -531,7 +531,7 @@ describe('activation public admission lifetime', () => {
       ).toBe(false);
       released.resolve();
       expect(await outcome).toBe(failure);
-      await expect(closing).rejects.toThrow(/cleanup/);
+      await expect(closing).resolves.toBeUndefined();
       expect(() => capturedSessionClient(handed)).toThrow(/disposed/);
       await expect(
         Promise.resolve().then(() => handed.refreshAuth()),

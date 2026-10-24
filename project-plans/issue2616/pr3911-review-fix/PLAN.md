@@ -1081,7 +1081,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T2.7c A7 Vertex external account exchange through the owner transport
 - [x] T3.1 A5 auxiliary generation disposal
 - [x] T3.2 A5 workspace control and loop runner joins
-- [ ] T3.3 A5 activation preflight public work
+- [x] T3.3 A5 activation preflight public work
 - [ ] T3.4 A4 auth admission, flights, owner signal, lock window
 - [ ] T3.5 A4 retained interactive handlers, Claude Code cancellation, close order
 - [ ] T3.6 E2 MCP admission closure split from connection retirement; disposal after borrowing facades

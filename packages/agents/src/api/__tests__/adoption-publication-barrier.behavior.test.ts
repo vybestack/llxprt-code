@@ -200,7 +200,7 @@ describe('adoption publication barrier', () => {
       expect(await media.store.getStoredByteLength()).toBe(0);
       release.release();
       expect(await image).toBeInstanceOf(Error);
-      expect(await outcome).toBeInstanceOf(AggregateError);
+      expect(await outcome).toBeUndefined();
       await expect(media.store.getStoredByteLength()).rejects.toThrow(/closed/);
       expect(() => filesystem.paths.directories()).toThrow(/disposed/);
       selected.writeUserParameter('survived-adoption', true);

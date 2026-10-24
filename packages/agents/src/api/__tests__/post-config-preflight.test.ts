@@ -391,6 +391,79 @@ describe('post-config preflight ownership', () => {
     });
   });
 
+  async function holdFailingHistoryRead(
+    activation: AgentActivationBootstrap,
+    failure: Error,
+  ) {
+    const entered = gate();
+    const released = gate();
+    const observation = spyOn(
+      AgentClient.prototype,
+      'getHistory',
+    ).mockImplementation(async () => {
+      entered.release();
+      await released.promise;
+      throw failure;
+    });
+    const history = activation.readHistory();
+    const seen = history.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await entered.promise;
+    observation.mockRestore();
+    return { seen, release: released.release };
+  }
+
+  it('waits for a public read that rejects for its caller before transferring the foreground session', async () => {
+    await withPreflight(false, async (operation, prepare) => {
+      await prepare();
+      const intent = { provider: 'openai', authMode: 'none' } as const;
+      const result = await operation.preflight(intent);
+      if (result.token === undefined)
+        throw new Error('Missing activation receipt');
+      const activation = transfer(operation);
+      const failure = new Error('history read failed for its caller');
+      const held = await holdFailingHistoryRead(activation, failure);
+      const pending = AgentProfilePreflight.createForegroundAgent(
+        operation,
+        result.token,
+        intent,
+        {},
+      );
+      const outcome = pending.then(
+        (agent) => ({ agent }),
+        (error: unknown) => ({ error }),
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      held.release();
+      expect(await held.seen).toBe(failure);
+      const published = await outcome;
+      if ('error' in published) throw published.error;
+      await published.agent.dispose();
+    });
+  });
+
+  it('disposes after a public read that rejected for its caller without reporting that rejection', async () => {
+    await withPreflight(false, async (operation, prepare) => {
+      await prepare();
+      const activation = transfer(operation);
+      const failure = new Error('history read failed for its caller');
+      const held = await holdFailingHistoryRead(activation, failure);
+      let closed = false;
+      const closing = Promise.resolve(activation.dispose()).then(() => {
+        closed = true;
+      });
+      void closing.catch(() => undefined);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(closed).toBe(false);
+      held.release();
+      expect(await held.seen).toBe(failure);
+      await closing;
+      expect(closed).toBe(true);
+    });
+  });
+
   it('keeps preflight history with the adopted session and closes captured reads on retirement', async () => {
     await withPreflight(false, async (operation, prepare) => {
       await prepare();

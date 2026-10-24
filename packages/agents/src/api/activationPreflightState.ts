@@ -153,12 +153,7 @@ export class AgentActivationBootstrap
   }
 
   async #joinPublicWork(): Promise<void> {
-    const work = await Promise.allSettled([this.#tail, ...this.#publicWork]);
-    const failures = work.flatMap((result) =>
-      result.status === 'rejected' ? [result.reason] : [],
-    );
-    if (failures.length > 0)
-      throw new AggregateError(failures, 'Foreground preparation failed');
+    await Promise.allSettled([this.#tail, ...this.#publicWork]);
   }
 
   async #completeForeground(
@@ -406,7 +401,7 @@ export class AgentActivationBootstrap
       : undefined;
     void memoryClosing?.catch(() => undefined);
     this.#closing = Promise.allSettled([this.#tail, ...this.#publicWork]).then(
-      async (work) => {
+      async () => {
         const client = this.ownsSessionClient
           ? this.ownedSessionClient
           : undefined;
@@ -421,7 +416,6 @@ export class AgentActivationBootstrap
           this.ownsFilesystem ? this.workspaceFilesystem.dispose() : undefined,
         ]);
         const failures = [
-          ...work,
           ...clientCleanup,
           ...memoryCleanup,
           ...mediaCleanup,
