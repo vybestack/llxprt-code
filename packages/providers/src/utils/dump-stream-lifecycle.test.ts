@@ -8,7 +8,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
 import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { DumpScratch } from './dumpScratch.js';
-import { AnthropicDumpTable } from '../anthropic/anthropicDumpTable.js';
+import { MessageTable } from '../anthropic/message-table/message-table.js';
 import { buildProviderDumpBodyStream } from './providerRequestConversion.js';
 import { dumpRequestContextStream } from './dumpContext.js';
 import { streamPrettyJson } from './streamPrettyJson.js';
@@ -245,7 +245,7 @@ describe('scratch construction cleanup', () => {
       );
       try {
         expect(() =>
-          failedIndex === 1 ? new DumpScratch() : new AnthropicDumpTable(),
+          failedIndex === 1 ? new DumpScratch() : new MessageTable(),
         ).toThrow('index failure');
         expect(watch.directories.filter(fs.existsSync)).toStrictEqual([]);
         expect(() => fs.fstatSync(descriptor)).toThrow(/EBADF/);
