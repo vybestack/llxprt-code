@@ -54,10 +54,17 @@ const noop = (): void => {};
 describe('Mounted CLI child execution ownership', () => {
   const cleanupOwners: Array<() => Promise<void>> = [];
   const finishes: Array<() => void> = [];
+  const histories: HistoryService[] = [];
+  function fixtureHistory(): HistoryService {
+    const history = new HistoryService();
+    histories.push(history);
+    return history;
+  }
   afterEach(async () => {
     cleanup();
     finishes.splice(0).forEach((finish) => finish());
     for (const dispose of cleanupOwners.splice(0).reverse()) await dispose();
+    for (const history of histories.splice(0)) await history.dispose();
   });
 
   async function owner(
@@ -173,7 +180,7 @@ describe('Mounted CLI child execution ownership', () => {
           subagentManager: subagents,
           runtimeLoader: async (options) => {
             const bundle = createStatelessRuntimeBundle({
-              history: new HistoryService(),
+              history: fixtureHistory(),
               toolRegistry: childRegistry,
               toolsView: {
                 listToolNames: () => ['child_record'],
@@ -188,7 +195,7 @@ describe('Mounted CLI child execution ownership', () => {
               ...options,
               overrides: {
                 ...options.overrides,
-                historyService: new HistoryService(),
+                historyService: fixtureHistory(),
                 toolsView: bundle.toolsView,
                 contentGenerator: bundle.contentGenerator,
               },
@@ -247,6 +254,8 @@ describe('Mounted CLI child execution ownership', () => {
           },
         }),
     });
+    const priorHistory = built.agentClient.getHistoryService();
+    if (priorHistory !== null) histories.push(priorHistory);
     const agent: Agent = await fromConfig({
       settingsService: built.settingsService,
       settingsOwner: built.settingsOwner,

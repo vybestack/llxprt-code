@@ -16,7 +16,10 @@ import { readStoredRow } from '@vybestack/llxprt-code-core/journal/rowReads.js';
 import { decodeStoredRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import { withPublicHistory } from '../../../../agents/src/api/__tests__/helpers/public-history-fixture.js';
+import { StreamOnlyHistory } from '../../../../agents/src/api/__tests__/helpers/public-history-fixture.js';
+import { buildAgent } from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandContext } from './types.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -71,29 +74,40 @@ export async function withChatMutationFixture<T>(
     model: 'test',
   });
   try {
-    return await withPublicHistory(
+    return await withSuffixFixture(
       size,
-      true,
-      async (agent, history, reader) => {
+      async (history, reader) => {
+        const { agent, cleanup } = await buildAgent('plain-text.jsonl');
         const client = agent.agentClient;
-        const context = createMockCommandContext({
-          services: {
-            config: { getEphemeralSetting: () => undefined },
-            agent: { agentClient: client },
-          },
-        });
-        context.recordingIntegration = undefined;
-        context.recordingSwapCallbacks = {
-          getCurrentRecording: () => recording,
-          getCurrentIntegration: () => null,
-          getCurrentLockHandle: () => null,
-          getCurrentMetadata: () => null,
-          setRecording: () => {},
-        };
-        await history.attachJournal(recording);
-        return execute({ context, history, client, recording, reader });
+        const priorHistory = client.getHistoryService();
+        client.storeHistoryServiceForReuse(history);
+        try {
+          await client.startChat([]);
+          const context = createMockCommandContext({
+            services: {
+              config: { getEphemeralSetting: () => undefined },
+              agent: { agentClient: client },
+            },
+          });
+          context.recordingIntegration = undefined;
+          context.recordingSwapCallbacks = {
+            getCurrentRecording: () => recording,
+            getCurrentIntegration: () => null,
+            getCurrentLockHandle: () => null,
+            getCurrentMetadata: () => null,
+            setRecording: () => {},
+          };
+          await history.attachJournal(recording);
+          return await execute({ context, history, client, recording, reader });
+        } finally {
+          await cleanup();
+          if (priorHistory !== history) await priorHistory?.dispose();
+        }
       },
       bytes,
+      accountingRow,
+      undefined,
+      (options) => new StreamOnlyHistory(options),
     );
   } finally {
     await recording.dispose();
