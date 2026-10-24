@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { NEUTRAL_ROW_FACTS_READY } from '../../journal/neutralRowFacts.js';
+import { NEUTRAL_ROW_FACTS_THROUGH } from '../../journal/neutralRowFacts.js';
 import { tokenUsageFactRegistration } from './token-usage-facts.js';
 import { estimateTokens } from '../../utils/toolOutputLimiter.js';
 import { journalContextSpan } from './journalContextSpan.js';
@@ -133,7 +133,9 @@ export class JournalSession {
         await store.commit([{ kind: 'recency' }]);
       if (
         options.eagerTokenUsageFacts === true &&
-        (await store.getMeta(NEUTRAL_ROW_FACTS_READY)) === undefined
+        new TextDecoder().decode(
+          await store.getMeta(NEUTRAL_ROW_FACTS_THROUGH),
+        ) !== String(store.published?.commitSeq)
       )
         await store.commit([{ kind: 'append', rows: [] }]);
       return new JournalSession(store, true);

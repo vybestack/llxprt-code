@@ -3,6 +3,8 @@ import {
   readNeutralRowFact,
   writeNeutralRowFact,
 } from './neutral-row-fact-storage.js';
+import { filledVersion } from './filled-version.js';
+import { decodeDecimal, encodeDecimal } from './metaFacts.js';
 import type { BuildContext, BuiltGroup } from './groupBuildShared.js';
 import type { RecordAppender } from './groupAppender.js';
 import { snapshotOf } from './formatFill.js';
@@ -33,6 +35,7 @@ export function neutralRowFactKey(
 }
 
 export const NEUTRAL_ROW_FACTS_READY = 'history:neutral-row-facts:1';
+export const NEUTRAL_ROW_FACTS_THROUGH = 'history:neutral-row-facts-through:1';
 
 async function* changedEntries(
   ctx: BuildContext,
@@ -57,7 +60,8 @@ export async function fillNeutralRowFacts(
   appender: RecordAppender,
 ): Promise<BuiltGroup> {
   const registration = ctx.neutralRowFacts;
-  if (registration === undefined) return built;
+  if (registration === undefined || ctx.deferNeutralRowFacts === true)
+    return built;
   await appender.drain();
   const access = ctx.readGroup(appender.nextOffset);
   const metaReader = new KeyedMapReader(
@@ -70,19 +74,18 @@ export async function fillNeutralRowFacts(
     built.state.metaRoot,
     NEUTRAL_ROW_FACTS_READY,
   );
-  if (ctx.deferNeutralRowFacts === true) {
-    if (ready === undefined || ready.length === 0) return built;
-    const meta = new KeyedMapBatch(metaReader, built.state.metaRoot);
-    meta.set(NEUTRAL_ROW_FACTS_READY, new Uint8Array());
-    return {
-      ...built,
-      state: { ...built.state, metaRoot: await meta.commit(appender) },
-    };
-  }
   const revision = `${registration.kind}:${registration.revision}`;
+  const through = await metaReader.get(
+    built.state.metaRoot,
+    NEUTRAL_ROW_FACTS_THROUGH,
+  );
+  const source =
+    through === undefined
+      ? undefined
+      : await filledVersion(ctx, Number(decodeDecimal(through)));
   const since =
     new TextDecoder().decode(ready) === revision
-      ? (ctx.published?.durableEnd ?? 0)
+      ? (source?.durableEnd ?? 0)
       : 0;
   const batch = new IdFactBatch(
     new IdTrieReader(access, ctx.idCache),
@@ -94,12 +97,13 @@ export async function fillNeutralRowFacts(
   const snapshot = snapshotOf(ctx, built, appender);
   try {
     const entries =
-      since > 0 && built.changedRows !== undefined
+      source === ctx.published && since > 0 && built.changedRows !== undefined
         ? built.changedRows
         : changedEntries(ctx, appender, built.state.rowRoot, since);
     for await (const entry of entries) {
       const key = neutralRowFactKey(registration, entry.label);
       const previous = await readNeutralRowFact(batch.queries, key);
+      if (entry.recordOffset < since && previous !== undefined) continue;
       const value = await registration.measure(snapshot, entry, previous);
       await writeNeutralRowFact(batch, key, value);
     }
@@ -115,6 +119,7 @@ export async function fillNeutralRowFacts(
       built.state.metaRoot,
     );
     meta.set(NEUTRAL_ROW_FACTS_READY, new TextEncoder().encode(revision));
+    meta.set(NEUTRAL_ROW_FACTS_THROUGH, encodeDecimal(ctx.commitSeq));
     return {
       ...built,
       state: {
