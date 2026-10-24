@@ -31,11 +31,14 @@ import {
   prepareAgentPreflight,
 } from '../profile-preflight.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { usePromptFixture } from './helpers/prompt-fixture.js';
 
 const HOST_A = 'model-a.invalid';
 const HOST_B = 'model-b.invalid';
 const CANNED_A = 'model-a-canned';
 const CANNED_B = 'model-b-canned';
+const COMPRESS_HOST_A = 'compress-a.invalid';
+const COMPRESS_HOST_B = 'compress-b.invalid';
 const SETTLE_LIMIT_MS = 5_000;
 
 class HeldRequestProvider extends OpenAIProvider {
@@ -155,6 +158,7 @@ async function settlesWithin(work: Promise<unknown>): Promise<boolean> {
 
 describe('owner transport per root', () => {
   const credentials = useOwnedCredentials();
+  usePromptFixture();
   const proxies: LocalForwardProxy[] = [];
   const cleanups: Array<() => Promise<void>> = [];
   let directory: string;
@@ -176,9 +180,16 @@ describe('owner transport per root', () => {
   async function startProxy(
     host: string,
     canned: string,
+    extraHosts: readonly string[] = [],
   ): Promise<LocalForwardProxy> {
     const proxy = await startLocalForwardProxy({
       [host]: (request) => respond(host, canned, request),
+      ...Object.fromEntries(
+        extraHosts.map((extra) => [
+          extra,
+          (request: ForwardProxyRequest) => respond(extra, extra, request),
+        ]),
+      ),
     });
     proxies.push(proxy);
     return proxy;
@@ -188,8 +199,9 @@ describe('owner transport per root', () => {
     kind: RootKind,
     host: string,
     canned: string,
+    extraHosts: readonly string[] = [],
   ): Promise<Root> {
-    const proxy = await startProxy(host, canned);
+    const proxy = await startProxy(host, canned, extraHosts);
     const baseUrl = `http://${host}/v1`;
     if (kind === 'preferred') {
       const agent = await createAgent({
@@ -298,6 +310,63 @@ describe('owner transport per root', () => {
       );
       expect(left.proxy.requestsTo(HOST_A)).toHaveLength(1);
     }, 30_000);
+  });
+
+  describe('compression profile', () => {
+    async function saveCompressionProfile(
+      name: string,
+      host: string,
+    ): Promise<void> {
+      await new ProfileManager().saveProfile(name, {
+        version: 1,
+        provider: 'openai',
+        model: `${name}-model`,
+        modelParams: {},
+        ephemeralSettings: {
+          'base-url': `http://${host}/v1`,
+          'auth-key': 'test-key',
+        },
+      });
+    }
+
+    async function compressThroughProfile(
+      agent: Agent,
+      profile: string,
+    ): Promise<void> {
+      for (let turn = 0; turn < 6; turn++) {
+        for await (const _event of agent.stream(
+          `Earlier turn ${turn}: ${'context '.repeat(200)}`,
+        )) {
+          // Draining the stream records the turn in history.
+        }
+      }
+      agent.setEphemeralSetting('compression.strategy', 'one-shot');
+      agent.setEphemeralSetting('compression.profile', profile);
+      await agent.compress();
+    }
+
+    it('sends each root compression profile request through its own proxy', async () => {
+      await saveCompressionProfile('compress-root-a', COMPRESS_HOST_A);
+      await saveCompressionProfile('compress-root-b', COMPRESS_HOST_B);
+      const left = await createRoot('preferred', HOST_A, CANNED_A, [
+        COMPRESS_HOST_A,
+      ]);
+      const right = await createRoot('preferred', HOST_B, CANNED_B, [
+        COMPRESS_HOST_B,
+      ]);
+
+      await compressThroughProfile(left.agent, 'compress-root-a');
+      await compressThroughProfile(right.agent, 'compress-root-b');
+
+      expect(
+        left.proxy.requestsTo(COMPRESS_HOST_A).map(({ path }) => path),
+      ).toContain('/v1/chat/completions');
+      expect(left.proxy.requestsTo(COMPRESS_HOST_B)).toHaveLength(0);
+      expect(
+        right.proxy.requestsTo(COMPRESS_HOST_B).map(({ path }) => path),
+      ).toContain('/v1/chat/completions');
+      expect(right.proxy.requestsTo(COMPRESS_HOST_A)).toHaveLength(0);
+    }, 60_000);
   });
 
   it('ends a request held on the root network when construction fails', async () => {

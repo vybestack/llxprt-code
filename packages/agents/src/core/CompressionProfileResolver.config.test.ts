@@ -7,9 +7,13 @@
 import { describe, expect, it } from 'bun:test';
 import type { Profile, StandardProfile } from '@vybestack/llxprt-code-settings';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createOwnerPolicyFixture } from './__tests__/session-policy-fixture.js';
 import { resolveCompressionProvider } from './CompressionProfileResolver.js';
+
+const ownerFetch: NetworkFetch = () =>
+  Promise.reject(new Error('Test resolver makes no requests'));
 
 describe('compression profile Config ownership', () => {
   it.each(['default', 'standard', 'roundrobin', 'failover'])(
@@ -54,6 +58,7 @@ describe('compression profile Config ownership', () => {
                 parameters,
                 signal,
                 fixture.runtime.state.sessionId,
+                ownerFetch,
               ),
             profileDefinitions: {
               loadProfile: async (name): Promise<Profile> =>

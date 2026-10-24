@@ -3,6 +3,7 @@ import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runti
 import type { ProfileDefinitionReads } from '@vybestack/llxprt-code-core';
 import { applyProfileSettings } from '@vybestack/llxprt-code-settings';
 import type { PrepareProviderInvocation } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -57,6 +58,17 @@ export interface CompressionProfileResolverContext {
   ): IProvider;
   /** Map of round-robin indexes, mutated in place when strategy is round-robin. */
   readonly roundRobinIndexes: Map<string, number>;
+}
+
+/**
+ * A compression profile request leaves through the root network that the
+ * compressed session's own invocations carry.
+ */
+function readRootFetch(ctx: CompressionProfileResolverContext): NetworkFetch {
+  const { fetch } = ctx.prepareProviderInvocation(ctx.runtimeState.provider);
+  if (fetch === undefined)
+    throw new Error('Provider request requires the owner transport');
+  return fetch;
 }
 
 // ---------------------------------------------------------------------------
@@ -384,6 +396,7 @@ export async function resolveStandardCompressionProvider(
   );
   const invocation = createRuntimeInvocationContext({
     runtimeId: runtime.runtimeId,
+    fetch: readRootFetch(ctx),
     sessionId: ctx.runtimeState.sessionId,
     runtimeMetadata: runtime.metadata,
 
@@ -519,6 +532,7 @@ export async function resolveLoadBalancedCompressionProvider(
   };
   const invocation = createRuntimeInvocationContext({
     runtimeId: runtime.runtimeId,
+    fetch: readRootFetch(ctx),
     sessionId: ctx.runtimeState.sessionId,
     runtimeMetadata: runtime.metadata,
 
