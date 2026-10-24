@@ -52,7 +52,9 @@ export function mixedRow(index: number, payloadBytes: number): IContent {
     blocks: [{ type: 'text', text: `${index}:${'y'.repeat(payloadBytes)}` }],
     metadata: {
       chronology,
-      ...(kind === 1 && index % 7 === 1 ? { responsesStored: true } : {}),
+      ...(kind === 1 && index % 7 === 1
+        ? { responsesStored: true, id: `response-${index}` }
+        : {}),
     },
   };
 }
