@@ -438,23 +438,22 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
 
   dispose(): Promise<void> {
     this.foreground.close();
+    this.interactiveAuth.closeAdmission();
     this.closing ??= this.retire();
     return this.closing;
   }
 
   /**
-   * Retires the manager in order: interactive sessions, accepted operations,
-   * authentication flights (their locks released), renewals, then the owned
-   * token store. Every step runs even if an earlier one failed; the steps' own
-   * failures are reported together at the end.
+   * Retires the manager in order, after `dispose` closed admission: cancel
+   * interactive sessions, unbind the host and join every host handler,
+   * accepted operations, authentication flights (their locks released),
+   * renewals, then the owned token store. Every step runs even if an earlier
+   * one failed; the steps' own failures are reported together at the end.
    */
   private async retire(): Promise<void> {
     const failures: unknown[] = [];
     const steps: Array<() => Promise<void>> = [
-      async () => {
-        this.interactiveAuth.unbindHost();
-        await this.interactiveAuth.dispose();
-      },
+      () => this.interactiveAuth.dispose(),
       () => this.foreground.join(),
       () => this.authFlowOrchestrator.dispose(),
       () => this.proactiveRenewalManager.cancelAndJoin(),
@@ -839,13 +838,16 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     providerName: string,
     buckets: string[],
     requestMetadata?: OAuthTokenRequestMetadata,
+    signal?: AbortSignal,
   ): Promise<void> {
     return this.foreground.accept((ownerSignal) =>
       this.authFlowOrchestrator.authenticateMultipleBuckets(
         providerName,
         buckets,
         requestMetadata,
-        ownerSignal,
+        signal === undefined
+          ? ownerSignal
+          : AbortSignal.any([ownerSignal, signal]),
       ),
     );
   }

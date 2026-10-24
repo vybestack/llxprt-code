@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'bun:test';
 import { ProxySocketClient } from '@vybestack/llxprt-code-auth/proxy/proxy-socket-client.js';
 import { ProxyTokenStore } from '@vybestack/llxprt-code-auth/proxy/proxy-token-store.js';
+import type { InteractiveAuthHostHandler } from './interactive-auth-coordinator.js';
 import { OAuthManager } from './oauth-manager.js';
 import type { OAuthProvider, OAuthToken } from './types.js';
 
@@ -335,6 +336,276 @@ describe('OAuthManager dispose joins its authentication flights', () => {
       held.hold.release();
       await authenticating.outcome;
       await disposing.outcome;
+    }
+  });
+});
+
+interface HeldHost {
+  readonly handler: InteractiveAuthHostHandler;
+  readonly entered: Promise<void>;
+  readonly hold: { release: () => void };
+  readonly signals: AbortSignal[];
+}
+
+/** A host handler that waits on a gate and ignores its session signal. */
+function heldHost(): HeldHost {
+  const entered = gate();
+  const hold = gate();
+  const signals: AbortSignal[] = [];
+  const handler: InteractiveAuthHostHandler = async (_challenge, signal) => {
+    signals.push(signal);
+    entered.release();
+    await hold.promise;
+  };
+  return { handler, entered: entered.promise, hold, signals };
+}
+
+function interactivePrompt(
+  timeoutMs?: number,
+): Parameters<OAuthManager['requestInteractiveAuth']>[0] {
+  return {
+    provider: 'host-auth',
+    bucket: 'default',
+    requester: { runtimeKind: 'agent' },
+    reason: 'authentication-required',
+    ...(timeoutMs === undefined ? {} : { timeoutMs }),
+  };
+}
+
+describe('OAuthManager dispose joins interactive host handlers', () => {
+  async function disposeWithHeldHandler(
+    prepare: (
+      manager: OAuthManager,
+      first: HeldHost,
+      request: ReturnType<typeof track>,
+    ) => Promise<void>,
+    timeoutMs?: number,
+  ): Promise<void> {
+    const store = new RecordingStore();
+    const manager = new OAuthManager(store, undefined, undefined, 'owned');
+    const first = heldHost();
+    manager.bindInteractiveAuthHost(first.handler);
+    const request = track(
+      manager.requestInteractiveAuth(interactivePrompt(timeoutMs)),
+    );
+    await first.entered;
+    try {
+      await prepare(manager, first, request);
+      const disposing = track(manager.dispose());
+      await flush();
+      expect(disposing.isSettled()).toBe(false);
+      expect(store.events).not.toContain('store-close');
+
+      first.hold.release();
+      expect(await disposing.outcome).toBeUndefined();
+      expect(request.isSettled()).toBe(true);
+      expect(store.events).toStrictEqual(['store-close']);
+    } finally {
+      first.hold.release();
+      await request.outcome;
+      await manager.dispose();
+    }
+  }
+
+  it('keeps dispose pending while an active handler ignores its signal', async () => {
+    await disposeWithHeldHandler(async (_manager, first) => {
+      expect(first.signals[0]?.aborted).toBe(false);
+    });
+  });
+
+  it('keeps dispose pending for the handler of a session cancelled before dispose', async () => {
+    await disposeWithHeldHandler(async (manager, _first, request) => {
+      expect(manager.cancelInteractiveAuth()).toBe(1);
+      expect(manager.getInteractiveAuthSessions()).toHaveLength(0);
+      expect(await request.outcome).toBeInstanceOf(Error);
+    });
+  });
+
+  it('keeps dispose pending for the handler of a session that timed out', async () => {
+    await disposeWithHeldHandler(async (manager, _first, request) => {
+      expect(await request.outcome).toBeInstanceOf(Error);
+      expect(manager.getInteractiveAuthSessions()).toHaveLength(0);
+    }, 20);
+  });
+
+  it('keeps dispose pending for the old host handler after the host was replaced', async () => {
+    await disposeWithHeldHandler(async (manager, _first, request) => {
+      const second = heldHost();
+      manager.bindInteractiveAuthHost(second.handler);
+      expect(manager.cancelInteractiveAuth()).toBe(1);
+      expect(await request.outcome).toBeInstanceOf(Error);
+      second.hold.release();
+    });
+  });
+
+  it('rejects interactive requests made after dispose started', async () => {
+    const store = new RecordingStore();
+    const manager = new OAuthManager(store, undefined, undefined, 'owned');
+    const first = heldHost();
+    manager.bindInteractiveAuthHost(first.handler);
+    const request = track(manager.requestInteractiveAuth(interactivePrompt()));
+    await first.entered;
+    const disposing = track(manager.dispose());
+    const lateHost = heldHost();
+    try {
+      manager.bindInteractiveAuthHost(lateHost.handler);
+      const late = track(manager.requestInteractiveAuth(interactivePrompt()));
+      await flush();
+      expect(late.isSettled()).toBe(true);
+      expect(String((await late.outcome) as Error)).toContain('disposed');
+      expect(disposing.isSettled()).toBe(false);
+    } finally {
+      first.hold.release();
+      lateHost.hold.release();
+      await request.outcome;
+      await disposing.outcome;
+    }
+  });
+
+  it('leaves an independent manager and its held handler to settle on its own gate', async () => {
+    const managerA = new OAuthManager(
+      new RecordingStore(),
+      undefined,
+      undefined,
+      'owned',
+    );
+    const storeB = new RecordingStore();
+    const managerB = new OAuthManager(storeB, undefined, undefined, 'owned');
+    const hostA = heldHost();
+    const hostB = heldHost();
+    managerA.bindInteractiveAuthHost(hostA.handler);
+    managerB.bindInteractiveAuthHost(hostB.handler);
+    const requestA = track(
+      managerA.requestInteractiveAuth(interactivePrompt()),
+    );
+    const requestB = track(
+      managerB.requestInteractiveAuth(interactivePrompt()),
+    );
+    await Promise.all([hostA.entered, hostB.entered]);
+
+    const disposingA = track(managerA.dispose());
+    try {
+      await flush();
+      expect(disposingA.isSettled()).toBe(false);
+      expect(hostA.signals[0]?.aborted).toBe(true);
+      expect(hostB.signals[0]?.aborted).toBe(false);
+      expect(requestB.isSettled()).toBe(false);
+      expect(managerB.getInteractiveAuthSessions()).toHaveLength(1);
+
+      hostB.hold.release();
+      expect(await requestB.outcome).toBeUndefined();
+      expect(disposingA.isSettled()).toBe(false);
+      expect(storeB.events).toStrictEqual([]);
+    } finally {
+      hostA.hold.release();
+      hostB.hold.release();
+      await requestA.outcome;
+      await disposingA.outcome;
+      await managerB.dispose();
+    }
+  });
+
+  it('serves a new interactive session on another manager while this one is disposing', async () => {
+    const managerA = new OAuthManager(
+      new RecordingStore(),
+      undefined,
+      undefined,
+      'owned',
+    );
+    const managerB = new OAuthManager(
+      new RecordingStore(),
+      undefined,
+      undefined,
+      'owned',
+    );
+    const hostA = heldHost();
+    managerA.bindInteractiveAuthHost(hostA.handler);
+    managerB.bindInteractiveAuthHost(async () => {});
+    const requestA = track(
+      managerA.requestInteractiveAuth(interactivePrompt()),
+    );
+    await hostA.entered;
+    const disposingA = track(managerA.dispose());
+    try {
+      await flush();
+      await managerB.requestInteractiveAuth(interactivePrompt());
+      expect(disposingA.isSettled()).toBe(false);
+    } finally {
+      hostA.hold.release();
+      await requestA.outcome;
+      await disposingA.outcome;
+      await managerB.dispose();
+    }
+  });
+});
+
+describe('OAuthManager multi-bucket authentication honors the caller signal', () => {
+  it('cancels a held multi-bucket authentication while the manager stays usable', async () => {
+    const store = new RecordingStore();
+    const manager = new OAuthManager(
+      store,
+      undefined,
+      {
+        readSessionAuthPolicy: () => ({
+          profileName: null,
+          bucketPrompt: false,
+          bucketDelay: 0,
+          interactiveTimeoutMs: undefined,
+          noBrowser: false,
+          authOnly: false,
+        }),
+      },
+      'owned',
+    );
+    const entered = gate();
+    let held = false;
+    const provider: OAuthProvider = {
+      name: 'multi',
+      initiateAuth: async (signal?: AbortSignal): Promise<OAuthToken> => {
+        if (held || signal === undefined) return freshToken('multi-free');
+        held = true;
+        entered.release();
+        await new Promise<never>((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), {
+            once: true,
+          });
+        });
+        throw new Error('unreachable');
+      },
+      getToken: async () => null,
+      refreshToken: async () => null,
+    };
+    manager.registerProvider(provider);
+    const caller = new AbortController();
+    const authenticating = track(
+      manager.authenticateMultipleBuckets(
+        'multi',
+        ['one', 'two'],
+        undefined,
+        caller.signal,
+      ),
+    );
+    try {
+      await entered.promise;
+      expect(authenticating.isSettled()).toBe(false);
+
+      caller.abort(new Error('caller gave up'));
+      const outcome = await Promise.race([
+        authenticating.outcome,
+        sleep(1000).then(() => 'still-held'),
+      ]);
+      expect(outcome).toBeInstanceOf(Error);
+      expect(store.events).not.toContain('store-close');
+      expect(store.events.filter((e) => e === 'lock-acquire')).toHaveLength(
+        store.events.filter((e) => e === 'lock-release').length,
+      );
+
+      await manager.authenticate('multi', 'three');
+      expect(store.tokens.has('multi:three')).toBe(true);
+    } finally {
+      caller.abort(new Error('test cleanup'));
+      await authenticating.outcome;
+      await manager.dispose();
     }
   });
 });

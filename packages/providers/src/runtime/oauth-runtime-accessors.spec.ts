@@ -76,9 +76,13 @@ describe('owner OAuth interactive authentication timeout', () => {
     const ready = new Promise<void>((resolve) => {
       started = resolve;
     });
-    manager.bindInteractiveAuthHost(async () => {
+    manager.bindInteractiveAuthHost(async (_challenge, signal) => {
       started();
-      await new Promise<void>(() => {});
+      await new Promise<void>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), {
+          once: true,
+        });
+      });
     });
     const delays: number[] = [];
     const setTimeout = globalThis.setTimeout;

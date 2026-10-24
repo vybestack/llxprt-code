@@ -382,7 +382,16 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
 
   it('surfaces host session expiry as a typed interactive authentication error', async () => {
     const harness = createHarness(interactive, 200);
-    interactive.bindHost(() => new Promise<void>(() => undefined));
+    interactive.bindHost(
+      (_challenge, signal) =>
+        new Promise<void>((_resolve, reject) => {
+          signal.addEventListener(
+            'abort',
+            () => reject(new DOMException('session ended', 'AbortError')),
+            { once: true },
+          );
+        }),
+    );
 
     const error = await harness.coordinator
       .getToken(PROVIDER, BUCKET)

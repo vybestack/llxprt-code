@@ -162,44 +162,63 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     return this.initGuard.ensureInitialized(() => this.initializeToken());
   }
 
-  async initiateAuth(): Promise<OAuthToken> {
-    return this.errorHandler.wrapMethod(
-      async () => {
-        // Cancel any previous auth attempt's pending dialog
-        const attemptId = crypto.randomUUID();
-        if (this.currentAuthAttemptId) {
-          this.cancelAuth();
-        }
-        this.currentAuthAttemptId = attemptId;
+  async initiateAuth(signal?: AbortSignal): Promise<OAuthToken> {
+    signal?.throwIfAborted();
+    try {
+      return await this.errorHandler.wrapMethod(
+        async () => this.runAuthAttempt(signal),
+        this.name,
+        'initiateAuth',
+      )();
+    } catch (error) {
+      // The wrapper classifies every failure as an OAuth error; the caller
+      // that aborted must see its own reason.
+      if (signal?.aborted === true) throw signal.reason;
+      throw error;
+    }
+  }
 
-        try {
-          await this.ensureInitialized();
-          const { localCallback } =
-            await this.setupDeviceFlowAndDisplay(attemptId);
+  private async runAuthAttempt(
+    signal: AbortSignal | undefined,
+  ): Promise<OAuthToken> {
+    if (signal?.aborted === true) throw new AuthAttemptCancelledError();
+    // Cancel any previous auth attempt's pending dialog
+    const attemptId = crypto.randomUUID();
+    if (this.currentAuthAttemptId) {
+      this.cancelAuth();
+    }
+    this.currentAuthAttemptId = attemptId;
+    const onAbort = (): void => {
+      if (this.currentAuthAttemptId === attemptId) {
+        this.dialog.rejectWithError(new AuthAttemptCancelledError());
+      }
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
 
-          if (localCallback) {
-            return await this.raceCallbackVsManualEntry(
-              attemptId,
-              localCallback,
-            );
-          }
+    try {
+      await this.ensureInitialized();
+      const { localCallback } = await this.setupDeviceFlowAndDisplay(
+        attemptId,
+        signal,
+      );
 
-          const authCode = await this.pendingAuthPromise!;
-          if (this.currentAuthAttemptId !== attemptId) {
-            throw new AuthAttemptCancelledError();
-          }
-          return await this.completeAuth(authCode);
-        } finally {
-          if (this.currentAuthAttemptId === attemptId) {
-            this.dialog.cancelAuth(this.name);
-            this.pendingAuthPromise = undefined;
-            this.currentAuthAttemptId = undefined;
-          }
-        }
-      },
-      this.name,
-      'initiateAuth',
-    )();
+      if (localCallback) {
+        return await this.raceCallbackVsManualEntry(attemptId, localCallback);
+      }
+
+      const authCode = await this.pendingAuthPromise!;
+      if (this.currentAuthAttemptId !== attemptId) {
+        throw new AuthAttemptCancelledError();
+      }
+      return await this.completeAuth(authCode);
+    } finally {
+      signal?.removeEventListener('abort', onAbort);
+      if (this.currentAuthAttemptId === attemptId) {
+        this.dialog.cancelAuth(this.name);
+        this.pendingAuthPromise = undefined;
+        this.currentAuthAttemptId = undefined;
+      }
+    }
   }
 
   /**
@@ -207,7 +226,10 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * display the auth URL to the user, copy to clipboard, and open browser.
    * Returns the URLs and callback handle needed by the calling flow.
    */
-  private async setupDeviceFlowAndDisplay(attemptId: string): Promise<{
+  private async setupDeviceFlowAndDisplay(
+    attemptId: string,
+    signal: AbortSignal | undefined,
+  ): Promise<{
     localCallback: LocalOAuthCallbackServer | null;
   }> {
     const deviceCodeResponse = await this.deviceFlow.initiateDeviceFlow();
@@ -240,7 +262,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       ? this.deviceFlow.buildAuthorizationUrl(localCallback.redirectUri)
       : null;
 
-    if (this.currentAuthAttemptId !== attemptId) {
+    if (this.currentAuthAttemptId !== attemptId || signal?.aborted === true) {
       await localCallback?.shutdown();
       throw new AuthAttemptCancelledError();
     }

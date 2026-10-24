@@ -195,6 +195,7 @@ export interface BucketFailoverOAuthManagerLike {
     providerName: string,
     buckets: string[],
     requestMetadata?: OAuthTokenRequestMetadata,
+    signal?: AbortSignal,
   ): Promise<void>;
   getTokenStore(): TokenStore;
   /**

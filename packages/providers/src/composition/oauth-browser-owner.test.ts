@@ -415,10 +415,14 @@ describe('OAuth owner reads before registration', () => {
       const started = managers.map(
         (manager) =>
           new Promise<void>((resolve) => {
-            manager.bindInteractiveAuthHost(async (challenge) => {
+            manager.bindInteractiveAuthHost(async (challenge, signal) => {
               challenges.push(challenge);
               resolve();
-              await new Promise<void>(() => {});
+              await new Promise<void>((_resolve, reject) => {
+                signal.addEventListener('abort', () => reject(signal.reason), {
+                  once: true,
+                });
+              });
             });
           }),
       );

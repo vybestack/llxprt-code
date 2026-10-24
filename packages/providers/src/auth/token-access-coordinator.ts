@@ -784,6 +784,7 @@ export class TokenAccessCoordinator {
           providerName,
           effectiveBuckets,
           requestMetadata,
+          signal,
         );
         const authenticatedBucket = effectiveBuckets[0];
         if (authenticatedBucket) {

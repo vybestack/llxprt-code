@@ -1083,7 +1083,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T3.2 A5 workspace control and loop runner joins
 - [x] T3.3 A5 activation preflight public work
 - [x] T3.4 A4 auth admission, flights, owner signal, lock window
-- [ ] T3.5 A4 retained interactive handlers, Claude Code cancellation, close order
+- [x] T3.5 A4 retained interactive handlers, Claude Code cancellation, close order
 - [ ] T3.6 E2 MCP admission closure split from connection retirement; disposal after borrowing facades
 - [ ] T4.1 B5 attempt outcomes per manager
 - [ ] T4.2 B5 dialog state per manager, singleton deleted

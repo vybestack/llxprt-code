@@ -45,8 +45,19 @@ function createDeferred<T>(): Deferred<T> {
   };
 }
 
+const activeHosts: RecordingHost[] = [];
+
 class RecordingHost {
   readonly calls: HostCall[] = [];
+
+  constructor() {
+    activeHosts.push(this);
+  }
+
+  /** Lets every handler this host started finish, as a host eventually does. */
+  releaseAll(): void {
+    for (const call of this.calls) call.completion.resolve();
+  }
 
   readonly handle: InteractiveAuthHostHandler = (challenge, signal) => {
     const completion = createDeferred<void>();
@@ -102,12 +113,14 @@ async function expectPending(promise: Promise<unknown>): Promise<void> {
 describe('InteractiveAuthCoordinator', () => {
   let coordinator: InteractiveAuthCoordinator;
   beforeEach(async () => {
+    activeHosts.length = 0;
     coordinator = new InteractiveAuthCoordinator();
     await coordinator.dispose();
     coordinator.unbindHost();
   });
 
   afterEach(async () => {
+    for (const host of activeHosts) host.releaseAll();
     await coordinator.dispose();
     coordinator.unbindHost();
   });
@@ -407,7 +420,10 @@ describe('InteractiveAuthCoordinator', () => {
     await flushMicrotasks();
     const call = getCall(host);
 
-    await Promise.all([coordinator.dispose(), coordinator.dispose()]);
+    const disposals = Promise.all([
+      coordinator.dispose(),
+      coordinator.dispose(),
+    ]);
 
     await expect(outcome).resolves.toStrictEqual({
       kind: 'cancelled',
@@ -416,6 +432,8 @@ describe('InteractiveAuthCoordinator', () => {
     expect(settlementCount).toBe(1);
     expect(call.signal.aborted).toBe(true);
     expect(coordinator.getActiveSessions()).toStrictEqual([]);
+    call.completion.resolve();
+    await disposals;
   });
 
   /**
