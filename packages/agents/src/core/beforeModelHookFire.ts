@@ -31,7 +31,7 @@ export interface BeforeModelSnapshotHookOptions {
   readonly log: (message: string) => void;
   readonly requestContents: ProviderRequestRows;
   readonly rawPending: ProviderRequestRows;
-  readonly root: string | (() => string);
+  readonly root?: string | (() => string);
   readonly signal?: AbortSignal;
 }
 
@@ -55,7 +55,7 @@ function enforceSnapshotDecision(
 }
 
 /**
- * Returned selections own disk copies independently of the hook command output.
+ * Returned selections own hook-returned rows independently of the command output.
  * Resolves `undefined` when the owner reports that hooks are disabled or no
  * BeforeModel hook is registered, so the caller keeps its unmodified selection
  * without copying the request to disk.
@@ -119,7 +119,6 @@ export async function fireBeforeModelSnapshotHook(
         'hookSpecificOutput',
         'llm_request_boundary',
       ]),
-      root: typeof options.root === 'function' ? options.root() : options.root,
       signal: options.signal,
     });
     options.log(
@@ -127,7 +126,7 @@ export async function fireBeforeModelSnapshotHook(
     );
     return resolved;
   } catch (error) {
-    resolved?.close();
+    await resolved?.close();
     throw error;
   } finally {
     hook.close();

@@ -13,7 +13,6 @@ import {
   sourcePendingMembership,
 } from './source-pending-selection.js';
 import { fireBeforeModelSnapshotHook } from './beforeModelHookFire.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 export interface SourceBeforeModelInput {
   readonly owner: HookExecutionOwner | undefined;
@@ -59,7 +58,6 @@ export async function sourceBeforeModelHook(
       },
       model: input.model,
       tools: input.tools ?? [],
-      root: getScratchRoot,
       signal: input.signal,
       log: input.log,
     });
@@ -82,7 +80,7 @@ export async function sourceBeforeModelHook(
         readAt: (index, signal) => boundary.contents.readAt(index, signal),
         async close() {
           try {
-            boundary.close();
+            await boundary.close();
           } finally {
             if (borrowedSnapshot) await input.snapshot.close();
           }
