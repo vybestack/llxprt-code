@@ -38,6 +38,10 @@ import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponsesInputItem } from '../OpenAIResponsesTypes.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
@@ -131,6 +135,7 @@ async function captureRequestBody(
   });
 
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
 

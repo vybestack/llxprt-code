@@ -15,6 +15,10 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function isOptionalObject(value: unknown): boolean {
   return value === undefined || typeof value === 'object';
@@ -302,6 +306,7 @@ describe('Anthropic provider stateless contract tests', () => {
       runtimeId: 'runtime-invocation',
     });
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 

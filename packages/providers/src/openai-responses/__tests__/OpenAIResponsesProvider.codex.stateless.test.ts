@@ -40,6 +40,10 @@ import type {
   StreamResponseOptions,
   WebSocketTransport,
 } from '../openAIResponsesWebSocketTransport.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 const TEST_RUNTIME_ID = 'codex-stateful-test-runtime';
@@ -128,6 +132,7 @@ async function captureRequestBody(
   });
 
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
 
@@ -387,6 +392,7 @@ describe('OpenAIResponsesProvider Codex stateful conversations @issue:3134', () 
     });
 
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 

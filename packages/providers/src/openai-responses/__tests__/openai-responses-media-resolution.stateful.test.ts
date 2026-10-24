@@ -30,6 +30,10 @@ import {
   SocketHarness,
 } from './openAIResponsesWebSocketTransport.test-helpers.js';
 import { buildCodexOAuthManager } from './codexStateful.test-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 describe('openai-responses-media-resolution', () => {
   const OPENAI_BASE_URL = 'https://api.openai.com/v1';
@@ -161,6 +165,7 @@ describe('openai-responses-media-resolution', () => {
       runtimeId: 'responses-media-stateful',
     });
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 

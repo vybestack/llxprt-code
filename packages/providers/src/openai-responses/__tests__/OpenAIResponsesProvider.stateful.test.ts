@@ -35,6 +35,10 @@ import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import { createOpenAIResponsesAliasProvider } from '../../composition/aliasProviderFactory.js';
 import type { ProviderAliasEntry } from '../../composition/providerAliases.js';
 import { declaredMediaTransportCapabilities } from '../../providerMediaTransportCapabilities.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 const TEST_RUNTIME_ID = 'stateful-test-runtime';
 const originalFetch = global.fetch;
@@ -95,6 +99,7 @@ async function captureRequestBody(
   });
 
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
 

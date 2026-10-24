@@ -35,6 +35,10 @@ import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storag
 import { getConversationFileWriter as getFromCore } from '@vybestack/llxprt-code-core/storage/ConversationFileWriter.js';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 class FakeProvider implements IProvider {
   name = 'fake-test-provider';
@@ -134,6 +138,7 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
       contents: inputContent,
       invocation: captureProviderInvocation(
         {
+          fetch: requestFetch,
           runtimeId: runtime.runtimeId,
           metadata: runtime.metadata,
           globalSettings: settings.getAllGlobalSettings(),
@@ -260,6 +265,7 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
         contents: [{ speaker: 'user', blocks: [{ type: 'text', text: 'hi' }] }],
         invocation: captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: runtime.runtimeId,
             metadata: runtime.metadata,
             globalSettings: settings.getAllGlobalSettings(),

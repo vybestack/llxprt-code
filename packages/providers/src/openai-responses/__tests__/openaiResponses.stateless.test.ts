@@ -13,6 +13,10 @@ import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 void vi.mock('openai', () => ({
   default: class FakeOpenAI {
@@ -292,6 +296,7 @@ describe('OpenAI Responses provider stateless contract tests', () => {
       runtimeId: 'runtime-invocation',
     });
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 

@@ -7,6 +7,10 @@
 import { describe, expect, it } from 'bun:test';
 import { normalizeChatCompletionOptions } from './optionsNormalizer.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const providerName = 'provider-a';
 
@@ -42,7 +46,11 @@ describe('logging request admission from data', () => {
 
   it('preserves admitted invocation and explicit kind over owner defaults', () => {
     const invocation = captureProviderInvocation(
-      { globalSettings: { model: 'caller-model' }, providerSettings: {} },
+      {
+        fetch: requestFetch,
+        globalSettings: { model: 'caller-model' },
+        providerSettings: {},
+      },
       providerName,
     );
     const result = normalizeChatCompletionOptions(

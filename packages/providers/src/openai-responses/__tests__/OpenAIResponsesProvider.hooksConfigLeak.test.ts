@@ -28,6 +28,10 @@ import type {
   CodexOAuthToken,
   OAuthManager,
 } from '@vybestack/llxprt-code-auth';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 const originalFetch = global.fetch;
 const mockFetch = vi.fn();
@@ -100,6 +104,7 @@ describe('OpenAIResponsesProvider hooksConfig leak @issue:3218', () => {
     });
 
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 

@@ -35,6 +35,10 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /**
  * Issue #2616: the settings singleton is gone. Each test refreshes this
@@ -90,6 +94,7 @@ function createOptionsWithRuntime(
     contents,
     invocation: captureProviderInvocation(
       {
+        fetch: requestFetch,
         runtimeId: runtime.runtimeId,
         metadata: runtime.metadata,
         globalSettings: settings.getAllGlobalSettings(),
@@ -390,6 +395,7 @@ describe('BaseProvider', () => {
         contents: [userMessage('options signature test')],
         invocation: captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: 'req-123',
             globalSettings: customSettings.getAllGlobalSettings(),
             providerSettings: customSettings.getProviderSettings('test'),
