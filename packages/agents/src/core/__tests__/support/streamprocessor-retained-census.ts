@@ -1,8 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { heapSize, heapStats } from 'bun:jsc';
 import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
-import { ProviderNormalizationDisk } from '@vybestack/llxprt-code-core/services/history/provider-normalization-disk.js';
-import { NormalizedProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
+import { JournalProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/journal-provider-request.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   requestScopedContents,
@@ -152,16 +152,15 @@ export function inFlightPeakLive(
 }
 
 function observeRowOwners(census: RetainedOwnerCensus): () => void {
-  const disk = ProviderNormalizationDisk.prototype;
-  const snapshot = NormalizedProviderRequestSnapshot.prototype;
+  const snapshot = JournalProviderRequestSnapshot.prototype;
+  const indexed = IndexedJournalRequestSnapshot.prototype;
   const writer = PromptKeyDiskWriter.prototype;
   const empty: AsyncIterable<IContent> = { async *[Symbol.asyncIterator]() {} };
   const progressive: RequestScopedContents = Object.getPrototypeOf(
     requestScopedContents(empty),
   );
   const original = {
-    diskRow: disk.row,
-    snapshotRead: snapshot.read,
+    snapshotRead: indexed.readAt,
     snapshotOpen: snapshot.openReader,
     progressiveStream: progressive.stream,
     progressiveDispose: progressive.dispose,
@@ -169,15 +168,8 @@ function observeRowOwners(census: RetainedOwnerCensus): () => void {
     writerString: writer.string,
     writerClose: writer.close,
   };
-  disk.row = function (stage, index) {
-    census.observe('normalization.disk', this);
-    const row = original.diskRow.call(this, stage, index);
-    census.row(`normalization.${stage}`, row);
-    return row;
-  };
-  snapshot.read = function (index) {
-    census.observe('request.snapshot', this);
-    const row = original.snapshotRead.call(this, index);
+  indexed.readAt = async function (index, signal) {
+    const row = await original.snapshotRead.call(this, index, signal);
     census.row('snapshot.row', row);
     return row;
   };
@@ -213,8 +205,7 @@ function observeRowOwners(census: RetainedOwnerCensus): () => void {
     return original.writerClose.call(this);
   };
   return () => {
-    disk.row = original.diskRow;
-    snapshot.read = original.snapshotRead;
+    indexed.readAt = original.snapshotRead;
     snapshot.openReader = original.snapshotOpen;
     progressive.stream = original.progressiveStream;
     progressive.dispose = original.progressiveDispose;

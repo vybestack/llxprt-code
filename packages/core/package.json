@@ -208,11 +208,6 @@
       "bun": "./src/services/history/journalSession.ts",
       "import": "./dist/src/services/history/journalSession.js"
     },
-    "./services/history/provider-normalization-disk.js": {
-      "types": "./dist/src/services/history/provider-normalization-disk.d.ts",
-      "bun": "./src/services/history/provider-normalization-disk.ts",
-      "import": "./dist/src/services/history/provider-normalization-disk.js"
-    },
     "./services/history/provider-request-snapshot.js": {
       "types": "./dist/src/services/history/provider-request-snapshot.d.ts",
       "bun": "./src/services/history/provider-request-snapshot.ts",
@@ -871,16 +866,6 @@
       "types": "./dist/src/services/history/__tests__/support/native-provider-fixture.d.ts",
       "bun": "./src/services/history/__tests__/support/native-provider-fixture.ts",
       "import": "./dist/src/services/history/__tests__/support/native-provider-fixture.js"
-    },
-    "./services/history/provider-curated-stream.js": {
-      "types": "./dist/src/services/history/provider-curated-stream.d.ts",
-      "bun": "./src/services/history/provider-curated-stream.ts",
-      "import": "./dist/src/services/history/provider-curated-stream.js"
-    },
-    "./services/history/provider-normalization-storage.js": {
-      "types": "./dist/src/services/history/provider-normalization-storage.d.ts",
-      "bun": "./src/services/history/provider-normalization-storage.ts",
-      "import": "./dist/src/services/history/provider-normalization-storage.js"
     },
     "./services/history/semantic-purge-disk-rows.js": {
       "types": "./dist/src/services/history/semantic-purge-disk-rows.d.ts",

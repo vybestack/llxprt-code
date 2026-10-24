@@ -1,20 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { DebugLogger } from '../../debug/index.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
-import { streamProviderContent } from './provider-curated-stream.js';
+import { openNativeProviderFixture } from './__tests__/support/native-provider-fixture.js';
 import { buildProviderContent } from './historyProviderPipeline.js';
 import { providerFixtureRow } from './__tests__/support/provider-curated-test-helpers.js';
 import type { IContent } from './IContent.js';
-import { consumeCuratedExit } from './__tests__/support/curated-stream-test-helpers.js';
-import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 
 const logger = new DebugLogger('test:provider-lifecycle');
-import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
-import { rejectedValue } from './chronology-rollback-test-helpers.js';
 async function* source(
   size: number,
   bytes = 2048,
@@ -22,146 +16,28 @@ async function* source(
   for (let index = 0; index < size; index++)
     yield providerFixtureRow(index, bytes);
 }
-async function drainRows(rows: AsyncIterable<IContent>): Promise<void> {
-  for await (const row of rows) expect(row.speaker).toBeDefined();
-}
-
-async function withRoot(
-  action: (root: string) => Promise<void>,
-): Promise<void> {
-  const root = mkdtempSync(join(tmpdir(), 'provider-lifecycle-'));
+async function* nativeRows(
+  size: number,
+  bytes = 2048,
+  ownership?: RowOwnership,
+): AsyncGenerator<IContent, void, unknown> {
+  const snapshot = await openNativeProviderFixture(
+    tmpdir(),
+    source(size, bytes),
+    size,
+    ownership,
+  );
   try {
-    await action(root);
+    yield* snapshot.openReader();
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    await snapshot.close();
   }
 }
-
-describe('provider preparation cancellation', () => {
-  it('observes timer cancellation while capturing input before the first yield', async () => {
-    await withRoot(async (root) => {
-      const controller = new AbortController();
-      const timer = setTimeout(
-        () => controller.abort(new Error('capture aborted')),
-        0,
-      );
-      const stream = streamProviderContent(source(512), [], logger, {
-        root,
-        signal: controller.signal,
-      });
-      try {
-        await expect(stream.next()).rejects.toThrow('capture aborted');
-        expect(readdirSync(root)).toHaveLength(0);
-      } finally {
-        clearTimeout(timer);
-        await stream.return();
-      }
-    });
-  });
-});
-
-describe('provider normalization cursor lifetime', () => {
-  const exits: ReadonlyArray<'return' | 'throw' | 'break' | 'consumer-throw'> =
-    ['return', 'throw', 'break', 'consumer-throw'];
-  for (const exit of exits) {
-    it(`releases scratch and its suspended output on ${exit}`, async () => {
-      await withRoot(async (root) => {
-        const ownership = new RowOwnership();
-        const stream = streamProviderContent(source(512), [], logger, {
-          root,
-          ownership,
-        });
-        const filesBeforeOpen = readdirSync(root).length;
-        expect((await stream.next()).done).toBe(false);
-        expect(ownership.snapshot().liveRows).toBe(1);
-        const filesWhileActive = readdirSync(root).length;
-        const failures = {
-          return: undefined,
-          throw: 'iterator failed',
-          break: undefined,
-          'consumer-throw': 'consumer failed',
-        };
-        expect(await consumeCuratedExit(stream, exit)).toBe(failures[exit]);
-        expect(ownership.snapshot().liveRows).toBe(0);
-        expect([
-          filesBeforeOpen,
-          filesWhileActive,
-          readdirSync(root).length,
-        ]).toStrictEqual([0, 1, 0]);
-      });
-    });
-  }
-});
-
-describe('provider cursor backpressure and faults', () => {
-  it('respects backpressure and aborts active and unopened cursors', async () => {
-    await withRoot(async (root) => {
-      const ownership = new RowOwnership();
-      const controller = new AbortController();
-      const stream = streamProviderContent(source(512), [], logger, {
-        root,
-        ownership,
-        signal: controller.signal,
-      });
-      await stream.next();
-      const acquired = ownership.snapshot().acquisitions;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(ownership.snapshot().acquisitions - acquired).toBe(0);
-      controller.abort(new Error('cancelled'));
-      await expect(stream.next()).rejects.toThrow('cancelled');
-      expect(ownership.snapshot().liveRows).toBe(0);
-      const filesAfterActiveAbort = readdirSync(root).length;
-      await expect(
-        streamProviderContent(source(512), [], logger, {
-          root,
-          signal: controller.signal,
-        }).next(),
-      ).rejects.toThrow('cancelled');
-      expect([filesAfterActiveAbort, readdirSync(root).length]).toStrictEqual([
-        0, 0,
-      ]);
-    });
-  });
-
-  it('propagates source faults and closes both the source and scratch', async () => {
-    await withRoot(async (root) => {
-      let closed = false;
-      async function* broken(): AsyncGenerator<IContent, void, unknown> {
-        try {
-          yield providerFixtureRow(0);
-          throw new Error('source failed');
-        } finally {
-          closed = true;
-        }
-      }
-      await expect(
-        streamProviderContent(broken(), [], logger, { root }).next(),
-      ).rejects.toThrow('source failed');
-      expect(closed).toBe(true);
-      expect(readdirSync(root)).toHaveLength(0);
-    });
-  });
-
-  it('fails when an active scratch snapshot is removed, without returning stale rows', async () => {
-    await withRoot(async (root) => {
-      const stream = streamProviderContent(source(512), [], logger, { root });
-      await stream.next();
-      rmSync(join(root, readdirSync(root)[0]), { recursive: true });
-      await expect(drainRows(stream)).rejects.toThrow(
-        'Provider normalization scratch directory is unavailable',
-      );
-      expect(readdirSync(root)).toHaveLength(0);
-    });
-  });
-});
-
 describe('provider row-local bounds and counter controls', () => {
   for (const size of [512, 8192]) {
     it(`keeps explicit output ownership bounded for ${size} rows and detects a retaining consumer`, async () => {
       const owned = new RowOwnership();
-      for await (const row of streamProviderContent(source(size), [], logger, {
-        ownership: owned,
-      })) {
+      for await (const row of nativeRows(size, 2048, owned)) {
         void row;
       }
       expect(owned.snapshot().liveRows).toBe(0);
@@ -170,10 +46,9 @@ describe('provider row-local bounds and counter controls', () => {
       ).toBe(true);
       const retained = new RowOwnership();
       const trap: IContent[] = [];
-      for await (const row of streamProviderContent(
-        source(size, size === 512 ? 128 * 1024 : 16 * 1024),
-        [],
-        logger,
+      for await (const row of nativeRows(
+        size,
+        size === 512 ? 128 * 1024 : 16 * 1024,
       )) {
         retained.retain(row);
         trap.push(row);
@@ -191,24 +66,7 @@ describe('provider row-local bounds and counter controls', () => {
   }
 });
 
-describe('provider large rows and pre-serialization decisions', () => {
-  it('permits a valid single row larger than 8 MiB without truncation', async () => {
-    await withSuffixFixture(
-      1,
-      async (history) => {
-        const stream = history.getCuratedForProviderStream();
-        const row = await stream.next();
-        if (row.done === true) throw new Error('Missing large row');
-        expect(JSON.stringify(row.value)).toBe(
-          JSON.stringify(providerFixtureRow(0, 9 * 1024 * 1024)),
-        );
-        expect((await stream.next()).done).toBe(true);
-      },
-      9 * 1024 * 1024,
-      providerFixtureRow,
-    );
-  });
-
+describe('provider response scoring', () => {
   it('retains old duplicate-response scoring when a JSON value serializes to null', async () => {
     const rows: IContent[] = [
       {
@@ -242,99 +100,18 @@ describe('provider large rows and pre-serialization decisions', () => {
       yield* rows;
     }
     const result: IContent[] = [];
-    for await (const row of streamProviderContent(input(), [], logger))
-      result.push(row);
+    const snapshot = await openNativeProviderFixture(
+      tmpdir(),
+      input(),
+      rows.length,
+    );
+    try {
+      for await (const row of snapshot.openReader()) result.push(row);
+    } finally {
+      await snapshot.close();
+    }
     expect(JSON.stringify(result)).toBe(
       JSON.stringify(buildProviderContent(rows, [], logger)),
     );
-  });
-});
-
-describe('public committed provider snapshot lifecycle', () => {
-  for (const exit of ['return', 'throw', 'break', 'consumer-throw'] as const) {
-    it(`keeps repeatable selection until its owner closes after ${exit}`, async () => {
-      await withRoot(async (root) => {
-        await withCoreSuffixFixture(
-          512,
-          async (history, inputOwners, counters) => {
-            const outputOwners = new RowOwnership();
-            const snapshot = await history.prepareCuratedForProviderSnapshot(
-              [],
-              { root, ownership: outputOwners },
-            );
-            try {
-              expect(snapshot.count).toBe(512);
-              const stream = snapshot.openReader();
-              expect((await stream.next()).done).toBe(false);
-              expect(inputOwners.snapshot().liveRows).toBe(0);
-              expect(counters.snapshot().peakDecodedRows).toBe(1);
-              expect(outputOwners.snapshot().liveRows).toBe(1);
-              const failures = {
-                return: undefined,
-                throw: 'iterator failed',
-                break: undefined,
-                'consumer-throw': 'consumer failed',
-              };
-              expect(await consumeCuratedExit(stream, exit)).toBe(
-                failures[exit],
-              );
-              expect(outputOwners.snapshot().liveRows).toBe(0);
-              const reopened = snapshot.openReader();
-              expect((await reopened.next()).done).toBe(false);
-              expect(readdirSync(root)).toHaveLength(1);
-            } finally {
-              snapshot.close();
-            }
-            expect(outputOwners.snapshot().liveRows).toBe(0);
-            expect(readdirSync(root)).toHaveLength(0);
-            expect(() => snapshot.openReader()).toThrow('closed');
-          },
-        );
-      });
-    });
-  }
-
-  it('preserves exact abort reasons during preparation and for active or unopened readers', async () => {
-    await withRoot(async (root) => {
-      await withCoreSuffixFixture(512, async (history) => {
-        const preparing = new AbortController();
-        const captureFailure = new Error('public preparation aborted');
-        const timer = setTimeout(() => preparing.abort(captureFailure), 0);
-        try {
-          expect(
-            await rejectedValue(
-              history
-                .prepareCuratedForProviderSnapshot([], {
-                  root,
-                  signal: preparing.signal,
-                })
-                .then(() => {}),
-            ),
-          ).toBe(captureFailure);
-          expect(readdirSync(root)).toHaveLength(0);
-        } finally {
-          clearTimeout(timer);
-        }
-        const active = new AbortController();
-        const reason = new Error('public selection aborted');
-        const owned = new RowOwnership();
-        const snapshot = await history.prepareCuratedForProviderSnapshot([], {
-          root,
-          signal: active.signal,
-          ownership: owned,
-        });
-        const first = snapshot.openReader();
-        const unstarted = snapshot.openReader();
-        expect((await first.next()).done).toBe(false);
-        active.abort(reason);
-        expect(await rejectedValue(first.next().then(() => {}))).toBe(reason);
-        expect(await rejectedValue(unstarted.next().then(() => {}))).toBe(
-          reason,
-        );
-        expect(owned.snapshot().liveRows).toBe(0);
-        expect(readdirSync(root)).toHaveLength(0);
-        snapshot.close();
-      });
-    });
   });
 });

@@ -34,11 +34,14 @@ describe('incremental provider preparation source controls', () => {
     expect(body).not.toMatch(forbidden);
     expect(body).toContain('streamProviderContent');
     const pipeline = readFileSync(
-      new URL('./provider-curated-stream.ts', import.meta.url),
+      new URL('./provider-request-snapshot.ts', import.meta.url),
       'utf8',
     );
-    expect(pipeline).not.toMatch(/\bIContent\[\]\s*=|\b(?:Map|Set)\s*</);
-    expect(pipeline).toContain('ProviderNormalizationDisk');
+    const stream = pipeline.slice(
+      pipeline.indexOf('export async function* streamProviderContentSnapshot'),
+    );
+    expect(stream).not.toMatch(/\bIContent\[\]\s*=|\b(?:Map|Set)\s*</);
+    expect(stream).toContain('await snapshot.close()');
   });
 
   it('rejects an eager generator and a cursor that caches every input row', () => {

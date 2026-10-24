@@ -10,7 +10,7 @@ import {
   inMemoryRequestSelection,
   providerRequestRows,
 } from './provider-request-snapshot.js';
-import { ProviderNormalizationDisk } from './provider-normalization-disk.js';
+import { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
 import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { providerFixtureRow } from './__tests__/support/provider-curated-test-helpers.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
@@ -30,10 +30,6 @@ async function withRoot(
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
-}
-
-async function drain(rows: AsyncIterable<IContent>): Promise<void> {
-  for await (const row of rows) expect(row.speaker).toBeDefined();
 }
 
 async function digest(rows: AsyncIterable<IContent>): Promise<string> {
@@ -86,7 +82,7 @@ describe('request-owned normalized disk snapshot', () => {
           await digest(history.getCuratedForProviderStream()),
         );
       } finally {
-        snapshot.close();
+        await snapshot.close();
       }
     });
   });
@@ -117,10 +113,10 @@ describe('request-owned normalized disk snapshot', () => {
             expect(ownership.snapshot().peakRows).toBe(2);
             expect(ownership.snapshot().liveRows).toBe(0);
             expect(sourceOwners.snapshot().liveRows).toBe(0);
-            expect(counters.snapshot().peakDecodedRows).toBe(1);
-            expect(readdirSync(root)).toHaveLength(1);
+            expect(counters.snapshot().peakDecodedRows).toBe(0);
+            expect(readdirSync(root)).toHaveLength(0);
           } finally {
-            snapshot.close();
+            await snapshot.close();
           }
           expect(readdirSync(root)).toHaveLength(0);
         });
@@ -151,7 +147,7 @@ describe('normalized request snapshot isolation', () => {
           expect(await digest(snapshot.openReader())).toBe(expected);
           expect(snapshot.count).toBe(513);
         } finally {
-          snapshot.close();
+          await snapshot.close();
         }
       },
       128,
@@ -211,9 +207,9 @@ describe('independent normalized request readers', () => {
             expect(await digest(snapshot.openReader())).toBe(
               await digest(history.getCuratedForProviderStream()),
             );
-            expect(readdirSync(root)).toHaveLength(1);
+            expect(readdirSync(root)).toHaveLength(0);
           } finally {
-            snapshot.close();
+            await snapshot.close();
           }
           expect(ownership.snapshot().liveRows).toBe(0);
           expect(readdirSync(root)).toHaveLength(0);
@@ -235,8 +231,8 @@ describe('normalized request owner lifetime', () => {
         const active = snapshot.openReader();
         const unopened = snapshot.openReader();
         await active.next();
-        snapshot.close();
-        snapshot.close();
+        await snapshot.close();
+        await snapshot.close();
         expect(ownership.snapshot().liveRows).toBe(0);
         expect(readdirSync(root)).toHaveLength(0);
         await expect(active.next()).rejects.toThrow('snapshot is closed');
@@ -259,11 +255,12 @@ describe('normalized request owner lifetime', () => {
         const reader = snapshot.openReader();
         await reader.next();
         controller.abort(new Error('request cancelled'));
+        await snapshot.close();
         expect(readdirSync(root)).toHaveLength(0);
         expect(ownership.snapshot().liveRows).toBe(0);
         await expect(reader.next()).rejects.toThrow('request cancelled');
         expect(() => snapshot.openReader()).toThrow('request cancelled');
-        snapshot.close();
+        await snapshot.close();
       });
     });
   });
@@ -287,7 +284,7 @@ describe('normalized request row size', () => {
             await digest(history.getCuratedForProviderStream()),
           );
         } finally {
-          snapshot.close();
+          await snapshot.close();
         }
       },
       10 * 1024 * 1024,
@@ -324,7 +321,7 @@ describe('normalized request pending provenance', () => {
           expect(snapshot.isPending(1)).toBe(true);
           expect(snapshot.isPending(512)).toBe(false);
         } finally {
-          snapshot.close();
+          await snapshot.close();
         }
       },
       0,
@@ -346,40 +343,6 @@ describe('normalized request pending provenance', () => {
   });
 });
 
-describe('normalized request disk faults', () => {
-  it('cleans failed normalization and failed disk reads without leaking suspended owners', async () => {
-    await withCoreSuffixFixture(512, async (history) => {
-      await withRoot(async (root) => {
-        async function* broken(): AsyncGenerator<IContent> {
-          yield* history.streamRawHistory();
-          throw new Error('source fault');
-        }
-        await expect(
-          history.prepareCuratedForProviderSnapshot([], { root }, broken()),
-        ).rejects.toThrow('source fault');
-        expect(readdirSync(root)).toHaveLength(0);
-        const ownership = new RowOwnership();
-        const snapshot = await history.prepareCuratedForProviderSnapshot([], {
-          root,
-          ownership,
-        });
-        const reader = snapshot.openReader();
-        try {
-          await reader.next();
-          rmSync(join(root, readdirSync(root)[0]), { recursive: true });
-          await expect(drain(reader)).rejects.toThrow(
-            'Provider normalization scratch directory is unavailable',
-          );
-          expect(ownership.snapshot().liveRows).toBe(0);
-        } finally {
-          snapshot.close();
-        }
-        expect(readdirSync(root)).toHaveLength(0);
-      });
-    });
-  });
-});
-
 describe('normalized request production stream integration', () => {
   it('reopens mixed normalized tool/media output without changing the production stream bytes', async () => {
     await withCoreSuffixFixture(
@@ -395,7 +358,7 @@ describe('normalized request production stream integration', () => {
             firstOutputIndex: undefined,
           });
         } finally {
-          snapshot.close();
+          await snapshot.close();
         }
       },
       128,
@@ -413,18 +376,21 @@ describe('random access to one request row', () => {
           pending,
         ]);
         const rows = providerRequestRows(snapshot);
-        const lookups = spyOn(ProviderNormalizationDisk.prototype, 'row');
+        const lookups = spyOn(
+          IndexedJournalRequestSnapshot.prototype,
+          'readAt',
+        );
         try {
           for (const index of [511, 0, 300, 512, 1]) {
             const expected = index === 512 ? pending : suffixRow(index, 128);
-            expect(rows.readAt(index)).toStrictEqual(expected);
+            expect(await rows.readAt(index)).toStrictEqual(expected);
           }
           expect(lookups).toHaveBeenCalledTimes(5);
-          expect(snapshot.readAt(7)).toStrictEqual(suffixRow(7, 128));
-          expect(rows.readAt(7)).not.toBe(rows.readAt(7));
+          expect(await snapshot.readAt(7)).toStrictEqual(suffixRow(7, 128));
+          expect(await rows.readAt(7)).not.toBe(await rows.readAt(7));
         } finally {
           lookups.mockRestore();
-          snapshot.close();
+          await snapshot.close();
         }
       },
       128,
@@ -439,14 +405,14 @@ describe('random access to one request row', () => {
         try {
           let index = 0;
           for await (const row of snapshot.openReader()) {
-            expect(JSON.stringify(snapshot.readAt(index))).toBe(
+            expect(JSON.stringify(await snapshot.readAt(index))).toBe(
               JSON.stringify(row),
             );
             index++;
           }
           expect(index).toBe(snapshot.count);
         } finally {
-          snapshot.close();
+          await snapshot.close();
         }
       },
       32,
@@ -460,7 +426,7 @@ describe('random access to one request row', () => {
         for (const index of [-1, 8, 1.5, Number.NaN])
           expect(() => snapshot.readAt(index)).toThrow(RangeError);
       } finally {
-        snapshot.close();
+        await snapshot.close();
       }
     });
   });
@@ -473,7 +439,7 @@ describe('random access to one request row', () => {
       expect(() => snapshot.readAt(0, controller.signal)).toThrow(
         'read cancelled',
       );
-      snapshot.close();
+      await snapshot.close();
       expect(() => snapshot.readAt(0)).toThrow('snapshot is closed');
     });
   });

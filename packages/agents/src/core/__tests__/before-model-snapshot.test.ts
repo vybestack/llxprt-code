@@ -80,7 +80,7 @@ async function runCaller(
   action: string,
   consume: (result: BoundarySnapshotResult) => Promise<void>,
 ): Promise<void> {
-  const fixture = diskFixture({
+  const fixture = await diskFixture({
     name: 'caller',
     before: [row('history'), row('pending')],
     after: [],
@@ -112,7 +112,7 @@ async function runCaller(
     try {
       await consume(result);
     } finally {
-      result.close();
+      await result.close();
     }
   } finally {
     eager.mockRestore();
@@ -121,7 +121,7 @@ async function runCaller(
       expect(fixture.active()).toBe(0);
       expect(readdirSync(fixture.root).sort()).toStrictEqual(scratch);
     } finally {
-      fixture.close();
+      await fixture.close();
     }
   }
 }
@@ -194,7 +194,7 @@ describe('snapshot BeforeModel preparation', () => {
 
 describe('snapshot preparation without hooks', () => {
   it('returns no snapshot and copies nothing to disk without a hook owner', async () => {
-    const fixture = diskFixture({
+    const fixture = await diskFixture({
       name: 'disabled',
       before: [row('h'), row('p')],
       after: [],
@@ -215,7 +215,7 @@ describe('snapshot preparation without hooks', () => {
       expect(fixture.active()).toBe(0);
       expect(fixture.scratch()).toStrictEqual(scratch);
     } finally {
-      fixture.close();
+      await fixture.close();
     }
   });
 });

@@ -6,7 +6,7 @@ import { resolvePendingBoundarySnapshot } from '../boundary-recovery-snapshot.js
 import { diskFixture, row } from './boundary-snapshot-test-helpers.js';
 describe('boundary snapshot lifecycle', () => {
   it('closes sources on cancellation and closes borrowed readers on return or owner close', async () => {
-    const fixture = diskFixture({
+    const fixture = await diskFixture({
       name: 'lifecycle',
       before: [row('h'), row('p')],
       after: [row('h'), row('edited')],
@@ -53,13 +53,13 @@ describe('boundary snapshot lifecycle', () => {
       expect((await cancelled.next()).done).toBe(false);
       abort.abort(new Error('cancel reader'));
       await expect(cancelled.next()).rejects.toThrow('cancel reader');
-      result.close();
+      await result.close();
       await expect(pendingReader?.next()).rejects.toThrow(
         'Boundary snapshot closed',
       );
       expect(fixture.scratch()).toStrictEqual(scratch);
     } finally {
-      fixture.close();
+      await fixture.close();
     }
   });
 });

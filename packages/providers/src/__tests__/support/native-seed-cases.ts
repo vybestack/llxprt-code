@@ -5,11 +5,15 @@ import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/hist
 import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
+import {
+  callerOwnedProviderRequest,
+  callerOwnedRawProviderSource,
+} from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import type {
   ProviderRequestSelection,
   ProviderRequestSnapshot,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { expect } from 'bun:test';
@@ -111,22 +115,6 @@ export function seedReceipt(value: unknown): void {
     appendFileSync(output, JSON.stringify(value) + '\n');
 }
 
-async function* restoreRequestTags(
-  history: HistoryService,
-  input: HistoryCase,
-): AsyncGenerator<IContent> {
-  let index = 0;
-  for await (const row of history.streamRawHistory()) {
-    const tag = input.rows[index++].metadata?.semanticMediaPurgeBoundary;
-    yield tag === undefined
-      ? row
-      : {
-          ...row,
-          metadata: { ...row.metadata, semanticMediaPurgeBoundary: tag },
-        };
-  }
-}
-
 async function seedReference(
   format: FrozenFormat,
   seed: number,
@@ -215,16 +203,10 @@ function assertSameFrozenBoundary(
 }
 
 function prepareSeedProvider(
-  history: HistoryService,
   input: HistoryCase,
   ownership: RowOwnership,
 ): Promise<ProviderRequestSnapshot> {
-  return prepareProviderContentSnapshot(
-    restoreRequestTags(history, input),
-    [],
-    new DebugLogger('seed-provider'),
-    { ownership },
-  );
+  return callerOwnedProviderRequest(input.rows, [], { ownership });
 }
 
 export async function checkNativeSeed(
@@ -242,14 +224,19 @@ export async function checkNativeSeed(
   await withCoreSuffixFixture(
     input.rows.length,
     async (history, ownership, counters) => {
-      const service = await history.prepareCuratedForProviderSnapshot(
-        [],
-        { ownership },
-        restoreRequestTags(history, input),
-      );
+      const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
+        enabled: input.rows.some(
+          (row) => row.metadata?.semanticMediaPurgeBoundary !== undefined,
+        ),
+        explicitCacheWriteRequired: true,
+      });
+      const transaction = await coordinator.begin({ mode: 'remove' });
+      const open = transaction?.providerSnapshotOpener(true);
+      const service = await (open?.([], { ownership }) ??
+        history.prepareCuratedForProviderSnapshot([], { ownership }));
       const provider =
         settings.form === 'normalized'
-          ? await prepareSeedProvider(history, input, ownership)
+          ? await prepareSeedProvider(input, ownership)
           : undefined;
       let failure: { readonly error: unknown } | undefined;
       try {
@@ -257,7 +244,7 @@ export async function checkNativeSeed(
           format,
           settings,
           input,
-          provider?.openReader() ?? restoreRequestTags(history, input),
+          provider?.openReader() ?? callerOwnedRawProviderSource(input.rows),
           provider,
         );
         const serviceActual = await captureSeed(
@@ -286,12 +273,12 @@ export async function checkNativeSeed(
         expect(serviceActual).toStrictEqual(serviceReference);
         assertSameFrozenBoundary(seed, expected, serviceActual, sameBoundary);
         expect(ownership.snapshot().liveRows).toBe(0);
-        expect(counters.snapshot().peakDecodedRows).toBe(1);
+        expect(counters.snapshot().peakDecodedRows).toBe(0);
       } catch (error) {
         failure = { error };
         throw error;
       } finally {
-        await closeInOrder(failure, provider, service);
+        await closeInOrder(failure, provider, service, transaction);
         expect(() => service.openReader()).toThrow('closed');
         expect(ownership.snapshot().liveRows).toBe(0);
       }

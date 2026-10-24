@@ -4,10 +4,10 @@ import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { ProviderNormalizationDisk } from '@vybestack/llxprt-code-core/services/history/provider-normalization-disk.js';
+import { openNativeRowFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/native-row-fixture.js';
 import {
-  NormalizedProviderRequestSnapshot,
   type ProviderRequestRows,
+  type ProviderRequestSelection,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import {
   HookOutputOwner,
@@ -328,22 +328,20 @@ export function legacyOutcome(test: BoundaryCase): Outcome {
   }
 }
 
-export function diskFixture(test: BoundaryCase): {
+export async function diskFixture(test: BoundaryCase): Promise<{
   root: string;
   before: ProviderRequestRows;
   rawPending: ProviderRequestRows;
   after: HookSnapshotRows;
   active(): number;
   scratch(): string[];
-  close(): void;
-} {
+  close(): Promise<void>;
+}> {
   const root = mkdtempSync(join(tmpdir(), 'boundary-fixture-'));
   let active = 0;
-  const owners: NormalizedProviderRequestSnapshot[] = [];
-  const source = (rows: IContent[]): ProviderRequestRows => {
-    const disk = new ProviderNormalizationDisk(root);
-    for (const row of rows) disk.append('ordered', row);
-    const owner = new NormalizedProviderRequestSnapshot(disk, 0);
+  const owners: ProviderRequestSelection[] = [];
+  const source = async (rows: IContent[]): Promise<ProviderRequestRows> => {
+    const owner = await openNativeRowFixture(root, rows, rows.length);
     owners.push(owner);
     return {
       count: rows.length,
@@ -375,13 +373,13 @@ export function diskFixture(test: BoundaryCase): {
   if (after === undefined) throw new Error('Missing fixture replacement');
   return {
     root,
-    before: source(test.before),
-    rawPending: source(test.pending),
+    before: await source(test.before),
+    rawPending: await source(test.pending),
     after,
     active: () => active,
     scratch: () => readdirSync(root).sort(),
-    close: () => {
-      for (const owner of owners) owner.close();
+    close: async () => {
+      for (const owner of owners) await owner.close();
       hook.dispose();
       rmSync(root, { recursive: true, force: true });
     },
@@ -404,7 +402,7 @@ function assertNoRetainedArrays(value: unknown): void {
 
 async function snapshotOutcome(
   test: BoundaryCase,
-  fixture: ReturnType<typeof diskFixture>,
+  fixture: Awaited<ReturnType<typeof diskFixture>>,
 ): Promise<Outcome> {
   try {
     const result = await resolvePendingBoundarySnapshot({
@@ -420,7 +418,7 @@ async function snapshotOutcome(
         pending: await collectRows(result.pendingSelection),
       };
     } finally {
-      result.close();
+      await result.close();
     }
   } catch (error) {
     if (!(error instanceof Error)) throw error;
@@ -434,7 +432,7 @@ async function snapshotOutcome(
 export async function compareBoundaryCase(
   test: BoundaryCase,
 ): Promise<Outcome> {
-  const fixture = diskFixture(test);
+  const fixture = await diskFixture(test);
   const scratch = fixture.scratch();
   try {
     const actual = await snapshotOutcome(test, fixture);
@@ -442,6 +440,6 @@ export async function compareBoundaryCase(
     expect(fixture.scratch()).toStrictEqual(scratch);
     return actual;
   } finally {
-    fixture.close();
+    await fixture.close();
   }
 }

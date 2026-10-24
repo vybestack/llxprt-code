@@ -33,7 +33,7 @@ function interrupted(
 describe('boundary snapshot input failure cleanup', () => {
   for (const stage of ['before', 'rawPending', 'after']) {
     it(`closes every reader when cancelled while reading ${stage}`, async () => {
-      const fixture = diskFixture({
+      const fixture = await diskFixture({
         name: 'cancel stage',
         before: [row('h'), row('p')],
         after: [row('h'), row('new')],
@@ -60,7 +60,7 @@ describe('boundary snapshot input failure cleanup', () => {
         expect(fixture.active()).toBe(0);
         expect(fixture.scratch()).toStrictEqual(scratch);
       } finally {
-        fixture.close();
+        await fixture.close();
       }
     });
   }
@@ -68,7 +68,7 @@ describe('boundary snapshot input failure cleanup', () => {
 
 describe('boundary snapshot malformed input cleanup', () => {
   it('closes every input reader and scratch on an advertised count mismatch', async () => {
-    const fixture = diskFixture({
+    const fixture = await diskFixture({
       name: 'count mismatch',
       before: [row('h'), row('p')],
       after: [row('h'), row('new')],
@@ -85,11 +85,11 @@ describe('boundary snapshot malformed input cleanup', () => {
       expect(fixture.active()).toBe(0);
       expect(fixture.scratch()).toStrictEqual(scratch);
     } finally {
-      fixture.close();
+      await fixture.close();
     }
   });
   it('closes the hook reader when external replacement rows are malformed', async () => {
-    const fixture = diskFixture({
+    const fixture = await diskFixture({
       name: 'invalid row',
       before: [row('h')],
       after: [],
@@ -116,7 +116,7 @@ describe('boundary snapshot malformed input cleanup', () => {
       expect(fixture.active()).toBe(0);
       expect(fixture.scratch()).toStrictEqual(scratch);
     } finally {
-      fixture.close();
+      await fixture.close();
     }
   });
 });

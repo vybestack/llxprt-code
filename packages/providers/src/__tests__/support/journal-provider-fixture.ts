@@ -5,7 +5,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
-import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
+import { callerOwnedProviderRequest } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
@@ -54,27 +54,19 @@ export async function withJournalProviderSelection<T>(
         explicitCacheWriteRequired: true,
       });
       const transaction = await coordinator.begin({ mode: 'remove' });
-      const source = transaction?.requestRows(true);
+      const open = transaction?.providerSnapshotOpener(true);
       const selection =
         curation === 'history'
-          ? await history.prepareCuratedForProviderSnapshot(
-              [],
-              { ownership },
-              source,
-            )
-          : await prepareProviderContentSnapshot(
-              source ?? history.streamRawHistory(),
-              [],
-              new DebugLogger('native-provider-normalized-fixture'),
-              { ownership },
-            );
+          ? await (open?.([], { ownership }) ??
+              history.prepareCuratedForProviderSnapshot([], { ownership }))
+          : await callerOwnedProviderRequest(input.rows, [], { ownership });
       let failure: { readonly error: unknown } | undefined;
       try {
         const result = await action(selection, history);
         if (selection.count > 0)
           expect(() => selection.readAt(0)).not.toThrow();
         expect(ownership.snapshot().liveRows).toBe(0);
-        expect(counters.snapshot().peakDecodedRows).toBe(1);
+        expect(counters.snapshot().peakDecodedRows).toBe(0);
         return result;
       } catch (error) {
         failure = { error };

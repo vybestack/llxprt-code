@@ -161,5 +161,3 @@ export {
 } from './session-media-package.js';
 
 export { ResumeCursorBoot } from './resumeCursorBoot.js';
-
-export { scanResumeMetadata } from './resumeMetadata.js';
