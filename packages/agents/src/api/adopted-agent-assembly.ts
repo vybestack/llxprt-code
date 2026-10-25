@@ -564,7 +564,7 @@ export abstract class AdoptedAgentAssembly extends AdoptedSessionAssembly {
       await this.activateAdoptedSession();
     const parsed = {
       provider:
-        this.adoptProviderManager?.getActiveProviderName() ??
+        this.adoptManager.getActiveProviderName() ??
         this.config.getProvider() ??
         '',
       model:
