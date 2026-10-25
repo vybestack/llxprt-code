@@ -22,7 +22,7 @@ import {
   type BrowserCatalogReader,
 } from '../hooks/browserCatalogHost.js';
 import { describe, expect, it } from 'bun:test';
-import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { useOwnerSessionAgents } from '../hooks/__tests__/owner-session-agents.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import {
   renderWithProviders,
@@ -32,72 +32,58 @@ import {
 import { renderSessionBrowserDialog } from './DialogManagerRenderers.js';
 
 describe('browser catalog application owner', () => {
+  const openAgent = useOwnerSessionAgents();
   it('lists the bound owner recording despite a retired invocation Agent', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        agent,
-        config,
-        _settingsOwner,
-        _settingsService,
-        _oauthManager,
-        borrow,
-        chatsDir,
-      ) => {
-        await agent.setHistory([
-          {
-            speaker: 'human',
-            blocks: [
-              { type: 'text', text: 'catalog source from actual owner' },
-            ],
-          },
-        ]);
-        await agent.session.setRecording({ enabled: true });
-        await agent.session.setRecording({ enabled: false });
-        const owner = await borrow();
-        await agent.dispose();
-        const context = createMockCommandContext({
-          services: {
-            agent,
-            config: {
-              getProjectTempDir: () => chatsDir.replace(/[/\\]chats$/, ''),
-              getProjectRoot: () => config.getProjectRoot(),
-              getSessionId: () => config.getSessionId(),
-            },
-          },
-          recordingOwner: 'agent',
-        });
-        const runtime = context.services.config;
-        if (!runtime) throw new Error('Missing catalog display data');
-        const OwnerCatalog = () => {
-          const commands = useBrowserCatalogCommands(
-            owner.session,
-            'agent',
-            runtime,
-            async () => {
-              throw new Error('Raw catalog must not be selected');
-            },
-            async () => {
-              throw new Error('Raw deletion must not be selected');
-            },
-          );
-          return renderSessionBrowserDialog(
-            runtime,
-            context,
-            async () => ({ ok: true }),
-            () => {},
-            commands.readBrowserCatalog,
-            commands.deleteBrowserTarget,
-          );
-        };
-        const view = renderWithProviders(<OwnerCatalog />);
-        await waitFor(() =>
-          expect(view.lastFrame()).toContain(
-            'catalog source from actual owner',
-          ),
-        );
-        view.unmount();
+    const { agent } = await openAgent();
+    await agent.setHistory([
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'catalog source from actual owner' }],
       },
+    ]);
+    await agent.session.setRecording({ enabled: true });
+    await agent.session.setRecording({ enabled: false });
+    const { agent: owner, config } = await openAgent();
+    await agent.dispose();
+    const context = createMockCommandContext({
+      services: {
+        agent,
+        config: {
+          getProjectTempDir: () => config.projectTempDir,
+          getProjectRoot: () => config.getProjectRoot(),
+          getSessionId: () => config.getSessionId(),
+        },
+      },
+      recordingOwner: 'agent',
+    });
+    const runtime = context.services.config;
+    if (!runtime) throw new Error('Missing catalog display data');
+    const OwnerCatalog = () => {
+      const commands = useBrowserCatalogCommands(
+        owner.session,
+        'agent',
+        runtime,
+        async () => {
+          throw new Error('Raw catalog must not be selected');
+        },
+        async () => {
+          throw new Error('Raw deletion must not be selected');
+        },
+      );
+      return renderSessionBrowserDialog(
+        runtime,
+        context,
+        async () => ({ ok: true }),
+        () => {},
+        commands.readBrowserCatalog,
+        commands.deleteBrowserTarget,
+      );
+    };
+    const view = renderWithProviders(<OwnerCatalog />);
+    await waitFor(() =>
+      expect(view.lastFrame()).toContain('catalog source from actual owner'),
     );
+    view.unmount();
   }, 30000);
 });
 
@@ -150,80 +136,63 @@ function CatalogApplication({
   );
 }
 describe('browser catalog application replacement', () => {
+  const openAgent = useOwnerSessionAgents();
   it('reloads the visible catalog when its application reader changes', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        agent,
-        config,
-        _settingsOwner,
-        _settingsService,
-        _oauthManager,
-        _borrow,
-        chatsDir,
-      ) => {
-        await agent.setHistory([
-          {
-            speaker: 'human',
-            blocks: [
-              { type: 'text', text: 'catalog before owner replacement' },
-            ],
-          },
-        ]);
-        await agent.session.setRecording({ enabled: true });
-        await agent.session.setRecording({ enabled: false });
-        const context = createMockCommandContext({
-          services: {
-            config: {
-              getProjectTempDir: () => chatsDir.replace(/[/\\]chats$/, ''),
-              getProjectRoot: () => config.getProjectRoot(),
-              getSessionId: () => config.getSessionId(),
-            },
-          },
-        });
-        const runtime = context.services.config;
-        if (!runtime) throw new Error('Missing catalog display data');
-        const first = bindOwnerBrowserCatalog(
-          () => agent.session.listBrowserTargetsDetailed(),
-          () => agent.session.getRecording().path,
-          () => config.getSessionId(),
-        );
-        const next = bindRawBrowserCatalog(
-          join(chatsDir, 'empty'),
-          getProjectHash(config.getProjectRoot()),
-          () => config.getSessionId(),
-          undefined,
-        );
-        const view = renderWithProviders(
+    const { agent, config } = await openAgent();
+    const chatsDir = config.projectChatsDir;
+    await agent.setHistory([
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'catalog before owner replacement' }],
+      },
+    ]);
+    await agent.session.setRecording({ enabled: true });
+    await agent.session.setRecording({ enabled: false });
+    const context = createMockCommandContext({
+      services: {
+        config: {
+          getProjectTempDir: () => config.projectTempDir,
+          getProjectRoot: () => config.getProjectRoot(),
+          getSessionId: () => config.getSessionId(),
+        },
+      },
+    });
+    const runtime = context.services.config;
+    if (!runtime) throw new Error('Missing catalog display data');
+    const first = bindOwnerBrowserCatalog(
+      () => agent.session.listBrowserTargetsDetailed(),
+      () => agent.session.getRecording().path,
+      () => config.getSessionId(),
+    );
+    const next = bindRawBrowserCatalog(
+      join(chatsDir, 'empty'),
+      getProjectHash(config.getProjectRoot()),
+      () => config.getSessionId(),
+      undefined,
+    );
+    const view = renderWithProviders(
+      <CatalogApplication runtime={runtime} context={context} read={first} />,
+    );
+    try {
+      await waitFor(() =>
+        expect(view.lastFrame()).toContain('catalog before owner replacement'),
+      );
+      view.rerender(
+        wrapWithProviders(
           <CatalogApplication
             runtime={runtime}
             context={context}
-            read={first}
+            read={next}
           />,
-        );
-        try {
-          await waitFor(() =>
-            expect(view.lastFrame()).toContain(
-              'catalog before owner replacement',
-            ),
-          );
-          view.rerender(
-            wrapWithProviders(
-              <CatalogApplication
-                runtime={runtime}
-                context={context}
-                read={next}
-              />,
-            ),
-          );
-          await waitFor(() =>
-            expect(view.lastFrame()).toContain(
-              'No sessions found for this project.',
-            ),
-          );
-        } finally {
-          view.unmount();
-        }
-      },
-    );
+        ),
+      );
+      await waitFor(() =>
+        expect(view.lastFrame()).toContain(
+          'No sessions found for this project.',
+        ),
+      );
+    } finally {
+      view.unmount();
+    }
   }, 30000);
 });

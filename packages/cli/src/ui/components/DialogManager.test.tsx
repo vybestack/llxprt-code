@@ -1,7 +1,4 @@
-import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { useOwnerSessionAgents } from '../hooks/__tests__/owner-session-agents.js';
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 import { Config, HydratedModel } from '@vybestack/llxprt-code-core';
 import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
@@ -134,46 +131,45 @@ function createSeededStore(): DialogStore {
 }
 
 describe('useModelDialogHandler', () => {
-  useRecordingPrompts();
+  const openAgent = useOwnerSessionAgents();
   beforeEach(() => {
     mockAddItem = vi.fn();
     callSequence = [];
     fakeRuntime = createFakeRuntime();
   });
   it('persists model selection through the Agent recorder without a raw write', async () => {
-    await withRecordingLifetimeFixture(async (agent) => {
-      await agent.setHistory([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },
-      ]);
-      await agent.session.setRecording({ enabled: true });
-      const path = agent.session.getRecording().path;
-      if (!path) throw new Error('No recording path');
-      const store = createSeededStore();
-      const rawWrite = vi.fn();
-      const { result, unmount } = renderHook(() =>
-        useModelDialogHandler(
-          fakeRuntime as never,
-          mockAddItem,
-          store,
-          'openai',
-          bindModelSwitchRecording(
-            'agent',
-            (event) => agent.session.recordRecordingEvent(event),
-            { recordProviderSwitch: rawWrite },
-          ),
+    const { agent } = await openAgent();
+    await agent.setHistory([
+      { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },
+    ]);
+    await agent.session.setRecording({ enabled: true });
+    const path = agent.session.getRecording().path;
+    if (!path) throw new Error('No recording path');
+    const store = createSeededStore();
+    const rawWrite = vi.fn();
+    const { result, unmount } = renderHook(() =>
+      useModelDialogHandler(
+        fakeRuntime as never,
+        mockAddItem,
+        store,
+        'openai',
+        bindModelSwitchRecording(
+          'agent',
+          (event) => agent.session.recordRecordingEvent(event),
+          { recordProviderSwitch: rawWrite },
         ),
-      );
-      result.current(makeModel('openai', 'owner-model'));
-      await waitFor(() =>
-        expect(hasDialogRequest(store, 'modelConfig')).toBe(true),
-      );
-      const lines = (await readFile(path, 'utf8')).split('\n');
-      expect(
-        lines.filter((line) => line.includes('provider_switch')),
-      ).toHaveLength(1);
-      expect(rawWrite).not.toHaveBeenCalled();
-      unmount();
-    });
+      ),
+    );
+    result.current(makeModel('openai', 'owner-model'));
+    await waitFor(() =>
+      expect(hasDialogRequest(store, 'modelConfig')).toBe(true),
+    );
+    const lines = (await readFile(path, 'utf8')).split('\n');
+    expect(
+      lines.filter((line) => line.includes('provider_switch')),
+    ).toHaveLength(1);
+    expect(rawWrite).not.toHaveBeenCalled();
+    unmount();
   }, 30000);
 
   it('opens config dialog after successful same-provider model switch', async () => {
@@ -441,7 +437,6 @@ async function renderDialogManager(requests: DialogRequest[]): Promise<string> {
 }
 
 describe('DialogManager render dispatch', () => {
-  useRecordingPrompts();
   it('renders the folder-trust dialog when only its request is open', async () => {
     const frame = await renderDialogManager([
       { kind: 'folderTrust', payload: {} },
