@@ -82,7 +82,8 @@ export class JournalPublication {
     const failures = results.flatMap((result) =>
       result.status === 'rejected' ? [result.reason] : [],
     );
-    if (failures.length > 0)
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1)
       throw new AggregateError(
         failures,
         'Compensation checkpoint cleanup failed',
