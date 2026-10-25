@@ -7,6 +7,7 @@ declare const Bun: {
 };
 export interface HeapCensus {
   heapSize: number;
+  runtimeHeapSize: number;
   extraMemorySize: number;
   bytes: number;
   objects: number;
@@ -45,10 +46,14 @@ function collectAndSweep(): void {
   jsc.gcAndSweep();
 }
 
+/**
+ * Snapshot node sizes count live cells and their owned backing storage once.
+ * Keep the runtime aggregate separate: on Linux its delta can fall below a
+ * live store's byteLength even when that store is fully present in the census.
+ */
 export function heapCensus(snapshotPath?: string): HeapCensus {
-  // Bun's process heapUsed reports the last Eden collection, even after a
-  // full GC. Read the live JSC size, including backing storage, instead.
-  const { heapUsed: heapSize, external: extraMemorySize } = sampleMemoryUsage();
+  const { heapUsed: runtimeHeapSize, external: extraMemorySize } =
+    sampleMemoryUsage();
   const snapshot = Bun.generateHeapSnapshot();
   if (
     snapshot.nodes.length % 4 !== 0 ||
@@ -57,7 +62,8 @@ export function heapCensus(snapshotPath?: string): HeapCensus {
     throw new Error('Unsupported Bun heap snapshot layout');
   }
   const result: HeapCensus = {
-    heapSize,
+    heapSize: 0,
+    runtimeHeapSize,
     extraMemorySize,
     bytes: 0,
     objects: 0,
@@ -79,6 +85,7 @@ export function heapCensus(snapshotPath?: string): HeapCensus {
   }
   if (result.bytes <= 0 || result.objects <= 0)
     throw new Error('Empty heap census');
+  result.heapSize = result.bytes;
   if (snapshotPath) writeFileSync(snapshotPath, JSON.stringify(snapshot));
   for (const value of Object.values(snapshot))
     if (Array.isArray(value)) value.length = 0;
@@ -131,13 +138,11 @@ async function censusAfterSettling(): Promise<HeapCensus> {
   warmCensus();
   await collectUntilStable();
   const census = heapCensus();
-  // The final snapshot also allocates workspace and collects live-heap garbage.
-  // Read both counters after its frame and cleared arrays have been swept.
   await collectUntilStable();
   const memory = sampleMemoryUsage();
   return {
     ...census,
-    heapSize: memory.heapUsed,
+    runtimeHeapSize: memory.heapUsed,
     extraMemorySize: memory.external,
   };
 }

@@ -82,4 +82,23 @@ describe('settled heap census in a grouped registration process', () => {
     expect(weak.deref()).toBe(retainedPayload);
     expect(retainedPayload?.[retainedPayload.length - 1]).toBe(97);
   });
+
+  it('counts shared backing storage once when only small views expose it', async () => {
+    const before = await boundary();
+    const buffer = new ArrayBuffer(payloadBytes);
+    const first = new Uint8Array(buffer, 0, 64);
+    const second = new DataView(buffer, 64, 64);
+    first.fill(99);
+    second.setUint8(0, 100);
+    const after = await boundary();
+    const growth = after.heapSize - before.heapSize;
+    expect(growth).toBeGreaterThan(liveFloor);
+    expect(growth).toBeLessThan(payloadBytes + releaseLimit);
+    expect(
+      after.classes.ArrayBuffer.bytes - before.classes.ArrayBuffer.bytes,
+    ).toBeGreaterThan(liveFloor);
+    expect(first[0]).toBe(99);
+    expect(second.getUint8(0)).toBe(100);
+    expect(buffer.byteLength).toBe(payloadBytes);
+  });
 });
