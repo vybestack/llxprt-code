@@ -6,10 +6,7 @@
 import { describe, expect, it } from 'bun:test';
 import { canonicalizeToolName } from '@vybestack/llxprt-code-tools';
 import type { HistoryItemWithoutId } from '../types.js';
-import {
-  useCommandOwners,
-  commandOwnerClient,
-} from '../../__tests__/command-owner-fixture.js';
+import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
@@ -32,7 +29,7 @@ describe('registered tools command owner', () => {
         listTools: () => owner.tools.list(),
         readSetting: (key) => owner.getEphemeralSetting(key),
         writeSetting: (key, value) => owner.setEphemeralSetting(key, value),
-        refreshToolSchema: () => commandOwnerClient(owner).setTools(),
+        refreshToolSchema: () => owner.sessionClient.publishTools(),
       },
       (item) => {
         history.push(item);
