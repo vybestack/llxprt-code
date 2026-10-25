@@ -720,14 +720,13 @@ async function testBody10(): Promise<void> {
     'estimateTokensForContents',
   );
 
-  estimateSpy
-    .mockResolvedValueOnce(200_000)
-    .mockResolvedValueOnce(200_000)
-    .mockRejectedValue(new Error('estimation infrastructure down'));
-
-  harness.performCompression.mockResolvedValue(
-    PerformCompressionResult.COMPRESSED,
-  );
+  estimateSpy.mockResolvedValue(200_000);
+  harness.performCompression.mockImplementation(async () => {
+    suite1HistoryService.add(makeUserMessage('compressed candidate'));
+    await suite1HistoryService.waitForTokenUpdates();
+    estimateSpy.mockRejectedValue(new Error('estimation infrastructure down'));
+    return PerformCompressionResult.COMPRESSED;
+  });
 
   let thrownError: Error | undefined;
   try {
@@ -750,15 +749,19 @@ async function testBody11(): Promise<void> {
     'estimateTokensForContents',
   );
 
-  estimateSpy
-    .mockResolvedValueOnce(200_000)
-    .mockResolvedValueOnce(200_000)
-    .mockResolvedValueOnce(199_000)
-    .mockRejectedValue(new Error('estimation infrastructure down'));
-
-  harness.performCompression.mockResolvedValue(
-    PerformCompressionResult.COMPRESSED,
-  );
+  estimateSpy.mockResolvedValue(200_000);
+  let compressed = false;
+  harness.performCompression.mockImplementation(async () => {
+    suite1HistoryService.add(makeUserMessage('compressed candidate'));
+    await suite1HistoryService.waitForTokenUpdates();
+    if (compressed)
+      estimateSpy.mockRejectedValue(
+        new Error('estimation infrastructure down'),
+      );
+    else estimateSpy.mockResolvedValue(199_000);
+    compressed = true;
+    return PerformCompressionResult.COMPRESSED;
+  });
 
   let thrownError: Error | undefined;
   try {
@@ -781,21 +784,19 @@ async function testBody12(): Promise<void> {
     'estimateTokensForContents',
   );
 
-  estimateSpy
-    .mockResolvedValueOnce(200_000)
-    .mockResolvedValueOnce(200_000)
-    .mockResolvedValueOnce(199_000)
-    .mockResolvedValueOnce(199_000)
-    .mockRejectedValue(new Error('estimation infrastructure down'));
-
-  harness.performCompression.mockResolvedValue(
-    PerformCompressionResult.COMPRESSED,
-  );
+  estimateSpy.mockResolvedValue(200_000);
+  harness.performCompression.mockImplementation(async () => {
+    suite1HistoryService.add(makeUserMessage('compressed candidate'));
+    await suite1HistoryService.waitForTokenUpdates();
+    estimateSpy.mockResolvedValue(199_000);
+    return PerformCompressionResult.COMPRESSED;
+  });
 
   harness.setDiskFallback(async (_promptId, applyResult) => {
     await installFixtureCandidate(applyResult, [
       makeUserMessage('truncated history'),
     ]);
+    estimateSpy.mockRejectedValue(new Error('estimation infrastructure down'));
     return true;
   });
 
@@ -839,25 +840,21 @@ async function testBody14(): Promise<void> {
     'estimateTokensForContents',
   );
 
-  // 1. Initial — over-limit (succeeds)
-  estimateSpy.mockResolvedValueOnce(200_000);
-  // 2. Post-density — over-limit (succeeds)
-  estimateSpy.mockResolvedValueOnce(200_000);
-  // 3. Post-first-compression — REJECTS with a specific stage error
-  estimateSpy.mockRejectedValueOnce(
-    new Error('estimation infrastructure down'),
-  );
-  // 4+. Any subsequent call would succeed (never reached)
-  estimateSpy.mockResolvedValueOnce(50_000);
+  estimateSpy.mockResolvedValue(200_000);
 
   let fallbackReached = false;
   harness.setDiskFallback(async () => {
     fallbackReached = true;
     return false;
   });
-  harness.performCompression.mockResolvedValue(
-    PerformCompressionResult.COMPRESSED,
-  );
+  harness.performCompression.mockImplementation(async () => {
+    suite1HistoryService.add(makeUserMessage('compressed candidate'));
+    await suite1HistoryService.waitForTokenUpdates();
+    estimateSpy
+      .mockRejectedValueOnce(new Error('estimation infrastructure down'))
+      .mockResolvedValue(50_000);
+    return PerformCompressionResult.COMPRESSED;
+  });
 
   let thrownError: Error | undefined;
   try {

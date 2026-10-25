@@ -529,7 +529,15 @@ export class CompressionHandler {
   ): Promise<S> {
     try {
       await this.historyService.waitForTokenUpdates();
-      const candidate = new SourceCandidate(source, estimate, reopen, pending);
+      const candidate = new SourceCandidate(
+        source,
+        estimate,
+        reopen,
+        pending,
+        source.native === undefined
+          ? undefined
+          : () => this.historyService.historyMutationGuard(),
+      );
       const limits = this.sourceContextLimits(provider);
       const getHistoryTokens = () => this.historyService.getTotalTokens();
       provider.setCompressionCallback?.(

@@ -7,22 +7,30 @@ export interface SourcePendingRows {
   replace(rows: IContent[]): void;
 }
 
-/**
- * The current disk candidate for one enforcement. `estimate` measures a
- * candidate, `reopen` rebuilds the pending-aware candidate from the durable
- * journal and the current pending rows. Superseded candidates stay owned by
- * the send preparer, which closes everything but the kept one.
- */
+/** One pinned candidate and its scalar estimate, invalidated by history or pending edits. */
 export class SourceCandidate<S> {
   private current: S;
+  private unchanged: (() => boolean) | undefined;
+  private pendingChanged = false;
+  private measured: Promise<number> | undefined;
+  readonly pending: SourcePendingRows;
 
   constructor(
     initial: S,
     private readonly estimateCandidate: (candidate: S) => Promise<number>,
     private readonly reopenCandidate: () => Promise<S>,
-    readonly pending: SourcePendingRows,
+    pending: SourcePendingRows,
+    private readonly captureHistoryGuard?: () => () => boolean,
   ) {
     this.current = initial;
+    this.unchanged = captureHistoryGuard?.();
+    this.pending = {
+      read: () => pending.read(),
+      replace: (rows) => {
+        pending.replace(rows);
+        this.pendingChanged = true;
+      },
+    };
   }
 
   get value(): S {
@@ -30,16 +38,32 @@ export class SourceCandidate<S> {
   }
 
   estimate(): Promise<number> {
-    return this.estimateCandidate(this.current);
+    if (this.captureHistoryGuard === undefined)
+      return this.estimateCandidate(this.current);
+    this.measured ??= this.estimateCandidate(this.current);
+    return this.measured;
   }
 
   async replace(): Promise<void> {
+    if (!this.pendingChanged && this.unchanged?.() === true) return;
     this.current = await this.reopenCandidate();
+    this.unchanged = this.captureHistoryGuard?.();
+    this.pendingChanged = false;
+    this.measured = undefined;
+  }
+
+  async replacePending(rows: IContent[]): Promise<void> {
+    const previous = await this.pending.read();
+    if (
+      previous.length !== rows.length ||
+      previous.some((row, index) => row !== rows[index])
+    )
+      this.pending.replace(rows);
   }
 
   /** Request tokens of the candidate rebuilt with `rows` as its pending input. */
   async estimateWithPending(rows: IContent[]): Promise<number> {
-    this.pending.replace(rows);
+    await this.replacePending(rows);
     await this.replace();
     return this.estimate();
   }

@@ -85,10 +85,7 @@ async function shed(
     deps.pendingContents.length === 0
       ? { root: 0, saving: 0 }
       : await overlay.header();
-  const working = deps.pendingContents.map((row) => ({
-    ...row,
-    blocks: [...row.blocks],
-  }));
+  const working = [...deps.pendingContents];
   let projected = await deps.computeProjected(working);
   let replacedCount = 0;
   let previous: ToolRank | undefined;

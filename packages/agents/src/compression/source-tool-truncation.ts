@@ -53,6 +53,6 @@ export async function truncateSourceToolResponses<S>(
     input.marginAdjustedLimit,
   );
   if (result.transformedPending !== undefined)
-    candidate.pending.replace(result.transformedPending);
+    await candidate.replacePending(result.transformedPending);
   return { replacedCount: result.replacedCount };
 }
