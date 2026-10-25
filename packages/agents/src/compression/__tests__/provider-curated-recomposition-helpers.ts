@@ -6,15 +6,14 @@ import { enforceProviderSourceForTest } from './support/enforce-provider-source.
 import { buildHandlerHarness } from './support/handler-harness.js';
 
 /**
- * Runs the real source ladder over `history` plus `pending`; the first
- * projection is over the compression threshold so density optimization runs,
- * then the reopened candidate fits. Compression and fallback must not run.
+ * Runs the real source ladder over `history` plus `pending` without reducing
+ * the BODY under comparison. Estimates depend on the candidate's rows, not
+ * invocation order, because unchanged native candidates reuse their estimate.
  */
 export async function recomposeFixture(
   history: HistoryService,
   pending: IContent[],
 ): Promise<IContent[]> {
-  let projection = 0;
   const harness = buildHandlerHarness(
     history,
     buildRuntimeContext(history, {
@@ -34,6 +33,6 @@ export async function recomposeFixture(
     pending,
     'curated-stream',
     undefined,
-    async () => (++projection === 1 ? 80_000 : 1),
+    async (rows) => rows.length,
   );
 }
