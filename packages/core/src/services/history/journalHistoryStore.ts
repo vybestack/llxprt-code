@@ -3,6 +3,7 @@ import { decodeStoredRow } from './journalRowCodec.js';
 import { encodeRowDraft, type RowDraft } from '../../journal/rowDraft.js';
 import type { MirrorCheckpoint } from '../../journal/mirrorCheckpoint.js';
 import type { TokenRowSource } from './history-token-tickets.js';
+import { JournalTokenRows } from './journal-token-rows.js';
 import { JournalHistoryStoreReads } from './journal-history-store-reads.js';
 import { JournalRowMutations } from './journal-row-mutations.js';
 import { openJournalSemanticPurge } from './journalSemanticPurge.js';
@@ -141,6 +142,14 @@ export class JournalHistoryStore
   private tokenDraft:
     | { readonly sequence: number; readonly draft: RowDraft }
     | undefined;
+  private appendingTokenRow = false;
+  private readonly tokenRows = new JournalTokenRows({
+    snapshot: () => this.exclusive(() => this.session.store.snapshot()),
+    takeDraft: (sequence) => this.takeTokenDraft(sequence),
+    releaseDraft: (sequence) => {
+      if (this.tokenDraft?.sequence === sequence) this.tokenDraft = undefined;
+    },
+  });
   private queue: Promise<void>;
   private failure: { readonly error: unknown; reported?: boolean } | undefined;
   private restoreFailed = false;
@@ -325,41 +334,36 @@ export class JournalHistoryStore
 
   captureTokenRow(): TokenRowSource {
     this.assertUsable();
-    const index = this.tentativeRows - 1;
-    const sequence = this.tokenDraft?.sequence;
-    const saved = this.exclusive(() => this.session.store.snapshot());
-    let closing: Promise<void> | undefined;
-    return {
-      read: async () => {
-        const snapshot = await saved;
-        const available = this.tokenDraft;
-        if (available !== undefined && available.sequence === sequence) {
-          this.tokenDraft = undefined;
-          const { draft } = available;
-          return decodeStoredRow({
-            header: encodeRowDraft(1n, draft).header,
-            rawIds: draft.ids.map((id) => id.rawId),
-            meta: draft.meta,
-            blocks: draft.blocks.map((block) => block.bytes),
-          });
-        }
-        const entry = await snapshot.entryAt(index);
-        return decodeStoredRow(await snapshot.readRow(entry));
-      },
-      close: () => {
-        if (this.tokenDraft?.sequence === sequence) this.tokenDraft = undefined;
-        closing ??= saved.then((snapshot) => snapshot.close());
-        return closing;
-      },
-    };
+    return this.tokenRows.capture(
+      this.tentativeRows - 1,
+      this.tokenDraft?.sequence,
+    );
+  }
+
+  private takeTokenDraft(sequence: number | undefined): IContent | undefined {
+    const available = this.tokenDraft;
+    if (available === undefined || available.sequence !== sequence) return;
+    this.tokenDraft = undefined;
+    const { draft } = available;
+    return decodeStoredRow({
+      header: encodeRowDraft(1n, draft).header,
+      rawIds: draft.ids.map((id) => id.rawId),
+      meta: draft.meta,
+      blocks: draft.blocks.map((block) => block.bytes),
+    });
   }
 
   apply(op: HistoryJournalOp): void {
     this.assertUsable();
     this.tokenDraft = undefined;
-    const draft = applyOperation(this.writes, op);
-    if (draft !== undefined) {
-      this.tokenDraft = { sequence: ++this.tokenDraftSequence, draft };
+    this.appendingTokenRow = op.kind === 'content';
+    try {
+      const draft = applyOperation(this.writes, op);
+      if (draft !== undefined) {
+        this.tokenDraft = { sequence: ++this.tokenDraftSequence, draft };
+      }
+    } finally {
+      this.appendingTokenRow = false;
     }
   }
 
@@ -778,6 +782,7 @@ export class JournalHistoryStore
 
   /** Runs `task` after everything queued, ahead of anything queued later; its failure goes to the caller and does not stop the queue. */
   private exclusive<T>(task: () => Promise<T>, detaching = false): Promise<T> {
+    this.tokenRows.seal();
     const turn = this.queue.then(() => {
       if (this.failure !== undefined && !detaching) throw this.failure.error;
       return task();
@@ -804,6 +809,7 @@ export class JournalHistoryStore
     build: EditBuilder,
     mirrors?: MirrorCheckpoint,
   ): Promise<CommitAck | undefined> {
+    if (!this.appendingTokenRow) this.tokenRows.seal();
     if (rowsAfter !== undefined) this.tentativeRows = rowsAfter;
     this.publication.accepted();
     const turn = this.queue.then(() => this.runStep(rowsAfter, build, mirrors));
