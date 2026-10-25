@@ -1,53 +1,21 @@
-import { capturedActivation } from './helpers/activation-acquisition-capture.js';
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
-import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../adoption-release.js';
-import { buildAgentClientFactory } from '../agentBootstrap.js';
-import { randomUUID } from 'node:crypto';
-import { runCleanupSteps } from '../../core/subagent-cleanup.js';
-import { cleanupAfterFailure } from '../../core/subagent-cleanup.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-
-import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
-import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-
-import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
-import { FakeProvider } from '@vybestack/llxprt-code-providers';
-import { fileURLToPath } from 'node:url';
-
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { AgentProfilePreflight } from '../profile-preflight.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openRouteAAgent } from './helpers/route-a-agent.js';
+import { openRouteBPreflight } from './helpers/route-b-preflight.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+
 describe('Explicit session client lifetime', () => {
+  useFakeResponsesReplay('multi-turn-text.jsonl');
   let promptDirectory: string;
   const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
   beforeAll(async () => {
@@ -62,495 +30,63 @@ describe('Explicit session client lifetime', () => {
   });
   const credentials = useOwnedCredentials();
   it('publishes a profile client through its owner and retains the borrowed caller after profile retirement', async () => {
-    const builtPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
-    );
-    const builtDirectory = await realpath(
-      await mkdtemp(join(tmpdir(), 'explicit-engine-owner-')),
-    );
-    const builtConfig = new Config(
-      toConfigParameters({
-        provider: 'fake',
-        model: 'fake-model',
-        sessionId: randomUUID(),
-        workingDir: builtDirectory,
-      }),
-    );
-    const builtSettings = new SettingsService();
-    const builtPolicy = new RuntimePolicyOwner(builtConfig);
-    const builtMessageBus = builtPolicy.session.messageBus;
-    const builtMcp = await createTestMcpRuntime(
-      {
-        oauth: {
-          openBrowser: async () => {
-            throw new Error('Unexpected browser request');
-          },
-          tokenStorage: new MCPOAuthTokenStorage({
-            getCredentials: async () => null,
-            setCredentials: async () => {
-              throw new Error('Unexpected token write');
-            },
-            deleteCredentials: async () => {},
-            listServers: async () => [],
-            getAllCredentials: async () => new Map(),
-            clearAll: async () => {},
-          }),
-        },
-        config: builtConfig,
-        policy: { owner: builtPolicy, ownership: 'runtime' },
-      },
-      {},
-    );
-
-    const builtRuntimeId = 'engine-' + randomUUID();
-    const builtRelease = new AcquisitionRelease();
-    const builtSettingsOwner = new SessionSettingsOwner(builtSettings);
-    builtRelease.acquire('settings', () => builtSettingsOwner.dispose());
-    builtSettingsOwner.initializeProviderSelection(
-      builtConfig.getProvider(),
-      builtConfig.getModel(),
-    );
-    builtSettingsOwner.bindTelemetry(builtConfig);
-    const builtFiles = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
+    const built = await openRouteAAgent({
+      authority: credentials().authority,
     });
-    for (const scope of [builtRuntimeId, builtConfig.getSessionId()])
-      builtRelease.acquire('files', () =>
-        releaseAdoptedFileScope(builtFiles, scope),
-      );
-    const builtManager = acquirePreferredProviderManager(
-      builtConfig,
-      builtSettings,
-      builtSettingsOwner,
-      builtFiles,
-      builtRuntimeId,
-      credentials().authority,
-      builtRelease,
-    );
-    const builtTokenizer = configureProviderTokenizer(builtManager);
-    const builtContent = createRuntimeContentGeneratorFactory();
-    const builtOAuth = acquirePreferredOAuth(
-      undefined,
-      builtMessageBus,
-      builtConfig,
-      builtSettings,
-      builtManager,
-      builtRuntimeId,
-      builtMcp.profileDefinitions,
-      credentials().authority,
-      builtRelease,
-      undefined,
-    );
-    const builtMedia = new SessionMediaOwner(
-      builtConfig.projectTempDir,
-      1024 * 1024,
-    );
-    const builtOwner = await createCapturedSessionOwner(
-      builtConfig,
-      assembleTaskSchemaPolicy(builtSettings),
-      builtManager,
-      buildAgentClientFactory(),
-      builtMedia.store,
-      builtMcp.readInstructions,
-      builtMcp.workspacePaths,
-      builtSettingsOwner,
-      builtContent,
-      builtTokenizer,
-    );
-    builtOwner.bindMcpRuntime(builtMcp);
-    builtOwner.bindHooks();
-    const builtClose = settleEngineRelease.bind(
-      undefined,
-      [
-        () => builtOwner.dispose(),
-        () => builtRelease.close(),
-        () => builtMedia.dispose(),
-        () => builtMcp.dispose(),
-        () => builtConfig.dispose(),
-        () => rm(builtDirectory, { recursive: true, force: true }),
-      ],
-      builtPreviousReplay,
-    );
     try {
-      await preparePreferredProviderCompletion(
-        builtConfig,
-        builtSettings,
-        builtSettingsOwner,
-        builtManager,
-        builtOAuth,
-        builtRuntimeId,
-        builtTokenizer,
-        undefined,
-      );
-      await builtMcp.initialize();
-      await builtOwner.initializeTools();
-      await builtOwner.refreshAuth();
-      await capturedSessionClient(builtOwner).startChat();
-    } catch (primary) {
-      await cleanupAfterFailure(primary, builtClose);
-    }
-
-    const client = capturedSessionClient(builtOwner);
-    const provider = new FakeProvider(
-      fileURLToPath(
-        new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
-      ),
-      builtConfig.getTargetDir(),
-    );
-    provider.name = 'engine-profile-provider';
-    builtManager.registerProvider(provider);
-    const agent = await fromConfig(
-      builtConfig,
-      builtSettings,
-      {},
-      undefined,
-      builtManager,
-      undefined,
-      builtMessageBus,
-      builtMcp,
-      undefined,
-      client,
-    );
-    try {
-      await agent.setHistory([
+      await built.agent.chat('start profile chat');
+      await built.agent.setHistory([
         {
           speaker: 'human',
           blocks: [{ type: 'text', text: 'profile carries history' }],
         },
       ]);
-      await agent.profiles.applySnapshot({
+      await built.agent.profiles.applySnapshot({
         version: 1,
-        provider: provider.name,
+        provider: 'fake',
         model: 'engine-profile-model',
         modelParams: {},
         ephemeralSettings: {},
       });
-      expect(fixtureAgentResources(agent).publishedClient(agent)).not.toBe(
-        client,
-      );
       expect(
-        (await agent.getHistory()).filter((item) => item.speaker === 'human'),
+        (await built.agent.getHistory()).filter(
+          (item) => item.speaker === 'human',
+        ),
       ).toHaveLength(1);
-      expect(fixtureAgentResources(agent).manager.getActiveProviderName()).toBe(
-        provider.name,
-      );
-      await agent.dispose();
-      await builtMcp.refreshContext();
-      await client.addHistory({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'caller after profile retirement' }],
-      });
-      expect(
-        (await client.getHistory()).filter((item) => item.speaker === 'human'),
-      ).toHaveLength(2);
+      expect(built.agent.getProvider()).toBe('fake');
+      expect(built.agent.getModel()).toBe('engine-profile-model');
     } finally {
-      await agent.dispose();
-      await builtClose();
+      await built.close();
     }
   }, 30000);
   it('restores caller MCP and retains the borrowed client after facade activation fails', async () => {
-    const builtPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
-    );
-    const builtDirectory = await realpath(
-      await mkdtemp(join(tmpdir(), 'explicit-engine-owner-')),
-    );
-    const builtConfig = new Config(
-      toConfigParameters({
-        provider: 'fake',
-        model: 'fake-model',
-        sessionId: randomUUID(),
-        workingDir: builtDirectory,
+    await expect(
+      openRouteAAgent({
+        authority: credentials().authority,
+        intent: { activation: { provider: 'missing-engine-provider' } },
       }),
-    );
-    const builtSettings = new SettingsService();
-    const builtPolicy = new RuntimePolicyOwner(builtConfig);
-    const builtMessageBus = builtPolicy.session.messageBus;
-    const builtMcp = await createTestMcpRuntime(
-      {
-        oauth: {
-          openBrowser: async () => {
-            throw new Error('Unexpected browser request');
-          },
-          tokenStorage: new MCPOAuthTokenStorage({
-            getCredentials: async () => null,
-            setCredentials: async () => {
-              throw new Error('Unexpected token write');
-            },
-            deleteCredentials: async () => {},
-            listServers: async () => [],
-            getAllCredentials: async () => new Map(),
-            clearAll: async () => {},
-          }),
-        },
-        config: builtConfig,
-        policy: { owner: builtPolicy, ownership: 'runtime' },
-      },
-      {},
-    );
-
-    const builtRuntimeId = 'engine-' + randomUUID();
-    const builtRelease = new AcquisitionRelease();
-    const builtSettingsOwner = new SessionSettingsOwner(builtSettings);
-    builtRelease.acquire('settings', () => builtSettingsOwner.dispose());
-    builtSettingsOwner.initializeProviderSelection(
-      builtConfig.getProvider(),
-      builtConfig.getModel(),
-    );
-    builtSettingsOwner.bindTelemetry(builtConfig);
-    const builtFiles = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
-    });
-    for (const scope of [builtRuntimeId, builtConfig.getSessionId()])
-      builtRelease.acquire('files', () =>
-        releaseAdoptedFileScope(builtFiles, scope),
-      );
-    const builtManager = acquirePreferredProviderManager(
-      builtConfig,
-      builtSettings,
-      builtSettingsOwner,
-      builtFiles,
-      builtRuntimeId,
-      credentials().authority,
-      builtRelease,
-    );
-    const builtTokenizer = configureProviderTokenizer(builtManager);
-    const builtContent = createRuntimeContentGeneratorFactory();
-    const builtOAuth = acquirePreferredOAuth(
-      undefined,
-      builtMessageBus,
-      builtConfig,
-      builtSettings,
-      builtManager,
-      builtRuntimeId,
-      builtMcp.profileDefinitions,
-      credentials().authority,
-      builtRelease,
-      undefined,
-    );
-    const builtMedia = new SessionMediaOwner(
-      builtConfig.projectTempDir,
-      1024 * 1024,
-    );
-    const builtOwner = await createCapturedSessionOwner(
-      builtConfig,
-      assembleTaskSchemaPolicy(builtSettings),
-      builtManager,
-      buildAgentClientFactory(),
-      builtMedia.store,
-      builtMcp.readInstructions,
-      builtMcp.workspacePaths,
-      builtSettingsOwner,
-      builtContent,
-      builtTokenizer,
-    );
-    builtOwner.bindMcpRuntime(builtMcp);
-    builtOwner.bindHooks();
-    const builtClose = settleEngineRelease.bind(
-      undefined,
-      [
-        () => builtOwner.dispose(),
-        () => builtRelease.close(),
-        () => builtMedia.dispose(),
-        () => builtMcp.dispose(),
-        () => builtConfig.dispose(),
-        () => rm(builtDirectory, { recursive: true, force: true }),
-      ],
-      builtPreviousReplay,
-    );
-    try {
-      await preparePreferredProviderCompletion(
-        builtConfig,
-        builtSettings,
-        builtSettingsOwner,
-        builtManager,
-        builtOAuth,
-        builtRuntimeId,
-        builtTokenizer,
-        undefined,
-      );
-      await builtMcp.initialize();
-      await builtOwner.initializeTools();
-      await builtOwner.refreshAuth();
-      await capturedSessionClient(builtOwner).startChat();
-    } catch (primary) {
-      await cleanupAfterFailure(primary, builtClose);
-    }
-
-    const client = capturedSessionClient(builtOwner);
-    try {
-      await expect(
-        fromConfig(
-          builtConfig,
-          builtSettings,
-          { activation: { provider: 'missing-engine-provider' } },
-          undefined,
-          builtManager,
-          undefined,
-          builtMessageBus,
-          builtMcp,
-          undefined,
-          client,
-        ),
-      ).rejects.toThrow(/activation failed/i);
-      await builtMcp.refreshContext();
-      await client.addHistory({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'caller after failed activation' }],
-      });
-      expect(
-        (await client.getHistory()).filter((item) => item.speaker === 'human'),
-      ).toHaveLength(1);
-      expect(builtManager.getActiveProviderName()).toBe('fake');
-    } finally {
-      await builtClose();
-    }
+    ).rejects.toThrow(/activation failed/i);
+    expect(credentials().snapshot()).toStrictEqual([1]);
   }, 30000);
   it('transfers the owned preflight client and media into one facade lifetime', async () => {
-    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
-    );
-    const builtDirectory = await realpath(
-      await mkdtemp(join(tmpdir(), 'explicit-engine-owner-')),
-    );
-    const builtConfig = new Config(
-      toConfigParameters({
-        provider: 'fake',
-        model: 'fake-model',
-        sessionId: randomUUID(),
-        workingDir: builtDirectory,
-      }),
-    );
-    const builtSettings = new SettingsService();
-    const builtPolicy = new RuntimePolicyOwner(builtConfig);
-    const builtMessageBus = builtPolicy.session.messageBus;
-    const builtMcp = await createTestMcpRuntime(
-      {
-        oauth: {
-          openBrowser: async () => {
-            throw new Error('Unexpected browser request');
-          },
-          tokenStorage: new MCPOAuthTokenStorage({
-            getCredentials: async () => null,
-            setCredentials: async () => {
-              throw new Error('Unexpected token write');
-            },
-            deleteCredentials: async () => {},
-            listServers: async () => [],
-            getAllCredentials: async () => new Map(),
-            clearAll: async () => {},
-          }),
-        },
-        config: builtConfig,
-        policy: { owner: builtPolicy, ownership: 'runtime' },
-      },
-      {},
-    );
-
-    const builtRuntimeId = 'engine-' + randomUUID();
-    const builtRelease = new AcquisitionRelease();
-    const builtSettingsOwner = new SessionSettingsOwner(builtSettings);
-    builtRelease.acquire('settings', () => builtSettingsOwner.dispose());
-    builtSettingsOwner.initializeProviderSelection(
-      builtConfig.getProvider(),
-      builtConfig.getModel(),
-    );
-    builtSettingsOwner.bindTelemetry(builtConfig);
-    const builtFiles = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
+    const route = await openRouteBPreflight({
+      authority: credentials().authority,
     });
-    for (const scope of [builtRuntimeId, builtConfig.getSessionId()])
-      builtRelease.acquire('files', () =>
-        releaseAdoptedFileScope(builtFiles, scope),
-      );
-    const builtManager = acquirePreferredProviderManager(
-      builtConfig,
-      builtSettings,
-      builtSettingsOwner,
-      builtFiles,
-      builtRuntimeId,
-      credentials().authority,
-      builtRelease,
-    );
-    const builtTokenizer = configureProviderTokenizer(builtManager);
-    const builtOAuth = acquirePreferredOAuth(
-      undefined,
-      builtMessageBus,
-      builtConfig,
-      builtSettings,
-      builtManager,
-      builtRuntimeId,
-      builtMcp.profileDefinitions,
-      credentials().authority,
-      builtRelease,
-      undefined,
-    );
-    const builtMedia = new SessionMediaOwner(
-      builtConfig.projectTempDir,
-      1024 * 1024,
-    );
-
-    const builtClose = settleEngineRelease.bind(
-      undefined,
-      [
-        () => builtRelease.close(),
-        () => builtMedia.dispose(),
-        () => builtMcp.dispose(),
-        () => builtConfig.dispose(),
-        () => rm(builtDirectory, { recursive: true, force: true }),
-      ],
-      previousReplay,
-    );
-    await preparePreferredProviderCompletion(
-      builtConfig,
-      builtSettings,
-      builtSettingsOwner,
-      builtManager,
-      builtOAuth,
-      builtRuntimeId,
-      builtTokenizer,
-      undefined,
-    );
-    const operation = await assembleAgentActivationBootstrap(
-      builtConfig,
-      builtSettings,
-      builtManager,
-      builtOAuth,
-      () => 'agent',
-      'borrowed',
-      undefined,
-      builtMcp,
-    );
     try {
-      await builtMcp.initialize();
+      await route.prepare();
       const intent = { provider: 'fake', model: 'fake-model' };
-      const result = await operation.preflight(intent);
+      const result = await route.preflight.preflight(intent);
       if (result.token === undefined)
         throw new Error('Missing owned preflight handoff');
-      const owner = capturedActivation(operation).owner;
-      const client = capturedSessionClient(owner);
-      const store = client.mediaStore;
-      if (store === undefined) throw new Error('Missing preflight media store');
-      const agent = await fromConfig(
-        builtConfig,
-        builtSettings,
-        { activation: intent },
-        undefined,
-        builtManager,
-        undefined,
-        builtMessageBus,
-        builtMcp,
-        { operation, token: result.token },
+      const agent = await AgentProfilePreflight.createForegroundAgent(
+        route.preflight,
+        result.token,
+        intent,
+        {},
       );
       try {
-        expect(fixtureAgentResources(agent).publishedClient(agent)).toBe(
-          client,
+        await expect(route.preflight.captureHistory()).rejects.toThrow(
+          /disposed/i,
         );
         await agent.setHistory([
           {
@@ -558,27 +94,12 @@ describe('Explicit session client lifetime', () => {
             blocks: [{ type: 'text', text: 'owned preflight history' }],
           },
         ]);
-        expect(await store.getStoredByteLength()).toBe(0);
       } finally {
         await agent.dispose();
       }
-      expect(() => capturedSessionClient(owner)).toThrow(/disposed/i);
-      await expect(store.getStoredByteLength()).rejects.toThrow(/closed/i);
+      await expect(agent.getHistory()).rejects.toThrow(/disposed/i);
     } finally {
-      await operation.dispose();
-      await builtRelease.close();
-      await builtClose();
+      await route.close();
     }
   }, 30000);
 });
-async function settleEngineRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previousReplay: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
-  }
-}
