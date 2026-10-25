@@ -390,6 +390,7 @@ async function finishPublication(
   previousTokens: number,
   { effects, options, appendOnly, completion }: FinishInput,
 ): Promise<void> {
+  await store.settleFanout();
   const delta = candidate.tokens - previousTokens;
   if (options.publishBatch === true) {
     // One event, after the ack, over the committed version: observers never hear of rows a failed group dropped.
