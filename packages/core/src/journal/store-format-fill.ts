@@ -12,12 +12,18 @@ import {
 import type { BuildContext, BuiltGroup } from './groupBuild.js';
 import type { RecordAppender } from './groupAppender.js';
 import type { VersionEdit } from './groupEdits.js';
-import { fillNativeFacts } from './nativeFactFill.js';
-import type { NativeFactIndexRegistration } from './nativeFactIndex.js';
+import { changesNativeSource, fillNativeFacts } from './nativeFactFill.js';
+import {
+  ACTIVE_FACT_INDEX,
+  type NativeFactIndexRegistration,
+} from './nativeFactIndex.js';
+import { mapReader } from './groupBuildShared.js';
+import { JournalFormatError } from './errors.js';
 import { fillToolRanking, toolRankingPolicy } from './tool-ranking-fill.js';
 import type { ToolRankingPolicy } from './tool-ranking-fill.js';
 
 export function nativeFactRegistration(
+  context: BuildContext,
   formats: readonly RegisteredRowFormat[],
   previous: NativeFactIndexRegistration | undefined,
 ): (
@@ -26,6 +32,21 @@ export function nativeFactRegistration(
   return async (edits) => {
     requireIncrementalFormats(edits, formats);
     const edit = edits.find((item) => item.kind === 'factIndex');
+    if (
+      previous === undefined &&
+      edit === undefined &&
+      context.published !== undefined &&
+      edits.some(changesNativeSource)
+    ) {
+      const active = await mapReader(context, 'meta').get(
+        context.published.roots.metaRoot,
+        ACTIVE_FACT_INDEX,
+      );
+      if (active !== undefined && active.byteLength > 0)
+        throw new JournalFormatError(
+          'Stored format incremental holder maintenance is not implemented; a native fact writer must be registered before history mutations',
+        );
+    }
     return edit?.kind === 'factIndex' ? edit.registration : previous;
   };
 }

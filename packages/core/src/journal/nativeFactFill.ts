@@ -46,7 +46,7 @@ export async function warmNativeFacts(
     : undefined;
 }
 
-function changesNativeSource(edit: VersionEdit): boolean {
+export function changesNativeSource(edit: VersionEdit): boolean {
   return ![
     'chronology',
     'densityCalls',

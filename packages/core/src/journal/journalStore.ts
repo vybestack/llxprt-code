@@ -750,7 +750,11 @@ export class JournalStore {
             edits,
             appender,
             effect === undefined ? appender : effectAppender(appender, effect),
-            nativeFactRegistration(this.rowFormats, this.factIndex),
+            nativeFactRegistration(
+              this.buildContext(),
+              this.rowFormats,
+              this.factIndex,
+            ),
           );
           ({ plan, built, edits: resolvedEdits, facts: factIndex } = prepared);
           streamedAppend = prepared.streamedAppend;
