@@ -1093,7 +1093,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T5.2a B1 host key storage reaches the interactive UI
 - [x] T5.2b B1 Config key methods deleted, negative control
 - [x] T5.3a B6 loadCliConfig test callers through a preflight helper (behavior-neutral)
-- [ ] T5.3 B6 loadCliConfig input
+- [x] T5.3 B6 loadCliConfig input
 - [ ] T5.4a B6 SubAgentScope.create test callers through one helper
 - [ ] T5.4b B6 SubAgentScope.create new signature
 - [ ] T5.4c B6 SubAgentScope.create returns narrow ChildAgentScope (preparatory for T5.6)

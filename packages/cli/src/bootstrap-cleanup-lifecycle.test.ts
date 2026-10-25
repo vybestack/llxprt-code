@@ -60,7 +60,7 @@ import {
   handleSessionListAndDelete,
 } from './cliSessionBootstrap.js';
 import { activateConfiguredProvider } from './cliProviderInit.js';
-import { loadCliConfig } from './config/config.js';
+import { ignoreReady, loadCliConfig } from './config/config.js';
 import { loadSettings } from './config/settings.js';
 import { parseArguments } from './config/cliArgParser.js';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
@@ -422,16 +422,20 @@ describe('real startup activation owner cleanup', () => {
       );
       registerCleanup(() => preflight.dispose());
       const config = await loadCliConfig(
-        settings.merged,
-        [],
-        new ExtensionEnablementManager(directory, { enabledOverride: [] }),
-        'borrowed-startup',
-        argv,
-        directory,
-        preflight,
-        undefined,
-        callerOwner,
-        credentialAuthority,
+        {
+          settings: settings.merged,
+          extensions: [],
+          extensionEnablementManager: new ExtensionEnablementManager(
+            directory,
+            { enabledOverride: [] },
+          ),
+          sessionId: 'borrowed-startup',
+          argv,
+          cwd: directory,
+          preflight,
+          settingsOwner: callerOwner,
+        },
+        ignoreReady,
       );
 
       const activationOperation = transferActivation(preflight);
@@ -688,7 +692,6 @@ describe('real startup activation owner cleanup', () => {
       settings,
       argv,
       directory,
-      credentialAuthority,
       preflight,
     );
     transferActivation(preflight);
@@ -735,7 +738,6 @@ describe('real startup activation owner cleanup', () => {
       settings,
       argv,
       directory,
-      credentialAuthority,
       preflight,
     );
     transferActivation(preflight);

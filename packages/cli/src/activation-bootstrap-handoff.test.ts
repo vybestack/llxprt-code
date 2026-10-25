@@ -88,13 +88,7 @@ describe('CLI activation operation handoff', () => {
       undefined,
     );
     const config = await captureActivationConstruction(() =>
-      bootstrapRuntimeAndConfig(
-        settings,
-        argv,
-        directory,
-        credentialAuthority,
-        preflight,
-      ),
+      bootstrapRuntimeAndConfig(settings, argv, directory, preflight),
     );
     let transferredActivation: AgentActivationOperation | undefined;
     preflight.transferActivation((operation) => {
@@ -187,13 +181,7 @@ describe('CLI activation operation handoff', () => {
       undefined,
     );
     const config = await captureActivationConstruction(() =>
-      bootstrapRuntimeAndConfig(
-        settings,
-        argv,
-        directory,
-        credentialAuthority,
-        preflight,
-      ),
+      bootstrapRuntimeAndConfig(settings, argv, directory, preflight),
     );
     let transferredActivation: AgentActivationOperation | undefined;
     preflight.transferActivation((operation) => {
@@ -266,13 +254,7 @@ describe('CLI activation operation handoff', () => {
       undefined,
     );
     const config = await captureActivationConstruction(() =>
-      bootstrapRuntimeAndConfig(
-        settings,
-        argv,
-        directory,
-        credentialAuthority,
-        preflight,
-      ),
+      bootstrapRuntimeAndConfig(settings, argv, directory, preflight),
     );
     let transferredActivation: AgentActivationOperation | undefined;
     preflight.transferActivation((operation) => {

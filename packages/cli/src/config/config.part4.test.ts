@@ -13,7 +13,16 @@ const retainedConfigFixtures: Array<{
   settingsOwner: SessionSettingsOwner;
 }> = [];
 
-async function loadConfigFixture(...args: Parameters<typeof loadCliConfig>) {
+async function loadConfigFixture(
+  ...args: [
+    settings: CliConfigLoadInput['settings'],
+    extensions: CliConfigLoadInput['extensions'],
+    extensionEnablementManager: CliConfigLoadInput['extensionEnablementManager'],
+    sessionId: CliConfigLoadInput['sessionId'],
+    argv: CliConfigLoadInput['argv'],
+    cwd?: CliConfigLoadInput['cwd'],
+  ]
+) {
   const store = new SettingsService();
   const settingsOwner = new SessionSettingsOwner(store);
   try {
@@ -53,7 +62,7 @@ import {
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
-import { loadCliConfig } from './config.js';
+import { loadCliConfig, type CliConfigLoadInput } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 import { ExtensionStorage } from './extension.js';

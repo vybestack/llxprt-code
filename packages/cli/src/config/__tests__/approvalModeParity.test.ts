@@ -38,7 +38,7 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { loadCliConfig } from '../config.js';
+import type { CliConfigLoadInput } from '../config.js';
 import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
 import { ExtensionStorage } from '../extension.js';
@@ -153,7 +153,7 @@ function makeExtMgr(extensions?: string[]) {
 
 async function getApprovalMode(
   settings: Settings,
-  argvOverride?: Partial<Parameters<typeof loadCliConfig>[4]>,
+  argvOverride?: Partial<CliConfigLoadInput['argv']>,
 ): Promise<ApprovalMode> {
   const argv = await parseArguments(settings);
   Object.assign(argv, argvOverride ?? {});

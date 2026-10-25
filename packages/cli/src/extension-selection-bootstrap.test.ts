@@ -108,7 +108,6 @@ describe('extension selection at CLI bootstrap', () => {
       settings,
       argv,
       workspace,
-      credentialAuthority,
       preflight,
     );
     const operation = transferActivation(preflight);

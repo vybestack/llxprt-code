@@ -18,7 +18,7 @@ import type {
   SessionSettingsOwner,
 } from '@vybestack/llxprt-code-core';
 import type { CliArgs } from '../config/cliArgParser.js';
-import { loadCliConfig } from '../config/config.js';
+import { ignoreReady, loadCliConfig } from '../config/config.js';
 import { resolveProxy } from '../config/configBuilder.js';
 import type { ExtensionEnablementManager } from '../config/extensions/extensionEnablement.js';
 import {
@@ -47,9 +47,9 @@ export interface LoadCliConfigFixtureInput {
 }
 
 /**
- * The single test-side owner of `loadCliConfig`'s positional order. Callers
- * that supply no preflight get one prepared here, and the post-configuration
- * activation is finished here when `loadCliConfig` returns or throws.
+ * The single test-side entry to `loadCliConfig`. Callers that supply no
+ * preflight get one prepared here, and the post-configuration activation is
+ * finished here when `loadCliConfig` returns or throws.
  */
 export async function loadCliConfigWithPreflight(
   input: LoadCliConfigFixtureInput,
@@ -58,21 +58,24 @@ export async function loadCliConfigWithPreflight(
   const prepared = input.preflight ?? (await prepareFixturePreflight(input));
   try {
     return await loadCliConfig(
-      input.settings,
-      input.extensions,
-      input.extensionEnablementManager,
-      input.sessionId,
-      input.argv,
-      cwd,
-      prepared,
-      input.settingsService,
-      input.settingsOwner,
-      input.authority,
-      input.contributions,
-      input.onActivationBootstrapReady,
-      input.onProfileApplicationReady,
-      input.onProviderSwitchReady,
-      input.onPreflightReady,
+      {
+        settings: input.settings,
+        extensions: input.extensions,
+        extensionEnablementManager: input.extensionEnablementManager,
+        sessionId: input.sessionId,
+        argv: input.argv,
+        cwd,
+        preflight: prepared,
+        settingsOwner: input.settingsOwner,
+      },
+      {
+        activationBootstrap: input.onActivationBootstrapReady,
+        profileApplication:
+          input.onProfileApplicationReady ?? ignoreReady.profileApplication,
+        providerSwitch:
+          input.onProviderSwitchReady ?? ignoreReady.providerSwitch,
+        preflight: input.onPreflightReady ?? ignoreReady.preflight,
+      },
     );
   } finally {
     if (input.preflight === undefined) await prepared.finishPostConfiguration();

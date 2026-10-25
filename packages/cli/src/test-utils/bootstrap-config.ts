@@ -14,10 +14,7 @@ export function handoffCliConfig(
   preflightOperation?: AgentActivationOperation['preflight'],
   hasActiveProvider?: () => boolean,
 ): typeof loadCliConfig {
-  return async (...args) => {
-    const preflight = args[6];
-    if (preflight === undefined)
-      throw new Error('Bootstrap fixture requires its owning preflight');
+  return async ({ preflight }) => {
     await preflight.prepareConfiguredWorkspace(config, () => {});
     if (preflightOperation !== undefined)
       vi.spyOn(preflight, 'preflight').mockImplementation(preflightOperation);

@@ -10,11 +10,8 @@ import {
   WorkspaceFilesystemOwner,
 } from '@vybestack/llxprt-code-core';
 import type { AgentProfilePreflight } from '@vybestack/llxprt-code-agents';
-import {
-  setTuiOwnsTerminal,
-  type CredentialAuthority,
-} from '@vybestack/llxprt-code-providers/auth.js';
-import { loadCliConfig } from './config/config.js';
+import { setTuiOwnsTerminal } from '@vybestack/llxprt-code-providers/auth.js';
+import { ignoreReady, loadCliConfig } from './config/config.js';
 import { isImageModeActive } from './config/imageMode.js';
 import { buildImageModeFlags } from './config/imageModeDispatch.js';
 import { start_sandbox } from './utils/sandbox.js';
@@ -143,7 +140,6 @@ export interface SandboxHopOptions {
   argv: ParsedCliArgs;
   workspaceRoot: string;
   prepareSandboxPreflight: () => Promise<AgentProfilePreflight>;
-  credentialAuthority: CredentialAuthority;
   initialAuthFailed: boolean;
   readStdin: () => Promise<string>;
   hasPipedInput: boolean;
@@ -192,16 +188,18 @@ export async function maybeHopIntoSandbox(
   const sandboxPreflight = await prepareSandboxPreflight();
   registerCleanup(() => sandboxPreflight.dispose());
   const partialConfig = await loadCliConfig(
-    settings.merged,
-    [],
-    new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
-    sessionId,
-    argv,
-    workspaceRoot,
-    sandboxPreflight,
-    undefined,
-    undefined,
-    options.credentialAuthority,
+    {
+      settings: settings.merged,
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+      ),
+      sessionId,
+      argv,
+      cwd: workspaceRoot,
+      preflight: sandboxPreflight,
+    },
+    ignoreReady,
   );
 
   await sandboxPreflight.dispose();

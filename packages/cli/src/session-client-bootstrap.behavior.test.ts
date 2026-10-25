@@ -164,13 +164,7 @@ describe('CLI session client bootstrap ownership', () => {
       undefined,
     );
     const config = await captureActivationConstruction(() =>
-      bootstrapRuntimeAndConfig(
-        settings,
-        argv,
-        directory,
-        credentialAuthority,
-        preflight,
-      ),
+      bootstrapRuntimeAndConfig(settings, argv, directory, preflight),
     );
     let transferredActivation: AgentActivationOperation | undefined;
     preflight.transferActivation((operation) => {

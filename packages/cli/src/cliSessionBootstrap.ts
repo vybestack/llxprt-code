@@ -1,5 +1,3 @@
-import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-
 import {
   CONTINUE_LATEST,
   type Config,
@@ -24,7 +22,7 @@ import type {
 import { buildMcpAuthFactoryRegistry } from '@vybestack/llxprt-code-mcp/auth/mcp-auth-factory.js';
 import { sessionId } from '@vybestack/llxprt-code-telemetry';
 import chalk from 'chalk';
-import { loadCliConfig } from './config/config.js';
+import { ignoreReady, loadCliConfig } from './config/config.js';
 import type { LoadedSettings } from './config/settings.js';
 import {
   classifyContinueRef,
@@ -131,7 +129,6 @@ export async function bootstrapRuntimeAndConfig(
   settings: LoadedSettings,
   argv: ParsedCliArgs,
   workspaceRoot: string,
-  credentialAuthority: CredentialAuthority,
   preflight: AgentProfilePreflight,
 ): Promise<Config> {
   registerCleanup(() => preflight.dispose());
@@ -144,16 +141,16 @@ export async function bootstrapRuntimeAndConfig(
       workspaceRoot,
     );
     return await loadCliConfig(
-      settings.merged,
-      extensions,
-      extensionEnablementManager,
-      sessionId,
-      argv,
-      workspaceRoot,
-      preflight,
-      undefined,
-      undefined,
-      credentialAuthority,
+      {
+        settings: settings.merged,
+        extensions,
+        extensionEnablementManager,
+        sessionId,
+        argv,
+        cwd: workspaceRoot,
+        preflight,
+      },
+      ignoreReady,
     );
   } catch (primary) {
     try {

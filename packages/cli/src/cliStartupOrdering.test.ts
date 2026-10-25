@@ -100,7 +100,6 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
       _settings: unknown,
       _argv: unknown,
       _root: unknown,
-      _authority: unknown,
       preflight: {
         hasActiveProvider(): boolean;
         prepareConfiguredWorkspace(

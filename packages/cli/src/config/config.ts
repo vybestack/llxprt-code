@@ -6,14 +6,11 @@
  * @plan PLAN-20260214-SESSIONBROWSER.P29
  */
 
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
   AgentProfilePreflight,
   AgentActivationOperation,
   AgentProfileApplication,
 } from '@vybestack/llxprt-code-agents';
-import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import type {
   ApprovalMode,
   Config,
@@ -39,12 +36,6 @@ import {
   type MergedSettings,
   type Settings,
 } from './settings.js';
-
-// @plan:PLAN-20251020-STATELESSPROVIDER3.P04
-import {
-  prepareRuntimeForProfile,
-  type ParsedBootstrapArgs,
-} from './profileBootstrap.js';
 
 import { buildConfig } from './configBuilder.js';
 import { finalizeConfig } from './postConfigRuntime.js';
@@ -82,29 +73,41 @@ type ConfigBuildPieces = {
 
 import type { ContextResolutionResult } from './interactiveContext.js';
 
-// ─── Orchestrator ────────────────────────────────────────────────────────────
-
-/** Step 2: Bootstrap the provider runtime for the already-resolved profile */
-async function acquirePreflight(
-  bootstrap: ParsedBootstrapArgs,
-  preflight: AgentProfilePreflight | undefined,
-  settingsService: SettingsService | undefined,
-  authority: CredentialAuthority | undefined,
-  contributions: ProviderContributionRegistry | undefined,
-  onPreflightReady: ((operation: AgentProfilePreflight) => void) | undefined,
-): Promise<AgentProfilePreflight> {
-  const runtimeState =
-    preflight ??
-    (await prepareRuntimeForProfile(
-      bootstrap,
-      authority,
-      settingsService,
-      undefined,
-      contributions,
-    ));
-  onPreflightReady?.(runtimeState);
-  return runtimeState;
+/** Values `loadCliConfig` reads once while it builds the Config. */
+export interface CliConfigLoadInput {
+  readonly settings: Settings;
+  readonly extensions: LlxprtExtension[];
+  readonly extensionEnablementManager: ExtensionEnablementManager;
+  readonly sessionId: string;
+  readonly argv: CliArgs;
+  readonly cwd: string;
+  readonly preflight: AgentProfilePreflight;
+  /** An externally owned settings owner the preflight prepares its workspace over. */
+  readonly settingsOwner?: SessionSettingsOwner;
 }
+
+/**
+ * Hand-offs `loadCliConfig` makes while the Config is being finalized.
+ * `activationBootstrap` is the only one that changes what happens: when present
+ * the preflight's post-config activation is transferred to it, and when absent
+ * the preflight keeps the activation for the caller to transfer or finish.
+ */
+export interface CliConfigReadyCallbacks {
+  readonly activationBootstrap?: (operation: AgentActivationOperation) => void;
+  readonly profileApplication: (application: AgentProfileApplication) => void;
+  readonly providerSwitch: (switchProvider: ProviderSwitcher) => void;
+  readonly preflight: (operation: AgentProfilePreflight) => void;
+}
+
+const ignore = (): void => undefined;
+
+export const ignoreReady: CliConfigReadyCallbacks = {
+  profileApplication: ignore,
+  providerSwitch: ignore,
+  preflight: ignore,
+};
+
+// ─── Orchestrator ────────────────────────────────────────────────────────────
 
 /** Step 8: Resolve provider/model, sync to SettingsService */
 function resolveProviderModelSelection(
@@ -269,22 +272,19 @@ function buildLoadedConfig(
  * Each step delegates to a focused module — see 00-overview.md.
  */
 export async function loadCliConfig(
-  settings: Settings,
-  extensions: LlxprtExtension[],
-  extensionEnablementManager: ExtensionEnablementManager,
-  sessionId: string,
-  argv: CliArgs,
-  cwd: string = process.cwd(),
-  preflight?: AgentProfilePreflight,
-  settingsService?: SettingsService,
-  settingsOwner?: SessionSettingsOwner,
-  authority?: CredentialAuthority,
-  contributions?: ProviderContributionRegistry,
-  onActivationBootstrapReady?: (operation: AgentActivationOperation) => void,
-  onProfileApplicationReady?: (application: AgentProfileApplication) => void,
-  onProviderSwitchReady?: (switchProvider: ProviderSwitcher) => void,
-  onPreflightReady?: (operation: AgentProfilePreflight) => void,
+  input: CliConfigLoadInput,
+  onReady: CliConfigReadyCallbacks,
 ): Promise<Config> {
+  const {
+    settings,
+    extensions,
+    extensionEnablementManager,
+    sessionId,
+    argv,
+    cwd,
+    preflight: runtimeState,
+    settingsOwner,
+  } = input;
   const declarative = await resolveDeclarativeCliConfig({
     settings,
     argv,
@@ -295,14 +295,7 @@ export async function loadCliConfig(
   const { bootstrap, profileResult } = declarative;
   const bootstrapArgs = bootstrap.bootstrapArgs;
   const profileMergedSettings = profileResult.profileMergedSettings;
-  const runtimeState = await acquirePreflight(
-    bootstrap,
-    preflight,
-    settingsService,
-    authority,
-    contributions,
-    onPreflightReady,
-  );
+  onReady.preflight(runtimeState);
 
   const pieces = await resolveConfigBuildPieces(
     argv,
@@ -338,10 +331,10 @@ export async function loadCliConfig(
       interactive: pieces.context.interactive,
     },
     settingsOwner,
-    onActivationBootstrapReady,
-    onProfileApplicationReady,
-    onProviderSwitchReady,
-    preflight === undefined,
+    onReady.activationBootstrap,
+    onReady.profileApplication,
+    onReady.providerSwitch,
+    false,
   );
 }
 

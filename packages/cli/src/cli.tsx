@@ -647,7 +647,6 @@ async function handleSandboxHop(
   argv: ParsedCliArgs,
   workspaceRoot: string,
   preflight: AgentProfilePreflight,
-  authority: CredentialAuthority,
   authFailed: boolean,
   readStdinOnce: () => Promise<string>,
   hasPipedInput: boolean,
@@ -661,7 +660,6 @@ async function handleSandboxHop(
     argv,
     workspaceRoot,
     prepareSandboxPreflight: () => preflight.forkSandboxPreflight(),
-    credentialAuthority: authority,
     initialAuthFailed: authFailed,
     readStdin: readStdinOnce,
     hasPipedInput,
@@ -716,13 +714,7 @@ export async function main() {
     authority,
     providerContributions,
   );
-  const config = await bootstrap(
-    settings,
-    argv,
-    workspaceRoot,
-    authority,
-    preflight,
-  );
+  const config = await bootstrap(settings, argv, workspaceRoot, preflight);
   let preflightHandedOff = false;
 
   try {
@@ -766,7 +758,6 @@ export async function main() {
       argv,
       workspaceRoot,
       preflight,
-      authority,
       providerActivation.authFailed,
       readStdinOnce,
       hasPipedInput,

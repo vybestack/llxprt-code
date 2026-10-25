@@ -260,7 +260,6 @@ describe('CLI sandbox', () => {
           captureAgentPreflightHostInput({ runtimeId: 'sandbox-hop-fixture' }),
           new CredentialAuthority(),
         ),
-      credentialAuthority: new CredentialAuthority(),
       initialAuthFailed: false,
       readStdin: async () => '',
       hasPipedInput: false,
