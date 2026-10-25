@@ -176,6 +176,9 @@ describe('density replacement values', () => {
           adopt: () => undefined,
           reconcile: async () => undefined,
           releaseAll: async () => undefined,
+          prepareReplacement: () => {
+            throw new Error('Density replacement must use media references');
+          },
           prepareReferenceReplacement: (references) => ({
             publish: async () => {
               for await (const reference of references) void reference;
