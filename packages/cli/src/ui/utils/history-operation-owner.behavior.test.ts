@@ -6,10 +6,7 @@ import { checkpointBindings } from '../../__tests__/recording-checkpoint-fixture
  */
 import type { HistoryItemWithoutId } from '../types.js';
 import { describe, expect, it } from 'bun:test';
-import {
-  useCommandOwners,
-  commandOwnerClient,
-} from '../../__tests__/command-owner-fixture.js';
+import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { resumeOwnerSession } from './resumeOwnerSession.js';
 import { bindCompressCommand } from '../commands/compressCommandHost.js';
 import {
@@ -130,7 +127,7 @@ describe('history operation ownership', () => {
   it('reads raw chat history through its captured reader without selecting an attached client', async () => {
     const owner = await makeOwner('raw-callback-owner');
     const sibling = await makeOwner('raw-callback-sibling');
-    await commandOwnerClient(owner).startChat();
+    await owner.session.replaceHistory(await owner.session.getHistory());
     await owner.setHistory([
       {
         speaker: 'human',
@@ -145,11 +142,11 @@ describe('history operation ownership', () => {
         Object.assign(() => null, { agent: sibling, config: null }),
         () => null,
         () => null,
-        () => commandOwnerClient(owner).mediaStore,
+        () => undefined,
       ),
-      () => commandOwnerClient(owner).getChat().getHistory(),
+      () => owner.session.readInitializedHistory(),
       async (history) => {
-        await commandOwnerClient(owner).getChat().setHistory(history);
+        await owner.session.replaceHistory(history);
       },
       () => owner.getModel(),
     );
