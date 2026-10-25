@@ -567,6 +567,22 @@ export class CompressionHandler {
     }
   }
 
+  private async finishCompression(
+    outcome: 'applied' | 'noop' | 'failed',
+    count: number,
+    origin?: object,
+  ): Promise<void> {
+    try {
+      await this.historyService.waitForCommit();
+    } finally {
+      this.historyService.endCompression(
+        outcome === 'noop' ? undefined : this.compressionSummary,
+        outcome === 'noop' ? undefined : count,
+        origin,
+      );
+    }
+  }
+
   async enforceContextWindow(
     pendingTokens: number,
     promptId: string,
@@ -702,9 +718,9 @@ export class CompressionHandler {
       // Balance the compression lock in all cases. On 'noop' no history was
       // mutated, so flush/unlock WITHOUT summary/itemsCompressed to avoid
       // emitting a compressionEnded recording event. (Issue #2602)
-      this.historyService.endCompression(
-        compressionOutcome === 'noop' ? undefined : this.compressionSummary,
-        compressionOutcome === 'noop' ? undefined : preCompressionCount,
+      await this.finishCompression(
+        compressionOutcome,
+        preCompressionCount,
         options?.historyOrigin,
       );
     }

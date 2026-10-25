@@ -9,6 +9,7 @@ import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.j
 import type { AgentClient } from '../../client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from '../../chatSession.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { AgentEventType, type PerformCompressionResult } from '../../turn.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
@@ -230,6 +231,7 @@ export function buildOverflowScenario(
 
   const mockChat: Partial<ChatSession> = {
     addHistory: vi.fn(),
+    ...chatDisposalHistory(),
     getHistory: vi.fn().mockReturnValue([]),
     getLastPromptTokenCount: vi.fn().mockReturnValue(observedCount),
     getProjectedPromptBaseline: vi
@@ -272,6 +274,17 @@ export function buildOverflowScenario(
     request: [{ type: 'text' as const, text: longText }],
     estimatedRequestTokenCount: Math.floor(longText.length / 4),
     remainingTokenCount: MOCKED_TOKEN_LIMIT - initialBaseline,
+  };
+}
+
+export function chatDisposalHistory(): Pick<
+  ChatSession,
+  'clearHistoryForDisposal' | 'getHistoryService'
+> {
+  const history = new HistoryService();
+  return {
+    clearHistoryForDisposal: () => history.clear(),
+    getHistoryService: () => history,
   };
 }
 

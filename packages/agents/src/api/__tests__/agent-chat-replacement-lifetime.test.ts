@@ -19,20 +19,13 @@ describe('Agent client chat replacement lifetime', () => {
     'closes every replaced chat journal after %s before agent disposal completes',
     async (operation) => {
       const handles: JournalFileHandle[] = [];
-      const resolve = journalOpen.resolveJournalDependencies;
+      const create = journalOpen.createSynchronousJournal;
       const opener = spyOn(
         journalOpen,
-        'resolveJournalDependencies',
-      ).mockImplementation(async (overrides) => {
-        const dependencies = await resolve(overrides);
-        return {
-          ...dependencies,
-          open: async (path, flags) => {
-            const handle = await dependencies.open(path, flags);
-            handles.push(handle);
-            return handle;
-          },
-        };
+        'createSynchronousJournal',
+      ).mockImplementation((handle, dependencies) => {
+        handles.push(handle);
+        return create(handle, dependencies);
       });
       try {
         const { agent, cleanup } = await buildAgent('plain-text.jsonl');
@@ -48,7 +41,7 @@ describe('Agent client chat replacement lifetime', () => {
         }
       } finally {
         opener.mockRestore();
-        for (const handle of handles) await handle.close();
+        await Promise.allSettled(handles.map((handle) => handle.close()));
       }
     },
   );

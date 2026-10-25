@@ -44,6 +44,7 @@ describe('bounded source enforcement foundation', () => {
           JSON.stringify({
             speaker: 'human',
             blocks: [{ type: 'text', text: rowText(index) }],
+            metadata: {},
           }),
         );
       const projection = await setup.enforcer.assess('initial');

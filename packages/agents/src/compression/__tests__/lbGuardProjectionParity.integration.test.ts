@@ -57,6 +57,8 @@ import {
   type HandlerHarness,
 } from './support/handler-harness.js';
 import { prepareAtSendSeam } from '../../core/promptEnvelopeSendSeam.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
+import type { ProviderRequestSource } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 
 const MODEL = 'test-model';
 const HISTORY_MESSAGES = 14;
@@ -111,14 +113,8 @@ function serializedToolTokens(tools: ProviderToolset | undefined): number {
 }
 
 /** Re-open eager rows as the provider-facing history stream (issue #854). */
-function toStream(rows: readonly IContent[]): AsyncIterable<IContent> {
-  return {
-    async *[Symbol.asyncIterator]() {
-      for (const row of rows) {
-        yield row;
-      }
-    },
-  };
+function toStream(rows: readonly IContent[]): ProviderRequestSource {
+  return callerOwnedRawProviderSource(rows);
 }
 
 /** Tokenizer factory whose prompt estimation defers to the projection. */

@@ -47,6 +47,7 @@ import {
   OVERFLOW_REQUEST_CHARS,
   THRESHOLD,
   setClient,
+  chatDisposalHistory,
 } from './__tests__/support/client.sendMessageStream-overflow-compression-fixture.js';
 
 describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2755) — deferred enforcement', () => {
@@ -145,6 +146,7 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
 
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
+        ...chatDisposalHistory(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         getProjectedPromptBaseline: vi
@@ -223,6 +225,7 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
 
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
+        ...chatDisposalHistory(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         getProjectedPromptBaseline: vi
@@ -289,6 +292,7 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
 
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
+        ...chatDisposalHistory(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(PREFLIGHT_BASELINE),
         getProjectedPromptBaseline: vi

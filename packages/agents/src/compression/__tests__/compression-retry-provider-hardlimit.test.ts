@@ -506,7 +506,10 @@ describe('provider-source pending boundaries, callbacks and restore (Issue #2588
         s.enforce(undefined, undefined, async () => {
           const callback = s.capturedCallback();
           estimateSpy.mockResolvedValue(150_000);
-          await callback();
+          await callback({
+            estimatedTokens: 215_536,
+            contextLimit: STANDARD_CONTEXT_LIMIT,
+          });
         }),
       );
     }
@@ -594,8 +597,6 @@ describe('provider-source pending boundaries, callbacks and restore (Issue #2588
       // Initial/post-density/post-compression stay over the hard limit so the
       // ladder reaches the restore path; the post-truncation projection then
       // fits, so the ladder returns the restored history.
-      const estimates = [500_000, 500_000, 500_000, 100];
-      let estimateIndex = 0;
       s.performCompression.mockResolvedValue(PerformCompressionResult.FAILED);
 
       const observed: string[] = [];
@@ -613,7 +614,9 @@ describe('provider-source pending boundaries, callbacks and restore (Issue #2588
       });
 
       historyService.startCompression();
-      await s.enforce(async () => estimates[estimateIndex++] ?? 100);
+      await s.enforce(async (rows) =>
+        textOf(rows).includes('restored-1') ? 100 : 500_000,
+      );
       historyService.add(makeUserMessage('late stream after restore'));
       historyService.endCompression(makeUserMessage('truncation summary'), 2);
 
