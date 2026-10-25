@@ -20,6 +20,17 @@ describe('native service seeded empty-id reconstruction', () => {
       checkNativeSeed(formatById('openai-chat-kimi'), 95),
     ).resolves.toBeUndefined();
   });
+  for (const format of [
+    'openai-chat-plain',
+    'openai-chat-kimi',
+    'openai-chat-mistral',
+  ]) {
+    it(`${format} seed 932 retains results when curated history has no assistant calls`, async () => {
+      await expect(
+        checkNativeSeed(formatById(format), 932),
+      ).resolves.toBeUndefined();
+    });
+  }
   for (const seed of [
     0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100,
   ]) {

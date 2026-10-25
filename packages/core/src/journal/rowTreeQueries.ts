@@ -1,10 +1,39 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { ROW_SPEAKER } from './rowRecord.js';
+import { ROW_FLAG, ROW_SPEAKER } from './rowRecord.js';
 import type { RecordAccess } from './recordAccess.js';
 import { JournalFormatError } from './errors.js';
 import { unitCount } from './unitContributions.js';
 import type { RowEntry } from './rowEntry.js';
 import { readRowTreeNode, type RowTreeRootRef } from './rowTreeReader.js';
+
+export async function hasAssistantToolCalls(
+  access: RecordAccess,
+  root: RowTreeRootRef | undefined,
+  excluded: ReadonlySet<bigint>,
+): Promise<boolean> {
+  if (root === undefined) return false;
+  const node = await readRowTreeNode(access, root.offset);
+  if (node.kind === 'leaf')
+    return node.entries.some((entry) => {
+      if (excluded.has(entry.label) || (entry.flags & ROW_FLAG.curated) === 0)
+        return false;
+      return (
+        entry.reconBlocks > 0 ||
+        (entry.toolCallBlocks > 0 && entry.speaker !== ROW_SPEAKER.human)
+      );
+    });
+  for (const slot of node.slots)
+    if (
+      (slot.aggregate.callRows > 0 || slot.aggregate.reconRows > 0) &&
+      (await hasAssistantToolCalls(
+        access,
+        { offset: slot.childOffset, rows: slot.count },
+        excluded,
+      ))
+    )
+      return true;
+  return false;
+}
 
 /**
  * How many live rows have a label below `cut`: one node per level, chosen by

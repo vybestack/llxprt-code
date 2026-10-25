@@ -28,6 +28,7 @@ export interface RowFormatSettings {
   readonly outputLimits: Readonly<OutputLimitConfig> | null;
   readonly chat?: {
     readonly includeInContext: boolean;
+    readonly allowOrphans?: boolean;
     readonly toolFormat?: 'openai' | 'mistral' | 'kimi';
     readonly mistralRevision?: string;
     readonly estimatorKey?: string;

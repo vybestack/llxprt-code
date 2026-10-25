@@ -120,7 +120,7 @@ export async function* nativeChatPieces(
   strip: unknown,
   lastThinking: number,
   rowIds?: NativeRowIds,
-  allowOrphans = false,
+  allowOrphans = settings.chat?.allowOrphans === true,
   mediaAt?: (index: number) => Promise<IContent>,
 ): AsyncGenerator<NativeDumpPiece> {
   let lastIds: readonly string[] = [];

@@ -293,7 +293,7 @@ async function planStreamedChat(
   rowIds: NativeRowIds | undefined,
   rowInput: ChatRowInput,
   count?: ChatUnitTokenMeasurer,
-  allowOrphans = false,
+  allowOrphans = settings.chat?.allowOrphans === true,
 ): Promise<StoredChatMessagePlan> {
   const source = rows.openReader(signal);
   const fold = await foldChatUnits(
@@ -718,7 +718,20 @@ export async function prepareNativePlainRequest(
   >
 > {
   const native = rows.native;
-  const settings = nativeChatSettings(options, toolFormat);
+  const baseSettings = nativeChatSettings(options, toolFormat);
+  const settings: RowFormatSettings =
+    native !== undefined &&
+    native.indexed.hasToolResponseSources() &&
+    !(await native.indexed.hasAssistantToolCalls())
+      ? {
+          ...baseSettings,
+          chat: {
+            ...baseSettings.chat,
+            includeInContext: baseSettings.chat?.includeInContext ?? true,
+            allowOrphans: true,
+          },
+        }
+      : baseSettings;
   const signal = getRequestSignal(options);
   const system = options.systemInstruction ?? '';
   const { planner, bodySettings, streamedPlan } = await chatPlanning(

@@ -330,7 +330,7 @@ export async function foldChatUnits(
       state,
       options.count,
       options.rowIds,
-      options.allowOrphans === true,
+      options.allowOrphans ?? settings.chat?.allowOrphans === true,
     );
     state = done.state;
     pendingMedia ||= done.facts[0].media.length > 0;

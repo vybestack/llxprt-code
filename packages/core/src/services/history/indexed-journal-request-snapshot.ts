@@ -282,6 +282,32 @@ export class IndexedJournalRequestSnapshot {
     return this.locate(index);
   }
 
+  hasToolResponseSources(): boolean {
+    this.requireOpen();
+    if ((this.snapshot.version?.aggregate.responseBlocks ?? 0) > 0) return true;
+    for (const row of this.rows) if (row.entry.responseBlocks > 0) return true;
+    return false;
+  }
+
+  async hasAssistantToolCalls(): Promise<boolean> {
+    this.requireOpen();
+    const excluded = new Set<bigint>();
+    for (const row of this.rows) excluded.add(row.entry.label);
+    if (await this.snapshot.hasAssistantToolCalls(excluded)) return true;
+    for (const row of this.rows)
+      for (let at = row.start; at < row.start + row.count; at++)
+        if (await this.planHasAssistantToolCalls(at)) return true;
+    return false;
+  }
+
+  private async planHasAssistantToolCalls(at: number): Promise<boolean> {
+    const plan = await this.planAt(at);
+    if (plan.header.speaker !== 'ai') return false;
+    for await (const block of plan.openBlocks())
+      if (block.type === 'tool_call') return true;
+    return false;
+  }
+
   hasPersistedMedia(): Promise<boolean> {
     return this.query(
       () => (this.snapshot.version?.aggregate.mediaContribRows ?? 0) > 0,

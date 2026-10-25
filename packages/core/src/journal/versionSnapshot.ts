@@ -54,6 +54,7 @@ import {
 } from './rowReads.js';
 import {
   entryByLabel,
+  hasAssistantToolCalls,
   humanRowOrdinal,
   countRowsBelow,
   countUnitsBelow,
@@ -518,6 +519,11 @@ export class VersionSnapshot {
   }
 
   /** The live rows in label order from index `from`. */
+  hasAssistantToolCalls(excluded: ReadonlySet<bigint>): Promise<boolean> {
+    this.read.requireOpen();
+    return hasAssistantToolCalls(this.read.access, this.rootRef(), excluded);
+  }
+
   async *entries(from = 0): AsyncGenerator<RowEntry> {
     const root = this.rootRef();
     if (root === undefined) return;
