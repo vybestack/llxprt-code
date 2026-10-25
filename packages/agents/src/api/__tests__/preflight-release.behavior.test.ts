@@ -345,12 +345,21 @@ describe('preflight acquired lifetime', () => {
         expect(requests).toHaveLength(1);
 
         expect(credentials().snapshot()).toStrictEqual([0]);
-        await credentials().saveToken(0, 'retained', {
+        expect((await agent.auth.detailedStatus('codex')).authenticated).toBe(
+          false,
+        );
+        const expiry = Math.floor(Date.now() / 1000) + 3600;
+        await credentials().saveToken(0, 'codex', {
           access_token: 'after-transfer',
           token_type: 'Bearer',
-          expiry: Math.floor(Date.now() / 1000) + 3600,
+          expiry,
         });
-        expect(await credentials().listProviders(0)).toContain('retained');
+        expect(await credentials().listProviders(0)).toContain('codex');
+        expect(await agent.auth.detailedStatus('codex')).toMatchObject({
+          provider: 'codex',
+          authenticated: true,
+          expiry,
+        });
 
         const pendingTurn = drain(agent.stream('write the pending file')).catch(
           (error: unknown) => error,
