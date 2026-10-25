@@ -81,7 +81,10 @@ describe('native recording positional failure ownership', () => {
       const cause = new Error(`native ${kind} failed`);
       if (kind === 'read') control.readError = cause;
       else control.flushError = cause;
-      recording.recordSessionMetadata('failed metadata');
+      // Checkpoint descriptors read their value from disk even when the trie
+      // path is cached; updating metadata can now finish entirely in cache.
+      const prequeued = recording.createCheckpoint('failed checkpoint');
+      await expect(prequeued).rejects.toBe(cause);
       const report = await rejected(integration.flushAtTurnBoundary());
       if (!(report instanceof RecordingFailureReport)) throw report;
       const generations: number[] = [];

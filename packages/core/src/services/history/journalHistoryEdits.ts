@@ -201,7 +201,11 @@ export async function publishClear(
     } catch (restoreError) {
       failures.push(restoreError);
     }
-    request.restore();
+    try {
+      await request.restore();
+    } catch (restoreError) {
+      failures.push(restoreError);
+    }
     throw historyMutationFailure(error, failures);
   }
 }

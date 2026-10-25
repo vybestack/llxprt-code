@@ -369,10 +369,11 @@ export class HistoryService extends HistoryServiceReads {
     this.invalidatePendingSyncs();
     this.removeAllListeners();
 
-    await this.tokenTickets.close();
-    const journalDisposal = this.journal.dispose(() =>
-      this.waitForOwnershipSettlement(),
-    );
+    const tokenDisposal = this.tokenTickets.close();
+    const journalDisposal = this.journal.dispose(async () => {
+      await tokenDisposal;
+      await this.waitForOwnershipSettlement();
+    });
     this.totalTokens = 0;
     this.baseTokenOffset = 0;
     this.isCompressing = false;
@@ -473,9 +474,16 @@ export class HistoryService extends HistoryServiceReads {
         this.emitContextRangeChanged();
         if (!rebuilding) this.invalidatePendingSyncs();
       },
-      restore: () => {
+      restore: async () => {
         this.totalTokens = previousTokens;
         this.spanWindow.set(previousSpans);
+        // The clear invalidated token tickets for pending rows before they
+        // became durable. Rebuild their accounting from restored membership.
+        await this.runSerializedTokenOperation(async () => {
+          this.totalTokens = await this.estimateTokensForContents(
+            this.journal.streamRows(),
+          );
+        });
       },
     });
   }

@@ -160,7 +160,7 @@ export interface HistoryClearRequest {
   /** Called once the rows are gone, with the spans including the cleared ones. */
   readonly publish: (spans: RemovedInteriorSpan[]) => void;
   /** Undoes what `publish` changed in the service when the clear is rolled back. */
-  readonly restore: () => void;
+  readonly restore: () => void | Promise<void>;
 }
 
 export interface HistoryRepairRequest {

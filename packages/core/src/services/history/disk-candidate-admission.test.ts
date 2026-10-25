@@ -25,38 +25,45 @@ async function compensationPressure(size: number): Promise<{
           yield ownerFixtureRow(index, 2048);
       })(),
     );
-    const primary = new Error('force compensation');
-    let writesBefore = 0;
-    let bytesBefore = 0;
-    history.once('tokensUpdated', () => {
-      writesBefore = io.descriptorWrites;
-      bytesBefore = io.descriptorWrittenBytes;
-      fixture.pauseWriter(size);
-      throw primary;
-    });
-    const operation = rejectedValue(
-      history.applyDensityResult({
-        replacements: new Map(),
-        removals: [size - 1],
-        metadata: {
-          readWritePairsPruned: 0,
-          fileDeduplicationsPruned: 0,
-          recencyPruned: 1,
-        },
-      }),
-    );
-    await fixture.writerPaused;
-    fixture.releaseWriter();
-    expect(await operation).toBe(primary);
-    await history.waitForCommit();
-    const pending = io.descriptorWrites - writesBefore;
-    const bytes = io.descriptorWrittenBytes - bytesBefore;
-    let restored = 0;
-    for await (const row of history.getRecent(0)) {
-      expect(row).toStrictEqual(ownerFixtureRow(restored++, 2048));
+    // Keep the source pinned while measuring compensation so releasing the
+    // mutation's own pin cannot start an unrelated whole-file compaction.
+    const pinned = await fixture.session.store.snapshot();
+    try {
+      const primary = new Error('force compensation');
+      let writesBefore = 0;
+      let bytesBefore = 0;
+      history.once('tokensUpdated', () => {
+        writesBefore = io.descriptorWrites;
+        bytesBefore = io.descriptorWrittenBytes;
+        fixture.pauseWriter(size);
+        throw primary;
+      });
+      const operation = rejectedValue(
+        history.applyDensityResult({
+          replacements: new Map(),
+          removals: [size - 1],
+          metadata: {
+            readWritePairsPruned: 0,
+            fileDeduplicationsPruned: 0,
+            recencyPruned: 1,
+          },
+        }),
+      );
+      await fixture.writerPaused;
+      fixture.releaseWriter();
+      expect(await operation).toBe(primary);
+      await history.waitForCommit();
+      const pending = io.descriptorWrites - writesBefore;
+      const bytes = io.descriptorWrittenBytes - bytesBefore;
+      let restored = 0;
+      for await (const row of history.getRecent(0)) {
+        expect(row).toStrictEqual(ownerFixtureRow(restored++, 2048));
+      }
+      expect(restored).toBe(size);
+      return { pending, bytes };
+    } finally {
+      await pinned.close();
     }
-    expect(restored).toBe(size);
-    return { pending, bytes };
   });
 }
 

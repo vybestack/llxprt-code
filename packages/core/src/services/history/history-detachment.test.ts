@@ -1,4 +1,7 @@
-import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import {
+  collectJournalFileRowsForAssertions,
+  collectRowsForAssertions,
+} from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import {
@@ -13,7 +16,6 @@ import * as filesystem from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { HistoryService } from './HistoryService.js';
-import { JournalSession } from './journalSession.js';
 import { requireJournalRecorder } from './recorderBackend.js';
 import type { IContent } from './IContent.js';
 import { RecordingIntegration } from '../../recording/RecordingIntegration.js';
@@ -111,15 +113,11 @@ async function verifyDetachesPendingWritesByCopyingRawJournalBytesWithoutMateria
   if (!source) throw new Error('Missing recording');
   expect(history.journalPath()).toBeNull();
   expect(reads.snapshot().rowsDecoded).toBe(0);
-  const durable = await JournalSession.open(source);
-  try {
-    const rows = await Array.fromAsync(durable.rows());
-    expect(rows.map((row) => row.content.blocks)).toStrictEqual([
+  await collectJournalFileRowsForAssertions(source, (rows) => {
+    expect(rows.map((row) => row.blocks)).toStrictEqual([
       [{ type: 'text', text: 'pending' }],
     ]);
-  } finally {
-    await durable.close();
-  }
+  });
   history.add({
     speaker: 'human',
     blocks: [{ type: 'text', text: 'detached' }],

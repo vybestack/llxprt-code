@@ -6,7 +6,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openJournalReadOnly } from '../../../../journal/journalReader.js';
 import { decodeFrameStart } from '../../../../journal/frame.js';
-import { decodeTrailerHeader } from '../../../../journal/trailerRecord.js';
+import {
+  decodeTrailerHeader,
+  TRAILER_RECORD_BYTES,
+} from '../../../../journal/trailerRecord.js';
+import { RECORD_KIND } from '../../../../journal/recordKinds.js';
 import { readStoredRow } from '../../../../journal/rowReads.js';
 import {
   iterateRowEntries,
@@ -101,13 +105,18 @@ async function heldSession(
             if (targetRows === undefined) await wait();
             else {
               const [buffer, offset, length, position] = args;
-              const trailer = decodeTrailerHeader(
-                decodeFrameStart(
-                  buffer.subarray(offset, offset + length),
-                  position,
-                ).kindHeader,
-              );
-              await wait(trailer.rootAggregate.rows);
+              if (
+                length === TRAILER_RECORD_BYTES &&
+                buffer[offset] === RECORD_KIND.TRAILER
+              ) {
+                const trailer = decodeTrailerHeader(
+                  decodeFrameStart(
+                    buffer.subarray(offset, offset + length),
+                    position,
+                  ).kindHeader,
+                );
+                await wait(trailer.rootAggregate.rows);
+              }
             }
             const result = io.write('trailer')
               ? { bytesWritten: 0 }
