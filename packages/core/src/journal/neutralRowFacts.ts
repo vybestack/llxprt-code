@@ -103,7 +103,6 @@ export async function fillNeutralRowFacts(
     for await (const entry of entries) {
       const key = neutralRowFactKey(registration, entry.label);
       const previous = await readNeutralRowFact(batch.queries, key);
-      if (entry.recordOffset < since && previous !== undefined) continue;
       const value = await registration.measure(snapshot, entry, previous);
       await writeNeutralRowFact(batch, key, value);
     }
