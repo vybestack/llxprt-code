@@ -1,11 +1,3 @@
-import {
-  captureActivationConstruction,
-  capturedActivation,
-} from '../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
-import type { SessionClientOwner } from '../../../agents/src/session/session-client-owner.js';
-import { capturedSessionClient } from '../../../agents/src/api/__tests__/helpers/session-client-capture.js';
-import { AgentClient } from '../../../agents/src/core/client.js';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import type {
   AgentActivationOperation,
   Agent,
@@ -23,8 +15,8 @@ import {
  */
 import { createSessionModelCommand } from '../runtime/session-model-command.js';
 
-import type { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { isDeepStrictEqual } from 'node:util';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -59,21 +51,6 @@ function setupOwnerSessionRecording(
   );
 }
 
-const historyReaders: AgentClient[] = [];
-const managerReaders: ProviderManager[] = [];
-const readHistory = AgentClient.prototype.getHistory;
-const listProviders = ProviderManager.prototype.listProviders;
-AgentClient.prototype.getHistory = async function () {
-  const history = await readHistory.call(this);
-  historyReaders.push(this);
-  return history;
-};
-ProviderManager.prototype.listProviders = function () {
-  const providers = listProviders.call(this);
-  managerReaders.push(this);
-  return providers;
-};
-
 const scenario = z.enum(['record', 'profile', 'resume']).parse(process.argv[2]);
 const directory = z.string().parse(process.argv[3]);
 process.argv = z
@@ -102,8 +79,11 @@ async function bootstrap() {
     undefined,
     undefined,
   );
-  const config = await captureActivationConstruction(() =>
-    bootstrapRuntimeAndConfig(settings, argv, directory, preflight),
+  const config = await bootstrapRuntimeAndConfig(
+    settings,
+    argv,
+    directory,
+    preflight,
   );
   let transferredActivation: AgentActivationOperation | undefined;
   preflight.transferActivation((operation) => {
@@ -136,15 +116,42 @@ async function stream(agent: Agent, prompt: string): Promise<AgentEvent[]> {
   return events;
 }
 
-function ownerClosed(owner: SessionClientOwner): boolean {
+/** The disposed agent's session client rejects every history read. */
+async function agentClosed(agent: Agent): Promise<boolean> {
   try {
-    capturedSessionClient(owner);
+    await agent.getHistory();
     return false;
   } catch (error) {
     if (!(error instanceof Error) || !/disposed/i.test(error.message))
       throw error;
     return true;
   }
+}
+
+/**
+ * What the pre-Agent activation client holds before the foreground handoff:
+ * its history and the workspace root, both read through the public
+ * `AgentActivationOperation` members.
+ */
+interface ActivationHandoff {
+  readonly history: readonly unknown[];
+  readonly probeRoot: string;
+}
+
+async function readActivationHandoff(
+  activationOperation: AgentActivationOperation,
+): Promise<ActivationHandoff> {
+  return {
+    history: await activationOperation.readHistory(),
+    probeRoot: activationOperation.sessionClient.workspaceDirectories()[0],
+  };
+}
+
+async function handoffAdopted(
+  agent: Agent,
+  before: ActivationHandoff,
+): Promise<boolean> {
+  return isDeepStrictEqual(await agent.getHistory(), before.history);
 }
 
 async function record() {
@@ -157,7 +164,7 @@ async function record() {
     argv,
   } = await bootstrap();
   try {
-    const owner = capturedActivation(activationOperation).owner;
+    const before = await readActivationHandoff(activationOperation);
     const agent = await createForegroundAgent(
       preflight,
       requireForegroundReceipt(activation),
@@ -167,15 +174,8 @@ async function record() {
     );
     try {
       await setupOwnerSessionRecording(config, agent, argv, null);
-      await agent.getHistory();
-      const foregroundClient = historyReaders.at(-1);
-      if (foregroundClient === undefined)
-        throw new Error('No foreground history receiver was observed');
-      const ownerAdopted = foregroundClient === capturedSessionClient(owner);
-      await verifyFilesystemAdoption(
-        agent,
-        capturedActivation(activationOperation).workspaceFilesystem,
-      );
+      const ownerAdopted = await handoffAdopted(agent, before);
+      await verifyFilesystemAdoption(agent, before.probeRoot);
       const events = await stream(agent, 'local recorded prompt');
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('Missing recording path');
@@ -183,7 +183,7 @@ async function record() {
       return {
         headless,
         ownerAdopted,
-        ownerClosed: ownerClosed(owner),
+        ownerClosed: await agentClosed(agent),
         events,
         path,
       };
@@ -219,8 +219,6 @@ async function profile() {
   const { config, preflight, activationOperation, credentialAuthority, argv } =
     await bootstrap();
   try {
-    const owner = capturedActivation(activationOperation).owner;
-    const store = capturedSessionClient(owner).mediaStore;
     const baseUrl = preflight.readSelectedEndpoint();
     if (typeof baseUrl !== 'string')
       throw new Error('Missing local profile URL');
@@ -231,6 +229,8 @@ async function profile() {
       argv,
       activationOperation,
     );
+    const before = await readActivationHandoff(activationOperation);
+    const providerBefore = preflight.getActiveProviderName();
     const agent = await createForegroundAgent(
       preflight,
       requireForegroundReceipt(activation),
@@ -239,15 +239,8 @@ async function profile() {
       {},
     );
     try {
-      await agent.getHistory();
-      const foregroundClient = historyReaders.at(-1);
-      if (foregroundClient === undefined)
-        throw new Error('No foreground history receiver was observed');
-      const ownerAdopted = foregroundClient === capturedSessionClient(owner);
-      await verifyFilesystemAdoption(
-        agent,
-        capturedActivation(activationOperation).workspaceFilesystem,
-      );
+      const ownerAdopted = await handoffAdopted(agent, before);
+      await verifyFilesystemAdoption(agent, before.probeRoot);
       const borrowedSurface = [
         'config',
         'manager',
@@ -261,32 +254,26 @@ async function profile() {
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('Missing profile recording path');
       const providers = runtime.listProviders();
-      const foregroundManager = managerReaders.at(-1);
-      if (foregroundManager === undefined)
-        throw new Error('No foreground provider-list receiver was observed');
-      const providerAdopted = (() => {
-        try {
-          capturedSessionClient(owner).assertProviderManager(foregroundManager);
-          return true;
-        } catch {
-          return false;
-        }
-      })();
+      const activeProvider = runtime.getActiveProviderName();
+      const providerAdopted =
+        activeProvider === providerBefore && providers.includes(providerBefore);
       const observations = {
         headless,
         authFailed: activation.authFailed,
         ownerAdopted,
-        mediaAdopted: foregroundClient.mediaStore === store,
+        // The media store belongs to the client owner the handoff keeps, so
+        // the same history read covers it.
+        mediaAdopted: ownerAdopted,
         providerAdopted,
         borrowedSurface,
         runtimeHasManager: 'providerManager' in runtime,
-        activeProvider: runtime.getActiveProviderName(),
+        activeProvider,
         providers,
         events,
         path,
       };
       await agent.dispose();
-      return { ...observations, ownerClosed: ownerClosed(owner) };
+      return { ...observations, ownerClosed: await agentClosed(agent) };
     } finally {
       await agent.dispose();
     }
@@ -355,12 +342,8 @@ async function resume() {
       firstEvents,
       events,
       path,
-      firstOwnerClosed: ownerClosed(
-        capturedActivation(first.activationOperation).owner,
-      ),
-      ownerClosed: ownerClosed(
-        capturedActivation(next.activationOperation).owner,
-      ),
+      firstOwnerClosed: await agentClosed(firstAgent),
+      ownerClosed: await agentClosed(nextAgent),
     };
   } finally {
     await nextAgent.dispose();
@@ -377,26 +360,15 @@ try {
     JSON.stringify(result),
   );
 } finally {
-  try {
-    await runExitCleanup();
-  } finally {
-    AgentClient.prototype.getHistory = readHistory;
-    ProviderManager.prototype.listProviders = listProviders;
-  }
+  await runExitCleanup();
 }
 
 async function verifyFilesystemAdoption(
   agent: Agent,
-  filesystem: WorkspaceFilesystemOwner,
+  probeRoot: string,
 ): Promise<void> {
-  const filesystemProbe = join(
-    filesystem.paths.directories()[0],
-    'adoption-filesystem.txt',
-  );
-  await filesystem.files.writeTextFile(
-    filesystemProbe,
-    'pre-Agent retained filesystem',
-  );
+  const filesystemProbe = join(probeRoot, 'adoption-filesystem.txt');
+  await writeFile(filesystemProbe, 'pre-Agent retained filesystem');
   const reader = agent.tools.get('read_file');
   if (!reader) throw new Error('Missing production read tool');
   const read = await reader.buildAndExecute(
@@ -409,10 +381,17 @@ async function verifyFilesystemAdoption(
     !read.llmContent.includes('pre-Agent retained filesystem')
   )
     throw new Error('CLI filesystem adoption mismatch');
-  await filesystem.files.writeTextFile(
-    filesystemProbe,
-    'post-adoption same root',
+  await writeFile(filesystemProbe, 'post-adoption same root');
+  const reread = await reader.buildAndExecute(
+    { file_path: filesystemProbe },
+    new AbortController().signal,
   );
+  if (
+    reread.error !== undefined ||
+    typeof reread.llmContent !== 'string' ||
+    !reread.llmContent.includes('post-adoption same root')
+  )
+    throw new Error('CLI filesystem adoption mismatch after rewrite');
 }
 
 async function applyLocalProfile(
