@@ -3,7 +3,11 @@ import type { RecordAppender } from './groupAppender.js';
 import { BoundedIdNodeCache, type IdNodeCache } from './idTrieCache.js';
 import { decodeIdTrieNode } from './idTrieNode.js';
 import { RECORD_KIND } from './recordKinds.js';
-import type { JournalGroupWriter } from './groupWriter.js';
+import type {
+  CommitAck,
+  JournalGroupWriter,
+  TrailerState,
+} from './groupWriter.js';
 import type { TrailerHeader } from './trailerRecord.js';
 
 /** Written nodes become reusable only after their trailer has been acknowledged. */
@@ -12,10 +16,8 @@ export class CommittedIdNodes {
 
   prepareGroup(
     writer: JournalGroupWriter,
-    build: (
-      appender: RecordAppender,
-    ) => ReturnType<Parameters<JournalGroupWriter['prepareGroup']>[0]>,
-  ): ReturnType<JournalGroupWriter['prepareGroup']> {
+    build: (appender: RecordAppender) => Promise<TrailerState | undefined>,
+  ): Promise<CommitAck | undefined> {
     return writer.prepareGroup((target) => build(this.appender(target)));
   }
 

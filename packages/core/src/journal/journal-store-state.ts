@@ -2,10 +2,31 @@
 import { JournalFormatError } from './errors.js';
 import type { CommitAck } from './groupWriter.js';
 import type { PinnedRead } from './pinLease.js';
-import type { Version } from './version.js';
+import { genesisVersion, type Version } from './version.js';
+import { FIRST_NEXT_LABEL } from './labels.js';
 import type { VersionEdit } from './groupEdits.js';
 import type { RightSpine } from './rowTreeBuilder.js';
 import type { GroupPlan } from './groupPlanTypes.js';
+
+export function unchangedGroup(
+  read: PinnedRead,
+  before: Version | undefined,
+): CommittedGroup {
+  const after = before ?? genesisVersion(FIRST_NEXT_LABEL);
+  return {
+    ack: {
+      commitSeq: after.commitSeq,
+      durableEnd: after.durableEnd,
+      groupTag: after.groupTag,
+    },
+    before,
+    after,
+    read,
+    writtenLabels: [],
+    unchanged: true,
+    close: () => read.close(),
+  };
+}
 
 export function assertCompactionUsable(
   failure: { readonly error: unknown } | undefined,

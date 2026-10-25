@@ -90,7 +90,7 @@ import {
   type StoredRow,
 } from './rowReads.js';
 import { readVersionAt } from './trailerAccess.js';
-import { genesisVersion, versionOf, type Version } from './version.js';
+import { versionOf, type Version } from './version.js';
 import { VersionSnapshot } from './versionSnapshot.js';
 import {
   writeCompactionCandidate,
@@ -125,7 +125,11 @@ export interface JournalStoreDependencies {
 /** What a store with no file name is called in its errors. */
 export const UNLINKED_JOURNAL_LABEL = '(unlinked journal)';
 
-import { noop, assertCompactionUsable } from './journal-store-state.js';
+import {
+  noop,
+  assertCompactionUsable,
+  unchangedGroup,
+} from './journal-store-state.js';
 
 export type { CommittedGroup } from './journal-store-state.js';
 import type { CommittedGroup } from './journal-store-state.js';
@@ -732,10 +736,7 @@ export class JournalStore {
     let factIndex = this.factIndex;
     let plan: GroupPlan | undefined;
     let built: BuiltGroup | undefined;
-    const effect = this.commitEffect?.({
-      read: this.buildContext().readGroup,
-      getState: (key) => this.getStateUnpinned(key),
-    });
+    const effect = this.beginCommitEffect();
     let ack: CommitAck | undefined;
     let rowFormats = this.rowFormats;
     const writtenNodes = new CommittedIdNodes();
@@ -773,7 +774,8 @@ export class JournalStore {
     } catch (error) {
       return rollbackEffect(effect, error);
     }
-    if (ack === undefined) return this.unchangedGroup();
+    if (ack === undefined)
+      return unchangedGroup(this.readOfPublished(), this.currentVersion);
     const trailer = this.writer.published?.trailer;
     if (built === undefined || trailer === undefined || plan === undefined) {
       throw new JournalFormatError('A committed group left no trailer');
@@ -802,6 +804,13 @@ export class JournalStore {
     };
   }
 
+  private beginCommitEffect(): CommitEffect | undefined {
+    return this.commitEffect?.({
+      read: this.buildContext().readGroup,
+      getState: (key) => this.getStateUnpinned(key),
+    });
+  }
+
   private async finishBuilt(
     built: BuiltGroup,
     appender: RecordAppender,
@@ -822,24 +831,6 @@ export class JournalStore {
       },
       effect,
     );
-  }
-
-  private unchangedGroup(): CommittedGroup {
-    const read = this.readOfPublished();
-    const after = this.currentVersion ?? genesisVersion(FIRST_NEXT_LABEL);
-    return {
-      ack: {
-        commitSeq: after.commitSeq,
-        durableEnd: after.durableEnd,
-        groupTag: after.groupTag,
-      },
-      before: this.currentVersion,
-      after,
-      read,
-      writtenLabels: [],
-      unchanged: true,
-      close: () => read.close(),
-    };
   }
 
   private requireVersion(): Version {
