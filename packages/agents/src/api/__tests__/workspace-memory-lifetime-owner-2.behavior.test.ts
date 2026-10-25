@@ -1,17 +1,11 @@
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { mkdtemp, realpath, rm, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import { buildAgent } from './helpers/agentHarness.js';
 
 /**
  * @license
@@ -61,17 +55,6 @@ async function physicalMemory(): Promise<{
   return { directory, file, memory };
 }
 
-async function settleFactorylessRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previous: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previous;
-  }
-}
 describe('supplied workspace memory lifetime through public adoption', () => {
   afterEach(async () => {
     for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
@@ -79,124 +62,19 @@ describe('supplied workspace memory lifetime through public adoption', () => {
 
   it('transfers supplied memory, closes admission synchronously and joins accepted physical publication', async () => {
     const { directory, file, memory } = await physicalMemory();
-    const built_directory = directory;
-    const built_builtFactorylessPreviousReplay =
-      process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('fixtures/' + 'plain-text.jsonl', import.meta.url),
-    );
-    const built_builtFactorylessDirectory = await realpath(
-      await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
-    );
-    const built_builtFactorylessConfig = new Config(
-      toConfigParameters({
-        ...{
-          provider: 'fake',
-          model: 'fake-model',
-          workingDir: built_builtFactorylessDirectory,
-        },
-        ...{
-          workingDir: built_directory,
-          sessionId: 'same-memory-label',
-          folderTrust: true,
-          mcpEnabled: false,
-          skillsSupport: false,
-          recording: { enabled: false },
-          telemetry: { enabled: false },
-          settings: { jitContextEnabled: false },
-        },
-      }),
-    );
-    const built_builtFactorylessSettings = new SettingsService();
-    for (const [built_key, built_value] of Object.entries(
-      built_builtFactorylessConfig.getInitialSettings(),
-    ))
-      built_builtFactorylessSettings.set(built_key, built_value);
-    const built_builtFactorylessSettingsOwner = new SessionSettingsOwner(
-      built_builtFactorylessSettings,
-    );
-    built_builtFactorylessSettingsOwner.bindTelemetry(
-      built_builtFactorylessConfig,
-    );
-    built_builtFactorylessSettingsOwner.initializeProviderSelection(
-      built_builtFactorylessConfig.getProvider(),
-      built_builtFactorylessConfig.getModel(),
-    );
-    const built_builtFactorylessPolicy = new RuntimePolicyOwner(
-      built_builtFactorylessConfig,
-    );
-    const built_builtFactorylessClose = settleFactorylessRelease.bind(
-      undefined,
-      [
-        () => built_builtFactorylessSettingsOwner.dispose(),
-        () => built_builtFactorylessPolicy.dispose(),
-        () => built_builtFactorylessConfig.dispose(),
-        () =>
-          rm(built_builtFactorylessDirectory, { recursive: true, force: true }),
-      ],
-      built_builtFactorylessPreviousReplay,
-    );
-    cleanups.push(built_builtFactorylessClose);
-    const optionsConfig: Parameters<typeof fromConfig>[0] =
-      built_builtFactorylessConfig;
-    const optionsSettingsService: Parameters<typeof fromConfig>[1] =
-      built_builtFactorylessSettings;
-    const optionsSettingsOwner: Parameters<typeof fromConfig>[3] =
-      built_builtFactorylessSettingsOwner;
-    const optionsMessageBus: Parameters<typeof fromConfig>[6] =
-      built_builtFactorylessPolicy.session.messageBus;
-    const optionsPolicyOwner: Parameters<typeof fromConfig>[16] =
-      built_builtFactorylessPolicy;
-    const optionsMemoryOwner: Parameters<typeof fromConfig>[23] = {
-      owner: memory,
-      ownership: 'agent',
-    };
-    const facade = await fromConfig(
-      optionsConfig,
-      optionsSettingsService,
-      {
-        sessionId: undefined,
-        sessionIdentityOwnership: undefined,
-        activation: undefined,
-        definitionOwnership: undefined,
-        filesystemOwnership: undefined,
-        lspOwnership: undefined,
-        mcpOwnership: undefined,
-      },
-      optionsSettingsOwner,
-      undefined,
-      undefined,
-      optionsMessageBus,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      optionsPolicyOwner,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      optionsMemoryOwner,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
-    cleanups.push(() => facade.dispose());
+    const built = await buildAgent('plain-text.jsonl', {
+      workingDir: directory,
+      memoryOwner: { owner: memory, ownership: 'agent' },
+      folderTrust: true,
+      skillsSupport: false,
+      mcpEnabled: false,
+      recording: { enabled: false },
+      telemetry: { enabled: false },
+      settings: { jitContextEnabled: false },
+      harness: { includeProcessCwd: false },
+    });
+    const facade = built.agent;
+    cleanups.push(built.cleanup);
     let enter: () => void = () => {
       throw new Error('Missing publication entry');
     };
