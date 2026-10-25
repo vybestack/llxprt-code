@@ -4,12 +4,18 @@ import {
   withRecordingLifetimeFixture,
 } from './helpers/recording-owner-lifetime-fixture.js';
 import { describe, expect, it, spyOn } from 'bun:test';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   EmptySummaryError,
   type CompressionStrategy,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { drain } from './helpers/agentHarness.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import * as compressionFactory from '../../compression/compressionStrategyFactory.js';
 
 /**
@@ -56,6 +62,39 @@ function useSummaryStrategy(fails = false): () => void {
   return () => spy.mockRestore();
 }
 
+/**
+ * Two independent agents built through `fromConfig` over one working
+ * directory (so one chats directory), each with its own Config, client and
+ * history. The user config directory is a temp directory so journals never
+ * land in the real one.
+ */
+async function withIndependentPair(
+  scenario: (agent: Agent, sibling: Agent) => Promise<void>,
+): Promise<void> {
+  const home = await mkdtemp(join(tmpdir(), 'recording-compression-home-'));
+  const previousHome = process.env.LLXPRT_CONFIG_HOME;
+  process.env.LLXPRT_CONFIG_HOME = home;
+  const routes: RouteAAgent[] = [];
+  try {
+    const first = await openRouteAAgent({ config: { interactive: true } });
+    routes.push(first);
+    const second = await openRouteAAgent({
+      config: { interactive: true, workingDir: first.directory },
+    });
+    routes.push(second);
+    await scenario(first.agent, second.agent);
+  } finally {
+    await runCleanupSteps([
+      ...[...routes].reverse().map((route) => () => route.close()),
+      () => {
+        if (previousHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
+        else process.env.LLXPRT_CONFIG_HOME = previousHome;
+      },
+      () => rm(home, { recursive: true, force: true }),
+    ]);
+  }
+}
+
 const seed = [
   {
     speaker: 'human' as const,
@@ -69,38 +108,30 @@ const seed = [
 
 describe('shared history compression recording origin', () => {
   useRecordingPrompts();
+  useFakeResponsesReplay('multi-turn-text.jsonl');
   it('records A-only and B-only compression summaries in their own journals', async () => {
     const restore = useSummaryStrategy();
     try {
-      await withRecordingLifetimeFixture(
-        async (
-          agent,
-          _config,
-          _settingsOwner,
-          _settingsService,
-          _oauthManager,
-          borrow,
-        ) => {
-          const sibling = await borrow();
-          await agent.setHistory(seed);
-          await agent.session.setRecording({ enabled: true });
-          await new Promise((resolve) => setTimeout(resolve, 1100));
-          await sibling.session.setRecording({ enabled: true });
-          const aPath = recordingPath(agent.session.getRecording());
-          const bPath = recordingPath(sibling.session.getRecording());
-          expect((await agent.compress()).status).toBe('compressed');
-          await agent.setHistory(seed);
-          expect((await sibling.compress()).status).toBe('compressed');
-          await agent.session.setRecording({ enabled: false });
-          await sibling.session.setRecording({ enabled: false });
-          const a = await readFile(aPath, 'utf8');
-          const b = await readFile(bPath, 'utf8');
-          expect(a).toContain('owned-summary-1');
-          expect(b).not.toContain('owned-summary-1');
-          expect(b).toContain('owned-summary-2');
-          expect(a).not.toContain('owned-summary-2');
-        },
-      );
+      await withIndependentPair(async (agent, sibling) => {
+        await agent.setHistory(seed);
+        await sibling.setHistory(seed);
+        await agent.session.setRecording({ enabled: true });
+        await new Promise((resolve) => setTimeout(resolve, 1100));
+        await sibling.session.setRecording({ enabled: true });
+        const aPath = recordingPath(agent.session.getRecording());
+        const bPath = recordingPath(sibling.session.getRecording());
+        expect((await agent.compress()).status).toBe('compressed');
+        await agent.setHistory(seed);
+        expect((await sibling.compress()).status).toBe('compressed');
+        await agent.session.setRecording({ enabled: false });
+        await sibling.session.setRecording({ enabled: false });
+        const a = await readFile(aPath, 'utf8');
+        const b = await readFile(bPath, 'utf8');
+        expect(a).toContain('owned-summary-1');
+        expect(b).not.toContain('owned-summary-1');
+        expect(b).toContain('owned-summary-2');
+        expect(a).not.toContain('owned-summary-2');
+      });
     } finally {
       restore();
     }
@@ -146,53 +177,42 @@ describe('shared history compression recording origin', () => {
   it('preserves compression ownership across profile adoption and session resume', async () => {
     const restore = useSummaryStrategy();
     try {
-      await withRecordingLifetimeFixture(
-        async (
-          agent,
-          _config,
-          _settingsOwner,
-          _settingsService,
-          _oauthManager,
-          borrow,
-        ) => {
-          const sibling = await borrow();
-          await agent.setHistory(seed);
-          await agent.session.setRecording({ enabled: true });
-          await agent.session.nameCurrentSession('compression-origin-A');
-          await new Promise((resolve) => setTimeout(resolve, 1100));
-          await sibling.session.setRecording({ enabled: true });
-          const bPath = recordingPath(sibling.session.getRecording());
-          await agent.profiles.applySnapshot({
-            version: 1,
-            provider: 'fake',
-            model: 'fake-model',
-            modelParams: {},
-            ephemeralSettings: {},
-          });
-          await agent.setHistory(seed);
-          expect((await agent.compress()).status).toBe('compressed');
-          expect(await readFile(bPath, 'utf8')).not.toContain(
-            'owned-summary-1',
-          );
-          await agent.session.setRecording({ enabled: false });
-          const saved = (await agent.session.listSessions()).find(
-            (session) => session.name === 'compression-origin-A',
-          );
-          if (!saved) throw new Error('Missing recorded session');
-          await agent.session.resume(saved.id);
-          await agent.setHistory(seed);
-          await agent.compress();
-          const aPath = recordingPath(agent.session.getRecording());
-          await agent.session.setRecording({ enabled: false });
-          await sibling.session.setRecording({ enabled: false });
-          const a = await readFile(aPath, 'utf8');
-          const b = await readFile(bPath, 'utf8');
-          expect(a).toContain('owned-summary-1');
-          expect(a).toContain('owned-summary-2');
-          expect(b).not.toContain('owned-summary-1');
-          expect(b).not.toContain('owned-summary-2');
-        },
-      );
+      await withIndependentPair(async (agent, sibling) => {
+        await agent.setHistory(seed);
+        await sibling.setHistory(seed);
+        await agent.session.setRecording({ enabled: true });
+        await agent.session.nameCurrentSession('compression-origin-A');
+        await new Promise((resolve) => setTimeout(resolve, 1100));
+        await sibling.session.setRecording({ enabled: true });
+        const bPath = recordingPath(sibling.session.getRecording());
+        await agent.profiles.applySnapshot({
+          version: 1,
+          provider: 'fake',
+          model: 'fake-model',
+          modelParams: {},
+          ephemeralSettings: {},
+        });
+        await agent.setHistory(seed);
+        expect((await agent.compress()).status).toBe('compressed');
+        expect(await readFile(bPath, 'utf8')).not.toContain('owned-summary-1');
+        await agent.session.setRecording({ enabled: false });
+        const saved = (await agent.session.listSessions()).find(
+          (session) => session.name === 'compression-origin-A',
+        );
+        if (!saved) throw new Error('Missing recorded session');
+        await agent.session.resume(saved.id);
+        await agent.setHistory(seed);
+        await agent.compress();
+        const aPath = recordingPath(agent.session.getRecording());
+        await agent.session.setRecording({ enabled: false });
+        await sibling.session.setRecording({ enabled: false });
+        const a = await readFile(aPath, 'utf8');
+        const b = await readFile(bPath, 'utf8');
+        expect(a).toContain('owned-summary-1');
+        expect(a).toContain('owned-summary-2');
+        expect(b).not.toContain('owned-summary-1');
+        expect(b).not.toContain('owned-summary-2');
+      });
     } finally {
       restore();
     }
@@ -201,43 +221,24 @@ describe('shared history compression recording origin', () => {
   it('unlocks after a rejected owner compression without recording a summary', async () => {
     const restore = useSummaryStrategy(true);
     try {
-      await withRecordingLifetimeFixture(
-        async (
-          agent,
-          _config,
-          _settingsOwner,
-          _settingsService,
-          _oauthManager,
-          borrow,
-        ) => {
-          const sibling = await borrow();
-          await agent.setHistory(seed);
-          await agent.session.setRecording({ enabled: true });
-          await new Promise((resolve) => setTimeout(resolve, 1100));
-          await sibling.session.setRecording({ enabled: true });
-          const aPath = recordingPath(agent.session.getRecording());
-          const bPath = recordingPath(sibling.session.getRecording());
-          await expect(agent.compress()).rejects.toThrow(
-            'compression rejected',
-          );
-          const history = fixtureAgentResources(agent)
-            .publishedClient(agent)
-            .getHistoryService();
-          if (!history) throw new Error('Missing history');
-          history.add({
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'external-after-error' }],
-          });
-          await agent.session.setRecording({ enabled: false });
-          await sibling.session.setRecording({ enabled: false });
-          expect(await readFile(aPath, 'utf8')).toContain(
-            'external-after-error',
-          );
-          const b = await readFile(bPath, 'utf8');
-          expect(b).toContain('external-after-error');
-          expect(b).not.toContain('owned-summary');
-        },
-      );
+      await withIndependentPair(async (agent, sibling) => {
+        await agent.setHistory(seed);
+        await sibling.setHistory(seed);
+        await agent.session.setRecording({ enabled: true });
+        await new Promise((resolve) => setTimeout(resolve, 1100));
+        await sibling.session.setRecording({ enabled: true });
+        const aPath = recordingPath(agent.session.getRecording());
+        const bPath = recordingPath(sibling.session.getRecording());
+        await expect(agent.compress()).rejects.toThrow('compression rejected');
+        await agent.addHistory({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'external-after-error' }],
+        });
+        await agent.session.setRecording({ enabled: false });
+        await sibling.session.setRecording({ enabled: false });
+        expect(await readFile(aPath, 'utf8')).toContain('external-after-error');
+        expect(await readFile(bPath, 'utf8')).not.toContain('owned-summary');
+      });
     } finally {
       restore();
     }
@@ -279,31 +280,22 @@ describe('shared history compression recording origin', () => {
       name === 'top-down-truncation' ? fallback : primary,
     );
     try {
-      await withRecordingLifetimeFixture(
-        async (
-          agent,
-          _config,
-          _settingsOwner,
-          _settingsService,
-          _oauthManager,
-          borrow,
-        ) => {
-          const sibling = await borrow();
-          await agent.setHistory(seed);
-          await agent.session.setRecording({ enabled: true });
-          await new Promise((resolve) => setTimeout(resolve, 1100));
-          await sibling.session.setRecording({ enabled: true });
-          const aPath = recordingPath(agent.session.getRecording());
-          const bPath = recordingPath(sibling.session.getRecording());
-          expect((await agent.compress()).status).toBe('compressed');
-          await agent.session.setRecording({ enabled: false });
-          await sibling.session.setRecording({ enabled: false });
-          expect(await readFile(aPath, 'utf8')).toContain('A-fallback-summary');
-          expect(await readFile(bPath, 'utf8')).not.toContain(
-            'A-fallback-summary',
-          );
-        },
-      );
+      await withIndependentPair(async (agent, sibling) => {
+        await agent.setHistory(seed);
+        await sibling.setHistory(seed);
+        await agent.session.setRecording({ enabled: true });
+        await new Promise((resolve) => setTimeout(resolve, 1100));
+        await sibling.session.setRecording({ enabled: true });
+        const aPath = recordingPath(agent.session.getRecording());
+        const bPath = recordingPath(sibling.session.getRecording());
+        expect((await agent.compress()).status).toBe('compressed');
+        await agent.session.setRecording({ enabled: false });
+        await sibling.session.setRecording({ enabled: false });
+        expect(await readFile(aPath, 'utf8')).toContain('A-fallback-summary');
+        expect(await readFile(bPath, 'utf8')).not.toContain(
+          'A-fallback-summary',
+        );
+      });
     } finally {
       spy.mockRestore();
     }
@@ -375,35 +367,25 @@ describe('shared history compression recording origin', () => {
   it('does not seed a late sibling with an owner summary after profile adoption', async () => {
     const restore = useSummaryStrategy();
     try {
-      await withRecordingLifetimeFixture(
-        async (
-          agent,
-          _config,
-          _settingsOwner,
-          _settingsService,
-          _oauthManager,
-          borrow,
-        ) => {
-          const sibling = await borrow();
-          await agent.setHistory(seed);
-          await agent.session.setRecording({ enabled: true });
-          expect((await agent.compress()).status).toBe('compressed');
-          await agent.profiles.applySnapshot({
-            version: 1,
-            provider: 'fake',
-            model: 'fake-model',
-            modelParams: {},
-            ephemeralSettings: {},
-          });
-          await new Promise((resolve) => setTimeout(resolve, 1100));
-          await sibling.session.setRecording({ enabled: true });
-          await drain(sibling.stream('B-after-profile-origin'));
-          const bPath = recordingPath(sibling.session.getRecording());
-          const b = await readFile(bPath, 'utf8');
-          expect(b).toContain('B-after-profile-origin');
-          expect(b).not.toContain('owned-summary-1');
-        },
-      );
+      await withIndependentPair(async (agent, sibling) => {
+        await agent.setHistory(seed);
+        await agent.session.setRecording({ enabled: true });
+        expect((await agent.compress()).status).toBe('compressed');
+        await agent.profiles.applySnapshot({
+          version: 1,
+          provider: 'fake',
+          model: 'fake-model',
+          modelParams: {},
+          ephemeralSettings: {},
+        });
+        await new Promise((resolve) => setTimeout(resolve, 1100));
+        await sibling.session.setRecording({ enabled: true });
+        await drain(sibling.stream('B-after-profile-origin'));
+        const bPath = recordingPath(sibling.session.getRecording());
+        const b = await readFile(bPath, 'utf8');
+        expect(b).toContain('B-after-profile-origin');
+        expect(b).not.toContain('owned-summary-1');
+      });
     } finally {
       restore();
     }
