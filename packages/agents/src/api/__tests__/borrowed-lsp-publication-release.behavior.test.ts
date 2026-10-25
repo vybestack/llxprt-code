@@ -14,6 +14,7 @@ import { Config } from '@vybestack/llxprt-code-core';
 import { WorkspaceLspOwner } from '@vybestack/llxprt-code-core/lsp/workspace-lsp-owner.js';
 import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { toConfigParameters } from '../../index.js';
 
 const fixture = fileURLToPath(
@@ -44,37 +45,29 @@ async function exercise(callerFirst: boolean): Promise<void> {
     directory,
     () => trust.isTrustedFolder(),
   );
-  const root = await McpRuntimeOwner.create(
+  const root = await createTestMcpRuntime(
     {
-      openBrowser: async () => {
-        throw new Error('Unexpected browser');
-      },
-      tokenStorage: new MCPOAuthTokenStorage({
-        getCredentials: async () => null,
-        setCredentials: async () => {
-          throw new Error('Unexpected credential write');
+      oauth: {
+        openBrowser: async () => {
+          throw new Error('Unexpected browser');
         },
-        deleteCredentials: async () => {},
-        listServers: async () => [],
-        getAllCredentials: async () => new Map(),
-        clearAll: async () => {},
-      }),
+        tokenStorage: new MCPOAuthTokenStorage({
+          getCredentials: async () => null,
+          setCredentials: async () => {
+            throw new Error('Unexpected credential write');
+          },
+          deleteCredentials: async () => {},
+          listServers: async () => [],
+          getAllCredentials: async () => new Map(),
+          clearAll: async () => {},
+        }),
+      },
+      config,
+      lspOwner: lsp,
+      lspOwnership: 'caller',
+      trustPort: trust,
     },
-    config,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    lsp,
-    'caller',
-    undefined,
-    'runtime',
-    undefined,
-    undefined,
-    'runtime',
-    trust,
+    {},
   );
   try {
     await root.initialize();

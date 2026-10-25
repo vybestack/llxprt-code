@@ -8,7 +8,8 @@ import {
   type McpOAuthBinding,
   type OAuthCredentials,
 } from '@vybestack/llxprt-code-mcp';
-import { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
+import type { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './create-mcp-runtime.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 
 /**
@@ -44,10 +45,14 @@ export async function buildTestMcpRuntime(
   config: Config,
   messageBus: MessageBus,
   overrides: Readonly<Partial<AgentConfig>>,
-  extensionLoader?: ExtensionLoader,
-  policyOwner?: RuntimePolicyOwner,
+  extensionLoader: ExtensionLoader | undefined,
+  policyOwner: RuntimePolicyOwner,
   skillOperations?: WorkspaceSkillAssemblyOperations,
 ): Promise<McpRuntimeOwner> {
+  if (messageBus !== policyOwner.session.messageBus)
+    throw new Error(
+      'buildTestMcpRuntime: messageBus must be policyOwner.session.messageBus',
+    );
   const binding = createTestOAuthBinding();
   const lspOwnership =
     overrides.lspOwnership ??
@@ -55,33 +60,32 @@ export async function buildTestMcpRuntime(
   const filesystemOwnership =
     overrides.filesystemOwnership ??
     (overrides.filesystemOwner === undefined ? 'agent' : 'caller');
-  return McpRuntimeOwner.create(
+  return createTestMcpRuntime(
     {
-      tokenStorage: overrides.mcpTokenStorage
-        ? new MCPOAuthTokenStorage(overrides.mcpTokenStorage)
-        : binding.tokenStorage,
-      openBrowser: overrides.mcpHost?.openBrowser ?? binding.openBrowser,
+      oauth: {
+        tokenStorage: overrides.mcpTokenStorage
+          ? new MCPOAuthTokenStorage(overrides.mcpTokenStorage)
+          : binding.tokenStorage,
+        openBrowser: overrides.mcpHost?.openBrowser ?? binding.openBrowser,
+      },
+      config,
+      extensionLoader,
+      policy: { owner: policyOwner, ownership: 'runtime' },
+      lspOwner: overrides.lspOwner,
+      lspOwnership: lspOwnership === 'agent' ? 'runtime' : 'caller',
+      filesystemOwner: overrides.filesystemOwner,
+      filesystemOwnership:
+        filesystemOwnership === 'agent' ? 'runtime' : 'caller',
+      definitionOwner: overrides.definitionOwner,
+      definitionOwnership:
+        overrides.definitionOwnership === 'agent' ||
+        overrides.definitionOwner === undefined
+          ? 'runtime'
+          : 'caller',
     },
-    config,
-    messageBus,
-    overrides.mcpHost,
-    undefined,
-    extensionLoader,
-    policyOwner,
-    'runtime',
-    overrides.lspOwner,
-    lspOwnership === 'agent' ? 'runtime' : 'caller',
-    overrides.filesystemOwner,
-    filesystemOwnership === 'agent' ? 'runtime' : 'caller',
-    undefined,
-    overrides.definitionOwner,
-    overrides.definitionOwnership === 'agent' ||
-      overrides.definitionOwner === undefined
-      ? 'runtime'
-      : 'caller',
-    undefined,
-    undefined,
-    undefined,
-    skillOperations,
+    {
+      emitFeedback: overrides.mcpHost?.emitFeedback,
+      skillOperations,
+    },
   );
 }

@@ -20,6 +20,7 @@ import {
 import { nativeHookCommand } from './helpers/native-hook-command.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
 
 const wireSchema = z
@@ -141,7 +142,10 @@ console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...
           ],
         },
       });
-      mcp = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
+      mcp = await createTestMcpRuntime(
+        { oauth: createTestOAuthBinding(), config },
+        {},
+      );
       const adoptedSettings1 = createSessionSettingsFixture(config);
       agent = await fromConfig(
         config,

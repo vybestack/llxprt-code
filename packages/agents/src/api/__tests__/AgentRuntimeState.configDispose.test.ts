@@ -17,7 +17,7 @@ import {
   ProviderManager,
   FakeProvider,
 } from '@vybestack/llxprt-code-providers';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { fileURLToPath } from 'node:url';
 
@@ -32,29 +32,27 @@ async function owner() {
   });
   const settingsService = new SettingsService();
   const policy = new RuntimePolicyOwner(config);
-  const mcp = await McpRuntimeOwner.create(
+  const mcp = await createTestMcpRuntime(
     {
-      openBrowser: async () => {
-        throw new Error('Unexpected browser');
-      },
-      tokenStorage: new MCPOAuthTokenStorage({
-        getCredentials: async () => null,
-        setCredentials: async () => {
-          throw new Error('Unexpected credential write');
+      oauth: {
+        openBrowser: async () => {
+          throw new Error('Unexpected browser');
         },
-        deleteCredentials: async () => {},
-        listServers: async () => [],
-        getAllCredentials: async () => new Map(),
-        clearAll: async () => {},
-      }),
+        tokenStorage: new MCPOAuthTokenStorage({
+          getCredentials: async () => null,
+          setCredentials: async () => {
+            throw new Error('Unexpected credential write');
+          },
+          deleteCredentials: async () => {},
+          listServers: async () => [],
+          getAllCredentials: async () => new Map(),
+          clearAll: async () => {},
+        }),
+      },
+      config,
+      policy: { owner: policy, ownership: 'runtime' },
     },
-    config,
-    policy.session.messageBus,
-    undefined,
-    undefined,
-    undefined,
-    policy,
-    'runtime',
+    {},
   );
   const credentialAuthority = new CredentialAuthority();
   const manager = new ProviderManager(

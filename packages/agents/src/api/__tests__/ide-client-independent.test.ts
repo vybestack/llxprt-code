@@ -18,6 +18,7 @@ import {
   installIdeCleanup,
 } from './helpers/ide-lifecycle-companion.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { toConfigParameters } from '@vybestack/llxprt-code-agents';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -84,28 +85,18 @@ function createWorkspace(
   config: Config,
   trust: WorkspaceTrustLifecycle,
 ): Promise<McpRuntimeOwner> {
-  return McpRuntimeOwner.create(
+  return createTestMcpRuntime(
     {
-      tokenStorage: new MCPOAuthTokenStorage(
-        new KeychainTokenStorage('llxprt-cli-mcp-oauth'),
-      ),
-      openBrowser: openBrowserSecurely,
+      oauth: {
+        tokenStorage: new MCPOAuthTokenStorage(
+          new KeychainTokenStorage('llxprt-cli-mcp-oauth'),
+        ),
+        openBrowser: openBrowserSecurely,
+      },
+      config,
+      trustPort: trust,
     },
-    config,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    'caller',
-    undefined,
-    'runtime',
-    undefined,
-    'runtime',
-    undefined,
-    undefined,
-    'runtime',
-    trust,
+    {},
   );
 }
 

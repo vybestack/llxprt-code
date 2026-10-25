@@ -16,6 +16,7 @@ import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/wo
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
@@ -67,17 +68,14 @@ describe('explicit workspace startup ownership boundary', () => {
       throw new AggregateError(failures, 'Workspace fixture cleanup failed');
   });
 
-  async function acquire(
-    readBus: () => MessageBus = () => policy.session.messageBus,
-  ): Promise<McpRuntimeOwner> {
-    const owner = await McpRuntimeOwner.create(
-      createTestOAuthBinding(),
-      config,
-      readBus(),
-      undefined,
-      undefined,
-      undefined,
-      policy,
+  async function acquire(): Promise<McpRuntimeOwner> {
+    const owner = await createTestMcpRuntime(
+      {
+        oauth: createTestOAuthBinding(),
+        config,
+        policy: { owner: policy, ownership: 'caller' },
+      },
+      {},
     );
     cleanup.push(() => owner.dispose());
     return owner;
@@ -96,8 +94,7 @@ describe('explicit workspace startup ownership boundary', () => {
 
   it('keeps Config declarative while shorthand bus selection initializes real workspace tools', async () => {
     const messageBus = policy.session.messageBus;
-    const selection = { messageBus };
-    const owner = await acquire(() => selection.messageBus);
+    const owner = await acquire();
     await owner.initialize();
     expect('initialize' in config).toBe(false);
     expect('ensureInitialized' in config).toBe(false);
@@ -107,7 +104,7 @@ describe('explicit workspace startup ownership boundary', () => {
   });
 
   it('resolves a narrow bus read at the owning acquisition seam without a dependency graph factory', async () => {
-    const owner = await acquire(() => policy.session.messageBus);
+    const owner = await acquire();
     await owner.initialize();
     owner.assertConfig(config, policy.session.messageBus);
     expect(await readPhysicalFile(owner)).toContain('explicit workspace bytes');
@@ -181,14 +178,13 @@ describe('explicit workspace startup ownership boundary', () => {
   });
 
   it('caches an exact failed infrastructure acquisition and never silently retries it', async () => {
-    const owner = await McpRuntimeOwner.create(
-      createTestOAuthBinding(),
-      config,
-      policy.session.messageBus,
-      undefined,
-      undefined,
-      undefined,
-      policy,
+    const owner = await createTestMcpRuntime(
+      {
+        oauth: createTestOAuthBinding(),
+        config,
+        policy: { owner: policy, ownership: 'caller' },
+      },
+      {},
     );
     const primary = new Error('IDE infrastructure acquisition failed');
     const connection = vi.spyOn(IdeClient, 'create').mockRejectedValue(primary);
@@ -269,7 +265,7 @@ describe('explicit workspace startup ownership boundary', () => {
 
   it('accepts an aliased bus variable without changing workspace identity or tool effects', async () => {
     const renamed = policy.session.messageBus;
-    const owner = await acquire(() => renamed);
+    const owner = await acquire();
     await owner.initialize();
     expect(owner.messageBus).toBe(renamed);
     expect(await readPhysicalFile(owner)).toContain('explicit workspace bytes');
@@ -290,14 +286,13 @@ describe('explicit workspace startup ownership boundary', () => {
     cleanup.push(() => trust.dispose());
     const borrowedPolicy = new RuntimePolicyOwner(config, trust);
     cleanup.push(() => borrowedPolicy.dispose());
-    const owner = await McpRuntimeOwner.create(
-      createTestOAuthBinding(),
-      config,
-      borrowedPolicy.session.messageBus,
-      undefined,
-      undefined,
-      undefined,
-      borrowedPolicy,
+    const owner = await createTestMcpRuntime(
+      {
+        oauth: createTestOAuthBinding(),
+        config,
+        policy: { owner: borrowedPolicy, ownership: 'caller' },
+      },
+      {},
     );
     await expect(owner.initialize()).rejects.toBe(primary);
     const failed = await disposal;

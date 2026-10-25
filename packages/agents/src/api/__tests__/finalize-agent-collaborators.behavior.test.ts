@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { toConfigParameters } from '../agentConfig.adapter.js';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
@@ -72,29 +72,27 @@ describe('Agent finalization collaborators', () => {
     const builtSettings = new SettingsService();
     const builtPolicy = new RuntimePolicyOwner(builtConfig);
     const builtMessageBus = builtPolicy.session.messageBus;
-    const builtMcp = await McpRuntimeOwner.create(
+    const builtMcp = await createTestMcpRuntime(
       {
-        openBrowser: async () => {
-          throw new Error('Unexpected browser request');
-        },
-        tokenStorage: new MCPOAuthTokenStorage({
-          getCredentials: async () => null,
-          setCredentials: async () => {
-            throw new Error('Unexpected token write');
+        oauth: {
+          openBrowser: async () => {
+            throw new Error('Unexpected browser request');
           },
-          deleteCredentials: async () => {},
-          listServers: async () => [],
-          getAllCredentials: async () => new Map(),
-          clearAll: async () => {},
-        }),
+          tokenStorage: new MCPOAuthTokenStorage({
+            getCredentials: async () => null,
+            setCredentials: async () => {
+              throw new Error('Unexpected token write');
+            },
+            deleteCredentials: async () => {},
+            listServers: async () => [],
+            getAllCredentials: async () => new Map(),
+            clearAll: async () => {},
+          }),
+        },
+        config: builtConfig,
+        policy: { owner: builtPolicy, ownership: 'runtime' },
       },
-      builtConfig,
-      builtMessageBus,
-      undefined,
-      undefined,
-      undefined,
-      builtPolicy,
-      'runtime',
+      {},
     );
 
     const builtRuntimeId = 'engine-' + randomUUID();

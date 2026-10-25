@@ -13,7 +13,8 @@ import { createSessionSettingsFixture } from './session-settings-fixture.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
 
 import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
-import { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
+import type { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './create-mcp-runtime.js';
 
 import {
   createServer,
@@ -352,6 +353,10 @@ async function createFixtureDirectory(): Promise<string> {
   return realpath(await mkdtemp(join(tmpdir(), 'async-child-disposal-join-')));
 }
 
+function createParentMcpRuntime(config: Config): Promise<McpRuntimeOwner> {
+  return createTestMcpRuntime({ oauth: createTestOAuthBinding(), config }, {});
+}
+
 export async function withDisposalJoinFixture(
   scenario: (fixture: DisposalJoinFixture) => Promise<void>,
   toolSchedulerFactory?: AgentSchedulerFactory,
@@ -370,7 +375,7 @@ export async function withDisposalJoinFixture(
   const errors: unknown[] = [];
   try {
     config = await createChildConfig(directory, server.baseUrl, extraTools);
-    mcpRuntime = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
+    mcpRuntime = await createParentMcpRuntime(config);
     const { settingsRoot, adoptSibling } = createDisposalSettings(
       config,
       mcpRuntime,

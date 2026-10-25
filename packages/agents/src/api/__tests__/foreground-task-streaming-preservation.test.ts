@@ -28,6 +28,7 @@ import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentMana
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-tools';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import {
   HookEventName,
   HookType,
@@ -220,7 +221,10 @@ writeFileSync('task-hook-late', 'privileged');
           }
         : undefined,
     });
-    mcp = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
+    mcp = await createTestMcpRuntime(
+      { oauth: createTestOAuthBinding(), config },
+      {},
+    );
     const adoptedSettings1 = createSessionSettingsFixture(config);
     agent = await fromConfig(
       config,
