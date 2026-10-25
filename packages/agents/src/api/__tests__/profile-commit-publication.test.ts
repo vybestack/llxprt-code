@@ -1,10 +1,8 @@
 import { AggregateDisposeError } from '../disposeErrors.js';
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import {
   createCapturedSessionOwner,
-  capturedSessionClient,
+  ownerClients,
 } from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -18,11 +16,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import {
-  ProviderFileLifecycle,
-  FakeProvider,
-  ProviderManager,
-} from '@vybestack/llxprt-code-providers';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {
   configureProviderTokenizer,
   createRuntimeContentGeneratorFactory,
@@ -46,26 +41,23 @@ import { beforeAll, afterAll, describe, expect, it, vi } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { fileURLToPath } from 'node:url';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import {
-  createAgentRuntimeFactoryBindings,
-  AgentRuntimeFactoryBindings,
-} from '../runtimeFactories.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
-import { buildRuntimeProfileSnapshot } from '../profileSnapshot.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import {
   MemoryTokenStore,
   makeToken,
 } from './helpers/provider-auth-fixtures.js';
+import { openRouteAAgent } from './helpers/route-a-agent.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 
 /**
  * @license
@@ -81,6 +73,7 @@ function originalCauses(error: unknown): unknown[] {
 }
 
 describe('profile-commit-publication', () => {
+  const useFixture = useFakeResponsesReplay('plain-text.jsonl');
   let promptDirectory: string;
   const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
   beforeAll(async () => {
@@ -103,7 +96,6 @@ describe('profile-commit-publication', () => {
   let builtCallerManager: ReturnType<typeof acquirePreferredProviderManager>;
   let builtCallerOwner: SessionClientOwner;
   let builtCallerClose: () => Promise<void>;
-  let builtCallerFactories: AgentRuntimeFactoryBindings;
   let builtCallerRelease: AcquisitionRelease;
   let builtCallerFiles: ProviderFileLifecycle;
   let builtCallerRuntimeId: string;
@@ -113,10 +105,14 @@ describe('profile-commit-publication', () => {
     typeof createRuntimeContentGeneratorFactory
   >;
 
+  function lastBuiltCallerClient(): AgentClientContract {
+    const clients = ownerClients(builtCallerOwner);
+    return clients[clients.length - 1];
+  }
+
   async function openbuiltCaller(
     fixture: string,
     overrides: Readonly<Partial<AgentConfig>> = {},
-    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
     skillSettings: Pick<
       ConfigParameters,
       'enableExtensionReloading' | 'storageRoot'
@@ -153,10 +149,6 @@ describe('profile-commit-publication', () => {
         process.cwd(),
       ];
     builtCallerConfig = new Config(parameters);
-    builtCallerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...suppliedFactories,
-    };
     builtCallerSettings = new SettingsService();
     for (const [key, value] of Object.entries(
       builtCallerConfig.getInitialSettings(),
@@ -181,7 +173,7 @@ describe('profile-commit-publication', () => {
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
-      builtCallerFactories.agentClientFactory,
+      buildAgentClientFactory(),
       media.store,
       builtCallerMcp.readInstructions,
       builtCallerMcp.workspacePaths,
@@ -297,240 +289,118 @@ describe('profile-commit-publication', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await capturedSessionClient(builtCallerOwner).startChat();
+    await lastBuiltCallerClient().startChat();
   }
 
-  it.each([false, true])(
-    'retains committed state and retires both old subscriptions (removal throws: %s)',
-    async (removalThrows) => {
-      await openbuiltCaller('multi-turn-text.jsonl');
-      const ownerModels = builtCallerSettingsOwner[
-        'modelNotifications'
-      ].listeners(CoreEvent.ModelChanged);
-      const ownerProfiles = builtCallerSettingsOwner[
-        'modelNotifications'
-      ].listeners(CoreEvent.ModelProfileChanged);
-      const agent = await fromConfig(
-        builtCallerConfig,
-        builtCallerSettings,
-        {},
-        builtCallerSettingsOwner,
-        builtCallerManager,
-        builtCallerOAuth,
-        builtCallerPolicy.session.messageBus,
-        builtCallerMcp,
-        undefined,
-        undefined,
-        builtCallerFiles,
-      );
-      const manager = builtCallerManager;
+  it('retains committed state and reports listener failures after a committed profile change', async () => {
+    useFixture('multi-turn-text.jsonl');
+    const { agent, close } = await openRouteAAgent();
+    const modelError = new Error('model listener failed');
+    const profileError = new Error('profile listener failed');
+    const release = agent.settings.subscribeModelChanges((profile) => {
+      throw profile === undefined ? modelError : profileError;
+    });
+    let released = false;
+    const releaseListener = (): void => {
+      if (released) return;
+      released = true;
+      release();
+    };
+    try {
+      for await (const event of agent.stream('establish prior history'))
+        expect(event.type).not.toBe('error');
+      const priorHistory = await agent.getHistory();
+      expect(priorHistory.length).toBeGreaterThan(0);
 
-      const alternative = new FakeProvider(
-        fileURLToPath(
-          new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
-        ),
-        builtCallerConfig.getTargetDir(),
-      );
-      alternative.name = 'alternative';
-      alternative.baseProviderConfig = {
-        baseURL: 'https://alternative.invalid',
-      };
-      manager.registerProvider(alternative);
-      const oldModels = builtCallerSettingsOwner['modelNotifications']
-        .listeners(CoreEvent.ModelChanged)
-        .filter((listener) => !ownerModels.includes(listener));
-      const oldProfiles = builtCallerSettingsOwner['modelNotifications']
-        .listeners(CoreEvent.ModelProfileChanged)
-        .filter((listener) => !ownerProfiles.includes(listener));
-      const resources = fixtureAgentResources(agent);
-      await resources.publishedClient(agent).startChat();
-      await resources.readObservedHistory(agent);
-      const priorClient = resources.historyReaders
-        .slice(-1)
-        .values()
-        .next().value;
-      if (priorClient === undefined)
-        throw new Error('Expected an actual native history receiver');
-      const history = priorClient.getHistoryService();
-      const modelError = new Error('model listener failed');
-      const profileError = new Error('profile listener failed');
-      const removalError = new Error('old model removal failed');
-      const onModel = (): never => {
-        throw modelError;
-      };
-      const onProfile = (): never => {
-        throw profileError;
-      };
-      let removalFailed = false;
-      const onRemove = (
-        event: string | symbol,
-        listener: (...args: unknown[]) => void,
-      ): void => {
-        if (
-          removalThrows &&
-          !removalFailed &&
-          event === CoreEvent.ModelChanged &&
-          oldModels.includes(listener)
-        ) {
-          removalFailed = true;
-          throw removalError;
-        }
-      };
-      builtCallerSettingsOwner['modelNotifications'].on(
-        CoreEvent.ModelChanged,
-        onModel,
-      );
-      builtCallerSettingsOwner['modelNotifications'].on(
-        CoreEvent.ModelProfileChanged,
-        onProfile,
-      );
-      builtCallerSettingsOwner['modelNotifications'].addListener(
-        'removeListener',
-        onRemove,
-      );
-      try {
-        const outcome = await agent.profiles
-          .applySnapshot({
-            version: 1,
-            provider: 'alternative',
-            model: 'committed-after-listener-error',
-            modelParams: {},
-            ephemeralSettings: {},
-          })
-          .then(
-            (value) => ({ value }),
-            (error: unknown) => ({ error }),
-          );
-        expect(outcome).toHaveProperty('error.committed', true);
-        expect(outcome).toHaveProperty(
-          'error.result.modelName',
-          'committed-after-listener-error',
-        );
-        if (!('error' in outcome))
-          throw new Error('Expected committed failure');
-        expect(originalCauses(outcome.error)).toContain(modelError);
-        expect(originalCauses(outcome.error)).toContain(profileError);
-        expect(originalCauses(outcome.error).includes(removalError)).toBe(
-          removalThrows,
-        );
-        for (const listener of oldModels)
-          expect(
-            builtCallerSettingsOwner['modelNotifications'].listeners(
-              CoreEvent.ModelChanged,
-            ),
-          ).not.toContain(listener);
-        for (const listener of oldProfiles)
-          expect(
-            builtCallerSettingsOwner['modelNotifications'].listeners(
-              CoreEvent.ModelProfileChanged,
-            ),
-          ).not.toContain(listener);
-        expect(fixtureAgentResources(agent).publishedClient(agent)).not.toBe(
-          priorClient,
-        );
-        expect(
-          fixtureAgentResources(agent)
-            .publishedClient(agent)
-            .getHistoryService(),
-        ).toBe(history);
-        expect(agent.getModel()).toBe('committed-after-listener-error');
-        expect(agent.profiles.isApplying()).toBe(false);
-        builtCallerSettingsOwner['modelNotifications'].off(
-          CoreEvent.ModelChanged,
-          onModel,
-        );
-        builtCallerSettingsOwner['modelNotifications'].off(
-          CoreEvent.ModelProfileChanged,
-          onProfile,
-        );
-        builtCallerSettingsOwner['modelNotifications'].removeListener(
-          'removeListener',
-          onRemove,
-        );
-        await agent.profiles.applySnapshot({
+      const outcome = await agent.profiles
+        .applySnapshot({
           version: 1,
-          provider: 'alternative',
-          model: 'recovered',
+          provider: 'fake',
+          model: 'committed-after-listener-error',
           modelParams: {},
           ephemeralSettings: {},
-        });
-        const events = [];
-        for await (const event of agent.stream(
-          'continue after notification failure',
-          { mcpDiscovery: 'skip' },
-        ))
-          events.push(event);
-        expect(events.filter((event) => event.type === 'error')).toStrictEqual(
-          [],
+        })
+        .then(
+          (value) => ({ value }),
+          (error: unknown) => ({ error }),
         );
-        expect(events.filter((event) => event.type === 'done')).toStrictEqual([
-          { type: 'done', reason: 'stop' },
-        ]);
-      } finally {
-        builtCallerSettingsOwner['modelNotifications'].off(
-          CoreEvent.ModelChanged,
-          onModel,
-        );
-        builtCallerSettingsOwner['modelNotifications'].off(
-          CoreEvent.ModelProfileChanged,
-          onProfile,
-        );
-        builtCallerSettingsOwner['modelNotifications'].removeListener(
-          'removeListener',
-          onRemove,
-        );
-        const disposal = await agent.dispose().then(
-          () => undefined,
-          (error: unknown) => error,
-        );
-        expect(
-          disposal === undefined ? [] : originalCauses(disposal),
-        ).toStrictEqual(removalThrows ? [removalError] : []);
-        await builtCallerConfig.dispose();
-        await builtCallerClose();
-      }
-    },
-    30000,
-  );
+      expect(outcome).toHaveProperty('error.committed', true);
+      expect(outcome).toHaveProperty(
+        'error.result.modelName',
+        'committed-after-listener-error',
+      );
+      if (!('error' in outcome)) throw new Error('Expected committed failure');
+      expect(originalCauses(outcome.error)).toContain(modelError);
+      expect(originalCauses(outcome.error)).toContain(profileError);
+      expect(agent.getModel()).toBe('committed-after-listener-error');
+      expect(agent.profiles.isApplying()).toBe(false);
+      expect(await agent.getHistory()).toStrictEqual(priorHistory);
+      releaseListener();
+      await agent.profiles.applySnapshot({
+        version: 1,
+        provider: 'fake',
+        model: 'recovered',
+        modelParams: {},
+        ephemeralSettings: {},
+      });
+      const events = [];
+      for await (const event of agent.stream(
+        'continue after notification failure',
+        { mcpDiscovery: 'skip' },
+      ))
+        events.push(event);
+      expect(events.filter((event) => event.type === 'error')).toStrictEqual(
+        [],
+      );
+      expect(events.filter((event) => event.type === 'done')).toStrictEqual([
+        { type: 'done', reason: 'stop' },
+      ]);
+    } finally {
+      releaseListener();
+      await close();
+    }
+  }, 30000);
+
+  it('stops delivering model notifications to the client the owner replaced', async () => {
+    await openbuiltCaller('plain-text.jsonl');
+    try {
+      const profile = {
+        model: 'notified-model',
+        providerName: 'fake',
+        profileName: null,
+        displayLabel: 'notified-model',
+      };
+      const prior = lastBuiltCallerClient();
+      await prior.startChat();
+      expect(prior.hasChatInitialized()).toBe(true);
+      builtCallerSettingsOwner.publishModelProfile(profile);
+      expect(prior.hasChatInitialized()).toBe(false);
+      await prior.startChat();
+      expect(prior.hasChatInitialized()).toBe(true);
+
+      await builtCallerOwner.refreshAuth();
+
+      const replacement = lastBuiltCallerClient();
+      expect(replacement).not.toBe(prior);
+      await replacement.startChat();
+      expect(replacement.hasChatInitialized()).toBe(true);
+      builtCallerSettingsOwner.publishModelProfile(profile);
+      expect(replacement.hasChatInitialized()).toBe(false);
+      expect(prior.hasChatInitialized()).toBe(true);
+    } finally {
+      await builtCallerClose();
+    }
+  }, 30000);
 
   it('rolls back supported active-provider loss after model selection', async () => {
-    await openbuiltCaller('plain-text.jsonl');
-    const agent = await fromConfig(
-      builtCallerConfig,
-      builtCallerSettings,
-      {},
-      builtCallerSettingsOwner,
-      builtCallerManager,
-      undefined,
-      builtCallerPolicy.session.messageBus,
-      builtCallerMcp,
-      undefined,
-      capturedSessionClient(builtCallerOwner),
-    );
-    const settings = builtCallerSettings;
-    const manager = builtCallerManager;
-    if (!(manager instanceof ProviderManager))
-      throw new Error('Expected real provider manager');
-    const priorProvider = manager.getActiveProviderName();
-    if (priorProvider === undefined)
-      throw new Error('Expected an active caller provider');
-    const priorSettings = structuredClone(
-      settings.getProviderSettings(priorProvider),
-    );
-    const priorModel = priorSettings.model;
-    if (typeof priorModel !== 'string')
-      throw new Error('Expected a configured caller model');
-    const before = buildRuntimeProfileSnapshot({
-      providerName: priorProvider,
-      modelName: priorModel,
-      providerSettings: priorSettings,
-      ephemeralSettings: structuredClone(
-        builtCallerSettingsOwner.captureUserParameters(),
-      ),
+    useFixture('plain-text.jsonl');
+    const { agent, settings, close } = await openRouteAAgent({
+      config: { interactive: true },
     });
+    const before = agent.captureProfile();
     const interrupt = (event: { key: string; newValue: unknown }): void => {
       if (event.key === 'temperature' && event.newValue === 0.25)
-        manager.clearActiveProvider();
+        settings.set('activeProvider', '');
     };
     settings.on('provider-change', interrupt);
     try {
@@ -548,8 +418,7 @@ describe('profile-commit-publication', () => {
       expect(agent.profiles.isApplying()).toBe(false);
     } finally {
       settings.off('provider-change', interrupt);
-      await agent.dispose();
-      await builtCallerClose();
+      await close();
     }
   }, 30000);
 
@@ -587,12 +456,12 @@ describe('profile-commit-publication', () => {
   }, 30000);
 
   it('retains renewal schedules and publishes no profile success when real loop preparation fails', async () => {
-    await openbuiltCaller('multi-turn-text.jsonl');
-    const store = new MemoryTokenStore();
-    const oauth = new OAuthManager(store, undefined, {
-      config: builtCallerConfig,
-      messageBus: builtCallerPolicy.session.messageBus,
+    useFixture('multi-turn-text.jsonl');
+    const { agent, config, close } = await openRouteAAgent({
+      config: { interactive: true },
     });
+    const store = new MemoryTokenStore();
+    const oauth = new OAuthManager(store, undefined, { config });
     oauth.registerProvider({
       name: 'fake',
       initiateAuth: async () => {
@@ -606,53 +475,27 @@ describe('profile-commit-publication', () => {
       }),
     });
     await oauth.toggleOAuthEnabled('fake');
-    const agent = await fromConfig(
-      builtCallerConfig,
-      builtCallerSettings,
-      {},
-      builtCallerSettingsOwner,
-      builtCallerManager,
-      undefined,
-      builtCallerPolicy.session.messageBus,
-      builtCallerMcp,
-      undefined,
-      capturedSessionClient(builtCallerOwner),
-    );
     const models: string[] = [];
     const profiles: unknown[] = [];
-    const onModel = (model: string): void => {
-      models.push(model);
-    };
-    const onProfile = (profile: unknown): void => {
-      profiles.push(profile);
-    };
-    builtCallerSettingsOwner['modelNotifications'].on(
-      CoreEvent.ModelChanged,
-      onModel,
-    );
-    builtCallerSettingsOwner['modelNotifications'].on(
-      CoreEvent.ModelProfileChanged,
-      onProfile,
-    );
-    const initialModel = builtCallerSettings.getProviderSettings('fake').model;
-    if (typeof initialModel !== 'string')
-      throw new Error('Expected the configured caller model');
+    const release = agent.settings.subscribeModelChanges((profile) => {
+      if (profile === undefined) models.push(agent.getModel());
+      else profiles.push(profile);
+    });
+    const initialModel = agent.getModel();
     try {
       const initialEvents = [];
       for await (const event of agent.stream('remember the prior conversation'))
         initialEvents.push(event);
       expect(initialEvents.some((event) => event.type === 'error')).toBe(false);
-      const priorNativeClient = capturedSessionClient(builtCallerOwner);
-      const priorHistory = await priorNativeClient.getHistory();
+      const priorHistory = await agent.getHistory();
       expect(priorHistory.length).toBeGreaterThan(0);
       vi.useFakeTimers();
-      for (const bucket of ['old', 'replacement']) {
+      for (const bucket of ['old', 'replacement'])
         await store.saveToken(
           'fake',
           makeToken(bucket, { expiresInSec: 600 }),
           bucket,
         );
-      }
       await oauth.configureProactiveRenewalsForProfile({
         provider: 'fake',
         auth: { type: 'oauth', buckets: ['old'] },
@@ -660,7 +503,7 @@ describe('profile-commit-publication', () => {
       oauth.setSessionBucket('fake', 'old');
       const failure = new Error('loop configuration unavailable');
       const interactive = vi
-        .spyOn(builtCallerConfig, 'isInteractive')
+        .spyOn(config, 'isInteractive')
         .mockImplementationOnce(() => {
           throw failure;
         });
@@ -716,17 +559,9 @@ describe('profile-commit-publication', () => {
       expect(profiles).toHaveLength(1);
       expect(models).toStrictEqual(['committed-model']);
     } finally {
-      builtCallerSettingsOwner['modelNotifications'].off(
-        CoreEvent.ModelChanged,
-        onModel,
-      );
-      builtCallerSettingsOwner['modelNotifications'].off(
-        CoreEvent.ModelProfileChanged,
-        onProfile,
-      );
+      release();
       vi.useRealTimers();
-      await agent.dispose();
-      await builtCallerClose();
+      await close();
     }
   }, 30000);
 });
