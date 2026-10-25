@@ -31,7 +31,6 @@ import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.
 
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import { usePromptTransport } from '../../../__tests__/prompt-transport-fixture.js';
-import { useRecordingPrompts } from '../../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createMockRuntimeApi } from '../../components/__tests__/StatsDisplay.testHelpers.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -634,7 +633,6 @@ describe('subagentCommand', () => {
    * @requirement:REQ-003
    */
   describe('saveCommand - auto mode @requirement:REQ-003', () => {
-    useRecordingPrompts();
     const transport = usePromptTransport();
     let context: CommandOwnerFixture;
     let subagentManager: SubagentManager;
