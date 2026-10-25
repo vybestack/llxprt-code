@@ -1,10 +1,21 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { JournalFormatError } from './errors.js';
 import type { CommitAck } from './groupWriter.js';
 import type { PinnedRead } from './pinLease.js';
 import type { Version } from './version.js';
 import type { VersionEdit } from './groupEdits.js';
 import type { RightSpine } from './rowTreeBuilder.js';
 import type { GroupPlan } from './groupPlanTypes.js';
+
+export function assertCompactionUsable(
+  failure: { readonly error: unknown } | undefined,
+): void {
+  if (failure !== undefined)
+    throw new JournalFormatError(
+      'An earlier compaction of this journal failed',
+      { cause: failure.error },
+    );
+}
 
 export function noop(): void {
   // Settles the tail of the commit queue; the caller sees the commit's own outcome.

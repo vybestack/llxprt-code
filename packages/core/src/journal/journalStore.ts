@@ -1,10 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { CommittedIdNodes } from './committed-id-nodes.js';
 import { writtenLabelsOf, type SpineEntry } from './journal-store-state.js';
 import { JournalAdmissions } from './row-admission.js';
 import type { NeutralRowFactRegistration } from './neutralRowFacts.js';
 import { retainNamedWriter } from './named-writer-ownership.js';
 import { journalLabelSorter } from './ordered-labels.js';
-import { finishStoreFormats } from './store-format-fill.js';
+import {
+  finishStoreFormats,
+  nativeFactRegistration,
+} from './store-format-fill.js';
 import {
   readContextSpans,
   type ContextSpan,
@@ -93,7 +97,6 @@ import {
   writeUnlinkedCompactionCandidate,
 } from './storeCompaction.js';
 import type { SlotKinds } from './aggregateComposition.js';
-import { requireIncrementalFormats } from './formatFillLifecycle.js';
 import {
   type fillRowFormats,
   warmRowFormat,
@@ -122,7 +125,7 @@ export interface JournalStoreDependencies {
 /** What a store with no file name is called in its errors. */
 export const UNLINKED_JOURNAL_LABEL = '(unlinked journal)';
 
-import { noop } from './journal-store-state.js';
+import { noop, assertCompactionUsable } from './journal-store-state.js';
 
 export type { CommittedGroup } from './journal-store-state.js';
 import type { CommittedGroup } from './journal-store-state.js';
@@ -717,28 +720,10 @@ export class JournalStore {
     };
   }
 
-  private async nativeFactRegistration(
-    edits: readonly VersionEdit[],
-  ): Promise<NativeFactIndexRegistration | undefined> {
-    requireIncrementalFormats(edits, this.rowFormats);
-    const edit = edits.find((item) => item.kind === 'factIndex');
-    const registration =
-      edit?.kind === 'factIndex' ? edit.registration : this.factIndex;
-    return registration;
-  }
-
-  private assertCompactionUsable(): void {
-    if (this.compactionFailure !== undefined)
-      throw new JournalFormatError(
-        'An earlier compaction of this journal failed',
-        { cause: this.compactionFailure.error },
-      );
-  }
-
   private async runCommit(
     edits: readonly VersionEdit[],
   ): Promise<CommittedGroup> {
-    this.assertCompactionUsable();
+    assertCompactionUsable(this.compactionFailure);
     const before = this.currentVersion;
     const warm = await this.reuseRowFormat(edits);
     if (warm !== undefined) return warm;
@@ -753,8 +738,9 @@ export class JournalStore {
     });
     let ack: CommitAck | undefined;
     let rowFormats = this.rowFormats;
+    const writtenNodes = new CommittedIdNodes();
     try {
-      ack = await this.writer.prepareGroup(async (appender) => {
+      ack = await writtenNodes.prepareGroup(this.writer, async (appender) => {
         try {
           const prepared = await prepareBuild(
             this.buildContext(),
@@ -762,7 +748,7 @@ export class JournalStore {
             edits,
             appender,
             effect === undefined ? appender : effectAppender(appender, effect),
-            (actual) => this.nativeFactRegistration(actual),
+            nativeFactRegistration(this.rowFormats, this.factIndex),
           );
           ({ plan, built, edits: resolvedEdits, facts: factIndex } = prepared);
           streamedAppend = prepared.streamedAppend;
@@ -792,7 +778,7 @@ export class JournalStore {
     if (built === undefined || trailer === undefined || plan === undefined) {
       throw new JournalFormatError('A committed group left no trailer');
     }
-    this.install(trailer);
+    this.install(trailer, writtenNodes);
     this.rowFormats = rowFormats;
     this.factIndex = factIndex;
     this.toolRanking = toolRankingPolicy(resolvedEdits, this.toolRanking);
@@ -864,8 +850,17 @@ export class JournalStore {
   }
 
   /** The only place the published version moves. */
-  private install(trailer: Parameters<typeof versionOf>[0] | undefined): void {
+  private install(
+    trailer: Parameters<typeof versionOf>[0] | undefined,
+    writtenNodes?: CommittedIdNodes,
+  ): void {
     if (trailer === undefined) return;
+    writtenNodes?.publish(
+      trailer,
+      this.idCache,
+      this.metaCache,
+      this.stateCache,
+    );
     this.currentVersion = versionOf(trailer);
     this.access = createRecordAccess(
       this.path,

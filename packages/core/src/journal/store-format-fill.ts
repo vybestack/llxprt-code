@@ -5,7 +5,10 @@ import { densityFilePolicy } from './density-file-fill.js';
 import { fillDensityFiles } from './density-file-fill.js';
 import type { DensityFilePolicy } from './density-file-facts.js';
 import { fillRowFormats, type RegisteredRowFormat } from './formatFill.js';
-import { invalidateAnthropicFormats } from './formatFillLifecycle.js';
+import {
+  invalidateAnthropicFormats,
+  requireIncrementalFormats,
+} from './formatFillLifecycle.js';
 import type { BuildContext, BuiltGroup } from './groupBuild.js';
 import type { RecordAppender } from './groupAppender.js';
 import type { VersionEdit } from './groupEdits.js';
@@ -13,6 +16,19 @@ import { fillNativeFacts } from './nativeFactFill.js';
 import type { NativeFactIndexRegistration } from './nativeFactIndex.js';
 import { fillToolRanking, toolRankingPolicy } from './tool-ranking-fill.js';
 import type { ToolRankingPolicy } from './tool-ranking-fill.js';
+
+export function nativeFactRegistration(
+  formats: readonly RegisteredRowFormat[],
+  previous: NativeFactIndexRegistration | undefined,
+): (
+  edits: readonly VersionEdit[],
+) => Promise<NativeFactIndexRegistration | undefined> {
+  return async (edits) => {
+    requireIncrementalFormats(edits, formats);
+    const edit = edits.find((item) => item.kind === 'factIndex');
+    return edit?.kind === 'factIndex' ? edit.registration : previous;
+  };
+}
 
 export interface StoreFormatPolicies {
   readonly ranking: ToolRankingPolicy | undefined;
