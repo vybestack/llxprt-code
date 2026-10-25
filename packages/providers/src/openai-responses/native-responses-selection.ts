@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { ROW_FLAG } from '@vybestack/llxprt-code-core/journal/rowRecord.js';
@@ -41,15 +42,24 @@ export async function statefulUnsupportedMedia(
     )
       continue;
     const row = await rows.readAt(index);
-    for (const block of row.blocks.filter((block) => block.type === 'media')) {
-      const category = classifyMediaBlock(block);
-      if (category === 'image' || (category === 'pdf' && pdfEnabled)) continue;
-      unsupported.push({
-        kind: 'unsupported',
-        mediaType: category,
-        reason: `${category} input is not supported by this protocol and was replaced with a text placeholder`,
-      });
-    }
+    unsupported.push(...unsupportedMediaForRow(row, pdfEnabled));
+  }
+  return unsupported;
+}
+
+export function unsupportedMediaForRow(
+  row: IContent,
+  pdfEnabled: boolean,
+): UnsupportedMediaEntry[] {
+  const unsupported: UnsupportedMediaEntry[] = [];
+  for (const block of row.blocks.filter((block) => block.type === 'media')) {
+    const category = classifyMediaBlock(block);
+    if (category === 'image' || (category === 'pdf' && pdfEnabled)) continue;
+    unsupported.push({
+      kind: 'unsupported',
+      mediaType: category,
+      reason: `${category} input is not supported by this protocol and was replaced with a text placeholder`,
+    });
   }
   return unsupported;
 }

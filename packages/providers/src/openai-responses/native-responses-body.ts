@@ -51,6 +51,7 @@ import type { DiskBodyMedia } from './responses-disk-body.js';
 import {
   statefulResponsesSummary,
   statefulUnsupportedMedia,
+  unsupportedMediaForRow,
 } from './native-responses-selection.js';
 import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { toEstimationContents } from './openAIResponsesRequestState.js';
@@ -274,12 +275,17 @@ function nativeSettings(options: ResponsesRequest): RowFormatSettings {
   };
 }
 
+interface PreparedHistory {
+  readonly byteLength: number;
+  readonly unsupportedMedia: readonly UnsupportedMediaEntry[];
+}
+
 async function historyByteLength(
   options: ResponsesRequest,
   shell: ResponsesRequestShell,
   reasoningIdTime: number,
   selection: NativeResponsesSelection,
-): Promise<number> {
+): Promise<PreparedHistory> {
   const rows = options.requestRows;
   const native = rows?.native;
   if (rows === undefined)
@@ -339,7 +345,14 @@ async function historyByteLength(
       { summary, pdfBytes },
     );
   });
-  return plan.contentLength;
+  return {
+    byteLength: plan.contentLength,
+    unsupportedMedia: await statefulUnsupportedMedia(
+      rows,
+      selection.skipRows,
+      options.pdfEnabled,
+    ),
+  };
 }
 
 async function callerOwnedByteLength(
@@ -348,15 +361,17 @@ async function callerOwnedByteLength(
   reasoningIdTime: number,
   selection: NativeResponsesSelection,
   rows: ProviderRequestRows,
-): Promise<number> {
+): Promise<PreparedHistory> {
   const query = await CallerOwnedToolQuery.create(rows);
   const settings = nativeSettings(options);
+  const unsupportedMedia: UnsupportedMediaEntry[] = [];
   let pdfBytes = 0;
   let bytes = 2;
   let items = 0;
   let generatedIds = 0;
   for (let at = selection.skipRows; at < rows.count; at++) {
     const row = await rows.readAt(at, options.invocation.signal);
+    unsupportedMedia.push(...unsupportedMediaForRow(row, options.pdfEnabled));
     const pairs = await responsesUnitPairs(row, query, selection.skipRows);
     const measured = responsesUnitLength(
       row,
@@ -378,7 +393,10 @@ async function callerOwnedByteLength(
     throw new Error(
       `Native PDF input payload (${pdfBytes} bytes) exceeds the allowed ${PDF_AGGREGATE_MAX_BYTES} bytes (50 MB). Reduce the number or size of PDF files.`,
     );
-  return overrideByteLength(shell.request, []) - 2 + bytes;
+  return {
+    byteLength: overrideByteLength(shell.request, []) - 2 + bytes,
+    unsupportedMedia,
+  };
 }
 
 function overrideByteLength(
@@ -469,7 +487,7 @@ export async function prepareNativeResponsesPrompt(
     requestRows: rows,
     contentCount: rows.count,
   };
-  const bytes =
+  const prepared =
     selection.inputOverride === undefined
       ? await historyByteLength(
           preparedOptions,
@@ -477,7 +495,13 @@ export async function prepareNativeResponsesPrompt(
           reasoningIdTime,
           selection,
         )
-      : overrideByteLength(shell.request, selection.inputOverride.value);
+      : {
+          byteLength: overrideByteLength(
+            shell.request,
+            selection.inputOverride.value,
+          ),
+          unsupportedMedia: [],
+        };
   return new NativeResponsesPrompt(
     rows,
     preparedOptions,
@@ -488,14 +512,8 @@ export async function prepareNativeResponsesPrompt(
       selection.stateful.parentId !== undefined,
       reasoningIdTime,
     ),
-    bytes,
+    prepared.byteLength,
     selection,
-    selection.inputOverride === undefined
-      ? await statefulUnsupportedMedia(
-          rows,
-          selection.skipRows,
-          options.pdfEnabled,
-        )
-      : [],
+    prepared.unsupportedMedia,
   );
 }
