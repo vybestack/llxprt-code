@@ -1,3 +1,4 @@
+import { openIndependentJournal } from './__tests__/support/independent-journal.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
@@ -5,7 +6,6 @@ import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
-import { JournalSession } from './journalSession.js';
 import {
   JOURNAL_SPAN_WINDOW,
   encodeJournalSpanWindow,
@@ -55,7 +55,7 @@ async function assertDurableMirror(
   expected: IContent[],
   metadata: Uint8Array,
 ): Promise<void> {
-  const session = await JournalSession.open(path);
+  const session = await openIndependentJournal(path);
   try {
     const actual: IContent[] = [];
     for await (const entry of session.rows()) actual.push(entry.content);
@@ -161,7 +161,7 @@ describe('annotated append final metadata follows the native mirror FIFO', () =>
         for (const mirror of mirrors) {
           const path = mirror.getFilePath();
           if (path === null) throw new Error('Mirror has no durable file');
-          const session = await JournalSession.open(path);
+          const session = await openIndependentJournal(path);
           try {
             expect(session.store.published?.rows).toBe(0);
           } finally {

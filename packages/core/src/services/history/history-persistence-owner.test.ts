@@ -1,3 +1,4 @@
+import { openIndependentJournal } from './__tests__/support/independent-journal.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
@@ -13,7 +14,6 @@ import {
   resumeJournalSession,
   type JournalResumeResult as ResumeResult,
 } from '../../recording/journalResume.js';
-import { JournalSession } from './journalSession.js';
 const PROJECT_HASH = 'persistence-owner';
 
 function row(text: string): IContent {
@@ -21,7 +21,7 @@ function row(text: string): IContent {
 }
 
 async function reopen(file: string): Promise<IContent[]> {
-  const session = await JournalSession.open(file);
+  const session = await openIndependentJournal(file);
   try {
     const rows: IContent[] = [];
     for await (const entry of session.rows()) rows.push(entry.content);

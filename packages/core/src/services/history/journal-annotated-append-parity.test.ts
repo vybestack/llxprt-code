@@ -1,3 +1,4 @@
+import { openIndependentJournal } from './__tests__/support/independent-journal.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -13,7 +14,6 @@ import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { openOwnedJournal } from './journalOwnedFixture.js';
 import { decodeStoredRow } from './journalRowCodec.js';
-import { JournalSession } from './journalSession.js';
 
 async function assertCopiedOwners(
   current: VersionSnapshot,
@@ -54,7 +54,7 @@ async function contents(history: HistoryService): Promise<IContent[]> {
 async function durable(recorder: SessionRecordingPort): Promise<IContent[]> {
   const file = recorder.getFilePath();
   if (file === null) throw new Error('Missing annotated append recording');
-  const journal = await JournalSession.open(file);
+  const journal = await openIndependentJournal(file);
   try {
     const rows: IContent[] = [];
     for await (const entry of journal.rows()) rows.push(entry.content);

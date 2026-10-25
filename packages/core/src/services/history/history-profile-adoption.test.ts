@@ -1,3 +1,4 @@
+import { openIndependentJournal } from './__tests__/support/independent-journal.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -10,7 +11,6 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
 import type { SessionRecordingPort } from '../../recording/recordingPort.js';
-import { JournalSession } from './journalSession.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 
@@ -178,7 +178,7 @@ describe('profile history adoption', () => {
       await live.waitForCommit();
       const path = live.journalPath();
       if (path === null) throw new Error('Missing journal');
-      const session = await JournalSession.open(path);
+      const session = await openIndependentJournal(path);
       try {
         const rows: IContent[] = [];
         for await (const entry of session.rows()) rows.push(entry.content);

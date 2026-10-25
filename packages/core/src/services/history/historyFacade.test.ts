@@ -1,3 +1,4 @@
+import { openIndependentJournal } from './__tests__/support/independent-journal.js';
 import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
@@ -32,10 +33,10 @@ import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/cor
  *
  * Pinned facade API:
  *
- *   new HistoryService()                            // bare: creates its own
+ *   makeHistory()                            // bare: creates its own
  *                                                   // temp-file-backed journal
  *                                                   // store — no array fallback
- *   new HistoryService({ recording: recorder })     // injected journal store
+ *   makeHistory({ recording: recorder })     // injected journal store
  *   history.attachJournal(recorder)                 // late attach (the
  *                                                   // foreground CLI builds
  *                                                   // history before recording)
@@ -61,7 +62,6 @@ import type { IContent } from './IContent.js';
 import type { ContextRange } from './historyEventTypes.js';
 import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
 import type { SessionRecordingPort } from '../../recording/recordingPort.js';
-import { JournalSession } from './journalSession.js';
 import type { DensityResult } from '../../core/compression/types.js';
 
 const PROJECT_HASH = 'p05b3-facade-hash';
@@ -123,7 +123,7 @@ function project(contents: readonly IContent[]): ProjectedRow[] {
 }
 
 async function foldJournal(filePath: string): Promise<IContent[]> {
-  const session = await JournalSession.open(filePath);
+  const session = await openIndependentJournal(filePath);
   try {
     const rows: IContent[] = [];
     for await (const row of session.rows()) rows.push(row.content);
@@ -159,8 +159,22 @@ function useTempChatsDir(): {
   };
 }
 
+const resources: Array<{ dispose(): Promise<void> }> = [];
+afterEach(async () => {
+  for (const resource of resources.splice(0).reverse())
+    await resource.dispose();
+});
+
+function makeHistory(
+  options?: ConstructorParameters<typeof HistoryService>[0],
+): HistoryService {
+  const history = new HistoryService(options);
+  resources.push(history);
+  return history;
+}
+
 function makeRecorder(id: string): SessionRecordingPort {
-  return createSessionRecorder({
+  const recorder = createSessionRecorder({
     sessionId: `p05b3-facade-${id}`,
     projectHash: PROJECT_HASH,
     chatsDir: tempDir,
@@ -168,6 +182,8 @@ function makeRecorder(id: string): SessionRecordingPort {
     provider: 'test-provider',
     model: 'test-model',
   });
+  resources.push(recorder);
+  return recorder;
 }
 
 /**
@@ -209,7 +225,7 @@ describe('HistoryService facade construction (P05b3)', () => {
   afterEach(chatsDir.cleanup);
   it('accepts an injected journal store and exposes the facade surface', () => {
     const recorder = makeRecorder('injected');
-    const service = new HistoryService({ recording: recorder });
+    const service = makeHistory({ recording: recorder });
 
     expect(service.journalPath()).toBeNull();
     expect(typeof service.waitForCommit).toBe('function');
@@ -217,7 +233,7 @@ describe('HistoryService facade construction (P05b3)', () => {
   });
 
   it('attaches a journal store after construction (foreground wiring order)', async () => {
-    const service = new HistoryService();
+    const service = makeHistory();
     const recorder = makeRecorder('late-attach');
 
     const attachment = service.attachJournal(recorder);
@@ -233,7 +249,7 @@ describe('HistoryService facade construction (P05b3)', () => {
   });
 
   it('keeps bare history in an unlinked journal', async () => {
-    const service = new HistoryService();
+    const service = makeHistory();
     service.add(textContent('human', 'first'));
     service.add(textContent('ai', 'second'));
     await service.waitForCommit();
@@ -255,7 +271,7 @@ describe('HistoryService facade read APIs (P05b3)', () => {
   beforeEach(chatsDir.setup);
   afterEach(chatsDir.cleanup);
   it('add → getAll round-trips with the current shape', async () => {
-    const service = new HistoryService({ recording: makeRecorder('reads') });
+    const service = makeHistory({ recording: makeRecorder('reads') });
     service.add(textContent('human', 'one'));
     service.add(textContent('ai', 'two'));
     service.add(toolCallContent('call-reads', 'running'));
@@ -272,7 +288,7 @@ describe('HistoryService facade read APIs (P05b3)', () => {
   });
 
   it('getCurated() keeps its name and shape and drops empty AI rows', async () => {
-    const service = new HistoryService({
+    const service = makeHistory({
       recording: makeRecorder('curated'),
     });
     service.add(textContent('human', 'question'));
@@ -289,7 +305,7 @@ describe('HistoryService facade read APIs (P05b3)', () => {
   });
 
   it('getWithinTokenLimit() keeps its most-recent-window shape', async () => {
-    const service = new HistoryService({ recording: makeRecorder('window') });
+    const service = makeHistory({ recording: makeRecorder('window') });
     service.add(textContent('human', 'one'));
     service.add(textContent('ai', 'two'));
     service.add(textContent('human', 'three'));
@@ -312,7 +328,7 @@ describe('HistoryService facade retention property (P05b3)', () => {
   beforeEach(chatsDir.setup);
   afterEach(chatsDir.cleanup);
   it('releases early-turn payloads after N adds with no compression', async () => {
-    const service = new HistoryService();
+    const service = makeHistory();
     const probes: Array<WeakRef<IContent>> = [];
     for (let index = 0; index < 500; index += 1) {
       const content: IContent = {
@@ -336,7 +352,7 @@ describe('HistoryService facade retention property (P05b3)', () => {
   }, 30000);
 
   it('releases early-turn payloads across many compression boundaries', async () => {
-    const service = new HistoryService();
+    const service = makeHistory();
     const probes: Array<WeakRef<IContent>> = [];
     let compressions = 0;
     for (let index = 0; index < 500; index += 1) {
@@ -385,7 +401,7 @@ describe('HistoryService facade mutation durability (P05b3)', () => {
   afterEach(chatsDir.cleanup);
   it('lands add, pop, density, synthetic-insert, and clear in the journal', async () => {
     const recorder = makeRecorder('durable');
-    const service = new HistoryService({ recording: recorder });
+    const service = makeHistory({ recording: recorder });
 
     service.add(textContent('human', 'u1'));
     service.add(textContent('ai', 'a1'));
@@ -448,7 +464,7 @@ describe('HistoryService facade mutation durability (P05b3)', () => {
   }, 20000);
 
   it('lands replaceAll in the journal (compression-style whole replacement)', async () => {
-    const service = new HistoryService({
+    const service = makeHistory({
       recording: makeRecorder('replace'),
     });
     service.add(textContent('human', 'one'));
@@ -484,7 +500,7 @@ describe('HistoryService facade context-range boundaries (P05b3)', () => {
   beforeEach(chatsDir.setup);
   afterEach(chatsDir.cleanup);
   it('reports the boundary of the curated history after adds', async () => {
-    const service = new HistoryService({
+    const service = makeHistory({
       recording: makeRecorder('range-boundary'),
     });
     for (const text of ['one', 'two', 'three', 'four', 'five']) {
@@ -499,7 +515,7 @@ describe('HistoryService facade context-range boundaries (P05b3)', () => {
   });
 
   it('emits contextRangeChanged once for the first entry and once per boundary-moving commit after', async () => {
-    const service = new HistoryService({
+    const service = makeHistory({
       recording: makeRecorder('range-events'),
     });
     const events: ContextRange[] = [];
@@ -555,7 +571,7 @@ describe('HistoryService facade context-range clear (P05b3)', () => {
   beforeEach(chatsDir.setup);
   afterEach(chatsDir.cleanup);
   it('emits on clear with a zero-entry range', async () => {
-    const service = new HistoryService({
+    const service = makeHistory({
       recording: makeRecorder('range-clear'),
     });
     service.add(textContent('human', 'one'));

@@ -68,9 +68,14 @@ describe('journal session', () => {
       ROW_FLAG.hasToolCall,
     );
     expect(rows[1].entry.chronologySeq).toBe(7n);
-    const fact = await (await session.store.idFacts()).fact('call-1');
-    expect(fact?.callCount).toBe(1);
-    expect(fact?.respCount).toBe(1);
+    const facts = await session.store.idFacts();
+    try {
+      const fact = await facts.fact('call-1');
+      expect(fact?.callCount).toBe(1);
+      expect(fact?.respCount).toBe(1);
+    } finally {
+      await facts.close();
+    }
   });
 
   it('keeps the Responses stateful chain invalid for rows appended with the flag', async () => {

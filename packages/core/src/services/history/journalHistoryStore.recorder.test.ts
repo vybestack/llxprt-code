@@ -347,6 +347,7 @@ describe('journal history store over a journal recorder', () => {
           content: row(`row ${at}`),
           origin: at % 2 === 0 ? 'agent-a' : 'agent-b',
         });
+        if ((at + 1) % 32 === 0) await store.waitForDurable();
       }
       rec.recordSessionMetadata('Flushed');
       rec.recordProviderSwitch('openai', 'model-2');

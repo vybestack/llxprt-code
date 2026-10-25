@@ -1,3 +1,4 @@
+import { openIndependentJournal } from './__tests__/support/independent-journal.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
@@ -6,7 +7,6 @@ import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
-import { JournalSession } from './journalSession.js';
 import {
   JOURNAL_SPAN_WINDOW,
   encodeJournalSpanWindow,
@@ -44,7 +44,7 @@ async function checkMirror(
   standing: RemovedInteriorSpan[],
 ): Promise<void> {
   if (file === null) throw new Error('Missing summary mirror');
-  const session = await JournalSession.open(file);
+  const session = await openIndependentJournal(file);
   try {
     const durable: IContent[] = [];
     for await (const entry of session.rows()) durable.push(entry.content);
