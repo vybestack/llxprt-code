@@ -157,4 +157,29 @@ describe('HistoryService replaceAll serialization', () => {
     ]);
     expect(service.getAll()).toStrictEqual([]);
   });
+
+  it('keeps the committed content, its identity and its origin when afterPublication rejects a replaceAll', async () => {
+    const service = new HistoryService();
+    const origin = { name: 'session' };
+    const summary = createUserMessage('committed-summary');
+    const candidate = createUserMessage('rejected-summary');
+    await service.replaceAll([summary], undefined, { origin });
+    const committedTokens = service.getTotalTokens();
+
+    await expect(
+      service.replaceAll([candidate], undefined, {
+        origin,
+        afterPublication: () => {
+          throw new Error('reject summary replacement');
+        },
+      }),
+    ).rejects.toThrow('reject summary replacement');
+
+    expect(service.getAll()).toStrictEqual([summary]);
+    expect(service.getAll()[0]).toBe(summary);
+    expect(service.getContentOrigin(summary)).toBe(origin);
+    expect(service.getContentOrigin(candidate)).toBeUndefined();
+    expect(service.getTotalTokens()).toBe(committedTokens);
+    await expectConsistentTokenCount(service);
+  });
 });

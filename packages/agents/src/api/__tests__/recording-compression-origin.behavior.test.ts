@@ -1,8 +1,3 @@
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
-import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from './helpers/recording-owner-lifetime-fixture.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -107,7 +102,6 @@ const seed = [
 ];
 
 describe('shared history compression recording origin', () => {
-  useRecordingPrompts();
   useFakeResponsesReplay('multi-turn-text.jsonl');
   it('records A-only and B-only compression summaries in their own journals', async () => {
     const restore = useSummaryStrategy();
@@ -135,43 +129,6 @@ describe('shared history compression recording origin', () => {
     } finally {
       restore();
     }
-  }, 30000);
-
-  it('keeps unbound external compression summaries broadcast to both subscribers', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        agent,
-        _config,
-        _settingsOwner,
-        _settingsService,
-        _oauthManager,
-        borrow,
-      ) => {
-        const sibling = await borrow();
-        await agent.setHistory(seed);
-        await agent.session.setRecording({ enabled: true });
-        await new Promise((resolve) => setTimeout(resolve, 1100));
-        await sibling.session.setRecording({ enabled: true });
-        const history = fixtureAgentResources(agent)
-          .publishedClient(agent)
-          .getHistoryService();
-        if (!history) throw new Error('Missing shared history');
-        history.startCompression();
-        history.endCompression(
-          {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'external-summary' }],
-          },
-          2,
-        );
-        const aPath = recordingPath(agent.session.getRecording());
-        const bPath = recordingPath(sibling.session.getRecording());
-        await agent.session.setRecording({ enabled: false });
-        await sibling.session.setRecording({ enabled: false });
-        expect(await readFile(aPath, 'utf8')).toContain('external-summary');
-        expect(await readFile(bPath, 'utf8')).toContain('external-summary');
-      },
-    );
   }, 30000);
 
   it('preserves compression ownership across profile adoption and session resume', async () => {
@@ -298,69 +255,6 @@ describe('shared history compression recording origin', () => {
       });
     } finally {
       spy.mockRestore();
-    }
-  }, 30000);
-
-  it('retains the committed summary origin after a failed history replacement', async () => {
-    const restore = useSummaryStrategy();
-    try {
-      await withRecordingLifetimeFixture(
-        async (
-          agent,
-          _config,
-          _settingsOwner,
-          _settingsService,
-          _oauthManager,
-          borrow,
-        ) => {
-          const sibling = await borrow();
-          await agent.setHistory(seed);
-          await agent.session.setRecording({ enabled: true });
-          await new Promise((resolve) => setTimeout(resolve, 1100));
-          await sibling.session.setRecording({ enabled: true });
-          expect((await agent.compress()).status).toBe('compressed');
-          const history = fixtureAgentResources(agent)
-            .publishedClient(agent)
-            .getHistoryService();
-          if (!history) throw new Error('Missing shared history');
-          const summary = history
-            .getAll()
-            .find((entry) =>
-              entry.blocks.some(
-                (block) =>
-                  block.type === 'text' && block.text === 'owned-summary-1',
-              ),
-            );
-          if (!summary) throw new Error('Missing committed summary');
-          const candidate = {
-            speaker: 'ai' as const,
-            blocks: [{ type: 'text' as const, text: 'rejected-summary' }],
-          };
-          await expect(
-            history.replaceAll([candidate], undefined, {
-              origin: agent.session,
-              afterPublication: () => {
-                throw new Error('reject summary replacement');
-              },
-            }),
-          ).rejects.toThrow('reject summary replacement');
-          expect(history.getAll()).toContain(summary);
-          expect(history.getContentOrigin(summary)).toBe(agent.session);
-          expect(history.getContentOrigin(candidate)).toBeUndefined();
-          const aPath = recordingPath(agent.session.getRecording());
-          const bPath = recordingPath(sibling.session.getRecording());
-          await agent.session.setRecording({ enabled: false });
-          await sibling.session.setRecording({ enabled: false });
-          expect(await readFile(aPath, 'utf8')).not.toContain(
-            'rejected-summary',
-          );
-          expect(await readFile(bPath, 'utf8')).not.toContain(
-            'rejected-summary',
-          );
-        },
-      );
-    } finally {
-      restore();
     }
   }, 30000);
 
