@@ -15,7 +15,7 @@ const createSessionOwner = SessionClientOwner.create;
 type CreateArgs = Parameters<typeof SessionClientOwner.create>;
 type AcquireArgs = Parameters<typeof acquireSessionClient>;
 
-/** `SessionClientOwner.create` without the credential authority and the borrowed-client position. */
+/** `SessionClientOwner.create` without the credential authority. */
 export type CapturedOwnerArgs = [
   config: CreateArgs[0],
   readTaskSchemaPolicy: CreateArgs[1],
@@ -27,7 +27,7 @@ export type CapturedOwnerArgs = [
   settingsOwner: CreateArgs[7],
   contentGeneratorFactory: CreateArgs[8],
   tokenizerFactory: CreateArgs[9],
-  messageBus?: CreateArgs[12],
+  messageBus?: CreateArgs[11],
 ];
 
 /** `acquireSessionClient` without the credential authority. */
@@ -100,7 +100,6 @@ export async function createCapturedSessionOwner(
     contentGeneratorFactory,
     tokenizerFactory,
     new CredentialAuthority(),
-    undefined,
     messageBus,
   );
   builtClients.set(owner, built);

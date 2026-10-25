@@ -90,28 +90,6 @@ export async function cleanupFailedAdoption(
   );
 }
 
-export async function cleanupFailedMediaAssembly(
-  error: unknown,
-  closePreflight: (() => void | Promise<void>) | undefined,
-  closeMedia: (() => Promise<void>) | undefined,
-  closeMcp: (() => Promise<void>) | undefined,
-): Promise<never> {
-  const clients = await Promise.allSettled([
-    Promise.resolve().then(closePreflight),
-  ]);
-  const resources = await Promise.allSettled([
-    Promise.resolve().then(closeMedia),
-    Promise.resolve().then(closeMcp),
-  ]);
-  const failures = rejections([...clients, ...resources]);
-  if (failures.length > 0)
-    throw new AggregateError(
-      [error, ...failures],
-      'Adopted media assembly cleanup failed',
-    );
-  throw error;
-}
-
 export async function cleanupFailedForegroundWorkspace(
   primary: unknown,
   closeMemory: () => Promise<void>,

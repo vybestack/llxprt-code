@@ -31,7 +31,6 @@ import type {
   ProviderSwitcher,
   WorkspaceTrustControlPort,
 } from '@vybestack/llxprt-code-core';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
@@ -176,8 +175,6 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
   protected activationOAuth: OAuthManager | null = null;
   protected activationReadKind!: () => RuntimeKind | undefined;
   protected activationProviderLifetime!: 'borrowed' | (() => Promise<void>);
-  protected activationSuppliedClient: AgentClientContract | undefined;
-  protected activationMcp: McpRuntimeOwner | undefined;
   protected activationFilesystem: WorkspaceFilesystemOwner | undefined;
   protected activationMemory: WorkspaceMemoryOwner | undefined;
   protected activationSettingsOwner: SessionSettingsOwner | undefined;
@@ -185,22 +182,13 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
     'transferred';
   protected activationTrust: WorkspaceTrustControlPort | undefined;
   protected activationTrustCleanup: (() => Promise<void>) | undefined;
-  protected activationTokenizer: RuntimeTokenizerFactory | undefined;
-  protected activationContent:
-    | RuntimeContentGeneratorFactory<ContentGenerator>
-    | undefined;
   protected activationFiles: ProviderFileLifecycle | undefined;
   protected activationBus: MessageBus | undefined;
-  protected activationMemoryOwnership: 'borrowed' | 'transferred' = 'borrowed';
   protected activationSwitch!: ProviderSwitcher;
   readonly #activationRelease = new AcquisitionRelease();
 
   protected async acquireActivation(): Promise<void> {
     try {
-      this.activationSuppliedClient?.assertConfig(this.config);
-      this.activationSuppliedClient?.assertProviderManager(
-        this.activationManager,
-      );
       this.acquireActivationTrust();
       this.acquireActivationSettings();
       this.acquireActivationWorkspace();
@@ -220,15 +208,13 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
   }
 
   private acquireActivationTrust(): void {
-    const mcp = this.activationMcp;
-    mcp?.assertConfig(this.config, mcp.messageBus);
     const ownedTrust =
-      mcp === undefined && this.activationTrust === undefined
+      this.activationTrust === undefined
         ? new WorkspaceTrustLifecycle({
             localTrust: this.config.initialWorkspaceTrust,
           })
         : undefined;
-    const trust = mcp?.trust ?? this.activationTrust ?? ownedTrust;
+    const trust = this.activationTrust ?? ownedTrust;
     if (trust === undefined)
       throw new Error('Preflight requires an explicit trust authority');
     this.workspaceTrust = trust;
@@ -236,7 +222,7 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
       ownedTrust === undefined
         ? this.activationTrustCleanup
         : () => ownedTrust.dispose();
-    if (mcp === undefined && this.trustCleanup !== undefined)
+    if (this.trustCleanup !== undefined)
       this.#activationRelease.acquire('settings', this.trustCleanup);
   }
 
@@ -250,20 +236,16 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
     if (this.activationSettingsOwnership === 'transferred')
       this.#activationRelease.acquire('settings', () => owner.dispose());
     owner.bindTelemetry(this.config);
-    if (this.activationSuppliedClient === undefined) {
-      const media = new SessionMediaOwner(
-        this.config.projectTempDir,
-        this.config.getMediaStoreQuotaByteLimit(),
-      );
-      this.mediaOwner = media;
-      this.#activationRelease.acquire('settings', () => media.dispose());
-    }
+    const media = new SessionMediaOwner(
+      this.config.projectTempDir,
+      this.config.getMediaStoreQuotaByteLimit(),
+    );
+    this.mediaOwner = media;
+    this.#activationRelease.acquire('settings', () => media.dispose());
   }
 
   private acquireActivationWorkspace(): void {
-    const mcp = this.activationMcp;
     const filesystem =
-      mcp?.workspaceFilesystem ??
       this.activationFilesystem ??
       new WorkspaceFilesystemOwner({
         targetDir: this.config.getTargetDir(),
@@ -272,34 +254,24 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
         isTrusted: () => this.workspaceTrust.isTrustedFolder(),
       });
     this.workspaceFilesystem = filesystem;
-    this.ownsFilesystem = mcp === undefined;
-    if (this.ownsFilesystem)
-      this.#activationRelease.acquire('settings', () => filesystem.dispose());
-    let memoryOwnership = this.activationMemoryOwnership;
-    if (mcp !== undefined) memoryOwnership = 'borrowed';
-    else if (this.activationMemory === undefined)
-      memoryOwnership = 'transferred';
+    this.ownsFilesystem = true;
+    this.#activationRelease.acquire('settings', () => filesystem.dispose());
     const memory =
-      mcp?.workspaceMemory ??
       this.activationMemory ??
       assembleWorkspaceMemory(this.config, filesystem, this.workspaceTrust);
     this.workspaceMemory = memory;
-    this.workspaceMemoryOwnership = memoryOwnership;
-    this.ownsMemory = memoryOwnership === 'transferred';
-    if (this.ownsMemory)
-      this.#activationRelease.acquire('settings', () => memory.dispose());
-    const definitions =
-      mcp?.workspaceDefinitions ??
-      new WorkspaceDefinitionOwner(
-        this.config.profileDirectory ??
-          join(this.config.globalConfigRoot, 'profiles'),
-        this.config.subagentDirectory ??
-          join(this.config.globalConfigRoot, 'subagents'),
-      );
+    this.workspaceMemoryOwnership = 'transferred';
+    this.ownsMemory = true;
+    this.#activationRelease.acquire('settings', () => memory.dispose());
+    const definitions = new WorkspaceDefinitionOwner(
+      this.config.profileDirectory ??
+        join(this.config.globalConfigRoot, 'profiles'),
+      this.config.subagentDirectory ??
+        join(this.config.globalConfigRoot, 'subagents'),
+    );
     this.workspaceDefinitions = definitions;
-    this.ownsDefinitions = mcp === undefined;
-    if (this.ownsDefinitions)
-      this.#activationRelease.acquire('settings', () => definitions.dispose());
+    this.ownsDefinitions = true;
+    this.#activationRelease.acquire('settings', () => definitions.dispose());
     this.providerFileLifecycle =
       this.activationFiles ??
       new ProviderFileLifecycle({
@@ -310,9 +282,8 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
   }
 
   private async acquireActivationClient(): Promise<void> {
-    const store =
-      this.activationSuppliedClient?.mediaStore ?? this.mediaOwner?.store;
-    if (store === undefined)
+    const media = this.mediaOwner;
+    if (media === undefined)
       throw new Error('Preflight requires an explicit session media store');
     const files = this.providerFileLifecycle;
     if (files === undefined)
@@ -323,20 +294,15 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
       this.settingsOwner,
       this.activationManager,
       this.activationOAuth ?? undefined,
-      this.activationContent ?? createRuntimeContentGeneratorFactory(),
-      configureProviderTokenizer(
-        this.activationManager,
-        this.activationTokenizer,
-      ),
+      createRuntimeContentGeneratorFactory(),
+      configureProviderTokenizer(this.activationManager, undefined),
       files,
-      store,
+      media.store,
       undefined,
-      this.activationMcp?.readInstructions ?? (() => undefined),
+      () => undefined,
       this.workspaceFilesystem.paths,
       this.foregroundAuthority,
       this.activationBus,
-      undefined,
-      this.activationSuppliedClient,
     );
     this.ownedSessionClient = client;
     this.#activationRelease.acquire('manager', () => client.dispose());
@@ -365,18 +331,13 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
         this.activationOAuth?.composeRetryOperations(provider) ?? {},
       (scope) => cleanupProviderScope(files, scope),
     );
-    if (this.activationMcp !== undefined) {
-      client.bindMcpRuntime(this.activationMcp);
-      client.bindHooks();
-    } else {
-      client.bindDefinitionReads(
-        this.workspaceDefinitions.profileReads,
-        this.workspaceDefinitions.subagentReads,
-      );
-      client.bindWorkspaceInstructions(this.workspaceMemory);
-    }
+    client.bindDefinitionReads(
+      this.workspaceDefinitions.profileReads,
+      this.workspaceDefinitions.subagentReads,
+    );
+    client.bindWorkspaceInstructions(this.workspaceMemory);
     this.oauthManager = this.activationOAuth ?? undefined;
-    this.messageBus = this.activationBus ?? this.activationMcp?.messageBus;
+    this.messageBus = this.activationBus;
     this.activationSwitch = assembleProviderSwitch(
       this.config,
       this.activationSettings,

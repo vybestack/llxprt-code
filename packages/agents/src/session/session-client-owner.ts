@@ -34,7 +34,6 @@ import {
 import { finishCleanup } from './session-client-cleanup.js';
 import { SessionImageAdmission } from './session-image-admission.js';
 
-import { assertBorrowedClientAcquisition } from './session-client-binding.js';
 import { acceptSkillPublication } from './session-skill-publication.js';
 /**
  * @license
@@ -259,7 +258,6 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     readonly contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
     readonly tokenizerFactory: RuntimeTokenizerFactory,
     private readonly authority: CredentialAuthority,
-    protected readonly borrowedClient?: AgentClientContract,
     protected readonly borrowedBus?: MessageBus,
   ) {
     super();
@@ -273,12 +271,6 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
           this.mcpBindingToken,
           reload,
         ),
-    );
-    assertBorrowedClientAcquisition(
-      borrowedClient,
-      config,
-      manager,
-      mediaStore,
     );
     this.initializeTextGeneration();
     this.modelRegistry = new ModelRegistry(this.fetch);
@@ -310,7 +302,6 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
     tokenizerFactory: RuntimeTokenizerFactory,
     authority: CredentialAuthority,
-    borrowedClient?: AgentClientContract,
     borrowedBus?: MessageBus,
   ): Promise<SessionClientOwner> {
     const owner = new SessionClientOwner(
@@ -325,7 +316,6 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
       contentGeneratorFactory,
       tokenizerFactory,
       authority,
-      borrowedClient,
       borrowedBus,
     );
     await owner.initializeInitialClientBinding();
@@ -469,11 +459,10 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
 
   private bindSessionApproval(workspace: McpRuntimeOwner) {
     const policy =
-      this.borrowedClient === undefined && this.borrowedBus === undefined
+      this.borrowedBus === undefined
         ? new SessionPolicyOwner(workspace.policyOwner.workspace, this.config)
         : workspace.policyOwner.session;
-    this.ownsSessionPolicy =
-      this.borrowedClient === undefined && this.borrowedBus === undefined;
+    this.ownsSessionPolicy = this.borrowedBus === undefined;
     this.sessionPolicy = policy;
     return this.policyWrites.bind(
       policy,

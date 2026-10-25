@@ -60,7 +60,7 @@ export function captureSessionRuntimeState(
   });
 }
 
-export function bindClientTokenization(
+function bindClientTokenization(
   client: AgentClientContract,
   tokenizerFactory: RuntimeTokenizerFactory,
 ): void {
@@ -164,24 +164,6 @@ export function captureGenerationState(
   });
 }
 
-export function assertBorrowedClientAcquisition(
-  borrowedClient: AgentClientContract | undefined,
-  config: Config,
-  manager: RuntimeProviderManager,
-  mediaStore: LocalMediaStore,
-): void {
-  if (borrowedClient !== undefined) {
-    borrowedClient.assertConfig(config);
-    borrowedClient.assertProviderManager(manager);
-    if (!borrowedClient.isInitialized())
-      throw new Error('Borrowed session client must be initialized');
-    if (borrowedClient.mediaStore !== mediaStore)
-      throw new Error(
-        'Borrowed session client must retain its explicit media store',
-      );
-  }
-}
-
 export async function acquireSessionClient(
   config: Config,
   settings: SettingsService,
@@ -198,7 +180,6 @@ export async function acquireSessionClient(
   authority: CredentialAuthority,
   messageBus?: MessageBus,
   imageOperation?: SessionImageSelection['imageOperation'],
-  borrowedClient?: AgentClientContract,
 ): Promise<SessionClientOwner> {
   const client = await SessionClientOwner.create(
     config,
@@ -212,7 +193,6 @@ export async function acquireSessionClient(
     contentGeneratorFactory,
     tokenizerFactory,
     authority,
-    borrowedClient,
     messageBus,
   );
   try {

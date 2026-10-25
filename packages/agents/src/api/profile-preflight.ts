@@ -706,7 +706,6 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
         this.activationTrustCleanup = trustCleanup;
         this.activationFiles = preflight.#files;
         this.activationBus = preflight.#bus;
-        this.activationMemoryOwnership = 'transferred';
         this.foregroundPolicy = policy;
         this.foregroundSettings = preflight.#settings;
         this.foregroundManager = preflight.#manager;

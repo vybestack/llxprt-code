@@ -36,7 +36,6 @@ export async function prepareNewSessionClient(
   factory: RuntimeContentGeneratorFactory<ContentGenerator>,
   settings: SessionSettingsOwner,
   previous: AgentClientContract,
-  borrowed: AgentClientContract | undefined,
   ledger: OwnedClientLedger,
   acquire: (state: AgentRuntimeState) => AgentClientContract,
   bind: (client: AgentClientContract, state: AgentRuntimeState) => void,
@@ -64,7 +63,7 @@ export async function prepareNewSessionClient(
     },
     retire: async () => {
       await telemetry.retire();
-      if (previous !== borrowed) await ledger.dispose(previous);
+      await ledger.dispose(previous);
     },
     discard: async () => {
       const results = await Promise.allSettled([
@@ -92,7 +91,6 @@ export async function replaceSessionClient(
   acquire: (state: AgentRuntimeState) => AgentClientContract,
   bind: (client: AgentClientContract, state: AgentRuntimeState) => void,
   publish: (client: AgentClientContract, state: AgentRuntimeState) => void,
-  borrowed: AgentClientContract | undefined,
 ): Promise<void> {
   const logger = new DebugLogger('llxprt:session:refreshAuth');
   const { history, historyService } = await extractExistingState(
@@ -124,13 +122,11 @@ export async function replaceSessionClient(
   next.getHistoryService()?.setTokenizerFactory({
     getTokenizer: (provider, model) => tokenizer.getTokenizer(provider, model),
   });
-  if (previous !== borrowed) {
-    // The new client reuses the previous client's HistoryService. Rebind the
-    // previous chat to a throwaway service so disposing it clears that one
-    // instead of the shared conversation.
-    previous.prepareHistoryRebind(new HistoryService())();
-    await ledger.dispose(previous);
-  }
+  // The new client reuses the previous client's HistoryService. Rebind the
+  // previous chat to a throwaway service so disposing it clears that one
+  // instead of the shared conversation.
+  previous.prepareHistoryRebind(new HistoryService())();
+  await ledger.dispose(previous);
 }
 
 export async function prepareBoundProfileClient(

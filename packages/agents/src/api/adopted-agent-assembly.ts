@@ -144,7 +144,7 @@ export abstract class AdoptedAgentAssembly extends AdoptedSessionAssembly {
     this.adoptAuthority = authority;
     this.adoptMcp = await this.#adoptConstructMcp();
     try {
-      this.adoptMedia = await acquireAdoptedMedia(this.config, undefined);
+      this.adoptMedia = acquireAdoptedMedia(this.config);
       this.#adoptAcquireProviders();
       this.#adoptAcquireOAuth();
     } catch (primary) {

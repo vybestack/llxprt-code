@@ -51,7 +51,6 @@ import {
   bindClientDefinitions,
   bindClientModels,
   bindClientSettings,
-  bindClientTokenization,
   captureGenerationState,
   captureSessionRuntimeState,
   requireSessionPolicy,
@@ -92,7 +91,6 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
   protected abstract readonly settingsOwner: SessionSettingsOwner;
   abstract readonly contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>;
   abstract readonly tokenizerFactory: RuntimeTokenizerFactory;
-  protected abstract readonly borrowedClient?: AgentClientContract;
   abstract readonly toolCatalog: SessionToolCatalogOwner;
   abstract readonly modelRegistry: ModelRegistry;
   protected get fetch(): NetworkFetch {
@@ -116,11 +114,7 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
       this.config.getSessionId() || `runtime-${randomUUID()}`,
       this.config.getSessionId(),
     );
-    this.client = this.borrowedClient ?? this.acquireClient(this.runtimeState);
-    if (this.borrowedClient !== undefined) {
-      bindClientTokenization(this.borrowedClient, this.tokenizerFactory);
-      this.initialBindingComplete = true;
-    }
+    this.client = this.acquireClient(this.runtimeState);
   }
   protected async initializeInitialClientBinding(): Promise<void> {
     if (!this.initialBindingComplete) {
@@ -451,7 +445,6 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
         this.contentGeneratorFactory,
         this.settingsOwner,
         this.client,
-        this.borrowedClient,
         this.ownedClients,
         (state) => this.acquireClient(state),
         (client, state) => this.bindCreatedClient(client, state),
@@ -479,15 +472,6 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
   private async replaceClient(): Promise<void> {
     const sessionId = this.runtimeState.sessionId;
     const previous = this.client;
-    const canReuseBorrowed = previous === this.borrowedClient;
-    if (
-      canReuseBorrowed &&
-      this.runtimeState.model === this.settingsOwner.readSelectedModel() &&
-      this.runtimeState.provider === this.settingsOwner.readSelectedProvider()
-    ) {
-      await previous.setTools();
-      return;
-    }
     await replaceSessionClient(
       previous,
       this.captureRuntimeState(this.runtimeState.runtimeId, sessionId),
@@ -501,7 +485,6 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
         this.runtimeState = state;
         this.config.setFallbackMode(false);
       },
-      this.borrowedClient,
     );
   }
 
@@ -542,10 +525,7 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     const ledger = this.ownedClients;
     return {
       client: prepared.client,
-      prepareHistoryCommit:
-        previous === this.borrowedClient
-          ? async () => () => {}
-          : prepared.prepareHistoryCommit,
+      prepareHistoryCommit: prepared.prepareHistoryCommit,
       publish: () => {
         if (this.client !== previous)
           throw new Error(
