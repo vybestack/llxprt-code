@@ -1,65 +1,61 @@
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import {
-  Config,
-  ConfigParameters,
-} from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import {
-  ProviderFileLifecycle,
-  FakeProvider,
-} from '@vybestack/llxprt-code-providers';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../adoption-release.js';
-import { randomUUID } from 'node:crypto';
-import {
-  runCleanupSteps,
-  cleanupAfterFailure,
-} from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
-import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { fileURLToPath } from 'node:url';
-import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import {
-  createAgentRuntimeFactoryBindings,
-  AgentRuntimeFactoryBindings,
-} from '../runtimeFactories.js';
-import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
-import { executeProviderActivation } from '../providerActivationExecutor.js';
-import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
-import { assembleModelSelection } from '../model-selection.js';
-import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
-import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
-import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import {
+  Config,
+  type RuntimeTokenizerFactory,
+} from '@vybestack/llxprt-code-core';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { AgentEventType } from '@vybestack/llxprt-code-core/core/turn.js';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import {
+  FakeProvider,
+  ProviderFileLifecycle,
+} from '@vybestack/llxprt-code-providers';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  cleanupAfterFailure,
+  runCleanupSteps,
+} from '../../core/subagent-cleanup.js';
+import type { SessionClientOwner } from '../../session/session-client-owner.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
+import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
+import { assembleModelSelection } from '../model-selection.js';
+import {
+  acquirePreferredOAuth,
+  acquirePreferredProviderManager,
+  preparePreferredProviderCompletion,
+} from '../preferred-provider-acquisition.js';
+import { executeProviderActivation } from '../providerActivationExecutor.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  createCapturedSessionOwner,
+  ownerClients,
+} from './helpers/session-client-capture.js';
 
 function replacement(workingDir: string): FakeProvider {
   const provider = new FakeProvider(
@@ -68,6 +64,222 @@ function replacement(workingDir: string): FakeProvider {
   );
   provider.name = 'replacement';
   return provider;
+}
+
+/**
+ * Holds the tokenizer preparation the session client owner awaits while it
+ * replaces its client for the `replacement` provider, then fails it. The owner
+ * takes the tokenizer factory as a parameter production also fills.
+ */
+class ReplacementHold {
+  private notifyEntered: () => void = () => {};
+  private openGate: () => void = () => {};
+  private readonly gate = new Promise<void>((resolve) => {
+    this.openGate = resolve;
+  });
+  readonly entered = new Promise<void>((resolve) => {
+    this.notifyEntered = resolve;
+  });
+
+  constructor(private readonly failure: Error) {}
+
+  release(): void {
+    this.openGate();
+  }
+
+  wrap(inner: RuntimeTokenizerFactory): RuntimeTokenizerFactory {
+    return {
+      getTokenizer: (provider, model) => inner.getTokenizer(provider, model),
+      estimatePrompt: (request) => inner.estimatePrompt(request),
+      claimsModel: (model) => inner.claimsModel?.(model) ?? false,
+      getEstimatorFamily: (model) => inner.getEstimatorFamily?.(model),
+      prepareTokenizer: async (provider, model) => {
+        if (provider === 'replacement') {
+          this.notifyEntered();
+          await this.gate;
+          throw this.failure;
+        }
+        await inner.prepareTokenizer?.(provider, model);
+      },
+    };
+  }
+}
+
+interface Root {
+  readonly config: Config;
+  readonly settings: SettingsService;
+  readonly settingsOwner: SessionSettingsOwner;
+  readonly manager: ReturnType<typeof acquirePreferredProviderManager>;
+  readonly oauth: ReturnType<typeof acquirePreferredOAuth>;
+  readonly owner: SessionClientOwner;
+  readonly close: () => Promise<void>;
+}
+
+/** The client the owner currently serves: the last one its factory returned. */
+function currentClient(root: Root): AgentClientContract {
+  const clients = ownerClients(root.owner);
+  return clients[clients.length - 1];
+}
+
+async function openRoot(
+  authority: CredentialAuthority,
+  hold?: ReplacementHold,
+): Promise<Root> {
+  const directory = await realpath(
+    await mkdtemp(join(tmpdir(), 'switch-transaction-')),
+  );
+  const selection = toConfigParameters({
+    provider: 'fake',
+    model: 'fake-model',
+    sessionId: randomUUID(),
+    workingDir: directory,
+  });
+  const config = new Config({
+    ...selection,
+    interactive: true,
+    includeDirectories: [
+      ...(selection.includeDirectories ?? []),
+      process.cwd(),
+    ],
+  });
+  const settings = new SettingsService();
+  for (const [key, value] of Object.entries(config.getInitialSettings()))
+    settings.set(key, value);
+  const policy = new RuntimePolicyOwner(config);
+  injectConfirmationForcingPolicy(policy.session.confirmation);
+  const mcp = await buildTestMcpRuntime(
+    config,
+    policy.session.messageBus,
+    {},
+    undefined,
+    policy,
+  );
+  const runtimeId = 'switch-transaction-' + randomUUID();
+  const release = new AcquisitionRelease();
+  const settingsOwner = new SessionSettingsOwner(settings);
+  release.acquire('settings', () => settingsOwner.dispose());
+  settingsOwner.initializeProviderSelection(
+    config.getProvider(),
+    config.getModel(),
+  );
+  settingsOwner.bindTelemetry(config);
+  const files = new ProviderFileLifecycle({
+    maxFiles: 100,
+    maxBytes: 512 * 1024 * 1024,
+  });
+  for (const scope of [runtimeId, config.getSessionId()])
+    release.acquire('files', () => releaseAdoptedFileScope(files, scope));
+  const manager = acquirePreferredProviderManager(
+    config,
+    settings,
+    settingsOwner,
+    files,
+    runtimeId,
+    authority,
+    release,
+  );
+  const oauth = acquirePreferredOAuth(
+    undefined,
+    policy.session.messageBus,
+    config,
+    settings,
+    manager,
+    runtimeId,
+    mcp.profileDefinitions,
+    authority,
+    release,
+    undefined,
+  );
+  const tokenizer = configureProviderTokenizer(manager);
+  const media = new SessionMediaOwner(
+    config.projectTempDir,
+    1024 * 1024 * 1024,
+  );
+  const owner = await createCapturedSessionOwner(
+    config,
+    assembleTaskSchemaPolicy(settings),
+    manager,
+    buildAgentClientFactory(),
+    media.store,
+    mcp.readInstructions,
+    mcp.workspacePaths,
+    settingsOwner,
+    createRuntimeContentGeneratorFactory(),
+    hold === undefined ? tokenizer : hold.wrap(tokenizer),
+  );
+  owner.bindMcpRuntime(mcp);
+  owner.bindProviderFiles(files, (provider) =>
+    oauth.composeRetryOperations(provider),
+  );
+  owner.bindHooks();
+  const root: Root = {
+    config,
+    settings,
+    settingsOwner,
+    manager,
+    oauth,
+    owner,
+    close: () =>
+      runCleanupSteps([
+        () => owner.dispose(),
+        () => release.close(),
+        () => media.dispose(),
+        () => mcp.dispose(),
+        () => config.dispose(),
+        () => rm(directory, { recursive: true, force: true }),
+      ]),
+  };
+  try {
+    await preparePreferredProviderCompletion(
+      config,
+      settings,
+      settingsOwner,
+      manager,
+      oauth,
+      runtimeId,
+      tokenizer,
+      undefined,
+    );
+    await mcp.initialize();
+    const activation = await executeProviderActivation(
+      config,
+      { provider: config.getProvider(), model: config.getModel() },
+      assembleProviderSwitch(
+        config,
+        settings,
+        manager,
+        oauth,
+        () => 'agent',
+        () => owner.refreshAuth(),
+        settingsOwner,
+      ),
+      settings,
+      manager,
+      (method) => owner.refreshAuth(method),
+      assembleModelSelection(settingsOwner),
+    );
+    if (activation.authFailed) throw activation.authError;
+    await owner.initializeTools();
+    await currentClient(root).startChat();
+  } catch (primary) {
+    return cleanupAfterFailure(primary, root.close);
+  }
+  return root;
+}
+
+async function continueTurn(
+  client: AgentClientContract,
+  message: string,
+): Promise<void> {
+  const stream = client.sendMessageStream(
+    message,
+    new AbortController().signal,
+    'switch-transaction-' + randomUUID(),
+  );
+  for await (const event of stream) {
+    if (event.type === AgentEventType.Error)
+      throw new Error(event.value.error.message);
+  }
 }
 
 describe('provider switch transaction ownership', () => {
@@ -84,504 +296,62 @@ describe('provider switch transaction ownership', () => {
     await rm(promptDirectory, { recursive: true, force: true });
   });
 
+  useFakeResponsesReplay('multi-turn-text.jsonl');
   const firstCredentials = useOwnedCredentials();
-  let firstCallerConfig: Config;
-  let firstCallerSettings: SettingsService;
-  let firstCallerSettingsOwner: SessionSettingsOwner;
-  let firstCallerPolicy: RuntimePolicyOwner;
-  let firstCallerMcp: McpRuntimeOwner;
-  let firstCallerManager: ReturnType<typeof acquirePreferredProviderManager>;
-  let firstCallerOwner: SessionClientOwner;
-  let firstCallerClose: () => Promise<void>;
-  let firstCallerFactories: AgentRuntimeFactoryBindings;
-  let firstCallerRelease: AcquisitionRelease;
-  let firstCallerFiles: ProviderFileLifecycle;
-  let firstCallerRuntimeId: string;
-  let firstCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let firstCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
-  let firstCallerContent: ReturnType<
-    typeof createRuntimeContentGeneratorFactory
-  >;
-
-  async function openfirstCaller(
-    fixture: string,
-    overrides: Readonly<Partial<AgentConfig>> = {},
-    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
-    skillSettings: Pick<
-      ConfigParameters,
-      'enableExtensionReloading' | 'storageRoot'
-    > = {},
-    extensionLoader?: ExtensionLoader,
-    skillOperations?: WorkspaceSkillAssemblyOperations,
-  ): Promise<void> {
-    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('./fixtures/' + fixture, import.meta.url),
-    );
-    const directory = await realpath(
-      await mkdtemp(join(tmpdir(), 'firstCaller-adoption-')),
-    );
-    const selection: AgentConfig = {
-      provider: 'fake',
-      model: 'fake-model',
-      sessionId: randomUUID(),
-      ...overrides,
-      workingDir:
-        overrides.workingDir === undefined
-          ? directory
-          : await realpath(overrides.workingDir),
-    };
-    const parameters = { ...toConfigParameters(selection), ...skillSettings };
-    parameters.interactive = true;
-    if (overrides.hooks !== undefined) parameters.enableHooks = true;
-    if (
-      overrides.filesystemOwner === undefined &&
-      (overrides.harness?.includeProcessCwd ?? true)
-    )
-      parameters.includeDirectories = [
-        ...(parameters.includeDirectories ?? []),
-        process.cwd(),
-      ];
-    firstCallerConfig = new Config(parameters);
-    firstCallerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...suppliedFactories,
-    };
-    firstCallerSettings = new SettingsService();
-    for (const [key, value] of Object.entries(
-      firstCallerConfig.getInitialSettings(),
-    ))
-      firstCallerSettings.set(key, value);
-    firstCallerPolicy = new RuntimePolicyOwner(firstCallerConfig);
-    injectConfirmationForcingPolicy(firstCallerPolicy.session.confirmation);
-    firstCallerMcp = await buildTestMcpRuntime(
-      firstCallerConfig,
-      firstCallerPolicy.session.messageBus,
-      overrides,
-      extensionLoader,
-      firstCallerPolicy,
-      skillOperations,
-    );
-    acquirefirstCallerProviders();
-    const media = new SessionMediaOwner(
-      firstCallerConfig.projectTempDir,
-      1024 * 1024 * 1024,
-    );
-    firstCallerOwner = await createCapturedSessionOwner(
-      firstCallerConfig,
-      assembleTaskSchemaPolicy(firstCallerSettings),
-      firstCallerManager,
-      firstCallerFactories.agentClientFactory,
-      media.store,
-      firstCallerMcp.readInstructions,
-      firstCallerMcp.workspacePaths,
-      firstCallerSettingsOwner,
-      firstCallerContent,
-      firstCallerTokenizer,
-    );
-    firstCallerOwner.bindMcpRuntime(firstCallerMcp);
-    firstCallerOwner.bindProviderFiles(firstCallerFiles, (provider) =>
-      firstCallerOAuth.composeRetryOperations(provider),
-    );
-    firstCallerOwner.bindHooks();
-    firstCallerClose = settleEngineRelease.bind(
-      undefined,
-      [
-        () => firstCallerOwner.dispose(),
-        () => firstCallerRelease.close(),
-        () => media.dispose(),
-        () => firstCallerMcp.dispose(),
-        () => firstCallerConfig.dispose(),
-        () => rm(directory, { recursive: true, force: true }),
-      ],
-      previousReplay,
-    );
-    try {
-      await preparePreferredProviderCompletion(
-        firstCallerConfig,
-        firstCallerSettings,
-        firstCallerSettingsOwner,
-        firstCallerManager,
-        firstCallerOAuth,
-        firstCallerRuntimeId,
-        firstCallerTokenizer,
-        undefined,
-      );
-      await firstCallerMcp.initialize();
-      await activatefirstCallerClient(selection.activation);
-    } catch (primary) {
-      await cleanupAfterFailure(primary, firstCallerClose);
-    }
-  }
-  function acquirefirstCallerProviders(): void {
-    firstCallerRuntimeId = 'firstCaller-' + randomUUID();
-    firstCallerRelease = new AcquisitionRelease();
-    firstCallerSettingsOwner = new SessionSettingsOwner(firstCallerSettings);
-    firstCallerRelease.acquire('settings', () =>
-      firstCallerSettingsOwner.dispose(),
-    );
-    firstCallerSettingsOwner.initializeProviderSelection(
-      firstCallerConfig.getProvider(),
-      firstCallerConfig.getModel(),
-    );
-    firstCallerSettingsOwner.bindTelemetry(firstCallerConfig);
-    firstCallerFiles = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
-    });
-    for (const scope of [
-      firstCallerRuntimeId,
-      firstCallerConfig.getSessionId(),
-    ])
-      firstCallerRelease.acquire('files', () =>
-        releaseAdoptedFileScope(firstCallerFiles, scope),
-      );
-    firstCallerManager = acquirePreferredProviderManager(
-      firstCallerConfig,
-      firstCallerSettings,
-      firstCallerSettingsOwner,
-      firstCallerFiles,
-      firstCallerRuntimeId,
-      firstCredentials().authority,
-      firstCallerRelease,
-    );
-    const factoriesTokenizer = configureProviderTokenizer(firstCallerManager);
-    const factoriesContent = createRuntimeContentGeneratorFactory();
-    firstCallerTokenizer = factoriesTokenizer;
-    firstCallerContent = factoriesContent;
-    firstCallerOAuth = acquirePreferredOAuth(
-      undefined,
-      firstCallerPolicy.session.messageBus,
-      firstCallerConfig,
-      firstCallerSettings,
-      firstCallerManager,
-      firstCallerRuntimeId,
-      firstCallerMcp.profileDefinitions,
-      firstCredentials().authority,
-      firstCallerRelease,
-      undefined,
-    );
-  }
-  async function activatefirstCallerClient(
-    intent: ProviderActivationIntent = {
-      provider: firstCallerConfig.getProvider(),
-      model: firstCallerConfig.getModel(),
-    },
-  ): Promise<void> {
-    const activation = await executeProviderActivation(
-      firstCallerConfig,
-      intent,
-      assembleProviderSwitch(
-        firstCallerConfig,
-        firstCallerSettings,
-        firstCallerManager,
-        firstCallerOAuth,
-        () => 'agent',
-        () => firstCallerOwner.refreshAuth(),
-        firstCallerSettingsOwner,
-      ),
-      firstCallerSettings,
-      firstCallerManager,
-      (method) => firstCallerOwner.refreshAuth(method),
-      assembleModelSelection(firstCallerSettingsOwner),
-    );
-    requireCallerActivation(activation);
-    await firstCallerOwner.initializeTools();
-    await capturedSessionClient(firstCallerOwner).startChat();
-  }
-
   const secondCredentials = useOwnedCredentials();
-  let secondCallerConfig: Config;
-  let secondCallerSettings: SettingsService;
-  let secondCallerSettingsOwner: SessionSettingsOwner;
-  let secondCallerPolicy: RuntimePolicyOwner;
-  let secondCallerMcp: McpRuntimeOwner;
-  let secondCallerManager: ReturnType<typeof acquirePreferredProviderManager>;
-  let secondCallerOwner: SessionClientOwner;
-  let secondCallerClose: () => Promise<void>;
-  let secondCallerFactories: AgentRuntimeFactoryBindings;
-  let secondCallerRelease: AcquisitionRelease;
-  let secondCallerFiles: ProviderFileLifecycle;
-  let secondCallerRuntimeId: string;
-  let secondCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let secondCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
-  let secondCallerContent: ReturnType<
-    typeof createRuntimeContentGeneratorFactory
-  >;
-
-  async function opensecondCaller(
-    fixture: string,
-    overrides: Readonly<Partial<AgentConfig>> = {},
-    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
-    skillSettings: Pick<
-      ConfigParameters,
-      'enableExtensionReloading' | 'storageRoot'
-    > = {},
-    extensionLoader?: ExtensionLoader,
-    skillOperations?: WorkspaceSkillAssemblyOperations,
-  ): Promise<void> {
-    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('./fixtures/' + fixture, import.meta.url),
-    );
-    const directory = await realpath(
-      await mkdtemp(join(tmpdir(), 'secondCaller-adoption-')),
-    );
-    const selection: AgentConfig = {
-      provider: 'fake',
-      model: 'fake-model',
-      sessionId: randomUUID(),
-      ...overrides,
-      workingDir:
-        overrides.workingDir === undefined
-          ? directory
-          : await realpath(overrides.workingDir),
-    };
-    const parameters = { ...toConfigParameters(selection), ...skillSettings };
-    parameters.interactive = true;
-    if (overrides.hooks !== undefined) parameters.enableHooks = true;
-    if (
-      overrides.filesystemOwner === undefined &&
-      (overrides.harness?.includeProcessCwd ?? true)
-    )
-      parameters.includeDirectories = [
-        ...(parameters.includeDirectories ?? []),
-        process.cwd(),
-      ];
-    secondCallerConfig = new Config(parameters);
-    secondCallerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...suppliedFactories,
-    };
-    secondCallerSettings = new SettingsService();
-    for (const [key, value] of Object.entries(
-      secondCallerConfig.getInitialSettings(),
-    ))
-      secondCallerSettings.set(key, value);
-    secondCallerPolicy = new RuntimePolicyOwner(secondCallerConfig);
-    injectConfirmationForcingPolicy(secondCallerPolicy.session.confirmation);
-    secondCallerMcp = await buildTestMcpRuntime(
-      secondCallerConfig,
-      secondCallerPolicy.session.messageBus,
-      overrides,
-      extensionLoader,
-      secondCallerPolicy,
-      skillOperations,
-    );
-    acquiresecondCallerProviders();
-    const media = new SessionMediaOwner(
-      secondCallerConfig.projectTempDir,
-      1024 * 1024 * 1024,
-    );
-    secondCallerOwner = await createCapturedSessionOwner(
-      secondCallerConfig,
-      assembleTaskSchemaPolicy(secondCallerSettings),
-      secondCallerManager,
-      secondCallerFactories.agentClientFactory,
-      media.store,
-      secondCallerMcp.readInstructions,
-      secondCallerMcp.workspacePaths,
-      secondCallerSettingsOwner,
-      secondCallerContent,
-      secondCallerTokenizer,
-    );
-    secondCallerOwner.bindMcpRuntime(secondCallerMcp);
-    secondCallerOwner.bindProviderFiles(secondCallerFiles, (provider) =>
-      secondCallerOAuth.composeRetryOperations(provider),
-    );
-    secondCallerOwner.bindHooks();
-    secondCallerClose = settleEngineRelease.bind(
-      undefined,
-      [
-        () => secondCallerOwner.dispose(),
-        () => secondCallerRelease.close(),
-        () => media.dispose(),
-        () => secondCallerMcp.dispose(),
-        () => secondCallerConfig.dispose(),
-        () => rm(directory, { recursive: true, force: true }),
-      ],
-      previousReplay,
-    );
-    try {
-      await preparePreferredProviderCompletion(
-        secondCallerConfig,
-        secondCallerSettings,
-        secondCallerSettingsOwner,
-        secondCallerManager,
-        secondCallerOAuth,
-        secondCallerRuntimeId,
-        secondCallerTokenizer,
-        undefined,
-      );
-      await secondCallerMcp.initialize();
-      await activatesecondCallerClient(selection.activation);
-    } catch (primary) {
-      await cleanupAfterFailure(primary, secondCallerClose);
-    }
-  }
-  function acquiresecondCallerProviders(): void {
-    secondCallerRuntimeId = 'secondCaller-' + randomUUID();
-    secondCallerRelease = new AcquisitionRelease();
-    secondCallerSettingsOwner = new SessionSettingsOwner(secondCallerSettings);
-    secondCallerRelease.acquire('settings', () =>
-      secondCallerSettingsOwner.dispose(),
-    );
-    secondCallerSettingsOwner.initializeProviderSelection(
-      secondCallerConfig.getProvider(),
-      secondCallerConfig.getModel(),
-    );
-    secondCallerSettingsOwner.bindTelemetry(secondCallerConfig);
-    secondCallerFiles = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
-    });
-    for (const scope of [
-      secondCallerRuntimeId,
-      secondCallerConfig.getSessionId(),
-    ])
-      secondCallerRelease.acquire('files', () =>
-        releaseAdoptedFileScope(secondCallerFiles, scope),
-      );
-    secondCallerManager = acquirePreferredProviderManager(
-      secondCallerConfig,
-      secondCallerSettings,
-      secondCallerSettingsOwner,
-      secondCallerFiles,
-      secondCallerRuntimeId,
-      secondCredentials().authority,
-      secondCallerRelease,
-    );
-    const factoriesTokenizer = configureProviderTokenizer(secondCallerManager);
-    const factoriesContent = createRuntimeContentGeneratorFactory();
-    secondCallerTokenizer = factoriesTokenizer;
-    secondCallerContent = factoriesContent;
-    secondCallerOAuth = acquirePreferredOAuth(
-      undefined,
-      secondCallerPolicy.session.messageBus,
-      secondCallerConfig,
-      secondCallerSettings,
-      secondCallerManager,
-      secondCallerRuntimeId,
-      secondCallerMcp.profileDefinitions,
-      secondCredentials().authority,
-      secondCallerRelease,
-      undefined,
-    );
-  }
-  async function activatesecondCallerClient(
-    intent: ProviderActivationIntent = {
-      provider: secondCallerConfig.getProvider(),
-      model: secondCallerConfig.getModel(),
-    },
-  ): Promise<void> {
-    const activation = await executeProviderActivation(
-      secondCallerConfig,
-      intent,
-      assembleProviderSwitch(
-        secondCallerConfig,
-        secondCallerSettings,
-        secondCallerManager,
-        secondCallerOAuth,
-        () => 'agent',
-        () => secondCallerOwner.refreshAuth(),
-        secondCallerSettingsOwner,
-      ),
-      secondCallerSettings,
-      secondCallerManager,
-      (method) => secondCallerOwner.refreshAuth(method),
-      assembleModelSelection(secondCallerSettingsOwner),
-    );
-    requireCallerActivation(activation);
-    await secondCallerOwner.initializeTools();
-    await capturedSessionClient(secondCallerOwner).startChat();
-  }
 
   it('rejects replacement failure and restores the switching owner without disturbing a successful same-label sibling', async () => {
-    await openfirstCaller('multi-turn-text.jsonl');
-    await opensecondCaller('multi-turn-text.jsonl');
-    firstCallerConfig.adoptSessionId('same-label');
-    secondCallerConfig.adoptSessionId('same-label');
-    const a = await fromConfig(
-      firstCallerConfig,
-      firstCallerSettings,
-      {},
-      firstCallerSettingsOwner,
-      firstCallerManager,
-      undefined,
-      firstCallerPolicy.session.messageBus,
-      firstCallerMcp,
-      undefined,
-      capturedSessionClient(firstCallerOwner),
-    );
-    const b = await fromConfig(
-      secondCallerConfig,
-      secondCallerSettings,
-      {},
-      secondCallerSettingsOwner,
-      secondCallerManager,
-      undefined,
-      secondCallerPolicy.session.messageBus,
-      secondCallerMcp,
-      undefined,
-      capturedSessionClient(secondCallerOwner),
-    );
-    const managerA = firstCallerManager;
-    const managerB = secondCallerManager;
-
-    managerA.registerProvider(replacement(firstCallerConfig.getTargetDir()));
-    managerB.registerProvider(replacement(secondCallerConfig.getTargetDir()));
-    const settingsA = firstCallerSettings;
-    firstCallerSettingsOwner.writeUserParameter('auth-key', 'first-owner-key');
-    firstCallerSettingsOwner.writeUserParameter('reasoning.enabled', false);
-    const originalProvider = managerA.getProviderByName('fake');
-    if (!originalProvider) throw new Error('Missing original fixture provider');
-    const before = {
-      settings: structuredClone(settingsA.exportForStateSnapshot()),
-      provider: originalProvider,
-      client: capturedSessionClient(firstCallerOwner),
-    };
-    const ephemerals = structuredClone(
-      firstCallerSettingsOwner.captureNamedParameters(),
-    );
     const failure = new Error('owner client replacement rejected');
-    let started = (): void => {};
-    let release = (): void => {};
-    const entered = new Promise<void>((resolve) => {
-      started = resolve;
-    });
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const rejectInitialization = async (): Promise<void> => {
-      started();
-      await gate;
-      throw failure;
-    };
-    const switchA = assembleProviderSwitch(
-      firstCallerConfig,
-      settingsA,
-      managerA,
-      null,
-      () => 'agent',
-      rejectInitialization,
-      firstCallerSettingsOwner,
-    );
-    const switchB = assembleProviderSwitch(
-      secondCallerConfig,
-      secondCallerSettings,
-      managerB,
-      null,
-      () => 'subagent',
-      () => secondCallerOwner.refreshAuth(),
-      secondCallerSettingsOwner,
+    const hold = new ReplacementHold(failure);
+    const a = await openRoot(firstCredentials().authority, hold);
+    const b = await openRoot(secondCredentials().authority).catch(
+      async (error: unknown) => {
+        await a.close();
+        throw error;
+      },
     );
     try {
+      a.config.adoptSessionId('same-label');
+      b.config.adoptSessionId('same-label');
+      a.manager.registerProvider(replacement(a.config.getTargetDir()));
+      b.manager.registerProvider(replacement(b.config.getTargetDir()));
+      a.settingsOwner.writeUserParameter('auth-key', 'first-owner-key');
+      a.settingsOwner.writeUserParameter('reasoning.enabled', false);
+      const originalProvider = a.manager.getProviderByName('fake');
+      if (!originalProvider)
+        throw new Error('Missing original fixture provider');
+      const before = {
+        settings: structuredClone(a.settings.exportForStateSnapshot()),
+        provider: originalProvider,
+        client: currentClient(a),
+      };
+      const ephemerals = structuredClone(
+        a.settingsOwner.captureNamedParameters(),
+      );
+      const switchA = assembleProviderSwitch(
+        a.config,
+        a.settings,
+        a.manager,
+        a.oauth,
+        () => 'agent',
+        () => a.owner.refreshAuth(),
+        a.settingsOwner,
+      );
+      const switchB = assembleProviderSwitch(
+        b.config,
+        b.settings,
+        b.manager,
+        b.oauth,
+        () => 'subagent',
+        () => b.owner.refreshAuth(),
+        b.settingsOwner,
+      );
       const pending = switchA('replacement');
       const observed = pending.then(
         (result) => ({ result }),
         (error: unknown) => ({ error }),
       );
-      await entered;
+      await hold.entered;
       const sibling = await switchB('replacement');
       expect(sibling.changed).toBe(true);
       const siblingState = {
@@ -597,15 +367,17 @@ describe('provider switch transaction ownership', () => {
           },
         },
       };
-      release();
+      hold.release();
       expect(await observed).toStrictEqual({ error: failure });
-      expect(settingsA.exportForStateSnapshot()).toStrictEqual(before.settings);
-      expect(firstCallerSettingsOwner.captureNamedParameters()).toStrictEqual(
+      expect(a.settings.exportForStateSnapshot()).toStrictEqual(
+        before.settings,
+      );
+      expect(a.settingsOwner.captureNamedParameters()).toStrictEqual(
         ephemerals,
       );
-      expect(managerA.getActiveProvider()).toBe(before.provider);
-      expect(capturedSessionClient(firstCallerOwner)).toBe(before.client);
-      const siblingSnapshot = secondCallerSettings.exportForStateSnapshot();
+      expect(a.manager.getActiveProvider()).toBe(before.provider);
+      expect(currentClient(a)).toBe(before.client);
+      const siblingSnapshot = b.settings.exportForStateSnapshot();
       expect({
         global: siblingSnapshot.global,
         providers: Object.fromEntries(
@@ -616,40 +388,17 @@ describe('provider switch transaction ownership', () => {
         ),
         ...('tools' in siblingSnapshot ? { tools: siblingSnapshot.tools } : {}),
       }).toStrictEqual(siblingState);
-      for await (const event of a.stream('Continue on the restored owner')) {
-        if (event.type === 'error') throw new Error(event.error.message);
-      }
-      for await (const event of b.stream('Continue on the committed sibling')) {
-        if (event.type === 'error') throw new Error(event.error.message);
-      }
-      expect(JSON.stringify(await a.getHistory())).toContain('restored owner');
-      expect(JSON.stringify(await b.getHistory())).toContain(
+      await continueTurn(currentClient(a), 'Continue on the restored owner');
+      await continueTurn(currentClient(b), 'Continue on the committed sibling');
+      expect(JSON.stringify(await currentClient(a).getHistory())).toContain(
+        'restored owner',
+      );
+      expect(JSON.stringify(await currentClient(b).getHistory())).toContain(
         'committed sibling',
       );
     } finally {
-      release();
-      await a.dispose();
-      await b.dispose();
-      await firstCallerClose();
-      await secondCallerClose();
+      hold.release();
+      await runCleanupSteps([() => a.close(), () => b.close()]);
     }
   }, 30000);
 });
-
-async function settleEngineRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previousReplay: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
-  }
-}
-
-function requireCallerActivation(
-  result: Awaited<ReturnType<typeof executeProviderActivation>>,
-): void {
-  if (result.authFailed) throw result.authError;
-}
