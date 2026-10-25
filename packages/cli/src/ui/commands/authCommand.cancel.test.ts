@@ -27,6 +27,21 @@ function createChallenge(
   };
 }
 
+function waitUntilAborted(
+  _challenge: InteractiveAuthChallenge,
+  signal: AbortSignal,
+): Promise<void> {
+  return new Promise<void>((_resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    signal.addEventListener('abort', () => reject(signal.reason), {
+      once: true,
+    });
+  });
+}
+
 async function executeCancel(
   coordinator: InteractiveAuthCoordinator,
 ): Promise<MessageActionReturn> {
@@ -70,14 +85,7 @@ describe('/auth cancel', () => {
   });
 
   it('cancels active authentication sessions and reports retry guidance', async () => {
-    coordinator.bindHost(
-      (_challenge, signal) =>
-        new Promise<void>((_resolve, reject) => {
-          signal.addEventListener('abort', () => reject(signal.reason), {
-            once: true,
-          });
-        }),
-    );
+    coordinator.bindHost(waitUntilAborted);
     const waiter = coordinator.requestAuth(createChallenge());
 
     const result = await executeCancel(coordinator);
@@ -96,14 +104,7 @@ describe('/auth cancel', () => {
   });
 
   it('lists each cancelled provider once in retry guidance', async () => {
-    coordinator.bindHost(
-      (_challenge, signal) =>
-        new Promise<void>((_resolve, reject) => {
-          signal.addEventListener('abort', () => reject(signal.reason), {
-            once: true,
-          });
-        }),
-    );
+    coordinator.bindHost(waitUntilAborted);
     const waiters = [
       coordinator.requestAuth(createChallenge('codex', 'cancel-codex-work')),
       coordinator.requestAuth(
