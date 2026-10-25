@@ -1,4 +1,4 @@
-import { AdoptedProviderFixture } from '../../../agents/src/api/__tests__/helpers/adopted-provider-fixture.js';
+import { openRouteAAgent } from '../../../agents/src/api/__tests__/helpers/route-a-agent.js';
 import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
@@ -331,38 +331,43 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
     );
   }
 
-  it.each(['wrapper', 'direct'])(
-    '%s activation keeps foreground provider and OAuth infrastructure unchanged',
-    async (activation) => {
-      await openForeground('same-label', 'same-label', 'owner-model');
-      foregroundSettings.set('activeProvider', 'kimi');
-      await openFirst('same-label', 'same-label', 'owner-model');
-      if (activation === 'wrapper')
-        await new AdoptedProviderFixture(
-          firstConfig,
-          firstSettings,
-          'same-label',
-        ).activate(
-          firstSettingsOwner,
-          firstManager,
-          firstOauth,
-          true,
-          configureProviderTokenizer(firstManager),
-        );
-      else await activateFirst();
-      expect(
-        new ProviderReadFixture(
-          foregroundSettingsOwner,
-          foregroundManager,
-          () => foregroundConfig.getModel(),
-          (provider) => foregroundSettings.getProviderSettings(provider),
-        ).getActiveProviderName(),
-      ).toBe('kimi');
-      expect('providerManager' in foregroundConfig).toBe(false);
-      expect(foregroundManager.listProviders()).toContain('openai');
-      expect(firstOauth).not.toBe(foregroundOauth);
-    },
-  );
+  function readForegroundActiveProvider(): string | undefined {
+    return new ProviderReadFixture(
+      foregroundSettingsOwner,
+      foregroundManager,
+      () => foregroundConfig.getModel(),
+      (provider) => foregroundSettings.getProviderSettings(provider),
+    ).getActiveProviderName();
+  }
+
+  it('wrapper activation keeps foreground provider and OAuth infrastructure unchanged', async () => {
+    await openForeground('same-label', 'same-label', 'owner-model');
+    foregroundSettings.set('activeProvider', 'kimi');
+    const root = await openRouteAAgent({
+      authority: credentials().authority,
+      config: { sessionId: 'same-label', model: 'owner-model' },
+      intent: {
+        sessionId: 'same-label',
+        activation: { provider: 'fake', model: 'owner-model' },
+      },
+    });
+    firstRetiring.push(() => root.close());
+    expect(readForegroundActiveProvider()).toBe('kimi');
+    expect('providerManager' in foregroundConfig).toBe(false);
+    expect(foregroundManager.listProviders()).toContain('openai');
+    expect(foregroundOauth.runtimeMessageBus).toBe(foregroundBus);
+  });
+
+  it('direct activation keeps foreground provider and OAuth infrastructure unchanged', async () => {
+    await openForeground('same-label', 'same-label', 'owner-model');
+    foregroundSettings.set('activeProvider', 'kimi');
+    await openFirst('same-label', 'same-label', 'owner-model');
+    await activateFirst();
+    expect(readForegroundActiveProvider()).toBe('kimi');
+    expect('providerManager' in foregroundConfig).toBe(false);
+    expect(foregroundManager.listProviders()).toContain('openai');
+    expect(firstOauth).not.toBe(foregroundOauth);
+  });
 
   it('isolated cleanup cannot clear the same-label foreground OAuth or provider manager', async () => {
     await openForeground('same-label', 'same-label', 'owner-model');

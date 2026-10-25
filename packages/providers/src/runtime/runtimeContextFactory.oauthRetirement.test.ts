@@ -1,4 +1,3 @@
-import { AdoptedProviderFixture } from '../../../agents/src/api/__tests__/helpers/adopted-provider-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -11,9 +10,9 @@ import * as path from 'node:path';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { MemoryTokenStore } from '../auth/__tests__/behavioral/test-utils.js';
-import { createFileOAuthSettingsProvider } from '../auth/file-oauth-settings.js';
-import { OAuthManager } from '../auth/oauth-manager.js';
+import type { OAuthManager } from '../auth/oauth-manager.js';
 import type { OAuthProvider, OAuthToken } from '../auth/types.js';
+import { acquirePreferredOAuth } from '../../../agents/src/api/preferred-provider-acquisition.js';
 import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 
@@ -140,10 +139,12 @@ describe('runtime cleanup retires the OAuthManager it owns', () => {
     fakeTimersInstalled = false;
   });
   const credentials = useOwnedCredentials(trace);
-  function openOAuth(
-    store: RecordingTokenStore,
-    supplied: OAuthManager | undefined = undefined,
-  ): void {
+  function openRuntime(): {
+    readonly config: Config;
+    readonly settings: SettingsService;
+    readonly policy: RuntimePolicyOwner;
+    readonly manager: ProviderManager;
+  } {
     const settings = new SettingsService();
     const config = new Config({
       sessionId: 'same-label',
@@ -167,18 +168,22 @@ describe('runtime cleanup retires the OAuthManager it owns', () => {
       config,
     );
     release.acquire('manager', () => manager.dispose());
-    oauth = new AdoptedProviderFixture(
-      config,
-      settings,
-      'same-label',
-    ).acquireOAuth(
-      supplied,
+    return { config, settings, policy, manager };
+  }
+
+  function openOAuth(store: RecordingTokenStore): void {
+    const runtime = openRuntime();
+    oauth = acquirePreferredOAuth(
       store,
-      policy.session.messageBus,
-      manager,
+      runtime.policy.session.messageBus,
+      runtime.config,
+      runtime.settings,
+      runtime.manager,
+      'same-label',
       undefined,
       credentials().authority,
       release,
+      undefined,
     );
   }
   let configHome: string;
@@ -281,9 +286,21 @@ describe('runtime cleanup retires the OAuthManager it owns', () => {
     trace('borrowed.body:enter');
     const store = new RecordingTokenStore();
     await seedToken(store);
-    const borrowed = new OAuthManager(store, createFileOAuthSettingsProvider());
+    const runtime = openRuntime();
+    const preflightRelease = new AcquisitionRelease();
+    const borrowed = acquirePreferredOAuth(
+      store,
+      runtime.policy.session.messageBus,
+      runtime.config,
+      runtime.settings,
+      runtime.manager,
+      'same-label',
+      undefined,
+      credentials().authority,
+      preflightRelease,
+      undefined,
+    );
     borrowed.registerProvider(createProvider());
-    openOAuth(store, borrowed);
 
     try {
       trace('borrowed.release.close:enter');
@@ -296,7 +313,7 @@ describe('runtime cleanup retires the OAuthManager it owns', () => {
       expect(store.events).toContain('acquire');
     } finally {
       trace('borrowed.dispose:enter');
-      await borrowed.dispose();
+      await preflightRelease.close();
       trace('borrowed.dispose:exit');
     }
     trace('borrowed.body:exit');

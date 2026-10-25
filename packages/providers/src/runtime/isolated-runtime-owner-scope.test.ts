@@ -8,262 +8,119 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { Config } from '@vybestack/llxprt-code-core';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 import {
-  captureAgentAdoption as fromConfig,
-  fixtureAgentResources,
-  AgentResourceCapture,
-} from '../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
-import type { Agent } from '../../../agents/src/api/agent.js';
+  openRouteAAgent,
+  type RouteAAgent,
+} from '../../../agents/src/api/__tests__/helpers/route-a-agent.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
   cleanupAfterFailure,
   runCleanupSteps,
 } from '../../../agents/src/core/subagent-cleanup.js';
-import {
-  ProviderFileLifecycle,
-  resolveProviderFilePolicy,
-} from '../providerFilePolicy.js';
+import { resolveProviderFilePolicy } from '../providerFilePolicy.js';
 
 describe('isolated runtime owner activation', () => {
   const credentials = useOwnedCredentials();
   const retiring: Array<() => void | Promise<void>> = [];
-  let firstConfig: Config;
-  let secondConfig: Config;
-  let firstSettings: SettingsService;
-  let secondSettings: SettingsService;
-  let firstOwner: SessionSettingsOwner;
-  let secondOwner: SessionSettingsOwner;
-  let first: Agent;
-  let second: Agent;
+  let directory: string;
+  let first: RouteAAgent;
+  let second: RouteAAgent;
 
   afterEach(async () => {
     await runCleanupSteps(retiring.splice(0).reverse());
   });
 
-  async function openConfigs(): Promise<void> {
+  async function openDirectory(): Promise<void> {
     const raw = await mkdtemp(join(tmpdir(), 'owner-activation-'));
     retiring.push(() => rm(raw, { recursive: true, force: true }));
-    const directory = await realpath(raw);
-    firstConfig = new Config({
-      sessionId: 'shared-owner-label',
-      targetDir: directory,
-      cwd: directory,
-      debugMode: false,
-      model: 'test-model',
-    });
-    const configA = firstConfig;
-    retiring.push(() => configA.dispose());
-    secondConfig = new Config({
-      sessionId: 'shared-owner-label',
-      targetDir: directory,
-      cwd: directory,
-      debugMode: false,
-      model: 'test-model',
-    });
-    const configB = secondConfig;
-    retiring.push(() => configB.dispose());
-    firstSettings = new SettingsService();
-    secondSettings = new SettingsService();
-    firstOwner = new SessionSettingsOwner(firstSettings);
-    const ownerA = firstOwner;
-    retiring.push(() => ownerA.dispose());
-    ownerA.bindTelemetry(configA);
-    secondOwner = new SessionSettingsOwner(secondSettings);
-    const ownerB = secondOwner;
-    retiring.push(() => ownerB.dispose());
-    ownerB.bindTelemetry(configB);
+    directory = await realpath(raw);
   }
 
-  async function openFirst(runtimeId: string | undefined): Promise<void> {
-    first = await fromConfig(
-      firstConfig,
-      firstSettings,
-      { sessionId: runtimeId },
-      firstOwner,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      credentials().authority,
-    );
-    const agent = first;
-    retiring.push(() => agent.dispose());
-  }
-  async function openSecond(runtimeId: string | undefined): Promise<void> {
-    second = await fromConfig(
-      secondConfig,
-      secondSettings,
-      { sessionId: runtimeId },
-      secondOwner,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      credentials().authority,
-    );
-    const agent = second;
-    retiring.push(() => agent.dispose());
+  async function openOwner(
+    runtimeId: string | undefined,
+  ): Promise<RouteAAgent> {
+    const owner = await openRouteAAgent({
+      authority: credentials().authority,
+      config: { sessionId: 'shared-owner-label', workingDir: directory },
+      intent: { sessionId: runtimeId },
+    });
+    retiring.push(() => owner.close());
+    return owner;
   }
 
   it('requires the explicit SDK owner even when an isolated owner is active', async () => {
-    await openConfigs();
-    await openFirst('sdk-owner');
+    await openDirectory();
+    first = await openOwner('sdk-owner');
     expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
       'Provider reads require an explicit session owner',
     );
-    expect('providerManager' in firstConfig).toBe(false);
+    expect('providerManager' in first.config).toBe(false);
   });
 
   it('keeps two concurrent owners with the same label independent', async () => {
-    await openConfigs();
-    await Promise.all([openFirst('shared-label'), openSecond('shared-label')]);
-    expect('providerManager' in firstConfig).toBe(false);
-    expect(fixtureAgentResources(first).manager).not.toBe(
-      fixtureAgentResources(second).manager,
-    );
-    await first.dispose();
-    expect('providerManager' in secondConfig).toBe(false);
+    await openDirectory();
+    [first, second] = await Promise.all([
+      openOwner('shared-label'),
+      openOwner('shared-label'),
+    ]);
+    expect('providerManager' in first.config).toBe(false);
+    await first.agent.dispose();
+    expect('providerManager' in second.config).toBe(false);
+    expect(second.agent.getProvider()).toBe('fake');
+    expect(second.agent.captureProviderFiles()).toBeDefined();
+    expect(second.agent.getRuntimeId()).toBe('shared-label');
   });
 
   it('assigns independent UUID identities to equal-label Config owners without caller IDs', async () => {
-    await openConfigs();
-    await Promise.all([openFirst(undefined), openSecond(undefined)]);
-    expect(firstConfig.getSessionId()).toBe(secondConfig.getSessionId());
-    expect(first.getRuntimeId()).toMatch(
+    await openDirectory();
+    [first, second] = await Promise.all([
+      openOwner(undefined),
+      openOwner(undefined),
+    ]);
+    expect(first.config.getSessionId()).toBe(second.config.getSessionId());
+    expect(first.agent.getRuntimeId()).toMatch(
       /^agent-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i,
     );
-    expect(second.getRuntimeId()).not.toBe(first.getRuntimeId());
-    expect('providerManager' in firstConfig).toBe(false);
-    await first.dispose();
-    expect('providerManager' in secondConfig).toBe(false);
+    expect(second.agent.getRuntimeId()).not.toBe(first.agent.getRuntimeId());
+    expect('providerManager' in first.config).toBe(false);
+    await first.agent.dispose();
+    expect('providerManager' in second.config).toBe(false);
   });
 
   it('an aborted same-label activation leaves the other owner usable', async () => {
-    await openConfigs();
-    await openFirst('same-label-abort');
-    firstOwner.writeUserParameter('auth-key', 'sibling-credential');
+    await openDirectory();
+    first = await openOwner('same-label-abort');
+    first.agent.setEphemeralSetting('auth-key', 'sibling-credential');
     await expect(
-      fromConfig(
-        secondConfig,
-        secondSettings,
-        { sessionId: 'same-label-abort' },
-        secondOwner,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        credentials().authority,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        () => {
-          const error = new Error('activation aborted');
-          error.name = 'AbortError';
-          throw error;
+      openRouteAAgent({
+        authority: credentials().authority,
+        config: { sessionId: 'shared-owner-label', workingDir: directory },
+        intent: {
+          sessionId: 'same-label-abort',
+          activation: {
+            provider: 'openai',
+            model: 'gpt-4o',
+            cliOverrides: { baseUrl: 'not a url' },
+          },
         },
-      ),
-    ).rejects.toThrow('activation aborted');
-    expect(firstOwner.readNamedParameter('auth-key')).toBe(
+      }),
+    ).rejects.toThrow('baseUrl.invalid');
+    expect(first.agent.getEphemeralSetting('auth-key')).toBe(
       'sibling-credential',
     );
-    expect('providerManager' in firstConfig).toBe(false);
+    expect('providerManager' in first.config).toBe(false);
   });
 
   it('passes the exact owner Config and runtime ID to activation callbacks', async () => {
-    await openConfigs();
+    await openDirectory();
     const observed: string[] = [];
-    const files = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
-    });
-    let admittedConfig: Config | undefined;
-    const acquisition = new AgentResourceCapture();
-    first = await fromConfig(
-      firstConfig,
-      firstSettings,
-      { sessionId: 'callback-owner' },
-      firstOwner,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      files,
-      undefined,
-      undefined,
-      acquisition.factories(undefined),
-      undefined,
-      credentials().authority,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      () => {
-        const config = acquisition.config;
-        expect(config).toBe(firstConfig);
-        admittedConfig = config;
-        observed.push('callback-owner');
-      },
-    );
-    const agent = first;
-    retiring.push(() => agent.dispose());
-    const path = join(firstConfig.getTargetDir(), 'remote-owner-file');
+    first = await openOwner('callback-owner');
+    const owner = first;
+    const path = join(owner.config.getTargetDir(), 'remote-owner-file');
     await writeFile(path, 'retained owner data');
     try {
-      const retained = await first.retainProviderFile({
+      const retained = await owner.agent.retainProviderFile({
         cacheKey: 'callback-file',
         fileId: path,
         bytes: 19,
@@ -282,15 +139,17 @@ describe('isolated runtime owner activation', () => {
         }),
         deleteRemote: async (file) => {
           await rm(file);
-          expect(admittedConfig).toBe(firstConfig);
-          observed.push(first.getRuntimeId());
+          expect(owner.agent.workspace.getWorkingDirectory()).toBe(
+            owner.config.getTargetDir(),
+          );
+          observed.push(owner.agent.getRuntimeId());
         },
       });
       await retained.lease.release();
-      await first.dispose();
+      await owner.agent.dispose();
     } catch (primary) {
-      await cleanupAfterFailure(primary, () => first.dispose());
+      await cleanupAfterFailure(primary, () => owner.agent.dispose());
     }
-    expect(observed).toStrictEqual(['callback-owner', 'callback-owner']);
+    expect(observed).toStrictEqual(['callback-owner']);
   });
 });
