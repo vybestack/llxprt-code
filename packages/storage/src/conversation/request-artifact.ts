@@ -19,9 +19,11 @@ async function writeNextArtifactRow(
   write: (text: string) => Promise<void>,
   first: boolean,
 ): Promise<boolean> {
-  const next = await iterator.next();
+  let next = await iterator.next();
   if (next.done === true) return false;
-  await write((first ? '' : ',') + JSON.stringify(next.value));
+  const written = write((first ? '' : ',') + JSON.stringify(next.value));
+  next = { done: true, value: undefined };
+  await written;
   return true;
 }
 
@@ -47,6 +49,7 @@ export async function stageRequestArtifact(
     contentBytes += Buffer.byteLength(text);
     contentChars += text.length;
     await file.writeFile(text);
+    text = '';
   };
   try {
     const header = JSON.stringify({
