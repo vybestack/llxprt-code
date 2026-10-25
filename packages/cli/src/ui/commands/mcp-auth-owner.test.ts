@@ -5,14 +5,22 @@
  */
 
 import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import { describe, expect, it, spyOn } from 'bun:test';
-import { openRouteAAgent } from '../../../../agents/src/api/__tests__/helpers/route-a-agent.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { createAgent } from '@vybestack/llxprt-code-agents';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { useFakeResponsesReplay } from '../../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
+import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { registerMcpCommand } from '../../__tests__/credential-command-test-owner.js';
 
 describe('CLI MCP authentication', () => {
   useFakeResponsesReplay('multi-turn-text.jsonl');
+  const builtCredentials = useOwnedCredentials();
 
   it('belongs to the public Agent disposal lifetime', async () => {
     let enter = (): void => {};
@@ -38,21 +46,39 @@ describe('CLI MCP authentication', () => {
         { preconnect: () => {} },
       ),
     );
-    const built = await openRouteAAgent({
-      config: {
-        folderTrust: false,
-        mcpServers: { shared: { httpUrl: 'https://mcp-owner.test/mcp' } },
-        telemetry: { enabled: false },
-        recording: { enabled: false },
-      },
+    // The agent is a Route C root (HTTP MCP servers on Route A and B use the
+    // OS keychain); the slash-command runtime reads declarations from the
+    // test's own Config.
+    const directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'mcp-auth-owner-')),
+    );
+    const agent = await createAgent({
+      provider: 'fake',
+      model: 'fake-model',
+      workingDir: directory,
+      folderTrust: false,
+      mcpServers: { shared: { httpUrl: 'https://mcp-owner.test/mcp' } },
+      mcpTokenStorage: createTestOAuthBinding().tokenStorage,
+      credentialAuthority: builtCredentials().authority,
+      telemetry: { enabled: false },
+      recording: { enabled: false },
+    });
+    const declarations = new Config({
+      sessionId: randomUUID(),
+      targetDir: directory,
+      cwd: directory,
+      debugMode: false,
+      model: 'fake-model',
+      folderTrust: false,
+      telemetry: { enabled: false },
     });
     const base = createMockCommandContext();
     const context = {
       ...base,
       services: {
         ...base.services,
-        agent: built.agent,
-        config: buildSlashCommandRuntimeForTest(built.config, built.agent),
+        agent,
+        config: buildSlashCommandRuntimeForTest(declarations, agent),
       },
     };
     const messages: unknown[] = [];
@@ -76,7 +102,7 @@ describe('CLI MCP authentication', () => {
       expect(JSON.stringify(messages)).toContain(
         "Starting OAuth authentication for MCP server 'shared'",
       );
-      disposal = built.agent.dispose();
+      disposal = agent.dispose();
       expect(signal?.aborted).toBe(true);
       release();
       expect(await work).toMatchObject({
@@ -92,7 +118,9 @@ describe('CLI MCP authentication', () => {
       release();
       await work;
       await disposal;
-      await built.close();
+      await agent.dispose();
+      await declarations.dispose();
+      await rm(directory, { recursive: true, force: true });
       network.mockRestore();
     }
   }, 30000);
