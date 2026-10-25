@@ -4,7 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it, spyOn } from 'bun:test';
-import { Config, WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core';
+import {
+  Config,
+  WorkspaceFilesystemOwner,
+  WorkspaceMemoryOwner,
+  WorkspaceTrustLifecycle,
+  assembleWorkspaceMemory,
+} from '@vybestack/llxprt-code-core';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProxyTokenStore } from '@vybestack/llxprt-code-auth/proxy/proxy-token-store.js';
@@ -138,6 +144,131 @@ describe('Preflight acquisition closure', () => {
       expect(credentials().keySnapshot()).toStrictEqual([1]);
     } finally {
       await preflight.dispose();
+      await owner.dispose();
+      await config.dispose();
+    }
+  });
+
+  async function openHostWorkspace(config: Config): Promise<{
+    readonly trust: WorkspaceTrustLifecycle;
+    readonly filesystem: WorkspaceFilesystemOwner;
+    readonly memory: WorkspaceMemoryOwner;
+  }> {
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: config.initialWorkspaceTrust,
+    });
+    const filesystem = new WorkspaceFilesystemOwner({
+      targetDir: config.getTargetDir(),
+      isTrusted: () => trust.isTrustedFolder(),
+    });
+    return {
+      trust,
+      filesystem,
+      memory: assembleWorkspaceMemory(config, filesystem, trust),
+    };
+  }
+
+  it('retains the original failure and borrowed settings when binding to the host memory fails after native client acquisition', async () => {
+    const config = await workspace();
+    const settings = new SettingsService();
+    const owner = new SessionSettingsOwner(settings);
+    const { trust, filesystem, memory } = await openHostWorkspace(config);
+    await memory.dispose();
+    const preflight = await AgentProfilePreflight.create(
+      { runtimeId: config.getSessionId() },
+      credentials().authority,
+      settings,
+      owner,
+      undefined,
+      undefined,
+    );
+    try {
+      const error: unknown = await preflight
+        .preparePostConfiguration(
+          config,
+          filesystem,
+          memory,
+          trust,
+          () => trust.dispose(),
+          owner,
+        )
+        .then(
+          () => null,
+          (failure: unknown) => failure,
+        );
+      expect(error).toBeInstanceOf(Error);
+      expect(error instanceof Error ? error.message : '').toContain(
+        'Workspace memory is disposed',
+      );
+      expect(() => preflight.captureSettings()).toThrow('disposed');
+      owner.writeUserParameter('survives', 'borrowed');
+      expect(owner.readNamedParameter('survives')).toBe('borrowed');
+      expect(credentials().snapshot()).toStrictEqual([1]);
+      expect(credentials().keySnapshot()).toStrictEqual([1]);
+      await preflight.dispose();
+      expect(credentials().snapshot()).toStrictEqual([1]);
+      expect(credentials().keySnapshot()).toStrictEqual([1]);
+    } finally {
+      await preflight.dispose();
+      await filesystem.dispose();
+      await trust.dispose();
+      await owner.dispose();
+      await config.dispose();
+    }
+  });
+
+  it('settles accepted preparation and joins repeated disposal queued from the settings owner during native binding', async () => {
+    const config = await workspace();
+    const settings = new SettingsService();
+    const owner = new SessionSettingsOwner(settings);
+    const { trust, filesystem, memory } = await openHostWorkspace(config);
+    const preflight = await AgentProfilePreflight.create(
+      { runtimeId: config.getSessionId() },
+      credentials().authority,
+      settings,
+      owner,
+      undefined,
+      undefined,
+    );
+    const subscribe = owner.subscribeModelChanges.bind(owner);
+    let queued: Array<Promise<void>> = [];
+    let credentialsWhenQueued: readonly number[] = [];
+    owner.subscribeModelChanges = (listener) => {
+      if (queued.length === 0) {
+        queued = [preflight.dispose(), preflight.dispose()];
+        credentialsWhenQueued = credentials().snapshot();
+      }
+      return subscribe(listener);
+    };
+    try {
+      const error: unknown = await preflight
+        .preparePostConfiguration(
+          config,
+          filesystem,
+          memory,
+          trust,
+          () => trust.dispose(),
+          owner,
+        )
+        .then(
+          () => null,
+          (failure: unknown) => failure,
+        );
+      expect(queued).toHaveLength(2);
+      expect(credentialsWhenQueued).toStrictEqual([0]);
+      expect(error).toBeInstanceOf(Error);
+      await Promise.all(queued);
+      await preflight.dispose();
+      expect(() => preflight.captureSettings()).toThrow('disposed');
+      owner.writeUserParameter('survives', 'borrowed');
+      expect(owner.readNamedParameter('survives')).toBe('borrowed');
+      expect(credentials().snapshot()).toStrictEqual([1]);
+      expect(credentials().keySnapshot()).toStrictEqual([1]);
+    } finally {
+      await preflight.dispose();
+      await memory.dispose();
+      await filesystem.dispose();
+      await trust.dispose();
       await owner.dispose();
       await config.dispose();
     }
