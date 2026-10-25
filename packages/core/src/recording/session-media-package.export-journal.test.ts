@@ -202,7 +202,7 @@ describe('native recording export', () => {
       expect(
         error.errors.map((failure: Error) => failure.message),
       ).toStrictEqual(['media failed', 'release failed']);
-      expect(await readdir(root)).toStrictEqual(['chats', 'media']);
+      expect((await readdir(root)).sort()).toStrictEqual(['chats', 'media']);
       expect(
         await SessionLockManager.isLocked(join(root, 'chats'), 'source'),
       ).toBe(false);
@@ -221,7 +221,7 @@ describe('native recording export', () => {
       expect(
         await SessionLockManager.isLocked(join(root, 'chats'), 'source'),
       ).toBe(true);
-      expect(await readdir(root)).toStrictEqual(['chats', 'media']);
+      expect((await readdir(root)).sort()).toStrictEqual(['chats', 'media']);
     } finally {
       await f.recording.dispose();
     }
@@ -236,7 +236,7 @@ describe('native recording export', () => {
     expect(
       await SessionLockManager.isLocked(join(root, 'chats'), 'source'),
     ).toBe(false);
-    expect(await readdir(root)).toStrictEqual(['chats', 'media']);
+    expect((await readdir(root)).sort()).toStrictEqual(['chats', 'media']);
   });
 
   it('copies only the pinned durable boundary when a writer commits before the first source read', async () => {
@@ -319,7 +319,7 @@ describe('native recording export', () => {
           signal: controller.signal,
         }),
       ).rejects.toThrow('export cancelled');
-      expect(await readdir(root)).toStrictEqual(['chats', 'media']);
+      expect((await readdir(root)).sort()).toStrictEqual(['chats', 'media']);
       expect(
         await SessionLockManager.isLocked(join(root, 'chats'), 'source'),
       ).toBe(true);
