@@ -109,6 +109,7 @@ describe('ProfileSaveStep', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     process.env.LLXPRT_CONFIG_HOME = previousConfigHome;
     // Restore writability in case a test revoked it, so cleanup can delete.
     await fs.chmod(profilesDir, 0o755).catch(() => undefined);
@@ -116,13 +117,29 @@ describe('ProfileSaveStep', () => {
   });
 
   /**
-   * Lets the step's mount effect finish scanning the profiles directory
-   * before keystrokes start, so duplicate validation sees seeded files.
+   * Holds the step's profiles-directory scan until the returned function is
+   * called, which lets the scan finish inside act. Tests can then order the
+   * scan against keystrokes instead of racing a real directory read.
    */
-  async function flushExistingProfilesScan(): Promise<void> {
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 25));
+  function holdExistingProfilesScan(): () => Promise<void> {
+    const readdir = fs.readdir.bind(fs);
+    let openGate = (): void => undefined;
+    const gate = new Promise<void>((resolve) => {
+      openGate = resolve;
     });
+    let scan: Promise<unknown> = Promise.resolve();
+    vi.spyOn(fs, 'readdir').mockImplementation(((
+      ...args: Parameters<typeof readdir>
+    ) => {
+      scan = gate.then(() => readdir(...args));
+      return scan;
+    }) as typeof fs.readdir);
+    return async () => {
+      await act(async () => {
+        openGate();
+        await scan.catch(() => undefined);
+      });
+    };
   }
 
   async function seedExistingProfile(name: string): Promise<void> {
@@ -131,7 +148,6 @@ describe('ProfileSaveStep', () => {
       JSON.stringify({ version: 1, provider: 'zai', model: 'glm-4.7' }),
       'utf8',
     );
-    await flushExistingProfilesScan();
   }
 
   it('shows the empty-name validation error on submit without saving', async () => {
@@ -176,7 +192,9 @@ describe('ProfileSaveStep', () => {
 
   it('flags a name that matches an existing profile file', async () => {
     await seedExistingProfile(EXISTING_PROFILE);
+    const finishScan = holdExistingProfilesScan();
     const step = renderSaveStep();
+    await finishScan();
 
     await typeText(step.stdin, EXISTING_PROFILE);
 
@@ -185,9 +203,25 @@ describe('ProfileSaveStep', () => {
     expect(frame).not.toContain('✓ Name is available');
   });
 
+  it('flags a matching name typed before the profile scan lands', async () => {
+    await seedExistingProfile(EXISTING_PROFILE);
+    const finishScan = holdExistingProfilesScan();
+    const step = renderSaveStep();
+
+    await typeText(step.stdin, EXISTING_PROFILE);
+    expect(step.lastFrame() ?? '').toContain('✓ Name is available');
+    await finishScan();
+
+    const frame = step.lastFrame() ?? '';
+    expect(frame).toContain('✗ Profile name already exists');
+    expect(frame).not.toContain('✓ Name is available');
+  });
+
   it('marks a fresh name as available', async () => {
     await seedExistingProfile(EXISTING_PROFILE);
+    const finishScan = holdExistingProfilesScan();
     const step = renderSaveStep();
+    await finishScan();
 
     await typeText(step.stdin, 'fresh-one');
 
@@ -248,7 +282,9 @@ describe('ProfileSaveStep', () => {
 
   it('routes a duplicate submit into the conflict dialog and Escape returns to the name input', async () => {
     await seedExistingProfile(EXISTING_PROFILE);
+    const finishScan = holdExistingProfilesScan();
     const step = renderSaveStep();
+    await finishScan();
 
     await typeText(step.stdin, EXISTING_PROFILE);
     await act(async () => {
