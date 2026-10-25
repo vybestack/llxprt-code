@@ -53,7 +53,7 @@ function modelResponse(name?: string, args?: object): Response {
 
 describe('admitted child tool acquisition lifetime', () => {
   it.skipIf(process.platform === 'win32')(
-    'queries and launches through its own owners and joins held work without retiring borrowed-Config peers',
+    'queries and launches through its own owners and joins held work without retiring peers of a second agent',
     async () => {
       const directory = await makeScratchDir('child-acquisition-lifetime-');
       const shells = await shellOwnerGate();
@@ -76,7 +76,7 @@ describe('admitted child tool acquisition lifetime', () => {
       try {
         await withDisposalJoinFixture(
           async (fixture) => {
-            const sibling = await fixture.adoptSibling();
+            const sibling = await fixture.openSibling();
             const peerShellTool = sibling.tools.get('run_shell_command');
             const peerTaskTool = sibling.tools.get('task');
             const taskTool = fixture.agent.tools.get('task');

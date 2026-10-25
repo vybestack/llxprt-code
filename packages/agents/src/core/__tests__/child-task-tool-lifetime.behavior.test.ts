@@ -220,7 +220,11 @@ describe('child task tool lifetime', () => {
         workspaceTrust: fixture.workspaceTrust,
         createChildSettings: () => fixture.settingsOwner.createChildStore(),
         readRunPolicy: () => fixture.settingsOwner.readSubagentRunPolicy(),
-        toolRegistry: fixture.client.tools,
+        toolRegistry: new ToolRegistry(
+          new CoreToolRegistryHostAdapter(fixture.config),
+          new CoreMessageBusAdapter(policy.session.messageBus),
+          () => fixture.settingsOwner.readRegistryPolicy([]),
+        ),
         workspacePaths: fixture.workspacePaths,
         instructions: fixture.instructionReads,
         foregroundConfig: fixture.config,

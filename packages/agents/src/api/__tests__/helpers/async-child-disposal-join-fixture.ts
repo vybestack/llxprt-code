@@ -1,8 +1,3 @@
-import {
-  captureAgentAdoption,
-  fixtureAgentResources,
-} from './agent-resource-capture.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { createSessionSettingsFixture } from './session-settings-fixture.js';
 /**
  * @license
@@ -12,9 +7,10 @@ import { createSessionSettingsFixture } from './session-settings-fixture.js';
 
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
 
-import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
 import { createTestMcpRuntime } from './create-mcp-runtime.js';
+import { openClientOwner } from './client-owner-session.js';
 
 import {
   createServer,
@@ -27,14 +23,19 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import {
   ApprovalMode,
+  createAgent,
   toConfigParameters,
   type Agent,
+  type AgentConfig,
   type AgentSchedulerFactory,
 } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
+
+/** Captured at load so a scenario's fake timers cannot stall the observer. */
+const realSetTimeout = globalThis.setTimeout;
 
 export function gate(): { promise: Promise<void>; release: () => void } {
   let release = (): void => {};
@@ -118,10 +119,20 @@ type RouteHandler = (
 ) => Promise<void>;
 
 export interface DisposalJoinFixture extends HeldWork {
-  readonly manager: AsyncTaskManager;
   readonly agent: Agent;
-  readonly client: AgentClientContract;
-  readonly adoptSibling: () => Promise<Agent>;
+  /** The working directory shared by the parent agent and its sibling. */
+  readonly directory: string;
+  /**
+   * A second, independent agent over the same working directory. It owns its
+   * own task manager and runs `sibling-child` against the sibling route.
+   */
+  readonly openSibling: () => Promise<Agent>;
+  /**
+   * The tool registry of a domain-level session client owner, for
+   * hand-built child orchestrators. Opened on first use and closed at
+   * teardown.
+   */
+  readonly parentTools: () => Promise<AgentClientContract['tools']>;
   readonly siblingWork: HeldWork;
   /**
    * Answers child model requests from the script instead of holding them.
@@ -326,29 +337,6 @@ async function createParentServer(
   };
 }
 
-function createDisposalSettings(
-  config: Config,
-  runtime: McpRuntimeOwner,
-  siblings: Agent[],
-  manager: AsyncTaskManager,
-): {
-  settingsRoot: ReturnType<typeof createSessionSettingsFixture>;
-  adoptSibling: DisposalJoinFixture['adoptSibling'];
-} {
-  const settingsRoot = createSessionSettingsFixture(config);
-  return {
-    settingsRoot,
-    adoptSibling: adoptSibling.bind(
-      undefined,
-      config,
-      runtime,
-      siblings,
-      manager,
-      settingsRoot,
-    ),
-  };
-}
-
 /** Canonical path so owned and expected directories agree on Windows 8.3 names. */
 async function createFixtureDirectory(): Promise<string> {
   return realpath(await mkdtemp(join(tmpdir(), 'async-child-disposal-join-')));
@@ -356,6 +344,121 @@ async function createFixtureDirectory(): Promise<string> {
 
 function createParentMcpRuntime(config: Config): Promise<McpRuntimeOwner> {
   return createTestMcpRuntime({ oauth: createTestOAuthBinding(), config }, {});
+}
+
+/** Public inputs for the parent agent and its sibling over one directory. */
+function agentInputs(
+  directory: string,
+  baseUrl: string,
+  extraTools: readonly string[],
+  sessionId: string,
+): AgentConfig {
+  return {
+    provider: 'openai',
+    model: 'parent-model',
+    workingDir: directory,
+    sessionId,
+    approvalMode: ApprovalMode.YOLO,
+    folderTrust: true,
+    interactive: false,
+    coreTools: ['task', 'check_async_tasks', ...extraTools],
+    telemetry: { enabled: false },
+    recording: { enabled: false },
+    settings: {
+      profileDirectory: join(directory, 'profiles'),
+      subagentDirectory: join(directory, 'subagents'),
+    },
+    activation: {
+      provider: 'openai',
+      model: 'parent-model',
+      cliOverrides: { key: 'local-test-key', baseUrl },
+    },
+    harness: {
+      forceInteractive: false,
+      forceConfirmations: false,
+      includeProcessCwd: false,
+    },
+  };
+}
+
+/** The agents a scenario opens and the observers that follow them. */
+class AgentHost {
+  agent: Agent | undefined;
+  private readonly siblings: Agent[] = [];
+  private domainClient: Awaited<ReturnType<typeof openClientOwner>> | undefined;
+  private observing = true;
+  private status: Promise<string> | undefined;
+
+  constructor(
+    private readonly directory: string,
+    private readonly baseUrl: string,
+    private readonly extraTools: readonly string[],
+    private readonly timeline: string[],
+  ) {}
+
+  inputs(sessionId: string): AgentConfig {
+    return agentInputs(
+      this.directory,
+      this.baseUrl,
+      this.extraTools,
+      sessionId,
+    );
+  }
+
+  readonly openSibling = async (): Promise<Agent> => {
+    const sibling = await createAgent(
+      this.inputs('async-child-sibling-session'),
+    );
+    this.siblings.push(sibling);
+    return sibling;
+  };
+
+  readonly parentTools = async (): Promise<AgentClientContract['tools']> => {
+    this.domainClient ??= await openClientOwner(
+      new CredentialAuthority(),
+      this.inputs('async-child-domain-session'),
+      {
+        provider: 'openai',
+        model: 'parent-model',
+        cliOverrides: { key: 'local-test-key', baseUrl: this.baseUrl },
+      },
+    );
+    return this.domainClient.client.tools;
+  };
+
+  childStatus(agent: Agent): Promise<string> {
+    this.status ??= observeTerminalTask(
+      agent,
+      this.timeline,
+      () => !this.observing,
+    );
+    return this.status;
+  }
+
+  /** Releases in the order the scenario's resources depend on each other. */
+  releases(external: HeldWork): ReadonlyArray<() => Promise<void>> {
+    return [
+      async (): Promise<void> => {
+        if (external.signal() !== undefined) await external.workSettled;
+      },
+      async (): Promise<void> => {
+        const agent = this.agent;
+        if (
+          external.signal() !== undefined &&
+          agent?.tasks.list().some((task) => task.kind === 'subagent') === true
+        )
+          await this.childStatus(agent);
+      },
+      async (): Promise<void> => {
+        this.observing = false;
+      },
+      async (): Promise<void> => this.agent?.dispose(),
+      ...this.siblings.map(
+        (sibling) => async (): Promise<void> => sibling.dispose(),
+      ),
+      async (): Promise<void> => this.domainClient?.close(),
+    ];
+  }
 }
 
 export async function withDisposalJoinFixture(
@@ -368,48 +471,40 @@ export async function withDisposalJoinFixture(
   const timeline: string[] = [];
   const { server, childRoute, siblingWork } = await startModelServer(timeline);
   const external = childRoute.work;
-  const siblings: Agent[] = [];
-  const manager = new AsyncTaskManager(5);
+  const host = new AgentHost(directory, server.baseUrl, extraTools, timeline);
   let mcpRuntime: McpRuntimeOwner | undefined;
   let config: Config | undefined;
-  let agent: Agent | undefined;
-  let childStatus: Promise<string> | undefined;
   const errors: unknown[] = [];
   try {
     config = await createChildConfig(directory, server.baseUrl, extraTools);
     mcpRuntime = await createParentMcpRuntime(config);
-    const { settingsRoot, adoptSibling } = createDisposalSettings(
-      config,
-      mcpRuntime,
-      siblings,
-      manager,
-    );
-    agent = await adoptParent(
-      config,
-      mcpRuntime,
-      manager,
-      settingsRoot,
-      server.baseUrl,
+    await mcpRuntime.initialize();
+    const settingsRoot = createSessionSettingsFixture(config);
+    const parent = await createAgent({
+      ...host.inputs('async-child-disposal-session'),
       toolSchedulerFactory,
       credentialAuthority,
-    );
-    childStatus = observeTerminalTask(manager, timeline);
+    });
+    host.agent = parent;
+    const runtime = mcpRuntime;
     await scenario({
-      agent,
-      client: fixtureAgentResources(agent).publishedClient(agent),
-      manager,
+      agent: parent,
+      directory,
       ...external,
       scriptChildRequests: childRoute.script,
       timeline,
-      childStatus,
+      get childStatus(): Promise<string> {
+        return host.childStatus(parent);
+      },
       siblingWork,
       settingsOwner: settingsRoot.settingsOwner,
       config,
-      adoptSibling,
-      workspaceTrust: mcpRuntime.trust,
-      workspacePaths: mcpRuntime.workspacePaths,
-      instructionReads: mcpRuntime.workspaceMemory.operations,
-      readMcpInstructions: mcpRuntime.readInstructions,
+      openSibling: host.openSibling,
+      parentTools: host.parentTools,
+      workspaceTrust: runtime.trust,
+      workspacePaths: runtime.workspacePaths,
+      instructionReads: runtime.workspaceMemory.operations,
+      readMcpInstructions: runtime.readInstructions,
     });
   } catch (error) {
     errors.push(error);
@@ -418,16 +513,7 @@ export async function withDisposalJoinFixture(
     external.releaseWork();
     siblingWork.releaseWork();
     await collectFixtureReleases(errors, [
-      async (): Promise<void> => {
-        if (external.signal()) await external.workSettled;
-      },
-      async (): Promise<void> => {
-        if (external.signal()) await childStatus;
-      },
-      async (): Promise<void> => agent?.dispose(),
-      ...siblings.map(
-        (sibling) => async (): Promise<void> => sibling.dispose(),
-      ),
+      ...host.releases(external),
       async (): Promise<void> => mcpRuntime?.dispose(),
       async (): Promise<void> => config?.dispose(),
       async (): Promise<void> => server.close(),
@@ -437,48 +523,6 @@ export async function withDisposalJoinFixture(
   }
   if (errors.length > 0)
     throw new AggregateError(errors, 'Disposal join fixture failed');
-}
-
-async function adoptSibling(
-  config: Config,
-  mcpRuntime: McpRuntimeOwner,
-  siblings: Agent[],
-  manager: AsyncTaskManager,
-  parentSettings: ReturnType<typeof createSessionSettingsFixture>,
-): Promise<Agent> {
-  const siblingSettings = createSessionSettingsFixture(
-    config,
-    parentSettings.settingsOwner.createChildStore(),
-  );
-  const sibling = await captureAgentAdoption(
-    config,
-    siblingSettings.settingsService,
-    { mcpOwnership: 'caller' },
-    siblingSettings.settingsOwner,
-    undefined,
-    undefined,
-    undefined,
-    mcpRuntime,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    manager,
-  );
-  siblings.push(sibling);
-  return sibling;
 }
 
 async function createChildConfig(
@@ -518,38 +562,40 @@ async function createChildConfig(
     'sibling-child',
     'Complete the requested task.',
   );
-  const config = new Config({
-    ...toConfigParameters({
-      provider: 'openai',
-      model: 'parent-model',
-      workingDir: directory,
-      approvalMode: ApprovalMode.YOLO,
-      folderTrust: true,
-      interactive: false,
-      coreTools: ['task', 'check_async_tasks', ...extraTools],
-      telemetry: { enabled: false },
-      recording: { enabled: false },
-    }),
+  return new Config({
+    ...toConfigParameters(
+      agentInputs(
+        directory,
+        baseUrl,
+        extraTools,
+        'async-child-disposal-domain',
+      ),
+    ),
     profileDirectory: join(directory, 'profiles'),
     subagentDirectory: join(directory, 'subagents'),
-    sessionId: 'async-child-disposal-session',
   });
-  return config;
 }
 
+/** Reports the status of the first subagent task the agent lists as no longer running. */
 function observeTerminalTask(
-  manager: AsyncTaskManager,
+  agent: Agent,
   timeline: string[],
+  stopped: () => boolean,
 ): Promise<string> {
-  return new Promise<string>((resolve) => {
-    const terminal = (task: { status: string }): void => {
-      timeline.push(`task-terminal:${task.status}`);
-      resolve(task.status);
-    };
-    manager.onTaskCompleted(terminal);
-    manager.onTaskFailed(terminal);
-    manager.onTaskCancelled(terminal);
-  });
+  const poll = async (): Promise<string> => {
+    while (!stopped()) {
+      const terminal = agent.tasks
+        .list()
+        .find((task) => task.kind === 'subagent' && task.status !== 'running');
+      if (terminal !== undefined) {
+        timeline.push(`task-terminal:${terminal.status}`);
+        return terminal.status;
+      }
+      await new Promise<void>((resolve) => realSetTimeout(resolve, 5));
+    }
+    return 'observation-stopped';
+  };
+  return poll();
 }
 
 async function collectFixtureReleases(
@@ -561,59 +607,4 @@ async function collectFixtureReleases(
       errors.push(error);
     });
   }
-}
-
-async function adoptParent(
-  config: Config,
-  mcpRuntime: McpRuntimeOwner,
-  manager: AsyncTaskManager,
-  settingsRoot: ReturnType<typeof createSessionSettingsFixture>,
-  baseUrl: string,
-  toolSchedulerFactory?: AgentSchedulerFactory,
-  credentialAuthority?: CredentialAuthority,
-): Promise<Agent> {
-  return captureAgentAdoption(
-    config,
-    settingsRoot.settingsService,
-    {
-      activation: {
-        provider: 'openai',
-        model: 'parent-model',
-        cliOverrides: { key: 'local-test-key', baseUrl },
-      },
-      mcpOwnership: 'caller',
-    },
-    settingsRoot.settingsOwner,
-    undefined,
-    undefined,
-    undefined,
-    mcpRuntime,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    credentialAuthority,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    manager,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    toolSchedulerFactory,
-  );
 }

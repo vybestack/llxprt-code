@@ -159,10 +159,10 @@ describe('public Agent async child disposal join', () => {
     });
   }, 30000);
 
-  it('disposes only its own accepted task when facades borrow the same Config and manager', async () => {
+  it('disposes only its own accepted task when a second agent runs a task over the same working directory', async () => {
     await withDisposalJoinFixture(async (fixture) => {
       await acceptChild(fixture);
-      const sibling = await fixture.adoptSibling();
+      const sibling = await fixture.openSibling();
       const channel = sibling.tools.openClientChannel();
       await channel.ready;
       await channel.schedule(
@@ -210,7 +210,7 @@ describe('public Agent async child disposal join', () => {
       expect(sibling.tasks.get(siblingTasks[0].id)?.status).toBe('running');
       expect(fixture.siblingWork.isWorkSettled()).toBe(false);
       expect(sibling.tools.get('task')).toBeDefined();
-      expect(fixture.manager.getRunningTasks()).toHaveLength(1);
+      expect(sibling.tasks.listRunning()).toHaveLength(1);
       fixture.siblingWork.releaseWork();
       await fixture.siblingWork.workSettled;
       await sibling.dispose();
@@ -281,7 +281,7 @@ describe('public Agent async child disposal join', () => {
       const release = gate();
       const original = fs.readFile;
       const target = join(
-        fixture.config.getTargetDir(),
+        fixture.directory,
         'subagents',
         'disposal-child.json',
       );
@@ -326,7 +326,6 @@ describe('public Agent async child disposal join', () => {
       const accepted = invocation.execute(new AbortController().signal);
       try {
         await entered.promise;
-        expect(fixture.manager.canLaunchAsync().allowed).toBe(false);
         let disposed = false;
         const disposal = fixture.agent.dispose().then(() => {
           disposed = true;
@@ -341,7 +340,6 @@ describe('public Agent async child disposal join', () => {
         expect((await accepted).error).toBeDefined();
         await disposal;
         expect(fixture.agent.tasks.list()).toHaveLength(0);
-        expect(fixture.manager.canLaunchAsync().allowed).toBe(true);
         expect(fixture.signal()).toBeUndefined();
       } finally {
         release.release();

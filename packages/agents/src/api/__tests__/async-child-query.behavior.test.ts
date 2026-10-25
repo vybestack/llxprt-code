@@ -44,9 +44,9 @@ function response(query: boolean): Response {
 }
 
 describe('public async child query ownership', () => {
-  it('runs a child-issued query against its owner without exposing a borrowed-Config sibling', async () => {
+  it('runs a child-issued query against its owner without exposing a second agent task', async () => {
     await withDisposalJoinFixture(async (fixture) => {
-      const sibling = await fixture.adoptSibling();
+      const sibling = await fixture.openSibling();
       const siblingTool = sibling.tools.get('task');
       const task = fixture.agent.tools.get('task');
       if (!siblingTool || !task) throw new Error('Missing task');

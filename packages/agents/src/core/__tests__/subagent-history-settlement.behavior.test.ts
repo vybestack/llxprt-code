@@ -59,7 +59,7 @@ describe('subagent history ownership settlement', () => {
             workspaceTrust: fixture.workspaceTrust,
             createChildSettings: () => fixture.settingsOwner.createChildStore(),
             readRunPolicy: () => fixture.settingsOwner.readSubagentRunPolicy(),
-            toolRegistry: fixture.client.tools,
+            toolRegistry: await fixture.parentTools(),
             workspacePaths: fixture.workspacePaths,
             instructions: fixture.instructionReads,
             foregroundConfig: fixture.config,

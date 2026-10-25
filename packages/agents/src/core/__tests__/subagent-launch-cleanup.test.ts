@@ -120,6 +120,7 @@ describe('subagent cleanup error retention', () => {
           'missing-child.responses',
         );
         let historyContentId: string | undefined;
+        const toolRegistry = await fixture.parentTools();
         try {
           if (stage === 'activation')
             process.env.LLXPRT_FAKE_RESPONSES = missingReplay;
@@ -128,7 +129,7 @@ describe('subagent cleanup error retention', () => {
             workspaceTrust: fixture.workspaceTrust,
             createChildSettings: () => fixture.settingsOwner.createChildStore(),
             readRunPolicy: () => fixture.settingsOwner.readSubagentRunPolicy(),
-            toolRegistry: fixture.client.tools,
+            toolRegistry,
             workspacePaths: fixture.workspacePaths,
             instructions: fixture.instructionReads,
             foregroundConfig: fixture.config,

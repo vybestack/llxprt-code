@@ -34,10 +34,10 @@ function completionResponse(): Response {
   );
 }
 
-describe('child launched from an agent adopted through fromConfig', () => {
+describe('child launched from an agent built through createAgent', () => {
   const credentials = useOwnedCredentials();
 
-  it('runs the child with the credential authority passed to fromConfig', async () => {
+  it('runs the child with the credential authority passed to createAgent', async () => {
     await withDisposalJoinFixture(
       async (fixture) => {
         const task = fixture.agent.tools.get('task');

@@ -17,7 +17,7 @@ import {
 describe('public async child late storage finalization', () => {
   it('joins actual child media directory cleanup while external storage retains its session lock', async () => {
     await withDisposalJoinFixture(async (fixture) => {
-      const directory = fixture.config.getTargetDir();
+      const directory = fixture.directory;
       const sessionId = 'child-finalizer';
       const lock = await SessionLockManager.acquire(directory, sessionId);
       const file = join(directory, 'child-finalizer.json');

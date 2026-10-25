@@ -29,7 +29,7 @@ describe('child acquired resource lifetime', () => {
         workspaceTrust: fixture.workspaceTrust,
         createChildSettings: () => fixture.settingsOwner.createChildStore(),
         readRunPolicy: () => fixture.settingsOwner.readSubagentRunPolicy(),
-        toolRegistry: fixture.client.tools,
+        toolRegistry: await fixture.parentTools(),
         workspacePaths: fixture.workspacePaths,
         instructions: fixture.instructionReads,
         foregroundConfig: fixture.config,
@@ -46,12 +46,6 @@ describe('child acquired resource lifetime', () => {
         { name: 'disposal-child' },
         parentSignal,
       );
-      fixture.manager.registerTask({
-        id: first.agentId,
-        subagentName: 'disposal-child',
-        goalPrompt: 'Observe direct child disposal',
-        abortController: new AbortController(),
-      });
       const events: string[] = [];
       let credentialsAtRunSettled: readonly number[] | undefined;
       const running = first.scope.runNonInteractive(new ContextState());
@@ -81,7 +75,6 @@ describe('child acquired resource lifetime', () => {
         await settled;
         await first.dispose();
         await sibling.dispose();
-        fixture.manager.cancelTask(first.agentId);
       }
       expect(credentials().keySnapshot()).toStrictEqual([1, 1]);
     });
@@ -108,7 +101,7 @@ describe('child acquired resource lifetime', () => {
         workspaceTrust: fixture.workspaceTrust,
         createChildSettings: () => fixture.settingsOwner.createChildStore(),
         readRunPolicy: () => fixture.settingsOwner.readSubagentRunPolicy(),
-        toolRegistry: fixture.client.tools,
+        toolRegistry: await fixture.parentTools(),
         workspacePaths: fixture.workspacePaths,
         instructions: fixture.instructionReads,
         foregroundConfig: fixture.config,
@@ -140,7 +133,7 @@ describe('child acquired resource lifetime', () => {
         unsubscribe();
       }
       expect(fixture.workspacePaths.directories()).toContain(
-        await realpath(fixture.config.getTargetDir()),
+        await realpath(fixture.directory),
       );
     });
   }, 30000);
@@ -152,7 +145,7 @@ describe('child acquired resource lifetime', () => {
         workspaceTrust: fixture.workspaceTrust,
         createChildSettings: () => fixture.settingsOwner.createChildStore(),
         readRunPolicy: () => fixture.settingsOwner.readSubagentRunPolicy(),
-        toolRegistry: fixture.client.tools,
+        toolRegistry: await fixture.parentTools(),
         workspacePaths: fixture.workspacePaths,
         instructions: fixture.instructionReads,
         foregroundConfig: fixture.config,
@@ -175,7 +168,7 @@ describe('child acquired resource lifetime', () => {
       expect(credentials().snapshot()).toStrictEqual([1]);
       expect(fixture.settingsOwner.readSelectedModel()).toBe('parent-model');
       expect(fixture.workspacePaths.directories()).toContain(
-        await realpath(fixture.config.getTargetDir()),
+        await realpath(fixture.directory),
       );
     });
   }, 30000);
