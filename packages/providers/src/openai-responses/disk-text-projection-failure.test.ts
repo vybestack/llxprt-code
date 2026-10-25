@@ -6,16 +6,13 @@
  * the caller sees.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { existsSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core';
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import {
   promptDirs,
   startSourceRouteHarness,
@@ -26,20 +23,15 @@ import {
 class RecordingWeakMap<K extends object, V> extends WeakMap<K, V> {
   readonly installed: K[] = [];
 
+  constructor(private readonly onInstall: () => void) {
+    super();
+  }
+
   override set(key: K, value: V): this {
     this.installed.push(key);
-    return super.set(key, value);
-  }
-}
-
-async function* corruptAfter(
-  rows: AsyncGenerator<IContent, void>,
-  after: () => void,
-): AsyncGenerator<IContent, void> {
-  try {
-    yield* rows;
-  } finally {
-    after();
+    const result = super.set(key, value);
+    this.onInstall();
+    return result;
   }
 }
 
@@ -66,7 +58,13 @@ describe('Responses disk-text projection adaptation failure', () => {
       mimeType: 'image/png',
       semanticMetadata: { variantPolicy: 'admitted-v1' },
     });
-    const installed = new RecordingWeakMap<object, unknown>();
+    const controller = new AbortController();
+    const reason = new SyntaxError(
+      'projection cancelled after token installation',
+    );
+    const installed = new RecordingWeakMap<object, unknown>(() =>
+      controller.abort(reason),
+    );
     Object.defineProperty(harness.setup.provider, 'preparedPromptEnvelopes', {
       value: installed,
     });
@@ -79,34 +77,19 @@ describe('Responses disk-text projection adaptation failure', () => {
       resolver,
       image.normalizedBase64Length,
     );
-    const selection = options.requestRows;
-    if (selection === undefined) throw new Error('Missing request selection');
     const before = promptDirs();
-    // The projection adapter reads the unsupported-media ledger back once the
-    // serializer has consumed the rows. A ledger the serializer did not write
-    // makes that real adapter throw after the prepared context exists.
-    const corruptLedgers = (): void => {
-      for (const entry of promptDirs()) {
-        if (before.has(entry)) continue;
-        const ledger = join(getScratchRoot(), entry, 'unsupported-media.jsonl');
-        if (existsSync(ledger)) writeFileSync(ledger, 'not json\n');
-      }
-    };
-    const corrupting: ProviderRequestSelection = {
-      count: selection.count,
-      close: () => selection.close(),
-      readAt: (index, signal) => selection.readAt(index, signal),
-      openReader: (signal) =>
-        corruptAfter(selection.openReader(signal), corruptLedgers),
-    };
     const failure = await provider
-      .projectPromptEnvelope({ ...options, requestRows: corrupting })
+      .projectPromptEnvelope({
+        ...options,
+        metadata: { ...options.metadata, abortSignal: controller.signal },
+      })
       .then(
         () => undefined,
         (error: unknown) => error,
       );
 
     expect(failure).toBeInstanceOf(SyntaxError);
+    expect(failure).toBe(reason);
     expect(installed.installed).toHaveLength(1);
     expect(installed.has(installed.installed[0])).toBe(false);
     expect(

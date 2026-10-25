@@ -58,7 +58,10 @@ import { NativeAnthropicEstimateProjection } from './native-anthropic-estimate.j
 
 import { AnthropicRepairSource } from './anthropic-repair-source.js';
 import { AnthropicSpanPlan } from './anthropic-span-plan.js';
-import { applyAnthropicPurgeCache } from './anthropic-cache-facts.js';
+import {
+  applyAnthropicPurgeCache,
+  type AnthropicCachePlan,
+} from './anthropic-cache-facts.js';
 import { AnthropicDecisionOverlay } from './anthropic-decision-overlay.js';
 import { measureAnthropicSpans } from './anthropic-span-measure.js';
 
@@ -179,6 +182,14 @@ async function releaseNativeRequest(
   }
 }
 
+function cacheWriteEvidence(
+  cache: AnthropicCachePlan | undefined,
+): { readonly boundaryId: object; readonly preparation: 'added' } | undefined {
+  return cache?.writeBoundary === undefined
+    ? undefined
+    : { boundaryId: cache.writeBoundary, preparation: 'added' };
+}
+
 async function requestFromEngine(
   params: AnthropicPlanParams,
   plan: AnthropicRequestPlan,
@@ -234,7 +245,11 @@ async function requestFromEngine(
       )
     : undefined;
   return {
-    facts: requestFactsOf(plan, params.cacheLogger, undefined),
+    facts: requestFactsOf(
+      plan,
+      params.cacheLogger,
+      cacheWriteEvidence(measured.cache),
+    ),
     envelope,
     spool: body,
     estimate:

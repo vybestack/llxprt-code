@@ -913,7 +913,7 @@ export async function* streamOverWebSocketOrFallback(
       ? streamOptions
       : {
           ...streamOptions,
-          requestFrameBytes: async function* (): AsyncGenerator<Uint8Array> {
+          async *requestFrameBytes(): AsyncGenerator<Uint8Array> {
             yield frame;
           },
         };

@@ -109,6 +109,7 @@ export interface AnthropicCachePlan {
   readonly targets: readonly Target[];
   readonly ttl: '5m' | '1h';
   readonly bytes: number;
+  readonly writeBoundary?: object;
   readonly purge?: z.infer<typeof purgeSchema>;
 }
 

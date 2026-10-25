@@ -247,6 +247,7 @@ export async function callerOwnedPurgeCache(
   let previous: Target | undefined;
   let expected: Target | undefined;
   let tagged: Target | undefined;
+  let boundaryId: object | undefined;
   let tags = 0;
   let image = false;
   let breakpoints = prefixBreakpoints + cache.targets.length;
@@ -258,6 +259,7 @@ export async function callerOwnedPurgeCache(
     if (entry.purge !== undefined && !(entry.target.string && cached)) {
       tags++;
       tagged = entry.target;
+      boundaryId = entry.purge;
     }
     if (!image && entry.block.type === 'image') {
       image = true;
@@ -283,6 +285,7 @@ export async function callerOwnedPurgeCache(
   return {
     ...cache,
     targets: [...cache.targets, tagged],
+    writeBoundary: boundaryId,
     bytes: cache.bytes + markerBytes + (tagged.string ? blockify : 0),
   };
 }
