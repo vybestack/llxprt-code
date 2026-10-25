@@ -212,7 +212,11 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
 
   openReader(signal?: AbortSignal): AsyncGenerator<IContent, void, unknown> {
     this.requireOpen(signal);
-    const source = this.readers.open(this.rows(signal));
+    const source = this.readers.open(
+      this.ownership === undefined
+        ? this.indexed.openReader(signal ?? this.signal)
+        : this.rows(this.ownership, signal),
+    );
     const reader: AsyncGenerator<IContent, void, unknown> = {
       [Symbol.asyncIterator]: () => reader,
       [Symbol.asyncDispose]: async () => {
@@ -240,20 +244,16 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
   }
 
   private async *rows(
+    ownership: RowOwnership,
     signal?: AbortSignal,
   ): AsyncGenerator<IContent, void, unknown> {
-    if (this.ownership === undefined) {
-      yield* this.indexed.openReader(signal ?? this.signal);
-      this.requireOpen(signal);
-      return;
-    }
     for await (const row of this.indexed.openReader(signal ?? this.signal)) {
       this.requireOpen(signal);
-      this.ownership.retain(row);
+      ownership.retain(row);
       try {
         yield row;
       } finally {
-        this.ownership.release(row);
+        ownership.release(row);
       }
     }
     this.requireOpen(signal);
