@@ -1,3 +1,4 @@
+import { openIndependentJournal } from '../services/history/__tests__/support/independent-journal.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { createHash } from 'node:crypto';
@@ -130,7 +131,7 @@ describe('native media release queue across owner reopen', () => {
         (await media.reclaimUnreferenced(new Set(), Number.MAX_SAFE_INTEGER))
           .objectsRemoved,
       ).toBe(0);
-      const reopened = await JournalSession.open(session.path);
+      const reopened = await openIndependentJournal(session.path);
       try {
         const rows = [];
         for await (const saved of reopened.rows()) rows.push(saved.content);
@@ -159,6 +160,7 @@ describe('native media release queue across owner reopen', () => {
       await expect(request.close()).rejects.toBe(failure);
       expect(await media.hasReservations(reference.contentId)).toBe(false);
       commit.mockRestore();
+      await session.close();
       const reopened = await JournalSession.open(session.path);
       const nextMedia = new LocalMediaStore({
         rootDirectory: media.rootDirectory,
@@ -203,6 +205,7 @@ describe('native media release queue across owner reopen', () => {
           .objectsRemoved,
       ).toBe(0);
       expect(await session.store.compact()).toBe('swapped');
+      await session.close();
       const reopened = await JournalSession.open(session.path);
       try {
         expect((await reopened.store.checkpoint('media'))?.name).toBe('media');
@@ -248,7 +251,7 @@ describe('native media release queue across owner reopen', () => {
         (outcome) => outcome,
         (error: unknown) => error,
       );
-      const inspection = await JournalSession.open(session.path);
+      const inspection = await openIndependentJournal(session.path);
       try {
         expect(await inspection.store.getState('rel:0')).toBeDefined();
         expect(await queueCounter(inspection, 'head')).toBe(0);
@@ -266,6 +269,7 @@ describe('native media release queue across owner reopen', () => {
           .objectsRemoved,
       ).toBe(0);
       release.mockRestore();
+      await session.close();
       const reopened = await JournalSession.open(session.path);
       const nextMedia = new LocalMediaStore({
         rootDirectory: media.rootDirectory,

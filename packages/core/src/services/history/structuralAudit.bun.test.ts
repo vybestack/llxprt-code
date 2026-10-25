@@ -592,6 +592,8 @@ describe('native journal retention mutation controls', () => {
       'create',
       'open',
       'createUnlinked',
+      'createAsynchronousUnlinked',
+      'createSynchronousUnlinked',
       'cloneUnlinked',
     ]);
   });

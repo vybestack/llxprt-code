@@ -210,6 +210,7 @@ describe('journal history store owners and mirrors', () => {
             content: row(`original ${index}`, index + 1),
             origin: origins[index % 3],
           });
+          if ((index + 1) % 32 === 0) await store.waitForDurable();
         }
         await store.waitForDurable();
 
