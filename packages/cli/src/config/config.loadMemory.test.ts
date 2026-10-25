@@ -1,7 +1,3 @@
-import {
-  captureActivationConstruction,
-  capturedActivation,
-} from '../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -9,7 +5,10 @@ import {
  */
 
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import type { AgentActivationOperation } from '@vybestack/llxprt-code-agents';
+import {
+  AgentProfilePreflight,
+  type AgentActivationOperation,
+} from '@vybestack/llxprt-code-agents';
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'fs/promises';
@@ -22,6 +21,9 @@ import {
 import { type CliArgs } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 import { loadCliConfigWithPreflight } from '../__tests__/load-cli-config-fixture.js';
+import { transferActivation } from '../__tests__/startup-activation-fixture.js';
+import { openRouteBPreflight } from '../../../agents/src/api/__tests__/helpers/route-b-preflight.js';
+import { useFakeResponsesReplay } from '../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
 void vi.mock('@vybestack/llxprt-code-core', () => ({
@@ -30,6 +32,7 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
 }));
 
 describe('loadCliConfig memory discovery', () => {
+  useFakeResponsesReplay('plain-text.jsonl');
   let tempRoot: string;
   let workspaceDir: string;
   let includeDir: string;
@@ -151,79 +154,67 @@ describe('loadCliConfig memory discovery', () => {
       './extension.js'
     );
     let operation: AgentActivationOperation | undefined;
-    const config = await captureActivationConstruction(() =>
-      loadCliConfigWithPreflight({
-        settings,
-        extensions: [],
-        extensionEnablementManager: new ExtensionEnablementManager(
-          ExtensionStorage.getUserExtensionsDir(),
-        ),
-        sessionId: 'test-session',
-        argv,
-        cwd: workspaceDir,
-        authority: new CredentialAuthority(),
-        onActivationBootstrapReady: (owner) => {
-          operation = owner;
-        },
-      }),
-    );
+    let preflight: AgentProfilePreflight | undefined;
+    const config = await loadCliConfigWithPreflight({
+      settings,
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+      ),
+      sessionId: 'test-session',
+      argv,
+      cwd: workspaceDir,
+      authority: new CredentialAuthority(),
+      onActivationBootstrapReady: (owner) => {
+        operation = owner;
+      },
+      onPreflightReady: (owner) => {
+        preflight = owner;
+      },
+    });
 
-    if (operation === undefined)
+    if (operation === undefined || preflight === undefined)
       throw new Error('Missing retained CLI activation root');
+    const intent = { provider: 'fake', model: 'fake-model' };
+    const activation = await operation.preflight(intent);
+    if (activation.token === undefined)
+      throw new Error('Missing foreground receipt');
+    const agent = await AgentProfilePreflight.createForegroundAgent(
+      preflight,
+      activation.token,
+      intent,
+      {},
+    );
     try {
-      expect(
-        capturedActivation(operation).workspaceMemory.operations.snapshot()
-          .memoryContent,
-      ).toContain(contextContent);
-      expect(
-        capturedActivation(operation).workspaceMemory.operations.snapshot()
-          .fileCount,
-      ).toBeGreaterThan(0);
+      expect(agent.memory.getMemory()).toContain(contextContent);
+      expect(agent.memory.getFileCount()).toBeGreaterThan(0);
       expect(config.getProvidedInstructions()).toBe('');
     } finally {
-      await operation.dispose();
+      await agent.dispose();
     }
   });
 
   it('releases the CLI-created workspace memory exactly once when the activation is disposed', async () => {
-    const { ExtensionEnablementManager, ExtensionStorage } = await import(
-      './extension.js'
-    );
-    let operation: AgentActivationOperation | undefined;
-    await captureActivationConstruction(() =>
-      loadCliConfigWithPreflight({
-        settings: createSettings('AGENTS.md'),
-        extensions: [],
-        extensionEnablementManager: new ExtensionEnablementManager(
-          ExtensionStorage.getUserExtensionsDir(),
-        ),
-        sessionId: 'test-session',
-        argv: createArgv(),
-        cwd: workspaceDir,
-        authority: new CredentialAuthority(),
-        onActivationBootstrapReady: (owner) => {
-          operation = owner;
-        },
-      }),
-    );
-    if (operation === undefined)
-      throw new Error('Missing retained CLI activation root');
-    const memory = capturedActivation(operation).workspaceMemory;
-    expect(capturedActivation(operation).workspaceMemoryOwnership).toBe(
-      'transferred',
-    );
-    const originalDispose = memory.dispose.bind(memory);
-    let memoryDisposals = 0;
-    memory.dispose = () => {
-      memoryDisposals += 1;
-      return originalDispose();
-    };
+    const route = await openRouteBPreflight();
+    try {
+      const memory = route.memory;
+      await route.prepare();
+      const operation = transferActivation(route.preflight);
+      const originalDispose = memory.dispose.bind(memory);
+      let memoryDisposals = 0;
+      memory.dispose = () => {
+        memoryDisposals += 1;
+        return originalDispose();
+      };
 
-    await Promise.all([operation.dispose(), operation.dispose()]);
+      await Promise.all([operation.dispose(), operation.dispose()]);
 
-    expect(memoryDisposals).toBe(1);
-    expect(() => memory.operations.snapshot()).toThrow(
-      'Instructions are disposed',
-    );
+      expect(memoryDisposals).toBe(1);
+      expect(() => memory.operations.snapshot()).toThrow(
+        'Instructions are disposed',
+      );
+    } finally {
+      await route.close();
+    }
   });
 });

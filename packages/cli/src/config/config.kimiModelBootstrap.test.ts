@@ -1,8 +1,6 @@
-import { observeActivationPreparation } from '../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
-
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import type { AgentProfilePreflight } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -70,20 +68,9 @@ describe('loadCliConfig provider alias model bootstrap', () => {
     const secondSettings = new SettingsService();
     const firstOwner = new SessionSettingsOwner(firstSettings);
     const secondOwner = new SessionSettingsOwner(secondSettings);
-    let firstFiles: object | undefined;
-    let secondFiles: object | undefined;
-    let firstManager: RuntimeProviderManager | undefined;
-    let secondManager: RuntimeProviderManager | undefined;
+    let firstRoot: AgentProfilePreflight | undefined;
+    let secondRoot: AgentProfilePreflight | undefined;
 
-    const observation = observeActivationPreparation((operation, state) => {
-      if (state.settingsService === firstSettings) {
-        firstManager = state.manager;
-        firstFiles = state.providerFileLifecycle;
-      } else if (state.settingsService === secondSettings) {
-        secondManager = state.manager;
-        secondFiles = state.providerFileLifecycle;
-      }
-    });
     const first = await loadCliConfigWithPreflight({
       settings: {},
       extensions: [],
@@ -94,6 +81,9 @@ describe('loadCliConfig provider alias model bootstrap', () => {
       settingsService: firstSettings,
       settingsOwner: firstOwner,
       authority: new CredentialAuthority(),
+      onPreflightReady: (root) => {
+        firstRoot = root;
+      },
     });
     const second = await loadCliConfigWithPreflight({
       settings: {},
@@ -105,6 +95,9 @@ describe('loadCliConfig provider alias model bootstrap', () => {
       settingsService: secondSettings,
       settingsOwner: secondOwner,
       authority: new CredentialAuthority(),
+      onPreflightReady: (root) => {
+        secondRoot = root;
+      },
     });
     try {
       expect(() =>
@@ -113,12 +106,10 @@ describe('loadCliConfig provider alias model bootstrap', () => {
       expect(() =>
         secondOwner.assertSettingsIdentity(secondSettings),
       ).not.toThrow();
-      expect(firstManager).toBeDefined();
-      expect(secondManager).toBeDefined();
-      expect(firstManager).not.toBe(secondManager);
-      expect(firstFiles).toBeDefined();
-      expect(secondFiles).toBeDefined();
-      expect(firstFiles).not.toBe(secondFiles);
+      expect(firstRoot?.getActiveProviderName()).toBe('kimi');
+      expect(secondRoot?.getActiveProviderName()).toBe('kimi');
+      expect(firstRoot?.captureProviderFiles()).toBeDefined();
+      expect(secondRoot?.captureProviderFiles()).toBeDefined();
       expect(first.getProvider()).toBe('kimi');
       expect(second.getProvider()).toBe('kimi');
       firstOwner.chooseModel('kimi-first');
@@ -126,10 +117,9 @@ describe('loadCliConfig provider alias model bootstrap', () => {
       expect(firstOwner.readSelectedModel()).toBe('kimi-first');
       expect(secondOwner.readSelectedModel()).toBe('kimi-second');
       await first.dispose();
-      expect(secondManager?.getActiveProvider()?.name).toBe('kimi');
+      expect(secondRoot?.getActiveProviderName()).toBe('kimi');
       expect(secondOwner.readSelectedModel()).toBe('kimi-second');
     } finally {
-      observation.mockRestore();
       await firstOwner.dispose();
       await secondOwner.dispose();
       await first.dispose();

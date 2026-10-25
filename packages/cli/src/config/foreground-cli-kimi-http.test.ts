@@ -1,5 +1,3 @@
-import { adoptFixture as fromConfig } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -14,8 +12,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PromptService } from '@vybestack/llxprt-code-core/prompt-config/index.js';
 import {
+  AgentProfilePreflight,
   type Agent,
-  type AgentProfilePreflight,
+  type AgentActivationOperation,
 } from '@vybestack/llxprt-code-agents';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core';
@@ -24,6 +23,7 @@ import { parseArguments } from './cliArgParser.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 import type { Settings } from './settings.js';
 import { loadCliConfigWithPreflight } from '../__tests__/load-cli-config-fixture.js';
+import { activateConfiguredProvider } from '../cliProviderInit.js';
 
 function streamReply(text: string): string {
   const chunk = {
@@ -64,9 +64,9 @@ async function loadOwner(
   ];
   const argv = await parseArguments({} as Settings);
   let registration: AgentProfilePreflight | undefined;
+  let operation: AgentActivationOperation | undefined;
   const credentialAuthority = new CredentialAuthority();
   const settingsService = new SettingsService();
-  const settingsOwner = new SessionSettingsOwner(settingsService);
   const config = await loadCliConfigWithPreflight({
     settings: {},
     extensions: [],
@@ -80,33 +80,31 @@ async function loadOwner(
     argv,
     cwd: process.cwd(),
     settingsService,
-    settingsOwner,
     authority: credentialAuthority,
-    onActivationBootstrapReady: () => undefined,
+    onActivationBootstrapReady: (owner) => {
+      operation = owner;
+    },
     onPreflightReady: (owner) => {
       registration = owner;
     },
   });
-  if (!registration) throw new Error('CLI did not provide its owner handle');
+  if (!registration || !operation)
+    throw new Error('CLI did not provide its owner handle');
+  const activation = await activateConfiguredProvider(
+    config,
+    registration,
+    argv,
+    operation,
+  );
+  if (activation.token === undefined)
+    throw new Error('CLI did not provide a foreground receipt');
   return {
     config,
-    agent: await fromConfig(
-      config,
-      settingsService,
+    agent: await AgentProfilePreflight.createForegroundAgent(
+      registration,
+      activation.token,
+      activation.intent ?? {},
       {},
-      settingsOwner,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      credentialAuthority,
     ),
     registration,
   };
