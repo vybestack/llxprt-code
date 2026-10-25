@@ -36,8 +36,10 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 const retainedInvocationOwners: SessionSettingsOwner[] = [];
+const retainedHistories: HistoryService[] = [];
 
 async function disposeInvocationOwners(): Promise<void> {
+  for (const history of retainedHistories.splice(0)) await history.dispose();
   for (const owner of retainedInvocationOwners.splice(0)) await owner.dispose();
 }
 
@@ -70,6 +72,7 @@ function makeChatSession(
   });
 
   const historyService = new HistoryService();
+  retainedHistories.push(historyService);
   vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(100000);
   vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue(undefined);
   vi.spyOn(historyService, 'getStatistics').mockReturnValue({

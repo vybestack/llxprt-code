@@ -1,7 +1,9 @@
 import { afterEach as closeInvocationRoots } from 'bun:test';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 const retainedInvocationOwners: SessionSettingsOwner[] = [];
+const retainedHistories: HistoryService[] = [];
 closeInvocationRoots(async () => {
+  for (const history of retainedHistories.splice(0)) await history.dispose();
   for (const owner of retainedInvocationOwners.splice(0)) await owner.dispose();
 });
 /**
@@ -121,6 +123,7 @@ export function makeChatSession(
   });
 
   const historyService = new HistoryService();
+  retainedHistories.push(historyService);
   vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(100000);
   vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue(undefined);
   vi.spyOn(historyService, 'getStatistics').mockReturnValue({
@@ -256,6 +259,7 @@ export function makeChatForEnforceContextWindow(
   });
 
   const historyService = new HistoryService();
+  retainedHistories.push(historyService);
   vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(totalTokens);
   vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue(undefined);
   vi.spyOn(historyService, 'getStatistics').mockReturnValue({

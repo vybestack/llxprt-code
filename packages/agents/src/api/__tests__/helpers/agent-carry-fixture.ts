@@ -154,7 +154,6 @@ export async function withAgentCarry<T>(
   bytes = 2048,
   configure: (client: CarryProbeClient) => void = () => {},
 ): Promise<T> {
-  const mutations = new RowOwnership();
   return withSuffixFixture(
     size,
     async (history, input) => {
@@ -197,6 +196,7 @@ export async function withAgentCarry<T>(
         },
       });
       const previous = agent.agentClient;
+      const priorHistory = previous.getHistoryService();
       previous.storeHistoryServiceForReuse(history);
       const access = Object.assign(
         () => {
@@ -211,12 +211,16 @@ export async function withAgentCarry<T>(
         return await action(agent, access, previous, input);
       } finally {
         replacement?.proceed.open();
-        await cleanup();
+        try {
+          await cleanup();
+        } finally {
+          if (priorHistory !== history) await priorHistory?.dispose();
+        }
       }
     },
     bytes,
     accountingRow,
-    mutations,
+    new RowOwnership(),
   );
 }
 

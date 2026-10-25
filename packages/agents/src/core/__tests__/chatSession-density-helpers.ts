@@ -34,7 +34,10 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
 let callIdCounter = 0;
 
 const policyRoots: SessionSettingsOwner[] = [];
+const historyRoots = new Set<HistoryService>();
 closePolicyFixtures(async () => {
+  for (const history of historyRoots) await history.dispose();
+  historyRoots.clear();
   for (const owner of policyRoots.splice(0)) await owner.dispose();
 });
 
@@ -146,6 +149,7 @@ export function buildRuntimeContext(
 
   const settingsService = new SettingsService();
   const settingsOwner = new SessionSettingsOwner(settingsService);
+  historyRoots.add(historyService);
   policyRoots.push(settingsOwner);
   return createAgentRuntimeContext({
     readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
