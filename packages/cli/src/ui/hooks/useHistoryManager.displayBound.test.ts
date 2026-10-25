@@ -34,6 +34,7 @@ import { createTurnStore } from '../stores/turn/turnStore.js';
 
 const created: string[] = [];
 const services: SessionRecordingPort[] = [];
+const histories: HistoryService[] = [];
 
 const LARGE_TEXT = 'a very long assistant response. '.repeat(400_000 / 32);
 
@@ -41,6 +42,7 @@ describe('UI history display bound preserves content elsewhere', () => {
   afterEach(async () => {
     // Disposal here rather than inline, so a failing assertion cannot leak the
     // recording service or its temp directory.
+    for (const history of histories.splice(0)) await history.dispose();
     for (const service of services.splice(0)) {
       await service.dispose();
     }
@@ -51,6 +53,7 @@ describe('UI history display bound preserves content elsewhere', () => {
 
   it('bounds the on-screen copy while core history keeps the full text', async () => {
     const historyService = new HistoryService();
+    histories.push(historyService);
     historyService.add({
       speaker: 'ai',
       blocks: [{ type: 'text', text: LARGE_TEXT }],
