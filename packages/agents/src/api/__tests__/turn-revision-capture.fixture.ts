@@ -13,7 +13,7 @@ import { json } from 'node:stream/consumers';
 import { tmpdir } from 'node:os';
 import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
 import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import { captureAgentCreation as createAgent } from './helpers/agent-resource-capture.js';
+import { createAgent } from '../createAgent.js';
 
 function barrier(): { readonly promise: Promise<void>; release(): void } {
   let release = (): void => {
