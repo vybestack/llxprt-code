@@ -279,7 +279,7 @@ describe('Mistral physical holder correction costs', () => {
             expect(unrelated).toBe(0);
             const holderCount = all ? size : 3;
             const affected = historicalId === '' ? holderCount : 0;
-            expect(holders).toBe(collision ? affected * 2 : 0);
+            expect(holders).toBe(collision ? affected : 0);
             recordCost(audit, {
               size,
               all,
