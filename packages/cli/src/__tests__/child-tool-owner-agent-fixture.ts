@@ -5,15 +5,21 @@
  */
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import { type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent, type AgentConfig } from '@vybestack/llxprt-code-agents';
 import {
+  PolicyDecision,
   type CompletedToolCall,
   type ToolCallRequestInfo,
 } from '@vybestack/llxprt-code-core';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { createGatedRecordingMcp } from '../../../agents/src/api/__tests__/helpers/gated-recording-mcp.js';
+import { createGatedEchoMcp } from '../../../agents/src/api/__tests__/helpers/gated-echo-mcp.js';
+import { awaitMcpDiscoveryReady } from '../../../agents/src/api/__tests__/helpers/mcp-discovery-ready.js';
 import { openRouteAAgent } from '../../../agents/src/api/__tests__/helpers/route-a-agent.js';
 import {
   cleanupAfterFailure,
@@ -25,6 +31,9 @@ import { renderHook } from './render.js';
 const noop = (): void => {};
 
 const CHILD_TOOL = 'child_record';
+// The policy engine names an MCP tool `<server>__<tool>`; the agent catalog prefixes `mcp__`.
+const CHILD_TOOL_NAME = `mcp__recording__${CHILD_TOOL}`;
+const CHILD_POLICY_TOOL_NAME = `recording__${CHILD_TOOL}`;
 const CHILD_REPLAY = fileURLToPath(
   new URL('./fixtures/child-record-tool-then-done.jsonl', import.meta.url),
 );
@@ -55,6 +64,30 @@ export interface ChildToolOwner {
   readonly run: (detached?: boolean) => Promise<void>;
   /** `terminate_reason` of every `task` result the owner has completed. */
   readonly terminateReasons: () => readonly string[];
+  /** `agent_id` of every `task` result the owner has completed. */
+  readonly childAgentIds: () => readonly string[];
+}
+
+/**
+ * How the child's tool call is decided: `allow` runs it, `ask` raises a
+ * confirmation the mounted display (or channel) must answer, `deny` excludes
+ * the tool so the call fails without reaching the tool.
+ */
+export type ChildToolDecision = 'allow' | 'ask' | 'deny';
+
+export interface ChildToolOwnerOptions {
+  readonly decision?: ChildToolDecision;
+  /**
+   * The MCP tool answers `<text>:undefined` instead of `recorded`, so the
+   * displayed result tells the owners apart.
+   */
+  readonly outputText?: string;
+  /**
+   * The child runs a gated shell command that prints this text, instead of
+   * the MCP tool. A shell tool streams its output while it runs; an MCP tool
+   * does not.
+   */
+  readonly streamingShellText?: string;
 }
 
 const taskResult = z.object({
@@ -64,15 +97,19 @@ const taskResult = z.object({
   }),
 });
 
-const taskOutput = z.object({ terminate_reason: z.string() });
+const taskOutput = z.object({
+  agent_id: z.string(),
+  terminate_reason: z.string(),
+});
 
-function terminateReasonOf(call: CompletedToolCall): string[] {
+function taskOutputsOf(call: CompletedToolCall): Array<{
+  agent_id: string;
+  terminate_reason: string;
+}> {
   if (call.request.name !== 'task' || call.status !== 'success') return [];
   return call.response.responseParts.flatMap((part) => {
     const result = taskResult.safeParse(part);
-    return result.success
-      ? [taskOutput.parse(result.data.result.output).terminate_reason]
-      : [];
+    return result.success ? [taskOutput.parse(result.data.result.output)] : [];
   });
 }
 
@@ -130,32 +167,197 @@ function taskRequest(name: string, childToolName: string): ToolCallRequestInfo {
   };
 }
 
-function enterChildReplay(): () => void {
+/** What the child tool does and how the test holds, releases and counts it. */
+interface ChildToolGate {
+  readonly replay: string;
+  readonly config: Partial<AgentConfig>;
+  readonly toolName: (agent: Agent) => Promise<string>;
+  readonly entered: () => Promise<void>;
+  readonly release: () => Promise<void>;
+  /** Number of times the child tool was entered. */
+  readonly callCount: () => Promise<number>;
+  readonly close: () => Promise<void>;
+}
+
+/** A DENY rule on the child tool, through the public `AgentConfig.policy` input. */
+function denyPolicy(decision: ChildToolDecision): Partial<AgentConfig> {
+  if (decision !== 'deny') return {};
+  return {
+    policy: {
+      defaultDecision: PolicyDecision.ASK_USER,
+      rules: [
+        { toolName: 'task', decision: PolicyDecision.ALLOW, priority: 1 },
+        {
+          toolName: CHILD_POLICY_TOOL_NAME,
+          decision: PolicyDecision.DENY,
+          priority: 10000,
+        },
+      ],
+    },
+  };
+}
+
+async function openMcpGate(
+  decision: ChildToolDecision,
+  outputText: string | undefined,
+  steps: Array<() => void | Promise<void>>,
+): Promise<ChildToolGate> {
+  const trust = decision === 'allow';
+  if (outputText !== undefined) {
+    const echo = await createGatedEchoMcp({
+      toolName: CHILD_TOOL,
+      serverName: 'recording',
+      outputPrefix: outputText,
+      trust,
+    });
+    steps.push(() => echo.close());
+    return {
+      replay: CHILD_REPLAY,
+      config: { mcpServers: echo.mcpServers, ...denyPolicy(decision) },
+      toolName: async (agent) => {
+        await awaitMcpDiscoveryReady(agent);
+        return CHILD_TOOL_NAME;
+      },
+      entered: () => echo.entered(),
+      release: () => echo.release(),
+      callCount: async () => (await echo.calls()).length,
+      close: () => echo.close(),
+    };
+  }
+  const mcp = await createGatedRecordingMcp({
+    toolName: CHILD_TOOL,
+    gated: true,
+    trust,
+  });
+  steps.push(() => mcp.close());
+  return {
+    replay: CHILD_REPLAY,
+    config: {
+      mcpServers: mcp.mcpServers,
+      ...denyPolicy(decision),
+    },
+    toolName: async (agent) => (await mcp.tool(agent)).name,
+    entered: () => mcp.entered(),
+    release: () => mcp.release(),
+    callCount: async () =>
+      (await mcp.effects()).filter((effect) => effect.event === 'entered')
+        .length,
+    close: () => mcp.close(),
+  };
+}
+
+const SHELL_POLL = 'while [ ! -e "$RELEASE" ]; do sleep 0.05; done';
+
+async function openStreamingShellGate(
+  text: string,
+  steps: Array<() => void | Promise<void>>,
+): Promise<ChildToolGate> {
+  const directory = await mkdtemp(join(tmpdir(), 'child-shell-gate-'));
+  steps.push(() => rm(directory, { recursive: true, force: true }));
+  const enteredFile = join(directory, 'entered');
+  const releaseFile = join(directory, 'release');
+  await writeFile(enteredFile, '');
+  const command = `RELEASE='${releaseFile}'; printf '%s\\n' '${text}'; echo entered >> '${enteredFile}'; ${SHELL_POLL}`;
+  const replay = join(directory, 'replay.jsonl');
+  const turns = [
+    {
+      chunks: [
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'same-child-call',
+              name: 'run_shell_command',
+              parameters: { command },
+            },
+          ],
+        },
+      ],
+    },
+    { chunks: [{ speaker: 'ai', blocks: [{ type: 'text', text: 'Done' }] }] },
+  ];
+  await writeFile(
+    replay,
+    turns.map((turn) => JSON.stringify(turn)).join('\n') + '\n',
+  );
+  const lines = async (): Promise<number> =>
+    (await readFile(enteredFile, 'utf8')).split('\n').filter(Boolean).length;
+  return {
+    replay,
+    config: { allowedTools: ['run_shell_command'] },
+    toolName: () => Promise.resolve('run_shell_command'),
+    entered: async () => {
+      const deadline = Date.now() + 30_000;
+      while ((await lines()) < 1) {
+        if (Date.now() > deadline)
+          throw new Error('Shell child was not entered');
+        await new Promise<void>((resolve) => setTimeout(resolve, 10));
+      }
+    },
+    release: () => writeFile(releaseFile, ''),
+    callCount: lines,
+    close: () => rm(directory, { recursive: true, force: true }),
+  };
+}
+
+function enterReplay(replay: string): () => void {
   const previous = process.env.LLXPRT_FAKE_RESPONSES;
-  process.env.LLXPRT_FAKE_RESPONSES = CHILD_REPLAY;
+  process.env.LLXPRT_FAKE_RESPONSES = replay;
   return (): void => {
     if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
     else process.env.LLXPRT_FAKE_RESPONSES = previous;
   };
 }
 
+type ClientChannel = ReturnType<Agent['tools']['openClientChannel']>;
+
+function openGate(
+  options: ChildToolOwnerOptions,
+  steps: Array<() => void | Promise<void>>,
+): Promise<ChildToolGate> {
+  return options.streamingShellText === undefined
+    ? openMcpGate(options.decision ?? 'allow', options.outputText, steps)
+    : openStreamingShellGate(options.streamingShellText, steps);
+}
+
+/** Schedules the task through the mounted hook, a detached channel, or the owner's channel. */
+async function runTask(
+  request: ToolCallRequestInfo,
+  detached: boolean,
+  route: {
+    readonly hook: SchedulerHook | undefined;
+    readonly channel: ClientChannel | undefined;
+    readonly openChannel: () => ClientChannel;
+  },
+): Promise<void> {
+  const signal = new AbortController().signal;
+  if (detached) {
+    const execution = route.openChannel();
+    try {
+      await execution.schedule(request, signal);
+    } finally {
+      await execution.release();
+    }
+  } else if (route.hook) await route.hook.result.current[1](request, signal);
+  else await route.channel?.schedule(request, signal);
+}
+
 export async function openChildToolOwner(
   name: string,
   mounted = true,
+  options: ChildToolOwnerOptions = {},
 ): Promise<{
   readonly owner: ChildToolOwner;
   readonly close: () => Promise<void>;
 }> {
-  const restoreReplay = enterChildReplay();
   const steps: Array<() => void | Promise<void>> = [];
+  let restoreReplay = (): void => {};
   const close = (): Promise<void> =>
-    runCleanupSteps(steps.splice(0).reverse()).finally(restoreReplay);
+    runCleanupSteps(steps.splice(0).reverse()).finally(() => restoreReplay());
   try {
-    const mcp = await createGatedRecordingMcp({
-      toolName: CHILD_TOOL,
-      gated: true,
-    });
-    steps.push(() => mcp.close());
+    const gate = await openGate(options, steps);
+    restoreReplay = enterReplay(gate.replay);
     const route = await openRouteAAgent({
       config: {
         sessionId: 'equal-child-owner-label',
@@ -163,19 +365,19 @@ export async function openChildToolOwner(
         telemetry: { enabled: false },
         recording: { enabled: false },
         interactive: true,
-        mcpServers: mcp.mcpServers,
+        ...gate.config,
       },
     });
     steps.push(
       () => route.close(),
-      () => mcp.release(),
+      () => gate.release(),
     );
     const agent = route.agent;
     await saveWorkerSubagent(agent);
-    const request = taskRequest(name, (await mcp.tool(agent)).name);
+    const request = taskRequest(name, await gate.toolName(agent));
     const completed: ChildToolOwner['completed'] = [];
     const channelResults: CompletedToolCall[] = [];
-    const openChannel = (): ReturnType<Agent['tools']['openClientChannel']> =>
+    const openChannel = (): ClientChannel =>
       agent.tools.openClientChannel((calls) => {
         channelResults.push(...calls);
       });
@@ -186,33 +388,22 @@ export async function openChildToolOwner(
       steps.push(() => channel.release());
       await channel.ready;
     }
+    const taskOutputs = (): ReturnType<typeof taskOutputsOf> =>
+      [...completed.flatMap((entry) => entry.calls), ...channelResults].flatMap(
+        taskOutputsOf,
+      );
     const owner: ChildToolOwner = {
       agent,
       hook,
       completed,
-      entered: () => mcp.entered(),
-      release: () => mcp.release(),
+      entered: () => gate.entered(),
+      release: () => gate.release(),
       effects: async () =>
-        (await mcp.effects())
-          .filter((effect) => effect.event === 'entered')
-          .map(() => name),
-      run: async (detached = false) => {
-        const signal = new AbortController().signal;
-        if (detached) {
-          const execution = openChannel();
-          try {
-            await execution.schedule(request, signal);
-          } finally {
-            await execution.release();
-          }
-        } else if (hook) await hook.result.current[1](request, signal);
-        else await channel?.schedule(request, signal);
-      },
-      terminateReasons: () =>
-        [
-          ...completed.flatMap((entry) => entry.calls),
-          ...channelResults,
-        ].flatMap(terminateReasonOf),
+        Array.from({ length: await gate.callCount() }, () => name),
+      run: (detached = false) =>
+        runTask(request, detached, { hook, channel, openChannel }),
+      terminateReasons: () => taskOutputs().map((out) => out.terminate_reason),
+      childAgentIds: () => taskOutputs().map((out) => out.agent_id),
     };
     return { owner, close };
   } catch (primary) {
