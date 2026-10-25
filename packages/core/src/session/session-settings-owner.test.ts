@@ -57,6 +57,32 @@ describe('session default classification', () => {
       await peer.dispose();
     }
   });
+
+  it('keeps default-owned key classification separate across two owners when one applies a profile', async () => {
+    const first = new SessionSettingsOwner(new SettingsService());
+    const second = new SessionSettingsOwner(new SettingsService());
+    try {
+      for (const owner of [first, second]) {
+        owner.recordProviderDefaults([]);
+        owner.recordModelDefaults(['reasoning.enabled']);
+      }
+      const applied = { modelKeys: ['reasoning.enabled'], providerEntries: [] };
+      expect(first.captureDefaultClassification()).toStrictEqual(applied);
+      expect(second.captureDefaultClassification()).toStrictEqual(applied);
+
+      first.recordProviderDefaults([]);
+      first.recordModelDefaults([]);
+
+      expect(first.captureDefaultClassification()).toStrictEqual({
+        modelKeys: [],
+        providerEntries: [],
+      });
+      expect(second.captureDefaultClassification()).toStrictEqual(applied);
+    } finally {
+      await first.dispose();
+      await second.dispose();
+    }
+  });
 });
 
 describe('session override authority', () => {
