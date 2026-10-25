@@ -5,10 +5,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import {
-  openCaller,
-  useFakeResponsesReplay,
-} from './helpers/caller-fixture.js';
+import { openCaller } from './helpers/caller-fixture.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { randomUUID } from 'node:crypto';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { beforeAll, afterAll, describe, expect, it, spyOn } from 'bun:test';

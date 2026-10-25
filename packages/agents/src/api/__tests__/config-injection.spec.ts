@@ -2,10 +2,8 @@ import { capturedSessionClient } from './helpers/session-client-capture.js';
 import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { useConsumerPromptDirectory } from './helpers/consumer-owner-primitives.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import {
-  openCaller,
-  useFakeResponsesReplay,
-} from './helpers/caller-fixture.js';
+import { openCaller } from './helpers/caller-fixture.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { describe, expect, it } from 'bun:test';
 import { type Agent, type AgentEvent } from '@vybestack/llxprt-code-agents';

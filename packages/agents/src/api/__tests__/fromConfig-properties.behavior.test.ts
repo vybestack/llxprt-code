@@ -5,10 +5,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import {
-  openCaller,
-  useFakeResponsesReplay,
-} from './helpers/caller-fixture.js';
+import { openCaller } from './helpers/caller-fixture.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { beforeAll, afterAll, describe, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { type MessageBus } from './helpers/fixture-data.js';

@@ -4,12 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterAll, beforeAll, beforeEach } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
@@ -46,35 +44,6 @@ import {
   capturedSessionClient,
 } from './session-client-capture.js';
 import { buildTestMcpRuntime } from './mcp-owner-fixture.js';
-
-/**
- * Points the FakeProvider replay seam (LLXPRT_FAKE_RESPONSES) at a fixture for
- * the whole suite. Property cases open a caller per generated value, and a
- * timed-out property keeps running after its test ends, so per-case set and
- * restore calls would overwrite the value the next test depends on. The
- * returned function switches the fixture for one test; every test starts from
- * the default again.
- */
-export function useFakeResponsesReplay(
-  defaultFixture: string,
-): (fixture: string) => void {
-  const fixturePath = (fixture: string): string =>
-    fileURLToPath(new URL('../fixtures/' + fixture, import.meta.url));
-  let previous: string | undefined;
-  beforeAll(() => {
-    previous = process.env.LLXPRT_FAKE_RESPONSES;
-  });
-  beforeEach(() => {
-    process.env.LLXPRT_FAKE_RESPONSES = fixturePath(defaultFixture);
-  });
-  afterAll(() => {
-    if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previous;
-  });
-  return (fixture) => {
-    process.env.LLXPRT_FAKE_RESPONSES = fixturePath(fixture);
-  };
-}
 
 /**
  * Everything one generated case owns. It is created and closed by that case
