@@ -128,6 +128,8 @@ describe('native detached density annotation projection', () => {
         end: index * 3 + 1,
         reason: 'density-replaced' as const,
       }));
+      // Keep automatic named-file compaction outside the interval-file trap.
+      const pin = await journal.session.store.snapshot();
       try {
         await denyIntervalCreation(() =>
           journal.store.publishDetached(
@@ -165,6 +167,7 @@ describe('native detached density annotation projection', () => {
           ),
         );
       } finally {
+        await pin.close();
         await journal.dispose();
       }
     });

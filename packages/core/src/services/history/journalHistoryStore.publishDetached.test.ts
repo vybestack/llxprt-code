@@ -82,8 +82,8 @@ async function openJournal(
   for (const content of rows) {
     stamper.stamp(content);
     store.apply({ kind: 'content', content });
+    await store.waitForDurable();
   }
-  await store.waitForDurable();
   const estimator = new HistoryService();
   estimator.setTokenizerFactory(exactTokenizer());
   const startTokens = await estimator.estimateTokensForContents(rows);
