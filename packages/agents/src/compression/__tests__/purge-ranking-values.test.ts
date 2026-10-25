@@ -46,7 +46,7 @@ async function observeRoute(
       history,
       rollback ? failure : undefined,
     );
-    fixture.pauseWriter();
+    fixture.pauseWriter(size);
     try {
       const operation = rejectedValue(
         prepared.execute().then((result) => {
@@ -60,8 +60,8 @@ async function observeRoute(
         }),
       ]);
       await sample('writer-paused');
-      expect(owners.snapshot().liveRows).toBeGreaterThan(0);
-      fixture.releaseWriter();
+      expect(owners.snapshot().liveRows).toBe(0);
+      await Promise.resolve(fixture.releaseWriter());
       await finalization.acknowledged;
       await sample('acknowledged');
       const expected = await detachedDigest(
@@ -70,12 +70,14 @@ async function observeRoute(
       expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
         expected,
       );
-      expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
+      expect(await detachedDigest(fixture.primaryRows())).toStrictEqual(
+        expected,
+      );
       expect(history.getTotalTokens()).toBe(
         route === 'purge' ? size * 2 : beforeTokens,
       );
       expect(history.getContextRange()).toStrictEqual(expectedRange(size));
-      finalization.release();
+      await Promise.resolve(finalization.release());
       expect(await operation).toBe(rollback ? failure : undefined);
       await sample(rollback ? 'rollback' : 'complete');
       const restored = rollback ? before : expected;
@@ -95,9 +97,9 @@ async function observeRoute(
       ).toBe(true);
       return restored.count;
     } finally {
-      fixture.releaseWriter();
-      finalization.release();
-      prepared.close();
+      await Promise.resolve(fixture.releaseWriter());
+      await Promise.resolve(finalization.release());
+      await prepared.close();
     }
   });
 }

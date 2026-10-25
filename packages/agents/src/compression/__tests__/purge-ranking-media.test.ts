@@ -33,22 +33,17 @@ async function* referenceRows(
   }
 }
 
-async function mediaRoute(
+async function observeMediaRoute(
+  store: LocalMediaStore,
+  owner: HistoryMediaOwnership,
+  media: MediaReferenceBlock,
   route: ValueRoute,
   size: number,
   rollback: boolean,
 ): Promise<number> {
-  const root = await mkdtemp(join(tmpdir(), 'purge-ranking-media-'));
-  const store = new LocalMediaStore({ rootDirectory: root, quotaBytes: 1024 });
-  const owner = new HistoryMediaOwnership(store);
-  try {
-    const media = await store.admit({
-      bytes: new Uint8Array([1, 2, 3]),
-      mimeType: 'image/png',
-      semanticMetadata: {},
-    });
-    return await withValueTransformFixture(async (fixture) => {
-      const { history, recorder, owners } = fixture;
+  return withValueTransformFixture(async (fixture) => {
+    const { history, recorder, owners } = fixture;
+    try {
       await history.registerMediaOwner(owner);
       await history.detachedValues.replace(referenceRows(size, media));
       const before = await detachedDigest(referenceRows(size, media));
@@ -61,8 +56,12 @@ async function mediaRoute(
         adopt: (rows) => owner.adopt(rows),
         reconcile: (rows, next) => owner.reconcile(rows, next),
         releaseAll: () => owner.releaseAll(),
-        prepareReplacement: async (input) => {
-          const effect = owner.prepareReplacement(input);
+        prepareReplacement: (input) => owner.prepareReplacement(input),
+        prepareReferenceReplacement: async (references, ownership) => {
+          const effect = owner.prepareReferenceReplacement(
+            references,
+            ownership,
+          );
           return {
             publish: () => effect.publish(),
             rollback: () => effect.rollback(),
@@ -89,6 +88,8 @@ async function mediaRoute(
         ).toBe(true);
         fixture.releaseWriter();
         expect(await operation).toBe(rollback ? failure : undefined);
+        await prepared.close();
+        await history.waitForOwnershipSettlement();
         expect(await store.hasReservations(media.contentId)).toBe(
           route === 'ranking' || rollback,
         );
@@ -101,11 +102,30 @@ async function mediaRoute(
         return size;
       } finally {
         fixture.releaseWriter();
-        prepared.close();
+        await prepared.close();
       }
+    } finally {
+      await owner.releaseAll();
+    }
+  });
+}
+
+async function mediaRoute(
+  route: ValueRoute,
+  size: number,
+  rollback: boolean,
+): Promise<number> {
+  const root = await mkdtemp(join(tmpdir(), 'purge-ranking-media-'));
+  const store = new LocalMediaStore({ rootDirectory: root, quotaBytes: 1024 });
+  const owner = new HistoryMediaOwnership(store);
+  try {
+    const media = await store.admit({
+      bytes: new Uint8Array([1, 2, 3]),
+      mimeType: 'image/png',
+      semanticMetadata: {},
     });
+    return await observeMediaRoute(store, owner, media, route, size, rollback);
   } finally {
-    await owner.releaseAll();
     await store.close();
     await rm(root, { recursive: true, force: true });
   }
