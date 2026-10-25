@@ -129,6 +129,39 @@ function keepsMessage(
   );
 }
 
+interface ChatRowMessages {
+  readonly speaker: IContent['speaker'];
+  readonly messages: Array<OpenAI.Chat.ChatCompletionMessageParam | null>;
+  readonly media: MediaBlock[];
+}
+
+function nextChatRowMessages(
+  iterator: AsyncIterator<IContent>,
+  at: number,
+  settings: RowFormatSettings,
+  strip: unknown,
+  lastThinking: number,
+  rowIds: NativeRowIds | undefined,
+): Promise<ChatRowMessages | undefined> {
+  return iterator.next().then((next) => {
+    if (next.done === true) return undefined;
+    const remove = strip === 'all' || (strip !== 'none' && at !== lastThinking);
+    const row = remove ? removeThinkingFromContent(next.value) : next.value;
+    const convert = (mapper?: StreamingToolIdMapper): ChatRowMessages => {
+      const media: MediaBlock[] = [];
+      return {
+        speaker: row.speaker,
+        messages: messagesOf(row, settings, media, mapper),
+        media,
+      };
+    };
+    const mapping = rowIds?.(row, at);
+    return mapping === undefined
+      ? convert()
+      : mapping.then((createMapper) => convert(createMapper?.()));
+  });
+}
+
 export async function* nativeChatPieces(
   rows: AsyncIterable<IContent>,
   settings: RowFormatSettings,
@@ -145,42 +178,56 @@ export async function* nativeChatPieces(
   let mediaEnd = -1;
   let video = false;
   let index = 0;
-  for await (const source of rows) {
-    if (
-      (pending.length !== 0 || mediaStart >= 0) &&
-      source.speaker !== 'tool'
-    ) {
-      if (mediaAt === undefined) yield* mediaMessage(pending, serialize);
-      else
-        yield* indexedMediaMessage(
-          mediaAt,
-          mediaStart,
-          mediaEnd,
-          video,
-          serialize,
+  const iterator = rows[Symbol.asyncIterator]();
+  try {
+    for (;;) {
+      const item = await nextChatRowMessages(
+        iterator,
+        index++,
+        settings,
+        strip,
+        lastThinking,
+        rowIds,
+      );
+      if (item === undefined) break;
+      if (
+        (pending.length !== 0 || mediaStart >= 0) &&
+        item.speaker !== 'tool'
+      ) {
+        if (mediaAt === undefined) yield* mediaMessage(pending, serialize);
+        else
+          yield* indexedMediaMessage(
+            mediaAt,
+            mediaStart,
+            mediaEnd,
+            video,
+            serialize,
+          );
+        pending = [];
+        mediaStart = -1;
+        video = false;
+        lastIds = [];
+      }
+      const at = index - 1;
+      pending.push(...item.media);
+      const messages = item.messages;
+      if (mediaAt !== undefined && pending.length !== 0) {
+        if (mediaStart < 0) mediaStart = at;
+        mediaEnd = at;
+        video ||= pending.some(
+          (block) => classifyMediaBlock(block) === 'video',
         );
-      pending = [];
-      mediaStart = -1;
-      video = false;
-      lastIds = [];
+        pending = [];
+      }
+      for (const message of messages) {
+        if (!keepsMessage(message, allowOrphans, lastIds)) continue;
+        lastIds = nextCallIds(message, lastIds);
+        yield nativeDumpLiteral(',');
+        yield* serialize(message);
+      }
     }
-    const at = index++;
-    const remove = strip === 'all' || (strip !== 'none' && at !== lastThinking);
-    const row = remove ? removeThinkingFromContent(source) : source;
-    const mapper = (await rowIds?.(row, at))?.();
-    const messages = messagesOf(row, settings, pending, mapper);
-    if (mediaAt !== undefined && pending.length !== 0) {
-      if (mediaStart < 0) mediaStart = at;
-      mediaEnd = at;
-      video ||= pending.some((block) => classifyMediaBlock(block) === 'video');
-      pending = [];
-    }
-    for (const message of messages) {
-      if (!keepsMessage(message, allowOrphans, lastIds)) continue;
-      lastIds = nextCallIds(message, lastIds);
-      yield nativeDumpLiteral(',');
-      yield* serialize(message);
-    }
+  } finally {
+    await iterator.return?.();
   }
   if (mediaAt !== undefined && mediaStart >= 0)
     yield* indexedMediaMessage(mediaAt, mediaStart, mediaEnd, video, serialize);
