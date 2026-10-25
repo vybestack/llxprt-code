@@ -1,5 +1,3 @@
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { buildRuntimeProfileSnapshot } from '../../../agents/src/api/profileSnapshot.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -13,63 +11,33 @@ import { buildRuntimeProfileSnapshot } from '../../../agents/src/api/profileSnap
  */
 
 import { beforeEach, afterEach, describe, expect, it } from 'bun:test';
-import {
-  Config,
-  type RuntimeProviderManager,
-} from '@vybestack/llxprt-code-core';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { IProvider } from '@vybestack/llxprt-code-providers';
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 import { createSetCommand } from '../ui/commands/setCommand.js';
 import type { SlashCommand } from '../ui/commands/types.js';
+import { buildRuntimeProfileSnapshot } from '../../../agents/src/api/profileSnapshot.js';
 import {
   setActiveModelParam,
   clearActiveModelParam,
 } from '../../../agents/src/api/model-parameters.js';
-import { prepareIntegrationPreflight } from './__tests__/prepare-preflight.js';
-import type { AgentProfilePreflight } from '@vybestack/llxprt-code-agents';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import type { RouteBPreflight } from '../../../agents/src/api/__tests__/helpers/route-b-preflight.js';
 import { assertDefined } from '../__tests__/assertions.js';
 import {
-  createTempDirectory,
-  cleanupTempDirectory,
-  initializeTestAgent,
-} from './test-utils.js';
-
-function createStubProvider(name: string): IProvider {
-  return {
-    name,
-    async getModels() {
-      return [
-        {
-          id: `${name}-model`,
-          name: `${name}-model`,
-          provider: name,
-          supportedToolFormats: [],
-        },
-      ];
-    },
-    getDefaultModel() {
-      return `${name}-model`;
-    },
-    async *generateChatCompletion() {
-      yield {
-        speaker: 'ai' as const,
-        blocks: [{ type: 'text' as const, text: `response-from-${name}` }],
-      };
-    },
-  };
-}
+  createModelParamsStubProvider,
+  openModelParamsRoot,
+  type ModelParamsRoot,
+} from './__tests__/model-params-route.js';
 
 describe('CLI model parameter command integration', () => {
   const credentials = useOwnedCredentials();
-  let tempDir: string;
+  let root: ModelParamsRoot;
   let config: Config;
-  let settingsOwner: SessionSettingsOwner;
-  let sessionRoot: Awaited<ReturnType<typeof initializeTestAgent>>;
+  let sessionRoot: Agent;
   let settingsService: SettingsService;
-  let preflight: AgentProfilePreflight;
-  let providerManager: RuntimeProviderManager;
+  let preflight: RouteBPreflight['preflight'];
   let context: ReturnType<typeof createMockCommandContext>;
   let setCommand: SlashCommand;
 
@@ -79,33 +47,17 @@ describe('CLI model parameter command integration', () => {
   };
 
   beforeEach(async () => {
-    tempDir = await createTempDirectory();
-    config = new Config({
-      sessionId: 'model-params-integration',
-      targetDir: tempDir,
-      debugMode: false,
-      cwd: tempDir,
-      model: 'alpha-model',
-    });
-    settingsService = new SettingsService();
-    preflight = await prepareIntegrationPreflight(
-      config,
-      settingsService,
+    root = await openModelParamsRoot(
       credentials().authority,
+      'model-params-integration',
       'modelparams-test',
-      (manager) => {
-        providerManager = manager;
-      },
+      [createModelParamsStubProvider('alpha')],
     );
-    settingsOwner = new SessionSettingsOwner(settingsService);
-    sessionRoot = await initializeTestAgent(
-      config,
-      providerManager,
-      settingsService,
-      settingsOwner,
-    );
-    providerManager.registerProvider(createStubProvider('alpha'));
-    await providerManager.setActiveProvider('alpha');
+    config = root.route.config;
+    settingsService = root.route.settings;
+    preflight = root.route.preflight;
+    sessionRoot = root.agent;
+    await preflight.setActiveProvider('alpha');
 
     context = createMockCommandContext({
       runtimeApi: {
@@ -114,13 +66,13 @@ describe('CLI model parameter command integration', () => {
             key,
             value,
             settingsService,
-            providerManager.getActiveProviderName(),
+            preflight.getActiveProviderName(),
           ),
         clearActiveModelParam: (key: string) =>
           clearActiveModelParam(
             key,
             settingsService,
-            providerManager.getActiveProviderName(),
+            preflight.getActiveProviderName(),
           ),
         setEphemeralSetting: (key: string, value: unknown) =>
           sessionRoot.setEphemeralSetting(key, value),
@@ -145,8 +97,7 @@ describe('CLI model parameter command integration', () => {
   });
 
   afterEach(async () => {
-    await preflight.dispose();
-    await cleanupTempDirectory(tempDir);
+    await root.close();
   });
 
   it('sets provider-scoped model params via /set modelparam', async () => {
@@ -175,10 +126,10 @@ describe('CLI model parameter command integration', () => {
     await runSetCommand('modelparam top_p 0.92');
 
     const snapshot = buildRuntimeProfileSnapshot({
-      providerName: providerManager.getActiveProviderName() ?? '',
+      providerName: preflight.getActiveProviderName() ?? '',
       modelName: sessionRoot.getModel(),
       providerSettings: settingsService.getProviderSettings(
-        providerManager.getActiveProviderName() ?? '',
+        preflight.getActiveProviderName() ?? '',
       ),
       ephemeralSettings: sessionRoot.getEphemeralSettings(),
     });
@@ -198,7 +149,7 @@ describe('CLI model parameter command integration', () => {
     clearActiveModelParam(
       'temperature',
       settingsService,
-      providerManager.getActiveProviderName(),
+      preflight.getActiveProviderName(),
     );
     expect(sessionRoot.providerReads.getActiveModelParams()).toStrictEqual({});
   });
