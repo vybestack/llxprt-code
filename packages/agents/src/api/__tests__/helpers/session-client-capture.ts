@@ -11,6 +11,7 @@ import { AgentResourceCapture } from './agent-resource-capture.js';
 import { buildAgentClientFactory } from '../../agentBootstrap.js';
 
 const acquisitions = new WeakMap<SessionClientOwner, AgentResourceCapture>();
+const builtClients = new WeakMap<SessionClientOwner, AgentClientContract[]>();
 const createSessionOwner = SessionClientOwner.create;
 
 type CreateArgs = Parameters<typeof SessionClientOwner.create>;
@@ -59,9 +60,11 @@ export async function captureSessionOwnerCreation(
 ): Promise<SessionClientOwner> {
   const capture = new AgentResourceCapture();
   const factory = args[3];
+  const built: AgentClientContract[] = [];
   args[3] = (...operands) => {
     const client = factory(...operands);
     if (client !== undefined) {
+      built.push(client);
       capture.clients.push(client);
       capture.observe(client);
     }
@@ -71,6 +74,7 @@ export async function captureSessionOwnerCreation(
   if (borrowed !== undefined) capture.observe(borrowed);
   const owner = await createSessionOwner(...args);
   acquisitions.set(owner, capture);
+  builtClients.set(owner, built);
   return owner;
 }
 
@@ -113,6 +117,7 @@ export async function acquireCapturedSessionClient(
 ): Promise<SessionClientOwner> {
   const capture = new AgentResourceCapture();
   const factory = args[9] ?? buildAgentClientFactory();
+  const built: AgentClientContract[] = [];
   const borrowed = args[14];
   if (borrowed !== undefined) capture.observe(borrowed);
   const [
@@ -143,6 +148,7 @@ export async function acquireCapturedSessionClient(
     mediaStore,
     (...operands) => {
       const client = factory(...operands);
+      built.push(client);
       capture.clients.push(client);
       capture.observe(client);
       return client;
@@ -155,7 +161,22 @@ export async function acquireCapturedSessionClient(
     borrowed,
   );
   acquisitions.set(owner, capture);
+  builtClients.set(owner, built);
   return owner;
+}
+
+/**
+ * The clients the owner's client factory returned, in creation order. The
+ * factory is the parameter production fills with `buildAgentClientFactory()`;
+ * nothing is patched on the clients.
+ */
+export function ownerClients(
+  owner: SessionClientOwner,
+): readonly AgentClientContract[] {
+  const built = builtClients.get(owner);
+  if (built === undefined)
+    throw new Error('Session owner was not built by the capture helpers');
+  return built;
 }
 
 export function capturedSessionClient(

@@ -1,179 +1,38 @@
-import { prepareActivationFixture } from './helpers/activation-acquisition-capture.js';
-import { createCapturedSessionOwner } from './helpers/session-client-capture.js';
-import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import { describe, expect, it, spyOn } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
-import { runCleanupSteps } from '../../core/subagent-cleanup.js';
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
-
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-
-import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
-import { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
-
-import { assembleWorkspaceMemory } from '@vybestack/llxprt-code-core';
-
-import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { gate } from './helpers/async-child-disposal-join-fixture.js';
-import { describe, expect, it } from 'bun:test';
+import { join } from 'node:path';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { gate } from './helpers/async-child-disposal-join-fixture.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openRouteBPreflight } from './helpers/route-b-preflight.js';
 
 describe('activation media owner lifetime', () => {
-  const createFilesystem = installTestWorkspaceFilesystem();
-  it('joins accepted activation before closing an untransferred media owner', async () => {
-    const builtFactorylessPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('fixtures/' + 'multi-turn-text.jsonl', import.meta.url),
-    );
-    const builtFactorylessDirectory = await realpath(
-      await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
-    );
-    const builtFactorylessSupplied: CallerAgentRuntimeFactories = {};
-    const builtFactorylessConfig = new Config(
-      toConfigParameters({
-        ...{
-          provider: 'fake',
-          model: 'fake-model',
-          workingDir: builtFactorylessDirectory,
-        },
-        ...{},
-      }),
-    );
-    const builtFactorylessSettings = new SettingsService();
-    for (const [key, value] of Object.entries(
-      builtFactorylessConfig.getInitialSettings(),
-    ))
-      builtFactorylessSettings.set(key, value);
-    const builtFactorylessSettingsOwner = new SessionSettingsOwner(
-      builtFactorylessSettings,
-    );
-    builtFactorylessSettingsOwner.bindTelemetry(builtFactorylessConfig);
-    builtFactorylessSettingsOwner.initializeProviderSelection(
-      builtFactorylessConfig.getProvider(),
-      builtFactorylessConfig.getModel(),
-    );
-    const builtFactorylessPolicy = new RuntimePolicyOwner(
-      builtFactorylessConfig,
-    );
-    const builtFactorylessTask = builtFactorylessSupplied.taskToolRegistration;
-    const builtFactorylessFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...(builtFactorylessSupplied.agentClientFactory
-        ? { agentClientFactory: builtFactorylessSupplied.agentClientFactory }
-        : {}),
-      ...(builtFactorylessTask
-        ? { taskToolRegistration: () => builtFactorylessTask }
-        : {}),
-    };
-
-    const builtFactorylessClose = settleFactorylessRelease.bind(
-      undefined,
-      [
-        () => builtFactorylessSettingsOwner.dispose(),
-        () => builtFactorylessPolicy.dispose(),
-        () => builtFactorylessConfig.dispose(),
-        () => rm(builtFactorylessDirectory, { recursive: true, force: true }),
-      ],
-      builtFactorylessPreviousReplay,
-    );
-
-    const filesystem = createFilesystem({
-      targetDir: builtFactorylessConfig.getTargetDir(),
-      isTrusted: () =>
-        new WorkspaceTrustLifecycle({
-          localTrust: builtFactorylessConfig.initialWorkspaceTrust,
-        }).isTrustedFolder(),
-    });
-    const owner = new SessionMediaOwner(
-      builtFactorylessConfig.projectTempDir,
-      1024,
-    );
-    const manager = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      builtFactorylessSettings,
-    );
+  useFakeResponsesReplay('multi-turn-text.jsonl');
+  it('joins accepted activation before closing the preflight', async () => {
+    const route = await openRouteBPreflight();
+    const settingsOwner = new SessionSettingsOwner(route.settings);
     const entered = gate();
-    const factoriesTokenizer = configureProviderTokenizer(manager);
-    const factoriesContent = createRuntimeContentGeneratorFactory();
     const released = gate();
-    const settingsOwner = builtFactorylessSettingsOwner;
-    const operation = prepareActivationFixture(
-      builtFactorylessConfig,
-      manager,
+    const telemetry = spyOn(settingsOwner, 'startTelemetry').mockImplementation(
       async () => {
-        await owner.store.admit({
-          bytes: new Uint8Array([1, 2, 3, 4]),
-          mimeType: 'image/png',
-          semanticMetadata: {},
-        });
         entered.release();
         await released.promise;
-        return { authFailed: false, infoMessages: [] };
       },
-      undefined,
-      owner,
-      await createCapturedSessionOwner(
-        builtFactorylessConfig,
-        assembleTaskSchemaPolicy(builtFactorylessSettings),
-        manager,
-        builtFactorylessFactories.agentClientFactory,
-        owner.store,
-        () => undefined,
-        filesystem.paths,
-        settingsOwner,
-        factoriesContent,
-        factoriesTokenizer,
-      ),
-      filesystem,
-      assembleWorkspaceMemory(
-        builtFactorylessConfig,
-        filesystem,
-        new WorkspaceTrustLifecycle({
-          localTrust: builtFactorylessConfig.initialWorkspaceTrust,
-        }),
-      ),
-      false,
-      settingsOwner,
-      'borrowed',
-      new WorkspaceDefinitionOwner(
-        join(builtFactorylessConfig.getTargetDir(), 'profiles'),
-        join(builtFactorylessConfig.getTargetDir(), 'subagents'),
-      ),
-      true,
-      new WorkspaceTrustLifecycle({
-        localTrust: builtFactorylessConfig.initialWorkspaceTrust,
-      }),
     );
-    const pending = operation.preflight({ provider: 'fake' });
-    await entered.promise;
-    const closing = operation.dispose();
+    let pending: Promise<unknown> | undefined;
+    let closing: Promise<void> | undefined;
     try {
+      await route.prepare({ settingsOwner });
+      pending = route.preflight.preflight({ provider: 'fake' });
+      await entered.promise;
+      closing = route.disposePreflight();
       expect(
         await Promise.race([
           closing.then(() => 'closed'),
@@ -184,135 +43,63 @@ describe('activation media owner lifetime', () => {
       ).toBe('joining');
     } finally {
       released.release();
-      await pending;
+      await pending?.catch(() => undefined);
       await closing;
-      manager.dispose();
-      await builtFactorylessClose();
+      telemetry.mockRestore();
+      await settingsOwner.dispose();
+      await route.close();
     }
-    await expect(owner.store.getStoredByteLength()).rejects.toThrow(/closed/i);
   });
+
+  it('closes the media store when its owner is disposed', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'media-owner-lifetime-'));
+    const owner = new SessionMediaOwner(directory, 1024);
+    try {
+      await owner.store.admit({
+        bytes: new Uint8Array([1, 2, 3, 4]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      });
+      expect(await owner.store.getStoredByteLength()).toBeGreaterThan(0);
+      await owner.dispose();
+      await expect(owner.store.getStoredByteLength()).rejects.toThrow(
+        /closed/i,
+      );
+    } finally {
+      await owner.dispose();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it('releases the owned filesystem after an accepted memory publication fails during teardown', async () => {
-    const builtFactorylessPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('fixtures/' + 'multi-turn-text.jsonl', import.meta.url),
-    );
-    const builtFactorylessDirectory = await realpath(
-      await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
-    );
-
-    const builtFactorylessConfig = new Config(
-      toConfigParameters({
-        ...{
-          provider: 'fake',
-          model: 'fake-model',
-          workingDir: builtFactorylessDirectory,
-        },
-        ...{},
-      }),
-    );
-    const builtFactorylessSettings = new SettingsService();
-    for (const [key, value] of Object.entries(
-      builtFactorylessConfig.getInitialSettings(),
-    ))
-      builtFactorylessSettings.set(key, value);
-    const builtFactorylessSettingsOwner = new SessionSettingsOwner(
-      builtFactorylessSettings,
-    );
-    builtFactorylessSettingsOwner.bindTelemetry(builtFactorylessConfig);
-    builtFactorylessSettingsOwner.initializeProviderSelection(
-      builtFactorylessConfig.getProvider(),
-      builtFactorylessConfig.getModel(),
-    );
-    const builtFactorylessPolicy = new RuntimePolicyOwner(
-      builtFactorylessConfig,
-    );
-
-    const builtFactorylessClose = settleFactorylessRelease.bind(
-      undefined,
-      [
-        () => builtFactorylessSettingsOwner.dispose(),
-        () => builtFactorylessPolicy.dispose(),
-        () => builtFactorylessConfig.dispose(),
-        () => rm(builtFactorylessDirectory, { recursive: true, force: true }),
-      ],
-      builtFactorylessPreviousReplay,
-    );
-
-    const filesystem = createFilesystem({
-      targetDir: builtFactorylessConfig.getTargetDir(),
-      isTrusted: () => true,
-    });
-    const memory = assembleWorkspaceMemory(
-      builtFactorylessConfig,
-      filesystem,
-      new WorkspaceTrustLifecycle({
-        localTrust: builtFactorylessConfig.initialWorkspaceTrust,
-      }),
-    );
+    const route = await openRouteBPreflight();
     const entered = gate();
     const release = gate();
-    memory.operations.subscribe(async () => {
+    route.memory.operations.subscribe(async () => {
       entered.release();
       await release.promise;
       throw new Error('publication rejected during teardown');
     });
-    const manager = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      builtFactorylessSettings,
-      builtFactorylessConfig,
-    );
-    const operation = await assembleAgentActivationBootstrap(
-      builtFactorylessConfig,
-      builtFactorylessSettings,
-      manager,
-      null,
-      () => undefined,
-      'borrowed',
-      undefined,
-      undefined,
-      filesystem,
-      memory,
-      builtFactorylessSettingsOwner,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      'transferred',
-    );
-    const refreshing = memory.operations.refresh();
-    await entered.promise;
-    const closing = operation.dispose();
-    const settled = Promise.allSettled([refreshing, closing]);
-    release.release();
     try {
+      await route.prepare();
+      const refreshing = route.memory.operations.refresh();
+      await entered.promise;
+      const closing = route.disposePreflight();
+      const settled = Promise.allSettled([refreshing, closing]);
+      release.release();
       await settled;
       await expect(refreshing).rejects.toThrow(
         'Memory publication and rollback failed',
       );
       await expect(closing).rejects.toThrow('Activation owner cleanup');
-      expect(() => filesystem.paths.directories()).toThrow('disposed');
+      expect(() => route.filesystem.paths.directories()).toThrow('disposed');
     } finally {
-      manager.dispose();
-      await filesystem.dispose();
-      await builtFactorylessClose();
+      release.release();
+      // The workspace memory owner retains its failed publication, so the
+      // host's own disposal of it reports the same failure again.
+      await expect(route.close()).rejects.toThrow(
+        'Workspace memory cleanup failed',
+      );
     }
   });
 });
-
-async function settleFactorylessRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previous: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previous;
-  }
-}
