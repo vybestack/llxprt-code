@@ -32,7 +32,6 @@ import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/sess
 import type { SessionClientOwner } from '../session/session-client-owner.js';
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import type { AgentConfig } from './config-types.js';
 import { injectConfirmationForcingPolicy } from './confirmationForcing.js';
@@ -42,17 +41,14 @@ import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 
 export async function assembleOwnedMcpRuntime(
   config: Config,
-  bus: MessageBus,
   options: McpAssemblyOptions,
   policy: RuntimePolicyOwner,
   settingsOwner: SessionSettingsOwner,
 ): Promise<McpRuntimeOwner> {
   return assembleMcpRuntime(
     config,
-    bus,
     options,
-    policy,
-    'runtime',
+    { owner: policy, ownership: 'runtime' },
     settingsOwner,
   );
 }

@@ -68,7 +68,7 @@ import {
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 
 import {
-  McpClientManager,
+  type McpClientManager,
   type DiscoveredMCPPrompt,
   type McpOAuthBinding,
   type TokenStorage,
@@ -119,16 +119,13 @@ import { MCP_SESSION_APPROVAL_SOURCE } from '@vybestack/llxprt-code-core/policy/
 import {
   assembleWorkspaceApproval,
   retainWorkspaceAuthority,
-  selectMcpConstructionInputs,
   retainMcpPolicyProjection,
   retainWorkspaceCheckpoints,
   type AgentMcpOperations,
-  type McpRuntimeConstructionInputs,
+  type McpRuntimeAcquisition,
+  type McpRuntimeOperations,
 } from './mcp-runtime-construction.js';
-export type {
-  AgentMcpOperations,
-  McpRuntimeConstructionInputs,
-} from './mcp-runtime-construction.js';
+export type { AgentMcpOperations } from './mcp-runtime-construction.js';
 
 import {
   type WorkspaceMcpSettings,
@@ -239,7 +236,7 @@ export class McpRuntimeOwner implements AgentMcpOperations {
   private readonly approvalWrites = new Set<Promise<void>>();
   private readonly approvalPolicy: McpApprovalPolicy;
   readonly messageBus: MessageBus;
-  private readonly feedback?: HostFeedbackSink;
+  private readonly feedback: HostFeedbackSink;
   private readonly oauth: McpOAuthBinding;
   readonly performOAuth = assembleMcpOAuthOperation(
     () => this.oauth,
@@ -250,14 +247,12 @@ export class McpRuntimeOwner implements AgentMcpOperations {
   readonly readOAuthCredentials: TokenStorage['getCredentials'];
 
   static async create(
-    ...inputs: McpRuntimeConstructionInputs
+    acquisition: McpRuntimeAcquisition,
+    operations: McpRuntimeOperations,
   ): Promise<McpRuntimeOwner> {
     const resources = new McpConstructionResources();
     try {
-      return new McpRuntimeOwner(
-        resources,
-        selectMcpConstructionInputs(inputs),
-      );
+      return new McpRuntimeOwner(resources, acquisition, operations);
     } catch (error) {
       return resources.reject(error);
     }
@@ -270,24 +265,25 @@ export class McpRuntimeOwner implements AgentMcpOperations {
 
   private constructor(
     resources: McpConstructionResources,
-    inputs: ReturnType<typeof selectMcpConstructionInputs>,
+    inputs: McpRuntimeAcquisition,
+    operations: McpRuntimeOperations,
   ) {
     this.config = inputs.config;
-    this.managerFactory = inputs.managerFactory ?? McpClientManager;
+    this.managerFactory = inputs.managerFactory;
     this.memoryOwner = inputs.memoryOwner;
-    this.mcpSettings = inputs.mcpSettings;
+    this.mcpSettings = operations.mcpSettings;
     this.serverCommand = inputs.config.getMcpServerCommand();
     this.debugMode = inputs.config.getDebugMode();
     [this.serverSettings, this.extensions, this.allowedServers] =
       captureWorkspaceServerDeclarations(
         inputs.config,
         inputs.extensionLoader,
-        inputs.mcpSettings,
+        operations.mcpSettings,
       );
     this.authority = retainWorkspaceAuthority(
       resources,
       inputs.config,
-      inputs.trustPort ?? inputs.policyOwner?.trust,
+      inputs.trustPort ?? inputs.policy?.owner.trust,
       inputs.idePort,
       inputs.trustCleanup,
     );
@@ -328,7 +324,7 @@ export class McpRuntimeOwner implements AgentMcpOperations {
     [this.workspaceSkills, this.workspaceExtensions] =
       this.composeSkillsAndExtensions(
         resources,
-        inputs.skillOperations ?? DEFAULT_SKILL_OPERATIONS,
+        operations.skillOperations ?? DEFAULT_SKILL_OPERATIONS,
         inputs.extensionLoader,
       );
     ({ binding: this.oauth, readCredentials: this.readOAuthCredentials } =
@@ -341,13 +337,13 @@ export class McpRuntimeOwner implements AgentMcpOperations {
       },
     );
     this.catalogs = this.composeCatalogs(resources);
-    this.feedback = inputs.host?.emitFeedback;
+    this.feedback = operations.emitFeedback;
     this.messageBus = this.policyOwner.session.messageBus;
   }
 
   private composeEnvironment(
     resources: McpConstructionResources,
-    inputs: ReturnType<typeof selectMcpConstructionInputs>,
+    inputs: McpRuntimeAcquisition,
   ): ReturnType<typeof retainWorkspaceEnvironment> {
     const environment = retainWorkspaceEnvironment(
       resources,
@@ -357,9 +353,7 @@ export class McpRuntimeOwner implements AgentMcpOperations {
       inputs.filesystemOwnership,
       inputs.memoryOwner,
       () => this.extensions.slice(),
-      inputs.messageBus,
-      inputs.policyOwner,
-      inputs.policyOwnership,
+      inputs.policy,
       inputs.filesystemService,
     );
     this.subscriptions.push(environment[4]);

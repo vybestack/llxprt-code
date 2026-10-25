@@ -245,10 +245,8 @@ describe('fromConfig bootstrap failure reporting', () => {
     await mkdir(policyWritePath, { recursive: true });
     const mcpRuntime = await assembleMcpRuntime(
       optionsConfig,
-      undefined,
       {},
       undefined,
-      'runtime',
       optionsSettingsOwner,
     );
     mcpRuntime.messageBus.publish({

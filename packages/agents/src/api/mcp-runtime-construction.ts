@@ -33,7 +33,6 @@ import type {
   WorkspaceLspInspection,
 } from '@vybestack/llxprt-code-core/lsp/workspace-lsp-owner.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import type {
   McpClientManager,
@@ -41,7 +40,7 @@ import type {
   TokenStorage,
   McpOAuthBinding,
 } from '@vybestack/llxprt-code-mcp';
-import type { McpHostServices } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
+import type { HostFeedbackSink } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 import type {
   McpRuntimeStatusView,
   McpControlDeps,
@@ -79,55 +78,54 @@ export interface AgentMcpOperations {
   awaitDiscovery(): Promise<ReadonlyMap<string, string>>;
 }
 
-export function constructPolicyOwner(
-  config: Config,
-  bus: MessageBus | undefined,
-  owner: RuntimePolicyOwner | undefined,
-  trust: WorkspaceTrustControlPort,
-): RuntimePolicyOwner {
-  if (bus !== undefined && owner === undefined)
-    throw new Error('MCP policy handoff requires its explicit runtime owner');
-  if (bus !== undefined && bus !== owner?.session.messageBus)
-    throw new Error('MCP policy handoff must retain its session MessageBus');
-  if (owner !== undefined && owner.trust !== trust)
-    throw new Error('Policy handoff must retain its trust authority');
-  return owner ?? new RuntimePolicyOwner(config, trust);
+export interface McpPolicyHandoff {
+  readonly owner: RuntimePolicyOwner;
+  readonly ownership: 'runtime' | 'caller';
 }
 
-export type McpRuntimeConstructionInputs = [
-  oauth: McpOAuthBinding,
+export interface McpRuntimeAcquisition {
+  readonly oauth: McpOAuthBinding;
+  readonly config: Config;
+  readonly managerFactory: typeof McpClientManager;
+  readonly extensionLoader: ExtensionLoader | undefined;
+  readonly policy: McpPolicyHandoff | undefined;
+  readonly lspOwner: WorkspaceLspOwner | undefined;
+  readonly lspOwnership: 'runtime' | 'caller';
+  readonly filesystemOwner: WorkspaceFilesystemOwner | undefined;
+  readonly filesystemOwnership: 'runtime' | 'caller';
+  readonly filesystemService: FileSystemService | undefined;
+  readonly memoryOwner: MemoryHandoff | undefined;
+  readonly definitionOwner: WorkspaceDefinitionOwner | undefined;
+  readonly definitionOwnership: 'runtime' | 'caller';
+  readonly trustPort: WorkspaceTrustControlPort | undefined;
+  readonly trustCleanup: (() => Promise<void>) | undefined;
+  readonly idePort: WorkspaceIdePort | undefined;
+}
+
+export interface McpRuntimeOperations {
+  readonly emitFeedback: HostFeedbackSink;
+  readonly skillOperations: WorkspaceSkillAssemblyOperations | undefined;
+  readonly mcpSettings: SessionMcpSettingsReads | undefined;
+}
+
+export function constructPolicyOwner(
   config: Config,
-  messageBus?: MessageBus,
-  host?: Partial<Pick<McpHostServices, 'emitFeedback'>>,
-  managerFactory?: typeof McpClientManager,
-  extensionLoader?: ExtensionLoader,
-  policyOwner?: RuntimePolicyOwner,
-  policyOwnership?: 'runtime' | 'caller',
-  lspOwner?: WorkspaceLspOwner,
-  lspOwnership?: 'runtime' | 'caller',
-  filesystemOwner?: WorkspaceFilesystemOwner,
-  filesystemOwnership?: 'runtime' | 'caller',
-  memoryOwner?: MemoryHandoff,
-  definitionOwner?: WorkspaceDefinitionOwner,
-  definitionOwnership?: 'runtime' | 'caller',
-  trustPort?: WorkspaceTrustControlPort,
-  idePort?: WorkspaceIdePort,
-  trustCleanup?: () => Promise<void>,
-  skillOperations?: WorkspaceSkillAssemblyOperations,
-  mcpSettings?: SessionMcpSettingsReads,
-  filesystemService?: FileSystemService,
-];
+  policy: McpPolicyHandoff | undefined,
+  trust: WorkspaceTrustControlPort,
+): RuntimePolicyOwner {
+  if (policy !== undefined && policy.owner.trust !== trust)
+    throw new Error('Policy handoff must retain its trust authority');
+  return policy?.owner ?? new RuntimePolicyOwner(config, trust);
+}
 
 export function retainPolicyOwner(
   resources: McpConstructionResources,
   config: Config,
-  bus: MessageBus | undefined,
-  supplied: RuntimePolicyOwner | undefined,
+  policy: McpPolicyHandoff | undefined,
   trust: WorkspaceTrustControlPort,
-  ownership: 'runtime' | 'caller',
 ): { owner: RuntimePolicyOwner; owned: boolean } {
-  const owner = constructPolicyOwner(config, bus, supplied, trust);
-  const owned = supplied === undefined || ownership === 'runtime';
+  const owner = constructPolicyOwner(config, policy, trust);
+  const owned = policy === undefined || policy.ownership === 'runtime';
   if (owned) resources.retain(() => owner.dispose());
   return { owner, owned };
 }
@@ -196,52 +194,4 @@ export function assembleWorkspaceApproval(
     },
     assertActive,
   );
-}
-
-export function selectMcpConstructionInputs([
-  oauth,
-  config,
-  messageBus,
-  host,
-  managerFactory,
-  extensionLoader,
-  policyOwner,
-  policyOwnership = 'caller',
-  lspOwner,
-  lspOwnership = defaultWorkspaceOwnership(lspOwner),
-  filesystemOwner,
-  filesystemOwnership = defaultWorkspaceOwnership(filesystemOwner),
-  memoryOwner,
-  definitionOwner,
-  definitionOwnership = defaultWorkspaceOwnership(definitionOwner),
-  trustPort,
-  idePort,
-  trustCleanup,
-  skillOperations,
-  mcpSettings,
-  filesystemService,
-]: McpRuntimeConstructionInputs) {
-  return {
-    oauth,
-    config,
-    messageBus,
-    host,
-    managerFactory,
-    extensionLoader,
-    policyOwner,
-    policyOwnership,
-    lspOwner,
-    lspOwnership,
-    filesystemOwner,
-    filesystemOwnership,
-    memoryOwner,
-    definitionOwner,
-    definitionOwnership,
-    trustPort,
-    idePort,
-    trustCleanup,
-    skillOperations,
-    mcpSettings,
-    filesystemService,
-  };
 }

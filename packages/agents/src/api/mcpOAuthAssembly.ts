@@ -7,16 +7,16 @@ import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/s
  */
 import type { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 
-import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-
 import {
   MCPOAuthTokenStorage,
   KeychainTokenStorage,
+  McpClientManager,
 } from '@vybestack/llxprt-code-mcp';
+import { defaultFeedbackSink } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 import { openBrowserSecurely } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentConfig } from './config-types.js';
+import type { McpPolicyHandoff } from './mcp-runtime-construction.js';
 import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 
 export type MemoryHandoff =
@@ -45,10 +45,8 @@ export type McpAssemblyOptions = Pick<
 
 export async function assembleMcpRuntime(
   config: Config,
-  messageBus: MessageBus | undefined,
   options: McpAssemblyOptions & { readonly trustCleanup?: () => Promise<void> },
-  policyOwner?: RuntimePolicyOwner,
-  policyOwnership: 'runtime' | 'caller' = 'caller',
+  policy: McpPolicyHandoff | undefined,
   settingsOwner?: SessionSettingsOwner,
 ): Promise<McpRuntimeOwner> {
   if (options.lspOwnership === 'caller' && options.lspOwner === undefined)
@@ -67,7 +65,7 @@ export async function assembleMcpRuntime(
     throw new Error(
       'Caller-owned definitions require an explicit workspace root',
     );
-  const feedback = options.mcpHost?.emitFeedback;
+  const feedback = options.mcpHost?.emitFeedback ?? defaultFeedbackSink;
   const ownership =
     options.lspOwnership ??
     (options.lspOwner === undefined ? 'agent' : 'caller');
@@ -76,42 +74,49 @@ export async function assembleMcpRuntime(
     (options.filesystemOwner === undefined ? 'agent' : 'caller');
   return McpRuntimeOwner.create(
     {
-      getAuthProviderFactory: options.mcpHost?.getAuthProviderFactory,
-      tokenStorage: new MCPOAuthTokenStorage(
-        options.mcpTokenStorage ??
-          new KeychainTokenStorage('llxprt-cli-mcp-oauth', feedback),
-      ),
-      openBrowser: options.mcpHost?.openBrowser ?? openBrowserSecurely,
+      oauth: {
+        getAuthProviderFactory: options.mcpHost?.getAuthProviderFactory,
+        tokenStorage: new MCPOAuthTokenStorage(
+          options.mcpTokenStorage ??
+            new KeychainTokenStorage('llxprt-cli-mcp-oauth', feedback),
+        ),
+        openBrowser: options.mcpHost?.openBrowser ?? openBrowserSecurely,
+      },
+      config,
+      managerFactory: McpClientManager,
+      extensionLoader: undefined,
+      policy,
+      lspOwner: options.lspOwner,
+      lspOwnership: ownership === 'agent' ? 'runtime' : 'caller',
+      filesystemOwner: options.filesystemOwner,
+      filesystemOwnership:
+        filesystemOwnership === 'agent' ? 'runtime' : 'caller',
+      filesystemService: options.filesystemService,
+      memoryOwner:
+        options.memoryOwner === undefined
+          ? undefined
+          : {
+              owner: options.memoryOwner.owner,
+              ownership:
+                options.memoryOwner.ownership === 'agent'
+                  ? 'runtime'
+                  : 'caller',
+            },
+      definitionOwner: options.definitionOwner,
+      definitionOwnership:
+        options.definitionOwnership === 'agent' ||
+        options.definitionOwner === undefined
+          ? 'runtime'
+          : 'caller',
+      trustPort: options.trustPort,
+      trustCleanup: options.trustCleanup,
+      idePort: options.idePort,
     },
-    config,
-    messageBus,
-    { emitFeedback: feedback },
-    undefined,
-    undefined,
-    policyOwner,
-    policyOwnership,
-    options.lspOwner,
-    ownership === 'agent' ? 'runtime' : 'caller',
-    options.filesystemOwner,
-    filesystemOwnership === 'agent' ? 'runtime' : 'caller',
-    options.memoryOwner === undefined
-      ? undefined
-      : {
-          owner: options.memoryOwner.owner,
-          ownership:
-            options.memoryOwner.ownership === 'agent' ? 'runtime' : 'caller',
-        },
-    options.definitionOwner,
-    options.definitionOwnership === 'agent' ||
-      options.definitionOwner === undefined
-      ? 'runtime'
-      : 'caller',
-    options.trustPort,
-    options.idePort,
-    options.trustCleanup,
-    undefined,
-    settingsOwner?.readMcpSettingsBinding(),
-    options.filesystemService,
+    {
+      emitFeedback: feedback,
+      skillOperations: undefined,
+      mcpSettings: settingsOwner?.readMcpSettingsBinding(),
+    },
   );
 }
 

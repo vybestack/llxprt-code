@@ -4,103 +4,61 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  Config,
-  WorkspaceDefinitionOwner,
-  WorkspaceIdePort,
-  WorkspaceTrustControlPort,
-} from '@vybestack/llxprt-code-core';
-import type { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import type { WorkspaceLspOwner } from '@vybestack/llxprt-code-core/lsp/workspace-lsp-owner.js';
-import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import type { SessionMcpSettingsReads } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import type { FileSystemService } from '@vybestack/llxprt-code-core/services/fileSystemService.js';
-import type { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import type { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
-import {
-  McpClientManager,
-  type McpOAuthBinding,
-} from '@vybestack/llxprt-code-mcp';
-import {
-  defaultFeedbackSink,
-  type HostFeedbackSink,
-} from '@vybestack/llxprt-code-mcp/host/hostServices.js';
-import type { MemoryHandoff } from '../../mcpOAuthAssembly.js';
+import { McpClientManager } from '@vybestack/llxprt-code-mcp';
+import { defaultFeedbackSink } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 import { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
-import { defaultWorkspaceOwnership } from '../../mcp-runtime-construction.js';
+import {
+  defaultWorkspaceOwnership,
+  type McpRuntimeAcquisition,
+  type McpRuntimeOperations,
+} from '../../mcp-runtime-construction.js';
 
-export interface McpPolicyHandoff {
-  readonly owner: RuntimePolicyOwner;
-  readonly ownership: 'runtime' | 'caller';
-}
+export type McpRuntimeTestAcquisition = Partial<
+  Omit<McpRuntimeAcquisition, 'oauth' | 'config'>
+> &
+  Pick<McpRuntimeAcquisition, 'oauth' | 'config'>;
 
-export interface McpRuntimeTestAcquisition {
-  readonly oauth: McpOAuthBinding;
-  readonly config: Config;
-  readonly managerFactory?: typeof McpClientManager | undefined;
-  readonly extensionLoader?: ExtensionLoader | undefined;
-  readonly policy?: McpPolicyHandoff | undefined;
-  readonly lspOwner?: WorkspaceLspOwner | undefined;
-  readonly lspOwnership?: 'runtime' | 'caller' | undefined;
-  readonly filesystemOwner?: WorkspaceFilesystemOwner | undefined;
-  readonly filesystemOwnership?: 'runtime' | 'caller' | undefined;
-  readonly filesystemService?: FileSystemService | undefined;
-  readonly memoryOwner?: MemoryHandoff | undefined;
-  readonly definitionOwner?: WorkspaceDefinitionOwner | undefined;
-  readonly definitionOwnership?: 'runtime' | 'caller' | undefined;
-  readonly trustPort?: WorkspaceTrustControlPort | undefined;
-  readonly trustCleanup?: (() => Promise<void>) | undefined;
-  readonly idePort?: WorkspaceIdePort | undefined;
-}
-
-export interface McpRuntimeTestOperations {
-  readonly emitFeedback?: HostFeedbackSink | undefined;
-  readonly skillOperations?: WorkspaceSkillAssemblyOperations | undefined;
-  readonly mcpSettings?: SessionMcpSettingsReads | undefined;
-}
+export type McpRuntimeTestOperations = Partial<McpRuntimeOperations>;
 
 /**
- * The only test code that knows the positional order of
- * `McpRuntimeOwner.create`. An omitted member takes the value the
- * constructor applies today when its position is missing.
+ * The only test code that knows the shape of `McpRuntimeOwner.create`.
+ * An omitted member takes the value the constructor applied before every
+ * member became a required key.
  */
 export function createTestMcpRuntime(
   acquisition: McpRuntimeTestAcquisition,
   operations: McpRuntimeTestOperations,
 ): Promise<McpRuntimeOwner> {
-  const {
-    policy,
-    managerFactory = McpClientManager,
-    lspOwnership = defaultWorkspaceOwnership(acquisition.lspOwner),
-    filesystemOwnership = defaultWorkspaceOwnership(
-      acquisition.filesystemOwner,
-    ),
-    definitionOwnership = defaultWorkspaceOwnership(
-      acquisition.definitionOwner,
-    ),
-  } = acquisition;
-  const { emitFeedback = defaultFeedbackSink } = operations;
+  const { managerFactory = McpClientManager } = acquisition;
   return McpRuntimeOwner.create(
-    acquisition.oauth,
-    acquisition.config,
-    policy?.owner.session.messageBus,
-    { emitFeedback },
-    managerFactory,
-    acquisition.extensionLoader,
-    policy?.owner,
-    policy?.ownership,
-    acquisition.lspOwner,
-    lspOwnership,
-    acquisition.filesystemOwner,
-    filesystemOwnership,
-    acquisition.memoryOwner,
-    acquisition.definitionOwner,
-    definitionOwnership,
-    acquisition.trustPort,
-    acquisition.idePort,
-    acquisition.trustCleanup,
-    operations.skillOperations,
-    operations.mcpSettings,
-    acquisition.filesystemService,
+    {
+      oauth: acquisition.oauth,
+      config: acquisition.config,
+      managerFactory,
+      extensionLoader: acquisition.extensionLoader,
+      policy: acquisition.policy,
+      lspOwner: acquisition.lspOwner,
+      lspOwnership:
+        acquisition.lspOwnership ??
+        defaultWorkspaceOwnership(acquisition.lspOwner),
+      filesystemOwner: acquisition.filesystemOwner,
+      filesystemOwnership:
+        acquisition.filesystemOwnership ??
+        defaultWorkspaceOwnership(acquisition.filesystemOwner),
+      filesystemService: acquisition.filesystemService,
+      memoryOwner: acquisition.memoryOwner,
+      definitionOwner: acquisition.definitionOwner,
+      definitionOwnership:
+        acquisition.definitionOwnership ??
+        defaultWorkspaceOwnership(acquisition.definitionOwner),
+      trustPort: acquisition.trustPort,
+      trustCleanup: acquisition.trustCleanup,
+      idePort: acquisition.idePort,
+    },
+    {
+      emitFeedback: operations.emitFeedback ?? defaultFeedbackSink,
+      skillOperations: operations.skillOperations,
+      mcpSettings: operations.mcpSettings,
+    },
   );
 }

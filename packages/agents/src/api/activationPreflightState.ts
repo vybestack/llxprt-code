@@ -14,7 +14,9 @@ import { type RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/poli
 import {
   KeychainTokenStorage,
   MCPOAuthTokenStorage,
+  McpClientManager,
 } from '@vybestack/llxprt-code-mcp';
+import { defaultFeedbackSink } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 
 import { type CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { type SettingsService } from '@vybestack/llxprt-code-settings';
@@ -239,49 +241,55 @@ export class AgentActivationBootstrap
 
   async #constructForegroundMcp(): Promise<void> {
     const transport = this.#foregroundHost.mcpHost;
+    const feedback = transport?.emitFeedback ?? defaultFeedbackSink;
+    const policyOwner = this.foregroundPolicy;
+    if (policyOwner === undefined)
+      throw new Error(
+        'Foreground MCP construction requires the preflight policy owner',
+      );
     const mcp = await McpRuntimeOwner.create(
       {
-        getAuthProviderFactory: transport?.getAuthProviderFactory,
-        tokenStorage: new MCPOAuthTokenStorage(
-          new KeychainTokenStorage(
-            'llxprt-cli-mcp-oauth',
-            transport?.emitFeedback,
+        oauth: {
+          getAuthProviderFactory: transport?.getAuthProviderFactory,
+          tokenStorage: new MCPOAuthTokenStorage(
+            new KeychainTokenStorage('llxprt-cli-mcp-oauth', feedback),
           ),
-        ),
-        openBrowser: transport?.openBrowser ?? openBrowserSecurely,
+          openBrowser: transport?.openBrowser ?? openBrowserSecurely,
+        },
+        config: this.config,
+        managerFactory: McpClientManager,
+        extensionLoader: undefined,
+        policy: { owner: policyOwner, ownership: 'caller' },
+        lspOwner: undefined,
+        lspOwnership: 'runtime',
+        filesystemOwner: this.workspaceFilesystem,
+        filesystemOwnership: 'runtime',
+        filesystemService: undefined,
+        memoryOwner: {
+          owner: this.workspaceMemory,
+          ownership:
+            this.workspaceMemoryOwnership === 'transferred'
+              ? 'runtime'
+              : 'caller',
+        },
+        definitionOwner: this.workspaceDefinitions,
+        definitionOwnership: 'runtime',
+        trustPort: this.workspaceTrust,
+        trustCleanup: this.trustCleanup,
+        idePort: undefined,
       },
-      this.config,
-      this.messageBus,
-      { emitFeedback: transport?.emitFeedback },
-      undefined,
-      undefined,
-      this.foregroundPolicy,
-      'caller',
-      undefined,
-      'runtime',
-      this.workspaceFilesystem,
-      'runtime',
       {
-        owner: this.workspaceMemory,
-        ownership:
-          this.workspaceMemoryOwnership === 'transferred'
-            ? 'runtime'
-            : 'caller',
+        emitFeedback: feedback,
+        skillOperations: {
+          reloadPolicy:
+            this.#foregroundHost.skillPolicy ??
+            DEFAULT_SKILL_OPERATIONS.reloadPolicy,
+          registerTools:
+            this.#foregroundHost.registerSkillTools ??
+            DEFAULT_SKILL_OPERATIONS.registerTools,
+        },
+        mcpSettings: this.settingsOwner.readMcpSettingsBinding(),
       },
-      this.workspaceDefinitions,
-      'runtime',
-      this.workspaceTrust,
-      undefined,
-      this.trustCleanup,
-      {
-        reloadPolicy:
-          this.#foregroundHost.skillPolicy ??
-          DEFAULT_SKILL_OPERATIONS.reloadPolicy,
-        registerTools:
-          this.#foregroundHost.registerSkillTools ??
-          DEFAULT_SKILL_OPERATIONS.registerTools,
-      },
-      this.settingsOwner.readMcpSettingsBinding(),
     );
     this.foregroundMcp = mcp;
   }

@@ -1,5 +1,8 @@
 import { assembleMcpFilesystem } from './mcp-filesystem-assembly.js';
-import { retainPolicyOwner } from './mcp-runtime-construction.js';
+import {
+  retainPolicyOwner,
+  type McpPolicyHandoff,
+} from './mcp-runtime-construction.js';
 import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 /**
  * @license
@@ -191,9 +194,7 @@ export function retainWorkspaceEnvironment(
   filesystemOwnership: 'runtime' | 'caller',
   memoryOwner: MemoryHandoff | undefined,
   readExtensions: () => LlxprtExtension[],
-  messageBus: MessageBus | undefined,
-  policyOwner: RuntimePolicyOwner | undefined,
-  policyOwnership: 'runtime' | 'caller',
+  policy: McpPolicyHandoff | undefined,
   filesystemService: FileSystemService | undefined,
 ): [
   WorkspaceFilesystemOwner,
@@ -218,19 +219,12 @@ export function retainWorkspaceEnvironment(
     memoryOwner,
     readExtensions,
   );
-  const policy = retainPolicyOwner(
-    resources,
-    config,
-    messageBus,
-    policyOwner,
-    trust,
-    policyOwnership,
-  );
+  const retainedPolicy = retainPolicyOwner(resources, config, policy, trust);
   return [
     filesystem.filesystem,
     memory,
-    policy.owner,
-    policy.owned,
+    retainedPolicy.owner,
+    retainedPolicy.owned,
     filesystem.unsubscribe,
   ];
 }

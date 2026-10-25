@@ -29,9 +29,13 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
 import {
   KeychainTokenStorage,
   MCPOAuthTokenStorage,
+  McpClientManager,
   type TokenStorage,
 } from '@vybestack/llxprt-code-mcp';
-import { type McpHostServices } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
+import {
+  defaultFeedbackSink,
+  type McpHostServices,
+} from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {
   HostCredentialOwner,
@@ -111,6 +115,10 @@ import {
   runtimeOwnership,
   selectedOwnership,
 } from './mcpOAuthAssembly.js';
+import type {
+  McpPolicyHandoff,
+  McpRuntimeOperations,
+} from './mcp-runtime-construction.js';
 import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import { assembleModelSelection } from './model-selection.js';
 import { setActiveModel } from './providerMutations.js';
@@ -299,59 +307,79 @@ export abstract class AdoptedAgentAssembly extends AdoptedSessionAssembly {
       this.adoptIntent.definitionOwnership,
       definitions,
     );
-    const feedback = this.adoptMcpHost?.emitFeedback;
+    const feedback = this.adoptMcpHost?.emitFeedback ?? defaultFeedbackSink;
     const memory = this.adoptMemoryOwner?.owner ?? preflight?.workspaceMemory;
     const memoryOwnership = runtimeOwnership(
       this.adoptMemoryOwner !== undefined
         ? this.adoptMemoryOwner.ownership === 'agent'
         : preflight?.workspaceMemoryOwnership === 'transferred',
     );
+    const policy = this.#adoptPolicyHandoff(messageBus);
     return McpRuntimeOwner.create(
       {
-        getAuthProviderFactory: this.adoptMcpHost?.getAuthProviderFactory,
-        tokenStorage: new MCPOAuthTokenStorage(
-          this.adoptMcpTokenStorage ??
-            new KeychainTokenStorage('llxprt-cli-mcp-oauth', feedback),
+        oauth: {
+          getAuthProviderFactory: this.adoptMcpHost?.getAuthProviderFactory,
+          tokenStorage: new MCPOAuthTokenStorage(
+            this.adoptMcpTokenStorage ??
+              new KeychainTokenStorage('llxprt-cli-mcp-oauth', feedback),
+          ),
+          openBrowser: this.adoptMcpHost?.openBrowser ?? openBrowserSecurely,
+        },
+        config: this.config,
+        managerFactory: McpClientManager,
+        extensionLoader: undefined,
+        policy,
+        lspOwner: this.adoptLspOwner,
+        lspOwnership: selectedOwnership(
+          this.adoptIntent.lspOwnership,
+          this.adoptLspOwner === undefined,
         ),
-        openBrowser: this.adoptMcpHost?.openBrowser ?? openBrowserSecurely,
+        filesystemOwner: filesystem,
+        filesystemOwnership: selectedOwnership(
+          this.adoptIntent.filesystemOwnership,
+          preflight !== undefined || filesystem === undefined,
+        ),
+        filesystemService: undefined,
+        memoryOwner:
+          memory === undefined
+            ? undefined
+            : { owner: memory, ownership: memoryOwnership },
+        definitionOwner: definitions,
+        definitionOwnership: selectedOwnership(
+          this.adoptIntent.definitionOwnership,
+          preflight !== undefined || definitions === undefined,
+        ),
+        trustPort: this.adoptTrustPort ?? preflight?.workspaceTrust,
+        trustCleanup: preflight?.trustCleanup,
+        idePort: this.adoptIdePort,
       },
-      this.config,
-      messageBus,
-      { emitFeedback: feedback },
-      undefined,
-      undefined,
-      this.adoptPolicyOwner,
-      runtimeOwnership(this.adoptPolicyOwner === undefined),
-      this.adoptLspOwner,
-      selectedOwnership(
-        this.adoptIntent.lspOwnership,
-        this.adoptLspOwner === undefined,
-      ),
-      filesystem,
-      selectedOwnership(
-        this.adoptIntent.filesystemOwnership,
-        preflight !== undefined || filesystem === undefined,
-      ),
-      memory === undefined
-        ? undefined
-        : { owner: memory, ownership: memoryOwnership },
-      definitions,
-      selectedOwnership(
-        this.adoptIntent.definitionOwnership,
-        preflight !== undefined || definitions === undefined,
-      ),
-      this.adoptTrustPort ?? preflight?.workspaceTrust,
-      this.adoptIdePort,
-      preflight?.trustCleanup,
-      {
+      this.#adoptMcpOperations(feedback),
+    );
+  }
+  #adoptMcpOperations(
+    emitFeedback: McpRuntimeOperations['emitFeedback'],
+  ): McpRuntimeOperations {
+    return {
+      emitFeedback,
+      skillOperations: {
         reloadPolicy:
           this.adoptSkillPolicy ?? DEFAULT_SKILL_OPERATIONS.reloadPolicy,
         registerTools:
           this.adoptRegisterSkillTools ??
           DEFAULT_SKILL_OPERATIONS.registerTools,
       },
-      this.adoptSettingsOwner?.readMcpSettingsBinding(),
-    );
+      mcpSettings: this.adoptSettingsOwner?.readMcpSettingsBinding(),
+    };
+  }
+  #adoptPolicyHandoff(
+    messageBus: MessageBus | undefined,
+  ): McpPolicyHandoff | undefined {
+    const owner = this.adoptPolicyOwner;
+    if (messageBus !== undefined && owner === undefined)
+      throw new Error('MCP policy handoff requires its explicit runtime owner');
+    if (messageBus !== undefined && messageBus !== owner?.session.messageBus)
+      throw new Error('MCP policy handoff must retain its session MessageBus');
+    return owner === undefined ? undefined : { owner, ownership: 'caller' };
   }
   #adoptAgent!: Agent;
   protected readonly adoptRelease = new AcquisitionRelease();

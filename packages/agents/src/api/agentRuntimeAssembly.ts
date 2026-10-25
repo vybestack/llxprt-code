@@ -421,7 +421,6 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
     try {
       const mcpRuntime = await assembleOwnedMcpRuntime(
         this.config,
-        this.policyOwner.session.messageBus,
         this.mcpOptions,
         this.policyOwner,
         this.settingsOwner,

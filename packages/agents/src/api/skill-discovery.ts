@@ -10,7 +10,11 @@ import {
   type MCPServerConfig,
   type SkillDefinition,
 } from '@vybestack/llxprt-code-core';
-import type { McpOAuthBinding } from '@vybestack/llxprt-code-mcp';
+import {
+  McpClientManager,
+  type McpOAuthBinding,
+} from '@vybestack/llxprt-code-mcp';
+import { defaultFeedbackSink } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 import {
   cleanupAfterFailure,
   runCleanupSteps,
@@ -69,7 +73,31 @@ export async function discoverAgentSkills(
   });
   let runtime: McpRuntimeOwner;
   try {
-    runtime = await McpRuntimeOwner.create(host.oauth, config);
+    runtime = await McpRuntimeOwner.create(
+      {
+        oauth: host.oauth,
+        config,
+        managerFactory: McpClientManager,
+        extensionLoader: undefined,
+        policy: undefined,
+        lspOwner: undefined,
+        lspOwnership: 'runtime',
+        filesystemOwner: undefined,
+        filesystemOwnership: 'runtime',
+        filesystemService: undefined,
+        memoryOwner: undefined,
+        definitionOwner: undefined,
+        definitionOwnership: 'runtime',
+        trustPort: undefined,
+        trustCleanup: undefined,
+        idePort: undefined,
+      },
+      {
+        emitFeedback: defaultFeedbackSink,
+        skillOperations: undefined,
+        mcpSettings: undefined,
+      },
+    );
   } catch (error) {
     return cleanupAfterFailure(error, () => config.dispose());
   }
