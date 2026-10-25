@@ -1,4 +1,3 @@
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -14,8 +13,8 @@ import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { fromConfig } from '../fromConfig.js';
 import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
@@ -138,30 +137,17 @@ describe('explicit workspace startup ownership boundary', () => {
     expect(await readPhysicalFile(owner)).toContain('explicit workspace bytes');
   });
 
-  it('refuses caller-owned startup without its actual owner before credential acquisition', async () => {
+  it('refuses a non-Config before any credential acquisition from the supplied authority', async () => {
     const settings = new SettingsService();
-    const settingsOwner = new SessionSettingsOwner(settings);
-    cleanup.push(() => settingsOwner.dispose());
+    const notAConfig = {};
     await expect(
       Reflect.apply(fromConfig, undefined, [
-        config,
+        notAConfig,
         settings,
-        { mcpOwnership: 'caller' },
-        settingsOwner,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
+        {},
         credentials().authority,
       ]),
-    ).rejects.toThrow('Caller-owned MCP requires an explicit runtime handoff');
+    ).rejects.toThrow('fromConfig requires an existing Config');
     expect(credentials().snapshot()).toStrictEqual([]);
     expect(credentials().keySnapshot()).toStrictEqual([]);
   });

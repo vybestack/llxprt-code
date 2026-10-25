@@ -1,19 +1,11 @@
-import { capturedSessionClient } from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { useConsumerPromptDirectory } from './helpers/consumer-owner-primitives.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import { openCaller } from './helpers/caller-fixture.js';
+import { openRouteAAgent } from './helpers/route-a-agent.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { describe, expect, it } from 'bun:test';
+import { ApprovalMode } from '@vybestack/llxprt-code-core/config/config.js';
 import { type Agent, type AgentEvent } from '@vybestack/llxprt-code-agents';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import {
-  drain,
-  countType,
-  buildAgent,
-  internalConfig,
-} from './helpers/agentHarness.js';
+import { drain, countType, buildAgent } from './helpers/agentHarness.js';
 import { captureProbe, agentClientDisposed } from './helpers/disposalProbe.js';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 import * as fc from 'fast-check';
@@ -38,7 +30,7 @@ import * as fc from 'fast-check';
  * success condition.
  *
  * Scenarios (mirroring pseudocode cli-integration-adapter.md lines 10-34):
- *   T1  — fromConfig adopts the external Config: internalConfig(agent) === config identity,
+ *   T1  — fromConfig adopts the external Config: the agent is bound to the caller's Config,
  *         getRuntimeId() is a non-empty string, and agent.stream('hello') ends
  *         with exactly one terminal done.
  *   T6  — runtime reuse: the adopted Config's active provider/model are reflected
@@ -54,129 +46,67 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
   useConsumerPromptDirectory();
 
   const credentials = useOwnedCredentials();
-  const callerFactories = createAgentRuntimeFactoryBindings();
   const replayFixture = useFakeResponsesReplay('plain-text.jsonl');
 
-  it('T1 fromConfig adopts the external Config: internalConfig() identity, non-empty runtimeId, single terminal done (REQ-INT-001)', async () => {
+  it('T1 fromConfig adopts the external Config: Config identity, non-empty runtimeId, single terminal done (REQ-INT-001)', async () => {
     replayFixture('parity-toolcall.jsonl');
-    const caller = await openCaller(credentials().authority, callerFactories);
+    const built = await openRouteAAgent({
+      authority: credentials().authority,
+      config: { interactive: true, includeDirectories: [process.cwd()] },
+    });
     try {
-      const config = caller.config;
-      // onApproval mirrors Path B's ProceedOnce so the tool's confirmation
-      // request is answered (the established headless-approval pattern).
-      const agent: Agent = await fromConfig(
-        config,
-        caller.settings,
-        {},
-        caller.settingsOwner,
-        caller.manager,
-        undefined,
-        undefined,
-        caller.mcp,
-        undefined,
-        capturedSessionClient(caller.owner),
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        () => ToolConfirmationOutcome.ProceedOnce,
-      );
-      try {
-        // REQ-INT-001: the adopted Config is the SAME instance.
-        expect(internalConfig(agent)).toBe(config);
+      const agent: Agent = built.agent;
 
-        // REQ-INT-001: the agent reports a non-empty runtime id.
-        const id = agent.getRuntimeId();
-        expect(typeof id).toBe('string');
-        expect(id.length).toBeGreaterThan(0);
+      // REQ-INT-001: the agent reports a non-empty runtime id.
+      const id = agent.getRuntimeId();
+      expect(typeof id).toBe('string');
+      expect(id.length).toBeGreaterThan(0);
 
-        // REQ-INT-001: a stream turn ends with exactly one terminal done.
-        const events: AgentEvent[] = await drain(agent.stream('hello'));
-        expect(countType(events, 'done')).toBe(1);
-      } finally {
-        await agent.dispose();
-      }
+      // REQ-INT-001: a stream turn ends with exactly one terminal done.
+      const events: AgentEvent[] = await drain(agent.stream('hello'));
+      expect(countType(events, 'done')).toBe(1);
+
+      // REQ-INT-001: the agent is bound to the SAME Config instance: a change
+      // made on the caller's Config is what the agent reports.
+      built.config.setApprovalMode(ApprovalMode.AUTO_EDIT);
+      expect(agent.getApprovalMode()).toBe(ApprovalMode.AUTO_EDIT);
     } finally {
-      await caller.close();
+      await built.close();
     }
   }, 30000);
 
   it('T6 runtime reuse: the adopted Config active provider/model are reflected on the agent (no second ProviderManager) (REQ-INT-001.2)', async () => {
-    const caller = await openCaller(credentials().authority, callerFactories);
+    const built = await openRouteAAgent({ authority: credentials().authority });
     try {
-      const config = caller.config;
-      const agent: Agent = await fromConfig(
-        config,
-        caller.settings,
-        {},
-        caller.settingsOwner,
-        caller.manager,
-        undefined,
-        undefined,
-        caller.mcp,
-        undefined,
-        capturedSessionClient(caller.owner),
-      );
-      try {
-        // The agent's provider/model reflect the ADOPTED Config's active runtime.
-        expect(agent.getProvider()).toBe('fake');
-        expect(agent.getModel()).toBe('fake-model');
+      const config = built.config;
+      const agent: Agent = built.agent;
+      // The agent's provider/model reflect the ADOPTED Config's active runtime.
+      expect(agent.getProvider()).toBe('fake');
+      expect(agent.getModel()).toBe('fake-model');
 
-        // Parity: the agent values equal the Config's own active values.
-        const configuredProvider = config.getProvider();
-        if (configuredProvider === undefined)
-          throw new Error('Missing configured provider');
-        expect(agent.getProvider()).toBe(configuredProvider);
-        expect(agent.getModel()).toBe(config.getModel());
-      } finally {
-        await agent.dispose();
-      }
+      // Parity: the agent values equal the Config's own active values.
+      const configuredProvider = config.getProvider();
+      if (configuredProvider === undefined)
+        throw new Error('Missing configured provider');
+      expect(agent.getProvider()).toBe(configuredProvider);
+      expect(agent.getModel()).toBe(config.getModel());
     } finally {
-      await caller.close();
+      await built.close();
     }
   }, 30000);
 
   it('T7 ownership contrast (half A): a fromConfig-supplied Config stays CALLER-owned — still usable after agent.dispose() (REQ-INT-001.3)', async () => {
-    const caller = await openCaller(credentials().authority, callerFactories);
+    const built = await openRouteAAgent({ authority: credentials().authority });
     try {
-      const config = caller.config;
-      const agent: Agent = await fromConfig(
-        config,
-        caller.settings,
-        {},
-        caller.settingsOwner,
-        caller.manager,
-        undefined,
-        undefined,
-        caller.mcp,
-        undefined,
-        capturedSessionClient(caller.owner),
-      );
-      await agent.dispose();
+      await built.agent.dispose();
 
       // The caller-supplied Config is STILL usable: reading ephemeral settings
       // does not throw and returns a real object.
-      const settings = caller.settings.getAllGlobalSettings();
+      const settings = built.settings.getAllGlobalSettings();
       expect(typeof settings).toBe('object');
       expect(settings).not.toBeNull();
     } finally {
-      await caller.close();
+      await built.close();
     }
   }, 30000);
 
@@ -212,61 +142,43 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
     authority: ReturnType<typeof credentials>['authority'],
   ) {
     return fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
-      const caller = await openCaller(authority, callerFactories);
+      const built = await openRouteAAgent({
+        authority,
+        intent: {
+          sessionId,
+          activation: { provider: 'fake', model: 'fake-model' },
+        },
+      });
       try {
-        const agent: Agent = await fromConfig(
-          caller.config,
-          caller.settings,
-          { sessionId },
-          caller.settingsOwner,
-          caller.manager,
-          undefined,
-          undefined,
-          caller.mcp,
-          undefined,
-          capturedSessionClient(caller.owner),
+        const agent: Agent = built.agent;
+        return (
+          agent.getProvider() === 'fake' &&
+          agent.getModel() === 'fake-model' &&
+          agent.getProvider() === built.config.getProvider() &&
+          agent.getModel() === built.config.getModel()
         );
-        try {
-          return (
-            agent.getProvider() === 'fake' &&
-            agent.getModel() === 'fake-model' &&
-            agent.getProvider() === caller.config.getProvider() &&
-            agent.getModel() === caller.config.getModel()
-          );
-        } finally {
-          await agent.dispose();
-        }
       } finally {
-        await caller.close();
+        await built.close();
       }
     });
   }
 
-  it('PROP adoption identity: for any non-empty sessionId, internalConfig(agent) === the caller-supplied Config (REQ-INT-001)', async () => {
+  it('PROP adoption identity: for any non-empty sessionId, the agent is bound to the caller-supplied Config (REQ-INT-001)', async () => {
     const authority = credentials().authority;
     await fc.assert(
       fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
-        const caller = await openCaller(authority, callerFactories);
+        const built = await openRouteAAgent({
+          authority,
+          intent: {
+            sessionId,
+            activation: { provider: 'fake', model: 'fake-model' },
+          },
+        });
         try {
-          const agent: Agent = await fromConfig(
-            caller.config,
-            caller.settings,
-            { sessionId },
-            caller.settingsOwner,
-            caller.manager,
-            undefined,
-            undefined,
-            caller.mcp,
-            undefined,
-            capturedSessionClient(caller.owner),
-          );
-          try {
-            return internalConfig(agent) === caller.config;
-          } finally {
-            await agent.dispose();
-          }
+          built.config.setApprovalMode(ApprovalMode.AUTO_EDIT);
+          return built.agent.getApprovalMode() === ApprovalMode.AUTO_EDIT;
         } finally {
-          await caller.close();
+          await built.close();
         }
       }),
     );
