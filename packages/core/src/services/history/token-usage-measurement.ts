@@ -97,8 +97,12 @@ export function measureContent(
         : [],
   );
   const serialized = serializedBlocks.join('\n');
+  const tokens =
+    content.blocks.length === 1 && toolResults.length === 1
+      ? toolResults[0].resultTokens
+      : countTokens(serialized);
   return {
-    measurement: { tokens: countTokens(serialized), toolResults },
+    measurement: { tokens, toolResults },
     serialized,
   };
 }
