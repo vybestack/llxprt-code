@@ -48,11 +48,19 @@ async function createIndexedSessions(
   return sessionIds;
 }
 
-async function releaseCurrentLock(
+async function disposeResumeContext(
   context: ReturnType<typeof makeResumeContext>,
 ): Promise<void> {
-  const newLock = context.recordingCallbacks.getCurrentLockHandle();
-  if (newLock) await newLock.release();
+  const callbacks = context.recordingCallbacks;
+  try {
+    await callbacks.getCurrentIntegration()?.dispose();
+  } finally {
+    try {
+      await callbacks.getCurrentRecording()?.dispose();
+    } finally {
+      await callbacks.getCurrentLockHandle()?.release();
+    }
+  }
 }
 
 describe('Property-based tests #1', () => {
@@ -83,6 +91,9 @@ describe('Property-based tests #1', () => {
         );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
+        const context = makeResumeContext(localChatsDir, {
+          currentSessionId: 'other-session',
+        });
 
         try {
           // Create N sessions
@@ -94,10 +105,6 @@ describe('Property-based tests #1', () => {
           // Pick a random valid index
           const validIndex = Math.floor(Math.random() * sessionCount) + 1;
 
-          const context = makeResumeContext(localChatsDir, {
-            currentSessionId: 'other-session',
-          });
-
           const result = await performResume(String(validIndex), context);
 
           expect(result.ok).toBe(true);
@@ -105,10 +112,12 @@ describe('Property-based tests #1', () => {
           // Index is 1-based, newest first
           const expectedSessionId = sessionIds[sessionCount - validIndex];
           expect(result.metadata.sessionId).toBe(expectedSessionId);
-
-          await releaseCurrentLock(context);
         } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
+          try {
+            await disposeResumeContext(context);
+          } finally {
+            await fs.rm(localTempDir, { recursive: true, force: true });
+          }
         }
       }),
       { numRuns: 5 },
