@@ -1,6 +1,6 @@
 import {
   createCapturedSessionOwner,
-  capturedSessionClient,
+  ownerClients,
 } from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
@@ -39,10 +39,7 @@ import { beforeAll, afterAll, describe, expect, it, vi } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { fileURLToPath } from 'node:url';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import {
-  createAgentRuntimeFactoryBindings,
-  AgentRuntimeFactoryBindings,
-} from '../runtimeFactories.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
@@ -50,6 +47,7 @@ import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 async function settleEngineRelease(
@@ -98,8 +96,6 @@ describe('explicit session authentication lifecycle', () => {
 
   let builtCallerClose: () => Promise<void>;
 
-  let builtCallerFactories: AgentRuntimeFactoryBindings;
-
   let builtCallerRelease: AcquisitionRelease;
 
   let builtCallerFiles: ProviderFileLifecycle;
@@ -114,10 +110,16 @@ describe('explicit session authentication lifecycle', () => {
     typeof createRuntimeContentGeneratorFactory
   >;
 
+  function sessionClient(): AgentClientContract {
+    const clients = ownerClients(builtCallerOwner);
+    if (clients.length === 0)
+      throw new Error('Session owner has built no client');
+    return clients[clients.length - 1];
+  }
+
   async function openbuiltCaller(
     fixture: string,
     overrides: Readonly<Partial<AgentConfig>> = {},
-    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
     skillSettings: Pick<
       ConfigParameters,
       'enableExtensionReloading' | 'storageRoot'
@@ -154,10 +156,6 @@ describe('explicit session authentication lifecycle', () => {
         process.cwd(),
       ];
     builtCallerConfig = new Config(parameters);
-    builtCallerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...suppliedFactories,
-    };
     builtCallerSettings = new SettingsService();
     for (const [key, value] of Object.entries(
       builtCallerConfig.getInitialSettings(),
@@ -182,7 +180,7 @@ describe('explicit session authentication lifecycle', () => {
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
-      builtCallerFactories.agentClientFactory,
+      buildAgentClientFactory(),
       media.store,
       builtCallerMcp.readInstructions,
       builtCallerMcp.workspacePaths,
@@ -300,7 +298,7 @@ describe('explicit session authentication lifecycle', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await capturedSessionClient(builtCallerOwner).startChat();
+    await sessionClient().startChat();
   }
 
   async function withSession(run: () => Promise<void>): Promise<void> {
@@ -331,11 +329,11 @@ describe('explicit session authentication lifecycle', () => {
       try {
         delete process.env.GEMINI_API_KEY;
         delete process.env.GOOGLE_API_KEY;
-        await capturedSessionClient(builtCallerOwner).initialize({
+        await sessionClient().initialize({
           model: 'fake-model',
           vertexai: false,
         });
-        await capturedSessionClient(builtCallerOwner).setHistory([
+        await sessionClient().setHistory([
           {
             speaker: 'ai',
             blocks: [
@@ -350,8 +348,7 @@ describe('explicit session authentication lifecycle', () => {
         ]);
         process.env.GOOGLE_API_KEY = 'local-vertex-metadata-only';
         await builtCallerOwner.refreshAuth();
-        const retained =
-          await capturedSessionClient(builtCallerOwner).getHistory();
+        const retained = await sessionClient().getHistory();
         expect(
           retained
             .flatMap((content) => content.blocks)
@@ -373,33 +370,28 @@ describe('explicit session authentication lifecycle', () => {
 
   it('refreshes authentication and clears fallback mode', async () => {
     await withSession(async () => {
-      const previous = capturedSessionClient(builtCallerOwner);
+      const previous = sessionClient();
       builtCallerSettingsOwner.chooseModel('replacement-model');
       builtCallerConfig.setFallbackMode(true);
       await builtCallerOwner.refreshAuth();
-      expect(
-        capturedSessionClient(builtCallerOwner).getContentGeneratorConfig()
-          ?.model,
-      ).toBe('replacement-model');
-      expect(previous).not.toBe(capturedSessionClient(builtCallerOwner));
+      expect(sessionClient().getContentGeneratorConfig()?.model).toBe(
+        'replacement-model',
+      );
+      expect(previous).not.toBe(sessionClient());
       expect(builtCallerConfig.isInFallbackMode()).toBe(false);
     });
   });
 
   it('preserves conversation history when refreshing authentication', async () => {
     await withSession(async () => {
-      await capturedSessionClient(builtCallerOwner).setHistory(history);
+      await sessionClient().setHistory(history);
       await builtCallerOwner.refreshAuth();
-      await capturedSessionClient(builtCallerOwner).startChat(
-        await capturedSessionClient(builtCallerOwner).getHistory(),
-      );
+      await sessionClient().startChat(await sessionClient().getHistory());
       expect(
-        (await capturedSessionClient(builtCallerOwner).getHistory()).map(
-          ({ speaker, blocks }) => ({
-            speaker,
-            blocks,
-          }),
-        ),
+        (await sessionClient().getHistory()).map(({ speaker, blocks }) => ({
+          speaker,
+          blocks,
+        })),
       ).toStrictEqual(history);
     });
   });
@@ -407,47 +399,35 @@ describe('explicit session authentication lifecycle', () => {
   it('preserves carried history before chat initialization (#2500)', async () => {
     await withSession(async () => {
       await builtCallerOwner.refreshAuth();
-      expect(capturedSessionClient(builtCallerOwner).hasChatInitialized()).toBe(
-        false,
-      );
-      await capturedSessionClient(builtCallerOwner).storeHistoryForLaterUse(
-        history,
-      );
+      expect(sessionClient().hasChatInitialized()).toBe(false);
+      await sessionClient().storeHistoryForLaterUse(history);
       await builtCallerOwner.refreshAuth();
-      await capturedSessionClient(builtCallerOwner).startChat(
-        await capturedSessionClient(builtCallerOwner).getHistory(),
-      );
+      await sessionClient().startChat(await sessionClient().getHistory());
       expect(
-        (await capturedSessionClient(builtCallerOwner).getHistory()).map(
-          ({ speaker, blocks }) => ({
-            speaker,
-            blocks,
-          }),
-        ),
+        (await sessionClient().getHistory()).map(({ speaker, blocks }) => ({
+          speaker,
+          blocks,
+        })),
       ).toStrictEqual(history);
     });
   });
 
   it('preserves committed chat history without waiting for idle history', async () => {
     await withSession(async () => {
-      await capturedSessionClient(builtCallerOwner).setHistory(history);
+      await sessionClient().setHistory(history);
       const idleHistory = vi
-        .spyOn(capturedSessionClient(builtCallerOwner), 'getHistory')
+        .spyOn(sessionClient(), 'getHistory')
         .mockImplementation(async () => {
           throw new Error('Idle history must not be awaited');
         });
       try {
         await builtCallerOwner.refreshAuth();
-        await capturedSessionClient(builtCallerOwner).startChat(
-          await capturedSessionClient(builtCallerOwner).getHistory(),
-        );
+        await sessionClient().startChat(await sessionClient().getHistory());
         expect(
-          (await capturedSessionClient(builtCallerOwner).getHistory()).map(
-            ({ speaker, blocks }) => ({
-              speaker,
-              blocks,
-            }),
-          ),
+          (await sessionClient().getHistory()).map(({ speaker, blocks }) => ({
+            speaker,
+            blocks,
+          })),
         ).toStrictEqual(history);
       } finally {
         idleHistory.mockRestore();
