@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import { type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent, type AgentConfig } from '@vybestack/llxprt-code-agents';
 import { openRouteAAgent } from '../../../agents/src/api/__tests__/helpers/route-a-agent.js';
 import {
   cleanupAfterFailure,
@@ -20,13 +20,14 @@ import {
 
 export async function buildTaskNotificationAgent(
   authority: CredentialAuthority,
+  config: Partial<AgentConfig> = {},
 ): Promise<{ readonly agent: Agent; readonly cleanup: () => Promise<void> }> {
   const directory = await mkdtemp(join(tmpdir(), 'task-notification-agent-'));
   const restore = enterTaskNotificationEnvironment(directory);
   try {
     const route = await openRouteAAgent({
       authority,
-      config: { workingDir: directory },
+      config: { workingDir: directory, ...config },
       intent: {
         activation: { provider: 'fake', model: 'fake-model', authMode: 'auto' },
       },

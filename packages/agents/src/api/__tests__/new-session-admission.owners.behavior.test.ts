@@ -116,6 +116,37 @@ function openAdmission(): {
   };
 }
 
+async function awaitTaskOwnerIdle(tasks: TaskLaunchOwner): Promise<void> {
+  await deadline(
+    (async () => {
+      while (tasks.hasPendingWork()) await delay(10);
+    })(),
+    'task owner idle',
+  );
+}
+
+async function joinFailure(tasks: TaskLaunchOwner): Promise<boolean> {
+  const failure = await tasks.join().then(
+    () => null,
+    (error: unknown) => error,
+  );
+  return failure instanceof AggregateError;
+}
+
+async function failTask(tasks: TaskLaunchOwner, id: string): Promise<void> {
+  await tasks.start(async (launch, publish) => {
+    tasks.manager.registerTask({
+      id,
+      subagentName: 'worker',
+      goalPrompt: 'work',
+      abortController: launch.controller,
+    });
+    launch.register(id);
+    publish({ llmContent: '', returnDisplay: '' });
+  });
+  tasks.manager.failTask(id, 'failed work');
+}
+
 describe('new-session admission over the task and shell owners', () => {
   for (const state of ['completed', 'failed']) {
     it(`recovers a busy-time ${state} notice and admits clear after delivery`, async () => {
@@ -444,6 +475,117 @@ describe('new-session admission over the task and shell owners', () => {
       await startNewSession();
       expect(sessions()).toBe(1);
     } finally {
+      await close();
+    }
+  });
+  for (const delivery of ['throws', 'defers']) {
+    it(`retains a failed-task notice after a delivery that ${delivery} until a replacement delivers it`, async () => {
+      const { tasks, shell, startNewSession, sessions, close } =
+        openAdmission();
+      const entered = deferred<void>();
+      const first = tasks.subscribeNotifications(
+        () => false,
+        async () => {
+          entered.resolve();
+          if (delivery === 'throws')
+            throw new Error('notice transport unavailable');
+          return 'deferred';
+        },
+        shell,
+      );
+      let current = first;
+      const messages: string[] = [];
+      const reportsFailure = delivery === 'throws';
+      try {
+        await failTask(tasks, 'retained-task');
+        await deadline(entered.promise, 'first delivery attempt');
+        first();
+        expect(await joinFailure(tasks)).toBe(reportsFailure);
+        await awaitTaskOwnerIdle(tasks);
+        expect(tasks.getPendingNotifications()).toHaveLength(1);
+        expect(tasks.getTask('retained-task')?.notifiedAt).toBeUndefined();
+        await expect(startNewSession()).rejects.toThrow('completion notices');
+        expect(sessions()).toBe(0);
+        const delivered = deferred<void>();
+        current = tasks.subscribeNotifications(
+          () => false,
+          async (text) => {
+            messages.push(text);
+            delivered.resolve();
+          },
+          shell,
+        );
+        await deadline(delivered.promise, 'replacement delivery');
+        await current.drain();
+        await awaitTaskOwnerIdle(tasks);
+        expect(messages).toHaveLength(1);
+        expect(tasks.getPendingNotifications()).toHaveLength(0);
+        expect(tasks.getTask('retained-task')?.notifiedAt).toBeDefined();
+        await startNewSession();
+        expect(sessions()).toBe(1);
+        expect(await joinFailure(tasks)).toBe(reportsFailure);
+      } finally {
+        current();
+        await current.drain();
+        await close();
+      }
+    });
+  }
+
+  it('retires a subscription before any delivery without recording a failure', async () => {
+    const { tasks, shell, startNewSession, sessions, close } = openAdmission();
+    const retire = tasks.subscribeNotifications(
+      () => true,
+      async () => {
+        throw new Error('unexpected delivery while busy');
+      },
+      shell,
+    );
+    try {
+      await failTask(tasks, 'undelivered-task');
+      await setImmediate();
+      retire();
+      await tasks.join();
+      expect(tasks.hasPendingWork()).toBe(false);
+      expect(tasks.getPendingNotifications()).toHaveLength(1);
+      expect(tasks.getTask('undelivered-task')?.notifiedAt).toBeUndefined();
+      await expect(startNewSession()).rejects.toThrow('completion notices');
+      expect(sessions()).toBe(0);
+    } finally {
+      retire();
+      await close();
+    }
+  });
+
+  it('keeps ownership of an in-flight delivery after its subscription retires', async () => {
+    const { tasks, shell, startNewSession, sessions, close } = openAdmission();
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const retire = tasks.subscribeNotifications(
+      () => false,
+      async () => {
+        entered.resolve();
+        await release.promise;
+        return 'deferred';
+      },
+      shell,
+    );
+    try {
+      await failTask(tasks, 'in-flight-task');
+      await deadline(entered.promise, 'delivery attempt');
+      retire();
+      expect(tasks.hasPendingWork()).toBe(true);
+      await expect(startNewSession()).rejects.toThrow('completion delivery');
+      release.resolve();
+      await awaitTaskOwnerIdle(tasks);
+      expect(tasks.getPendingNotifications()).toHaveLength(1);
+      expect(tasks.getTask('in-flight-task')?.notifiedAt).toBeUndefined();
+      await expect(startNewSession()).rejects.toThrow('completion notices');
+      expect(sessions()).toBe(0);
+      await tasks.join();
+    } finally {
+      release.resolve();
+      retire();
       await close();
     }
   });
