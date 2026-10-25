@@ -21,7 +21,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import * as fc from 'fast-check';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { setupHistoryServices } from './support/history-lifetime.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type {
   IContent,
   TextBlock,
@@ -46,22 +47,15 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIResponsesProvider } from '@vybestack/llxprt-code-providers';
 import { prepareAtSendSeam } from '../../core/promptEnvelopeSendSeam.js';
-import { sourceRootSetup } from '../../core/__tests__/support/prompt-envelope-source-test-helpers.js';
 import { ContextOverflowError } from '../contextOverflowError.js';
+
+const createHistory = setupHistoryServices();
 
 // ---------------------------------------------------------------------------
 // REQ-005.5c — provider source enforcement observable behavior
 // ---------------------------------------------------------------------------
 
-// Set per test from sourceRootSetup() so the tests that need a source root can
-// be passed to `it` directly, where jest/expect-expect sees their assertions.
-let sourceRoot = '';
-
 describe('P26: provider source enforcement characterization', () => {
-  const workspace = sourceRootSetup();
-  beforeEach(() => {
-    sourceRoot = workspace();
-  });
   beforeEach(facadeCallback0);
 
   it(
@@ -288,7 +282,7 @@ async function facadeCallback2(): Promise<void> {
 async function facadeCallback3(): Promise<void> {
   const { settings, config, providerRuntime, tokenizerFactory } =
     statefulRuntime(
-      createPromptTokenizerFactory(sourceRoot),
+      createPromptTokenizerFactory(),
       'stateful-responses-enforcement',
     );
 
@@ -392,7 +386,7 @@ async function facadeCallback3(): Promise<void> {
 async function facadeCallback4(): Promise<void> {
   const { settings, config, providerRuntime, tokenizerFactory } =
     statefulRuntime(
-      createAmplifyingPromptTokenizerFactory(sourceRoot),
+      createAmplifyingPromptTokenizerFactory(),
       'stateful-responses-overflow',
     );
 
@@ -427,7 +421,9 @@ async function facadeCallback4(): Promise<void> {
 
   const pending = textContent(
     'human',
-    'Continue the retained analysis with one additional observation.',
+    'Continue the retained analysis with one additional observation. '.repeat(
+      64,
+    ),
   );
 
   const estimates: PromptEnvelopeEstimate[] = [];
@@ -735,13 +731,13 @@ function facadeCallback25(): void {
 }
 
 async function facadeCallback26(): Promise<void> {
-  const historyService = new HistoryService();
+  const historyService = createHistory();
   const estimate = await estimatePendingTokens([], historyService, 'm');
   expect(estimate).toBe(0);
 }
 
 async function facadeCallback27(): Promise<void> {
-  const historyService = new HistoryService();
+  const historyService = createHistory();
   const spy = vi
     .spyOn(historyService, 'estimateTokensForContents')
     .mockResolvedValue(777);
@@ -778,7 +774,7 @@ function facadeCallback29(): void {
 async function facadeCallback30(): Promise<void> {
   await fc.assert(
     fc.asyncProperty(fc.string({ minLength: 1 }), async (model: string) => {
-      const historyService = new HistoryService();
+      const historyService = createHistory();
       const estimate = await estimatePendingTokens([], historyService, model);
       expect(estimate).toBe(0);
     }),
@@ -839,10 +835,19 @@ function createStatefulEstimator(
           ephemerals: { 'responses-stateful': true },
         }),
         contents: toStream(candidate),
+        contentCount: candidate.length,
+        requestRows: {
+          ...inMemoryRequestSelection(candidate),
+          callerOwned: true,
+        },
       },
       tokenizerFactory,
     );
-    return recordPreparedEstimate(prepared, estimates);
+    try {
+      return recordPreparedEstimate(prepared, estimates);
+    } finally {
+      await prepared.releaseIfUnsent?.();
+    }
   };
 }
 

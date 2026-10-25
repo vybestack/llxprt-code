@@ -1,7 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { setupHistoryServices } from './support/history-lifetime.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -14,13 +15,12 @@ import type {
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { withGpt56DiskSources } from '@vybestack/llxprt-code-providers/tokenizers/gpt56-disk-tokenizer-factory.js';
-import {
-  promptTextPieces,
-  SourceFamilyInput,
-} from '@vybestack/llxprt-code-providers/tokenizers/source-family-input.js';
 import { ContextOverflowError } from '../contextOverflowError.js';
 import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
 import { buildHandlerHarness } from './support/handler-harness.js';
+
+const createHistory = setupHistoryServices();
+
 export function toStream(rows: readonly IContent[]): AsyncIterable<IContent> {
   return {
     async *[Symbol.asyncIterator]() {
@@ -104,7 +104,7 @@ export function buildCharacterizationHarness(
     performCompressionResult?: PerformCompressionResult;
   } = {},
 ): CharacterizationHarness {
-  const historyService = new HistoryService();
+  const historyService = createHistory();
   const runtimeContext = buildRuntimeContext(historyService, {
     compressionThreshold: overrides.compressionThreshold,
     contextLimit: overrides.contextLimit,
@@ -131,60 +131,37 @@ export function buildCharacterizationHarness(
   };
 }
 
-/**
- * The Responses source route hands the factory a sealed disk prompt. The disk
- * wrapper turns it into the family-registry input whose legacy estimate counts
- * the spooled prompt text, so these fixtures only scale that count.
- */
-export function createPromptTokenizerFactory(
-  workspaceDirectory: string,
-): RuntimeTokenizerFactory {
+export function createPromptTokenizerFactory(): RuntimeTokenizerFactory {
   return withGpt56DiskSources(
     {
       getTokenizer: () => undefined,
       estimatePrompt: async (request: RuntimePromptEstimateRequest) => ({
         count: await request.legacyEstimate(),
         method: 'calibrated',
-        family: 'stateful-enforcement-fixture',
+        family: 'legacy-stateful-enforcement-fixture',
         estimatorVersion: '1',
         assetRevision: 'fixture',
         projectionRevision: request.projectionRevision,
       }),
     },
-    workspaceDirectory,
+    process.cwd(),
   );
 }
 
-async function amplifiedProjectionLength(
-  request: RuntimePromptEstimateRequest,
-): Promise<number> {
-  const input = request.finalizedProjection;
-  if (!(input instanceof SourceFamilyInput)) {
-    throw new Error('Expected the source family input');
-  }
-  let length = 0;
-  for await (const piece of promptTextPieces(input.projection)) {
-    length += piece.length;
-  }
-  return length * 4;
-}
-
-export function createAmplifyingPromptTokenizerFactory(
-  workspaceDirectory: string,
-): RuntimeTokenizerFactory {
+export function createAmplifyingPromptTokenizerFactory(): RuntimeTokenizerFactory {
   return withGpt56DiskSources(
     {
       getTokenizer: () => undefined,
       estimatePrompt: async (request) => ({
-        count: await amplifiedProjectionLength(request),
-        method: 'exact',
-        family: 'amplified-stateful-fixture',
+        count: (await request.legacyEstimate()) * 4,
+        method: 'calibrated',
+        family: 'legacy-amplified-stateful-fixture',
         estimatorVersion: '1',
         assetRevision: 'fixture',
         projectionRevision: request.projectionRevision,
       }),
     },
-    workspaceDirectory,
+    process.cwd(),
   );
 }
 

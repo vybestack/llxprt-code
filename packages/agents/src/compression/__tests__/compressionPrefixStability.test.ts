@@ -25,7 +25,7 @@
 
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, it, expect } from 'bun:test';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { setupHistoryServices } from './support/history-lifetime.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
@@ -46,6 +46,8 @@ import {
   InvalidContextBudgetError,
 } from '../compressionBudgeting.js';
 import { resolveHeadAnchorSeq } from './support/cacheAnchor.js';
+
+const createHistory = setupHistoryServices();
 
 // ---------------------------------------------------------------------------
 // Test-local helpers: operational definition of a "cacheable prefix"
@@ -98,7 +100,7 @@ const PRODUCTION_TOP_PRESERVE = 0.2;
 
 /** Stamp chronology onto plain messages via a real HistoryService. */
 async function stampHistory(messages: IContent[]): Promise<IContent[]> {
-  const hs = new HistoryService();
+  const hs = createHistory();
   for (const msg of messages) {
     hs.add(msg);
   }
@@ -130,7 +132,7 @@ async function restampAndAppend(
   newHistory: IContent[],
   extra: IContent[],
 ): Promise<IContent[]> {
-  const hs = new HistoryService();
+  const hs = createHistory();
   for (const entry of newHistory) {
     hs.add(entry);
   }
@@ -356,7 +358,7 @@ const densityFixture7_observeAnchorThatWouldPushPastTheBottomSplitYieldsACleanSt
 
 const densityFixture8_observeTheResolvedSeqIsAcceptedBySetCacheAnchorSeqAndPinsTheHead =
   async () => {
-    const hs = new HistoryService();
+    const hs = createHistory();
     const stamped = await stampHistory([
       humanMsg('h0'),
       aiTextMsg('a1'),
@@ -427,12 +429,12 @@ describe('A3: completion-budget trigger arithmetic (#3070 Defect A)', () => {
 
 describe('A4: HistoryService cache-anchor contract (#3070 Defect B)', () => {
   it('a fresh service reports 0', () => {
-    const hs = new HistoryService();
+    const hs = createHistory();
     expect(hs.getCacheAnchorSeq()).toBe(0);
   });
 
   it('setCacheAnchorSeq tracks exact identity, including a numerically lower seq', () => {
-    const hs = new HistoryService();
+    const hs = createHistory();
     hs.setCacheAnchorSeq(10);
     expect(hs.getCacheAnchorSeq()).toBe(10);
     hs.setCacheAnchorSeq(5);
@@ -446,7 +448,7 @@ describe('A4: HistoryService cache-anchor contract (#3070 Defect B)', () => {
   });
 
   it('clear() preserves the anchor (compression rebuild survives)', async () => {
-    const hs = new HistoryService();
+    const hs = createHistory();
     hs.add(humanMsg('msg'));
     hs.setCacheAnchorSeq(3);
     await hs.clear();
@@ -454,7 +456,7 @@ describe('A4: HistoryService cache-anchor contract (#3070 Defect B)', () => {
   });
 
   it('resetCacheAnchorSeq resets to 0 (session-reset path)', () => {
-    const hs = new HistoryService();
+    const hs = createHistory();
     hs.setCacheAnchorSeq(7);
     hs.resetCacheAnchorSeq();
     expect(hs.getCacheAnchorSeq()).toBe(0);
@@ -582,7 +584,7 @@ function observeDensityCase11() {
 }
 
 function observeDensityCase12() {
-  const hs = new HistoryService();
+  const hs = createHistory();
   expect(() => hs.setCacheAnchorSeq(0)).toThrow(
     'Cache-anchor seq must be a positive integer: got 0',
   );

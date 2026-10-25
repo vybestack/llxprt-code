@@ -40,8 +40,14 @@ function observeTransportRows(): ReturnType<
     const scope = acquireRequestRows(options);
     try {
       expect(scope.options.requestRows).toBe(rows);
-      expect(await stagedRequestRows(scope.options.contents)).toBe(rows);
-      const checked = await providerRowsOf(scope.options);
+      const staged = await stagedRequestRows(scope.options.contents);
+      expect(staged.native).toBeDefined();
+      expect(staged.native).toBe(rows.native);
+      expect(staged.count).toBe(rows.count);
+      const checked = await providerRowsOf({
+        ...scope.options,
+        requestRows: { ...staged, close: () => scope.close() },
+      });
       let count = 0;
       let pending = 0;
       for await (const row of checked.openReader()) {
@@ -145,11 +151,7 @@ describe('native normalization through public chat', () => {
             await drain(agent.stream('continue'));
             await history.waitForCommit();
           });
-          expect(
-            receipt.files.map((path) =>
-              /\/media-live\/[^/]+\/locks\/store\.lock$/.test(path),
-            ),
-          ).toStrictEqual(purge ? [true] : []);
+          expect(receipt.files).toStrictEqual([]);
           expect(
             receipt.directories.filter((path) =>
               path.includes('provider-normalization-'),
