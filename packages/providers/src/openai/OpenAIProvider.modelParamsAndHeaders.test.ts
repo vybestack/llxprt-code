@@ -1,12 +1,11 @@
+import { replayableContents } from '../utils/collectContents.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import type OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  createProviderCallOptions,
-  type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../__tests__/streamCallOptions.js';
+import { type ProviderCallOptionsInit } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { createOpenAIRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 
@@ -62,9 +61,7 @@ function createStreamCallOptions(
   },
 ): GenerateChatOptions {
   const { contents, ...rest } = init;
-  const stream = (async function* (): AsyncGenerator<IContent> {
-    yield* contents;
-  })();
+  const stream = replayableContents(contents);
   return {
     ...createProviderCallOptions({ ...rest, contents: stream }),
     contents: stream,

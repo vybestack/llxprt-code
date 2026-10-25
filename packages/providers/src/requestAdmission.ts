@@ -12,6 +12,8 @@ export function copyProviderRequestOptions(
   return {
     runtimeKind: input.runtimeKind,
     contents: input.contents,
+    requestRows: input.requestRows,
+    contentCount: input.contentCount,
     tools: input.tools,
     modelParameters: input.modelParameters,
     invocation: input.invocation,

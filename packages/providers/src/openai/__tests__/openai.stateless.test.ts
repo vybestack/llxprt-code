@@ -1,3 +1,4 @@
+import { replayableContents } from '../../utils/collectContents.js';
 /**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P08
  * @requirement REQ-SP2-001
@@ -12,10 +13,8 @@ import {
   type RuntimeInvocationContext,
 } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import {
-  createProviderCallOptions,
-  type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../../__tests__/streamCallOptions.js';
+import { type ProviderCallOptionsInit } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { createOpenAIRawPostTestAdapter } from '../../__tests__/rawPostTestAdapters.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../../IProvider.js';
@@ -109,9 +108,7 @@ function buildCallOptions(
   } = {},
 ): GenerateChatOptions & { invocation: RuntimeInvocationContext } {
   const { contents = [], ...rest } = overrides;
-  const stream = (async function* (): AsyncGenerator<IContent> {
-    yield* contents;
-  })();
+  const stream = replayableContents(contents);
   return {
     ...createProviderCallOptions({
       providerName: provider.name,

@@ -1,3 +1,4 @@
+import { replayableContents } from '../utils/collectContents.js';
 /**
  * @plan PLAN-20251023-STATELESS-HARDENING.P08
  * @requirement REQ-SP2-001
@@ -10,10 +11,8 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import Anthropic from '@anthropic-ai/sdk';
-import {
-  createProviderCallOptions,
-  type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../__tests__/streamCallOptions.js';
+import { type ProviderCallOptionsInit } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../IProvider.js';
@@ -184,9 +183,7 @@ function buildCallOptions(
   } = {},
 ): GenerateChatOptions {
   const { contents = [], ...rest } = overrides;
-  const stream = (async function* (): AsyncGenerator<IContent> {
-    yield* contents;
-  })();
+  const stream = replayableContents(contents);
   return {
     ...createProviderCallOptions({
       providerName: provider.name,

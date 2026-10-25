@@ -10,6 +10,7 @@ import {
   type IProvider,
   type IModel,
   type GenerateChatOptions,
+  type ProviderChatOptions,
   type ProviderToolset,
 } from './IProvider.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -64,7 +65,10 @@ import {
 } from './logging/attemptLifecycle.js';
 import { AttemptRecorder } from './logging/attemptRecorder.js';
 import { isWrapperLifecycleOwner } from './logging/lifecycleOwnership.js';
-import { acquireRequestRows } from './utils/requestRowsLease.js';
+import {
+  acquireRequestRows,
+  admitProviderContents,
+} from './utils/requestRowsLease.js';
 import {
   requestLoggingPolicy,
   type RequestLoggingPolicy,
@@ -241,19 +245,19 @@ export class LoggingProviderWrapper implements IProvider {
    */
   // Only method that includes logging - everything else is passthrough
   generateChatCompletion(
-    options: GenerateChatOptions,
+    options: ProviderChatOptions,
   ): AsyncIterableIterator<IContent>;
   generateChatCompletion(
     content: AsyncIterable<IContent>,
     tools?: ProviderToolset,
   ): AsyncIterableIterator<IContent>;
   async *generateChatCompletion(
-    contentOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
+    contentOrOptions: AsyncIterable<IContent> | ProviderChatOptions,
     maybeTools?: ProviderToolset,
   ): AsyncIterableIterator<IContent> {
     const rawOptions = isAsyncIterableContents(contentOrOptions)
       ? { contents: contentOrOptions, tools: maybeTools }
-      : contentOrOptions;
+      : admitProviderContents(contentOrOptions);
     const normalizedOptions = this.normalizeChatCompletionOptions(
       rawOptions,
       maybeTools,

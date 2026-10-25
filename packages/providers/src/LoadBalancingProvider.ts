@@ -8,6 +8,7 @@ import { ProviderMediaFileAdapter } from '@vybestack/llxprt-code-core/runtime/pr
 import type {
   IProvider,
   GenerateChatOptions,
+  ProviderChatOptions,
   ProviderToolset,
 } from './IProvider.js';
 import type { IModel } from './IModel.js';
@@ -404,7 +405,7 @@ export class LoadBalancingProvider
   }
 
   generateChatCompletion(
-    options: GenerateChatOptions,
+    options: ProviderChatOptions,
   ): AsyncIterableIterator<IContent>;
   generateChatCompletion(
     content: AsyncIterable<IContent>,
@@ -412,7 +413,7 @@ export class LoadBalancingProvider
     signal?: AbortSignal,
   ): AsyncIterableIterator<IContent>;
   async *generateChatCompletion(
-    optionsOrContent: GenerateChatOptions | AsyncIterable<IContent>,
+    optionsOrContent: ProviderChatOptions | AsyncIterable<IContent>,
     tools?: ProviderToolset,
     signal?: AbortSignal,
   ): AsyncIterableIterator<IContent> {

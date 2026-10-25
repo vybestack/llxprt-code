@@ -5,11 +5,18 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateChatOptions, ProviderToolset } from '../IProvider.js';
+import type {
+  GenerateChatOptions,
+  ProviderChatOptions,
+  ProviderToolset,
+} from '../IProvider.js';
 import { closeStagedRowsAfterFailure } from '../BaseProviderNormalization.js';
 import { isAsyncIterableContents } from '../utils/collectContents.js';
 import { providerRowsOf } from '../utils/providerRows.js';
-import { acquireRequestRows } from '../utils/requestRowsLease.js';
+import {
+  acquireRequestRows,
+  admitProviderContents,
+} from '../utils/requestRowsLease.js';
 import { normalizeLoadBalancerOptions } from './resolvedOptionsBuilder.js';
 import { optionsWithRequestRows } from './preparedPromptOptions.js';
 
@@ -28,7 +35,7 @@ export interface StagedCallOptions {
  * built (issue #854).
  */
 export async function stageCallOptions(
-  optionsOrContent: GenerateChatOptions | AsyncIterable<IContent>,
+  optionsOrContent: ProviderChatOptions | AsyncIterable<IContent>,
   tools: ProviderToolset | undefined,
   signal: AbortSignal | undefined,
 ): Promise<StagedCallOptions> {
@@ -36,12 +43,15 @@ export async function stageCallOptions(
     !isAsyncIterableContents(optionsOrContent) &&
     optionsOrContent.requestRows !== undefined
   ) {
-    return { options: optionsOrContent, close: async () => {} };
+    return {
+      options: admitProviderContents(optionsOrContent),
+      close: async () => {},
+    };
   }
   const scope = acquireRequestRows(
     isAsyncIterableContents(optionsOrContent)
       ? optionsOrContent
-      : normalizeLoadBalancerOptions(optionsOrContent),
+      : normalizeLoadBalancerOptions(admitProviderContents(optionsOrContent)),
     tools,
     signal,
   );

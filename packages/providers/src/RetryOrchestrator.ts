@@ -26,6 +26,7 @@ import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtim
 import {
   type IProvider,
   type GenerateChatOptions,
+  type ProviderChatOptions,
   type ProviderToolset,
 } from './IProvider.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -276,7 +277,7 @@ export class RetryOrchestrator implements IProvider {
    * Supports both overloaded signatures accepted by the provider contract
    */
   generateChatCompletion(
-    optionsOrContents: GenerateChatOptions | AsyncIterable<IContent>,
+    optionsOrContents: ProviderChatOptions | AsyncIterable<IContent>,
     tools?: ProviderToolset,
     signal?: AbortSignal,
   ): AsyncIterableIterator<IContent> {
@@ -284,7 +285,7 @@ export class RetryOrchestrator implements IProvider {
   }
 
   private async *generateScopedCompletion(
-    input: GenerateChatOptions | AsyncIterable<IContent>,
+    input: ProviderChatOptions | AsyncIterable<IContent>,
     tools?: ProviderToolset,
     signal?: AbortSignal,
   ): AsyncIterableIterator<IContent> {
