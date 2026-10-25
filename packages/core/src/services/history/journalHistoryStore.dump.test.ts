@@ -81,6 +81,22 @@ describe('journal history store dump snapshot', () => {
     await dump.close();
     await expect(reader.next()).rejects.toThrow('Dump snapshot is closed');
   });
+  it('releases the actual suspended raw row when its owner closes', async () => {
+    const store = await created('raw-close.llxj');
+    store.apply({ kind: 'content', content: row('human', 'one', 1) });
+    const dump = await store.openDumpSnapshot();
+    const reader = dump.rows()[Symbol.asyncIterator]();
+    const weak = await (async (): Promise<WeakRef<IContent>> => {
+      const result = await reader.next();
+      if (result.done === true) throw new Error('Expected a raw row');
+      return new WeakRef(result.value);
+    })();
+    await dump.close();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    Bun.gc(true);
+    expect(weak.deref()).toBeUndefined();
+  });
+
   it('releases the actual suspended curated row when its owner closes', async () => {
     const store = await created('curated-close.llxj');
     store.apply({ kind: 'content', content: row('human', 'one', 1) });

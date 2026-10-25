@@ -15,6 +15,36 @@ function references(node: ts.Node, name: string): number {
   return count;
 }
 
+function boundedHeaderLabels(body: ts.Block, checker: ts.TypeChecker): boolean {
+  for (const statement of body.statements) {
+    if (
+      !ts.isVariableStatement(statement) ||
+      compact(statement) !==
+        'constlabels=newSet(this.projection?.headerLabels);'
+    )
+      continue;
+    const initializer = statement.declarationList.declarations[0].initializer;
+    if (initializer === undefined || !ts.isNewExpression(initializer))
+      return false;
+    const argument = initializer.arguments?.[0];
+    if (argument === undefined) return false;
+    const type = checker.getTypeAtLocation(argument);
+    const parts = type.isUnion() ? type.types : [type];
+    return parts.every((part) => {
+      if ((part.flags & ts.TypeFlags.Undefined) !== 0) return true;
+      if (!checker.isTupleType(part)) return false;
+      const length = part.getProperty('length');
+      if (length === undefined) return false;
+      const size = checker.getTypeOfSymbolAtLocation(length, argument);
+      const sizes = size.isUnion() ? size.types : [size];
+      return sizes.every(
+        (value) => value.isNumberLiteral() && value.value <= 1,
+      );
+    });
+  }
+  return false;
+}
+
 function inputLimitBound(
   factory: ts.MethodDeclaration,
   checker: ts.TypeChecker,
@@ -34,7 +64,8 @@ function inputLimitBound(
   const initial = body.statements.find(
     (statement) =>
       compact(statement) ===
-      'letmaxRows=this.tailRows.length+this.overlay.size;',
+        'letmaxRows=this.tailRows.length+this.overlay.size+labels.size;' &&
+      boundedHeaderLabels(body, checker),
   );
   const projectionLimits: ts.BinaryExpression[] = [];
   const visit = (node: ts.Node): void => {

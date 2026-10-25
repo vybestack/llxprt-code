@@ -384,8 +384,20 @@ describe('no context-retaining collections in the facade surface (P05b3): produc
       'journal-indexed-overlay.ts',
     );
     const tailFile = path.join(import.meta.dir, 'journal-tail-source.ts');
+    const projectionFile = path.join(
+      import.meta.dir,
+      'journal-request-projection.ts',
+    );
     for (const [helperFile, before, after] of [
       [overlayFile, 'rows.length > maxRows', 'false'],
+      [tailFile, '+ labels.size', '+ this.snapshot.rows'],
+      [tailFile, ' + labels.size', ''],
+      [projectionFile, 'readonly [] | readonly [bigint]', 'readonly bigint[]'],
+      [
+        projectionFile,
+        'readonly [] | readonly [bigint]',
+        'readonly [bigint, bigint]',
+      ],
       [
         tailFile,
         'this.tailRows.length + this.overlay.size',

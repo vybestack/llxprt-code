@@ -140,7 +140,7 @@ export class JournalTailSource implements JournalResponseSource {
     return (
       this.isTail(label) ||
       label === this.projection?.label ||
-      this.projection?.headerLabels?.includes(label) === true
+      this.projection?.headerLabels?.some((header) => header === label) === true
     );
   }
 

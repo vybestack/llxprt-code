@@ -14,7 +14,7 @@ import type { IContent } from './IContent.js';
 import type { JournalResponseSource } from './journal-response-source.js';
 
 export interface JournalRequestProjection {
-  readonly headerLabels?: readonly bigint[];
+  readonly headerLabels?: readonly [] | readonly [bigint];
   readonly label?: bigint;
   readonly removedBlock?: number;
   readonly removedRow?: boolean;
