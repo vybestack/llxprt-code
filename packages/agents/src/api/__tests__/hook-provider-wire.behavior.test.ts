@@ -1,4 +1,3 @@
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -18,10 +17,9 @@ import {
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { nativeHookCommand } from './helpers/native-hook-command.js';
-import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
-import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { fromConfig } from '../fromConfig.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 const wireSchema = z
   .object({
@@ -70,6 +68,7 @@ const hookInputSchema = z.object({
 });
 
 describe('public Agent physical model hooks', () => {
+  const credentials = useOwnedCredentials();
   it('sends the subprocess-modified contents to the actual localhost provider request', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'hook-provider-wire-'));
     const script = join(directory, 'before-model.ts');
@@ -105,7 +104,6 @@ console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...
       handlers.push(work);
     });
     let config: Config | undefined;
-    let mcp: McpRuntimeOwner | undefined;
     let agent: Agent | undefined;
     const failures: unknown[] = [];
     try {
@@ -142,27 +140,20 @@ console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...
           ],
         },
       });
-      mcp = await createTestMcpRuntime(
-        { oauth: createTestOAuthBinding(), config },
-        {},
-      );
-      const adoptedSettings1 = createSessionSettingsFixture(config);
+      const settings = new SettingsService();
+      for (const [key, value] of Object.entries(config.getInitialSettings()))
+        settings.set(key, value);
       agent = await fromConfig(
         config,
-        adoptedSettings1.settingsService,
+        settings,
         {
           activation: {
             provider: 'openai',
             model: 'wire-model',
             cliOverrides: { key: 'local-test-key', baseUrl },
           },
-          mcpOwnership: 'caller',
         },
-        adoptedSettings1.settingsOwner,
-        undefined,
-        undefined,
-        undefined,
-        mcp,
+        credentials().authority,
       );
       const runtimeId = agent.getRuntimeId();
       const text: string[] = [];
@@ -209,10 +200,7 @@ console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...
       failures.push(error);
     } finally {
       const retired = await Promise.allSettled([agent?.dispose()]);
-      const resources = await Promise.allSettled([
-        mcp?.dispose(),
-        config?.dispose(),
-      ]);
+      const resources = await Promise.allSettled([config?.dispose()]);
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       await Promise.all(handlers);

@@ -1,64 +1,21 @@
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import {
-  Config,
-  ConfigParameters,
-} from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { beforeAll, afterAll, afterEach, describe, expect, it } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../adoption-release.js';
-import { randomUUID } from 'node:crypto';
-import {
-  runCleanupSteps,
-  cleanupAfterFailure,
-} from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
-import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { fileURLToPath } from 'node:url';
-import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import {
-  createAgentRuntimeFactoryBindings,
-  AgentRuntimeFactoryBindings,
-} from '../runtimeFactories.js';
-import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
-import { executeProviderActivation } from '../providerActivationExecutor.js';
-import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
-import { assembleModelSelection } from '../model-selection.js';
-import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
-import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
-import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { type Agent } from '@vybestack/llxprt-code-agents';
 import {
   ToolConfirmationOutcome,
   PolicyDecision,
 } from '@vybestack/llxprt-code-core';
 import { ACTIVATE_SKILL_TOOL_NAME } from '@vybestack/llxprt-code-tools';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  createRecordingProvider,
+  type RecordedRequest,
+} from './helpers/recording-provider.js';
+import { openRouteBPreflight } from './helpers/route-b-preflight.js';
 
 /**
  * @license
@@ -71,50 +28,36 @@ import { ACTIVATE_SKILL_TOOL_NAME } from '@vybestack/llxprt-code-tools';
  *
  * `Config` cannot construct the skill activation tool itself (issue #2417), so
  * it takes a registrar hook and silently registers nothing when none is
- * supplied. `fromConfig` adopts a Config the caller built, and a caller has no
+ * supplied. The agent adopts a Config the caller built, and a caller has no
  * reason to know that hook exists, so an adopted Config with skills enabled
  * would produce an agent whose model was never told any skill exists.
  *
- * `buildCliStyleConfig` deliberately builds and initializes a Config the way an
- * embedder would, without a registrar, which is exactly the case under test.
- * Nothing here installs one.
+ * The Config here is built the way an embedder would, without a registrar,
+ * which is exactly the case under test. Nothing here installs one.
  */
-
-interface ProviderToolDeclaration {
-  readonly name: string;
-  readonly parametersJsonSchema?: unknown;
-}
 
 /**
  * The skill names the model may pass to `activate_skill`, read from the
- * declarations ChatSession will send with the next provider request. Throws
- * rather than returning empty if the shape moves, so a refactor of
- * `ChatSession.setTools` cannot turn this green by accident.
+ * declarations the provider received with the latest request. Throws rather
+ * than returning empty if the shape moves, so a refactor of the request's tool
+ * declarations cannot turn this green by accident.
  */
-function modelVisibleSkillNames(agent: Agent): string[] {
-  const chat = fixtureAgentResources(agent)
-    .publishedClient(agent)
-    .getChat() as unknown as {
-    generationConfig?: {
-      tools?: ProviderToolDeclaration[];
-    };
-  };
-  const toolGroups = chat.generationConfig?.tools;
-  if (!Array.isArray(toolGroups) || toolGroups.length === 0) {
-    throw new Error(
-      'ChatSession carries no tool groups; ChatSession.setTools may have changed shape',
-    );
+function modelVisibleSkillNames(
+  requests: readonly RecordedRequest[],
+): string[] {
+  if (requests.length === 0) {
+    throw new Error('The provider received no request');
   }
-  const declarations = toolGroups;
-  if (!Array.isArray(declarations)) {
+  const declarations = requests[requests.length - 1].tools;
+  if (declarations === undefined || declarations.length === 0) {
     throw new Error(
-      'ChatSession has no declarations; ChatSession.setTools may have changed shape',
+      'The provider request carries no tool declarations; the request shape may have changed',
     );
   }
   const declaration = declarations.find(
     (candidate) => candidate.name === ACTIVATE_SKILL_TOOL_NAME,
   );
-  if (!declaration) {
+  if (declaration === undefined) {
     return [];
   }
   const schema = declaration.parametersJsonSchema as {
@@ -147,279 +90,54 @@ describe('fromConfig gives the model the skills the config discovered @issue:338
     await rm(promptDirectory, { recursive: true, force: true });
   });
 
-  const builtCredentials = useOwnedCredentials();
-  let builtCallerConfig: Config;
-  let builtCallerSettings: SettingsService;
-  let builtCallerSettingsOwner: SessionSettingsOwner;
-  let builtCallerPolicy: RuntimePolicyOwner;
-  let builtCallerMcp: McpRuntimeOwner;
-  let builtCallerManager: ReturnType<typeof acquirePreferredProviderManager>;
-  let builtCallerOwner: SessionClientOwner;
-  let builtCallerClose: () => Promise<void>;
-  let builtCallerFactories: AgentRuntimeFactoryBindings;
-  let builtCallerRelease: AcquisitionRelease;
-  let builtCallerFiles: ProviderFileLifecycle;
-  let builtCallerRuntimeId: string;
-  let builtCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let builtCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
-  let builtCallerContent: ReturnType<
-    typeof createRuntimeContentGeneratorFactory
-  >;
-
-  async function openbuiltCaller(
-    fixture: string,
-    overrides: Readonly<Partial<AgentConfig>> = {},
-    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
-    skillSettings: Pick<
-      ConfigParameters,
-      'enableExtensionReloading' | 'storageRoot'
-    > = {},
-    extensionLoader?: ExtensionLoader,
-    skillOperations?: WorkspaceSkillAssemblyOperations,
-  ): Promise<void> {
-    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('./fixtures/' + fixture, import.meta.url),
-    );
-    const directory = await realpath(
-      await mkdtemp(join(tmpdir(), 'builtCaller-adoption-')),
-    );
-    const selection: AgentConfig = {
-      provider: 'fake',
-      model: 'fake-model',
-      sessionId: randomUUID(),
-      ...overrides,
-      workingDir:
-        overrides.workingDir === undefined
-          ? directory
-          : await realpath(overrides.workingDir),
-    };
-    const parameters = { ...toConfigParameters(selection), ...skillSettings };
-    parameters.interactive = true;
-    if (overrides.hooks !== undefined) parameters.enableHooks = true;
-    if (
-      overrides.filesystemOwner === undefined &&
-      (overrides.harness?.includeProcessCwd ?? true)
-    )
-      parameters.includeDirectories = [
-        ...(parameters.includeDirectories ?? []),
-        process.cwd(),
-      ];
-    builtCallerConfig = new Config(parameters);
-    builtCallerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...suppliedFactories,
-    };
-    builtCallerSettings = new SettingsService();
-    for (const [key, value] of Object.entries(
-      builtCallerConfig.getInitialSettings(),
-    ))
-      builtCallerSettings.set(key, value);
-    builtCallerPolicy = new RuntimePolicyOwner(builtCallerConfig);
-    injectConfirmationForcingPolicy(builtCallerPolicy.session.confirmation);
-    builtCallerMcp = await buildTestMcpRuntime(
-      builtCallerConfig,
-      builtCallerPolicy.session.messageBus,
-      overrides,
-      extensionLoader,
-      builtCallerPolicy,
-      skillOperations,
-    );
-    acquirebuiltCallerProviders();
-    const media = new SessionMediaOwner(
-      builtCallerConfig.projectTempDir,
-      1024 * 1024 * 1024,
-    );
-    builtCallerOwner = await createCapturedSessionOwner(
-      builtCallerConfig,
-      assembleTaskSchemaPolicy(builtCallerSettings),
-      builtCallerManager,
-      builtCallerFactories.agentClientFactory,
-      media.store,
-      builtCallerMcp.readInstructions,
-      builtCallerMcp.workspacePaths,
-      builtCallerSettingsOwner,
-      builtCallerContent,
-      builtCallerTokenizer,
-    );
-    builtCallerOwner.bindMcpRuntime(builtCallerMcp);
-    builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
-      builtCallerOAuth.composeRetryOperations(provider),
-    );
-    builtCallerOwner.bindHooks();
-    builtCallerClose = settleEngineRelease.bind(
-      undefined,
-      [
-        () => builtCallerOwner.dispose(),
-        () => builtCallerRelease.close(),
-        () => media.dispose(),
-        () => builtCallerMcp.dispose(),
-        () => builtCallerConfig.dispose(),
-        () => rm(directory, { recursive: true, force: true }),
-      ],
-      previousReplay,
-    );
-    try {
-      await preparePreferredProviderCompletion(
-        builtCallerConfig,
-        builtCallerSettings,
-        builtCallerSettingsOwner,
-        builtCallerManager,
-        builtCallerOAuth,
-        builtCallerRuntimeId,
-        builtCallerTokenizer,
-        undefined,
-      );
-      await builtCallerMcp.initialize();
-      await activatebuiltCallerClient(selection.activation);
-    } catch (primary) {
-      await cleanupAfterFailure(primary, builtCallerClose);
-    }
-  }
-  function acquirebuiltCallerProviders(): void {
-    builtCallerRuntimeId = 'builtCaller-' + randomUUID();
-    builtCallerRelease = new AcquisitionRelease();
-    builtCallerSettingsOwner = new SessionSettingsOwner(builtCallerSettings);
-    builtCallerRelease.acquire('settings', () =>
-      builtCallerSettingsOwner.dispose(),
-    );
-    builtCallerSettingsOwner.initializeProviderSelection(
-      builtCallerConfig.getProvider(),
-      builtCallerConfig.getModel(),
-    );
-    builtCallerSettingsOwner.bindTelemetry(builtCallerConfig);
-    builtCallerFiles = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
-    });
-    for (const scope of [
-      builtCallerRuntimeId,
-      builtCallerConfig.getSessionId(),
-    ])
-      builtCallerRelease.acquire('files', () =>
-        releaseAdoptedFileScope(builtCallerFiles, scope),
-      );
-    builtCallerManager = acquirePreferredProviderManager(
-      builtCallerConfig,
-      builtCallerSettings,
-      builtCallerSettingsOwner,
-      builtCallerFiles,
-      builtCallerRuntimeId,
-      builtCredentials().authority,
-      builtCallerRelease,
-    );
-    const factoriesTokenizer = configureProviderTokenizer(builtCallerManager);
-    const factoriesContent = createRuntimeContentGeneratorFactory();
-    builtCallerTokenizer = factoriesTokenizer;
-    builtCallerContent = factoriesContent;
-    builtCallerOAuth = acquirePreferredOAuth(
-      undefined,
-      builtCallerPolicy.session.messageBus,
-      builtCallerConfig,
-      builtCallerSettings,
-      builtCallerManager,
-      builtCallerRuntimeId,
-      builtCallerMcp.profileDefinitions,
-      builtCredentials().authority,
-      builtCallerRelease,
-      undefined,
-    );
-  }
-  async function activatebuiltCallerClient(
-    intent: ProviderActivationIntent = {
-      provider: builtCallerConfig.getProvider(),
-      model: builtCallerConfig.getModel(),
-    },
-  ): Promise<void> {
-    const activation = await executeProviderActivation(
-      builtCallerConfig,
-      intent,
-      assembleProviderSwitch(
-        builtCallerConfig,
-        builtCallerSettings,
-        builtCallerManager,
-        builtCallerOAuth,
-        () => 'agent',
-        () => builtCallerOwner.refreshAuth(),
-        builtCallerSettingsOwner,
-      ),
-      builtCallerSettings,
-      builtCallerManager,
-      (method) => builtCallerOwner.refreshAuth(method),
-      assembleModelSelection(builtCallerSettingsOwner),
-    );
-    requireCallerActivation(activation);
-    await builtCallerOwner.initializeTools();
-    await capturedSessionClient(builtCallerOwner).startChat();
-  }
+  const credentials = useOwnedCredentials();
+  const cleanups: Array<() => Promise<void>> = [];
+  afterEach(async () => {
+    for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+  });
 
   it('offers a skill from an adopted config that supplied no registrar', async () => {
-    const workspace = mkdtempSync(join(tmpdir(), 'llxprt-fromconfig-skills-'));
-    writeSkill(workspace, 'alpha');
-    await openbuiltCaller('plain-text.jsonl', {
-      skillsSupport: true,
-      workingDir: workspace,
+    const recording = createRecordingProvider();
+    const route = await openRouteBPreflight({
+      authority: credentials().authority,
+      contributions: recording.contributions,
+      config: {
+        provider: recording.alias,
+        model: 'recording-default',
+        skillsSupport: true,
+      },
     });
-    let agent: Agent | undefined;
-    try {
-      agent = await fromConfig(
-        builtCallerConfig,
-        builtCallerSettings,
-        {},
-        builtCallerSettingsOwner,
-        builtCallerManager,
-        undefined,
-        undefined,
-        builtCallerMcp,
-        undefined,
-        capturedSessionClient(builtCallerOwner),
-      );
-      for await (const _event of agent.stream('hello')) {
-        // Drain the turn so the chat session and its tool list exist.
-      }
-
-      expect(agent.skills.list().map((skill) => skill.name)).toContain('alpha');
-      expect(modelVisibleSkillNames(agent)).toContain('alpha');
-      const tool = builtCallerMcp.toolSelection.getTool(
-        ACTIVATE_SKILL_TOOL_NAME,
-      );
-      if (!tool) throw new Error('Missing published activation tool');
-      const confirmation = await tool
-        .build({ name: 'alpha' })
-        .shouldConfirmExecute(new AbortController().signal);
-      if (confirmation === false)
-        throw new Error('Missing activation confirmation');
-      await confirmation.onConfirm(ToolConfirmationOutcome.ProceedAlways);
-      expect(builtCallerMcp.policyInspection.getRules()).toContainEqual(
-        expect.objectContaining({
-          toolName: ACTIVATE_SKILL_TOOL_NAME,
-          decision: PolicyDecision.ALLOW,
-        }),
-      );
-    } finally {
-      await agent?.dispose().catch(() => {
-        /* disposed via cleanup regardless of impl state */
-      });
-      await builtCallerClose();
-      rmSync(workspace, { recursive: true, force: true });
+    cleanups.push(() => route.close());
+    writeSkill(route.directory, 'alpha');
+    await route.prepare();
+    const agent: Agent = await route.createAgent({
+      provider: recording.alias,
+      model: 'recording-default',
+    });
+    cleanups.push(() => agent.dispose());
+    for await (const _event of agent.stream('hello')) {
+      // Drain the turn so the chat session and its tool list exist.
     }
+
+    expect(agent.skills.list().map((skill) => skill.name)).toContain('alpha');
+    expect(modelVisibleSkillNames(recording.requests)).toContain('alpha');
+    const tool = agent.tools.get(ACTIVATE_SKILL_TOOL_NAME);
+    if (!tool) throw new Error('Missing published activation tool');
+    const confirmation = await tool
+      .build({ name: 'alpha' })
+      .shouldConfirmExecute(new AbortController().signal);
+    if (confirmation === false)
+      throw new Error('Missing activation confirmation');
+    await (
+      confirmation as {
+        onConfirm(outcome: ToolConfirmationOutcome): Promise<void>;
+      }
+    ).onConfirm(ToolConfirmationOutcome.ProceedAlways);
+    expect(agent.policy.getRules()).toContainEqual(
+      expect.objectContaining({
+        toolName: ACTIVATE_SKILL_TOOL_NAME,
+        decision: PolicyDecision.ALLOW,
+      }),
+    );
   });
 });
-
-async function settleEngineRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previousReplay: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
-  }
-}
-
-function requireCallerActivation(
-  result: Awaited<ReturnType<typeof executeProviderActivation>>,
-): void {
-  if (result.authFailed) throw result.authError;
-}
