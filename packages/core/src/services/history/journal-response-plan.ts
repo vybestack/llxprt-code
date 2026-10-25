@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from '../../journal/errors.js';
 import type { BlockPosition } from '../../journal/idFactCodec.js';
+import type { RowIds } from '../../journal/rowReads.js';
 import type { ContentBlock, IContent } from './IContent.js';
 import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
 import {
@@ -19,6 +20,7 @@ export interface JournalResponsePlan {
   readonly header: IContent;
   readonly blocks: readonly JournalBlockReference[];
   readonly pending: boolean;
+  sourceIds?(label: bigint): RowIds | undefined;
   openBlocks(): AsyncGenerator<ContentBlock>;
 }
 
@@ -70,6 +72,8 @@ export function responsePlan(
     header: sanitizeProviderContentForSerialization(header),
     blocks,
     pending,
+    sourceIds: (label) =>
+      known?.entry.label === label ? known.ids : undefined,
     async *openBlocks() {
       for (const ref of blocks) {
         const block = await resolveBlock(source, ref, known);

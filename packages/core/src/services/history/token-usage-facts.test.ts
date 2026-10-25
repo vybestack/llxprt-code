@@ -38,6 +38,7 @@ describe('neutral token usage row facts', () => {
       try {
         const entry = await snapshot.entryAt(0);
         const lookups = spyOn(snapshot, 'entryByLabel');
+        const headers = spyOn(snapshot, 'readIds');
         try {
           const registration = tokenUsageFactRegistration(
             (text) => text.length,
@@ -47,7 +48,9 @@ describe('neutral token usage row facts', () => {
             decodeTokenUsageFacts(bytes).map((unit) => unit.measurement),
           ).toStrictEqual([measureRequestRow(row, (text) => text.length)]);
           expect(lookups.mock.calls).toHaveLength(0);
+          expect(headers.mock.calls).toHaveLength(1);
         } finally {
+          headers.mockRestore();
           lookups.mockRestore();
         }
       } finally {

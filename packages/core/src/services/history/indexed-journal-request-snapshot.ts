@@ -441,6 +441,7 @@ export class IndexedJournalRequestSnapshot {
       if (this.source.measurementChanged(label)) return 'overlay';
       return this.snapshot.rowMeasurementStamp(
         label === selected.entry.label ? selected.entry : label,
+        plan.sourceIds?.(label),
       );
     });
     const overlay =

@@ -107,12 +107,15 @@ export class VersionSnapshot {
     this.kimiFacts = new KimiFactQueries(this, idDeps, this.kimi.meta);
   }
 
-  async rowMeasurementStamp(source: bigint | RowEntry): Promise<string> {
+  async rowMeasurementStamp(
+    source: bigint | RowEntry,
+    knownIds?: RowIds,
+  ): Promise<string> {
     const entry =
       typeof source === 'bigint' ? await this.entryByLabel(source) : source;
     if (entry === undefined)
       throw new JournalFormatError('Measurement source row is absent');
-    const ids = await this.readIds(entry);
+    const ids = knownIds ?? (await this.readIds(entry));
     const head = ids.head;
     if (head === undefined)
       throw new JournalFormatError('Measurement source has no stored frame');

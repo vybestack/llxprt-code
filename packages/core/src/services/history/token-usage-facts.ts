@@ -104,7 +104,10 @@ export function tokenUsageFactRegistration(
       const units: StoredTokenUsageUnit[] = [];
       for await (const plan of journalEntryPlans(source, entry)) {
         const signature = await tokenUsagePlanSignature(plan, (label) =>
-          snapshot.rowMeasurementStamp(label === entry.label ? entry : label),
+          snapshot.rowMeasurementStamp(
+            label === entry.label ? entry : label,
+            plan.sourceIds?.(label),
+          ),
         );
         const stored = old.find((unit) => unit.signature === signature);
         units.push(
