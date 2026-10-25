@@ -79,14 +79,17 @@ export class LoopRunLifetime implements AgenticLoopRunner {
       runs.map((run) => run.iterator.return(undefined)),
     );
     this.closing = (async () => {
-      await returns;
+      const finalizers = await returns;
       await Promise.all(runs.map((run) => run.settled));
       const [resources] = await Promise.allSettled([
         Promise.resolve().then(this.release),
       ]);
-      if (resources.status === 'rejected')
+      const failures = [...finalizers, resources].flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      );
+      if (failures.length > 0)
         throw new AggregateError(
-          [resources.reason],
+          failures,
           'Agentic loop runner cleanup failed',
         );
     })();

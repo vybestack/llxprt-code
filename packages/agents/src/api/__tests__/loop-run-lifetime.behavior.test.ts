@@ -77,4 +77,38 @@ describe('loop run lifetime disposal', () => {
       throw new Error('Missing cleanup failure');
     expect(outcome.errors).toStrictEqual([releaseFailure]);
   });
+
+  it('reports a finalizer failure of a run suspended at a yield once and still releases', async () => {
+    const finalizerFailure = new Error('iterator finalizer failed');
+    let released = 0;
+    const failFinalizer = (): never => {
+      throw finalizerFailure;
+    };
+    const lifetime = new LoopRunLifetime(
+      async function* (): AsyncGenerator<AgenticLoopEvent> {
+        try {
+          yield { kind: 'tool_output', callId: 'call-1', chunk: 'first' };
+        } finally {
+          failFinalizer();
+        }
+      },
+      async () => {
+        released += 1;
+      },
+    );
+    const run = lifetime.run('suspended', new AbortController().signal);
+    const first = await run.next();
+    expect(first.done).toBe(false);
+
+    const outcome = await lifetime.dispose().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    expect(outcome).toBeInstanceOf(AggregateError);
+    if (!(outcome instanceof AggregateError))
+      throw new Error('Missing finalizer failure');
+    expect(outcome.errors).toStrictEqual([finalizerFailure]);
+    expect(released).toBe(1);
+  });
 });
