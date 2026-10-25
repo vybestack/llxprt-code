@@ -195,13 +195,21 @@ describe('#3469 launch resource release', () => {
    * #3533 remediation regression: a fully terminated and reaped sidecar
    * leaves no living or zombie member in its process group; probing the
    * group then fails with ESRCH. Only groups this run created are probed.
+   *
+   * On darwin, probing a group whose only remaining members are zombies not
+   * yet reaped fails with EPERM instead of succeeding (reproduced in
+   * tmp/pr3911/T6.F2/repro.log; slow reaping under heavy load exposes it).
+   * That is a group that still has members, so it counts as alive and the
+   * caller keeps polling until ESRCH. Elsewhere EPERM stays an error.
    */
   function processGroupAlive(groupId: number): boolean {
     try {
       process.kill(-groupId, 0);
       return true;
     } catch (err) {
-      if (errnoCode(err) !== 'ESRCH') throw err;
+      const code = errnoCode(err);
+      if (code === 'EPERM' && process.platform === 'darwin') return true;
+      if (code !== 'ESRCH') throw err;
       return false;
     }
   }
