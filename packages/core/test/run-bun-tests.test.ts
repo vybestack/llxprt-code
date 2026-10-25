@@ -1361,7 +1361,11 @@ describe('core batch settlement after retry reaping', () => {
       writeFileSync(harness, source);
       const child = Bun.spawn([process.execPath, harness], {
         cwd: root,
-        env: { ...process.env, LLXPRT_CORE_TEST_CONCURRENCY: '1' },
+        env: {
+          ...process.env,
+          LLXPRT_CORE_TEST_CONCURRENCY: '1',
+          LLXPRT_CLI_TEST_PARTITION: '',
+        },
         stdout: 'pipe',
         stderr: 'pipe',
       });
