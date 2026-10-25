@@ -222,7 +222,8 @@ export class GroupCopier {
   ): Promise<number> {
     const earlier = await this.known(oldOffset);
     if (earlier !== undefined) return earlier;
-    const node = await this.ids.readNode(oldOffset);
+    // Retained versions share paths at scattered offsets, even during a full copy.
+    const node = await this.ids.readNode(oldOffset, undefined, false);
     const copy: IdTrieNode =
       node.kind === 'leaf'
         ? await this.copyFacts(node.entries, remapValue)
