@@ -33,7 +33,7 @@ import {
   type WorkspaceMcpSettings,
   type SessionMcpSettingsReads,
 } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { type MemoryHandoff, ownsMcpMemory } from './mcpOAuthAssembly.js';
+import type { MemoryHandoff } from './mcpOAuthAssembly.js';
 import type { McpConstructionResources } from './mcp-construction-resources.js';
 import { updateWorkspaceExtensionDefinitions } from './workspace-definition-assembly.js';
 import type { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
@@ -77,7 +77,7 @@ export function retainWorkspaceMemory(
   const memory =
     supplied?.owner ??
     assembleWorkspaceMemory(config, filesystem, trust, readExtensions);
-  if (ownsMcpMemory(supplied)) resources.retain(() => memory.dispose());
+  if (supplied === undefined) resources.retain(() => memory.dispose());
   return memory;
 }
 

@@ -118,6 +118,7 @@ import { MCP_SESSION_APPROVAL_SOURCE } from '@vybestack/llxprt-code-core/policy/
 
 import {
   assembleWorkspaceApproval,
+  retainSuppliedRuntimeOwners,
   retainWorkspaceAuthority,
   retainMcpPolicyProjection,
   retainWorkspaceCheckpoints,
@@ -251,6 +252,7 @@ export class McpRuntimeOwner implements AgentMcpOperations {
     operations: McpRuntimeOperations,
   ): Promise<McpRuntimeOwner> {
     const resources = new McpConstructionResources();
+    retainSuppliedRuntimeOwners(resources, acquisition);
     try {
       return new McpRuntimeOwner(resources, acquisition, operations);
     } catch (error) {

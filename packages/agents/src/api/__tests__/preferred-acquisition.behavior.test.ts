@@ -17,10 +17,17 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { StandardFileSystemService } from '@vybestack/llxprt-code-core/services/fileSystemService.js';
 import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import { WorkspaceLspOwner } from '@vybestack/llxprt-code-core/lsp/workspace-lsp-owner.js';
 import { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 import { resolveProviderFilePolicy } from '@vybestack/llxprt-code-providers/providerFilePolicy.js';
+
+function flattenFailures(failure: unknown): string[] {
+  if (failure instanceof AggregateError)
+    return failure.errors.flatMap(flattenFailures);
+  return [failure instanceof Error ? failure.message : String(failure)];
+}
 
 describe('preferred Agent acquisition release', () => {
   const credentials = useOwnedCredentials();
@@ -216,6 +223,48 @@ describe('preferred Agent acquisition release', () => {
         },
       };
     });
+  });
+
+  it('reports a failing transferred filesystem owner release once when activation rejects after MCP took it over', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'preferred-owner-report-'));
+    let releases = 0;
+    const filesystem = new WorkspaceFilesystemOwner({
+      targetDir: directory,
+      isTrusted: () => true,
+      fileSystem: {
+        service: new StandardFileSystemService(),
+        ownership: 'workspace',
+        release: async () => {
+          releases++;
+          throw new Error('PROBE_FILESYSTEM_FAILURE');
+        },
+      },
+    });
+    try {
+      const failure: unknown = await createAgent({
+        credentialAuthority: credentials().authority,
+        provider: 'openai',
+        model: 'unacquired-model',
+        workingDir: directory,
+        harness: { includeProcessCwd: false },
+        activation: {
+          provider: 'nonexistent-probe-provider',
+          providerSwitchPolicy: 'strict',
+        },
+        filesystemOwner: filesystem,
+        filesystemOwnership: 'agent',
+      }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(AggregateError);
+      const leaves = flattenFailures(failure);
+      expect(leaves[0]).toContain('nonexistent-probe-provider');
+      expect(leaves.slice(1)).toStrictEqual(['PROBE_FILESYSTEM_FAILURE']);
+      expect(releases).toBe(1);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   const HOST_CREDENTIAL_ERROR =

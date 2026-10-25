@@ -34,13 +34,16 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import type { AgentConfig } from './config-types.js';
 import { injectConfirmationForcingPolicy } from './confirmationForcing.js';
-import type { McpAssemblyOptions } from './mcpOAuthAssembly.js';
+import type {
+  McpAssemblyOptions,
+  McpTransferHandoff,
+} from './mcpOAuthAssembly.js';
 import { assembleMcpRuntime } from './mcpOAuthAssembly.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 
 export async function assembleOwnedMcpRuntime(
   config: Config,
-  options: McpAssemblyOptions,
+  options: McpAssemblyOptions & McpTransferHandoff,
   policy: RuntimePolicyOwner,
   settingsOwner: SessionSettingsOwner,
 ): Promise<McpRuntimeOwner> {

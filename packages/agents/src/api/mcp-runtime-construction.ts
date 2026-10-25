@@ -108,6 +108,38 @@ export interface McpRuntimeOperations {
   readonly mcpSettings: SessionMcpSettingsReads | undefined;
 }
 
+/**
+ * Caller-supplied workspace owners handed over with runtime ownership are
+ * released by the construction resources from the moment MCP accepts them, so
+ * a construction failure at any point releases each of them exactly once.
+ * Dependents release first because resources release in reverse order.
+ */
+export function retainSuppliedRuntimeOwners(
+  resources: McpConstructionResources,
+  inputs: Pick<
+    McpRuntimeAcquisition,
+    | 'filesystemOwner'
+    | 'filesystemOwnership'
+    | 'memoryOwner'
+    | 'definitionOwner'
+    | 'definitionOwnership'
+    | 'lspOwner'
+    | 'lspOwnership'
+  >,
+): void {
+  const { filesystemOwner, definitionOwner, lspOwner } = inputs;
+  if (inputs.filesystemOwnership === 'runtime' && filesystemOwner !== undefined)
+    resources.retain(() => filesystemOwner.dispose());
+  if (inputs.memoryOwner?.ownership === 'runtime') {
+    const memory = inputs.memoryOwner.owner;
+    resources.retain(() => memory.dispose());
+  }
+  if (inputs.definitionOwnership === 'runtime' && definitionOwner !== undefined)
+    resources.retain(() => definitionOwner.dispose());
+  if (inputs.lspOwnership === 'runtime' && lspOwner !== undefined)
+    resources.retain(() => lspOwner.dispose());
+}
+
 export function constructPolicyOwner(
   config: Config,
   policy: McpPolicyHandoff | undefined,

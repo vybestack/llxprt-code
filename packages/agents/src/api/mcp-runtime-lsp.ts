@@ -20,6 +20,7 @@ export function composeMcpLsp(
     new WorkspaceLspOwner(config.getLspConfig(), config.getTargetDir(), () =>
       trust.isTrustedFolder(),
     );
-  if (ownership === 'runtime') resources.retain(() => owner.dispose());
+  if (ownership === 'runtime' && supplied === undefined)
+    resources.retain(() => owner.dispose());
   return owner;
 }

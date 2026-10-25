@@ -31,7 +31,8 @@ export function composeWorkspaceDefinitions(
       directories.subagentDirectory ??
         join(directories.globalConfigRoot, 'subagents'),
     );
-  if (ownership === 'runtime') resources.retain(() => owner.dispose());
+  if (ownership === 'runtime' && supplied === undefined)
+    resources.retain(() => owner.dispose());
   return owner;
 }
 

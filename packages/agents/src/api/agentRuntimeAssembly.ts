@@ -123,7 +123,10 @@ import {
   bindCreatedSessionClient,
 } from './policyComposition.js';
 import { prepareImageConstruction } from './session-image-assembly.js';
-import { prepareTransferredWorkspaceOwners } from './transferred-workspace-owners.js';
+import {
+  prepareTransferredWorkspaceOwners,
+  type TransferredWorkspaceOwners,
+} from './transferred-workspace-owners.js';
 
 export async function disposeIsolatedMediaRuntime(
   closeRuntime: () => void | Promise<void>,
@@ -183,6 +186,7 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
   private trustPort: AgentConfig['trustPort'];
   private readonly inheritedTrustRelease = new AcquisitionRelease();
   private readonly workspaceRelease = new AcquisitionRelease();
+  private transferred!: TransferredWorkspaceOwners;
 
   constructor(
     private readonly rawConfig: AgentConfig,
@@ -197,6 +201,7 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
     // credential acquisition sits inside the same rollback as the rest.
     const images = prepareImageConstruction(this.rawConfig.imageOperation);
     const owners = prepareTransferredWorkspaceOwners(this.rawConfig);
+    this.transferred = owners;
     try {
       this.github = assembleHostGitHubBroker(this.rawConfig);
       const authority =
@@ -420,7 +425,10 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
     try {
       const mcpRuntime = await assembleOwnedMcpRuntime(
         this.config,
-        this.mcpOptions,
+        {
+          ...this.mcpOptions,
+          onTransferAccepted: () => this.transferred.handOffToMcp(),
+        },
         this.policyOwner,
         this.settingsOwner,
       );

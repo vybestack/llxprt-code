@@ -33,7 +33,8 @@ export function assembleMcpFilesystem(
       fileSystem:
         service === undefined ? undefined : { service, ownership: 'caller' },
     });
-  if (ownership === 'runtime') resources.retain(() => filesystem.dispose());
+  if (ownership === 'runtime' && supplied === undefined)
+    resources.retain(() => filesystem.dispose());
   const unsubscribe = trust.subscribeTrustChange(() =>
     filesystem.notifyTrustChanged(),
   );

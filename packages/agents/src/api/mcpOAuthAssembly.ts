@@ -42,9 +42,18 @@ export type McpAssemblyOptions = Pick<
   | 'filesystemOwnership'
 >;
 
+export interface McpTransferHandoff {
+  /**
+   * Called once MCP construction has taken responsibility for every supplied
+   * owner handed over with runtime ownership.
+   */
+  readonly onTransferAccepted?: () => void;
+}
+
 export async function assembleMcpRuntime(
   config: Config,
-  options: McpAssemblyOptions & { readonly trustCleanup?: () => Promise<void> },
+  options: McpAssemblyOptions &
+    McpTransferHandoff & { readonly trustCleanup?: () => Promise<void> },
   policy: McpPolicyHandoff | undefined,
   settingsOwner?: SessionSettingsOwner,
 ): Promise<McpRuntimeOwner> {
@@ -71,7 +80,9 @@ export async function assembleMcpRuntime(
   const filesystemOwnership =
     options.filesystemOwnership ??
     (options.filesystemOwner === undefined ? 'agent' : 'caller');
-  return McpRuntimeOwner.create(
+  // create() retains the supplied owners synchronously, before its first
+  // await, so the handoff below never leaves a window without an authority.
+  const runtime = McpRuntimeOwner.create(
     {
       oauth: {
         getAuthProviderFactory: options.mcpHost?.getAuthProviderFactory,
@@ -117,4 +128,6 @@ export async function assembleMcpRuntime(
       mcpSettings: settingsOwner?.readMcpSettingsBinding(),
     },
   );
+  options.onTransferAccepted?.();
+  return runtime;
 }

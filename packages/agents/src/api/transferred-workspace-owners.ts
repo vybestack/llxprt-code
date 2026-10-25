@@ -17,15 +17,20 @@ type TransferInputs = Pick<
 >;
 
 /**
- * Workspace owners the caller transferred with ownership 'agent'. The MCP
- * runtime takes them over only after input validation and the earlier
- * acquisitions succeed, so createAgent must release them itself when it
- * rejects before that point. Every owner's dispose is memoized, so releasing
- * after the runtime already did is a no-op.
+ * Workspace owners the caller transferred with ownership 'agent'. createAgent
+ * is their only rollback authority until MCP assembly accepts them. After
+ * `handOffToMcp()` the MCP runtime is the sole authority: it releases them if
+ * its construction fails and when it is disposed, so `cleanupFailedConstruction`
+ * releases nothing and cannot report their failures a second time.
  */
-export function prepareTransferredWorkspaceOwners(inputs: TransferInputs): {
+export interface TransferredWorkspaceOwners {
   cleanupFailedConstruction(): Promise<void>;
-} {
+  handOffToMcp(): void;
+}
+
+export function prepareTransferredWorkspaceOwners(
+  inputs: TransferInputs,
+): TransferredWorkspaceOwners {
   // Dependents first: memory reads through the filesystem owner.
   const owners = [
     inputs.lspOwnership === 'agent' ? inputs.lspOwner : undefined,
@@ -35,11 +40,16 @@ export function prepareTransferredWorkspaceOwners(inputs: TransferInputs): {
       : undefined,
     inputs.filesystemOwnership === 'agent' ? inputs.filesystemOwner : undefined,
   ].flatMap((owner) => (owner === undefined ? [] : [owner]));
+  let handedOff = false;
   let release: Promise<void> | undefined;
   return {
     cleanupFailedConstruction: () => {
+      if (handedOff) return Promise.resolve();
       release ??= releaseInOrder(owners);
       return release;
+    },
+    handOffToMcp: () => {
+      handedOff = true;
     },
   };
 }
