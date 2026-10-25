@@ -149,6 +149,9 @@ export class AnthropicSpanPlan {
       (await this.query.planAt(at)).header.metadata?.cacheAnchor !== true
     )
       return;
+    const message = await this.index.before(old + 1);
+    // Header-only projections can anchor rows excluded from the wire topology.
+    if (message === undefined || message.end < old) return;
     const window = await this.cacheRun(old, runs);
     await add(
       this.coordinates.forward(window[0]),
