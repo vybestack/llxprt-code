@@ -1,11 +1,7 @@
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
-  captureAgentAdoption as fromConfig,
-  fixtureAgentResources,
-} from '../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
-import {
   createCapturedSessionOwner,
-  capturedSessionClient,
+  ownerClients,
 } from '../../agents/src/api/__tests__/helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -35,13 +31,12 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../agents/src/core/subagent-cleanup.js';
-import type { SessionClientOwner } from '../../agents/src/session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it, vi } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { fileURLToPath } from 'node:url';
 import { buildTestMcpRuntime } from '../../agents/src/api/__tests__/helpers/mcp-owner-fixture.js';
-import { createAgentRuntimeFactoryBindings } from '../../agents/src/api/runtimeFactories.js';
+import { buildAgentClientFactory } from '../../agents/src/api/agentBootstrap.js';
 import { injectConfirmationForcingPolicy } from '../../agents/src/api/confirmationForcing.js';
 import { executeProviderActivation } from '../../agents/src/api/providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../../agents/src/api/providerSwitchAssembly.js';
@@ -51,7 +46,6 @@ import {
   WorkspaceDefinitionOwner,
   LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
-import { type Agent } from '@vybestack/llxprt-code-agents';
 import { loadExtension } from './config/extension.js';
 
 /**
@@ -181,9 +175,7 @@ describe('filesystem workspace extension ownership', () => {
 
   let extensionMcp: McpRuntimeOwner;
 
-  let extensionClient: ReturnType<SessionClientOwner['getAgentClient']>;
-
-  let agent: Agent;
+  let client: AgentClientContract;
   let workspace: string;
   let initial: LlxprtExtension;
   let definitionOwner: WorkspaceDefinitionOwner;
@@ -234,10 +226,6 @@ describe('filesystem workspace extension ownership', () => {
       process.cwd(),
     ];
     const builtCallerConfig = new Config(builtCallerParameters);
-    const builtCallerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...{},
-    };
     const builtCallerSettings = new SettingsService();
     for (const [key, value] of Object.entries(
       builtCallerConfig.getInitialSettings(),
@@ -308,7 +296,7 @@ describe('filesystem workspace extension ownership', () => {
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
-      builtCallerFactories.agentClientFactory,
+      buildAgentClientFactory(),
       builtCallerMedia.store,
       builtCallerMcp.readInstructions,
       builtCallerMcp.workspacePaths,
@@ -367,34 +355,21 @@ describe('filesystem workspace extension ownership', () => {
       );
       requireCallerActivation(activation);
       await builtCallerOwner.initializeTools();
-      await capturedSessionClient(builtCallerOwner).startChat();
+      const clients = ownerClients(builtCallerOwner);
+      client = clients[clients.length - 1];
+      await client.startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtCallerClose);
     }
 
-    agent = await fromConfig(
-      builtCallerConfig,
-      builtCallerSettings,
-      { mcpOwnership: 'agent' },
-      undefined,
-      builtCallerManager,
-      undefined,
-      undefined,
-      builtCallerMcp,
-      undefined,
-      capturedSessionClient(builtCallerOwner),
-    );
     try {
-      for await (const event of agent.stream('hello')) void event;
       await builtCallerMcp.awaitDiscovery();
       const adopted = builtCallerMcp.extensionOperations.list()[0];
       extensionMcp = builtCallerMcp;
 
-      extensionClient = capturedSessionClient(builtCallerOwner);
       initial = adopted;
       await run();
     } finally {
-      await agent.dispose();
       await builtCallerClose();
       await definitionOwner.dispose();
       await rm(workspace, { recursive: true, force: true });
@@ -406,11 +381,9 @@ describe('filesystem workspace extension ownership', () => {
       const beta = await filesystemExtension(workspace, 'beta');
       const entered = gate();
       const release = gate();
-      const publish = fixtureAgentResources(agent)
-        .publishedClient(agent)
-        .setTools.bind(fixtureAgentResources(agent).publishedClient(agent));
+      const publish = client.setTools.bind(client);
       const fault = vi
-        .spyOn(fixtureAgentResources(agent).publishedClient(agent), 'setTools')
+        .spyOn(client, 'setTools')
         .mockImplementationOnce(async () => {
           await publish();
           entered.release();
@@ -420,7 +393,7 @@ describe('filesystem workspace extension ownership', () => {
         const loading = extensionMcp.extensionOperations.load(beta);
         await entered.promise;
         const restart = extensionMcp.extensionOperations.restart(initial);
-        const closing = agent.dispose();
+        const closing = extensionMcp.dispose();
         await expect(
           extensionMcp.extensionOperations.load(beta),
         ).rejects.toThrow('closed');
@@ -436,7 +409,7 @@ describe('filesystem workspace extension ownership', () => {
         expect(
           await definitionOwner.subagentReads.listSubagents(),
         ).toStrictEqual([]);
-        expect(visibleSkills(extensionClient)).toStrictEqual([]);
+        expect(visibleSkills(client)).toStrictEqual([]);
       } finally {
         release.release();
         fault.mockRestore();
