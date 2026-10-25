@@ -490,7 +490,7 @@ export async function prepareNativeResponsesPrompt(
     ),
     bytes,
     selection,
-    selection.stateful.enabled && selection.inputOverride === undefined
+    selection.inputOverride === undefined
       ? await statefulUnsupportedMedia(
           rows,
           selection.skipRows,
