@@ -1,6 +1,6 @@
 import {
   createCapturedSessionOwner,
-  capturedSessionClient,
+  ownerClients,
 } from './__tests__/helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -36,7 +36,7 @@ import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { fileURLToPath } from 'node:url';
 import { buildTestMcpRuntime } from './__tests__/helpers/mcp-owner-fixture.js';
-import { createAgentRuntimeFactoryBindings } from './runtimeFactories.js';
+import { buildAgentClientFactory } from './agentBootstrap.js';
 import { injectConfirmationForcingPolicy } from './confirmationForcing.js';
 import { executeProviderActivation } from './providerActivationExecutor.js';
 import { assembleProviderSwitch } from './providerSwitchAssembly.js';
@@ -96,10 +96,6 @@ describe('profile candidate operations', () => {
       process.cwd(),
     ];
     const firstCallerConfig = new Config(firstCallerParameters);
-    const firstCallerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...{},
-    };
     const firstCallerSettings = new SettingsService();
     for (const [key, value] of Object.entries(
       firstCallerConfig.getInitialSettings(),
@@ -170,7 +166,7 @@ describe('profile candidate operations', () => {
       firstCallerConfig,
       assembleTaskSchemaPolicy(firstCallerSettings),
       firstCallerManager,
-      firstCallerFactories.agentClientFactory,
+      buildAgentClientFactory(),
       firstCallerMedia.store,
       firstCallerMcp.readInstructions,
       firstCallerMcp.workspacePaths,
@@ -229,7 +225,7 @@ describe('profile candidate operations', () => {
       );
       requireCallerActivation(activation);
       await firstCallerOwner.initializeTools();
-      await capturedSessionClient(firstCallerOwner).startChat();
+      await ownerClients(firstCallerOwner)[1].startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, firstCallerClose);
     }
@@ -263,10 +259,6 @@ describe('profile candidate operations', () => {
       process.cwd(),
     ];
     const secondCallerConfig = new Config(secondCallerParameters);
-    const secondCallerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...{},
-    };
     const secondCallerSettings = new SettingsService();
     for (const [key, value] of Object.entries(
       secondCallerConfig.getInitialSettings(),
@@ -338,7 +330,7 @@ describe('profile candidate operations', () => {
       secondCallerConfig,
       assembleTaskSchemaPolicy(secondCallerSettings),
       secondCallerManager,
-      secondCallerFactories.agentClientFactory,
+      buildAgentClientFactory(),
       secondCallerMedia.store,
       secondCallerMcp.readInstructions,
       secondCallerMcp.workspacePaths,
@@ -397,7 +389,7 @@ describe('profile candidate operations', () => {
       );
       requireCallerActivation(activation);
       await secondCallerOwner.initializeTools();
-      await capturedSessionClient(secondCallerOwner).startChat();
+      await ownerClients(secondCallerOwner)[1].startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, secondCallerClose);
     }
