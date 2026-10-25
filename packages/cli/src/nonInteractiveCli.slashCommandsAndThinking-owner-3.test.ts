@@ -1,4 +1,8 @@
-import { adoptScriptedHeadlessOwner } from './__tests__/scripted-headless-owner.js';
+import {
+  createScriptedHeadlessMcpOwner,
+  SCRIPTED_LISTING_TOOL_NAME,
+  type ScriptedHeadlessMcpOwner,
+} from './__tests__/scripted-headless-mcp-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -7,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { useFakeResponsesReplay } from '../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
 import {
   beforeAll,
   afterAll,
@@ -31,6 +36,7 @@ import {
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import {
+  fromConfig,
   type AgentEvent,
   type AgentInput,
   type TurnOptions,
@@ -86,73 +92,49 @@ const fixtureRoots: Array<{
   settingsOwner: SessionSettingsOwner;
 }> = [];
 
-function runWithMcpBus(
+async function runWithMcpBus(
   params: Parameters<typeof runNonInteractive>[0],
+  acquisitions: { count: number } = { count: 0 },
 ): Promise<void> {
-  return runHeadlessPolicyFixture(
-    params,
-    mockRuntimeSettings.owner,
-    mockProviderManager,
-    mockRuntimeSettings.store,
-    mockRuntimeSettings.owner,
-    mockCredentialAuthority,
-    async (policy) => {
-      const { fromConfig } = await import('@vybestack/llxprt-code-agents');
-      const acquire = fromConfigSentinel;
-      acquire.mockImplementation((config, settings, intent, authority) =>
-        adoptScriptedHeadlessOwner(
-          [
-            config,
-            settings,
-            intent,
-            mockRuntimeSettings.owner,
-            mockProviderManager,
-            undefined,
-            policy.session.messageBus,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            authority,
-            policy,
-          ],
-          policy,
-          agentState.events,
-          (input, options) => {
-            agentState.streamInput = input;
-            agentState.streamOpts = options ?? null;
+  let scripted: ScriptedHeadlessMcpOwner | undefined;
+  try {
+    await runHeadlessPolicyFixture(
+      params,
+      mockRuntimeSettings.owner,
+      mockProviderManager,
+      mockRuntimeSettings.store,
+      mockRuntimeSettings.owner,
+      mockCredentialAuthority,
+      async () => {
+        acquisitions.count += 1;
+        scripted = await createScriptedHeadlessMcpOwner(agentState.events);
+        process.env.LLXPRT_FAKE_RESPONSES = scripted.responsesFile;
+        params.config.setMcpServers(scripted.mcpServers);
+        const agent = await fromConfig(
+          params.config,
+          mockRuntimeSettings.store,
+          {
+            sessionId: params.config.getSessionId(),
+            activation: buildNonInteractiveActivationIntent(
+              params.config,
+              params.settings,
+            ),
           },
-        ),
-      );
-      return fromConfig(
-        params.config,
-        mockRuntimeSettings.store,
-        {
-          sessionId: params.config.getSessionId(),
-          sessionIdentityOwnership: 'config',
-          activation: buildNonInteractiveActivationIntent(
-            params.config,
-            params.settings,
-          ),
-          mcpOwnership: 'agent',
-        },
-        mockCredentialAuthority,
-      );
-    },
-  );
+          mockCredentialAuthority,
+        );
+        const stream = agent.stream.bind(agent);
+        agent.stream = (input, options) => {
+          agentState.streamInput = input;
+          agentState.streamOpts = options ?? null;
+          return stream(input, options);
+        };
+        return agent;
+      },
+    );
+  } finally {
+    await scripted?.close();
+  }
 }
-
-const original = { ...(await import('@vybestack/llxprt-code-agents')) };
-const fromConfigSentinel = vi.fn<typeof original.fromConfig>();
-
-void vi.mock('@vybestack/llxprt-code-agents', () => ({
-  ...original,
-  fromConfig: fromConfigSentinel,
-}));
 
 // Mock core modules
 void vi.mock('./ui/hooks/atCommandProcessor.js', () =>
@@ -177,7 +159,7 @@ void vi.mock('./services/CommandService.js', () => ({
   },
 }));
 
-// Direct-call streaming cases use a fake Agent; the owner command case uses a real one.
+// Every case runs a real Agent over a scripted provider replay.
 describe('runNonInteractive - slash commands and thinking output', () => {
   let promptDirectory: string;
 
@@ -194,7 +176,8 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
     await rm(promptDirectory, { recursive: true, force: true });
   });
-  useOwnedCredentials();
+  useFakeResponsesReplay('plain-text.jsonl');
+
   useOwnedCredentials();
 
   let mockConfig: Config;
@@ -230,9 +213,6 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       (...args: never[]) => boolean
     >;
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-
-    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
-    (fromConfig as Mock<typeof fromConfig>).mockReset();
 
     // Default: the Agent emits a clean stop completion. Individual tests
     // override agentState.events to stage thinking/tool/text sequences.
@@ -381,7 +361,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
         type: 'tool-call',
         call: {
           id: 'tool-shell-1',
-          name: 'ShellTool',
+          name: SCRIPTED_LISTING_TOOL_NAME,
           args: { command: 'ls' },
         },
       },
@@ -389,7 +369,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
         type: 'tool-result',
         result: {
           id: 'tool-shell-1',
-          name: 'ShellTool',
+          name: SCRIPTED_LISTING_TOOL_NAME,
           display: 'file.txt',
           output: 'file.txt',
         },
