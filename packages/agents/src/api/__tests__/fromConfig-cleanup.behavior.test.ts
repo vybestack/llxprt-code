@@ -24,7 +24,6 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { releaseAdoptedFileScope } from '../adoption-release.js';
-import { adoptedDefinitionCleanup } from '../adopted-definition-assembly.js';
 import { toConfigParameters } from '../agentConfig.adapter.js';
 import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { fromConfig } from '../fromConfig.js';
@@ -107,7 +106,7 @@ describe('adoption cleanup with explicit close operations', () => {
         cleanupFailedAdoption(
           primary,
           () => undefined,
-          adoptedDefinitionCleanup(mcp, undefined, undefined, true),
+          () => mcp.dispose(),
           undefined,
           undefined,
         ),

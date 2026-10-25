@@ -16,7 +16,7 @@ import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
 
 import { toConfigParameters } from '../agentConfig.adapter.js';
 import { fromConfig } from '../fromConfig.js';
-import { cleanupFailedFromConfig } from '../fromConfig-cleanup.js';
+import { cleanupFailedAdoption } from '../fromConfig-cleanup.js';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
@@ -127,13 +127,12 @@ describe('fromConfig bootstrap failure reporting', () => {
     });
     const primary = new Error('Failed to initialize checkpointing: fixture');
 
-    const outcome = await cleanupFailedFromConfig(
+    const outcome = await cleanupFailedAdoption(
       primary,
-      undefined,
-      async () => undefined,
-      undefined,
-      undefined,
+      () => undefined,
       () => mcpRuntime.dispose(),
+      undefined,
+      undefined,
     ).then(
       () => undefined,
       (error: unknown) => error,

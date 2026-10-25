@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   cleanupFailedAdoption,
-  cleanupFailedFromConfig,
+  cleanupFailedForegroundWorkspace,
   rethrowPrimaryAfterCleanup,
 } from '../fromConfig-cleanup.js';
 
@@ -52,40 +52,25 @@ describe('adoption release cause preservation and actual resource prefixes', () 
     expect(joined.errors).toStrictEqual([undefined, repeated]);
   });
 
-  it('joins every acquired outer resource after a synchronous failure and releases preflight only after the other owners settle', async () => {
-    for (const name of [
-      'github',
-      'images',
-      'definitions',
-      'memory',
-      'preflight',
-    ])
+  it('releases memory, filesystem and trust in order despite a synchronous failure, keeping repeated and undefined causes', async () => {
+    for (const name of ['memory', 'filesystem', 'trust'])
       await writeFile(join(directory, name), name);
-    const primary = new Error('construction failed');
+    const primary = new Error('foreground workspace construction failed');
     const repeated = new Error('independent releases failed');
     const results = await Promise.allSettled([
-      cleanupFailedFromConfig(
+      cleanupFailedForegroundWorkspace(
         primary,
         () => {
-          unlinkSync(join(directory, 'github'));
+          unlinkSync(join(directory, 'memory'));
           throw repeated;
         },
         async () => {
-          await unlink(join(directory, 'images'));
+          await unlink(join(directory, 'filesystem'));
           throw undefined;
         },
-        () => {
-          unlinkSync(join(directory, 'definitions'));
-          throw repeated;
-        },
         async () => {
-          await unlink(join(directory, 'memory'));
-        },
-        async () => {
-          expect((await readdir(directory)).sort()).toStrictEqual([
-            'preflight',
-          ]);
-          await unlink(join(directory, 'preflight'));
+          expect((await readdir(directory)).sort()).toStrictEqual(['trust']);
+          await unlink(join(directory, 'trust'));
           throw primary;
         },
       ),
@@ -100,7 +85,6 @@ describe('adoption release cause preservation and actual resource prefixes', () 
       primary,
       repeated,
       undefined,
-      repeated,
       primary,
     ]);
   });

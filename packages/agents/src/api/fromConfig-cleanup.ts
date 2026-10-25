@@ -28,36 +28,6 @@ export function rethrowPrimaryAfterCleanup(
   );
 }
 
-/**
- * Releases every construction owner after a failed adoption. The activation
- * preflight is released last, and any cleanup failure is attached to the
- * primary error instead of replacing it.
- */
-export async function cleanupFailedFromConfig(
-  primaryError: unknown,
-  closeGitHub: (() => Promise<void>) | undefined,
-  closeImages: () => Promise<void>,
-  closeDefinitions: (() => Promise<void>) | undefined,
-  closeMemory: (() => Promise<void>) | undefined,
-  closePreflight: (() => Promise<void>) | undefined,
-): Promise<never> {
-  const ownerCleanup = await Promise.allSettled([
-    Promise.resolve().then(closeGitHub),
-    Promise.resolve().then(closeImages),
-    Promise.resolve().then(closeDefinitions),
-    Promise.resolve().then(closeMemory),
-  ]);
-  const preflightCleanup = await Promise.allSettled([
-    Promise.resolve().then(closePreflight),
-  ]);
-  const failures = rejections([...ownerCleanup, ...preflightCleanup]);
-  return rethrowPrimaryAfterCleanup(
-    primaryError,
-    failures,
-    'fromConfig ownership cleanup failed',
-  );
-}
-
 export async function cleanupFailedAdoption(
   primaryError: unknown,
   closeRuntime: () => void | Promise<void>,
