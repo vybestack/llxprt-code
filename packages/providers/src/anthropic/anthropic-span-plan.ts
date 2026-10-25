@@ -98,7 +98,11 @@ export class AnthropicSpanPlan {
       const start = this.coordinates.forward(window[0]);
       const end = this.coordinates.forward(window[1] - 1) + 1;
       if (await this.hasImage(start, end)) {
-        await add(start, end);
+        const run = await this.cacheRun(window[0], runs[0]);
+        await add(
+          this.coordinates.forward(run[0]),
+          this.coordinates.forward(run[1] - 1) + 1,
+        );
         break;
       }
     }
