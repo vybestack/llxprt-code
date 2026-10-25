@@ -80,15 +80,11 @@ function createHoldableTokenizer(): {
   };
 }
 
-async function exercise(
-  survivor: Agent,
-): Promise<{ error: unknown; maxOutputTokens: unknown }> {
-  const result = await survivor.chat('peer after admitted disposal');
-  survivor.setModelParam('maxOutputTokens', 79);
-  return {
-    error: result.error,
-    maxOutputTokens: survivor.getModelParams().maxOutputTokens,
-  };
+async function expectPeerUsable(peer: Agent): Promise<void> {
+  const result = await peer.chat('peer after admitted disposal');
+  expect(result.error).toBeUndefined();
+  peer.setModelParam('maxOutputTokens', 79);
+  expect(peer.getModelParams().maxOutputTokens).toBe(79);
 }
 
 describe('admitted instruction publication disposal', () => {
@@ -152,9 +148,7 @@ describe('admitted instruction publication disposal', () => {
         await publication;
         await closing;
         expect(hold.countedCharacters()).toBeGreaterThan(0);
-        const survivor = peerFirst ? undefined : await exercise(peer);
-        expect(survivor?.error).toBeUndefined();
-        expect(survivor?.maxOutputTokens).toBe(peerFirst ? undefined : 79);
+        if (!peerFirst) await expectPeerUsable(peer);
       } finally {
         hold?.release();
         await Promise.allSettled([publication, closing]);
