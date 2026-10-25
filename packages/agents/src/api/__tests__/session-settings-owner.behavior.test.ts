@@ -1,5 +1,3 @@
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -15,12 +13,10 @@ import { join } from 'node:path';
 import { json } from 'node:stream/consumers';
 import { z } from 'zod';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { type Agent } from '../index.js';
+import { fromConfig } from '../fromConfig.js';
 import { toConfigParameters } from '../agentConfig.adapter.js';
 import { collect, successful } from './turn-revision-capture.fixture.js';
 
@@ -120,32 +116,6 @@ async function modelWire() {
   };
 }
 
-async function createWorkspace(config: Config): Promise<McpRuntimeOwner> {
-  const policy = new RuntimePolicyOwner(config);
-  return createTestMcpRuntime(
-    {
-      oauth: {
-        openBrowser: async () => {
-          throw new Error('Unexpected browser');
-        },
-        tokenStorage: new MCPOAuthTokenStorage({
-          getCredentials: async () => null,
-          setCredentials: async () => {
-            throw new Error('Unexpected credential write');
-          },
-          deleteCredentials: async () => {},
-          listServers: async () => [],
-          getAllCredentials: async () => new Map(),
-          clearAll: async () => {},
-        }),
-      },
-      config,
-      policy: { owner: policy, ownership: 'runtime' },
-    },
-    {},
-  );
-}
-
 async function withSharedConfig(
   run: (
     config: Config,
@@ -192,31 +162,21 @@ async function withSharedConfig(
       },
     }),
   );
-  const workspace = await createWorkspace(config);
+  const authority = new CredentialAuthority();
   let agents: readonly Agent[] = [];
   const adopt = async (settings: SettingsService): Promise<Agent> => {
-    const optionsConfig: Parameters<typeof fromConfig>[0] = config;
-    const optionsMcpRuntime: Parameters<typeof fromConfig>[7] = workspace;
-    const optionsSettingsService: Parameters<typeof fromConfig>[1] = settings;
-    const optionsSessionId: NonNullable<
-      Parameters<typeof fromConfig>[2]
-    >['sessionId'] = 'same-settings-owner-label';
-    const optionsActivation: NonNullable<
-      Parameters<typeof fromConfig>[2]
-    >['activation'] = {
-      provider: 'openai',
-      model: 'settings-model',
-      cliOverrides: { key: 'loopback-only', baseUrl: endpoint.url },
-    };
     const agent = await fromConfig(
-      optionsConfig,
-      optionsSettingsService,
-      { sessionId: optionsSessionId, activation: optionsActivation },
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      optionsMcpRuntime,
+      config,
+      settings,
+      {
+        sessionId: 'same-settings-owner-label',
+        activation: {
+          provider: 'openai',
+          model: 'settings-model',
+          cliOverrides: { key: 'loopback-only', baseUrl: endpoint.url },
+        },
+      },
+      authority,
     );
     agents = [...agents, agent];
     return agent;
@@ -225,7 +185,6 @@ async function withSharedConfig(
     await run(config, endpoint, adopt);
   } finally {
     await Promise.all(agents.map((agent) => agent.dispose()));
-    await workspace.dispose();
     await config.dispose();
     await endpoint.close();
     loopbackOnly.mockRestore();
@@ -440,16 +399,8 @@ describe('explicit adopted session settings on a shared Config', () => {
       expect(await second.generate('Detached second')).toContain(
         'Request completed.',
       );
-      expect(
-        fixtureAgentResources(first)
-          .publishedClient(first)
-          .getContentGeneratorConfig()?.model,
-      ).toBe('detached-first-model');
-      expect(
-        fixtureAgentResources(second)
-          .publishedClient(second)
-          .getContentGeneratorConfig()?.model,
-      ).toBe('detached-second-model');
+      expect(first.getModel()).toBe('detached-first-model');
+      expect(second.getModel()).toBe('detached-second-model');
       expect(
         endpoint
           .requests()
