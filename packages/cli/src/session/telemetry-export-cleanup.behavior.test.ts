@@ -1,4 +1,3 @@
-import { fixtureAgentResources } from '../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -21,10 +20,8 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import {
-  buildAgent,
-  internalConfig,
-} from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
+import { openRouteBPreflight } from '../../../agents/src/api/__tests__/helpers/route-b-preflight.js';
+import { useFakeResponsesReplay } from '../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
 import { dispatchInteractiveOrNonInteractive } from '../__tests__/session-dispatch-fixture.js';
 import { LoadedSettings } from '../config/settings.js';
 import {
@@ -34,6 +31,7 @@ import {
 const repositoryRoot = resolve(import.meta.dirname, '../../../..');
 
 describe('headless selected telemetry export cleanup', () => {
+  useFakeResponsesReplay('plain-text.jsonl');
   it('surfaces direct-created Agent retirement failure instead of logging and returning success', async () => {
     const [result] = await Promise.allSettled([runCleanupFailure(false)]);
     if (result.status !== 'rejected')
@@ -90,27 +88,32 @@ describe('headless selected telemetry export cleanup', () => {
 
   it('retires the actual CLI owner after accepted file export fails during headless finalization', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'headless-export-failure-'));
-    const built = await buildAgent('plain-text.jsonl', {
-      sessionId: 'headless-failure',
-      model: 'headless-failure',
-      tools: [],
-      coreTools: [],
-      mcpEnabled: false,
-      extensionsEnabled: false,
-      interactive: false,
-      harness: {
-        forceInteractive: false,
-        forceConfirmations: false,
-        includeProcessCwd: false,
-      },
-      telemetry: {
-        enabled: true,
-        logPrompts: false,
-        outfile: join(directory, 'headless-failure.jsonl'),
+    const route = await openRouteBPreflight({
+      config: {
+        sessionId: 'headless-failure',
+        model: 'headless-failure',
+        tools: [],
+        coreTools: [],
+        mcpEnabled: false,
+        extensionsEnabled: false,
+        interactive: false,
+        harness: {
+          forceInteractive: false,
+          forceConfirmations: false,
+          includeProcessCwd: false,
+        },
+        telemetry: {
+          enabled: true,
+          logPrompts: false,
+          outfile: join(directory, 'headless-failure.jsonl'),
+        },
       },
     });
-    const config = internalConfig(built.agent);
-    const telemetry = fixtureAgentResources(built.agent).telemetry;
+    await route.prepare();
+    const agent = await route.createAgent({
+      provider: 'fake',
+      model: 'headless-failure',
+    });
     const outfile = join(directory, 'headless-failure.jsonl');
     const marker = join(directory, 'cleanup-joined.txt');
     const settingsFile = {
@@ -133,31 +136,31 @@ describe('headless selected telemetry export cleanup', () => {
     registerCleanup(async () => {
       writeFileSync(marker, 'accepted cleanup');
       rmSync(outfile, { recursive: true, force: true });
-      await built.agent.dispose();
+      await agent.dispose();
     });
     let cleanupFailures: unknown[] = [];
     try {
       const outcomes = await Promise.allSettled([
         dispatchInteractiveOrNonInteractive({
-          config,
-          agent: built.agent,
+          config: route.config,
+          agent,
           settings,
           workspaceRoot: directory,
           hasPipedInput: true,
           readStdinData: () => Promise.resolve('local fake response'),
-          runtimeSettings: fixtureAgentResources(built.agent).settingsOwner,
+          runtimeSettings: route.preflight,
         }),
       ]);
       expect(outcomes[0].status).toBe('rejected');
       expect(existsSync(marker)).toBe(true);
-      expect(telemetry.isEnabled()).toBe(false);
+      expect(route.preflight.isTelemetryEnabled()).toBe(false);
     } finally {
       exit.mockRestore();
       rmSync(outfile, { recursive: true, force: true });
       __resetCleanupStateForTesting();
       const cleanup = await Promise.allSettled([
-        Promise.resolve().then(() => built.agent.dispose()),
-        Promise.resolve().then(() => built.cleanup()),
+        Promise.resolve().then(() => agent.dispose()),
+        Promise.resolve().then(() => route.close()),
       ]);
       cleanupFailures = cleanup.flatMap((result) =>
         result.status === 'rejected' ? [result.reason] : [],

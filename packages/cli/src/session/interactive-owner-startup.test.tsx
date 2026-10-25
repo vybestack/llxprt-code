@@ -1,4 +1,3 @@
-import { adoptFixture as fromConfig } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -9,15 +8,17 @@ import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { type Agent } from '@vybestack/llxprt-code-agents';
 import {
-  Config,
+  type Config,
   getProjectHash,
   listSessions,
 } from '@vybestack/llxprt-code-core';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  openRouteBPreflight,
+  type RouteBPreflight,
+} from '../../../agents/src/api/__tests__/helpers/route-b-preflight.js';
+import { useFakeResponsesReplay } from '../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
 import type { LoadedSettings } from '../config/settings.js';
 import { setupOwnerSessionRecording as setupOwnerSessionRecordingCore } from '../cliSessionBootstrap.js';
 import { dispatchInteractiveOrNonInteractive } from '../__tests__/session-dispatch-fixture.js';
@@ -33,12 +34,6 @@ import {
 import { AppWrapper } from '../ui/App.js';
 import { iContentToHistoryItems } from '../ui/utils/iContentToHistoryItems.js';
 
-const fixture = fileURLToPath(
-  new URL(
-    '../../../agents/src/api/__tests__/fixtures/plain-text.jsonl',
-    import.meta.url,
-  ),
-);
 const settings = {
   merged: { ui: { hideWindowTitle: true, unicode: 'auto' } },
 } as LoadedSettings;
@@ -63,20 +58,20 @@ function setupOwnerSessionRecording(
 describe('interactive CLI owner startup', () => {
   const roots: string[] = [];
   const agents: Agent[] = [];
+  const routes: RouteBPreflight[] = [];
   const oldHome = process.env.LLXPRT_CONFIG_HOME;
-  const oldFake = process.env.LLXPRT_FAKE_RESPONSES;
+  useFakeResponsesReplay('plain-text.jsonl');
   afterEach(async () => {
     __setRenderForTesting(null);
     __resetInteractiveUIStateForTesting();
     await runExitCleanup();
     __resetCleanupStateForTesting();
     for (const agent of agents.splice(0)) await agent.dispose();
+    for (const route of routes.splice(0)) await route.close();
     for (const root of roots.splice(0))
       await rm(root, { recursive: true, force: true });
     if (oldHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
     else process.env.LLXPRT_CONFIG_HOME = oldHome;
-    if (oldFake === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = oldFake;
   });
 
   async function build(
@@ -86,49 +81,38 @@ describe('interactive CLI owner startup', () => {
     agent: Agent;
     config: Config;
     root: string;
-    runtimeSettings: SessionSettingsOwner;
+    runtimeSettings: RouteBPreflight['preflight'];
   }> {
     const directory =
       root ?? (await mkdtemp(join(tmpdir(), 'interactive-owner-')));
     if (root === undefined) roots.push(directory);
     process.env.LLXPRT_CONFIG_HOME = directory;
-    process.env.LLXPRT_FAKE_RESPONSES = fixture;
-    const id = `owner-${agents.length + 1}`;
-    const config = new Config({
-      cwd: directory,
-      targetDir: directory,
-      debugMode: false,
-      question: undefined,
-      userMemory: '',
-      sessionId: id,
-      model: 'fake-model',
-      provider: 'fake',
-      continueSession,
-      interactive: true,
+    const route = await openRouteBPreflight({
+      config: {
+        workingDir: directory,
+        sessionId: `owner-${agents.length + 1}`,
+        interactive: true,
+        settings: { continueSession },
+      },
     });
-    const store = new SettingsService();
-    const owner = new SessionSettingsOwner(store);
-    const runtimeSettings = owner;
-    registerCleanup(async () => {
-      await owner.dispose();
-      await config.dispose();
-    });
-    const agent = await fromConfig(
-      config,
-      store,
-      { activation: { provider: 'fake', model: 'fake-model' } },
-      owner,
-    );
+    routes.push(route);
+    await route.prepare();
+    const agent = await route.createAgent();
     agents.push(agent);
     registerCleanup(() => agent.dispose());
-    return { agent, config, root: directory, runtimeSettings };
+    return {
+      agent,
+      config: route.config,
+      root: directory,
+      runtimeSettings: route.preflight,
+    };
   }
 
   async function renderOwner(
     config: Config,
     agent: Agent,
     history: Awaited<ReturnType<typeof setupOwnerSessionRecording>>,
-    runtimeSettings: SessionSettingsOwner,
+    runtimeSettings: RouteBPreflight['preflight'],
   ): Promise<React.ReactElement> {
     let tree: React.ReactElement | undefined;
     __setRenderForTesting((node) => {
