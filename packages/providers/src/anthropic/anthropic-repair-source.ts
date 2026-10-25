@@ -17,6 +17,7 @@ import {
 } from './AnthropicMessageNormalizer.js';
 import type { AnthropicMessageConversionOptions } from './AnthropicMessageConversionOptions.js';
 import {
+  copyRawChainResult,
   rawChainResults,
   rawChainWireResults,
 } from './raw-anthropic-chain-results.js';
@@ -287,6 +288,7 @@ export class AnthropicRepairSource<
       return piece;
     const blocks = piece.map((block) => {
       const copy = { ...block };
+      copyRawChainResult(block, copy);
       clearAnchorBlockTag(copy);
       return copy;
     });

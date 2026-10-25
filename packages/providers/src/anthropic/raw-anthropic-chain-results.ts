@@ -21,6 +21,14 @@ const descriptors = new WeakMap<
   () => AsyncGenerator<string>
 >();
 
+export function copyRawChainResult(
+  source: AnthropicMessageBlock,
+  target: AnthropicMessageBlock,
+): void {
+  const descriptor = descriptors.get(source);
+  if (descriptor !== undefined) descriptors.set(target, descriptor);
+}
+
 async function* chainBlocks(
   query: Pick<AnthropicRepairRows, 'readAt'>,
   range: Range,
