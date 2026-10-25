@@ -46,6 +46,14 @@ async function withConnectedAgent(
 }
 
 const BARRIER_MS = 20;
+const MCP_CLOSE_DEADLINE_MS = 10_000;
+
+function describeFailure(failure: unknown): string {
+  expect(failure).toBeDefined();
+  if (failure instanceof AggregateError)
+    return [failure.message, ...failure.errors.map(describeFailure)].join('|');
+  return failure instanceof Error ? failure.message : String(failure);
+}
 const SOCKET_CLOSE_WAIT_MS = 2000;
 
 function delay(milliseconds: number): Promise<void> {
@@ -127,6 +135,25 @@ describe('MCP runtime retirement with MCP operations in flight (characterization
       expect(fixture.liveSockets()).toBe(0);
     });
   });
+
+  it('a session DELETE the server never answers is cancelled at the close deadline, reported once, and does not hang agent.dispose', async () => {
+    await withConnectedAgent(async (agent, fixture) => {
+      fixture.holdSessionDeletes();
+      const startedAt = Date.now();
+
+      const failure: unknown = await agent.dispose().then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+      expect(Date.now() - startedAt).toBeLessThan(MCP_CLOSE_DEADLINE_MS + 5000);
+      await socketsClosed(fixture);
+      expect(fixture.events).toContain('delete:session-1');
+      expect(fixture.events).toContain('delete-abandoned:session-1');
+      expect(fixture.liveSockets()).toBe(0);
+      expect(describeFailure(failure).split('session-1').length - 1).toBe(1);
+    });
+  }, 60_000);
 
   it.each(['initialize', 'resources/list'])(
     'agent.mcp.refresh held on %s settles before dispose fulfills and leaves no connection open',

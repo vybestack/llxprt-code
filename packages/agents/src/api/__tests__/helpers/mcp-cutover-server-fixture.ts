@@ -239,6 +239,8 @@ export interface NoAuthMcpFixture {
   hold(method: string): void;
   waitUntilHeld(method: string): Promise<void>;
   release(method: string): void;
+  /** Withholds the response to every session DELETE until the client gives up. */
+  holdSessionDeletes(): void;
   close(): Promise<void>;
 }
 
@@ -299,6 +301,7 @@ interface NoAuthServerState {
   readonly waiters: Map<string, Array<() => void>>;
   readonly sessions: Set<string>;
   sessionCounter: number;
+  holdDeletes: boolean;
 }
 
 function serveNoAuthRequest(
@@ -316,6 +319,13 @@ function serveNoAuthRequest(
     if (request.method === 'DELETE') {
       const sessionId = String(request.headers['mcp-session-id']);
       events.push(`delete:${sessionId}`);
+      if (state.holdDeletes) {
+        response.on('close', () => {
+          if (!response.writableEnded)
+            events.push(`delete-abandoned:${sessionId}`);
+        });
+        return;
+      }
       sessions.delete(sessionId);
       response.writeHead(200);
       response.end();
@@ -376,6 +386,7 @@ export async function startNoAuthMcpFixture(): Promise<NoAuthMcpFixture> {
     waiters: new Map(),
     sessions: new Set(),
     sessionCounter: 0,
+    holdDeletes: false,
   };
   const { events, armed, held, waiters, sessions } = state;
   const sockets = new Set<Socket>();
@@ -404,6 +415,9 @@ export async function startNoAuthMcpFixture(): Promise<NoAuthMcpFixture> {
         : new Promise<void>((resolve) => {
             waiters.set(method, [...(waiters.get(method) ?? []), resolve]);
           }),
+    holdSessionDeletes: () => {
+      state.holdDeletes = true;
+    },
     release: (method) => {
       const request = held.get(method);
       held.delete(method);

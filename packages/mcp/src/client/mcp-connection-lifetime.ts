@@ -97,6 +97,23 @@ export async function connectClient(
   }
 }
 
+const retirementCancellers = new WeakMap<
+  Transport,
+  (reason: unknown) => void
+>();
+
+/**
+ * Cancels the in-flight requests of a joining transport, including the
+ * session DELETE, when its retirement deadline expires. The cancelled
+ * requests are still joined before the transport's close settles.
+ */
+export function cancelTransportRetirement(
+  transport: Transport | undefined,
+  reason: unknown,
+): void {
+  if (transport) retirementCancellers.get(transport)?.(reason);
+}
+
 export function createJoiningTransport<T extends Transport>(
   create: (fetch: FetchLike) => T,
   signal?: AbortSignal,
@@ -130,6 +147,7 @@ export function createJoiningTransport<T extends Transport>(
       return response;
     });
   const transport = create(ownedFetch);
+  retirementCancellers.set(transport, (reason) => controller.abort(reason));
   const start = transport.start.bind(transport);
   const send = transport.send.bind(transport);
   const close = transport.close.bind(transport);
@@ -155,7 +173,8 @@ export function createJoiningTransport<T extends Transport>(
     closing ??= (async () => {
       const cancellations = await Promise.allSettled(cancellationSends);
       // The DELETE goes through the tracked fetch, so it must be sent before
-      // the lifetime aborts and is joined with the other pending requests.
+      // the lifetime aborts. The owner signal or the close deadline
+      // (cancelTransportRetirement) aborts the lifetime and so the DELETE.
       const termination = await terminateSession(transport);
       controller.abort();
       try {
