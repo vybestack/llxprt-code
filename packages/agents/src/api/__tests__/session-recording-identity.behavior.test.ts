@@ -1,12 +1,18 @@
 import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
-import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from './helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
+import { openRouteBPreflight } from './helpers/route-b-preflight.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { describe, expect, it, spyOn } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { buildAgent, internalConfig } from './helpers/agentHarness.js';
 
 /**
@@ -49,12 +55,73 @@ async function locks(dir: string): Promise<string[]> {
   return (await readdir(dir)).filter((file) => file.endsWith('.lock'));
 }
 
+interface RouteBBuilt {
+  readonly agent: Agent;
+  readonly config: Config;
+  readonly cleanup: () => Promise<void>;
+}
+
+/**
+ * Agents built through the foreground preflight route the CLI takes (the
+ * route that gives the agent ownership of its Config's session identity),
+ * over one working directory. The runtime id is the session id, as it is for
+ * agents created from an `AgentConfig`.
+ */
+async function withRouteBAgents(
+  authority: CredentialAuthority,
+  scenario: (input: {
+    build: (id?: string) => Promise<RouteBBuilt>;
+  }) => Promise<void>,
+): Promise<void> {
+  const root = await mkdtemp(join(tmpdir(), 'session-identity-'));
+  const cleanups: Array<() => Promise<void>> = [];
+  let storageDir: string | undefined;
+  try {
+    await scenario({
+      build: async (id = randomUUID()) => {
+        const route = await openRouteBPreflight({
+          authority,
+          runtimeId: id,
+          config: { workingDir: root, sessionId: id },
+        });
+        let cleanup = async (): Promise<void> => {};
+        try {
+          await route.prepare();
+          const agent = await route.createAgent();
+          let closed = false;
+          cleanup = async (): Promise<void> => {
+            if (closed) return;
+            closed = true;
+            await runCleanupSteps([() => agent.dispose(), () => route.close()]);
+          };
+          storageDir = route.config.projectTempDir;
+          cleanups.push(cleanup);
+          return { agent, config: route.config, cleanup };
+        } catch (primary) {
+          await route.close();
+          throw primary;
+        }
+      },
+    });
+  } finally {
+    await runCleanupSteps([
+      ...cleanups.reverse().map((cleanup) => () => cleanup()),
+      () =>
+        storageDir === undefined
+          ? undefined
+          : rm(storageDir, { recursive: true, force: true }),
+      () => rm(root, { recursive: true, force: true }),
+    ]);
+  }
+}
+
 describe('Agent recording identity transitions', () => {
   useRecordingPrompts();
+  useFakeResponsesReplay('plain-text.jsonl');
+  const credentials = useOwnedCredentials();
   it('initializes generated facade recording identity in Config before resume', async () => {
-    await withAgents(async ({ build }) => {
-      const { agent } = await build();
-      const config = internalConfig(agent);
+    await withRouteBAgents(credentials().authority, async ({ build }) => {
+      const { agent, config } = await build();
       expect(config.getSessionId()).toBe(agent.getRuntimeId());
       await agent.setHistory([
         {
@@ -70,7 +137,7 @@ describe('Agent recording identity transitions', () => {
   }, 30000);
 
   it('adopts a different recording ID and keeps facade runtime ID stable across stop/start', async () => {
-    await withAgents(async ({ build }) => {
+    await withRouteBAgents(credentials().authority, async ({ build }) => {
       const source = await build('identity-source');
       await source.agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'identity-seed' }] },
@@ -81,7 +148,7 @@ describe('Agent recording identity transitions', () => {
       await source.cleanup();
 
       const owner = await build('identity-owner');
-      const config = internalConfig(owner.agent);
+      const { config } = owner;
       const restored = await owner.agent.session.resume('identity-source');
       expect(JSON.stringify(restored)).toContain('identity-seed');
       expect(config.getSessionId()).toBe('identity-source');
@@ -97,9 +164,8 @@ describe('Agent recording identity transitions', () => {
   }, 30000);
 
   it('adopts checkpoint fork identity while preserving the facade runtime ID', async () => {
-    await withAgents(async ({ build }) => {
-      const { agent } = await build('fork-owner');
-      const config = internalConfig(agent);
+    await withRouteBAgents(credentials().authority, async ({ build }) => {
+      const { agent, config } = await build('fork-owner');
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'fork-seed' }] },
       ]);
@@ -125,7 +191,7 @@ describe('Agent recording identity transitions', () => {
   }, 30000);
 
   it('rolls back Config ID, history and prepared lock when adoption throws after mutating Config', async () => {
-    await withAgents(async ({ build }) => {
+    await withRouteBAgents(credentials().authority, async ({ build }) => {
       const source = await build('rollback-source');
       await source.agent.setHistory([
         {
@@ -137,8 +203,7 @@ describe('Agent recording identity transitions', () => {
       await source.agent.session.setRecording({ enabled: false });
       await source.cleanup();
 
-      const { agent } = await build('rollback-owner');
-      const config = internalConfig(agent);
+      const { agent, config } = await build('rollback-owner');
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'prior-history' }] },
       ]);
@@ -217,53 +282,56 @@ describe('Agent recording identity transitions', () => {
     });
   }, 30000);
 
-  it('resumes two borrowed facades independently without adopting their shared Config identity', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        a,
-        config,
-        _settingsOwner,
-        _settingsService,
-        _oauthManager,
-        borrow,
-        chatsDir,
-      ) => {
-        const b = await borrow();
-        expect(config.getSessionId()).toBeUndefined();
-        await a.setHistory([
-          { speaker: 'human', blocks: [{ type: 'text', text: 'a-seed' }] },
-        ]);
-        await a.session.setRecording({ enabled: true });
-        const aPath = a.session.getRecording().path;
-        await a.session.setRecording({ enabled: false });
-        await b.setHistory([
-          { speaker: 'human', blocks: [{ type: 'text', text: 'b-seed' }] },
-        ]);
-        await b.session.setRecording({ enabled: true });
-        const bPath = b.session.getRecording().path;
-        await b.session.setRecording({ enabled: false });
-        if (!aPath || !bPath) throw new Error('Recording path missing');
-        expect(aPath).not.toBe(bPath);
-        await a.session.resume(b.getRuntimeId());
-        expect(config.getSessionId()).toBeUndefined();
-        expect(a.getRuntimeId()).not.toBe(b.getRuntimeId());
-        expect(a.session.getRecording().path).toBe(bPath);
-        await a.session.setRecording({ enabled: false });
-        await b.session.resume(a.getRuntimeId());
-        expect(config.getSessionId()).toBeUndefined();
-        expect(b.session.getRecording().path).toBe(aPath);
-        await b.session.setRecording({ enabled: false });
-        await a.session.setRecording({ enabled: true });
-        expect(a.session.getRecording().path).toBe(bPath);
-        await a.session.setRecording({ enabled: false });
-        await b.session.setRecording({ enabled: true });
-        expect(b.session.getRecording().path).toBe(aPath);
-        expect(await readFile(bPath, 'utf8')).toContain('b-seed');
-        expect(await readFile(aPath, 'utf8')).toContain('a-seed');
-        expect(config.getSessionId()).toBeUndefined();
-        await b.session.setRecording({ enabled: false });
-        expect(await locks(chatsDir)).toStrictEqual([]);
-      },
-    );
+  it('resumes two independent facades without sharing their Config identity', async () => {
+    const routes: RouteAAgent[] = [];
+    try {
+      const first = await openRouteAAgent({
+        authority: credentials().authority,
+        config: { interactive: true },
+      });
+      routes.push(first);
+      const second = await openRouteAAgent({
+        authority: credentials().authority,
+        config: { interactive: true, workingDir: first.directory },
+      });
+      routes.push(second);
+      const a = first.agent;
+      const b = second.agent;
+      const chatsDir = first.config.projectChatsDir;
+      await a.setHistory([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'a-seed' }] },
+      ]);
+      await a.session.setRecording({ enabled: true });
+      const aPath = a.session.getRecording().path;
+      await a.session.setRecording({ enabled: false });
+      await b.setHistory([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'b-seed' }] },
+      ]);
+      await b.session.setRecording({ enabled: true });
+      const bPath = b.session.getRecording().path;
+      await b.session.setRecording({ enabled: false });
+      if (!aPath || !bPath) throw new Error('Recording path missing');
+      expect(aPath).not.toBe(bPath);
+      await a.session.resume(b.getRuntimeId());
+      expect(a.getRuntimeId()).not.toBe(b.getRuntimeId());
+      expect(a.session.getRecording().path).toBe(bPath);
+      await a.session.setRecording({ enabled: false });
+      await b.session.resume(a.getRuntimeId());
+      expect(b.session.getRecording().path).toBe(aPath);
+      await b.session.setRecording({ enabled: false });
+      await a.session.setRecording({ enabled: true });
+      expect(a.session.getRecording().path).toBe(bPath);
+      await a.session.setRecording({ enabled: false });
+      await b.session.setRecording({ enabled: true });
+      expect(b.session.getRecording().path).toBe(aPath);
+      expect(await readFile(bPath, 'utf8')).toContain('b-seed');
+      expect(await readFile(aPath, 'utf8')).toContain('a-seed');
+      await b.session.setRecording({ enabled: false });
+      expect(await locks(chatsDir)).toStrictEqual([]);
+    } finally {
+      await runCleanupSteps(
+        [...routes].reverse().map((route) => () => route.close()),
+      );
+    }
   }, 30000);
 });
