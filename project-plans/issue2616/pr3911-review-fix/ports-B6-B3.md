@@ -121,18 +121,21 @@ Parameters of callable members are not counted, so `SubAgentScopeFactory` itself
 
 ### `McpRuntimeOwner.create(acquisition, operations)` (T5.5)
 
-The positional tuple `McpRuntimeConstructionInputs` and `selectMcpConstructionInputs` are deleted. Production callers: `activationPreflightState.ts`, `adopted-agent-assembly.ts`, `mcpOAuthAssembly.ts`, `skill-discovery.ts`, and the CLI test utility `integration-tests/test-utils.ts`. Phase 6 deletes the `'caller'` ownership options, so the `*Ownership` members below exist only if production still sets them after T6.D2; T5.5 runs before phase 6, so it keeps them as required members and T6.D2 deletes them.
+The positional tuple `McpRuntimeConstructionInputs` and `selectMcpConstructionInputs` are deleted. Production callers (four, all in `packages/agents/src/api`): `activationPreflightState.ts`, `adopted-agent-assembly.ts`, `mcpOAuthAssembly.ts`, `skill-discovery.ts`. `packages/cli/src/integration-tests/test-utils.ts` is a test caller and moves in T5.5e like the other test callers. Phase 6 deletes the `'caller'` ownership options, so the `*Ownership` members below exist only if production still sets them after T6.D2; T5.5 runs before phase 6, so it keeps them as required members and T6.D2 deletes them. The decisions behind this section, with code references, are in `revision-notes.md` under "Phase 5 inventory decisions".
 
-`McpRuntimeAcquisition` (assembly, root reached: `MessageBus` only):
+Every member of both objects is a required key. Where absence is a real composition fact, the value type includes `undefined` and the caller writes `undefined` by name; neither interface has a `?` member, so an omitted member fails to compile. The constructor applies no default for any member except `skillOperations` (unchanged, see the end of this section).
+
+`McpPolicyHandoff` (declared in `mcp-runtime-construction.ts`, the same shape as `MemoryHandoff`): `{ readonly owner: RuntimePolicyOwner; readonly ownership: 'runtime' | 'caller' }`.
+
+`McpRuntimeAcquisition` (assembly, root reached: `MessageBus` only, through `policy.owner`):
 
 | Member | Type |
 | --- | --- |
-| `oauth` | `McpOAuthBinding` (required) |
-| `config` | `Config` (required) |
-| `messageBus` | `MessageBus` (required in production; test callers pass a real bus) |
-| `managerFactory` | `typeof McpClientManager` (required; production passes `McpClientManager`) |
+| `oauth` | `McpOAuthBinding` |
+| `config` | `Config` |
+| `managerFactory` | `typeof McpClientManager` (production passes `McpClientManager`; the constructor's `?? McpClientManager` is deleted) |
 | `extensionLoader` | `ExtensionLoader \| undefined` (absence is data: no extensions) |
-| `policyOwner`, `policyOwnership` | `RuntimePolicyOwner \| undefined`, `'runtime' \| 'caller'` |
+| `policy` | `McpPolicyHandoff \| undefined` (`undefined`: the runtime builds `new RuntimePolicyOwner(config, trust)`, with its own session bus, and owns it) |
 | `lspOwner`, `lspOwnership` | `WorkspaceLspOwner \| undefined`, `'runtime' \| 'caller'` |
 | `filesystemOwner`, `filesystemOwnership`, `filesystemService` | `WorkspaceFilesystemOwner \| undefined`, `'runtime' \| 'caller'`, `FileSystemService \| undefined` |
 | `memoryOwner` | `MemoryHandoff \| undefined` |
@@ -140,17 +143,40 @@ The positional tuple `McpRuntimeConstructionInputs` and `selectMcpConstructionIn
 | `trustPort`, `trustCleanup` | `WorkspaceTrustControlPort \| undefined`, `(() => Promise<void>) \| undefined` |
 | `idePort` | `WorkspaceIdePort \| undefined` |
 
-Probe of exactly these 18 members: `MessageBus` only. The current tuple (`McpRuntimeConstructionInputs`) passes the guard only because tuple elements are not analyzed; the named object is the first time these members are actually checked, and they pass.
+There is no `messageBus` member and no separate `policyOwnership`. The tuple's positions 3 (`messageBus`), 7 (`policyOwner`) and 8 (`policyOwnership`) become `policy`. The bus was read only by the two checks in `constructPolicyOwner` ("requires its explicit runtime owner", "must retain its session MessageBus"); the runtime's bus is always the policy owner's `session.messageBus`, whether handed off or built (`mcpRuntimeAssembly.ts:345`). With the pair as one member neither mismatch can be written, so both checks are deleted. What stays: `constructPolicyOwner(config, policy, trust)` keeps the trust check (`owner.trust !== trust`, because `trustPort` is still its own member), `retainPolicyOwner` owns the owner when `policy === undefined || policy.ownership === 'runtime'`, the authority's trust is `trustPort ?? policy?.owner.trust`, and `retainWorkspaceEnvironment` takes `policy` in place of its `messageBus`, `policyOwner` and `policyOwnership` parameters.
+
+Probe of these 16 members: they are a subset of the 18 probed at `3984a8773` (`MessageBus` only), with the owner moved into one nested object, which the analyzer reads as a property; no new root is possible. T5.5 re-runs the probe on the declaration it writes (rule 3).
 
 `McpRuntimeOperations` (operational, roots reached: none; probe: no root):
 
 | Member | Type |
 | --- | --- |
-| `emitFeedback` | `McpHostServices['emitFeedback']` (required; production passes the host's, tests pass a recorder) |
+| `emitFeedback` | `HostFeedbackSink` (never `undefined`; see below) |
 | `skillOperations` | `WorkspaceSkillAssemblyOperations \| undefined` |
-| `mcpSettings` | `SessionMcpSettingsReads` (required) |
+| `mcpSettings` | `SessionMcpSettingsReads \| undefined` (`undefined`: this composition has no settings file; see below) |
 
-T5.5 is split by caller (see the task), so the signature change and the five production callers land together, and the test callers move first through the `T5.5-inv` inventory.
+`emitFeedback`: the CLI is the only host that supplies a sink (`cliTerminalSession.ts:155-158`). `AgentForegroundHost.mcpHost` and `AgentConfig.mcpHost` are optional public inputs, so each producer decides once, where it reads that input, what no host sink means: `const feedback = <host>?.emitFeedback ?? defaultFeedbackSink` (`@vybestack/llxprt-code-mcp/host/hostServices.js`, debug log only), passed both to `KeychainTokenStorage` and to `operations.emitFeedback`. This is the sink `McpClientManager` and `KeychainTokenStorage` substitute for `undefined` today, so behavior does not change; the difference is that the choice is visible at the caller. `McpRuntimeOwner`'s `feedback` field becomes a required `HostFeedbackSink`.
+
+`mcpSettings`: `SessionSettingsOwner.readMcpSettingsBinding()` returns `SessionMcpSettingsReads | undefined` because only the CLI binds a settings file. Without one the runtime reads its declarations from `Config` and works; `reload()` keeps its rejection "MCP server reload is not available in this composition." (`mcpRuntimeAssembly.ts:651-656`), which reports a capability this composition does not have rather than a missing dependency.
+
+`skillOperations` is not one of the decided items: it stays `| undefined` with the constructor's `?? DEFAULT_SKILL_OPERATIONS`, as at `28094bb75`.
+
+Production caller mapping (T5.5 writes every member at each call; `undefined` and `'runtime'` below are written literally):
+
+| Caller | `policy` | `emitFeedback` | `mcpSettings` | Other members |
+| --- | --- | --- | --- | --- |
+| `activationPreflightState.ts` `#constructForegroundMcp` | `{ owner: this.foregroundPolicy, ownership: 'caller' }`; if `foregroundPolicy` is `undefined`, throw `Error('Foreground MCP construction requires the preflight policy owner')` before the call. On this path the preflight transfer sets the policy owner and its always-defined bus together (`profile-preflight.ts:92,708-710`), so today `constructPolicyOwner` already rejects an unset owner here. `this.messageBus` is no longer passed. | `this.#foregroundHost.mcpHost?.emitFeedback ?? defaultFeedbackSink` | `this.settingsOwner.readMcpSettingsBinding()` | `managerFactory: McpClientManager`, `extensionLoader: undefined`, `lspOwner: undefined`, `lspOwnership: 'runtime'`, `filesystemService: undefined`, `idePort: undefined`; the rest one to one from today's positions |
+| `adopted-agent-assembly.ts` `#adoptConstructMcp(messageBus)` | `this.adoptPolicyOwner === undefined ? undefined : { owner: this.adoptPolicyOwner, ownership: 'caller' }` (today's `runtimeOwnership(this.adoptPolicyOwner === undefined)` gives `'caller'` whenever an owner is given). Before the call, the method keeps today's two checks on its selected `messageBus` with their messages unchanged: a defined bus with no `adoptPolicyOwner` throws "MCP policy handoff requires its explicit runtime owner", and a bus that is not `adoptPolicyOwner.session.messageBus` throws "MCP policy handoff must retain its session MessageBus". Here the bus is chosen from four adoption inputs (`adopted-agent-assembly.ts:195-199`), so this is where a mismatch can originate. T6.D1 deletes the checks together with `adoptMessageBus`/`adoptPolicyOwner` if production still never sets them (none does at `28094bb75`). | `this.adoptMcpHost?.emitFeedback ?? defaultFeedbackSink` (the existing `feedback` local) | `this.adoptSettingsOwner?.readMcpSettingsBinding()` | `managerFactory: McpClientManager`, `extensionLoader: undefined`, `filesystemService: undefined`; the rest one to one |
+| `mcpOAuthAssembly.ts` `assembleMcpRuntime` | Its parameters become `(config, options, policy: McpPolicyHandoff \| undefined, settingsOwner?)`: the `messageBus` and `policyOwnership` parameters are deleted and `policy` is passed through. `policyComposition.ts` `assembleOwnedMcpRuntime(config, options, policy, settingsOwner)` drops its `bus` parameter and passes `{ owner: policy, ownership: 'runtime' }`; `agentRuntimeAssembly.ts:422` stops passing `this.policyOwner.session.messageBus`; the one test caller, `__tests__/fromConfig-bootstrap-failure.behavior.test.ts:246`, passes `(optionsConfig, {}, undefined, optionsSettingsOwner)`. | `options.mcpHost?.emitFeedback ?? defaultFeedbackSink` (the existing `feedback` local) | `settingsOwner?.readMcpSettingsBinding()` | `managerFactory: McpClientManager`, `extensionLoader: undefined`, `skillOperations: undefined`; the rest one to one |
+| `skill-discovery.ts` `discoverAgentSkills` | `undefined` (declarative listing; no session, no bus) | `defaultFeedbackSink` | `undefined` | `oauth: host.oauth`, `config`, `managerFactory: McpClientManager`, every owner, port and cleanup `undefined`, every `*Ownership` `'runtime'`, `skillOperations: undefined` |
+
+Test callers (T5.5a-e): `packages/agents/src/api/__tests__/helpers/create-mcp-runtime.ts`, `createTestMcpRuntime(acquisition: McpRuntimeTestAcquisition, operations: McpRuntimeTestOperations)`, is the only test code in the repository that calls `McpRuntimeOwner.create` and the only code that applies test defaults. The two test types have the real member names and types with every member optional except `oauth` and `config`; one function in the helper fills each omitted member with today's constructor default (`managerFactory: McpClientManager`, `policy: undefined`, each `*Ownership` from `defaultWorkspaceOwnership(owner)`, `emitFeedback: defaultFeedbackSink`, every other member `undefined`). Until T5.5 it calls the positional `create`, mapping `policy` to positions 3 (`policy.owner.session.messageBus`), 7 and 8; T5.5 redeclares the two test types from the real ones (every member optional except `oauth` and `config`) and passes the filled objects straight to `McpRuntimeOwner.create(acquisition, operations)`. Routing:
+
+- `helpers/mcp-owner-fixture.ts` `buildTestMcpRuntime` keeps its six-parameter signature (165 importing files and 209 calls, none edited). Its body builds the two test objects from its `Partial<AgentConfig>` overrides and calls `createTestMcpRuntime`, with `policy: { owner: policyOwner, ownership: 'runtime' }`. Every one of the 209 calls passes a policy owner and that owner's bus (AST scan at `28094bb75`), so its `policyOwner` parameter becomes required and `extensionLoader` becomes `ExtensionLoader | undefined` with no caller edit. Its `messageBus` parameter, now read by nothing else, is compared with `policyOwner.session.messageBus` and the fixture throws on a mismatch, as `create` does today.
+- `helpers/async-child-disposal-join-fixture.ts` and `core/__tests__/subagent-test-helpers.ts` call `createTestMcpRuntime`.
+- cli has no helper of its own: `integration-tests/test-utils.ts`, `__tests__/stream-media-fixture.ts`, `services/workspace-mcp-consumers.test.ts` and `ui/cliUiRuntime.agentClientSource.test.ts` import `createTestMcpRuntime` from the agents helper by relative path, as ten cli fixtures already import agents `__tests__` helpers. So T5.5 edits no cli file.
+
+T5.5 is one atomic commit: the signature change, the four production callers and the helper body land together, after the test callers have moved through the `T5.5-inv` batches.
 
 ### `SessionToolCatalogOwner.initialize(workspace, session)` (T5.6)
 
@@ -480,7 +506,7 @@ B6 contracts:
 | `SubAgentLaunchInput` | none | pass |
 | `SubAgentRuntimeInput` | `HistoryService` | pass |
 | `SubAgentOperationPorts` | `MessageBus` | pass |
-| `McpRuntimeAcquisition` (18 members) | `MessageBus` | pass |
+| `McpRuntimeAcquisition` (18 members as probed; the decided 16-member list in the T5.5 section is a subset, re-probed by T5.5) | `MessageBus` | pass |
 | `McpRuntimeOperations` | none | pass |
 | `WorkspaceToolPorts` | none | pass |
 | `SessionToolPorts` | `MessageBus` | pass |
