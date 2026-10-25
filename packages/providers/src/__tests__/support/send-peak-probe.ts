@@ -30,10 +30,8 @@
  * is written to `<rootDirectory>/measured.json`.
  */
 
-import { createHash } from 'node:crypto';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { deserialize } from 'node:v8';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   estimatePromptEnvelope,
@@ -42,10 +40,7 @@ import {
 import { createRuntimeTokenizerFactory } from '../../composition/runtimeTokenizerFactory.js';
 import type { GenerateChatOptions, IProvider } from '../../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  assertRowIndex,
-  type ProviderRequestSelection,
-} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { type ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import {
   SETTLED_WINDOW_BYTES,
   median,
@@ -80,9 +75,6 @@ import {
   type ShapeCounts,
 } from './sendPeakMeasurement.js';
 
-const ROW_SAMPLE_INTERVAL = 2048;
-/** Body bytes between samples while the request body streams out. */
-const BODY_SAMPLE_BYTES = 1024 * 1024;
 /** Rows whose liveness is watched; only the newest are still expected alive. */
 const RECENT_ROW_WINDOW = 64;
 /**
@@ -261,74 +253,6 @@ function requestUrl(input: Parameters<typeof fetch>[0]): string {
   return input.url;
 }
 
-/** Hashes a request body as it streams and keeps no chunk. */
-async function hashBody(
-  body: BodyInit | null | undefined,
-  onBytes: (streamed: number, chunkIndex: number) => Promise<void>,
-): Promise<{ bytes: number; sha256: string; chunks: number }> {
-  const hash = createHash('sha256');
-  let bytes = 0;
-  let chunks = 0;
-  const stream =
-    body === null || body === undefined ? null : new Response(body).body;
-  if (stream !== null) {
-    const reader = stream.getReader();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      hash.update(value);
-      bytes += value.byteLength;
-      await onBytes(bytes, chunks);
-      chunks += 1;
-    }
-  }
-  return { bytes, sha256: hash.digest('hex'), chunks };
-}
-
-function installHashingTransport(
-  wireRoute: WireRoute,
-  sampler: MemorySampler | undefined,
-  evidence: BodyEvidence,
-): () => void {
-  const original = globalThis.fetch;
-  globalThis.fetch = Object.assign(
-    async (
-      input: Parameters<typeof fetch>[0],
-      init?: Parameters<typeof fetch>[1],
-    ): Promise<Response> => {
-      const isModelRequest = new URL(requestUrl(input)).pathname.endsWith(
-        wireRoute.endpoint,
-      );
-      const body = init?.body ?? (input instanceof Request ? input.body : null);
-      const headers = new Headers(
-        init?.headers ?? (input instanceof Request ? input.headers : undefined),
-      );
-      let sampledAt = -BODY_SAMPLE_BYTES;
-      const seen = await hashBody(body, async (streamed, chunkIndex) => {
-        const due =
-          chunkIndex === 0 || streamed - sampledAt >= BODY_SAMPLE_BYTES;
-        if (isModelRequest && due) {
-          sampledAt = streamed;
-          await sampler?.sample();
-        }
-      });
-      if (isModelRequest) {
-        await sampler?.sample();
-        evidence.bytes = seen.bytes;
-        evidence.sha256 = seen.sha256;
-        evidence.chunks = seen.chunks;
-        evidence.contentLength = headers.get('content-length');
-        evidence.modelRequests += 1;
-      }
-      return wireRoute.respond();
-    },
-    { preconnect: original.preconnect },
-  );
-  return () => {
-    globalThis.fetch = original;
-  };
-}
-
 function redirectToLocalHttp(baseURL: string): () => void {
   const original = globalThis.fetch;
   const destination = new URL(baseURL);
@@ -352,68 +276,21 @@ function redirectToLocalHttp(baseURL: string): () => void {
   };
 }
 
-/** Reads rows from their files, one object at a time. */
-async function* readRows(
-  job: Job,
-  sampler: MemorySampler | undefined,
-  sampleWhileReading: boolean,
-  signal?: AbortSignal,
-): AsyncGenerator<IContent, void> {
-  for (let index = 0; index < job.count; index++) {
-    signal?.throwIfAborted();
-    if (sampleWhileReading && index % ROW_SAMPLE_INTERVAL === 0) {
-      await sampler?.sample();
-    }
-    const row: IContent = deserialize(
-      readFileSync(join(job.directory, `${index}.row`)),
-    );
-    sampler?.trackRow(row);
-    yield row;
-  }
-  if (sampleWhileReading) await sampler?.sample();
-}
-
 interface SelectionHandle {
   readonly selection: ProviderRequestSelection;
+  arm(): Promise<void>;
   /** The rows again, unsampled, for a trap that holds them. */
   rows(): AsyncIterable<IContent>;
   /** The hold taken by the trap, released by the caller after the send. */
   hold(): TrapHold | undefined;
 }
 
-function fileSelection(
+function nativeSelection(
   job: Job,
   sampler: MemorySampler | undefined,
   activeTrap: SendTrap | undefined,
 ): SelectionHandle {
-  if (nativeSources !== undefined)
-    return nativeSources.handle(job, sampler, activeTrap);
-  let held: TrapHold | undefined;
-  let armed = false;
-  return {
-    rows: () => readRows(job, sampler, false),
-    selection: {
-      count: job.count,
-      readAt: (index: number, signal?: AbortSignal) => {
-        signal?.throwIfAborted();
-        assertRowIndex(index, job.count);
-        const row: IContent = deserialize(
-          readFileSync(join(job.directory, `${index}.row`)),
-        );
-        return row;
-      },
-      openReader: (signal?: AbortSignal) =>
-        (async function* (): AsyncGenerator<IContent, void> {
-          if (activeTrap !== undefined && !armed) {
-            armed = true;
-            held = await armSendTrap(activeTrap, readRows(job, sampler, false));
-          }
-          yield* readRows(job, sampler, true, signal);
-        })(),
-      close: () => undefined,
-    },
-    hold: () => held,
-  };
+  return nativeSources.handle(job, sampler, activeTrap);
 }
 
 const tokenizerFactory = createRuntimeTokenizerFactory();
@@ -488,22 +365,18 @@ async function send(
   sampler: MemorySampler | undefined,
 ): Promise<BodyEvidence> {
   const evidence = emptyEvidence();
-  const local =
-    nativeSources === undefined
-      ? undefined
-      : await isolatedWireHashSink(wireRoute, async () => {
-          await sampler?.sample('http');
-        });
-  const restore =
-    local === undefined
-      ? installHashingTransport(wireRoute, sampler, evidence)
-      : redirectToLocalHttp(local.route.baseURL);
-  const observed =
-    nativeSources === undefined ? undefined : observeNativeRoute();
+  const local = await isolatedWireHashSink(wireRoute, async () => {
+    await sampler?.sample('http');
+  });
+  const restore = redirectToLocalHttp(local.route.baseURL);
+  const observed = observeNativeRoute();
   try {
+    await handle.arm();
     const provider = wireRoute.createProvider();
-    const contents: AsyncIterable<IContent> = {
+    const contents = {
       [Symbol.asyncIterator]: () => handle.selection.openReader(),
+      openProviderRequest: async (): Promise<ProviderRequestSelection> =>
+        handle.selection,
     };
     const options = {
       ...buildRouteCallOptions(
@@ -530,9 +403,9 @@ async function send(
     })) {
       void chunk;
     }
-    observed?.requireSend(plan.estimate);
-    if (observed !== undefined) evidence.nativeRoute = observed.counts();
-    if (local !== undefined) {
+    observed.requireSend(plan.estimate);
+    evidence.nativeRoute = observed.counts();
+    {
       const seen = await local.body();
       evidence.bytes = seen.bytes;
       evidence.sha256 = seen.sha256;
@@ -541,9 +414,9 @@ async function send(
       evidence.modelRequests = seen.entries;
     }
   } finally {
-    observed?.restore();
+    observed.restore();
     restore();
-    await local?.close();
+    await local.close();
   }
   if (evidence.modelRequests !== 1) {
     throw new Error(
@@ -590,12 +463,11 @@ async function measure(
   baseline: Reading,
 ): Promise<Measured> {
   const sampler = new MemorySampler(baseline);
-  const handle = fileSelection(job, sampler, peakTrap);
-  const cost =
-    nativeSources === undefined ? undefined : nativeProbeCost(job.directory);
+  const handle = nativeSelection(job, sampler, peakTrap);
+  const cost = nativeProbeCost(job.directory);
   progress('measured-send-start', job);
   const evidence = await send(wireRoute, handle, sampler);
-  const nativeCost = cost?.();
+  const nativeCost = cost();
   progress('measured-send-complete', job);
   handle.hold()?.release();
   const after = await awaitQuiescentReading();
@@ -606,7 +478,7 @@ async function measure(
       routeId: wireRoute.id,
       trap: envTrap ?? null,
       ...evidence,
-      ...(nativeCost === undefined ? {} : { nativeCost }),
+      nativeCost,
       ...sampler.summary(),
     },
   };
@@ -639,10 +511,10 @@ async function accumulate(
     progress('accumulation-send-start', job);
     const evidence = await send(
       wireRoute,
-      fileSelection(job, undefined, accumulationTrap),
+      nativeSelection(job, undefined, accumulationTrap),
       undefined,
     );
-    if (nativeSources !== undefined && process.env.SEND_PEAK_LOG !== undefined)
+    if (process.env.SEND_PEAK_LOG !== undefined)
       appendFileSync(
         `${process.env.SEND_PEAK_LOG}.accumulation.jsonl`,
         `${JSON.stringify({ sent, ...evidence })}\n`,
@@ -670,10 +542,10 @@ async function measureShape(
     small: jobFor(shape, 'small', counts.small),
     large: jobFor(shape, 'large', counts.large),
   };
-  if (nativeSources === undefined || plan.protocol === 'original-three-pair') {
+  if (plan.protocol === 'original-three-pair') {
     await send(
       wireRoute,
-      fileSelection(jobs.small, undefined, undefined),
+      nativeSelection(jobs.small, undefined, undefined),
       undefined,
     );
   } else {
@@ -681,7 +553,7 @@ async function measureShape(
       const cost = nativeProbeCost(jobs[size].directory);
       const evidence = await send(
         wireRoute,
-        fileSelection(jobs[size], undefined, undefined),
+        nativeSelection(jobs[size], undefined, undefined),
         undefined,
       );
       const measuredCost = cost();
@@ -718,10 +590,7 @@ async function measureShape(
 }
 
 progress('source-preparation-start');
-const nativeSources =
-  process.env.ISSUE854_SEND_NATIVE === '1'
-    ? await prepareNativeProbeSources(root, plan)
-    : undefined;
+const nativeSources = await prepareNativeProbeSources(root, plan);
 progress('source-preparation-complete');
 await awaitCodeAging();
 const results: Record<string, SendPeakSeries> = {};
@@ -729,5 +598,5 @@ for (const [shape, counts] of Object.entries(plan.shapes)) {
   results[shape] = await measureShape(route, shape, counts);
 }
 writeFileSync(join(root, 'measured.json'), JSON.stringify(results));
-await nativeSources?.close();
+await nativeSources.close();
 clearTimeout(deadline);

@@ -76,7 +76,7 @@ export async function runSendPeakChild(
   routeId: string,
   root: string,
   trap: SendTrap | undefined,
-  native = process.env.ISSUE854_SEND_NATIVE === '1',
+  native = true,
 ): Promise<Partial<Record<string, SendPeakSeries>>> {
   const child = Bun.spawn([process.execPath, PROBE_PATH, routeId, root], {
     cwd: PROVIDERS_PACKAGE_DIRECTORY,

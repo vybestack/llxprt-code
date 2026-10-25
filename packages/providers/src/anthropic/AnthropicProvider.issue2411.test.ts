@@ -36,6 +36,7 @@ import {
 } from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
+import { replayableContents } from '../utils/collectContents.js';
 import {
   createProviderWithRuntime,
   createRuntimeConfigStub,
@@ -284,7 +285,7 @@ describe('Issue #2411: base-URL-aware OAuth eligibility for Anthropic', () => {
   ) =>
     createProviderCallOptions({
       providerName: 'anthropic',
-      contents,
+      contents: replayableContents(contents),
       settings: settingsService,
       runtime: runtimeContext,
       config: runtimeContext.config,
@@ -476,12 +477,12 @@ describe('Issue #2411: base-URL-aware OAuth eligibility for Anthropic', () => {
       // empty-token branch of buildProviderClient).
       const callOptions = createProviderCallOptions({
         providerName: 'anthropic',
-        contents: [
+        contents: replayableContents([
           {
             speaker: 'human',
             blocks: [{ type: 'text', text: 'hello via LB' }],
           },
-        ],
+        ]),
         settings: settingsService,
         runtime: runtimeContext,
         config: runtimeContext.config,

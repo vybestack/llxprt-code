@@ -23,6 +23,7 @@ interface ProbeSampler {
 
 interface NativeSelectionHandle {
   readonly selection: ProviderRequestSnapshot;
+  arm(): Promise<void>;
   rows(): AsyncIterable<IContent>;
   hold(): TrapHold | undefined;
 }
@@ -86,7 +87,14 @@ export class NativeProbeSources {
       }
       if (sample) await sampler?.sample();
     }
+    const arm = async (): Promise<void> => {
+      if (activeTrap !== undefined && !armed) {
+        armed = true;
+        held = await armSendTrap(activeTrap, rows(false));
+      }
+    };
     return {
+      arm,
       rows: () => rows(false),
       hold: () => held,
       selection: {
@@ -109,10 +117,7 @@ export class NativeProbeSources {
         },
         openReader: (signal) =>
           (async function* (): AsyncGenerator<IContent, void> {
-            if (activeTrap !== undefined && !armed) {
-              armed = true;
-              held = await armSendTrap(activeTrap, rows(false));
-            }
+            await arm();
             yield* rows(true, signal);
           })(),
         close: () => undefined,

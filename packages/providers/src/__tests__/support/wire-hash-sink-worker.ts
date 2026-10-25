@@ -32,8 +32,13 @@ process.on('message', (message: unknown) => {
     continueSample?.();
     continueSample = undefined;
   } else if (message === 'close') {
-    clearInterval(timer);
-    void sink.close().then(() => process.disconnect());
+    process.disconnect();
   } else throw new Error('Unknown hash sink command');
+});
+process.on('disconnect', () => {
+  clearInterval(timer);
+  continueSample?.();
+  continueSample = undefined;
+  void sink.close();
 });
 process.send({ kind: 'ready', baseURL: sink.route.baseURL, pid: process.pid });
