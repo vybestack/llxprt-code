@@ -4,6 +4,8 @@ import type { IContent } from './IContent.js';
 export interface TokenRowSource {
   read(): Promise<IContent>;
   close(): Promise<void>;
+  merge?(source: TokenRowSource): boolean;
+  hasNext?(): boolean;
 }
 interface TokenTicket {
   readonly content: IContent;
@@ -18,6 +20,7 @@ interface PendingTokenTicket {
 
 export class HistoryTokenTickets {
   private readonly pending = new Set<PendingTokenTicket>();
+  private tail: PendingTokenTicket | undefined;
   private reading: Promise<void> = Promise.resolve();
   private closed = false;
   constructor(
@@ -25,6 +28,10 @@ export class HistoryTokenTickets {
     private readonly process: (ticket: TokenTicket) => Promise<void>,
     private readonly failed: (error: unknown) => void,
   ) {}
+  assertAdmission(): void {
+    if (this.pending.size >= 32)
+      throw new Error('Token ticket range admission budget exceeded');
+  }
   prepare(
     source: TokenRowSource,
     modelName: string | undefined,
@@ -39,21 +46,34 @@ export class HistoryTokenTickets {
     void ticket.source.close().catch(this.failed);
   }
   publish(ticket: PendingTokenTicket): void {
+    const tail = this.tail;
+    if (
+      tail !== undefined &&
+      tail.modelName === ticket.modelName &&
+      tail.generation === ticket.generation &&
+      tail.source.merge?.(ticket.source) === true
+    ) {
+      this.pending.delete(ticket);
+      return;
+    }
     this.schedule(async () => {
+      if (this.tail === ticket) this.tail = undefined;
       if (!this.pending.delete(ticket)) return;
       try {
         if (!this.closed) {
-          const read = this.read(ticket.source);
-          this.reading = read.then(
-            () => undefined,
-            () => undefined,
-          );
-          const content = await read;
-          await this.process({
-            content,
-            modelName: ticket.modelName,
-            generation: ticket.generation,
-          });
+          do {
+            const read = ticket.source.read();
+            this.reading = read.then(
+              () => undefined,
+              () => undefined,
+            );
+            const content = await read;
+            await this.process({
+              content,
+              modelName: ticket.modelName,
+              generation: ticket.generation,
+            });
+          } while (ticket.source.hasNext?.() === true);
         }
       } catch (error) {
         this.failed(error);
@@ -61,16 +81,14 @@ export class HistoryTokenTickets {
         await ticket.source.close();
       }
     });
+    this.tail = ticket;
   }
-  private async read(source: TokenRowSource): Promise<IContent> {
-    try {
-      return await source.read();
-    } finally {
-      await source.close();
-    }
+  seal(): void {
+    this.tail = undefined;
   }
   async close(): Promise<void> {
     this.closed = true;
+    this.tail = undefined;
     const tickets = [...this.pending];
     this.pending.clear();
     await Promise.all([

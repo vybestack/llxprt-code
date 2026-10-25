@@ -45,32 +45,18 @@ class TokenRowBatch {
 
   capture(index: number, sequence: number | undefined): TokenRowSource {
     this.readers++;
-    let closing: Promise<void> | undefined;
-    return {
-      read: async () => {
-        if (closing !== undefined)
-          throw new Error('The token row source is closed');
-        const snapshot = await this.seal();
-        const content = this.host.takeDraft(sequence);
-        if (content !== undefined) return content;
-        return decodeStoredRow(
-          await snapshot.readRow(await snapshot.entryAt(index)),
-        );
-      },
-      close: () => {
-        if (closing !== undefined) return closing;
-        this.host.releaseDraft(sequence);
-        this.readers--;
-        if (this.readers === 0) {
-          this.detached();
-          const saved = this.saved;
-          this.saved = undefined;
-          this.closing ??= saved?.then((snapshot) => snapshot.close());
-        }
-        closing = this.closing ?? Promise.resolve();
-        return closing;
-      },
-    };
+    return new TokenRowRange(this, this.host, index, sequence);
+  }
+
+  release(): Promise<void> {
+    this.readers--;
+    if (this.readers === 0) {
+      this.detached();
+      const saved = this.saved;
+      this.saved = undefined;
+      this.closing ??= saved?.then((snapshot) => snapshot.close());
+    }
+    return this.closing ?? Promise.resolve();
   }
 
   seal(): Promise<VersionSnapshot> {
@@ -79,5 +65,65 @@ class TokenRowBatch {
       this.saved = this.host.snapshot();
     }
     return this.saved;
+  }
+}
+
+class TokenRowRange implements TokenRowSource {
+  private end: number;
+  private closing: Promise<void> | undefined;
+  constructor(
+    private readonly batch: TokenRowBatch,
+    private readonly host: TokenRowHost,
+    private index: number,
+    private sequence: number | undefined,
+  ) {
+    this.end = index + 1;
+  }
+
+  merge(source: TokenRowSource): boolean {
+    if (!(source instanceof TokenRowRange)) return false;
+    if (
+      source.batch !== this.batch ||
+      source.index !== this.end ||
+      this.closing !== undefined
+    )
+      return false;
+    const nextSequence =
+      this.sequence === undefined
+        ? undefined
+        : this.sequence + this.end - this.index;
+    if (source.sequence !== nextSequence) return false;
+    this.end = source.end;
+    source.closing = source.batch.release();
+    return true;
+  }
+
+  hasNext(): boolean {
+    return this.index < this.end;
+  }
+
+  async read(): Promise<IContent> {
+    if (this.closing !== undefined)
+      throw new Error('The token row source is closed');
+    const snapshot = await this.batch.seal();
+    const index = this.index++;
+    const sequence = this.sequence;
+    if (this.sequence !== undefined) this.sequence++;
+    const content = this.host.takeDraft(sequence);
+    if (content !== undefined) return content;
+    return decodeStoredRow(
+      await snapshot.readRow(await snapshot.entryAt(index)),
+    );
+  }
+
+  close(): Promise<void> {
+    if (this.closing !== undefined) return this.closing;
+    this.host.releaseDraft(
+      this.sequence === undefined
+        ? undefined
+        : this.sequence + this.end - this.index - 1,
+    );
+    this.closing = this.batch.release();
+    return this.closing;
   }
 }

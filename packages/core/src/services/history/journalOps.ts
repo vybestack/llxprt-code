@@ -16,6 +16,7 @@ import { encodeContentRow, UNOWNED_ROW } from './journalRowCodec.js';
 export interface JournalWriteHost {
   /** The rows once everything queued is applied. */
   rows(): number;
+  append(draft: RowDraft, origin: string | undefined): void;
   /** Read when a group is built: a resume can replace the store's owners while the operation waits. */
   owners(): JournalOwners;
   /** Queues a group; the tentative count moves to `rowsAfter` now. */
@@ -80,7 +81,7 @@ function applyContent(
     );
   }
   const draft = encodeAppended(host, content, origin);
-  applyAppendDrafts(host, [draft], origin);
+  host.append(draft, origin);
   return draft;
 }
 

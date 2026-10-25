@@ -1,7 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writeAdmittedRow, readAdmittedRows } from './row-admission.js';
+import { encodeRowDraft, type RowDraft } from './rowDraft.js';
 import { JournalInputError, JournalWriterPoisonedError } from './errors.js';
 import type { FlushRecords } from './flushRecords.js';
-import { frameLength } from './frame.js';
 import { VectoredRecordAppender, type GroupRecord } from './groupAppender.js';
 import {
   createFileHandleReader,
@@ -117,6 +118,34 @@ export class JournalGroupWriter {
     this.dependencies = dependencies;
   }
 
+  private admissionEpoch = 0;
+
+  private reserve(bytes: number): number {
+    const offset = this.writeOffset;
+    this.writeOffset += bytes;
+    return offset;
+  }
+
+  admitRow(draft: RowDraft): { start: number; end: number } {
+    if (this.closed) throw new Error('The journal writer is closed');
+    if (this.failure !== undefined)
+      throw new JournalWriterPoisonedError({ cause: this.failure.error });
+    const length = encodeRowDraft(0n, draft).recordLength;
+    const start = this.reserve(length);
+    this.admissionEpoch++;
+    try {
+      const end = writeAdmittedRow(this.requireHandle().fd, start, draft);
+      return { start, end };
+    } catch (error) {
+      this.poison(error);
+      throw error;
+    }
+  }
+
+  admittedRows(start: number, end: number): AsyncGenerator<RowDraft> {
+    return readAdmittedRows(this.reader, start, end);
+  }
+
   /** The last acked trailer. Undefined until the first group is acked. */
   get published(): PublishedState | undefined {
     const trailer = this.publishedTrailer;
@@ -137,9 +166,7 @@ export class JournalGroupWriter {
   commitGroup(group: CommitGroup): Promise<CommitAck> {
     return this.commitStreamedGroup(async (appender) => {
       // Before anything is appended, so a throw here leaves the file untouched.
-      const state = group.trailer(
-        planOffsets(appender.nextOffset, group.records),
-      );
+      const state = group.trailer(appender.reserveRecords(group.records));
       for (const record of group.records) await appender.append(record);
       return state;
     });
@@ -254,14 +281,26 @@ export class JournalGroupWriter {
       throw new JournalWriterPoisonedError({ cause: this.failure.error });
     }
     this.requireHandle();
-    const appender = new VectoredRecordAppender(this.handle, this.writeOffset);
+    const startOffset = this.writeOffset;
+    const admissionEpoch = this.admissionEpoch;
+    const appender = new VectoredRecordAppender(
+      this.handle,
+      startOffset,
+      undefined,
+      {
+        position: () => this.writeOffset,
+        reserve: (bytes) => this.reserve(bytes),
+      },
+    );
     try {
       const state = await build(appender);
       if (state === undefined) {
-        if (appender.started) await this.handle.truncate(this.writeOffset);
+        if (appender.started) {
+          await this.rollbackGroup(startOffset, admissionEpoch);
+        }
         return undefined;
       }
-      const selfOffset = appender.nextOffset;
+      const selfOffset = this.reserve(TRAILER_RECORD_BYTES);
       const trailer = this.buildTrailer(state, selfOffset);
       const record = encodeTrailerRecord(trailer);
       await this.writeRecordsFlushThenTrailer(appender, record, selfOffset);
@@ -269,7 +308,7 @@ export class JournalGroupWriter {
     } catch (error) {
       if (error instanceof JournalInputError) {
         try {
-          await this.handle.truncate(this.writeOffset);
+          await this.rollbackGroup(startOffset, admissionEpoch);
         } catch (rollback) {
           const failure = new AggregateError(
             [error.failure, rollback],
@@ -280,9 +319,21 @@ export class JournalGroupWriter {
         }
         throw error.failure;
       }
-      if (appender.started) this.failure = { error };
+      if (appender.started || admissionEpoch !== this.admissionEpoch)
+        this.failure = { error };
+      else this.writeOffset = startOffset;
       throw error;
     }
+  }
+
+  private async rollbackGroup(
+    startOffset: number,
+    admissionEpoch: number,
+  ): Promise<void> {
+    if (admissionEpoch !== this.admissionEpoch)
+      throw new Error('Cannot roll back a group across synchronous admissions');
+    await this.handle.truncate(startOffset);
+    this.writeOffset = startOffset;
   }
 
   private buildTrailer(state: TrailerState, selfOffset: number): TrailerHeader {
@@ -312,21 +363,11 @@ export class JournalGroupWriter {
   /** The only place the published state and the write offset move. */
   private acknowledge(trailer: TrailerHeader): CommitAck {
     this.publishedTrailer = trailer;
-    this.writeOffset = trailer.durableEnd;
+    this.writeOffset = Math.max(this.writeOffset, trailer.durableEnd);
     return {
       commitSeq: trailer.commitSeq,
       durableEnd: trailer.durableEnd,
       groupTag: trailer.groupTag,
     };
   }
-}
-
-function planOffsets(start: number, records: readonly GroupRecord[]): number[] {
-  const offsets: number[] = [];
-  let offset = start;
-  for (const record of records) {
-    offsets.push(offset);
-    offset += frameLength(record.kindHeader.length, record.body?.length ?? 0);
-  }
-  return offsets;
 }

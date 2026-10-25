@@ -314,6 +314,7 @@ export async function createWorkload(
     mode === 'normal'
       ? new HistoryService({ recording })
       : new RetainingHistory({ recording });
+  await history.waitForCommit();
   const provider = new OpenAIResponsesProvider('test-key', baseURL);
   const runtime = workloadRuntime({
     config,

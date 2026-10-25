@@ -1,4 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  commitAdmittedAppend,
+  StartupAdmissions,
+  type AppendAdmissionRun,
+} from './journal-append-admission.js';
 import { decodeStoredRow } from './journalRowCodec.js';
 import { encodeRowDraft, type RowDraft } from '../../journal/rowDraft.js';
 import type { MirrorCheckpoint } from '../../journal/mirrorCheckpoint.js';
@@ -150,6 +155,76 @@ export class JournalHistoryStore
       if (this.tokenDraft?.sequence === sequence) this.tokenDraft = undefined;
     },
   });
+  private appendRun: AppendAdmissionRun | undefined;
+  private queuedAppendRuns = 0;
+  private readonly startupAdmissions = new StartupAdmissions({
+    rows: () => this.tentativeRows,
+    enqueue: (rowsAfter, build) => this.enqueue(rowsAfter, build),
+    owners: () => this.owners,
+  });
+
+  private appendAdmitted(draft: RowDraft, origin: string | undefined): void {
+    if (this.journal === undefined) {
+      this.startupAdmissions.append(draft, origin);
+      return;
+    }
+    const store = this.session.store;
+    const current = this.appendRun;
+    const extending =
+      current !== undefined &&
+      current.origin === origin &&
+      current.store === store;
+    if (!extending && this.queuedAppendRuns >= 32)
+      throw new Error('Journal append range admission budget exceeded');
+    const admitted = store.admissions.admit(draft);
+    if (
+      current !== undefined &&
+      current.origin === origin &&
+      current.store === store
+    ) {
+      current.end = admitted.end;
+      current.count++;
+      current.rowsAfter = ++this.tentativeRows;
+      this.publication.accepted();
+      return;
+    }
+    const run = {
+      ...admitted,
+      store,
+      releaseReader: store.admissions.retainReader(),
+      count: 1,
+      rowsAfter: this.tentativeRows + 1,
+      origin,
+    };
+    this.appendRun = run;
+    this.queuedAppendRuns++;
+    this.tentativeRows = run.rowsAfter;
+    this.publication.accepted();
+    const turn = this.queue.then(() => this.runAdmittedAppend(run));
+    this.queue = turn.then(() => undefined);
+  }
+
+  private async runAdmittedAppend(
+    run: NonNullable<JournalHistoryStore['appendRun']>,
+  ): Promise<void> {
+    if (this.appendRun === run) this.appendRun = undefined;
+    const store = run.store;
+    try {
+      if (this.failure !== undefined) return;
+      await commitAdmittedAppend(run, {
+        owners: () => this.owners,
+        commit: (rowsAfter, build) => this.commitStep(rowsAfter, build),
+      });
+    } catch (error) {
+      this.failure = { error };
+      this.owners.invalidate();
+    } finally {
+      this.queuedAppendRuns--;
+      store.admissions.release(run.count);
+      await run.releaseReader();
+    }
+  }
+
   private queue: Promise<void>;
   private failure: { readonly error: unknown; reported?: boolean } | undefined;
   private restoreFailed = false;
@@ -168,6 +243,7 @@ export class JournalHistoryStore
   /** What a publication needs to queue its own groups (see journalOps.ts); every queued group is checked for a usable store. */
   readonly writes: JournalWriteHost = {
     rows: () => this.tentativeRows,
+    append: (draft, origin) => this.appendAdmitted(draft, origin),
     owners: () => this.owners,
     enqueue: (rowsAfter, build) => this.enqueue(rowsAfter, build),
     offerPreview: (content, origin) => this.offerPreview(content, origin),
@@ -782,6 +858,7 @@ export class JournalHistoryStore
 
   /** Runs `task` after everything queued, ahead of anything queued later; its failure goes to the caller and does not stop the queue. */
   private exclusive<T>(task: () => Promise<T>, detaching = false): Promise<T> {
+    this.appendRun = undefined;
     this.tokenRows.seal();
     const turn = this.queue.then(() => {
       if (this.failure !== undefined && !detaching) throw this.failure.error;
@@ -809,7 +886,10 @@ export class JournalHistoryStore
     build: EditBuilder,
     mirrors?: MirrorCheckpoint,
   ): Promise<CommitAck | undefined> {
-    if (!this.appendingTokenRow) this.tokenRows.seal();
+    if (!this.appendingTokenRow) {
+      this.appendRun = undefined;
+      this.tokenRows.seal();
+    }
     if (rowsAfter !== undefined) this.tentativeRows = rowsAfter;
     this.publication.accepted();
     const turn = this.queue.then(() => this.runStep(rowsAfter, build, mirrors));

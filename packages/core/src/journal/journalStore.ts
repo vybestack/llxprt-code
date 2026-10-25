@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writtenLabelsOf, type SpineEntry } from './journal-store-state.js';
+import { JournalAdmissions } from './row-admission.js';
 import type { NeutralRowFactRegistration } from './neutralRowFacts.js';
 import { retainNamedWriter } from './named-writer-ownership.js';
 import { journalLabelSorter } from './ordered-labels.js';
@@ -143,20 +145,6 @@ export interface CommittedGroup {
 }
 
 /** The labels of the rows a group writes. A replace streams its rows, so it names none. */
-function writtenLabelsOf(plan: GroupPlan): bigint[] {
-  if (plan.segments === undefined) return plan.newRows.map((row) => row.label);
-  const labels: bigint[] = [];
-  for (const segment of plan.segments) {
-    if (segment.kind === 'fresh') labels.push(segment.label);
-    if (segment.kind === 'foreign') labels.push(segment.row.entry.label);
-  }
-  return labels;
-}
-
-interface SpineEntry {
-  readonly rowRoot: number;
-  readonly spine: RightSpine;
-}
 
 /**
  * One journal as a versioned store: the single writer of the file, the
@@ -209,6 +197,10 @@ export class JournalStore {
     private readonly unlinked = false,
     private readonly releaseNamedWriter?: () => void,
   ) {
+    this.admissions = new JournalAdmissions(
+      writer,
+      () => !this.closing && this.compacting === undefined,
+    );
     this.neutralRowFactsEnabled = deps.eagerNeutralRowFacts ?? false;
     this.fileOperations =
       deps.fileOperations ?? realFileOperations(deps.journal.open);
@@ -314,6 +306,8 @@ export class JournalStore {
       throw error;
     }
   }
+
+  readonly admissions: JournalAdmissions;
 
   /** The last version whose trailer was acked, or undefined before the first group. */
   get published(): Version | undefined {
@@ -422,7 +416,11 @@ export class JournalStore {
   compact(): Promise<SwapOutcome> {
     if (this.closing)
       return Promise.reject(new Error('The journal store is closed'));
-    if (this.pins > 0 || this.mediaPins.releasePending) {
+    if (
+      this.pins > 0 ||
+      this.admissions.pending ||
+      this.mediaPins.releasePending
+    ) {
       return Promise.reject(
         new Error('A journal with a live pin cannot compact'),
       );
@@ -615,7 +613,11 @@ export class JournalStore {
     }
     const due = this.deps.compactionDue ?? compactionDue;
     if (!due(version, this.rearmAt)) return;
-    if (this.pins > 0 || this.mediaPins.releasePending) {
+    if (
+      this.pins > 0 ||
+      this.admissions.pending ||
+      this.mediaPins.releasePending
+    ) {
       this.deferredByPin = true;
       return;
     }

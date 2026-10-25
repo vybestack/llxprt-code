@@ -68,8 +68,9 @@ describe('queued token row snapshot lifetime', () => {
               await source.close();
             }
           }
-          // Each write reads its base. Token readers need one shared pin.
-          expect(snapshots.mock.calls.length).toBe(25);
+          // The first append and the coalesced suffix each read their base.
+          // Token readers need one shared pin, regardless of submission count.
+          expect(snapshots.mock.calls.length).toBe(3);
           expect(await session.store.compact()).toBe('swapped');
         } finally {
           seams.release();

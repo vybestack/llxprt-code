@@ -547,6 +547,7 @@ export abstract class HistoryServiceCore
   private serializeTokenOperation<T>(
     operation: () => T | Promise<T>,
   ): Promise<T> {
+    this.tokenTickets.seal();
     const result = this.tokenizerLock.then(operation);
     this.tokenizerLock = result.then(
       () => undefined,
@@ -688,6 +689,7 @@ export abstract class HistoryServiceCore
       return;
     }
 
+    this.tokenTickets.assertAdmission();
     const generation = this.syncGeneration;
     const wasEmpty = this.journal.getLength() === 0;
     let token: ReturnType<HistoryTokenTickets['prepare']> | undefined;

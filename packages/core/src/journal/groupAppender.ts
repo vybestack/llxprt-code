@@ -1,5 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { encodeBodylessFrame, frameParts, type FrameBody } from './frame.js';
+import {
+  encodeBodylessFrame,
+  frameParts,
+  frameLength,
+  type FrameBody,
+} from './frame.js';
 import { writeBuffersAt, type VectoredWriteTarget } from './positionalFile.js';
 
 /** One record of a group other than the trailer. */
@@ -51,18 +56,23 @@ export class VectoredRecordAppender implements RecordAppender {
   private pending: Uint8Array[] = [];
   private pendingBytes = 0;
   private begun = false;
+  private reservedOffsets: number[] | undefined;
 
   constructor(
     private readonly target: VectoredWriteTarget,
     startOffset: number,
     private readonly batchBytes: number = DEFAULT_BATCH_BYTES,
+    private readonly allocation?: {
+      position(): number;
+      reserve(bytes: number): number;
+    },
   ) {
     this.cursor = startOffset;
     this.writtenTo = startOffset;
   }
 
   get nextOffset(): number {
-    return this.cursor;
+    return Math.max(this.cursor, this.allocation?.position() ?? 0);
   }
 
   /** True once `append` has been called, whether or not a byte has been written. */
@@ -70,9 +80,34 @@ export class VectoredRecordAppender implements RecordAppender {
     return this.begun;
   }
 
+  reserveRecords(records: readonly GroupRecord[]): number[] {
+    const lengths = records.map((record) =>
+      frameLength(record.kindHeader.length, record.body?.length ?? 0),
+    );
+    let cursor =
+      this.allocation?.reserve(
+        lengths.reduce((sum, length) => sum + length, 0),
+      ) ?? this.cursor;
+    const offsets = lengths.map((length) => {
+      const offset = cursor;
+      cursor += length;
+      return offset;
+    });
+    this.reservedOffsets = [...offsets];
+    return offsets;
+  }
+
   async append(record: GroupRecord): Promise<number> {
     this.begun = true;
-    const offset = this.cursor;
+    const offset =
+      this.reservedOffsets?.shift() ??
+      this.allocation?.reserve(
+        frameLength(record.kindHeader.length, record.body?.length ?? 0),
+      ) ??
+      this.cursor;
+    if (offset !== this.cursor) await this.drain();
+    this.cursor = offset;
+    if (this.pendingBytes === 0) this.writtenTo = offset;
     if (record.body === undefined) {
       this.push(encodeBodylessFrame(record.kind, record.kindHeader));
     } else {
