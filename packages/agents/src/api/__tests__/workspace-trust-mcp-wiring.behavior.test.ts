@@ -39,6 +39,7 @@ interface InstanceMock {
   onFolderTrustRevoked: ReturnType<typeof vi.fn>;
   quarantineForTrustRevocation: ReturnType<typeof vi.fn>;
   stop: ReturnType<typeof vi.fn>;
+  cancelDiscovery: ReturnType<typeof vi.fn>;
 }
 
 const instances: InstanceMock[] = [];
@@ -50,6 +51,7 @@ function createInstanceMock(): InstanceMock {
     onFolderTrustRevoked: vi.fn().mockResolvedValue(undefined),
     quarantineForTrustRevocation: vi.fn(),
     stop: vi.fn().mockResolvedValue(undefined),
+    cancelDiscovery: vi.fn(),
   };
 }
 
@@ -158,6 +160,13 @@ describe('Config MCP wiring on folder trust change', () => {
         mock.quarantineForTrustRevocation,
       );
       vi.spyOn(this, 'stop').mockImplementation(mock.stop);
+      // Records the call and runs the real cancellation, which aborts
+      // discovery and in-flight connections.
+      const cancelDiscovery = this.cancelDiscovery.bind(this);
+      vi.spyOn(this, 'cancelDiscovery').mockImplementation(() => {
+        mock.cancelDiscovery();
+        return cancelDiscovery();
+      });
     });
   });
 
@@ -624,13 +633,19 @@ describe('Config MCP wiring on folder trust change', () => {
             retireWorkspace(owner),
             config.dispose(),
           ]);
-          await waitFor(() => expect(mock.stop).toHaveBeenCalledOnce());
+          await waitFor(() =>
+            expect(mock.cancelDiscovery).toHaveBeenCalledOnce(),
+          );
+          // Cancellation does not wait for the held transition; connections
+          // are retired only after the transition settles.
+          expect(mock.stop).not.toHaveBeenCalled();
           releaseTransition?.();
           failures.push(
             ...(await retirement).flatMap((result) =>
               result.status === 'rejected' ? [result.reason] : [],
             ),
           );
+          expect(mock.stop).toHaveBeenCalledOnce();
         } catch (error) {
           failures.push(error);
         } finally {
