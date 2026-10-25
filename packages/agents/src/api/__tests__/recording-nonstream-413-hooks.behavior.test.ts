@@ -16,12 +16,21 @@ import {
 } from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { Agent } from '@vybestack/llxprt-code-agents';
+import { Agent, toConfigParameters } from '@vybestack/llxprt-code-agents';
 import { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { fromConfig } from '../fromConfig.js';
+import type { AgentHooks } from '../config-types.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  cleanupAfterFailure,
+  runCleanupSteps,
+} from '../../core/subagent-cleanup.js';
 import { CompressionStrategy } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
   MessageBusType,
@@ -34,7 +43,7 @@ import {
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { createRecordingExecution } from '../recordingExecution.js';
 import { SessionControl } from '../control/sessionControl.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import * as compressionFactory from '../../compression/compressionStrategyFactory.js';
 
 /**
@@ -173,8 +182,199 @@ async function exerciseFacades(
   }
 }
 
+interface ContextLimitServer {
+  readonly baseUrl: string;
+  readonly requestCount: () => number;
+  readonly close: () => Promise<void>;
+}
+
+/**
+ * A local OpenAI-compatible endpoint that rejects every odd request with HTTP
+ * 413 and answers every even request with a streamed completion.
+ */
+async function startContextLimitServer(): Promise<ContextLimitServer> {
+  let requests = 0;
+  const server = createServer((request, response) => {
+    const number = ++requests;
+    request.resume();
+    request.once('end', () => {
+      if (number % 2 === 1) {
+        response.writeHead(413, { 'Content-Type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            error: { message: 'Request exceeds the maximum size' },
+          }),
+        );
+        return;
+      }
+      response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      response.end(
+        `data: ${JSON.stringify({ id: 'recovered', object: 'chat.completion.chunk', model: 'wire-model', choices: [{ index: 0, delta: { content: 'recovered reply' }, finish_reason: 'stop' }] })}
+
+data: [DONE]
+
+`,
+      );
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address();
+  if (address === null || typeof address === 'string')
+    throw new Error('Missing local provider port');
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}/v1`,
+    requestCount: () => requests,
+    close: async () => {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
+
+interface HookedAgent {
+  readonly agent: Agent;
+  readonly config: Config;
+}
+
+/**
+ * One agent built through `fromConfig` over the test's own `Config`
+ * (`AgentConfig` carries no `enableHooks`), pointed at a local OpenAI-compatible
+ * endpoint.
+ */
+async function openHookedAgent(
+  directory: string,
+  baseUrl: string,
+  hooks: AgentHooks,
+  authority: CredentialAuthority,
+): Promise<HookedAgent> {
+  const parameters = {
+    ...toConfigParameters({
+      provider: 'openai',
+      model: 'wire-model',
+      sessionId: randomUUID(),
+      workingDir: directory,
+      continueOnFailedApiCall: true,
+      hooks,
+    }),
+    interactive: true,
+    enableHooks: true,
+  };
+  parameters.includeDirectories = [
+    ...(parameters.includeDirectories ?? []),
+    process.cwd(),
+  ];
+  const config = new Config(parameters);
+  const settings = new SettingsService();
+  for (const [key, value] of Object.entries(config.getInitialSettings()))
+    settings.set(key, value);
+  try {
+    const agent = await fromConfig(
+      config,
+      settings,
+      {
+        activation: {
+          provider: 'openai',
+          model: 'wire-model',
+          cliOverrides: { key: 'local-test-key', baseUrl },
+        },
+      },
+      authority,
+    );
+    return { agent, config };
+  } catch (primary) {
+    return cleanupAfterFailure(primary, () => config.dispose());
+  }
+}
+
+/**
+ * Same four facade states as `exerciseFacades` over two independent agents
+ * (own `Config`, client, history and journal) that share one working
+ * directory and one hook command.
+ */
+async function exerciseIndependentFacades(
+  event: HookEventName,
+  baseUrl: string,
+  authority: CredentialAuthority,
+  drive: (agent: Agent) => Promise<void>,
+): Promise<number> {
+  const output = join(
+    tmpdir(),
+    `recording-nonstream-hooks-${randomUUID()}.jsonl`,
+  );
+  const directory = await realpath(
+    await mkdtemp(join(tmpdir(), 'recording-nonstream-agents-')),
+  );
+  const hooks: AgentHooks = {
+    [event]: [
+      {
+        hooks: [{ type: HookType.Command, command: jsonlHookCommand(output) }],
+      },
+    ],
+  };
+  const opened: HookedAgent[] = [];
+  try {
+    const first = await openHookedAgent(directory, baseUrl, hooks, authority);
+    opened.push(first);
+    const second = await openHookedAgent(directory, baseUrl, hooks, authority);
+    opened.push(second);
+    const a = first.agent;
+    const b = second.agent;
+    const seed = [
+      {
+        speaker: 'human' as const,
+        blocks: [{ type: 'text' as const, text: 'seed' }],
+      },
+    ];
+    await a.setHistory(seed);
+    await b.setHistory(seed);
+    await a.session.setRecording({ enabled: true });
+    const aPath = pathOf(a);
+    await b.session.setRecording({ enabled: true });
+    const bPath = pathOf(b);
+    await drive(a);
+    await drive(b);
+    await a.session.setRecording({ enabled: false });
+    await drive(a);
+    await a.session.resume('latest');
+    const resumedPath = pathOf(a);
+    await drive(a);
+    const matched = (await inputsAt(output)).filter(
+      (input) => input.hook_event_name === event,
+    );
+    expect(
+      matched.map((input) => [input.transcript_path, input.session_id]),
+    ).toStrictEqual([
+      [aPath, a.getRuntimeId()],
+      [bPath, b.getRuntimeId()],
+      ['', a.getRuntimeId()],
+      [resumedPath, a.getRuntimeId()],
+    ]);
+    expect(a.getRuntimeId()).not.toBe(b.getRuntimeId());
+    return matched.length;
+  } finally {
+    await runCleanupSteps([
+      ...[...opened].reverse().map(
+        ({ agent }) =>
+          () =>
+            agent.dispose(),
+      ),
+      ...[...opened].reverse().map(
+        ({ config }) =>
+          () =>
+            config.dispose(),
+      ),
+      () => removeJsonlHook(output),
+      () => rm(directory, { recursive: true, force: true }),
+    ]);
+  }
+}
+
 describe('shared client non-stream and context-size 413 hook owner', () => {
   useRecordingPrompts();
+  const credentials = useOwnedCredentials();
   it('routes non-stream tool selection through the invoking facade without a shared owner slot', async () => {
     expect(
       await exerciseFacades(
@@ -228,51 +428,16 @@ describe('shared client non-stream and context-size 413 hook owner', () => {
       compressionFactory,
       'getCompressionStrategy',
     ).mockReturnValue(strategy);
-    let transportRequests = 0;
+    const server = await startContextLimitServer();
     let surfaced413 = 0;
     let returnedContent = 0;
-    let restoreTransport: (() => void) | undefined;
     try {
-      await exerciseFacades(
+      await exerciseIndependentFacades(
         HookEventName.PreCompress,
-        async (agent, config) => {
+        server.baseUrl,
+        credentials().authority,
+        async (agent) => {
           agent.setEphemeralSetting('context-limit', 200000);
-          const manager = fixtureAgentResources(agent).manager;
-
-          const provider = manager.getActiveProvider();
-          if (!provider) throw new Error('Missing active fixture provider');
-          if (transportRequests === 0) {
-            const original = provider.generateChatCompletion.bind(provider);
-            const descriptor = Object.getOwnPropertyDescriptor(
-              provider,
-              'generateChatCompletion',
-            );
-            spyOn(config, 'getContinueOnFailedApiCall').mockReturnValue(true);
-            Object.defineProperty(provider, 'generateChatCompletion', {
-              configurable: true,
-              async *value(options: RuntimeGenerateChatOptions) {
-                transportRequests++;
-                if (transportRequests % 2 === 1) {
-                  throw Object.assign(
-                    new Error('Request exceeds the maximum size'),
-                    { status: 413 },
-                  );
-                }
-                yield* original(options);
-              },
-            });
-            restoreTransport = () => {
-              if (descriptor) {
-                Object.defineProperty(
-                  provider,
-                  'generateChatCompletion',
-                  descriptor,
-                );
-              } else {
-                Reflect.deleteProperty(provider, 'generateChatCompletion');
-              }
-            };
-          }
           for await (const event of agent.stream('retry original request')) {
             if (event.type === 'error' && event.error.status === 413) {
               surfaced413++;
@@ -281,12 +446,12 @@ describe('shared client non-stream and context-size 413 hook owner', () => {
           }
         },
       );
-      expect(transportRequests).toBe(8);
+      expect(server.requestCount()).toBe(8);
       expect(surfaced413).toBe(0);
       expect(returnedContent).toBeGreaterThanOrEqual(4);
     } finally {
-      restoreTransport?.();
       strategySpy.mockRestore();
+      await server.close();
     }
   }, 30000);
 
