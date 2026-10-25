@@ -1,4 +1,3 @@
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -20,21 +19,21 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { runImageOperation } from '@vybestack/llxprt-code-core/services/image/imageOperationDispatch.js';
 import { validatePngStructure } from '@vybestack/llxprt-code-core/services/image/ImageGenerationService.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { CodexImageBackend } from '@vybestack/llxprt-code-providers/openai/codexImageBackend.js';
+import type { AgentConfig } from '../config-types.js';
 import { createAgent } from '../createAgent.js';
 
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
-import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { Agent } from '../agent.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
   MemoryTokenStore,
-  createTestProvider,
   makeToken,
 } from './helpers/provider-auth-fixtures.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { openRouteAAgent } from './helpers/route-a-agent.js';
 
 const loopbackFetch: NetworkFetch = (input, init) =>
   globalThis.fetch(input, init);
@@ -157,85 +156,69 @@ async function imageWire(hold: boolean): Promise<ImageWire> {
   };
 }
 
+type ImageOperationSelection = NonNullable<AgentConfig['imageOperation']>;
+
+function openImageAgent(
+  directory: string,
+  imageOperation: ImageOperationSelection,
+  overrides: Partial<AgentConfig> = {},
+): Promise<Agent> {
+  return createAgent({
+    provider: 'openai',
+    model: 'gpt-5.6',
+    sessionId: 'same-image-label',
+    workingDir: directory,
+    activation: { authMode: 'none' },
+    imageOperation,
+    ...overrides,
+  });
+}
+
 async function withImageSession(
   hold: boolean,
   run: (session: {
-    readonly config: Config;
     readonly directory: string;
     readonly wire: Awaited<ReturnType<typeof imageWire>>;
-    readonly agent: Awaited<ReturnType<typeof fromConfig>>;
+    readonly agent: Agent;
     readonly runner: ImageOperationRunner;
   }) => Promise<void>,
 ): Promise<void> {
   validatePngStructure(PNG);
   const directory = await mkdtemp(join(import.meta.dir, 'physical-workspace-'));
   const wire = await imageWire(hold);
-  const config = new Config({
-    sessionId: 'same-image-label',
-    targetDir: directory,
-    cwd: directory,
-    provider: 'openai',
-    model: 'gpt-5.6',
-    debugMode: false,
-    skillsSupport: false,
-    enableHooks: false,
-  });
   const runner: ImageOperationRunner = (input) =>
     runImageOperation(input, {
       workspaceRoot: directory,
       resolveBackend: () => wire.backend,
     });
-  const agent = await fromConfig(
-    config,
-    new SettingsService(),
-    { sessionId: 'same-image-label', activation: { authMode: 'none' } },
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    { run: runner },
-  );
+  const agent = await openImageAgent(directory, { run: runner });
   try {
-    await run({ config, directory, wire, agent, runner });
+    await run({ directory, wire, agent, runner });
   } finally {
     wire.release();
     await agent.dispose();
     await wire.stop();
-    await config.dispose();
     await rm(directory, { recursive: true, force: true });
   }
 }
 
 describe('image operation authority and session lifetime', () => {
   it('keeps executable image fields and accessors off Config', async () => {
-    await withImageSession(false, async ({ config }) => {
-      expect('getRunImageOperation' in config).toBe(false);
-      expect('getImageBackendResolver' in config).toBe(false);
-      expect('runImageOperationCapability' in config).toBe(false);
-      expect('imageBackendResolver' in config).toBe(false);
+    const opened = await openRouteAAgent({
+      config: { provider: 'openai', model: 'gpt-5.6' },
+      intent: {
+        sessionId: 'same-image-label',
+        activation: { authMode: 'none' },
+      },
     });
+    try {
+      expect('getRunImageOperation' in opened.config).toBe(false);
+      expect('getImageBackendResolver' in opened.config).toBe(false);
+      expect('runImageOperationCapability' in opened.config).toBe(false);
+      expect('imageBackendResolver' in opened.config).toBe(false);
+    } finally {
+      await opened.close();
+    }
   });
 
   it('closes image admission before a disposed facade can start physical provider work', async () => {
@@ -292,39 +275,8 @@ describe('public image ownership and wire protocol', () => {
     it(`keeps a borrowed caller image operation live after both facade close orders: ${order}`, async () => {
       await withImageSession(
         false,
-        async ({ config, runner, agent, directory, wire }) => {
-          const peer = await fromConfig(
-            config,
-            new SettingsService(),
-            { sessionId: 'same-image-label', activation: { authMode: 'none' } },
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            { run: runner },
-          );
+        async ({ runner, agent, directory, wire }) => {
+          const peer = await openImageAgent(directory, { run: runner });
           try {
             const closing = order === 'first' ? agent : peer;
             const surviving = order === 'first' ? peer : agent;
@@ -433,85 +385,51 @@ describe('public image ownership and wire protocol', () => {
 
 describe('selected image operation roots', () => {
   it('isolates same-Config same-label facades with distinct captured endpoints and output roots', async () => {
-    await withImageSession(
-      false,
-      async ({ config, agent, directory, wire }) => {
-        const other = await imageWire(false);
-        const peerDirectory = await mkdtemp(join(directory, 'peer-'));
-        const peer = await fromConfig(
-          config,
-          new SettingsService(),
-          { sessionId: 'same-image-label', activation: { authMode: 'none' } },
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          {
-            run: (input) =>
-              runImageOperation(input, {
-                workspaceRoot: peerDirectory,
-                resolveBackend: () => other.backend,
-              }),
-          },
+    await withImageSession(false, async ({ agent, directory, wire }) => {
+      const other = await imageWire(false);
+      const peerDirectory = await mkdtemp(join(directory, 'peer-'));
+      const peer = await openImageAgent(peerDirectory, {
+        run: (input) =>
+          runImageOperation(input, {
+            workspaceRoot: peerDirectory,
+            resolveBackend: () => other.backend,
+          }),
+      });
+      try {
+        await agent.sessionClient.runImageOperation({
+          prompt: 'first endpoint',
+          outputPath: 'first.png',
+        });
+        await peer.sessionClient.runImageOperation({
+          prompt: 'second endpoint',
+          outputPath: 'second.png',
+        });
+        expect((await readFile(join(directory, 'first.png'))).equals(PNG)).toBe(
+          true,
         );
-        try {
-          await agent.sessionClient.runImageOperation({
-            prompt: 'first endpoint',
-            outputPath: 'first.png',
-          });
-          await peer.sessionClient.runImageOperation({
-            prompt: 'second endpoint',
-            outputPath: 'second.png',
-          });
-          expect(
-            (await readFile(join(directory, 'first.png'))).equals(PNG),
-          ).toBe(true);
-          expect(
-            (await readFile(join(peerDirectory, 'second.png'))).equals(PNG),
-          ).toBe(true);
-          expect((await readdir(directory)).includes('second.png')).toBe(false);
-          expect((await readdir(peerDirectory)).includes('first.png')).toBe(
-            false,
-          );
-          expect(wire.requests()).toBe(1);
-          expect(other.requests()).toBe(1);
-          await agent.dispose();
-          await peer.sessionClient.runImageOperation({
-            prompt: 'surviving endpoint',
-            outputPath: 'surviving.png',
-          });
-          expect(
-            (await readFile(join(peerDirectory, 'surviving.png'))).equals(PNG),
-          ).toBe(true);
-          expect(wire.requests()).toBe(1);
-        } finally {
-          await peer.dispose();
-          await other.stop();
-        }
-      },
-    );
+        expect(
+          (await readFile(join(peerDirectory, 'second.png'))).equals(PNG),
+        ).toBe(true);
+        expect((await readdir(directory)).includes('second.png')).toBe(false);
+        expect((await readdir(peerDirectory)).includes('first.png')).toBe(
+          false,
+        );
+        expect(wire.requests()).toBe(1);
+        expect(other.requests()).toBe(1);
+        await agent.dispose();
+        await peer.sessionClient.runImageOperation({
+          prompt: 'surviving endpoint',
+          outputPath: 'surviving.png',
+        });
+        expect(
+          (await readFile(join(peerDirectory, 'surviving.png'))).equals(PNG),
+        ).toBe(true);
+        expect(wire.requests()).toBe(1);
+      } finally {
+        await peer.dispose();
+        await other.stop();
+      }
+    });
   });
 
   it('captures edit input paths at admission without retaining the caller array', async () => {
@@ -533,44 +451,13 @@ describe('selected image operation roots', () => {
   });
 
   it('releases a transferred physical resource once after normal facade teardown', async () => {
-    await withImageSession(false, async ({ config, runner, directory }) => {
+    await withImageSession(false, async ({ runner, directory }) => {
       const file = await open(join(directory, 'owned-lifetime'), 'w');
-      const peer = await fromConfig(
-        config,
-        new SettingsService(),
-        { activation: { authMode: 'none' } },
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          run: runner,
-          ownership: 'agent',
-          dispose: () => file.close(),
-        },
-      );
+      const peer = await openImageAgent(directory, {
+        run: runner,
+        ownership: 'agent',
+        dispose: () => file.close(),
+      });
       try {
         await peer.sessionClient.runImageOperation({
           prompt: 'owned image',
@@ -593,12 +480,11 @@ describe('selected image operation roots', () => {
 });
 
 describe('default root image composition', () => {
+  const credentials = useOwnedCredentials();
+
   it('selects the active local Codex endpoint while resolving credentials from the live caller store', async () => {
-    await withImageSession(false, async ({ config, directory, wire }) => {
+    await withImageSession(false, async ({ directory, wire }) => {
       const store = new MemoryTokenStore();
-      const oauth = new OAuthManager(store);
-      oauth.registerProvider(createTestProvider('codex'));
-      await oauth.toggleOAuthEnabled('codex');
       const firstCredential = {
         ...makeToken('local-image-credential'),
         account_id: 'local-image-account',
@@ -613,22 +499,14 @@ describe('default root image composition', () => {
           return realFetch(input, init);
         },
       );
-      const selectedSettings = new SettingsService();
-      selectedSettings.setProviderSetting('openai', 'base-url', wire.endpoint);
-      const peer = await fromConfig(
-        config,
-        selectedSettings,
-        {
-          activation: {
-            provider: 'openai',
-            authMode: 'none',
-            cliOverrides: { baseUrl: wire.endpoint },
-          },
-        },
-        undefined,
-        undefined,
-        oauth,
-      );
+      const peer = await createAgent({
+        provider: 'openai',
+        model: 'gpt-5.6',
+        workingDir: directory,
+        credentialAuthority: credentials().authority,
+        tokenStore: store,
+        auth: { baseUrl: wire.endpoint },
+      });
       try {
         await peer.sessionClient.runImageOperation({
           prompt: 'root endpoint protocol',

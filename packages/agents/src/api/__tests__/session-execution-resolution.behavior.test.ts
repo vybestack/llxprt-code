@@ -7,29 +7,25 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Config } from '@vybestack/llxprt-code-core';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { Agent } from '../agent.js';
 import type { AgentEvent } from '../event-types.js';
 import { ForegroundRunLifecycle } from '../foregroundRunLifecycle.js';
 import {
   SessionExecutionOwner,
   toLoopResolution,
 } from '../../session/session-execution-owner.js';
-import {
-  AgentResourceCapture,
-  captureAgentCreation as createAgent,
-} from './helpers/agent-resource-capture.js';
+import { openClientOwner } from './helpers/client-owner-session.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 describe('session execution resolution keeps the initialization failure', () => {
+  useFakeResponsesReplay('multi-turn-text.jsonl');
   const credentials = useOwnedCredentials();
   const cleanup: Array<() => void | Promise<void>> = [];
-  let agent: Agent;
   let client: AgentClientContract;
   let config: Config;
   let policy: RuntimePolicyOwner;
@@ -39,15 +35,6 @@ describe('session execution resolution keeps the initialization failure', () => 
     const temporary = await mkdtemp(join(tmpdir(), 'execution-resolution-'));
     cleanup.push(() => rm(temporary, { recursive: true, force: true }));
     const directory = await realpath(temporary);
-    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    cleanup.push(() => {
-      if (previousReplay === undefined)
-        delete process.env.LLXPRT_FAKE_RESPONSES;
-      else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
-    });
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
-    );
     config = new Config({
       sessionId: 'execution-resolution',
       cwd: directory,
@@ -63,20 +50,18 @@ describe('session execution resolution keeps the initialization failure', () => 
     settings = new SessionSettingsOwner(new SettingsService());
     cleanup.push(() => settings.dispose());
     settings.bindTelemetry(config);
-    const capture = new AgentResourceCapture();
-    agent = await createAgent({
-      runtimeFactoryBindings: capture.factories(undefined),
-      provider: 'fake',
-      model: 'fake-model',
-      workingDir: directory,
-      credentialAuthority: credentials().authority,
-      harness: { includeProcessCwd: false },
-    });
-    cleanup.push(() => agent.dispose());
-    const captured = capture.clients.slice(-1).values().next().value;
-    if (captured === undefined)
-      throw new Error('Execution resolution fixture did not acquire a client');
-    client = captured;
+    const opened = await openClientOwner(
+      credentials().authority,
+      {
+        provider: 'fake',
+        model: 'fake-model',
+        workingDir: directory,
+        harness: { includeProcessCwd: false },
+      },
+      { provider: 'fake', model: 'fake-model' },
+    );
+    cleanup.push(() => opened.close());
+    client = opened.client;
   });
 
   afterEach(async () => {
