@@ -1,7 +1,10 @@
+import { useRecordingPrompts } from '../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { useFakeResponsesReplay } from '../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
+import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from '../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+  openRouteAAgent,
+  type RouteAAgent,
+} from '../../agents/src/api/__tests__/helpers/route-a-agent.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import type { Session } from './zed-session.js';
@@ -28,51 +31,55 @@ import {
 
 describe('Zed Session recording title owner', () => {
   useRecordingPrompts();
-  it('writes a durable title and hydrates only the owning facade when Config is borrowed', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        agent,
-        config,
-        _settingsOwner,
-        _settingsService,
-        _oauthManager,
-        borrow,
-      ) => {
-        const sibling = await borrow();
-        await agent.session.setRecording({ enabled: true });
-        const connection = new RecordingConnection();
-        const owned = createSession(agent, connection, config);
-        const first = await owned.prompt({
-          sessionId: 'test-session-id',
-          prompt: [{ type: 'text', text: '/tools owner title' }],
-        });
-        expect(first.stopReason).toBe('end_turn');
-        const path = agent.session.getRecording().path;
-        if (path === undefined)
-          throw new Error('Recording was not materialized');
-        expect(await readFile(path, 'utf8')).toContain(
-          '"title":"/tools owner title"',
-        );
-        await owned.prompt({
-          sessionId: 'test-session-id',
-          prompt: [{ type: 'text', text: '/tools second prompt' }],
-        });
-        expect(agent.session.getRecordingTitle()).toBe('/tools owner title');
+  useFakeResponsesReplay('multi-turn-text.jsonl');
+  const credentials = useOwnedCredentials();
+  const opened: RouteAAgent[] = [];
+  afterEach(async () => {
+    await Promise.allSettled(opened.splice(0).map((route) => route.close()));
+  });
 
-        const hydrated = createSession(agent, connection, config);
-        const other = createSession(sibling, connection, config);
-        expect(hydrated.getLifecycleInfo().title).toBe('/tools owner title');
-        expect(other.getLifecycleInfo().title).toBeUndefined();
-
-        const recorded = (await agent.session.listSessions()).at(0);
-        if (recorded === undefined) throw new Error('Session was not listed');
-        await agent.session.setRecording({ enabled: false });
-        await agent.session.resume(recorded.id);
-        expect(
-          createSession(agent, connection, config).getLifecycleInfo().title,
-        ).toBe('/tools owner title');
-      },
+  it('writes a durable title and hydrates only the owning facade', async () => {
+    const owner = await openRouteAAgent({ authority: credentials().authority });
+    opened.push(owner);
+    const siblingRoute = await openRouteAAgent({
+      authority: credentials().authority,
+      config: { workingDir: owner.directory },
+    });
+    opened.push(siblingRoute);
+    const agent = owner.agent;
+    const config = owner.config;
+    const sibling = siblingRoute.agent;
+    await agent.session.setRecording({ enabled: true });
+    const connection = new RecordingConnection();
+    const owned = createSession(agent, connection, config);
+    const first = await owned.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'text', text: '/tools owner title' }],
+    });
+    expect(first.stopReason).toBe('end_turn');
+    const path = agent.session.getRecording().path;
+    if (path === undefined) throw new Error('Recording was not materialized');
+    expect(await readFile(path, 'utf8')).toContain(
+      '"title":"/tools owner title"',
     );
+    await owned.prompt({
+      sessionId: 'test-session-id',
+      prompt: [{ type: 'text', text: '/tools second prompt' }],
+    });
+    expect(agent.session.getRecordingTitle()).toBe('/tools owner title');
+
+    const hydrated = createSession(agent, connection, config);
+    const other = createSession(sibling, connection, siblingRoute.config);
+    expect(hydrated.getLifecycleInfo().title).toBe('/tools owner title');
+    expect(other.getLifecycleInfo().title).toBeUndefined();
+
+    const recorded = (await agent.session.listSessions()).at(0);
+    if (recorded === undefined) throw new Error('Session was not listed');
+    await agent.session.setRecording({ enabled: false });
+    await agent.session.resume(recorded.id);
+    expect(
+      createSession(agent, connection, config).getLifecycleInfo().title,
+    ).toBe('/tools owner title');
   }, 30000);
 });
 
