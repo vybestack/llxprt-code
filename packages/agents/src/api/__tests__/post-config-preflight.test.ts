@@ -15,7 +15,16 @@ import { spyOn } from 'bun:test';
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import {
+  mkdtemp,
+  open,
+  rm,
+  readFile,
+  writeFile,
+  type FileHandle,
+} from 'node:fs/promises';
+import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -33,6 +42,8 @@ import {
   AgentActivationBootstrap,
   type AgentActivationOperation,
 } from '../activationPreflightState.js';
+
+const execFileAsync = promisify(execFile);
 
 function transfer(operation: AgentProfilePreflight): AgentActivationBootstrap {
   let activation: AgentActivationOperation | undefined;
@@ -123,6 +134,7 @@ describe('post-config preflight ownership', () => {
       stages: readonly string[],
     ) => Promise<void>,
     contributions?: ProviderContributionRegistry,
+    toolDiscoveryCommand?: string,
   ): Promise<void> {
     const root = await mkdtemp(join(tmpdir(), 'post-config-preflight-'));
     const settings = new SettingsService();
@@ -143,6 +155,7 @@ describe('post-config preflight ownership', () => {
       provider: 'openai',
       mcpEnabled: false,
       skillsSupport: false,
+      toolDiscoveryCommand,
     });
     const trust = new WorkspaceTrustLifecycle({
       localTrust: config.initialWorkspaceTrust,
@@ -200,7 +213,7 @@ describe('post-config preflight ownership', () => {
   }
 
   for (const borrowed of [false, true]) {
-    it(`joins accepted foreground acquisition before activation disposal completes (borrowed ${borrowed})`, async () => {
+    it(`joins accepted public work before activation disposal completes (borrowed ${borrowed})`, async () => {
       await withPreflight(borrowed, async (operation, prepare, supplied) => {
         await prepare();
         const intent = { provider: 'openai', authMode: 'none' } as const;
@@ -255,6 +268,81 @@ describe('post-config preflight ownership', () => {
           await Promise.allSettled([heldRead, publication, closing]);
         }
       });
+    });
+  }
+
+  for (const borrowed of [false, true]) {
+    it(`joins foreground acquisition held after token consumption before activation disposal completes (borrowed ${borrowed})`, async () => {
+      // The foreground MCP runtime runs the Config's tool discovery command
+      // while construction is past token consumption. `cat` on a FIFO blocks
+      // until the test writes, so opening the FIFO for writing resolves when
+      // discovery has started and closing it lets discovery finish.
+      const fifoRoot = await mkdtemp(join(tmpdir(), 'foreground-discovery-'));
+      const fifo = join(fifoRoot, 'discovery.fifo');
+      await execFileAsync('mkfifo', [fifo]);
+      let discovery: FileHandle | undefined;
+      const openDiscovery = open(fifo, 'w').then((handle) => {
+        discovery = handle;
+      });
+      void openDiscovery.catch(() => undefined);
+      const releaseDiscovery = async (): Promise<void> => {
+        if (discovery === undefined) return;
+        const handle = discovery;
+        discovery = undefined;
+        await handle.writeFile('[]');
+        await handle.close();
+      };
+      try {
+        await withPreflight(
+          borrowed,
+          async (operation, prepare, supplied) => {
+            await prepare();
+            const intent = { provider: 'openai', authMode: 'none' } as const;
+            const result = await operation.preflight(intent);
+            if (result.token === undefined)
+              throw new Error('Missing activation receipt');
+            const activation = transfer(operation);
+            const publication = AgentProfilePreflight.createForegroundAgent(
+              operation,
+              result.token,
+              intent,
+              {},
+            );
+            void publication.catch(() => undefined);
+            await openDiscovery;
+            let closed = false;
+            const closing = Promise.resolve(activation.dispose()).then(() => {
+              closed = true;
+            });
+            void closing.catch(() => undefined);
+            try {
+              await new Promise<void>((resolve) => setImmediate(resolve));
+              expect(closed).toBe(false);
+              await releaseDiscovery();
+              await expect(publication).rejects.toMatchObject({
+                name: 'AbortError',
+              });
+              await closing;
+              expect(closed).toBe(true);
+              supplied?.writeUserParameter('context-limit', 16384);
+              expect(supplied?.readNamedParameter('context-limit')).toBe(
+                borrowed ? 16384 : undefined,
+              );
+              await expect(activation.readHistory()).rejects.toThrow(
+                'disposed',
+              );
+            } finally {
+              await releaseDiscovery();
+              await Promise.allSettled([publication, closing]);
+            }
+          },
+          undefined,
+          `cat ${fifo}`,
+        );
+      } finally {
+        await releaseDiscovery();
+        await rm(fifoRoot, { recursive: true, force: true });
+      }
     });
   }
 
