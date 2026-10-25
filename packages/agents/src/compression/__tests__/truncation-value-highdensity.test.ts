@@ -47,12 +47,7 @@ async function highdensity(size: number): Promise<number> {
     );
     const expected = await detachedDigest(
       (async function* () {
-        for (const row of oracle)
-          yield {
-            speaker: row.speaker,
-            blocks: row.blocks,
-            metadata: row.metadata,
-          };
+        yield* oracle;
       })(),
     );
     history.openDumpSnapshot = async () => {
