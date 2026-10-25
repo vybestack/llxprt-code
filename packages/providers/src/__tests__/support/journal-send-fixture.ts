@@ -20,7 +20,7 @@ export interface JournalSendFixture {
 }
 
 export async function journalSendFixture(
-  rows: Iterable<IContent>,
+  rows: Iterable<IContent> | AsyncIterable<IContent>,
   pending: readonly IContent[] = [],
   options: {
     readonly directory?: string;
@@ -45,8 +45,8 @@ export async function journalSendFixture(
     return service;
   });
   try {
-    if (options.oneRowAtATime === true) {
-      for (const row of rows) await graph.service.addBatch([row]);
+    if (options.oneRowAtATime === true || Symbol.asyncIterator in rows) {
+      for await (const row of rows) await graph.service.addBatch([row]);
       await graph.service.waitForCommit();
     } else await graph.seed(rows);
     await graph.recording.setSessionName('Journal send fixture');

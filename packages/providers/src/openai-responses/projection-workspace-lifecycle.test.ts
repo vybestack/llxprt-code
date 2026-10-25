@@ -3,10 +3,12 @@ import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type { ProjectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
-import { replayableContents } from '../utils/collectContents.js';
-import { sourcePromptText } from './__tests__/support/source-prompt-text.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import {
-  onlySnapshot,
+  projectSourcePrompt,
+  sourcePromptText,
+} from './__tests__/support/source-prompt-text.js';
+import {
   promptKeyWorkspaces,
   snapshotWorkspaces,
   singleAttemptOptions,
@@ -38,8 +40,8 @@ async function requireRetiredToken(
 
 const root = registerProjectionWorkspace();
 
-describe('actual Responses workspace large rows and token retirement', () => {
-  it('sends a valid row above 10 MiB byte-for-byte and removes its transferred workspace', async () => {
+describe('actual Responses native large rows and token retirement', () => {
+  it('sends a valid row above 10 MiB byte-for-byte without scratch workspaces', async () => {
     await withWorkspaceRuntime(root(), async (setup, http) => {
       const text = 'large "row" \\ 雪.'.repeat(800_000);
       const row: IContent = {
@@ -55,19 +57,19 @@ describe('actual Responses workspace large rows and token retirement', () => {
         },
       };
       const options = setup.options(rows);
-      const projection = await setup.provider.projectPromptEnvelope(options);
-      const name = onlySnapshot(root());
+      const projection = await projectSourcePrompt(setup.provider, options);
+      expect(snapshotWorkspaces(root())).toStrictEqual([]);
       const stream = setup.provider.generateChatCompletion({
         ...options,
         promptEnvelopeTransportToken: projection.transportToken,
       });
       try {
-        expect(snapshotWorkspaces(root())).toStrictEqual([name]);
+        expect(snapshotWorkspaces(root())).toStrictEqual([]);
         http.readBody.release();
         http.respond.release();
         await drain(stream);
         expect(http.observations).toStrictEqual([
-          { snapshots: [name], ...workspaceBody([row]) },
+          { snapshots: [], ...workspaceBody([row]) },
         ]);
         expect(promptKeyWorkspaces(root())).toStrictEqual([]);
         await setup.closeRows();
@@ -83,7 +85,7 @@ describe('actual Responses workspace large rows and token retirement', () => {
     await withWorkspaceRuntime(root(), async (setup, http) => {
       const source = workspaceRows();
       const options = setup.options(source.rows);
-      const projection = await setup.provider.projectPromptEnvelope(options);
+      const projection = await projectSourcePrompt(setup.provider, options);
       http.readBody.release();
       http.respond.release();
       await projection.releaseIfUnsent?.();
@@ -97,16 +99,16 @@ describe('actual Responses workspace large rows and token retirement', () => {
   });
 });
 
-describe('actual Responses unused projection workspace', () => {
-  it('keeps reopenable snapshot rows while live, then unused release removes the workspace and retires its token', async () => {
+describe('actual Responses unused native projection', () => {
+  it('keeps reopenable journal rows while live, then unused release retires its token without scratch workspaces', async () => {
     await withWorkspaceRuntime(root(), async (setup) => {
       const source = workspaceRows();
       const options = setup.options(source.rows);
-      const projection = await setup.provider.projectPromptEnvelope(options);
-      const name = onlySnapshot(root());
+      const projection = await projectSourcePrompt(setup.provider, options);
+      expect(snapshotWorkspaces(root())).toStrictEqual([]);
       try {
-        expect(snapshotWorkspaces(root())).toStrictEqual([name]);
-        expect(promptKeyWorkspaces(root())).not.toStrictEqual([]);
+        expect(snapshotWorkspaces(root())).toStrictEqual([]);
+        expect(promptKeyWorkspaces(root())).toStrictEqual([]);
         expect(source.state).toStrictEqual({ active: 0, opened: 1, pulled: 2 });
         await projection.releaseIfUnsent?.();
         await projection.releaseIfUnsent?.();
@@ -124,15 +126,15 @@ describe('actual Responses unused projection workspace', () => {
   });
 });
 
-describe('actual Responses sent projection workspace', () => {
+describe('actual Responses sent native projection', () => {
   it.each(['done', 'return'])(
-    'transfers ownership on send and keeps the workspace until response %s',
+    'transfers ownership on send without scratch workspaces through response %s',
     async (ending) => {
       await withWorkspaceRuntime(root(), async (setup, http) => {
         const source = workspaceRows();
         const options = setup.options(source.rows);
-        const projection = await setup.provider.projectPromptEnvelope(options);
-        const name = onlySnapshot(root());
+        const projection = await projectSourcePrompt(setup.provider, options);
+        expect(snapshotWorkspaces(root())).toStrictEqual([]);
         const sentOptions = {
           ...options,
           promptEnvelopeTransportToken: projection.transportToken,
@@ -147,8 +149,8 @@ describe('actual Responses sent projection workspace', () => {
             promptKeysLive: promptKeyWorkspaces(root()).length > 0,
             uploads: http.observations,
           }).toStrictEqual({
-            workspaces: [name],
-            promptKeysLive: true,
+            workspaces: [],
+            promptKeysLive: false,
             uploads: [],
           });
           http.readBody.release();
@@ -157,8 +159,8 @@ describe('actual Responses sent projection workspace', () => {
             workspaces: snapshotWorkspaces(root()),
             uploads: http.observations,
           }).toStrictEqual({
-            workspaces: [name],
-            uploads: [{ snapshots: [name], ...workspaceBody(source.expected) }],
+            workspaces: [],
+            uploads: [{ snapshots: [], ...workspaceBody(source.expected) }],
           });
           http.respond.release();
           expect({
@@ -167,14 +169,14 @@ describe('actual Responses sent projection workspace', () => {
             promptKeysLive: promptKeyWorkspaces(root()).length > 0,
           }).toStrictEqual({
             done: false,
-            workspaces: [name],
-            promptKeysLive: true,
+            workspaces: [],
+            promptKeysLive: false,
           });
           if (ending === 'done') await drain(stream);
           else await stream.return?.();
           expect(promptKeyWorkspaces(root())).toStrictEqual([]);
           expect(http.observations).toStrictEqual([
-            { snapshots: [name], ...workspaceBody(source.expected) },
+            { snapshots: [], ...workspaceBody(source.expected) },
           ]);
           await requireRetiredToken(setup, sentOptions);
           await setup.closeRows();
@@ -190,13 +192,13 @@ describe('actual Responses sent projection workspace', () => {
   );
 });
 
-describe('actual Responses aborted projection workspace', () => {
-  it('cleans the transferred snapshot on abort while the actual receiver is paused', async () => {
+describe('actual Responses aborted native projection', () => {
+  it('retires the native request on abort while the actual receiver is paused', async () => {
     await withWorkspaceRuntime(root(), async (setup, http) => {
       const controller = new AbortController();
       const source = workspaceRows();
       const options = setup.options(source.rows, controller.signal);
-      const projection = await setup.provider.projectPromptEnvelope(options);
+      const projection = await projectSourcePrompt(setup.provider, options);
       const stream = setup.provider.generateChatCompletion({
         ...options,
         promptEnvelopeTransportToken: projection.transportToken,
@@ -241,7 +243,7 @@ describe('actual Responses failed projection preparation', () => {
               },
         );
         const options = setup.options(source.rows, controller.signal);
-        const preparation = setup.provider.projectPromptEnvelope({
+        const preparation = projectSourcePrompt(setup.provider, {
           ...options,
           ...(failure === 'finalized'
             ? {
@@ -279,16 +281,18 @@ describe('actual Responses failed projection preparation', () => {
   );
 });
 
-describe('actual Responses in-transport retry workspace', () => {
-  it('retries byte-identical BODY from the staged rows and a later projection reads the same staged rows with no orphan', async () => {
+describe('actual Responses in-transport native retry', () => {
+  it('retries byte-identical BODY from pinned rows and a later projection reuses the same pin without scratch workspaces', async () => {
     await withWorkspaceRuntime(
       root(),
       async (setup, http) => {
         const source = workspaceRows();
         const options = setup.options(source.rows);
-        const firstProjection =
-          await setup.provider.projectPromptEnvelope(options);
-        const owner = onlySnapshot(root());
+        const firstProjection = await projectSourcePrompt(
+          setup.provider,
+          options,
+        );
+        expect(snapshotWorkspaces(root())).toStrictEqual([]);
         const stream = setup.provider.generateChatCompletion({
           ...options,
           promptEnvelopeTransportToken: firstProjection.transportToken,
@@ -302,20 +306,22 @@ describe('actual Responses in-transport retry workspace', () => {
             promptKeys: promptKeyWorkspaces(root()),
             uploads: http.observations,
           }).toStrictEqual({
-            workspaces: [owner],
+            workspaces: [],
             promptKeys: [],
             uploads: [
-              { snapshots: [owner], ...workspaceBody(source.expected) },
-              { snapshots: [owner], ...workspaceBody(source.expected) },
+              { snapshots: [], ...workspaceBody(source.expected) },
+              { snapshots: [], ...workspaceBody(source.expected) },
             ],
           });
-          const nextProjection =
-            await setup.provider.projectPromptEnvelope(options);
+          const nextProjection = await projectSourcePrompt(
+            setup.provider,
+            options,
+          );
           try {
             expect(nextProjection.transportToken).not.toBe(
               firstProjection.transportToken,
             );
-            expect(onlySnapshot(root())).toBe(owner);
+            expect(snapshotWorkspaces(root())).toStrictEqual([]);
             const nextStream = setup.provider.generateChatCompletion({
               ...options,
               promptEnvelopeTransportToken: nextProjection.transportToken,
@@ -326,9 +332,9 @@ describe('actual Responses in-transport retry workspace', () => {
               await nextStream.return?.();
             }
             expect(http.observations).toStrictEqual([
-              { snapshots: [owner], ...workspaceBody(source.expected) },
-              { snapshots: [owner], ...workspaceBody(source.expected) },
-              { snapshots: [owner], ...workspaceBody(source.expected) },
+              { snapshots: [], ...workspaceBody(source.expected) },
+              { snapshots: [], ...workspaceBody(source.expected) },
+              { snapshots: [], ...workspaceBody(source.expected) },
             ]);
             expect(source.state.opened).toBe(1);
             expect(promptKeyWorkspaces(root())).toStrictEqual([]);
@@ -347,15 +353,15 @@ describe('actual Responses in-transport retry workspace', () => {
   });
 });
 
-describe('actual Responses failed-attempt retry workspace', () => {
-  it('a retry after a failed sent attempt sends the same BODY from the staged rows without an orphan', async () => {
+describe('actual Responses failed-attempt native retry', () => {
+  it('a retry after a failed sent attempt sends the same BODY from pinned rows without scratch workspaces', async () => {
     await withWorkspaceRuntime(
       root(),
       async (setup, http) => {
         const source = workspaceRows();
         const options = singleAttemptOptions(setup.options(source.rows));
-        const failed = await setup.provider.projectPromptEnvelope(options);
-        const owner = onlySnapshot(root());
+        const failed = await projectSourcePrompt(setup.provider, options);
+        expect(snapshotWorkspaces(root())).toStrictEqual([]);
         const firstStream = setup.provider.generateChatCompletion({
           ...options,
           promptEnvelopeTransportToken: failed.transportToken,
@@ -369,24 +375,22 @@ describe('actual Responses failed-attempt retry workspace', () => {
             promptKeys: promptKeyWorkspaces(root()),
             uploads: http.observations,
           }).toStrictEqual({
-            workspaces: [owner],
+            workspaces: [],
             promptKeys: [],
-            uploads: [
-              { snapshots: [owner], ...workspaceBody(source.expected) },
-            ],
+            uploads: [{ snapshots: [], ...workspaceBody(source.expected) }],
           });
-          const retried = await setup.provider.projectPromptEnvelope(options);
+          const retried = await projectSourcePrompt(setup.provider, options);
           const retryStream = setup.provider.generateChatCompletion({
             ...options,
             promptEnvelopeTransportToken: retried.transportToken,
           });
           try {
             expect(retried.transportToken).not.toBe(failed.transportToken);
-            expect(onlySnapshot(root())).toBe(owner);
+            expect(snapshotWorkspaces(root())).toStrictEqual([]);
             await drain(retryStream);
             expect(http.observations).toStrictEqual([
-              { snapshots: [owner], ...workspaceBody(source.expected) },
-              { snapshots: [owner], ...workspaceBody(source.expected) },
+              { snapshots: [], ...workspaceBody(source.expected) },
+              { snapshots: [], ...workspaceBody(source.expected) },
             ]);
             expect(source.state.opened).toBe(1);
             expect(promptKeyWorkspaces(root())).toStrictEqual([]);
@@ -407,7 +411,7 @@ describe('actual Responses failed-attempt retry workspace', () => {
 });
 
 describe('actual Responses projection cleanup failures', () => {
-  it('preserves the preparation failure and the source disposal error together while removing the staged rows', async () => {
+  it('preserves the admission failure and source disposal error together without scratch workspaces', async () => {
     await withWorkspaceRuntime(root(), async (setup) => {
       const controller = new AbortController();
       let pulled = 0;
@@ -415,7 +419,22 @@ describe('actual Responses projection cleanup failures', () => {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'before failure' }],
       };
-      const contents: AsyncIterable<IContent> = {
+      const contents = {
+        async openProviderRequest() {
+          const reader = contents[Symbol.asyncIterator]();
+          await reader.next();
+          return {
+            callerOwned: true,
+            count: 1,
+            readAt: () => row,
+            async *openReader(): AsyncGenerator<IContent, void> {
+              yield row;
+            },
+            async close(): Promise<void> {
+              await reader.return?.();
+            },
+          };
+        },
         [Symbol.asyncIterator](): AsyncIterator<IContent> {
           return {
             async next(): Promise<IteratorResult<IContent>> {
@@ -436,7 +455,7 @@ describe('actual Responses projection cleanup failures', () => {
         contents,
         requestRows: undefined,
       };
-      const outcome = await setup.provider.projectPromptEnvelope(options).then(
+      const outcome = await projectSourcePrompt(setup.provider, options).then(
         () => undefined,
         (error: unknown) => error,
       );
@@ -454,8 +473,8 @@ describe('actual Responses projection cleanup failures', () => {
   });
 });
 
-describe('actual Responses disabled media workspace', () => {
-  it('releases a snapshot containing disabled PDF media without changing unsupported-media reporting', async () => {
+describe('actual Responses disabled media native projection', () => {
+  it('releases a native selection containing disabled PDF media without changing unsupported-media reporting', async () => {
     await withWorkspaceRuntime(root(), async (setup) => {
       const disabledPdf: IContent = {
         speaker: 'human',
@@ -481,9 +500,9 @@ describe('actual Responses disabled media workspace', () => {
       });
       const eagerRows: IContent[] = [];
       for await (const row of rows.openReader()) eagerRows.push(row);
-      const eager = await setup.provider.projectPromptEnvelope({
+      const eager = await projectSourcePrompt(setup.provider, {
         ...options,
-        contents: replayableContents(eagerRows),
+        contents: callerOwnedRawProviderSource(eagerRows),
       });
       let eagerText = '';
       try {
@@ -494,9 +513,9 @@ describe('actual Responses disabled media workspace', () => {
       } finally {
         await eager.releaseIfUnsent?.();
       }
-      const projection = await setup.provider.projectPromptEnvelope(options);
+      const projection = await projectSourcePrompt(setup.provider, options);
       try {
-        onlySnapshot(root());
+        expect(snapshotWorkspaces(root())).toStrictEqual([]);
         expect(await sourcePromptText(projection)).toBe(eagerText);
         await projection.releaseIfUnsent?.();
         expect(promptKeyWorkspaces(root())).toStrictEqual([]);

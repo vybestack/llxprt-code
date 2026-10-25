@@ -7,14 +7,10 @@
 /**
  * P05b4 request rows, request cleanup (issue #854 criterion 3/5), rewritten for C2.
  *
- * A request without `requestRows` is sent from rows staged on the request's
- * scratch disk: every row is read, one at a time, before the first request
- * byte, because the body length is declared (Content-Length) from the
- * sealed files. These tests therefore no longer assert that the source is
- * left partly unread while the transport is slow. They assert what the
- * memory goal needs instead: no more than a bounded number of rows are alive
- * during the read, the request body is served from the scratch files, and an
- * aborted request leaves neither live rows nor scratch files behind.
+ * Caller-owned generated history is seeded once into a journal pin. Providers
+ * send directly from that pin without request scratch files. The census bounds
+ * live rows during seeding, and the transport assertions check streamed bytes,
+ * declared length, cancellation and complete cleanup.
  *
  * @plan:PLAN-20260917-ISSUE854.P05b4
  * @requirement:G6
@@ -39,6 +35,10 @@ import type { GenerateChatOptions } from '../IProvider.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
 import { withRequestSignal } from '../utils/abortSignal.js';
+import {
+  journalSendFixture,
+  type JournalSendFixture,
+} from './support/journal-send-fixture.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -164,8 +164,10 @@ async function countRetainedAfterGc(
   return probes.filter((probe) => probe.deref() !== undefined).length;
 }
 
-function cleanup(): void {
+const fixtures: JournalSendFixture[] = [];
+async function cleanup(): Promise<void> {
   globalThis.fetch = originalFetch;
+  for (const fixture of fixtures.splice(0)) await fixture.close();
 }
 
 /** Scratch entries this request creates: staged rows and prompt segment files. */
@@ -195,7 +197,7 @@ function newProvider(): OpenAIResponsesProvider {
   );
 }
 
-describe('P05b4 request rows are staged on disk before the body is sent @plan:PLAN-20260917-ISSUE854.P05b4', () => {
+describe('P05b4 request rows stream from native journal pins @plan:PLAN-20260917-ISSUE854.P05b4', () => {
   afterEach(cleanup);
 
   it('the census reports a source that retains its rows', async () => {
@@ -208,9 +210,11 @@ describe('P05b4 request rows are staged on disk before the body is sent @plan:PL
     expect(dropping.peakLive()).toBeLessThanOrEqual(LIVE_ROW_BOUND);
   });
 
-  it('reads every row before the first request byte with a bounded number of rows alive, then serves the body from scratch files', async () => {
+  it('seeds every row once with bounded live rows, then serves streamed bytes without scratch files', async () => {
     const harness = makeHarness('p05b4-backpressure');
     const source = countingSource('bp');
+    const fixture = await journalSendFixture(source.stream);
+    fixtures.push(fixture);
     const scratchBefore = requestScratchEntries();
     let releaseGate: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => {
@@ -243,7 +247,7 @@ describe('P05b4 request rows are staged on disk before the body is sent @plan:PL
       },
       { preconnect: originalFetch.preconnect },
     );
-    const options = streamCallOptions({
+    const baseOptions = streamCallOptions({
       providerName: 'openai-responses',
       settings: harness.settings,
       config: harness.runtime.config,
@@ -251,6 +255,11 @@ describe('P05b4 request rows are staged on disk before the body is sent @plan:PL
       invocation: invocationFor(harness),
       contents: source.stream,
     });
+    const options = {
+      ...baseOptions,
+      requestRows: fixture.selection,
+      contentCount: fixture.selection.count,
+    };
     const drained = (async () => {
       for await (const _chunk of newProvider().generateChatCompletion(
         options,
@@ -260,18 +269,15 @@ describe('P05b4 request rows are staged on disk before the body is sent @plan:PL
     })();
     const entered = await waitFor(() => atFetch.pulled !== undefined, 5000);
     expect(entered).toBe(true);
-    // The length is declared from the sealed files, so every row is read
-    // before the transport call starts.
     expect(atFetch.pulled).toBe(ROW_COUNT);
     expect(source.peakLive()).toBeLessThanOrEqual(LIVE_ROW_BOUND);
-    // The body is a stream over scratch files created for this request.
     expect(atFetch.streamed).toBe(true);
-    expect(atFetch.scratch?.length).toBeGreaterThan(scratchBefore.length);
+    expect(atFetch.scratch).toStrictEqual(scratchBefore);
     expect(
       atFetch.scratch?.some((name) =>
         name.startsWith('responses-prompt-keys-'),
       ),
-    ).toBe(true);
+    ).toBe(false);
     releaseGate?.();
     await drained;
     const { bodyBytes } = atFetch;
@@ -288,6 +294,8 @@ describe('P05b4 aborted transport and released rows @plan:PLAN-20260917-ISSUE854
   it('abort during a blocked transport surfaces the abort, keeps no row alive and removes the scratch files', async () => {
     const harness = makeHarness('p05b4-abort');
     const source = countingSource('abort');
+    const fixture = await journalSendFixture(source.stream);
+    fixtures.push(fixture);
     const scratchBefore = requestScratchEntries();
     const controller = new AbortController();
     let fetchEntered = false;
@@ -317,12 +325,19 @@ describe('P05b4 aborted transport and released rows @plan:PLAN-20260917-ISSUE854
       invocation: invocationFor(harness),
       contents: source.stream,
     });
-    const options = withRequestSignal(baseOptions, controller.signal);
+    const options = withRequestSignal(
+      {
+        ...baseOptions,
+        requestRows: fixture.selection,
+        contentCount: fixture.selection.count,
+      },
+      controller.signal,
+    );
     const settled = newProvider()
       .generateChatCompletion(options)
       .next()
       .then(
-        () => 'completed' as const,
+        () => 'completed',
         (error: unknown) => error,
       );
     const entered = await waitFor(() => fetchEntered, 5000);
@@ -330,7 +345,9 @@ describe('P05b4 aborted transport and released rows @plan:PLAN-20260917-ISSUE854
     controller.abort(new Error('test abort'));
     const outcome = await settled;
     expect(outcome).toBeInstanceOf(Error);
-    const abortError = outcome as Error;
+    if (!(outcome instanceof Error))
+      throw new Error('Expected cancellation error');
+    const abortError = outcome;
     expect(
       abortError.name === 'AbortError' ||
         /abort/i.test(`${abortError.name}: ${abortError.message}`),

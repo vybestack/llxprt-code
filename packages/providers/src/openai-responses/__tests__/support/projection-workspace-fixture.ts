@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readAtOf } from '../../../__tests__/requestRowsTestSupport.js';
 import { tmpdir } from 'node:os';
-import { afterEach, beforeEach, expect } from 'bun:test';
+import { afterEach, beforeEach } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -13,8 +13,10 @@ import {
 } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { GenerateChatOptions } from '../../../IProvider.js';
-import { acquireRequestRows } from '../../../utils/requestRowsLease.js';
-import type { RequestRowsScope } from '../../../utils/requestRowsLease.js';
+import {
+  journalSendFixture,
+  type JournalSendFixture,
+} from '../../../__tests__/support/journal-send-fixture.js';
 import {
   projectionGate,
   projectionInstructions,
@@ -199,9 +201,9 @@ export function workspaceEndpoint(
 }
 
 /**
- * A projection runtime whose plain-rows options are staged once by the
- * request's owner, the way the retry and logging wrappers hand rows to a
- * provider; `closeRows` ends that ownership.
+ * A projection runtime whose generated rows are admitted once into a native
+ * journal selection. `closeRows` ends the fixture ownership after requests and
+ * prepared tokens have released their own resources.
  */
 export type WorkspaceRuntime = ProjectionRuntime & {
   readonly closeRows: () => Promise<void>;
@@ -220,18 +222,42 @@ export async function withWorkspaceRuntime<T>(
     `http://127.0.0.1:${http.server.port}/v1`,
     root,
   );
-  const scopes: RequestRowsScope[] = [];
+  const fixtures: Array<Promise<JournalSendFixture>> = [];
   const setup: WorkspaceRuntime = {
     ...runtime,
     options: (rows, signal, ephemerals) => {
       const options = runtime.options(rows, signal, ephemerals);
-      if (options.requestRows !== undefined) return options;
-      const scope = acquireRequestRows(options);
-      scopes.push(scope);
-      return scope.options;
+      let fixture: Promise<JournalSendFixture> | undefined;
+      return {
+        ...options,
+        requestRows: undefined,
+        contents: {
+          [Symbol.asyncIterator]: () => rows.openReader(signal),
+          async openProviderRequest() {
+            if (fixture === undefined) {
+              fixture = journalSendFixture(rows.openReader(signal));
+              fixtures.push(fixture);
+            }
+            const native = (await fixture).selection;
+            return {
+              native: native.native,
+              count: native.count,
+              readAt: (index: number, readerSignal?: AbortSignal) =>
+                native.readAt(index, readerSignal),
+              openReader: (readerSignal?: AbortSignal) =>
+                native.openReader(readerSignal),
+              close: () => {},
+            };
+          },
+        },
+      };
     },
     closeRows: async () => {
-      await Promise.all(scopes.splice(0).map((scope) => scope.close()));
+      for (const fixture of fixtures.splice(0))
+        await fixture.then(
+          (value) => value.close(),
+          () => undefined,
+        );
     },
   };
   try {
@@ -243,10 +269,4 @@ export async function withWorkspaceRuntime<T>(
     await setup.closeRows();
     await setup.config.dispose();
   }
-}
-
-export function onlySnapshot(root: string): string {
-  const names = snapshotWorkspaces(root);
-  expect(names).toHaveLength(1);
-  return names[0];
 }
