@@ -23,18 +23,15 @@ import { cleanupProviderScope } from '../session/session-client-cleanup.js';
  * SPDX-License-Identifier: Apache-2.0
  */
 import type {
-  AgentRuntimeFactoryBindings,
   ContentGenerator,
   MessageBus,
   RuntimeContentGeneratorFactory,
   RuntimeProviderManager,
   RuntimeTokenizerFactory,
-  TokenStore,
   ProviderSwitcher,
   WorkspaceTrustControlPort,
 } from '@vybestack/llxprt-code-core';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
@@ -51,7 +48,6 @@ import {
   createOAuthProfileReads,
   createOwnedTokenStoreClose,
   createOwnerAuthCacheInvalidator,
-  registerStandardOAuthProviders,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -64,17 +60,10 @@ import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import { assembleModelSelection } from './model-selection.js';
 import { executeProviderActivation } from './providerActivationExecutor.js';
 import { assembleProviderSwitch } from './providerSwitchAssembly.js';
-import type { SessionImageSelection } from './session-image-assembly.js';
 
 export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
   protected abstract adoptSettingsService: SettingsService;
   protected abstract adoptIntent: AgentAdoptionIntent;
-  protected abstract adoptAgentClient: AgentClientContract | undefined;
-  protected abstract adoptRuntimeFactoryBindings:
-    | AgentRuntimeFactoryBindings
-    | undefined;
-  protected abstract adoptPolicyOwner: RuntimePolicyOwner | undefined;
-  protected abstract adoptMcpRuntime: McpRuntimeOwner | undefined;
 
   protected adoptClient!: SessionClientOwner;
   protected adoptMcp!: McpRuntimeOwner;
@@ -85,26 +74,14 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
   protected adoptOauth!: OAuthManager;
   protected adoptTokenizer!: RuntimeTokenizerFactory;
   protected adoptContent!: RuntimeContentGeneratorFactory<ContentGenerator>;
-  protected adoptSelectedBus: MessageBus | undefined;
-  protected adoptImages: SessionImageSelection['imageOperation'];
 
-  protected abstract adoptProviderManager: RuntimeProviderManager | undefined;
   protected adoptRuntimeId!: string;
   protected adoptAuthority!: CredentialAuthority;
   protected foregroundAuthority!: CredentialAuthority;
   protected abstract adoptRelease: AcquisitionRelease;
-  protected adoptOAuthProfiles:
-    | ReturnType<typeof createOAuthProfileReads>
-    | undefined;
-  protected adoptSuppliedOAuth: OAuthManager | undefined;
-  protected adoptTokenStore: TokenStore | undefined;
   protected adoptOAuthBus!: MessageBus;
 
   protected acquireAdoptedProviderManager(): void {
-    if (this.adoptProviderManager !== undefined) {
-      this.adoptManager = this.adoptProviderManager;
-      return;
-    }
     const network = new OwnedFetch(this.config.getProxy());
     this.adoptRelease.beforeRelease(() => network.closeAdmissionAndAbort());
     this.adoptRelease.acquire('network', () => network.dispose());
@@ -132,21 +109,13 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
       input: RequestInfo | URL,
       init?: RequestInit,
     ): Promise<Response> => this.adoptManager.fetchNetwork(input, init);
-    if (this.adoptSuppliedOAuth !== undefined) {
-      registerStandardOAuthProviders(this.adoptSuppliedOAuth, requestFetch);
-      this.adoptOauth = this.adoptSuppliedOAuth;
-      return;
-    }
-    const store =
-      this.adoptTokenStore ?? this.adoptAuthority.createTokenStore();
-    if (this.adoptTokenStore === undefined)
-      this.adoptRelease.acquire('tokens', createOwnedTokenStoreClose(store));
+    const store = this.adoptAuthority.createTokenStore();
+    this.adoptRelease.acquire('tokens', createOwnedTokenStoreClose(store));
     const oauth = createOwnerOAuthManager(
       store,
       createFileOAuthSettingsProvider(),
       this.adoptOAuthBus,
-      this.adoptOAuthProfiles ??
-        createOAuthProfileReads(this.config.profileDirectory),
+      createOAuthProfileReads(this.config.profileDirectory),
       createSessionAuthPolicyReader(this.adoptSettingsService),
       () => ({ runtimeId: this.adoptRuntimeId, runtimeKind: 'agent' }),
       undefined,
@@ -173,26 +142,24 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
       this.adoptSettingsService,
       this.config,
     );
-    if (this.adoptProviderManager === undefined) {
-      if (!(this.adoptManager instanceof ProviderManager))
-        throw new Error(
-          'Owned provider population requires its concrete manager',
-        );
-      populateProviderManager(
-        this.adoptManager,
-        this.adoptOauth,
-        this.adoptOauth.getTokenStore(),
-        this.adoptSettingsService,
-        new NodeFileSystem(),
-        this.config,
-        undefined,
-        undefined,
-        false,
-        false,
-        process.env.LLXPRT_FAKE_RESPONSES,
+    if (!(this.adoptManager instanceof ProviderManager))
+      throw new Error(
+        'Owned provider population requires its concrete manager',
       );
-    }
-    this.adoptManager.setTokenizerFactory?.(this.adoptTokenizer);
+    populateProviderManager(
+      this.adoptManager,
+      this.adoptOauth,
+      this.adoptOauth.getTokenStore(),
+      this.adoptSettingsService,
+      new NodeFileSystem(),
+      this.config,
+      undefined,
+      undefined,
+      false,
+      false,
+      process.env.LLXPRT_FAKE_RESPONSES,
+    );
+    this.adoptManager.setTokenizerFactory(this.adoptTokenizer);
     this.adoptManager.setConfig(this.config);
   }
 
@@ -439,7 +406,7 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
       this.adoptIntent.activation?.provider ?? this.config.getProvider(),
       this.adoptIntent.activation?.model ?? this.config.getModel(),
     );
-    const store = this.adoptAgentClient?.mediaStore ?? this.adoptMedia?.store;
+    const store = this.adoptMedia?.store;
     if (store === undefined)
       throw new AgentBootstrapError(
         'Missing explicit session client media store',
@@ -454,15 +421,10 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
       this.adoptTokenizer,
       this.adoptFiles,
       store,
-      this.adoptRuntimeFactoryBindings?.agentClientFactory,
+      undefined,
       this.adoptMcp.readInstructions,
       this.adoptMcp.workspacePaths,
       this.adoptAuthority,
-      this.adoptPolicyOwner === undefined && this.adoptMcpRuntime !== undefined
-        ? undefined
-        : this.adoptSelectedBus,
-      this.adoptImages,
-      this.adoptAgentClient,
     );
   }
 

@@ -440,12 +440,7 @@ export interface AgentConfig
 
 export interface AgentAdoptionIntent {
   readonly sessionId?: string;
-  readonly sessionIdentityOwnership?: 'config' | 'facade';
   readonly activation?: ProviderActivationIntent;
-  readonly definitionOwnership?: 'agent' | 'caller';
-  readonly filesystemOwnership?: 'agent' | 'caller';
-  readonly lspOwnership?: 'agent' | 'caller';
-  readonly mcpOwnership?: 'agent' | 'caller';
 }
 
 export const FromConfigValidatableSchema = z.object({

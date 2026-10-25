@@ -10,7 +10,6 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { AgentSessionControl } from '../api/agent.js';
-import { AgentBootstrapError } from '../api/agentBootstrap.js';
 import { seedOwnerRecording } from '../api/control/recordedHistoryPersistence.js';
 import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -232,12 +231,6 @@ export abstract class SessionConversationBinding {
   isClientInitialized(): boolean {
     this.assertConversationOpen();
     return this.client.isInitialized();
-  }
-  assertPreflightClient(client: AgentClientContract | undefined): void {
-    if (client !== undefined && client !== this.client)
-      throw new AgentBootstrapError(
-        'Borrowed client differs from the preflight session client',
-      );
   }
   readStats(metrics: SessionMetricReads): ReturnType<Agent['getStats']> {
     return projectSessionStats(

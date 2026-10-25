@@ -41,7 +41,6 @@ import { retireActivationOwners } from './activationOwnerRetirement.js';
 import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
 
 import { assembleHostGitHubBroker } from './host-github-broker-owner.js';
-import { assertMcpHandoff } from './mcpOAuthAssembly.js';
 import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import { type PreparedProfileFacade } from './profileApplicationAssembly.js';
 import { canonicalProviderActivationIntent } from './provider-activation-intent.js';
@@ -511,7 +510,7 @@ export class AgentActivationBootstrap
     intent: AgentAdoptionIntent,
     credentialAuthority: CredentialAuthority,
   ): Promise<Agent> {
-    const operation = this.selectAdoptionOwner(config, undefined);
+    const operation = new AgentActivationBootstrap(config);
     operation.adoptionConfig = config;
     operation.adoptSettingsService = settingsService;
     operation.adoptIntent = intent;
@@ -528,101 +527,6 @@ export class AgentActivationBootstrap
   protected validateAdoptionIdentity(): void {
     if (!(this.adoptionConfig instanceof Config))
       throw new AgentBootstrapError('fromConfig requires an existing Config');
-    assertMcpHandoff(
-      this.adoptMcpRuntime,
-      this.adoptIntent.mcpOwnership,
-      this.adoptMcpHost,
-      this.adoptMcpTokenStorage,
-    );
-    const preflight = this.adoptActivationPreflight;
-    if (preflight !== undefined) {
-      AgentActivationBootstrap.#validate(
-        preflight,
-        this.adoptionConfig,
-        this.adoptIntent.activation,
-        this.adoptProviderManager,
-        this.adoptSettingsService,
-      );
-      if (this.adoptImageOperation !== undefined)
-        throw new AgentBootstrapError(
-          'Preflight image operations cannot be replaced during adoption',
-        );
-      if (this.adoptMemoryOwner !== undefined)
-        throw new AgentBootstrapError(
-          'Preflight memory ownership cannot be replaced during adoption',
-        );
-      for (const [supplied, retained] of [
-        [this.adoptOauthManager, this.oauthManager],
-        [this.adoptMessageBus, this.messageBus],
-        [this.adoptTokenizerFactory, this.ownedSessionClient.tokenizerFactory],
-        [
-          this.adoptContentGeneratorFactory,
-          this.ownedSessionClient.contentGeneratorFactory,
-        ],
-        [this.adoptProviderFileLifecycle, this.providerFileLifecycle],
-      ])
-        if (
-          supplied !== undefined &&
-          retained !== undefined &&
-          supplied !== retained
-        )
-          throw new AgentBootstrapError(
-            'Preflight owners cannot be replaced during adoption',
-          );
-      for (const [supplied, retained] of [
-        [this.adoptFilesystemOwner, this.workspaceFilesystem],
-        [this.adoptDefinitionOwner, this.workspaceDefinitions],
-        [this.adoptTrustPort, this.workspaceTrust],
-      ])
-        if (supplied !== undefined && supplied !== retained)
-          throw new AgentBootstrapError(
-            'Preflight workspace owners cannot be replaced',
-          );
-      if (
-        this.adoptHookOwner !== undefined &&
-        this.ownedSessionClient.hasHookComposition()
-      )
-        throw new AgentBootstrapError(
-          'Preflight hook ownership cannot be replaced during adoption',
-        );
-    }
-  }
-  protected static selectAdoptionOwner(
-    config: Config,
-    preflight: ActivationPreflight | undefined,
-  ): AgentActivationBootstrap {
-    const retained = preflight?.operation;
-    if (
-      retained !== undefined &&
-      !(retained instanceof AgentActivationBootstrap)
-    )
-      throw new AgentBootstrapError('Invalid activation bootstrap operation');
-    const operation = retained ?? new AgentActivationBootstrap(config);
-    if (operation.#foregroundPending !== undefined)
-      throw new AgentBootstrapError(
-        'Activation preflight token is invalid or already consumed',
-      );
-    return operation;
-  }
-  protected async acceptAdoption(): Promise<void> {
-    this.#assertPublicOpen();
-    this.#publicClosed = true;
-    await this.#joinPublicWork();
-    this.assertConstructionOpen();
-    const preflight = this.adoptActivationPreflight;
-    const activation = this.adoptIntent.activation;
-    if (activation === undefined || preflight === undefined)
-      throw new AgentBootstrapError('Missing activation receipt');
-    AgentActivationBootstrap.#consume(
-      preflight,
-      this.config,
-      activation,
-      this.#manager,
-      this.adoptSettingsService,
-    );
-  }
-  protected closeAcquisition(): Promise<void> {
-    return this.#disposeAcquisition();
   }
   protected async publishAdoptedAgent(agent: Agent): Promise<Agent> {
     this.#foregroundAgent = agent;

@@ -58,30 +58,6 @@ export async function cleanupFailedFromConfig(
   );
 }
 
-/**
- * Releases the consumed preflight after a successful adoption. When that
- * release fails the adopted agent is disposed so it does not leak.
- */
-export async function closePreflightAfterAdoption(
-  closePreflight: (() => Promise<void>) | undefined,
-  closeAgent: () => Promise<void>,
-): Promise<void> {
-  try {
-    await Promise.resolve().then(closePreflight);
-  } catch (closeError) {
-    const agentCleanup = await Promise.allSettled([
-      Promise.resolve().then(closeAgent),
-    ]);
-    const failures = rejections(agentCleanup);
-    if (failures.length > 0)
-      throw new AggregateError(
-        [closeError, ...failures],
-        'fromConfig preflight cleanup failed',
-      );
-    throw closeError;
-  }
-}
-
 export async function cleanupFailedAdoption(
   primaryError: unknown,
   closeRuntime: () => void | Promise<void>,

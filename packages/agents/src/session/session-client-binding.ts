@@ -16,10 +16,7 @@ import type {
 } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { randomUUID } from 'node:crypto';
-import {
-  AgentBootstrapError,
-  buildAgentClientFactory,
-} from '../api/agentBootstrap.js';
+import { buildAgentClientFactory } from '../api/agentBootstrap.js';
 import {
   assembleSessionImages,
   type SessionImageSelection,
@@ -165,30 +162,6 @@ export function captureGenerationState(
     sessionId: state.sessionId,
     proxyUrl: state.proxyUrl,
   });
-}
-
-export function assertBorrowedSessionClient(
-  client: AgentClientContract | undefined,
-  config: Config,
-  manager: RuntimeProviderManager | undefined,
-  hasMcp: boolean,
-  preflight: AgentClientContract | undefined,
-): void {
-  if (client === undefined) return;
-  if (!hasMcp)
-    throw new AgentBootstrapError(
-      'Borrowed session client requires an explicit MCP runtime handoff',
-    );
-  client.assertConfig(config);
-  if (manager === undefined)
-    throw new AgentBootstrapError(
-      'Initialized Config adoption requires an explicit providerManager owner',
-    );
-  client.assertProviderManager(manager);
-  if (preflight !== undefined && preflight !== client)
-    throw new AgentBootstrapError(
-      'Borrowed client differs from the preflight session client',
-    );
 }
 
 export function assertBorrowedClientAcquisition(
