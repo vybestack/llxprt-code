@@ -3,7 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { once } from 'node:events';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -21,6 +21,10 @@ import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { Agent } from '../agent.js';
 import { createAgent } from '../createAgent.js';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
+import {
+  openClientOwner,
+  type OpenedClientOwner,
+} from './helpers/client-owner-session.js';
 import { awaitMcpDiscoveryReady } from './helpers/mcp-discovery-ready.js';
 
 const CHILD_TURN = 'Run the child.';
@@ -134,20 +138,74 @@ async function transport(): Promise<{
   };
 }
 
+/** An auxiliary content generator that posts the request to the local endpoint. */
+function auxiliaryGenerator(url: string): ContentGenerator {
+  return {
+    generateContent: async (request) => {
+      const response = await fetch(`${url}/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: request.model,
+          messages: [
+            {
+              role: 'system',
+              content: request.settings?.systemInstruction,
+            },
+            ...request.contents,
+          ],
+        }),
+        signal: request.abortSignal,
+      });
+      if (!response.ok)
+        throw new Error(`Local provider returned ${response.status}`);
+      await response.text();
+      return {
+        content: {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: '{"ok":true}' }],
+        },
+      };
+    },
+    generateContentStream: async () => {
+      throw new Error('Unexpected auxiliary stream');
+    },
+    countTokens: async () => ({ totalTokens: 1 }),
+    embedContent: async () => ({ embeddings: [] }),
+  };
+}
+
 describe('MCP instruction ownership', () => {
+  // The prompt service initializes once per process from LLXPRT_CONFIG_HOME,
+  // so both tests share one home that outlives each test's own directory.
+  const environment = Object.fromEntries(
+    ['LLXPRT_CONFIG_HOME', 'LLXPRT_DATA_HOME', 'LLXPRT_FAKE_RESPONSES'].map(
+      (key) => [key, process.env[key]],
+    ),
+  );
+  let home: string;
+  let configHome: string;
+
+  beforeAll(async () => {
+    home = await mkdtemp(join(tmpdir(), 'llxprt-mcp-instruction-home-'));
+    configHome = join(home, 'config');
+    process.env.LLXPRT_CONFIG_HOME = configHome;
+    process.env.LLXPRT_DATA_HOME = join(home, 'data');
+    delete process.env.LLXPRT_FAKE_RESPONSES;
+  });
+
+  afterAll(async () => {
+    for (const [key, value] of Object.entries(environment)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await rm(home, { recursive: true, force: true });
+  });
+
   it('keeps live owner instructions isolated across same-key agents, auxiliary requests and child scopes', async () => {
     const evidence = join(tmpdir(), 'llxprt-mcp-instruction-threading');
     await mkdir(evidence, { recursive: true });
     const directory = await mkdtemp(join(evidence, 'owners-'));
-    const environment = Object.fromEntries(
-      ['LLXPRT_CONFIG_HOME', 'LLXPRT_DATA_HOME', 'LLXPRT_FAKE_RESPONSES'].map(
-        (key) => [key, process.env[key]],
-      ),
-    );
-    const configHome = join(directory, 'home');
-    process.env.LLXPRT_CONFIG_HOME = configHome;
-    process.env.LLXPRT_DATA_HOME = join(directory, 'data');
-    delete process.env.LLXPRT_FAKE_RESPONSES;
     const endpoint = await transport();
     interface Owner {
       agent: Agent;
@@ -282,39 +340,7 @@ describe('MCP instruction ownership', () => {
         'INSTRUCTION_OWNER_A',
         'INSTRUCTION_OWNER_B',
       );
-      auxiliaryTransport = {
-        generateContent: async (request) => {
-          const response = await fetch(`${endpoint.url}/chat/completions`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              model: request.model,
-              messages: [
-                {
-                  role: 'system',
-                  content: request.settings?.systemInstruction,
-                },
-                ...request.contents,
-              ],
-            }),
-            signal: request.abortSignal,
-          });
-          if (!response.ok)
-            throw new Error(`Local provider returned ${response.status}`);
-          await response.text();
-          return {
-            content: {
-              speaker: 'ai',
-              blocks: [{ type: 'text', text: '{"ok":true}' }],
-            },
-          };
-        },
-        generateContentStream: async () => {
-          throw new Error('Unexpected auxiliary stream');
-        },
-        countTokens: async () => ({ totalTokens: 1 }),
-        embedContent: async () => ({ embeddings: [] }),
-      };
+      auxiliaryTransport = auxiliaryGenerator(endpoint.url);
       for (const candidate of [a, b]) {
         await candidate.agent.sessionClient.refreshAuth();
       }
@@ -365,10 +391,88 @@ describe('MCP instruction ownership', () => {
         await candidate.agent.dispose();
       }
       await endpoint.stop();
-      for (const [key, value] of Object.entries(environment)) {
-        if (value === undefined) delete process.env[key];
-        else process.env[key] = value;
-      }
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 30000);
+
+  it("carries each session client owner's MCP instructions into lightweight generateContent requests", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), 'llxprt-mcp-instruction-gc-'),
+    );
+    const endpoint = await transport();
+    const signal = new AbortController().signal;
+    const messages = [
+      {
+        speaker: 'human' as const,
+        blocks: [{ type: 'text' as const, text: 'Return JSON.' }],
+      },
+    ];
+    const opened: OpenedClientOwner[] = [];
+    async function open(name: string): Promise<OpenedClientOwner> {
+      const workingDir = join(directory, name);
+      await mkdir(workingDir);
+      const instructionPath = join(workingDir, 'instructions.txt');
+      await writeFile(instructionPath, `INSTRUCTION_OWNER_${name}`);
+      const owner = await openClientOwner(
+        new CredentialAuthority(),
+        {
+          provider: 'openai',
+          model: 'instruction-model',
+          auth: { apiKey: 'local-only', baseUrl: endpoint.url },
+          workingDir,
+          sessionId: 'same-instruction-session',
+          folderTrust: true,
+          skillsSupport: false,
+          telemetry: { enabled: false },
+          recording: { enabled: false },
+          mcpServers: {
+            same: {
+              command: process.execPath,
+              args: [
+                resolveRepositoryFixture(
+                  import.meta.url,
+                  'scripts/tests/mcp-instruction-stdio-fixture.ts',
+                ),
+                instructionPath,
+              ],
+            },
+          },
+        },
+        { provider: 'openai', model: 'instruction-model' },
+        {
+          contentGeneratorFactory: {
+            createContentGenerator: () => auxiliaryGenerator(endpoint.url),
+          },
+        },
+      );
+      opened.push(owner);
+      return owner;
+    }
+    async function generated(
+      candidate: OpenedClientOwner,
+      present: string,
+      absent: string,
+    ): Promise<void> {
+      const start = endpoint.bodies.length;
+      await candidate.client.generateContent(
+        messages,
+        {},
+        signal,
+        'instruction-model',
+      );
+      const bodies = endpoint.bodies.slice(start);
+      expect(bodies).toHaveLength(1);
+      expect(bodies[0]).toContain(present);
+      expect(bodies[0]).not.toContain(absent);
+    }
+    try {
+      const a = await open('A');
+      const b = await open('B');
+      await generated(a, 'INSTRUCTION_OWNER_A', 'INSTRUCTION_OWNER_B');
+      await generated(b, 'INSTRUCTION_OWNER_B', 'INSTRUCTION_OWNER_A');
+    } finally {
+      for (const candidate of opened) await candidate.close();
+      await endpoint.stop();
       await rm(directory, { recursive: true, force: true });
     }
   }, 30000);

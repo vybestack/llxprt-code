@@ -56,6 +56,12 @@ export interface ClientOwnerOptions {
   readonly createSettingsOwner?: (
     settings: SettingsService,
   ) => SessionSettingsOwner;
+  /**
+   * The content generator factory the owner is created with. Defaults to
+   * `createRuntimeContentGeneratorFactory()`, which production passes unless
+   * the host supplies `AgentConfig.contentGeneratorFactory`.
+   */
+  readonly contentGeneratorFactory?: AgentConfig['contentGeneratorFactory'];
 }
 
 export interface OpenedClientOwner {
@@ -218,7 +224,7 @@ export async function openClientOwner(
     mcp.readInstructions,
     mcp.workspacePaths,
     settingsOwner,
-    createRuntimeContentGeneratorFactory(),
+    options.contentGeneratorFactory ?? createRuntimeContentGeneratorFactory(),
     stack.tokenizer,
   );
   owner.bindMcpRuntime(mcp);
