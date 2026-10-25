@@ -28,8 +28,15 @@ const ai = (text: string) => ({
   blocks: [{ type: 'text' as const, text }],
 });
 
+type RestoreTurns = Agent['session']['restoreTurns'];
+
 // Registers /chat the way the session host does: bound to this one owner.
-function ownerActions(agent: Agent) {
+// `restoreTurns` replaces only the restore operation handed to the production
+// binding, so a failure can be injected at the command's collaborator boundary.
+function ownerActions(
+  agent: Agent,
+  restoreTurns: RestoreTurns = (turns) => agent.session.restoreTurns(turns),
+) {
   const chat = createChatOwnerCommand(
     bindChatOwnerOperations(
       () => agent.session.listCheckpoints(),
@@ -40,7 +47,7 @@ function ownerActions(agent: Agent) {
         agent.session.renameCheckpoint(checkpointId, name, options),
       () => agent.session.getHistory(),
       () => agent.session.clearHistory(),
-      (turns) => agent.session.restoreTurns(turns),
+      restoreTurns,
       (name, options) => agent.session.nameCurrentSession(name, options),
       () => agent.session.getRecording().path,
       () => agent.getModel(),
@@ -198,6 +205,35 @@ describe('owner-backed /chat command route', () => {
       const raw = await readFile(path, 'utf8');
       expect(raw).toContain('"rewind"');
       expect(await lockFiles(chatsDir)).toHaveLength(1);
+    });
+  }, 30000);
+
+  it('reports an error and leaves the UI and owner history untouched when the restore operation fails', async () => {
+    await withChatRoute(async ({ agent, config }) => {
+      await agent.setHistory([human('first'), ai('one'), human('second')]);
+      await agent.session.setRecording({ enabled: true });
+      const path = agent.session.getRecording().path;
+      if (!path) throw new Error('No owner recording');
+      const action = ownerActions(agent, async () => {
+        throw new Error('restore interrupted');
+      });
+      const context = createMockCommandContext({ services: { agent } });
+
+      const result = await action('restore')(context, '1');
+
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'error',
+        content: 'Failed to restore history: restore interrupted',
+      });
+      expect(context.ui.loadHistory).not.toHaveBeenCalled();
+      expect(context.ui.clear).not.toHaveBeenCalled();
+      expect(context.ui.addItem).not.toHaveBeenCalled();
+      await agent.session.flushRecording();
+      const replay = await replaySession(path, basename(config.projectTempDir));
+      if (!replay.ok) throw new Error(replay.error);
+      expect(JSON.stringify(replay.history)).toContain('second');
+      expect(JSON.stringify(await agent.getHistory())).toContain('second');
     });
   }, 30000);
 
