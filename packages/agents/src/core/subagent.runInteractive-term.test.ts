@@ -1,3 +1,4 @@
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
@@ -21,7 +22,6 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
   SubagentTerminateMode,
@@ -210,15 +210,16 @@ describe('subagent.ts', () => {
         { runtimeBundle },
       );
 
-      const scope = await SubAgentScope.create(
-        'interactive-timeout-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        runConfig,
-        { tools: ['external_tool'] },
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'interactive-timeout-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: runConfig,
+          toolConfig: { tools: ['external_tool'] },
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       const interactiveResponseStream = (async function* () {
@@ -363,15 +364,16 @@ describe('subagent.ts', () => {
           { runtimeBundle },
         );
 
-        const scope = await SubAgentScope.create(
-          'hanging-scheduler-agent',
-          config,
-          { systemPrompt: 'Execute task.' },
-          defaultModelConfig,
-          runConfig,
-          { tools: ['hanging_tool'] },
-          undefined,
-          ...scopeInputs(overrides),
+        const scope = await createSubagentScope(
+          {
+            name: 'hanging-scheduler-agent',
+            prompt: { systemPrompt: 'Execute task.' },
+            model: defaultModelConfig,
+            run: runConfig,
+            toolConfig: { tools: ['hanging_tool'] },
+            outputConfig: undefined,
+          },
+          ...scopeInputs(config, overrides),
         );
 
         // Stream yields a tool call then ends

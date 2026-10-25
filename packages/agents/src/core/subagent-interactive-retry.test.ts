@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { describe, expect, it } from 'bun:test';
 import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { SubAgentScope } from './subagent.js';
@@ -80,15 +81,20 @@ async function createScope(
     mcpRuntime.workspaceFilesystem.paths,
     { runtimeBundle, environmentLoader: async () => [] },
   );
-  const scope = await SubAgentScope.create(
-    'retry-agent',
-    config,
-    { systemPrompt: 'Complete the task.' },
-    { model: 'gpt-5.6-sol', temp: 0.5, top_p: 1 },
-    { max_time_minutes: 1, max_turns: maxTurns, max_output_tokens_total: 200 },
-    undefined,
-    { outputs: { result: 'The completed task result.' } },
-    ...scopeInputs(overrides),
+  const scope = await createSubagentScope(
+    {
+      name: 'retry-agent',
+      prompt: { systemPrompt: 'Complete the task.' },
+      model: { model: 'gpt-5.6-sol', temp: 0.5, top_p: 1 },
+      run: {
+        max_time_minutes: 1,
+        max_turns: maxTurns,
+        max_output_tokens_total: 200,
+      },
+      toolConfig: undefined,
+      outputConfig: { outputs: { result: 'The completed task result.' } },
+    },
+    ...scopeInputs(config, overrides),
   );
   retainCleanup(() => scope.dispose());
   const rendered: string[] = [];

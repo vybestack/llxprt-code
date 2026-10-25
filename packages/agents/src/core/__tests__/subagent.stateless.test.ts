@@ -1,3 +1,4 @@
+import { createSubagentScope } from './helpers/create-subagent-scope.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { scopeInputs } from './subagent-test-helpers.js';
 import type { SubagentTestInputs } from './subagent-test-helpers.js';
@@ -288,15 +289,16 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
 
       const { overrides } = createRuntimeOverrides();
 
-      await SubAgentScope.create(
-        'test-subagent',
-        foregroundConfig,
-        promptConfig,
-        modelConfig,
-        runConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      await createSubagentScope(
+        {
+          name: 'test-subagent',
+          prompt: promptConfig,
+          model: modelConfig,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(foregroundConfig, overrides),
       );
 
       // THEN Config.setModel() should NEVER be called
@@ -330,15 +332,16 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
 
       const { overrides: providerOverrides } = createRuntimeOverrides();
 
-      await SubAgentScope.create(
-        'test-subagent',
-        foregroundConfig,
-        promptConfig,
-        modelConfig,
-        runConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(providerOverrides),
+      await createSubagentScope(
+        {
+          name: 'test-subagent',
+          prompt: promptConfig,
+          model: modelConfig,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(foregroundConfig, providerOverrides),
       );
 
       // THEN Config.setProvider() should NEVER be called
@@ -366,15 +369,16 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
 
       const { overrides: mutatorOverrides } = createRuntimeOverrides();
 
-      await SubAgentScope.create(
-        'test-subagent',
-        foregroundConfig,
-        promptConfig,
-        modelConfig,
-        runConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(mutatorOverrides),
+      await createSubagentScope(
+        {
+          name: 'test-subagent',
+          prompt: promptConfig,
+          model: modelConfig,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(foregroundConfig, mutatorOverrides),
       );
 
       // ZERO Config mutations allowed
@@ -392,15 +396,16 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
     const runConfig = createTestRunConfig();
     const { overrides } = createRuntimeOverrides();
 
-    await SubAgentScope.create(
-      'test-subagent',
-      foregroundConfig,
-      promptConfig,
-      modelConfig,
-      runConfig,
-      undefined,
-      undefined,
-      ...scopeInputs(overrides),
+    await createSubagentScope(
+      {
+        name: 'test-subagent',
+        prompt: promptConfig,
+        model: modelConfig,
+        run: runConfig,
+        toolConfig: undefined,
+        outputConfig: undefined,
+      },
+      ...scopeInputs(foregroundConfig, overrides),
     );
 
     expect(loaderSpy).not.toHaveBeenCalled();
@@ -429,15 +434,16 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
 
       const { overrides } = createRuntimeOverrides();
 
-      const scope = await SubAgentScope.create(
-        'test-subagent',
-        foregroundConfig,
-        promptConfig,
-        modelConfig,
-        runConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-subagent',
+          prompt: promptConfig,
+          model: modelConfig,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(foregroundConfig, overrides),
       );
 
       // WHEN SubAgentScope is created
@@ -465,15 +471,16 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
 
       const { overrides: frozenOverrides } = createRuntimeOverrides();
 
-      const scope = await SubAgentScope.create(
-        'test-subagent',
-        foregroundConfig,
-        promptConfig,
-        modelConfig,
-        runConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(frozenOverrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-subagent',
+          prompt: promptConfig,
+          model: modelConfig,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(foregroundConfig, frozenOverrides),
       );
 
       // Access internal runtimeContext (will fail with current Config-based implementation)
@@ -510,27 +517,29 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
 
       // Create two subagent scopes
       const { overrides: overridesA } = createRuntimeOverrides();
-      const scopeA = await SubAgentScope.create(
-        'subagent-a',
-        foregroundConfig,
-        promptConfig,
-        modelConfig1,
-        runConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overridesA),
+      const scopeA = await createSubagentScope(
+        {
+          name: 'subagent-a',
+          prompt: promptConfig,
+          model: modelConfig1,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(foregroundConfig, overridesA),
       );
 
       const { overrides: overridesB } = createRuntimeOverrides();
-      const scopeB = await SubAgentScope.create(
-        'subagent-b',
-        foregroundConfig,
-        promptConfig,
-        modelConfig2,
-        runConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overridesB),
+      const scopeB = await createSubagentScope(
+        {
+          name: 'subagent-b',
+          prompt: promptConfig,
+          model: modelConfig2,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(foregroundConfig, overridesB),
       );
 
       // Access runtime contexts (will fail with current Config-based implementation)
@@ -561,27 +570,29 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
 
       // Create two subagent scopes
       const { overrides: histOverridesA } = createRuntimeOverrides();
-      const scopeA = await SubAgentScope.create(
-        'subagent-a',
-        foregroundConfig,
-        promptConfig,
-        modelConfig,
-        runConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(histOverridesA),
+      const scopeA = await createSubagentScope(
+        {
+          name: 'subagent-a',
+          prompt: promptConfig,
+          model: modelConfig,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(foregroundConfig, histOverridesA),
       );
 
       const { overrides: histOverridesB } = createRuntimeOverrides();
-      const scopeB = await SubAgentScope.create(
-        'subagent-b',
-        foregroundConfig,
-        promptConfig,
-        modelConfig,
-        runConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(histOverridesB),
+      const scopeB = await createSubagentScope(
+        {
+          name: 'subagent-b',
+          prompt: promptConfig,
+          model: modelConfig,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(foregroundConfig, histOverridesB),
       );
 
       // Access runtime contexts
@@ -626,15 +637,16 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         }),
       });
 
-      const scope = await SubAgentScope.create(
-        'test-subagent',
-        foregroundConfig,
-        promptConfig,
-        modelConfig,
-        runConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-subagent',
+          prompt: promptConfig,
+          model: modelConfig,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(foregroundConfig, overrides),
       );
 
       // Access runtime context (will fail with current Config-based implementation)
@@ -671,15 +683,16 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         }),
       });
 
-      const scope = await SubAgentScope.create(
-        'test-subagent',
-        foregroundConfig,
-        promptConfig,
-        modelConfig,
-        runConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(runtimeOverrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-subagent',
+          prompt: promptConfig,
+          model: modelConfig,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(foregroundConfig, runtimeOverrides),
       );
 
       // Access runtime context
@@ -725,15 +738,16 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       // If this throws, it means the code is still using the legacy path
       // After P08: setModel is no longer called, so the mock never throws
       const { overrides } = createRuntimeOverrides();
-      const result = await SubAgentScope.create(
-        'test-subagent',
-        foregroundConfig,
-        promptConfig,
-        modelConfig,
-        runConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const result = await createSubagentScope(
+        {
+          name: 'test-subagent',
+          prompt: promptConfig,
+          model: modelConfig,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(foregroundConfig, overrides),
       );
 
       // Verify that SubAgentScope was created successfully (setModel was NOT called)
@@ -753,15 +767,18 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       const runConfig = createTestRunConfig();
 
       await expect(
-        SubAgentScope.create(
-          'stateless-subagent',
-          foregroundConfig,
-          promptConfig,
-          modelConfig,
-          runConfig,
-          undefined,
-          undefined,
-          ...scopeInputs({ readMcpInstructions: () => undefined }),
+        createSubagentScope(
+          {
+            name: 'stateless-subagent',
+            prompt: promptConfig,
+            model: modelConfig,
+            run: runConfig,
+            toolConfig: undefined,
+            outputConfig: undefined,
+          },
+          ...scopeInputs(foregroundConfig, {
+            readMcpInstructions: () => undefined,
+          }),
         ),
       ).rejects.toThrow('runtime bundle');
     });
@@ -848,15 +865,16 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       const { overrides } = createRuntimeOverrides({ runtimeBundle });
 
       await expect(
-        SubAgentScope.create(
-          'stateless-subagent',
-          foregroundConfig,
-          promptConfig,
-          modelConfig,
-          runConfig,
-          undefined,
-          undefined,
-          ...scopeInputs(overrides),
+        createSubagentScope(
+          {
+            name: 'stateless-subagent',
+            prompt: promptConfig,
+            model: modelConfig,
+            run: runConfig,
+            toolConfig: undefined,
+            outputConfig: undefined,
+          },
+          ...scopeInputs(foregroundConfig, overrides),
         ),
       ).resolves.toBeInstanceOf(SubAgentScope);
     });

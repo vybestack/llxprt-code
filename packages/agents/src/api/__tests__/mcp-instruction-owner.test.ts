@@ -1,3 +1,4 @@
+import { createSubagentScope } from '../../core/__tests__/helpers/create-subagent-scope.js';
 import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { scopeInputs } from '../../core/__tests__/subagent-test-helpers.js';
 /**
@@ -35,7 +36,6 @@ import { toConfigParameters } from '../agentConfig.adapter.js';
 
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { SubAgentScope } from '../../core/subagent.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = (input, init) =>
@@ -299,15 +299,16 @@ describe('MCP instruction ownership', () => {
           providerManager: candidate.capture.manager,
         },
       });
-      const scope = await SubAgentScope.create(
-        'child',
-        config,
-        { systemPrompt: 'Reply once.' },
-        { model: 'instruction-model', temp: 0, top_p: 1 },
-        { max_turns: 1, max_time_minutes: 1 },
-        undefined,
-        undefined,
-        ...scopeInputs({
+      const scope = await createSubagentScope(
+        {
+          name: 'child',
+          prompt: { systemPrompt: 'Reply once.' },
+          model: { model: 'instruction-model', temp: 0, top_p: 1 },
+          run: { max_turns: 1, max_time_minutes: 1 },
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, {
           instructions: emptyInstructionReads,
           workspacePaths: candidate.mcp.workspacePaths,
           runtimeBundle,

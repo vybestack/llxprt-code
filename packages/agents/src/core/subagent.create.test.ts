@@ -1,3 +1,4 @@
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
@@ -138,15 +139,16 @@ describe('subagent.ts', () => {
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
       );
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
       expect(scope).toBeInstanceOf(SubAgentScope);
     });
@@ -201,15 +203,16 @@ describe('subagent.ts', () => {
 
       const toolConfig: ToolConfig = { tools: ['risky_tool'] };
 
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        toolConfig,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       expect(scope).toBeInstanceOf(SubAgentScope);
@@ -261,15 +264,16 @@ describe('subagent.ts', () => {
 
       const toolConfig: ToolConfig = { tools: ['safe_tool'] };
 
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        toolConfig,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       expect(scope).toBeInstanceOf(SubAgentScope);
@@ -339,15 +343,16 @@ describe('subagent.ts', () => {
       const toolConfig: ToolConfig = { tools: ['tool_with_params'] };
 
       // The creation should succeed without throwing
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        toolConfig,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       expect(scope).toBeInstanceOf(SubAgentScope);
@@ -452,15 +457,16 @@ describe('subagent.ts', () => {
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-      const scope = await SubAgentScope.create(
-        'stateless-agent',
-        config,
-        { systemPrompt: 'Runtime only' },
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'stateless-agent',
+          prompt: { systemPrompt: 'Runtime only' },
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -529,15 +535,17 @@ describe('subagent.ts', () => {
 
         mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-        const scope = await SubAgentScope.create(
-          'stateless-agent',
-          config,
-          { systemPrompt: 'Use runtime tools' },
-          defaultModelConfig,
-          defaultRunConfig,
-          undefined,
-          undefined,
+        const scope = await createSubagentScope(
+          {
+            name: 'stateless-agent',
+            prompt: { systemPrompt: 'Use runtime tools' },
+            model: defaultModelConfig,
+            run: defaultRunConfig,
+            toolConfig: undefined,
+            outputConfig: undefined,
+          },
           ...scopeInputs(
+            config,
             createRuntimeOverrides(mcpRuntime.workspaceFilesystem.paths, {
               runtimeBundle,
             }).overrides,
@@ -597,15 +605,16 @@ describe('subagent.ts', () => {
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-      const scope = await SubAgentScope.create(
-        'stateless-agent',
-        config,
-        { systemPrompt: 'Stateless env' },
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'stateless-agent',
+          prompt: { systemPrompt: 'Stateless env' },
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -698,15 +707,16 @@ describe('subagent.ts', () => {
             'stop',
           ]),
         );
-        const scope = await SubAgentScope.create(
-          'whitelisted-child',
-          config,
-          { systemPrompt: 'Only read.' },
-          defaultModelConfig,
-          defaultRunConfig,
-          { tools: ['read_file'] },
-          undefined,
-          ...scopeInputs({
+        const scope = await createSubagentScope(
+          {
+            name: 'whitelisted-child',
+            prompt: { systemPrompt: 'Only read.' },
+            model: defaultModelConfig,
+            run: defaultRunConfig,
+            toolConfig: { tools: ['read_file'] },
+            outputConfig: undefined,
+          },
+          ...scopeInputs(config, {
             ...createRuntimeOverrides(mcpRuntime.workspaceFilesystem.paths, {
               runtimeBundle,
               toolRegistry,
@@ -763,15 +773,16 @@ describe('subagent.ts', () => {
         { runtimeBundle },
       );
 
-      const scope = await SubAgentScope.create(
-        'stateless-agent',
-        config,
-        { systemPrompt: 'Tool execution' },
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'stateless-agent',
+          prompt: { systemPrompt: 'Tool execution' },
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       mockSendMessageStream.mockImplementation(

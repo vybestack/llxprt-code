@@ -1,3 +1,4 @@
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 import type { SubagentTestInputs } from './__tests__/subagent-test-helpers.js';
@@ -31,7 +32,6 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
   SubagentTerminateMode,
@@ -270,15 +270,16 @@ describe('subagent.ts', () => {
         ),
       };
 
-      const scope = await SubAgentScope.create(
-        'timeout-test-agent',
-        configWithTimeout,
-        { systemPrompt: 'Test timeout behavior.' },
-        localDefaultModelConfig,
-        localDefaultRunConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'timeout-test-agent',
+          prompt: { systemPrompt: 'Test timeout behavior.' },
+          model: localDefaultModelConfig,
+          run: localDefaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(configWithTimeout, overrides),
       );
 
       // Mock a slow stream that yields after the timeout
@@ -374,15 +375,16 @@ describe('subagent.ts', () => {
         ),
       };
 
-      const scope = await SubAgentScope.create(
-        'no-timeout-agent',
-        configWithTimeout,
-        { systemPrompt: 'Test no timeout behavior.' },
-        localDefaultModelConfig,
-        { ...localDefaultRunConfig, max_time_minutes: 60 }, // Long enough for test
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'no-timeout-agent',
+          prompt: { systemPrompt: 'Test no timeout behavior.' },
+          model: localDefaultModelConfig,
+          run: { ...localDefaultRunConfig, max_time_minutes: 60 }, // Long enough for test
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(configWithTimeout, overrides),
       );
 
       let resolveIterator: () => void;
@@ -514,15 +516,16 @@ describe('subagent.ts', () => {
         ),
       };
 
-      const scope = await SubAgentScope.create(
-        'env-precedence-agent',
-        configWithTimeout,
-        { systemPrompt: 'Test env precedence.' },
-        localDefaultModelConfig,
-        localDefaultRunConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'env-precedence-agent',
+          prompt: { systemPrompt: 'Test env precedence.' },
+          model: localDefaultModelConfig,
+          run: localDefaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(configWithTimeout, overrides),
       );
 
       let gapReached = false;

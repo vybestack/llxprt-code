@@ -1,3 +1,4 @@
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 /**
  * @license
@@ -10,7 +11,6 @@ import { scopeInputs } from './__tests__/subagent-test-helpers.js';
  */
 
 import { vi, describe, it, expect } from 'bun:test';
-import { SubAgentScope } from './subagent.js';
 import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { PromptConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { AgentRuntimeProviderAdapter } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -102,15 +102,16 @@ describe('subagent.ts', () => {
           },
         );
 
-        await SubAgentScope.create(
-          'stateless-agent',
-          config,
-          promptConfig,
-          defaultModelConfig,
-          defaultRunConfig,
-          undefined,
-          undefined,
-          ...scopeInputs(overrides),
+        await createSubagentScope(
+          {
+            name: 'stateless-agent',
+            prompt: promptConfig,
+            model: defaultModelConfig,
+            run: defaultRunConfig,
+            toolConfig: undefined,
+            outputConfig: undefined,
+          },
+          ...scopeInputs(config, overrides),
         );
 
         expect(getProviderManagerSpy).not.toHaveBeenCalled();

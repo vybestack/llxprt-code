@@ -1,3 +1,7 @@
+import {
+  createSubagentScope,
+  type SubAgentLaunchInput,
+} from './__tests__/helpers/create-subagent-scope.js';
 import { afterAll } from 'bun:test';
 import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
 import { scopeInputs } from './__tests__/subagent-test-helpers.js';
@@ -44,7 +48,6 @@ import {
 } from './__tests__/subagent-test-helpers.js';
 import { ChatSession } from './chatSession.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
-import { SubAgentScope } from './subagent.js';
 
 const realEnvironmentContextModule = {
   ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
@@ -108,6 +111,22 @@ describe('subagent.ts', () => {
   describe('runNonInteractive - Execution and Tool Use', () => {
     const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 
+    const launchScope = (
+      config: Parameters<typeof scopeInputs>[0],
+      launch: Pick<SubAgentLaunchInput, 'toolConfig' | 'outputConfig'>,
+      inputs: Parameters<typeof scopeInputs>[1],
+    ) =>
+      createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          ...launch,
+        },
+        ...scopeInputs(config, inputs),
+      );
+
     beforeEach(async () => {
       vi.clearAllMocks();
       mockReadTodos.mockReset();
@@ -168,15 +187,10 @@ describe('subagent.ts', () => {
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
       );
-      const scope = await SubAgentScope.create(
-        'test-agent',
+      const scope = await launchScope(
         config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+        { toolConfig: undefined, outputConfig: undefined },
+        overrides,
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -252,15 +266,10 @@ describe('subagent.ts', () => {
         const { overrides } = createRuntimeOverrides(
           mcpRuntime.workspaceFilesystem.paths,
         );
-        const scope = await SubAgentScope.create(
-          'test-agent',
+        const scope = await launchScope(
           config,
-          promptConfig,
-          defaultModelConfig,
-          defaultRunConfig,
-          undefined,
-          undefined,
-          ...scopeInputs(overrides),
+          { toolConfig: undefined, outputConfig: undefined },
+          overrides,
         );
 
         await scope.runNonInteractive(new ContextState());
@@ -312,15 +321,10 @@ describe('subagent.ts', () => {
       const { overrides: emitOverrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
       );
-      const scope = await SubAgentScope.create(
-        'test-agent',
+      const scope = await launchScope(
         config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        outputConfig,
-        ...scopeInputs(emitOverrides),
+        { toolConfig: undefined, outputConfig },
+        emitOverrides,
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -366,15 +370,10 @@ describe('subagent.ts', () => {
       const { overrides: emitOverrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
       );
-      const scope = await SubAgentScope.create(
-        'test-agent',
+      const scope = await launchScope(
         config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        outputConfig,
-        ...scopeInputs(emitOverrides),
+        { toolConfig: undefined, outputConfig },
+        emitOverrides,
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -459,15 +458,10 @@ describe('subagent.ts', () => {
         },
       );
 
-      const scope = await SubAgentScope.create(
-        'test-agent',
+      const scope = await launchScope(
         config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        toolConfig,
-        undefined,
-        ...scopeInputs(overrides),
+        { toolConfig, outputConfig: undefined },
+        overrides,
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -552,15 +546,10 @@ describe('subagent.ts', () => {
         },
       );
 
-      const scope = await SubAgentScope.create(
-        'test-agent',
+      const scope = await launchScope(
         config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        toolConfig,
-        undefined,
-        ...scopeInputs(overrides),
+        { toolConfig, outputConfig: undefined },
+        overrides,
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -650,15 +639,10 @@ describe('subagent.ts', () => {
           },
         );
 
-        const scope = await SubAgentScope.create(
-          'test-agent',
+        const scope = await launchScope(
           config,
-          promptConfig,
-          defaultModelConfig,
-          defaultRunConfig,
-          toolConfig,
-          undefined,
-          ...scopeInputs(overrides),
+          { toolConfig, outputConfig: undefined },
+          overrides,
         );
 
         await scope.runNonInteractive(new ContextState());
@@ -777,15 +761,10 @@ describe('subagent.ts', () => {
         }),
       });
 
-      const scope = await SubAgentScope.create(
-        'test-agent',
+      const scope = await launchScope(
         config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        { tools: ['write_file'] },
-        undefined,
-        ...scopeInputs(overrides),
+        { toolConfig: { tools: ['write_file'] }, outputConfig: undefined },
+        overrides,
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -832,15 +811,10 @@ describe('subagent.ts', () => {
       const { overrides: nudgeOverrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
       );
-      const scope = await SubAgentScope.create(
-        'test-agent',
+      const scope = await launchScope(
         config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        outputConfig,
-        ...scopeInputs(nudgeOverrides),
+        { toolConfig: undefined, outputConfig },
+        nudgeOverrides,
       );
 
       await scope.runNonInteractive(new ContextState());

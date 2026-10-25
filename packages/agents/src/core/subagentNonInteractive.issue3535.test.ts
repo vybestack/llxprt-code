@@ -1,3 +1,4 @@
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { CoreToolRegistryHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreToolRegistryHostAdapter.js';
 import { afterAll } from 'bun:test';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
@@ -74,7 +75,6 @@ import {
 } from './__tests__/subagent-test-helpers.js';
 import { ChatSession, StreamEventType } from './chatSession.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
-import { SubAgentScope } from './subagent.js';
 import type { ExecutionLoopContext } from './subagentExecution.js';
 import { executeNonInteractiveRun } from './subagentNonInteractive.js';
 import { getScopeLocalFuncDefs } from './subagentRuntimeSetup.js';
@@ -462,15 +462,16 @@ async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
     providerAdapter,
     toolRegistry,
   });
-  const scope = await SubAgentScope.create(
-    'interactive-issue3535-agent',
-    config,
-    { systemPrompt: 'Do the task.' },
-    defaultModelConfig,
-    defaultRunConfig,
-    undefined,
-    OUTPUT_CONFIG,
-    ...scopeInputs({
+  const scope = await createSubagentScope(
+    {
+      name: 'interactive-issue3535-agent',
+      prompt: { systemPrompt: 'Do the task.' },
+      model: defaultModelConfig,
+      run: defaultRunConfig,
+      toolConfig: undefined,
+      outputConfig: OUTPUT_CONFIG,
+    },
+    ...scopeInputs(config, {
       runtimeBundle: bundle,
       environmentContextLoader: async () => [],
       workspacePaths: fixturePaths(),

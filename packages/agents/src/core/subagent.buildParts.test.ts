@@ -1,3 +1,4 @@
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 /**
  * @license
@@ -36,7 +37,6 @@ import {
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
   type PromptConfig,
@@ -191,15 +191,16 @@ describe('subagent.ts', () => {
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       // Track onMessage calls
@@ -270,15 +271,16 @@ describe('subagent.ts', () => {
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       // Track onMessage calls
@@ -348,15 +350,16 @@ describe('subagent.ts', () => {
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       // Track onMessage calls
@@ -444,15 +447,16 @@ describe('subagent.ts', () => {
 
         mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-        const scope = await SubAgentScope.create(
-          'test-agent',
-          config,
-          promptConfig,
-          defaultModelConfig,
-          defaultRunConfig,
-          undefined,
-          undefined,
-          ...scopeInputs(overrides),
+        const scope = await createSubagentScope(
+          {
+            name: 'test-agent',
+            prompt: promptConfig,
+            model: defaultModelConfig,
+            run: defaultRunConfig,
+            toolConfig: undefined,
+            outputConfig: undefined,
+          },
+          ...scopeInputs(config, overrides),
         );
 
         // Simulate error completed calls with tool_call in responseParts
@@ -548,15 +552,16 @@ describe('subagent.ts', () => {
 
         mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-        const scope = await SubAgentScope.create(
-          'test-agent',
-          config,
-          promptConfig,
-          defaultModelConfig,
-          defaultRunConfig,
-          undefined,
-          undefined,
-          ...scopeInputs(overrides),
+        const scope = await createSubagentScope(
+          {
+            name: 'test-agent',
+            prompt: promptConfig,
+            model: defaultModelConfig,
+            run: defaultRunConfig,
+            toolConfig: undefined,
+            outputConfig: undefined,
+          },
+          ...scopeInputs(config, overrides),
         );
 
         const completedCalls = makePartsCalls([
@@ -651,15 +656,16 @@ describe('subagent.ts', () => {
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       // Track onMessage calls
@@ -806,15 +812,16 @@ describe('subagent.ts', () => {
           'stop',
         ]),
       );
-      const scope = await SubAgentScope.create(
-        'hook-child',
-        config,
-        { systemPrompt: 'Read.' },
-        defaultModelConfig,
-        defaultRunConfig,
-        { tools: ['read_file'] },
-        undefined,
-        ...scopeInputs({
+      const scope = await createSubagentScope(
+        {
+          name: 'hook-child',
+          prompt: { systemPrompt: 'Read.' },
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: { tools: ['read_file'] },
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, {
           ...createRuntimeOverrides(mcpRuntime.workspaceFilesystem.paths, {
             runtimeBundle,
             toolRegistry,

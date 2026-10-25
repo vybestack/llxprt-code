@@ -1,3 +1,4 @@
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 /**
  * @license
@@ -138,15 +139,16 @@ async function createBudgetScope(
   });
   const outputConfig: OutputConfig = { outputs: {} };
 
-  return SubAgentScope.create(
-    'aggregate-budget-agent',
-    config,
-    { systemPrompt: 'Exercise aggregate output accounting.' },
-    defaultModelConfig,
-    runConfig,
-    undefined,
-    outputConfig,
-    ...scopeInputs(overrides),
+  return createSubagentScope(
+    {
+      name: 'aggregate-budget-agent',
+      prompt: { systemPrompt: 'Exercise aggregate output accounting.' },
+      model: defaultModelConfig,
+      run: runConfig,
+      toolConfig: undefined,
+      outputConfig,
+    },
+    ...scopeInputs(config, overrides),
   );
 }
 

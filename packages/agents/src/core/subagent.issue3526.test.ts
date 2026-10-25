@@ -1,3 +1,4 @@
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 /**
@@ -363,17 +364,21 @@ async function createHarness(
   const toolConfig = params.toolConfig
     ? { tools: [...params.toolConfig.tools] }
     : undefined;
-  const scope = await SubAgentScope.create(
-    'issue3526-agent',
-    config,
-    { systemPrompt: 'Complete the task and emit each required output.' },
-    defaultModelConfig,
-    defaultRunConfig,
-    toolConfig,
-    params.outputConfig === null
-      ? undefined
-      : (params.outputConfig ?? OUTPUT_CONFIG),
-    ...scopeInputs({ ...overrides, hookOwner }),
+  const scope = await createSubagentScope(
+    {
+      name: 'issue3526-agent',
+      prompt: {
+        systemPrompt: 'Complete the task and emit each required output.',
+      },
+      model: defaultModelConfig,
+      run: defaultRunConfig,
+      toolConfig,
+      outputConfig:
+        params.outputConfig === null
+          ? undefined
+          : (params.outputConfig ?? OUTPUT_CONFIG),
+    },
+    ...scopeInputs(config, { ...overrides, hookOwner }),
   );
   return { requests, scope };
 }

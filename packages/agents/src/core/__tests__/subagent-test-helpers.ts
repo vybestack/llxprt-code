@@ -6,7 +6,10 @@ import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runti
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-import type { SubAgentScope } from '../subagent.js';
+import type {
+  SubAgentOperationPorts,
+  SubAgentRuntimeInput,
+} from './helpers/create-subagent-scope.js';
 import { createSessionPolicyFixture } from './session-policy-fixture.js';
 /**
  * @license
@@ -504,44 +507,32 @@ export interface SubagentTestInputs {
 }
 
 export function scopeInputs(
+  foregroundConfig: Config,
   inputs: SubagentTestInputs,
-): [
-  Parameters<typeof SubAgentScope.create>[7],
-  Parameters<typeof SubAgentScope.create>[8],
-  Parameters<typeof SubAgentScope.create>[9],
-  Parameters<typeof SubAgentScope.create>[10],
-  Parameters<typeof SubAgentScope.create>[11],
-  Parameters<typeof SubAgentScope.create>[12],
-  Parameters<typeof SubAgentScope.create>[13],
-  Parameters<typeof SubAgentScope.create>[14],
-  Parameters<typeof SubAgentScope.create>[15],
-  Parameters<typeof SubAgentScope.create>[16],
-  Parameters<typeof SubAgentScope.create>[17],
-  Parameters<typeof SubAgentScope.create>[18],
-  Parameters<typeof SubAgentScope.create>[19],
-  Parameters<typeof SubAgentScope.create>[20],
-  Parameters<typeof SubAgentScope.create>[21],
-  Parameters<typeof SubAgentScope.create>[22],
-  Parameters<typeof SubAgentScope.create>[23],
-] {
+): [SubAgentRuntimeInput, SubAgentOperationPorts] {
   const runtime = inputs.runtimeBundle;
   return [
-    runtime?.runtimeContext,
-    runtime?.contentGenerator,
-    runtime?.telemetryRoot,
-    inputs.toolRegistry ?? runtime?.toolRegistry,
-    runtime?.runtimeContext.tools ?? runtime?.toolsView,
-    inputs.instructions,
-    inputs.workspacePaths,
-    inputs.readMcpInstructions,
-    inputs.messageBus ?? new MessageBus(),
-    inputs.settingsSnapshot ?? runtime?.settingsSnapshot,
-    inputs.environmentContextLoader,
-    inputs.readApprovalMode,
-    inputs.admitModelParameters,
-    undefined,
-    inputs.hookOwner,
-    undefined,
-    undefined,
+    {
+      foregroundConfig,
+      admittedRuntime: runtime?.runtimeContext,
+      contentGenerator: runtime?.contentGenerator,
+      telemetry: runtime?.telemetryRoot,
+      toolRegistry: inputs.toolRegistry ?? runtime?.toolRegistry,
+      toolsView: runtime?.runtimeContext.tools ?? runtime?.toolsView,
+      settingsSnapshot: inputs.settingsSnapshot ?? runtime?.settingsSnapshot,
+    },
+    {
+      instructions: inputs.instructions,
+      workspacePaths: inputs.workspacePaths,
+      readMcpInstructions: inputs.readMcpInstructions,
+      messageBus: inputs.messageBus ?? new MessageBus(),
+      loadEnvironmentContext: inputs.environmentContextLoader,
+      readApprovalMode: inputs.readApprovalMode,
+      admitModelParameters: inputs.admitModelParameters,
+      providerFiles: undefined,
+      hooks: inputs.hookOwner,
+      tryBucketFailover: undefined,
+      readCurrentBucket: undefined,
+    },
   ];
 }

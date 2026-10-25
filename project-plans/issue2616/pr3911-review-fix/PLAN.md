@@ -1094,7 +1094,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T5.2b B1 Config key methods deleted, negative control
 - [x] T5.3a B6 loadCliConfig test callers through a preflight helper (behavior-neutral)
 - [x] T5.3 B6 loadCliConfig input
-- [ ] T5.4a B6 SubAgentScope.create test callers through one helper
+- [x] T5.4a B6 SubAgentScope.create test callers through one helper
 - [ ] T5.4b B6 SubAgentScope.create new signature
 - [ ] T5.4c B6 SubAgentScope.create returns narrow ChildAgentScope (preparatory for T5.6)
 - [ ] T5.5-inv B6 McpRuntimeOwner.create caller inventory

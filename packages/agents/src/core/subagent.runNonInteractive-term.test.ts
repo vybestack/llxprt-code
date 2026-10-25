@@ -1,3 +1,4 @@
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { afterAll } from 'bun:test';
 import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 /**
@@ -207,15 +208,16 @@ describe('subagent.ts', () => {
         mcpRuntime.workspaceFilesystem.paths,
         { settings },
       );
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        runConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(maxTurnOverrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: runConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, maxTurnOverrides),
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -260,15 +262,16 @@ describe('subagent.ts', () => {
           mcpRuntime.workspaceFilesystem.paths,
           { settings },
         );
-        scope = await SubAgentScope.create(
-          'test-agent',
-          config,
-          promptConfig,
-          defaultModelConfig,
-          runConfig,
-          undefined,
-          undefined,
-          ...scopeInputs(timeoutOverrides),
+        scope = await createSubagentScope(
+          {
+            name: 'test-agent',
+            prompt: promptConfig,
+            model: defaultModelConfig,
+            run: runConfig,
+            toolConfig: undefined,
+            outputConfig: undefined,
+          },
+          ...scopeInputs(config, timeoutOverrides),
         );
 
         runPromise = scope.runNonInteractive(new ContextState());
@@ -381,15 +384,16 @@ describe('subagent.ts', () => {
           mcpRuntime.workspaceFilesystem.paths,
           { settings },
         );
-        const scope = await SubAgentScope.create(
-          'test-agent',
-          config,
-          promptConfig,
-          defaultModelConfig,
-          runConfig,
-          undefined,
-          undefined,
-          ...scopeInputs(overrides),
+        const scope = await createSubagentScope(
+          {
+            name: 'test-agent',
+            prompt: promptConfig,
+            model: defaultModelConfig,
+            run: runConfig,
+            toolConfig: undefined,
+            outputConfig: undefined,
+          },
+          ...scopeInputs(config, overrides),
         );
 
         const runPromise = scope.runNonInteractive(new ContextState());
@@ -436,15 +440,16 @@ describe('subagent.ts', () => {
         mcpRuntime.workspaceFilesystem.paths,
         { settings },
       );
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(errorOverrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, errorOverrides),
       );
 
       await expect(scope.runNonInteractive(new ContextState())).rejects.toThrow(
@@ -511,15 +516,16 @@ describe('subagent.ts', () => {
           mcpRuntime.workspaceFilesystem.paths,
           { settings },
         );
-        const scope = await SubAgentScope.create(
-          'test-agent',
-          config,
-          promptConfig,
-          defaultModelConfig,
-          runConfig,
-          undefined,
-          undefined,
-          ...scopeInputs(overrides),
+        const scope = await createSubagentScope(
+          {
+            name: 'test-agent',
+            prompt: promptConfig,
+            model: defaultModelConfig,
+            run: runConfig,
+            toolConfig: undefined,
+            outputConfig: undefined,
+          },
+          ...scopeInputs(config, overrides),
         );
 
         const runPromise = scope.runNonInteractive(new ContextState());
@@ -600,15 +606,16 @@ describe('subagent.ts', () => {
       { runtimeBundle },
     );
 
-    const scope = await SubAgentScope.create(
-      'interactive-best-effort-agent',
-      config,
-      promptConfig,
-      defaultModelConfig,
-      runConfig,
-      { tools: ['external_tool'] },
-      undefined,
-      ...scopeInputs(overrides),
+    const scope = await createSubagentScope(
+      {
+        name: 'interactive-best-effort-agent',
+        prompt: promptConfig,
+        model: defaultModelConfig,
+        run: runConfig,
+        toolConfig: { tools: ['external_tool'] },
+        outputConfig: undefined,
+      },
+      ...scopeInputs(config, overrides),
     );
 
     mockSendMessageStream.mockImplementation(
@@ -677,15 +684,16 @@ describe('subagent.ts', () => {
         { runtimeBundle },
       );
 
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        { systemPrompt: 'Test agent' },
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: { systemPrompt: 'Test agent' },
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       // Model returns stop immediately to complete normally
@@ -718,16 +726,17 @@ describe('subagent.ts', () => {
         { runtimeBundle },
       );
 
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        { systemPrompt: 'Test agent' },
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
-        parentAbortController.signal,
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: { systemPrompt: 'Test agent' },
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+          parentSignal: parentAbortController.signal,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       // Run the agent to bind the parent signal
@@ -754,15 +763,16 @@ describe('subagent.ts', () => {
         { runtimeBundle },
       );
 
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        { systemPrompt: 'Test agent' },
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: { systemPrompt: 'Test agent' },
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       // Should not throw
@@ -786,15 +796,16 @@ describe('subagent.ts', () => {
         { runtimeBundle },
       );
 
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        { systemPrompt: 'Test agent' },
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        ...scopeInputs(overrides),
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: { systemPrompt: 'Test agent' },
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       // Start an operation to create an abort controller
@@ -852,15 +863,16 @@ describe('subagent.ts', () => {
           { runtimeBundle },
         );
 
-        scope = await SubAgentScope.create(
-          'test-agent',
-          config,
-          { systemPrompt: 'Test agent' },
-          defaultModelConfig,
-          runConfig,
-          undefined,
-          undefined,
-          ...scopeInputs(overrides),
+        scope = await createSubagentScope(
+          {
+            name: 'test-agent',
+            prompt: { systemPrompt: 'Test agent' },
+            model: defaultModelConfig,
+            run: runConfig,
+            toolConfig: undefined,
+            outputConfig: undefined,
+          },
+          ...scopeInputs(config, overrides),
         );
 
         runPromise = scope.runNonInteractive(new ContextState());
