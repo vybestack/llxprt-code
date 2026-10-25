@@ -20,7 +20,7 @@ import { withGenerationAgent } from '../../../../agents/src/api/__tests__/helper
 import { createGenerationProvider } from '../../../../agents/src/api/__tests__/helpers/generation-provider.js';
 import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { withOwners } from '../../../../agents/src/api/__tests__/turn-revision-capture.fixture.js';
-import { useRecordingPrompts } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from '../../../../agents/src/api/__tests__/helpers/recording-prompts.js';
 
 function makeBuffer(text: string): TextBuffer {
   const buffer = {

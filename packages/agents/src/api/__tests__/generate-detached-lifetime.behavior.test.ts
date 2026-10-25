@@ -7,7 +7,7 @@ import { describe, expect, it } from 'bun:test';
 import type { GenerateOptions } from '@vybestack/llxprt-code-agents';
 import type { SessionClientOwner } from '../../session/session-client-owner.js';
 import { withOwners } from './turn-revision-capture.fixture.js';
-import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { AggregateDisposeError } from '../disposeErrors.js';
 import {

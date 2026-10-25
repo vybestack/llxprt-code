@@ -9,7 +9,7 @@ import {
   type LoadBalancerProfile,
 } from '@vybestack/llxprt-code-settings';
 import { withOwners } from './turn-revision-capture.fixture.js';
-import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
 import { withGenerateOptionsAgent } from './helpers/generate-options-agent.js';
 import { gate as generationGate } from './helpers/async-child-disposal-join-fixture.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';

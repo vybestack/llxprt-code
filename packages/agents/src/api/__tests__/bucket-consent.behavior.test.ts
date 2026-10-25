@@ -119,7 +119,6 @@ describe('Session owner bucket consent', () => {
       settingsOwner,
       createRuntimeContentGeneratorFactory(),
       tokenizer,
-      undefined,
       mcp.messageBus,
     );
     owner.bindMcpRuntime(mcp);

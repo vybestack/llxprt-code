@@ -6,7 +6,7 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as recordingFs from 'node:fs/promises';
 import { withOwners } from './turn-revision-capture.fixture.js';
-import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
 import { randomUUID } from 'node:crypto';
 import { readFile, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

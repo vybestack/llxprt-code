@@ -7,17 +7,18 @@ import { SessionClientOwner } from '../../../session/session-client-owner.js';
 import { acquireSessionClient } from '../../../session/session-client-binding.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import { AgentResourceCapture } from './agent-resource-capture.js';
 import { buildAgentClientFactory } from '../../agentBootstrap.js';
 
-const acquisitions = new WeakMap<SessionClientOwner, AgentResourceCapture>();
 const builtClients = new WeakMap<SessionClientOwner, AgentClientContract[]>();
+const suppliedClients = new WeakMap<SessionClientOwner, AgentClientContract>();
+// `SessionClientOwner.create` as production defines it, captured before a
+// test's `spyOn(SessionClientOwner, 'create')` can replace it.
 const createSessionOwner = SessionClientOwner.create;
 
 type CreateArgs = Parameters<typeof SessionClientOwner.create>;
 type AcquireArgs = Parameters<typeof acquireSessionClient>;
 
-/** `SessionClientOwner.create` without the credential authority. */
+/** `SessionClientOwner.create` without the credential authority and the borrowed-client position. */
 export type CapturedOwnerArgs = [
   config: CreateArgs[0],
   readTaskSchemaPolicy: CreateArgs[1],
@@ -29,58 +30,71 @@ export type CapturedOwnerArgs = [
   settingsOwner: CreateArgs[7],
   contentGeneratorFactory: CreateArgs[8],
   tokenizerFactory: CreateArgs[9],
-  borrowedClient?: CreateArgs[11],
-  borrowedBus?: CreateArgs[12],
+  messageBus?: CreateArgs[12],
 ];
 
 /** `acquireSessionClient` without the credential authority. */
 export type CapturedAcquisitionArgs = [
-  ...head: [
-    config: AcquireArgs[0],
-    settings: AcquireArgs[1],
-    settingsOwner: AcquireArgs[2],
-    providerManager: AcquireArgs[3],
-    oauthManager: AcquireArgs[4],
-    contentGeneratorFactory: AcquireArgs[5],
-    tokenizerFactory: AcquireArgs[6],
-    providerFileLifecycle: AcquireArgs[7],
-    mediaStore: AcquireArgs[8],
-    factory: AcquireArgs[9],
-    readInstructions: AcquireArgs[10],
-    workspacePaths: AcquireArgs[11],
-  ],
+  config: AcquireArgs[0],
+  settings: AcquireArgs[1],
+  settingsOwner: AcquireArgs[2],
+  providerManager: AcquireArgs[3],
+  oauthManager: AcquireArgs[4],
+  contentGeneratorFactory: AcquireArgs[5],
+  tokenizerFactory: AcquireArgs[6],
+  providerFileLifecycle: AcquireArgs[7],
+  mediaStore: AcquireArgs[8],
+  factory: AcquireArgs[9],
+  readInstructions: AcquireArgs[10],
+  workspacePaths: AcquireArgs[11],
   messageBus?: AcquireArgs[13],
   imageOperation?: AcquireArgs[14],
-  borrowedClient?: AcquireArgs[15],
 ];
 
-/** Creation with the production signature, for `spyOn(SessionClientOwner, 'create')`. */
+/**
+ * Wraps the owner's client factory parameter so the clients it returns are
+ * recorded in creation order. Nothing is patched on the clients.
+ */
+function recordingFactory<
+  Operands extends unknown[],
+  Built extends AgentClientContract | undefined,
+>(
+  factory: (...operands: Operands) => Built,
+  built: AgentClientContract[],
+): (...operands: Operands) => Built {
+  return (...operands) => {
+    const client = factory(...operands);
+    if (client !== undefined) built.push(client);
+    return client;
+  };
+}
+
+/**
+ * Creation with the production signature, for
+ * `spyOn(SessionClientOwner, 'create')`: the owner is built by production
+ * `create` and its factory-built clients are recorded for `ownerClients`.
+ */
 export async function captureSessionOwnerCreation(
   ...args: CreateArgs
 ): Promise<SessionClientOwner> {
-  const capture = new AgentResourceCapture();
-  const factory = args[3];
   const built: AgentClientContract[] = [];
-  args[3] = (...operands) => {
-    const client = factory(...operands);
-    if (client !== undefined) {
-      built.push(client);
-      capture.clients.push(client);
-      capture.observe(client);
-    }
-    return client;
-  };
-  const borrowed = args[11];
-  if (borrowed !== undefined) capture.observe(borrowed);
+  args[3] = recordingFactory(args[3], built);
   const owner = await createSessionOwner(...args);
-  acquisitions.set(owner, capture);
   builtClients.set(owner, built);
+  const supplied = args[11];
+  if (supplied !== undefined) suppliedClients.set(owner, supplied);
   return owner;
 }
 
-export function createCapturedSessionOwner(
+/**
+ * A `SessionClientOwner` built through production `SessionClientOwner.create`
+ * with the parameters production fills; its clients are observed through the
+ * client-factory parameter (`ownerClients`).
+ */
+export async function createCapturedSessionOwner(
   ...args: CapturedOwnerArgs
 ): Promise<SessionClientOwner> {
+  const built: AgentClientContract[] = [];
   const [
     config,
     readTaskSchemaPolicy,
@@ -92,14 +106,13 @@ export function createCapturedSessionOwner(
     settingsOwner,
     contentGeneratorFactory,
     tokenizerFactory,
-    borrowedClient,
-    borrowedBus,
+    messageBus,
   ] = args;
-  return captureSessionOwnerCreation(
+  const owner = await createSessionOwner(
     config,
     readTaskSchemaPolicy,
     manager,
-    factory,
+    recordingFactory(factory, built),
     mediaStore,
     readMcpInstructions,
     workspacePaths,
@@ -107,19 +120,18 @@ export function createCapturedSessionOwner(
     contentGeneratorFactory,
     tokenizerFactory,
     new CredentialAuthority(),
-    borrowedClient,
-    borrowedBus,
+    undefined,
+    messageBus,
   );
+  builtClients.set(owner, built);
+  return owner;
 }
 
+/** `acquireSessionClient` with its client factory observed the same way. */
 export async function acquireCapturedSessionClient(
   ...args: CapturedAcquisitionArgs
 ): Promise<SessionClientOwner> {
-  const capture = new AgentResourceCapture();
-  const factory = args[9] ?? buildAgentClientFactory();
   const built: AgentClientContract[] = [];
-  const borrowed = args[14];
-  if (borrowed !== undefined) capture.observe(borrowed);
   const [
     config,
     settings,
@@ -130,7 +142,7 @@ export async function acquireCapturedSessionClient(
     tokenizerFactory,
     providerFileLifecycle,
     mediaStore,
-    ,
+    factory,
     readInstructions,
     workspacePaths,
     messageBus,
@@ -146,21 +158,13 @@ export async function acquireCapturedSessionClient(
     tokenizerFactory,
     providerFileLifecycle,
     mediaStore,
-    (...operands) => {
-      const client = factory(...operands);
-      built.push(client);
-      capture.clients.push(client);
-      capture.observe(client);
-      return client;
-    },
+    recordingFactory(factory ?? buildAgentClientFactory(), built),
     readInstructions,
     workspacePaths,
     new CredentialAuthority(),
     messageBus,
     imageOperation,
-    borrowed,
   );
-  acquisitions.set(owner, capture);
   builtClients.set(owner, built);
   return owner;
 }
@@ -179,11 +183,45 @@ export function ownerClients(
   return built;
 }
 
+/**
+ * The client the owner's conversation currently delegates to. It is found by
+ * asking the conversation for its sequence model while each candidate client
+ * records that it was asked; the probe is removed again before returning.
+ * Remaining importers read the current client after a replacement that may
+ * have been rolled back, which `ownerClients` alone does not say; each moves
+ * to `ownerClients` with its own batch and this export is deleted with the
+ * last one.
+ */
 export function capturedSessionClient(
   owner: SessionClientOwner,
 ): AgentClientContract {
-  const capture = acquisitions.get(owner);
-  if (capture === undefined)
-    throw new Error('Session owner has no actual acquisition capture');
-  return capture.publishedClient(owner.conversation);
+  const supplied = suppliedClients.get(owner);
+  const candidates = [
+    ...ownerClients(owner),
+    ...(supplied === undefined ? [] : [supplied]),
+  ];
+  let receiver: AgentClientContract | undefined;
+  const restores = candidates.map((client) => {
+    const hadOwn = Object.prototype.hasOwnProperty.call(
+      client,
+      'getCurrentSequenceModel',
+    );
+    const previous = client.getCurrentSequenceModel;
+    client.getCurrentSequenceModel = () => {
+      receiver = client;
+      return previous.call(client);
+    };
+    return () => {
+      if (hadOwn) client.getCurrentSequenceModel = previous;
+      else Reflect.deleteProperty(client, 'getCurrentSequenceModel');
+    };
+  });
+  try {
+    owner.conversation.getCurrentSequenceModel();
+  } finally {
+    for (const restore of restores) restore();
+  }
+  if (receiver === undefined)
+    throw new Error('No session client received the sequence-model probe');
+  return receiver;
 }

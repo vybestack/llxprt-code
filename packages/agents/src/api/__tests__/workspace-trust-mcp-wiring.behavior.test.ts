@@ -768,7 +768,7 @@ describe('Config MCP wiring on folder trust change', () => {
         await hookSystem.initialize();
         const disposeHooks = vi.spyOn(hookSystem, 'dispose');
         const agentFailure = new Error('agent dispose failed');
-        const session = await createFailingSession(config, agentFailure);
+        const session = await createFailingSession(agentFailure);
 
         await owner.dispose();
         await expect(session()).resolves.toStrictEqual([agentFailure]);
@@ -795,7 +795,7 @@ describe('Config MCP wiring on folder trust change', () => {
         const agentFailure = new Error('agent dispose failed');
         const hookFailure = new Error('hook dispose failed');
         const stopFailure = new Error('stop failed');
-        const session = await createFailingSession(config, agentFailure);
+        const session = await createFailingSession(agentFailure);
         const hookSystem = createHookRoot(config, configTrust);
         const failedRetirement = vi
           .spyOn(hookSystem, 'dispose')

@@ -140,7 +140,6 @@ describe('session client post-auth guard', () => {
           settingsOwner,
           createRuntimeContentGeneratorFactory(),
           tokenizer,
-          undefined,
           mcp.messageBus,
         );
         expect.unreachable('the session owner should have rejected');

@@ -1,4 +1,4 @@
-import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
 import { openRouteBPreflight } from './helpers/route-b-preflight.js';

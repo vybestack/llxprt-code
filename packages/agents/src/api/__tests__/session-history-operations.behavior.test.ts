@@ -18,7 +18,7 @@ import {
   type OpenedClientOwner,
 } from './helpers/client-owner-session.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
 
 interface SharedHistorySessions {
   readonly opened: OpenedClientOwner;

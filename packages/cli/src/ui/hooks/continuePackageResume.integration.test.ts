@@ -233,7 +233,6 @@ async function createConfig(
     settingsOwner,
     factoriesContent,
     factoriesTokenizer,
-    client,
   );
 
   sessionClient.initializeConversation();

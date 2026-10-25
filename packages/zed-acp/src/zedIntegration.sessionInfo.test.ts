@@ -1,4 +1,4 @@
-import { useRecordingPrompts } from '../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from '../../agents/src/api/__tests__/helpers/recording-prompts.js';
 import { useFakeResponsesReplay } from '../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
 import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {

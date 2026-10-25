@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import { withOwners } from '../../../../agents/src/api/__tests__/turn-revision-capture.fixture.js';
-import { useRecordingPrompts } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from '../../../../agents/src/api/__tests__/helpers/recording-prompts.js';
 import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
   createGenerationProvider,

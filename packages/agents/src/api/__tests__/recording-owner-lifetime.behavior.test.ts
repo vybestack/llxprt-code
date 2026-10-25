@@ -1,4 +1,4 @@
-import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { mkdtemp, readFile, readdir, realpath, rm } from 'node:fs/promises';
 import { readdirSync } from 'node:fs';

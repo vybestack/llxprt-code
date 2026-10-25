@@ -14,7 +14,7 @@ import {
   withGenerationClientOwner,
   type GenerationClientOwnerOptions,
 } from '../../../../agents/src/api/__tests__/helpers/generation-client-owner.js';
-import { useRecordingPrompts } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from '../../../../agents/src/api/__tests__/helpers/recording-prompts.js';
 import { generateAutoPrompt } from './autoPromptGenerator.js';
 
 describe('detached auto prompt client', () => {

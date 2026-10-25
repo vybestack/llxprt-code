@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { AggregateDisposeError } from '../disposeErrors.js';
-import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

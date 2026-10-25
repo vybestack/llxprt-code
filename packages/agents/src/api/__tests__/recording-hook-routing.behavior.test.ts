@@ -2,7 +2,7 @@ import {
   jsonlHookCommand,
   removeJsonlHook,
 } from './helpers/jsonl-hook-command.js';
-import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';

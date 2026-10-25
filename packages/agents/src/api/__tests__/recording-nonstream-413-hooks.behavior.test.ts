@@ -2,7 +2,7 @@ import {
   jsonlHookCommand,
   removeJsonlHook,
 } from './helpers/jsonl-hook-command.js';
-import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';

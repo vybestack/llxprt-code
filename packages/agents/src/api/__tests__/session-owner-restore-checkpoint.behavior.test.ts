@@ -1,4 +1,4 @@
-import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { openClientOwner } from './helpers/client-owner-session.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
