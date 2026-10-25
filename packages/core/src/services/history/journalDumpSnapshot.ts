@@ -238,8 +238,8 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
     }
   }
 
-  rows(): AsyncGenerator<IContent, void, unknown> {
-    return this.readers.open(this.raw());
+  async *rows(): AsyncGenerator<IContent, void, unknown> {
+    yield* this.readers.open(this.raw());
   }
 
   private async *raw(): AsyncGenerator<IContent, void, unknown> {
