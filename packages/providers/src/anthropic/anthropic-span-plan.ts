@@ -243,9 +243,14 @@ export class AnthropicSpanPlan {
     return combine(0, streams.length);
   }
   private async bounds(at: number): Promise<AnthropicSpan> {
-    const window =
-      this.topology.find((candidate) => candidate.start === at) ??
-      this.windows.find((candidate) => candidate.start === at);
+    let window: AnthropicSpan | undefined;
+    for (const spans of [this.topology, this.windows])
+      for (const candidate of spans)
+        if (
+          candidate.start === at &&
+          (window === undefined || candidate.end > window.end)
+        )
+          window = candidate;
     let start = window?.start ?? Math.max(0, at - 1);
     let end = window?.end ?? Math.min(this.query.count, at + 2);
     if (start >= end) return { start, end };

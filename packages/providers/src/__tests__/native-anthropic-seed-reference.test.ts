@@ -127,7 +127,7 @@ describe('independent Anthropic seed reference duplicate result movement', () =>
     'anthropic-purge-boundary',
   ]) {
     for (const seed of [
-      20, 25, 79, 80, 81, 101, 106, 216, 235, 237, 238, 239, 2049,
+      20, 25, 79, 80, 81, 101, 106, 139, 216, 235, 237, 238, 239, 2049,
     ]) {
       it(`${id} seed ${seed} preserves frozen provider and independently curated service bytes`, async () => {
         await expect(
