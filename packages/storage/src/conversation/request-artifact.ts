@@ -14,17 +14,17 @@ export interface RequestArtifactDescriptor {
   readonly row_count: number;
 }
 
-async function writeNextArtifactRow(
+function writeNextArtifactRow(
   iterator: AsyncIterator<unknown>,
   write: (text: string) => Promise<void>,
   first: boolean,
 ): Promise<boolean> {
-  let next = await iterator.next();
-  if (next.done === true) return false;
-  const written = write((first ? '' : ',') + JSON.stringify(next.value));
-  next = { done: true, value: undefined };
-  await written;
-  return true;
+  return iterator.next().then((next) => {
+    if (next.done === true) return false;
+    return write((first ? '' : ',') + JSON.stringify(next.value)).then(
+      () => true,
+    );
+  });
 }
 
 export async function stageRequestArtifact(
