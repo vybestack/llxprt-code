@@ -1395,6 +1395,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
   - [ ] T6.B158 B2 migration batch, 1 points, agents/src/api/__tests__: turn-revision-capture.fixture.ts (file list and dependencies in B2-batches.md)
   - [ ] T6.B159 B2 migration batch, 9 points, rule 6 (cross-directory by rule): session-client-child-owner.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
 - [ ] T6.Pk B2 production fixes found by migrated scenarios (added when needed)
+- [x] T6.P1 createAgent accepts its typed tokenizerFactory and contentGeneratorFactory inputs
 - [ ] T6.D2a B2 conservation check, delete fixtures and capture helpers, E9a
 - [ ] T6.D1a B2 delete unreachable adopt inputs, adoption-with-preflight route, AgentAdoptionIntent options
 - [ ] T6.D1b B2 delete unset activation inputs and the borrowed-client parameter

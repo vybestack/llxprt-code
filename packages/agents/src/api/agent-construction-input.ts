@@ -67,6 +67,8 @@ export function parseAgentConstruction(
     editorCallbacks,
     toolSchedulerFactory,
     runtimeFactoryBindings,
+    tokenizerFactory: _tokenizerFactory,
+    contentGeneratorFactory: _contentGeneratorFactory,
     tokenStore,
     credentialAuthority: _credentialAuthority,
     mediaOwner: suppliedMediaOwner,
