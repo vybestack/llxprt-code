@@ -139,7 +139,9 @@ export async function fillNeutralRowFacts(
   const snapshot = snapshotOf(ctx, built, appender);
   try {
     const entries = entriesForFill(ctx, built, appender, source, since);
-    const prior = previousNeutralFacts(ctx);
+    const prior = edits.some((edit) => edit.kind === 'replace')
+      ? previousNeutralFacts(ctx)
+      : undefined;
     for await (const entry of entries) {
       const key = neutralRowFactKey(registration, entry.label);
       const previous = await reusableNeutralFact(

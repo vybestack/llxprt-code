@@ -7,6 +7,8 @@ import { measureRequestRow } from './token-usage-measurement.js';
 import { storedTokenUsageFacts } from './token-usage-facts.js';
 import { encodeContentRow } from './journalRowCodec.js';
 import type { IContent } from './IContent.js';
+import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
+import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 
 const countTokens = (text: string): number => text.length;
 
@@ -58,6 +60,45 @@ async function replaceResponse(
 }
 
 describe('token usage after response replacement', () => {
+  const directory = useTempDir('neutral-reuse-reads-');
+  it('does not read previous chronology for fresh appended rows', async () => {
+    const counter = { reads: 0 };
+    let measured = 0;
+    const session = await JournalSession.create(`${directory()}/append.llxj`, {
+      journal: testJournalSeams({ readCounter: counter }, 1, false)
+        .dependencies,
+      tokenUsageCountTokens: (value) => {
+        measured++;
+        return value.length;
+      },
+    });
+    const rows = (from: number, count: number): IContent[] =>
+      Array.from({ length: count }, (_, index) => ({
+        speaker: 'human',
+        metadata: {
+          chronology: {
+            seq: from + index,
+            userTurn: 1,
+            step: 0,
+            recordedAt: 1,
+          },
+        },
+        blocks: [{ type: 'text', text: `${from + index}:`.padEnd(800, 'x') }],
+      }));
+    try {
+      await session.append(rows(1, 40));
+      await session.append(rows(41, 400));
+      session.store.enableNeutralRowFacts();
+      counter.reads = 0;
+      await session.append([]);
+      expect(measured).toBe(440);
+      expect(counter.reads).toBeLessThan(800);
+      await verifyMeasurements(session);
+    } finally {
+      await session.close();
+    }
+  });
+
   it('reuses unchanged row counts when purge replacements allocate new labels', async () => {
     let calls = 0;
     const session = await JournalSession.createUnlinked({
