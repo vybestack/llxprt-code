@@ -120,6 +120,29 @@ async function decide(
       [...index.version, message.start + 1],
     );
 }
+async function writeAtomFacts(
+  index: AnthropicRepairIndex,
+  engine: AnthropicStreamRepair,
+  writer: NativeFactIndexWriter,
+  from = 0,
+): Promise<void> {
+  for await (const { ordinal, message } of index.messageEntries(from)) {
+    const kept =
+      message.slot !== 'results' || (await engine.tools.hasKept(message));
+    let inserts = false;
+    if (message.role === 'assistant')
+      for await (const _decision of engine.tools.scripts(message)) {
+        inserts = true;
+        break;
+      }
+    await writeRepairMessage(
+      writer,
+      ordinal,
+      { ...message, kept, inserts },
+      index.version,
+    );
+  }
+}
 async function appendIndexedFacts(
   snapshot: VersionSnapshot,
   writer: NativeFactIndexWriter,
@@ -134,11 +157,19 @@ async function appendIndexedFacts(
   const query = await IndexedJournalRequestSnapshot.create(snapshot);
   try {
     const index = await AnthropicRepairIndex.read(writer);
-    await writeAnthropicCacheWindows(
-      await AnthropicStreamRepair.create(query, settings, {}, index),
-      writer,
-      previous.aggregate.units,
+    const engine = await AnthropicStreamRepair.create(
+      query,
+      settings,
+      {},
+      index,
     );
+    await writeAtomFacts(
+      index,
+      engine,
+      writer,
+      Math.max(0, previous.aggregate.units - 2),
+    );
+    await writeAnthropicCacheWindows(engine, writer, previous.aggregate.units);
     return true;
   } finally {
     await query.close();
@@ -197,10 +228,14 @@ export function anthropicRepairFactIndex(
           for await (const call of source.calls(message))
             await decide(source, writer, index, message, next, call.id);
         }
-        await writeAnthropicCacheWindows(
-          await AnthropicStreamRepair.create(query, settings, {}, index),
-          writer,
+        const engine = await AnthropicStreamRepair.create(
+          query,
+          settings,
+          {},
+          index,
         );
+        await writeAtomFacts(index, engine, writer);
+        await writeAnthropicCacheWindows(engine, writer);
         await writeAnthropicRecoveryFacts(
           query,
           writer,

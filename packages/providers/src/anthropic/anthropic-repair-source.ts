@@ -7,7 +7,10 @@ import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/h
 import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { normalizeToAnthropicToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
-import { nativeAnthropicCallIds } from './anthropic-native-calls.js';
+import {
+  nativeAnthropicCallIds,
+  nativeAnthropicResultIds,
+} from './anthropic-native-calls.js';
 import { projectAnthropicUnit } from './anthropic-unit-facts.js';
 import type { AnthropicRequestRepairIndex } from './anthropic-repair-index.js';
 import {
@@ -34,6 +37,8 @@ export interface RepairMessage {
   readonly slot: 'results' | 'content' | 'chain';
   readonly chainResults?: true;
   readonly role: AnthropicMessage['role'];
+  readonly kept?: boolean;
+  readonly inserts?: boolean;
 }
 export type RepairPiece = string | readonly AnthropicMessageBlock[];
 export interface RepairPolicy {
@@ -314,6 +319,20 @@ export class AnthropicRepairSource<
     for (let at = message.start; at <= message.end; at++) {
       const piece = await this.pieceAt(message, at, redact);
       if (piece !== undefined) yield piece;
+    }
+  }
+  async *resultIds(at: number): AsyncGenerator<string> {
+    if (this.normalized && this.query.planAt !== undefined) {
+      yield* nativeAnthropicResultIds(await this.query.planAt(at));
+      return;
+    }
+    for await (const piece of this.pieces(
+      { start: at, end: at, slot: 'results', role: 'user' },
+      false,
+    )) {
+      if (typeof piece === 'string') continue;
+      for (const block of piece)
+        if (block.type === 'tool_result') yield block.tool_use_id;
     }
   }
   private async *callsAt(

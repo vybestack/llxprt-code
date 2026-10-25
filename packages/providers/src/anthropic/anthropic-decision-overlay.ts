@@ -12,8 +12,11 @@ export class AnthropicDecisionOverlay implements AnthropicRequestRepairIndex {
     { readonly start: number; readonly decision: ToolRepairOverlay | undefined }
   >();
   constructor(readonly plan: AnthropicSpanPlan) {}
-  messages(from: number): AsyncGenerator<RepairMessage> {
-    return this.plan.messages(from);
+  async *messages(from: number): AsyncGenerator<RepairMessage> {
+    for await (const message of this.plan.messages(from)) {
+      const { kept: _kept, inserts: _inserts, ...topology } = message;
+      yield topology;
+    }
   }
   async prepare(): Promise<void> {
     const { index, coordinates, query } = this.plan;

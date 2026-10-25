@@ -165,12 +165,9 @@ export class AnthropicStreamRepair<
   async *atoms(from = 0): AsyncGenerator<LazyRepairAtom> {
     for await (const message of this.source.messages(Math.floor(from / 4))) {
       const key = message.start * 4 + Number(message.slot !== 'results');
-      let exists = message.slot !== 'results';
-      if (!exists)
-        for await (const _piece of this.tools.kept(message, false)) {
-          exists = true;
-          break;
-        }
+      const exists =
+        message.kept ??
+        (message.slot !== 'results' || (await this.tools.hasKept(message)));
       if (exists && key >= from)
         yield {
           key,
@@ -183,11 +180,12 @@ export class AnthropicStreamRepair<
             this.tools.kept(message, redact),
         };
       if (message.role !== 'assistant') continue;
-      let inserted = false;
-      for await (const _block of this.tools.insertions(message)) {
-        inserted = true;
-        break;
-      }
+      let inserted = message.inserts ?? false;
+      if (message.inserts === undefined)
+        for await (const _block of this.tools.scripts(message)) {
+          inserted = true;
+          break;
+        }
       if (inserted && message.start * 4 + 2 >= from) {
         const tools = this.tools;
         yield {

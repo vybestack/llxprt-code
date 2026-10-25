@@ -27,3 +27,26 @@ export function* nativeAnthropicCallIds(
     }
   }
 }
+
+export function* nativeAnthropicResultIds(
+  plan: JournalResponsePlan,
+): Generator<string> {
+  for (const ref of plan.blocks) {
+    if (ref.kind === 'response' || ref.kind === 'orphan') {
+      if (ref.id === undefined)
+        throw new JournalFormatError('Native result has no id');
+      yield normalizeToAnthropicToolId(ref.id);
+    } else if (ref.kind === 'source') {
+      const ids = plan.sourceIds?.(ref.at.label);
+      if (ids === undefined)
+        throw new JournalFormatError(
+          'Native result source has no row id directory',
+        );
+      const at = ids.header.ids.findIndex(
+        (tuple) =>
+          tuple.block === ref.at.block && tuple.kind === ROW_ID_KIND.response,
+      );
+      if (at >= 0) yield normalizeToAnthropicToolId(ids.rawIds[at]);
+    }
+  }
+}

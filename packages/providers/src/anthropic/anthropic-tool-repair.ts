@@ -103,6 +103,27 @@ export class AnthropicToolRepair<Query extends AnthropicRepairRows> {
     return this.index.taken(id, ordinal, at);
   }
 
+  async hasKept(message: RepairMessage): Promise<boolean> {
+    for (let at = message.start; at <= message.end; at++) {
+      const within = new Map<string, number>();
+      for await (const id of this.source.resultIds(at)) {
+        const ordinal = (within.get(id) ?? 0) + 1;
+        within.set(id, ordinal);
+        const query = this.source.query;
+        const before = await query.normalizedCount(2, 1, id, {
+          from: 0,
+          to: at,
+        });
+        if (
+          (await query.normalizedCount(2, 0, id)) > 0 &&
+          !(await this.taken(id, before + ordinal, at))
+        )
+          return true;
+      }
+    }
+    return false;
+  }
+
   async *kept(
     message: RepairMessage,
     redact: boolean,
@@ -130,6 +151,15 @@ export class AnthropicToolRepair<Query extends AnthropicRepairRows> {
     )) {
       if (typeof piece === 'string')
         throw new JournalFormatError('Result message contains string content');
+      if (
+        message.kept === true &&
+        message.start === message.end &&
+        piece.length === 1 &&
+        piece[0].type === 'tool_result'
+      ) {
+        yield piece;
+        continue;
+      }
       const blocks: AnthropicMessageBlock[] = [];
       for (const block of piece) {
         if (block.type !== 'tool_result')

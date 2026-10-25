@@ -12,7 +12,7 @@ import type { RepairMessage } from './anthropic-repair-source.js';
 import type { ToolRepairOverlay } from './anthropic-tool-repair.js';
 
 export const anthropicRepairScope = (settings: RowFormatSettings): string =>
-  `anthropic-repair:5:${rowFormatKey(settings)}`;
+  `anthropic-repair:6:${rowFormatKey(settings)}`;
 export interface ScalarFacts {
   get(
     key: ReadonlyArray<string | number>,
@@ -25,6 +25,10 @@ export function sameFactVersion(
   return (
     values !== undefined && values[0] === version[0] && values[1] === version[1]
   );
+}
+function validMessageTag(tag: number): boolean {
+  const finalized = tag < 8 || (tag & 8) !== 0;
+  return tag <= 63 && (tag & 7) <= 5 && finalized;
 }
 export class AnthropicRepairIndex {
   private constructor(
@@ -62,15 +66,19 @@ export class AnthropicRepairIndex {
       !sameFactVersion(values, this.version) ||
       values.length !== 5 ||
       values[3] < values[2] ||
-      values[4] > 5
+      !validMessageTag(values[4])
     )
       throw new JournalFormatError('Invalid Anthropic native message facts');
-    const slot = values[4] < 4 ? 'content' : 'chain';
+    const kind = values[4] & 7;
+    const slot = kind < 4 ? 'content' : 'chain';
     return {
       start: values[2],
       end: values[3],
-      slot: values[4] < 2 ? 'results' : slot,
-      role: values[4] % 2 === 0 ? 'user' : 'assistant',
+      slot: kind < 2 ? 'results' : slot,
+      role: kind % 2 === 0 ? 'user' : 'assistant',
+      ...((values[4] & 8) !== 0
+        ? { kept: (values[4] & 16) !== 0, inserts: (values[4] & 32) !== 0 }
+        : {}),
     };
   }
   async previousThinking(before: number): Promise<number | undefined> {
@@ -104,6 +112,12 @@ export class AnthropicRepairIndex {
     return low === 1 ? undefined : this.message(low - 1);
   }
   async *messages(from: number): AsyncGenerator<RepairMessage> {
+    for await (const entry of this.messageEntries(from)) yield entry.message;
+  }
+  async *messageEntries(from: number): AsyncGenerator<{
+    readonly ordinal: number;
+    readonly message: RepairMessage;
+  }> {
     let low = 1;
     let high = this.count + 1;
     while (low < high) {
@@ -112,7 +126,7 @@ export class AnthropicRepairIndex {
       else high = mid;
     }
     for (let ordinal = low; ordinal <= this.count; ordinal++)
-      yield await this.message(ordinal);
+      yield { ordinal, message: await this.message(ordinal) };
   }
   async decision(
     message: RepairMessage,
@@ -147,6 +161,10 @@ export async function writeRepairMessage(
   generation: readonly number[],
 ): Promise<void> {
   const slot = message.slot === 'content' ? 2 : 4;
+  // Pack the finalized atom decisions into the existing tag scalar.
+  let atom = 0;
+  if (message.kept !== undefined && message.inserts !== undefined)
+    atom = 8 | (Number(message.kept) * 16) | (Number(message.inserts) * 32);
   await writer.set(
     ['message', ordinal],
     [
@@ -154,7 +172,8 @@ export async function writeRepairMessage(
       message.start,
       message.end,
       (message.slot === 'results' ? 0 : slot) +
-        Number(message.role === 'assistant'),
+        Number(message.role === 'assistant') +
+        atom,
     ],
   );
 }
