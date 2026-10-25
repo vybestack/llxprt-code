@@ -37,6 +37,7 @@ import {
   type AgentForegroundHost,
   type ProviderActivationIntent,
 } from './config-types.js';
+import { retireActivationOwners } from './activationOwnerRetirement.js';
 import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
 
 import { assembleHostGitHubBroker } from './host-github-broker-owner.js';
@@ -406,42 +407,26 @@ export class AgentActivationBootstrap
       ? this.workspaceMemory.dispose()
       : undefined;
     void memoryClosing?.catch(() => undefined);
-    this.#closing = Promise.allSettled([this.#tail, ...this.#publicWork]).then(
-      async () => {
-        const client = this.ownsSessionClient
-          ? this.ownedSessionClient
-          : undefined;
-        const memoryCleanup = await Promise.allSettled([memoryClosing]);
-        const clientCleanup = await Promise.allSettled([client?.dispose()]);
-        const mediaCleanup = await Promise.allSettled([
+    this.#closing = retireActivationOwners({
+      publicWork: Promise.allSettled([this.#tail, ...this.#publicWork]),
+      memory: memoryClosing,
+      sessionClient: () =>
+        this.ownsSessionClient ? this.ownedSessionClient.dispose() : undefined,
+      afterClient: [
+        () =>
           this.ownsDefinitions
             ? this.workspaceDefinitions.dispose()
             : undefined,
-          this.mediaOwner?.dispose(),
-          this.ownsFilesystem ? this.trustCleanup?.() : undefined,
+        () => this.mediaOwner?.dispose(),
+        () => (this.ownsFilesystem ? this.trustCleanup?.() : undefined),
+        () =>
           this.ownsFilesystem ? this.workspaceFilesystem.dispose() : undefined,
-        ]);
-        const failures = [
-          ...clientCleanup,
-          ...memoryCleanup,
-          ...mediaCleanup,
-        ].flatMap((result) =>
-          result.status === 'rejected' ? [result.reason] : [],
-        );
-        if (
-          this.ownsSettings &&
-          this.settingsOwnerOwnership === 'transferred'
-        ) {
-          const settingsCleanup = await Promise.allSettled([
-            this.settingsOwner.dispose(),
-          ]);
-          for (const result of settingsCleanup)
-            if (result.status === 'rejected') failures.push(result.reason);
-        }
-        if (failures.length > 0)
-          throw new AggregateError(failures, 'Activation owner cleanup failed');
-      },
-    );
+      ],
+      settings: () =>
+        this.ownsSettings && this.settingsOwnerOwnership === 'transferred'
+          ? this.settingsOwner.dispose()
+          : undefined,
+    });
     return this.#closing;
   }
 
