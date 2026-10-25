@@ -5,6 +5,7 @@
  */
 
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
+import { isProviderRequestSource } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -12,13 +13,16 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core';
 import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../__tests__/streamCallOptions.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
-import { sourcePromptText } from './__tests__/support/source-prompt-text.js';
+import {
+  projectSourcePrompt,
+  sourcePromptText,
+} from './__tests__/support/source-prompt-text.js';
 
 function gate(): { promise: Promise<void>; open(): void } {
   let open = (): void => {};
@@ -40,7 +44,10 @@ describe('provider request ownership', () => {
     );
   });
 
-  async function fixture(provider: IProvider): Promise<{
+  async function fixture(
+    provider: IProvider,
+    pauseRows = false,
+  ): Promise<{
     options: ReturnType<typeof createProviderCallOptions>;
     provider: IProvider;
     entered: ReturnType<typeof gate>;
@@ -134,8 +141,21 @@ describe('provider request ownership', () => {
         { speaker: 'human', blocks: [image] },
       ],
     });
+    const pausedContents = {
+      [Symbol.asyncIterator]: () => options.contents[Symbol.asyncIterator](),
+      openProviderRequest: async (signal?: AbortSignal) => {
+        if (!isProviderRequestSource(options.contents))
+          throw new Error('Expected admitted fixture rows');
+        entered.open();
+        await resume.promise;
+        return options.contents.openProviderRequest(signal);
+      },
+    };
     return {
-      options,
+      options: {
+        ...options,
+        contents: pauseRows ? pausedContents : options.contents,
+      },
       entered,
       resume,
       settings,
@@ -208,17 +228,16 @@ describe('provider request ownership', () => {
         expect(resolver.accounting().activeRequestCount).toBe(0);
       });
 
-      it('uses the same admitted tool policy for public prompt projection', async () => {
+      it('uses the same admitted tool policy when the owner changes during projection row preparation', async () => {
         let provider = create();
-        const fixtureOwner = await fixture(provider);
+        const fixtureOwner = await fixture(provider, true);
         const { options, entered, resume, settings, resolver } = fixtureOwner;
         provider = fixtureOwner.provider;
-        const projecting = provider.projectPromptEnvelope?.(options);
+        const projecting = projectSourcePrompt(provider, options);
         await entered.promise;
         mutateOwner(settings, provider.name);
         resume.open();
         const projection = await projecting;
-        if (projection === undefined) throw new Error('Expected a projection');
         expect(await sourcePromptText(projection)).toContain(
           'original tool payload',
         );

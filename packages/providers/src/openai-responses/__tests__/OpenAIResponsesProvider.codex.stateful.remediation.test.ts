@@ -48,6 +48,7 @@ import type { OpenAIResponsesRequest } from '../OpenAIResponsesTypes.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
+import { journalSendFixture } from '../../__tests__/support/journal-send-fixture.js';
 import {
   CODEX_BASE_URL,
   TEST_RUNTIME_ID,
@@ -682,12 +683,30 @@ function registerCodexRemediationCase10(): void {
         ephemeralsSnapshot: { 'responses-stateful': false },
       });
       let pulled = 0;
-      const source = (async function* (): AsyncIterableIterator<IContent> {
-        for (const row of contents) {
-          pulled += 1;
-          yield row;
-        }
-      })();
+      const source = {
+        [Symbol.asyncIterator](): AsyncIterator<IContent> {
+          throw new Error('Provider must use the admitted native selection');
+        },
+        async openProviderRequest() {
+          const fixture = await journalSendFixture({
+            *[Symbol.iterator](): Generator<IContent> {
+              for (const row of contents) {
+                pulled += 1;
+                yield row;
+              }
+            },
+          });
+          return {
+            native: fixture.selection.native,
+            count: fixture.selection.count,
+            readAt: (index: number, signal?: AbortSignal) =>
+              fixture.selection.readAt(index, signal),
+            openReader: (signal?: AbortSignal) =>
+              fixture.selection.openReader(signal),
+            close: () => fixture.close(),
+          };
+        },
+      };
       const options = streamCallOptions({
         providerName: provider.name,
         settings,

@@ -4,7 +4,6 @@ import {
   median,
   settledHeap,
 } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
-import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import {
@@ -13,7 +12,12 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { requestSelection } from './__tests__/support/request-selection.js';
 import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
-import { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
+import { NativeResponsesEstimateProjection } from './native-responses-estimate.js';
+import { nativeDiskRows } from './__tests__/support/native-disk-text-rows.js';
+import {
+  projectSourcePrompt,
+  sourcePromptText,
+} from './__tests__/support/source-prompt-text.js';
 import {
   diskTextFixture,
   diskTextRow,
@@ -76,7 +80,7 @@ async function nativeEstimate(
     await projection.releaseIfUnsent?.();
   }
 }
-function segmentDescriptors(source: Gpt56SourceProjection): string[] {
+function segmentDescriptors(): string[] {
   const result = spawnSync('lsof', ['-p', String(process.pid), '-Fn'], {
     encoding: 'utf8',
   });
@@ -84,10 +88,10 @@ function segmentDescriptors(source: Gpt56SourceProjection): string[] {
     throw new Error(`Descriptor inspection failed: ${result.stderr}`);
   return result.stdout
     .split('\n')
-    .filter((line) =>
-      source.promptSegments.some(
-        (segment) => line === `n${segment.source.path}`,
-      ),
+    .filter(
+      (line) =>
+        line.includes('/responses-prompt-keys-') ||
+        line.includes('/provider-normalization-'),
     );
 }
 async function warmRuntime(setup: Setup): Promise<void> {
@@ -131,9 +135,14 @@ async function warmRuntime(setup: Setup): Promise<void> {
       projection,
       withGpt56DiskSources(setup.factory, tmpdir()),
     );
-    if (!(projection.finalizedProjection instanceof Gpt56SourceProjection))
+    if (
+      !(
+        projection.finalizedProjection instanceof
+        NativeResponsesEstimateProjection
+      )
+    )
       throw new Error('Missing warm source');
-    segmentDescriptors(projection.finalizedProjection);
+    segmentDescriptors();
     for await (const row of setup.provider.generateChatCompletion({
       ...options,
       promptEnvelopeTransportToken: projection.transportToken,
@@ -151,7 +160,6 @@ async function uploadMeasurements(
   >,
   http: ReturnType<typeof projectionEndpoint>,
   observer: BodyObservation,
-  source: Gpt56SourceProjection,
 ): Promise<{
   firstChunkHeap: number;
   firstDemand: BodyObservation['state'];
@@ -177,7 +185,7 @@ async function uploadMeasurements(
   await http.uploaded.wait;
   await observer.last.wait;
   const lastChunkHeap = await heap();
-  const descriptorsAtUpload = segmentDescriptors(source);
+  const descriptorsAtUpload = segmentDescriptors();
   http.respond.release();
   if ((await first).done === true)
     throw new Error('Missing actual provider response');
@@ -202,13 +210,14 @@ function largestRowSize(large: boolean): number {
     0,
   );
 }
-function requireSource(value: unknown): Gpt56SourceProjection {
-  if (!(value instanceof Gpt56SourceProjection))
+function requireSource(value: unknown): NativeResponsesEstimateProjection {
+  if (!(value instanceof NativeResponsesEstimateProjection))
     throw new Error('Missing actual provider source projection');
   return value;
 }
 async function acceptance(large: boolean, retainRows = false) {
   const disk = diskTextFixture(large, retainRows);
+  const native = await nativeDiskRows(disk, retainRows);
   const http = projectionEndpoint(true);
   const setup = await projectionRuntime(
     `http://127.0.0.1:${http.server.port}/v1`,
@@ -219,9 +228,9 @@ async function acceptance(large: boolean, retainRows = false) {
   const largestRowBytes = largestRowSize(large);
   await warmRuntime(setup);
   const baseline = await heap();
-  const options = setup.options(requestSelection(disk.rows));
-  const projection = await setup.provider.projectPromptEnvelope(options);
-  const source = requireSource(projection.finalizedProjection);
+  const options = setup.options(native.selection);
+  const projection = await projectSourcePrompt(setup.provider, options);
+  requireSource(projection.finalizedProjection);
   const estimate = await estimatePromptEnvelope(
     setup.provider.name,
     projection,
@@ -238,12 +247,7 @@ async function acceptance(large: boolean, retainRows = false) {
     promptEnvelopeTransportToken: projection.transportToken,
   });
   try {
-    const measurements = await uploadMeasurements(
-      stream,
-      http,
-      observer,
-      source,
-    );
+    const measurements = await uploadMeasurements(stream, http, observer);
     const liveFinalRows = disk.references.filter(
       (row) => row.deref() !== undefined,
     ).length;
@@ -261,9 +265,12 @@ async function acceptance(large: boolean, retainRows = false) {
       baseline,
       preparedHeap,
       ...measurements,
-      finalDescriptors: segmentDescriptors(source),
-      pathsRemoved: source.promptSegments.every(
-        (segment) => !existsSync(segment.source.path),
+      finalDescriptors: segmentDescriptors(),
+      pathsRemoved: await sourcePromptText(projection).then(
+        () => false,
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message === 'Native Responses prompt is closed',
       ),
       bodies: http.bodies,
       activeBodies: activeRequestBodyCount(),
@@ -276,6 +283,7 @@ async function acceptance(large: boolean, retainRows = false) {
     await stream.return?.();
     await projection.releaseIfUnsent?.();
     observer.restore();
+    await native.close();
     disk.close();
     await http.server.stop(true);
     await setup.config.dispose();

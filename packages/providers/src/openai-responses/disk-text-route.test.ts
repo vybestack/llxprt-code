@@ -1,11 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { describe, expect, it } from 'bun:test';
-import { existsSync, readdirSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { requestSelection } from './__tests__/support/request-selection.js';
 import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
-import { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
+import { NativeResponsesEstimateProjection } from './native-responses-estimate.js';
+import {
+  projectSourcePrompt,
+  sourcePromptText,
+} from './__tests__/support/source-prompt-text.js';
+import { nativeDiskRows } from './__tests__/support/native-disk-text-rows.js';
 import {
   projectionEndpoint,
   projectionRuntime,
@@ -25,16 +30,17 @@ async function gcRows(
 describe('explicit actual provider disk text route', () => {
   it('seals the actual finalized projection without retaining rows or strings and releases an unsent token', async () => {
     const disk = projectionDiskRows(false, false);
+    const native = await nativeDiskRows(disk);
     const setup = await projectionRuntime('http://127.0.0.1:1/v1', disk.root);
     const before = new Set(readdirSync(getScratchRoot()));
     try {
-      const rows = requestSelection(disk.rows);
+      const rows = native.selection;
       const projection = await setup.provider.projectPromptEnvelope({
         ...setup.options(rows),
         requestRows: rows,
       });
       const finalized = projection.finalizedProjection;
-      expect(finalized).toBeInstanceOf(Gpt56SourceProjection);
+      expect(finalized).toBeInstanceOf(NativeResponsesEstimateProjection);
       await gcRows(disk.references);
       expect(disk.state.pulled).toBe(64);
       expect(disk.state.active).toBe(0);
@@ -49,6 +55,7 @@ describe('explicit actual provider disk text route', () => {
         ),
       ).toHaveLength(0);
     } finally {
+      await native.close();
       disk.close();
       await setup.config.dispose();
     }
@@ -58,15 +65,15 @@ describe('explicit actual provider disk text route', () => {
 describe('actual source HTTP replay', () => {
   it('preserves independent actual HTTP bytes through 503 replay using fresh segment readers', async () => {
     const disk = projectionDiskRows(false, false);
+    const native = await nativeDiskRows(disk);
     const http = projectionEndpoint(true);
     const setup = await projectionRuntime(
       `http://127.0.0.1:${http.server.port}/v1`,
       disk.root,
     );
-    const rows = requestSelection(disk.rows);
+    const rows = native.selection;
     const options = setup.options(rows);
-    const projection = await setup.provider.projectPromptEnvelope(options);
-    const source = projection.finalizedProjection;
+    const projection = await projectSourcePrompt(setup.provider, options);
     const iterator = setup.provider.generateChatCompletion({
       ...options,
       promptEnvelopeTransportToken: projection.transportToken,
@@ -94,18 +101,15 @@ describe('actual source HTTP replay', () => {
         projectionWireOracle(false),
       ]);
       expect([scanAtHttpArrival, disk.state.pulled]).toStrictEqual([64, 64]);
-      if (!(source instanceof Gpt56SourceProjection))
-        throw new Error('Missing sealed source');
-      expect(
-        source.promptSegments.every(
-          (segment) => !existsSync(segment.source.path),
-        ),
-      ).toBe(true);
+      await expect(sourcePromptText(projection)).rejects.toThrow(
+        'Native Responses prompt is closed',
+      );
     } finally {
       http.readBody.release();
       http.respond.release();
       await iterator.return?.();
       await projection.releaseIfUnsent?.();
+      await native.close();
       disk.close();
       await http.server.stop(true);
       await setup.config.dispose();
@@ -116,6 +120,7 @@ describe('actual source HTTP replay', () => {
 describe('actual source pinned estimate', () => {
   it('uses complete prompt-key pinned accounting rather than row sums through the provider estimate seam', async () => {
     const disk = projectionDiskRows(false, false);
+    const native = await nativeDiskRows(disk);
     const setup = await projectionRuntime('http://127.0.0.1:1/v1', disk.root);
     let release: (() => Promise<void>) | undefined;
     try {
@@ -129,7 +134,7 @@ describe('actual source pinned estimate', () => {
         setup.factory,
       );
       await eager.releaseIfUnsent?.();
-      const rows = requestSelection(disk.rows);
+      const rows = native.selection;
       const projection = await setup.provider.projectPromptEnvelope(
         setup.options(rows),
       );
@@ -142,6 +147,7 @@ describe('actual source pinned estimate', () => {
       expect(estimate).toStrictEqual(oracle);
     } finally {
       await release?.();
+      await native.close();
       disk.close();
       await setup.config.dispose();
     }

@@ -63,7 +63,7 @@ async function measure(
       ],
     };
   }
-  async function* rows(): AsyncIterable<IContent> {
+  async function* rows(): AsyncGenerator<IContent, void> {
     for (let index = 0; index < count; index++) {
       const row = readAt(index);
       if (eager) retainedRows.push(row);

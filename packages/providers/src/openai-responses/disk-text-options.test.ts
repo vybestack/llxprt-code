@@ -1,7 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { existsSync } from 'node:fs';
-import { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
+import {
+  projectSourcePrompt,
+  sourcePromptText,
+} from './__tests__/support/source-prompt-text.js';
 import { tmpdir } from 'node:os';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -125,7 +127,7 @@ describe('source prepared options rejection', () => {
     const disk = diskTextFixture(false, false);
     const setup = await projectionRuntime('http://127.0.0.1:1/v1', disk.root);
     const options = setup.options(requestSelection(disk.rows));
-    const projection = await setup.provider.projectPromptEnvelope(options);
+    const projection = await projectSourcePrompt(setup.provider, options);
     if (options.invocation === undefined)
       throw new Error('Missing fixture invocation');
     const invocation = createRuntimeInvocationContext({
@@ -142,14 +144,9 @@ describe('source prepared options rejection', () => {
       await expect(stream.next()).rejects.toThrow(
         'stateful options changed after the source token was prepared',
       );
-      const source = projection.finalizedProjection;
-      if (!(source instanceof Gpt56SourceProjection))
-        throw new Error('Missing sealed source');
-      expect(
-        source.promptSegments.every(
-          (segment) => !existsSync(segment.source.path),
-        ),
-      ).toBe(true);
+      await expect(sourcePromptText(projection)).rejects.toThrow(
+        'Native Responses prompt is closed',
+      );
     } finally {
       await stream.return?.();
       await projection.releaseIfUnsent?.();
