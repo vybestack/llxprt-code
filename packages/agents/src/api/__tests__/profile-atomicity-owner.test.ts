@@ -1,6 +1,6 @@
 import {
   createCapturedSessionOwner,
-  capturedSessionClient,
+  ownerClients,
 } from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -47,7 +47,7 @@ import {
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { fileURLToPath } from 'node:url';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
@@ -98,7 +98,6 @@ describe('Profile settings rollback at the owner', () => {
   let callerManager: ReturnType<typeof acquirePreferredProviderManager>;
   let callerOwner: SessionClientOwner;
   let callerClose: () => Promise<void>;
-  const callerFactories = createAgentRuntimeFactoryBindings();
   let callerRelease: AcquisitionRelease;
   let callerFiles: ProviderFileLifecycle;
   let callerRuntimeId: string;
@@ -143,7 +142,7 @@ describe('Profile settings rollback at the owner', () => {
       callerConfig,
       assembleTaskSchemaPolicy(callerSettings),
       callerManager,
-      callerFactories.agentClientFactory,
+      buildAgentClientFactory(),
       media.store,
       callerMcp.readInstructions,
       callerMcp.workspacePaths,
@@ -249,7 +248,10 @@ describe('Profile settings rollback at the owner', () => {
     );
     requireCallerActivation(activation);
     await callerOwner.initializeTools();
-    await capturedSessionClient(callerOwner).startChat();
+    const clients = ownerClients(callerOwner);
+    if (clients.length === 0)
+      throw new Error('Session owner has built no client');
+    await clients[clients.length - 1].startChat();
   }
 
   let profileStore: ProfileDefinitionReads & ProfileDefinitionWrites;
