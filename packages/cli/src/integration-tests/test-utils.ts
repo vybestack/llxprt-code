@@ -1,4 +1,4 @@
-import { adoptFixture as fromConfig } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
+import { adoptFixture } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -6,7 +6,7 @@ import { adoptFixture as fromConfig } from '../../../agents/src/api/__tests__/he
  */
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   MCPOAuthTokenStorage,
@@ -24,7 +24,8 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import { createTestMcpRuntime } from '../../../agents/src/api/__tests__/helpers/create-mcp-runtime.js';
-import { type Agent } from '@vybestack/llxprt-code-agents';
+import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { afterEach } from 'bun:test';
 
 function createTestOAuthBinding(): McpOAuthBinding {
@@ -89,19 +90,26 @@ export async function cleanupTempDirectory(dir: string): Promise<void> {
     }
   }
 }
-export async function initializeTestConfig(
-  config: Config,
-  providerManager?: RuntimeProviderManager,
-): Promise<Agent> {
+/**
+ * Builds an agent over a caller-owned `Config` through the production
+ * `fromConfig` entry point. The agent builds and disposes its own session
+ * owners; the borrowed `Config` is disposed after it.
+ */
+export async function initializeTestConfig(config: Config): Promise<Agent> {
   const settings = new SettingsService();
   for (const [key, value] of Object.entries(config.getInitialSettings()))
     settings.set(key, value);
-  return initializeTestAgent(
+  const agent = await fromConfig(
     config,
-    providerManager,
     settings,
-    new SessionSettingsOwner(settings),
+    {},
+    new CredentialAuthority(),
   );
+  roots.add(async () => {
+    await agent.dispose();
+    await config.dispose();
+  });
+  return agent;
 }
 
 export async function initializeTestAgent(
@@ -124,7 +132,7 @@ export async function initializeTestAgent(
     },
     {},
   );
-  const agent = await fromConfig(
+  const agent = await adoptFixture(
     config,
     settingsService,
     { mcpOwnership: 'caller' },
