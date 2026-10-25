@@ -8,54 +8,34 @@
  * @plan:PLAN-20260617-COREAPI.P13
  * @requirement:REQ-016
  *
- * LAYER-5 resource-leak / disposal (T13, RED). Behavioral integration tests
- * against a real public Agent, driven through the agentHarness. Every test FAILS
- * NATURALLY now because `AgentImpl.dispose()` throws at its stub body
- * (agentImpl.ts ~164), so the post-dispose disposed-flag reads never run. No
- * mock theater, no reverse tests, no NYI literal matching — only real behavioral
- * assertions on observable disposed flags obtained through the white-box
- * disposalProbe helper.
+ * LAYER-5 resource-leak / disposal. Behavioral integration tests against a real
+ * public Agent, driven through the agentHarness. Each ownership-table row from
+ * dispose.md §4.3 is asserted torn-down by its own test that NAMES the row
+ * token. `await agent.dispose()` is called DIRECTLY (the harness cleanup()
+ * swallows dispose errors, which is fine for env restore in `finally` but
+ * disposal tests MUST observe the real throw / real effect).
  *
- * Each ownership-table row from dispose.md §4.3 is asserted torn-down by its
- * own test that NAMES the row token. The capture-before-dispose pattern grabs
- * resource references first (dispose may null the facade-held slots); then
- * `await agent.dispose()` is called DIRECTLY (the harness cleanup() swallows
- * dispose errors — fine for env restore in `finally`, but disposal tests MUST
- * observe the real throw / real flag flip); then the captured reference's
- * disposed flag is read. At P24 (GREEN) dispose() flips the real flags and the
- * assertions pass with no rewrite.
+ * Observation per row (public Agent API and real effects only):
+ * - agentClient: `agent.getHistory()` resolves while the agent is open and
+ *   rejects as disposed once the session client owner is torn down.
+ * - scheduler + confirmationCoordinator: the test's own
+ *   `createRecordingSchedulerFactory().factory` is injected through the public
+ *   `toolSchedulerFactory` input and a tool turn is driven; the recording
+ *   handle the factory returned exposes a real `disposed` boolean.
+ * - sessionLock: the recording lock file `<chats dir>/<sessionId>.lock` exists
+ *   while recording is on and is gone after dispose.
+ * - idempotent re-dispose + AggregateDisposeError rows: structural predicates
+ *   over the real rejection (failing-factory induction).
  *
- * GREEN-reachability contract per row:
- * - agentClient: observes its `handleModelChanged` handler leaving
- *   `coreEvents.listeners(CoreEvent.ModelChanged)` (client.ts registers it in
- *   the constructor; dispose() removes it). The fake client IS constructed and
- *   its constructor DOES register the handler, so this is a genuine
- *   transition.
- * - scheduler + confirmationCoordinator: inject
- *   `createRecordingSchedulerFactory().factory` + drive a tool turn; assert the
- *   recording handle's REAL `disposed` boolean. CORRECT (the fake handle
- *   genuinely exposes `disposed`).
- * - messageBus: probe sums `emitter.eventNames().reduce((n,name)=>n+
- *   emitter.listenerCount(name),0)` on the real private emitter. CORRECT.
- * - extensions: observed through the loader's `getExtensions()` after dispose
- *   (see the T13e cases).
- * - sessionLock (NET-NEW per dispose.md lines 81-82): the lock handle has no
- *   boolean flag, so the probe reads the completion marker
- *   `ownership.sessionLocksReleased` that dispose sets after the release loop.
- * - idempotent re-dispose + AggregateDisposeError rows: CORRECT (structural
- *   predicate; failing-factory induction).
- *
- * GREEN-reachability audit: EVERY disposal test performs a PRE-dispose sanity
- * read that EXECUTES the probe against the real captured object BEFORE
- * `dispose()` runs, asserting the resource is currently NOT-yet-torn-down
- * (e.g. `expect(agentClientDisposed(probe)).toBe(false)`). This forces the
- * probe code path to run at RED, so a missing import / non-existent surface
- * would fail LOUDLY here instead of being masked by the NYI throw. The PRIMARY
- * behavioral assertion remains the POST-dispose teardown (the `toBe(true)` /
- * `toBe(0)` after `await agent.dispose()`).
+ * Rows asserted at domain level (internals the Agent API cannot read):
+ * - messageBus subscriptions: `runtime-policy-owner-disposal.behavior.test.ts`.
+ * - extensions: `workspace-extension-disposal.behavior.test.ts`.
+ * - client teardown itself: `session-client-owner-disposal.behavior.test.ts`.
  */
 
 import { describe, it, expect } from 'bun:test';
+import { readdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import {
   buildAgent,
   drain,
@@ -64,37 +44,38 @@ import {
   ToolConfirmationOutcome,
 } from './helpers/agentHarness.js';
 import {
-  agentClientDisposed,
   aggregateErrors,
   aggregateMessage,
-  captureProbe,
-  confirmationCoordinatorDisposed,
-  type DisposalProbe,
-  type FakeExtension,
-  buildExtensionDisposalAgent,
   isAggregateDisposeError,
-  messageBusSubscriptionCount,
-  schedulerDisposed,
-  sessionLocksReleased,
 } from './helpers/disposalProbe.js';
 import {
   createFailingSchedulerFactory,
   createRecordingSchedulerFactory,
+  type RecordingSchedulerFactory,
+  type RecordingSchedulerHandle,
 } from './helpers/fakeScheduler.js';
+
+function firstHandle(
+  recording: RecordingSchedulerFactory,
+): RecordingSchedulerHandle {
+  const handle = recording.createdHandles.at(0);
+  if (handle === undefined)
+    throw new Error('No scheduler reached actual injected acquisition');
+  return handle;
+}
+
+function lockFiles(chatsDir: string): string[] {
+  return readdirSync(chatsDir).filter((name) => name.endsWith('.lock'));
+}
 
 describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => {
   it('T13 agentClient is torn down on dispose (disposed flag is true) @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const probe: DisposalProbe = captureProbe(agent);
-      // PRE-dispose sanity read: the agentClient is NOT yet torn down. The
-      // probe reads the client's `handleModelChanged` handler (registered by
-      // the client.ts constructor) which dispose() removes from
-      // coreEvents. dispose() line 60 -> config.dispose() ->
-      // agentClient.dispose().
-      expect(agentClientDisposed(probe)).toBe(false);
+      // PRE-dispose sanity read: the session client is live and answers.
+      await expect(agent.getHistory()).resolves.toStrictEqual([]);
       await agent.dispose();
-      expect(agentClientDisposed(probe)).toBe(true);
+      await expect(agent.getHistory()).rejects.toThrow(/disposed/);
     } finally {
       await cleanup();
     }
@@ -103,12 +84,9 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
   it('T13 scheduler (facade-held injected-factory instance) is torn down on dispose (disposed flag is true) @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', async () => {
     // Per dispose.md lines 40-47 this facade-held scheduler is CONDITIONAL T19:
     // it exists ONLY when an injected toolSchedulerFactory creates an instance
-    // the facade retains. Most agents have NO facade-held scheduler, so a
-    // plain-text agent would never have one and the disposed flag could never
-    // flip. Build this agent WITH an injected RECORDING toolSchedulerFactory
-    // (the same one T19 uses) AND drive a tool turn so the facade creates and
-    // retains the injected scheduler/coordinator. dispose.md table note: "Most
-    // agents have NO facade-held scheduler."
+    // the facade retains. Build this agent WITH an injected RECORDING
+    // toolSchedulerFactory AND drive a tool turn so the facade creates and
+    // retains the injected scheduler/coordinator.
     const recording = createRecordingSchedulerFactory();
     const { agent, cleanup } = await buildAgent('tool-call-then-answer.jsonl', {
       toolSchedulerFactory: recording.factory,
@@ -118,24 +96,19 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
       ToolConfirmationOutcome.ProceedOnce,
     );
     try {
-      // Run a tool turn so the facade invokes the injected factory and retains
-      // the scheduler/coordinator. At RED agent.stream/onConfirmationRequest
-      // throws NYI → natural fail before any scheduling.
       const events = await drain(agent.stream('use a tool'));
       expect(countType(events, 'tool-call')).toBeGreaterThanOrEqual(1);
       expect(recording.createdHandles.length).toBeGreaterThanOrEqual(1);
 
-      // The probe's scheduler field targets the facade-held injected-factory
-      // instance (captureProbe reads injectedFactoryScheduler). At GREEN the
-      // factory created >=1 handle and the facade retained it.
-      const probe: DisposalProbe = captureProbe(agent);
+      // The handle the test's factory returned IS the facade-held scheduler.
+      const handle = firstHandle(recording);
       // PRE-dispose sanity read: the injected scheduler handle is NOT yet torn
-      // down. Executes the probe against the real captured handle.
-      expect(schedulerDisposed(probe)).toBe(false);
+      // down.
+      expect(handle.disposed).toBe(false);
       // dispose.md line 41: injectedFactoryScheduler.dispose() (guarded
       // existence check; CONDITIONAL T19).
       await agent.dispose();
-      expect(schedulerDisposed(probe)).toBe(true);
+      expect(handle.disposed).toBe(true);
     } finally {
       responder.unsubscribe();
       await cleanup();
@@ -145,10 +118,8 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
   it('T13 confirmationCoordinator is torn down on dispose (disposed flag is true) @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', async () => {
     // Per dispose.md lines 45-47 the coordinator is CONDITIONAL T19: it is
     // owned by the facade-held injected-factory scheduler and exists ONLY when
-    // an injected toolSchedulerFactory created a retained instance. Build this
-    // agent WITH an injected RECORDING toolSchedulerFactory AND drive a tool
-    // turn so the facade retains the coordinator backing the injected
-    // scheduler. A plain-text agent has no facade-held coordinator.
+    // an injected toolSchedulerFactory created a retained instance. The
+    // recording handle backs both rows, so this reads the same handle.
     const recording = createRecordingSchedulerFactory();
     const { agent, cleanup } = await buildAgent('tool-call-then-answer.jsonl', {
       toolSchedulerFactory: recording.factory,
@@ -162,157 +133,41 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
       expect(countType(events, 'tool-call')).toBeGreaterThanOrEqual(1);
       expect(recording.createdHandles.length).toBeGreaterThanOrEqual(1);
 
-      const probe: DisposalProbe = captureProbe(agent);
+      const handle = firstHandle(recording);
       // PRE-dispose sanity read: the coordinator backing the facade-held
       // scheduler is NOT yet torn down.
-      expect(confirmationCoordinatorDisposed(probe)).toBe(false);
+      expect(handle.disposed).toBe(false);
       // dispose.md line 46: injectedFactoryCoordinator.dispose() (CONDITIONAL
       // T19; coordinator is owned by the injected-factory scheduler).
       await agent.dispose();
-      expect(confirmationCoordinatorDisposed(probe)).toBe(true);
+      expect(handle.disposed).toBe(true);
     } finally {
       responder.unsubscribe();
       await cleanup();
     }
   });
 
-  it('T13 messageBus has zero subscriptions after dispose @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    try {
-      const probe: DisposalProbe = captureProbe(agent);
-      // PRE-dispose sanity read: the real emitter reports its genuine current
-      // listener count (>=0). This executes the probe's emitter-summation
-      // (eventNames().reduce + listenerCount) against the captured bus BEFORE
-      // dispose, proving the surface is reachable (would surface a missing
-      // import / non-existent emitter here, not after the NYI throw).
-      const preCount = messageBusSubscriptionCount(probe);
-      expect(preCount).toBeGreaterThanOrEqual(0);
-      // dispose() lines 50-52 unsubscribe all recorded bus subscriptions, so
-      // the emitter's total listener count reaches its post-dispose baseline.
-      await agent.dispose();
-      expect(messageBusSubscriptionCount(probe)).toBe(0);
-    } finally {
-      await cleanup();
-    }
-  });
-
-  it('T13e extension teardown unloads ONLY the active extensions (inactive ones are filtered out), in encounter order @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016', async () => {
-    const extensions: readonly FakeExtension[] = [
-      {
-        name: 'alpha',
-        version: '1.0.0',
-        isActive: true,
-        path: '/ext/alpha',
-        contextFiles: [],
-      },
-      {
-        name: 'beta-inactive',
-        version: '1.0.0',
-        isActive: false,
-        path: '/ext/beta',
-        contextFiles: [],
-      },
-      {
-        name: 'gamma',
-        version: '2.0.0',
-        isActive: true,
-        path: '/ext/gamma',
-        contextFiles: [],
-      },
-    ];
-    const { agent, cleanup, recorder } =
-      await buildExtensionDisposalAgent(extensions);
-    try {
-      // Install a loader carrying a mix of active and inactive extensions. The
-      // observable contract (dispose.md line 80): dispose() reads
-      // getExtensions(), filters to isActive, and unloads each active one. The
-      // recorder captures the NAMES actually passed to unloadExtension, so the
-      // assertion verifies the real filtering output — inactive extensions are
-      // NEVER unloaded, active ones are unloaded in encounter order.
-
-      // Pre-dispose: nothing unloaded yet.
-      expect(recorder.unloaded).toStrictEqual([]);
-
-      await agent.dispose();
-
-      // ONLY the two active extensions were unloaded, in encounter order; the
-      // inactive 'beta-inactive' was filtered out by the isActive predicate.
-      expect(recorder.unloaded).toStrictEqual(['alpha', 'gamma']);
-    } finally {
-      await cleanup();
-    }
-  });
-
-  it('T13e when every extension is inactive, NONE are unloaded yet teardown still completes @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016', async () => {
-    const extensions: readonly FakeExtension[] = [
-      {
-        name: 'idle-one',
-        version: '1.0.0',
-        isActive: false,
-        path: '/ext/one',
-        contextFiles: [],
-      },
-      {
-        name: 'idle-two',
-        version: '1.0.0',
-        isActive: false,
-        path: '/ext/two',
-        contextFiles: [],
-      },
-    ];
-    const { agent, cleanup, recorder } =
-      await buildExtensionDisposalAgent(extensions);
-    try {
-      // All extensions inactive: the isActive filter yields an empty set, so
-      // unloadExtension is NEVER called and dispose() still completes.
-
-      await agent.dispose();
-
-      expect(recorder.unloaded).toStrictEqual([]);
-    } finally {
-      await cleanup();
-    }
-  });
-
-  it('T13e a loader lacking the required unloadExtension method reports failure while other teardown completes @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016', async () => {
-    const extensions: readonly FakeExtension[] = [
-      {
-        name: 'active-but-unloadless',
-        version: '1.0.0',
-        isActive: true,
-        path: '/ext/x',
-        contextFiles: [],
-      },
-    ];
-    const { agent, cleanup, recorder } = await buildExtensionDisposalAgent(
-      extensions,
-      true,
-    );
-    try {
-      await expect(agent.dispose()).rejects.toThrow(
-        'this.unloadExtension is not a function',
-      );
-
-      expect(recorder.unloaded).toStrictEqual([]);
-    } finally {
-      await cleanup();
-    }
-  });
-
   it('T13 sessionLock is released on dispose (released flag is true) @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    const sessionId = `disposal-lock-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+      sessionId,
+    });
     try {
-      const probe: DisposalProbe = captureProbe(agent);
-      // PRE-dispose sanity read: the session lock teardown has NOT yet run. The
-      // probe reads the per-resource teardown marker
-      // `ownership.sessionLocksReleased` that P24 sets when every captured
-      // lock's `release()` completes. Session-lock teardown is a NET-NEW step
-      // (dispose.md lines 81-82) — `SessionLockManager.release()` uses a closure
-      // variable (NOT a property) and `LockHandle` has no `.released`, so the
-      // observable is the ownership record's completion marker.
-      expect(sessionLocksReleased(probe)).toBe(false);
+      // Recording takes the session's real lock file in the chats directory,
+      // which is the directory of the recording journal.
+      await agent.setHistory([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'lock-seed' }] },
+      ]);
+      await agent.session.setRecording({ enabled: true });
+      const journal = agent.session.getRecording().path;
+      if (!journal) throw new Error('Recording journal missing');
+      const chatsDir = dirname(journal);
+      const lockName = `${sessionId}.lock`;
+
+      // PRE-dispose sanity read: the session lock is held.
+      expect(lockFiles(chatsDir)).toContain(lockName);
       await agent.dispose();
-      expect(sessionLocksReleased(probe)).toBe(true);
+      expect(lockFiles(chatsDir)).not.toContain(lockName);
     } finally {
       await cleanup();
     }
@@ -321,17 +176,15 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
   it('T13 re-dispose is idempotent: a second dispose() resolves without throwing and the agentClient stays disposed @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const probe: DisposalProbe = captureProbe(agent);
-      // PRE-dispose sanity read: agentClient not yet torn down (its
-      // `handleModelChanged` handler is still registered on coreEvents).
-      expect(agentClientDisposed(probe)).toBe(false);
+      // PRE-dispose sanity read: the session client is live and answers.
+      await expect(agent.getHistory()).resolves.toStrictEqual([]);
       // First dispose performs the teardown; dispose.md lines 11-12 guard with
       // a disposed flag so a second dispose() is a no-op that resolves cleanly.
       await agent.dispose();
       // The second call must not throw — the idempotent guard short-circuits.
       await agent.dispose();
-      // The agentClient stays torn down after the idempotent second dispose.
-      expect(agentClientDisposed(probe)).toBe(true);
+      // The session client stays torn down after the idempotent second dispose.
+      await expect(agent.getHistory()).rejects.toThrow(/disposed/);
     } finally {
       await cleanup();
     }

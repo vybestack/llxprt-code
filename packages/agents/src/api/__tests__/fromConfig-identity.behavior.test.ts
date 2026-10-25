@@ -15,11 +15,6 @@ import { fromConfig } from '../fromConfig.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { openRouteAAgent } from './helpers/route-a-agent.js';
-import {
-  captureProbe,
-  agentClientDisposed,
-  type DisposalProbe,
-} from './helpers/disposalProbe.js';
 import { drain, countType, buildAgent } from './helpers/agentHarness.js';
 
 /**
@@ -158,13 +153,12 @@ describe('fromConfig caller identities', () => {
     }
   });
 
-  it('T7b ownership contrast: a createAgent-created Config IS disposed by agent.dispose() — agentClientDisposed(probe) === true after dispose @requirement:REQ-001.3 @scenario:agent-owned-config @given:a createAgent-built agent (Config owned by the agent) @when:agent.dispose() runs @then:agentClientDisposed(probe) === true (the ownership flag differentiates createAgent from fromConfig)', async () => {
+  it('T7b ownership contrast: a createAgent-created Config IS disposed by agent.dispose() — agent.getHistory() rejects as disposed after dispose @requirement:REQ-001.3 @scenario:agent-owned-config @given:a createAgent-built agent (Config owned by the agent) @when:agent.dispose() runs @then:agent.getHistory() rejects as disposed (the ownership flag differentiates createAgent from fromConfig)', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const probe: DisposalProbe = captureProbe(agent);
-      expect(agentClientDisposed(probe)).toBe(false);
+      await expect(agent.getHistory()).resolves.toStrictEqual([]);
       await agent.dispose();
-      expect(agentClientDisposed(probe)).toBe(true);
+      await expect(agent.getHistory()).rejects.toThrow(/disposed/);
     } finally {
       await cleanup();
     }

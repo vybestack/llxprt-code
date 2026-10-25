@@ -6,7 +6,6 @@ import { describe, expect, it } from 'bun:test';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { type Agent, type AgentEvent } from '@vybestack/llxprt-code-agents';
 import { drain, countType, buildAgent } from './helpers/agentHarness.js';
-import { captureProbe, agentClientDisposed } from './helpers/disposalProbe.js';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 import * as fc from 'fast-check';
 
@@ -115,12 +114,11 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
     // seam with a real working directory (the createAgent-owned Config path).
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const probe = captureProbe(agent);
       // PRE-dispose sanity: the agent-owned client is not yet torn down.
-      expect(agentClientDisposed(probe)).toBe(false);
+      await expect(agent.getHistory()).resolves.toStrictEqual([]);
       await agent.dispose();
       // POST-dispose: the createAgent-owned Config IS torn down.
-      expect(agentClientDisposed(probe)).toBe(true);
+      await expect(agent.getHistory()).rejects.toThrow(/disposed/);
     } finally {
       await cleanup();
     }
