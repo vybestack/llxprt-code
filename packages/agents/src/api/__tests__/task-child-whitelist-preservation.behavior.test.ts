@@ -1,12 +1,10 @@
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { fromConfig } from '../fromConfig.js';
 import { describe, expect, it } from 'bun:test';
 import { createServer } from 'node:http';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -20,6 +18,7 @@ import {
 } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   ProfileManager,
   SettingsService,
@@ -138,7 +137,6 @@ async function observeChild(
       'whitelist-child',
       'Complete the task without invoking tools.',
     );
-    const factories = createAgentRuntimeFactoryBindings();
     config = new Config({
       ...toConfigParameters({
         provider: 'openai',
@@ -165,19 +163,8 @@ async function observeChild(
           cliOverrides: { key: 'local-test-key', baseUrl },
         },
       },
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      factories,
+      new CredentialAuthority(),
     );
-    const registry = fixtureAgentResources(agent).publishedClient(agent).tools;
     const task = agent.tools.get('task');
     if (!task) throw new Error('Public direct task handle unavailable');
     if (blockAll) await agent.tools.setEnabled(['task']);
@@ -190,7 +177,7 @@ async function observeChild(
       flatAllowed: ephemerals['tools.allowed'],
       nestedTools: ephemerals.tools,
     };
-    expect(registry.getAllTools().map((tool) => tool.name)).toStrictEqual(
+    expect(agent.tools.list().map((tool) => tool.name)).toStrictEqual(
       expect.arrayContaining(requestedTools),
     );
     if (blockAll)
