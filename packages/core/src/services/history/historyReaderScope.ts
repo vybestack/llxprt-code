@@ -27,6 +27,7 @@ export class HistoryReaderScope {
   }
 
   open<T>(source: Reader<T>): Reader<T> {
+    this.requireOpen();
     const reader: Reader<T> = {
       [Symbol.asyncIterator]: () => reader,
       async [Symbol.asyncDispose]() {
@@ -54,7 +55,7 @@ export class HistoryReaderScope {
         }
       },
     };
-    if (!this.closed) this.readers.add(reader);
+    this.readers.add(reader);
     return reader;
   }
 

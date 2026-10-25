@@ -8,8 +8,16 @@ import {
 import { unitCase } from './__tests__/support/normalization-cases.js';
 import { withoutFileCreation } from './__tests__/support/without-file-creation.js';
 import type { IContent } from './IContent.js';
+import { callerOwnedProviderRequest } from './caller-owned-provider-request.js';
 
 describe('caller-owned provider overrides', () => {
+  it('refuses to open a reader after its snapshot closes', async () => {
+    const snapshot = await callerOwnedProviderRequest([
+      { speaker: 'human', blocks: [{ type: 'text', text: 'closed request' }] },
+    ]);
+    await snapshot.close();
+    expect(() => snapshot.openReader()).toThrow('snapshot is closed');
+  });
   it('rejects an override that lost its indexed snapshot opener without staging it', async () => {
     await withCoreSuffixFixture(1, async (history) => {
       const override = {
