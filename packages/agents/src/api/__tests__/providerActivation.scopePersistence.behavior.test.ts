@@ -60,6 +60,15 @@ describe('executeProviderActivation provider-scope persistence (#2534)', () => {
   ): Promise<ActivatedState> {
     const route = await openRouteAAgent({ config, intent: { activation } });
     try {
+      // Runs through the session client, so it fails when activation left the
+      // agent without one (a turn cannot run in the unconfigured and no-replay
+      // modes).
+      await route.agent.setHistory([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'client-probe' }] },
+      ]);
+      expect(JSON.stringify(await route.agent.getHistory())).toContain(
+        'client-probe',
+      );
       return {
         activeProvider:
           route.agent.providerReads.inspection.getActiveProviderDetails()?.name,

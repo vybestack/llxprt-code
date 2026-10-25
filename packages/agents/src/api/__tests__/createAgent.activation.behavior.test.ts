@@ -15,6 +15,18 @@ import {
   type AgentConfig,
 } from './helpers/agentHarness.js';
 
+/**
+ * A history round trip runs through the session client, so it fails when
+ * construction left the agent without a client. Unlike a turn it needs no
+ * provider credentials, so it also covers the unconfigured and no-replay modes.
+ */
+async function expectClientBacked(agent: Agent): Promise<void> {
+  await agent.setHistory([
+    { speaker: 'human', blocks: [{ type: 'text', text: 'client-probe' }] },
+  ]);
+  expect(JSON.stringify(await agent.getHistory())).toContain('client-probe');
+}
+
 function activeProviderName(agent: Agent): string | undefined {
   return agent.providerReads.inspection.getActiveProviderDetails()?.name;
 }
@@ -32,6 +44,7 @@ async function activationSnapshot(
 ) {
   const { agent, cleanup } = await buildAgent('plain-text.jsonl', overrides);
   try {
+    if (!withTurn) await expectClientBacked(agent);
     return {
       provider: agent.getProvider(),
       model: agent.getModel(),
@@ -220,6 +233,7 @@ describe('createAgent single activation transition (#2534)', () => {
           expect(agent.getProvider()).toBe(provider);
           expect(agent.getModel()).toBe(model);
           expect(activeProviderName(agent)).toBe(active);
+          await expectClientBacked(agent);
         } finally {
           await agent.dispose();
         }
