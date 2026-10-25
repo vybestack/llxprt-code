@@ -1,4 +1,3 @@
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -15,9 +14,10 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 
+import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import type { Agent } from '../agent.js';
+import type { AgentConfig } from '../config-types.js';
 
 import { createAgent } from '../createAgent.js';
 function barrier(): { promise: Promise<void>; release(): void } {
@@ -131,37 +131,39 @@ async function withConfig(
   }
 }
 
-function adopt(config: Config, client?: GitHubBrokerClient): Promise<Agent> {
-  return fromConfig(
-    config,
-    new SettingsService(),
-    { sessionId: 'same-report-label', activation: { authMode: 'none' } },
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    client,
-  );
+function build(
+  config: Config,
+  client?: GitHubBrokerClient,
+  overrides: Partial<AgentConfig> = {},
+): Promise<Agent> {
+  return createAgent({
+    provider: 'openai',
+    model: 'report-host-model',
+    auth: {
+      apiKey: 'local-provider-key',
+      baseUrl: 'http://127.0.0.1:1/v1',
+    },
+    workingDir: config.getWorkingDir(),
+    sessionId: 'same-report-label',
+    harness: { includeProcessCwd: false },
+    skillsSupport: false,
+    mcpEnabled: false,
+    telemetry: { enabled: false },
+    ...(client === undefined ? {} : { githubBrokerClient: client }),
+    ...overrides,
+  });
+}
+
+function failingContributions(failure: Error): ProviderContributionRegistry {
+  return {
+    getProviderFactory: () => undefined,
+    getProviderOrigin: () => undefined,
+    listProviderIds: () => [],
+    getContributedAliases: () => {
+      throw failure;
+    },
+    getMcpAuthFactories: () => [],
+  };
 }
 
 function github(agent: Agent) {
@@ -193,9 +195,9 @@ describe('explicit host GitHub broker ownership', () => {
         const secondWire = await reportWire();
         const owners: Agent[] = [];
         try {
-          const first = await adopt(config, firstWire.client);
+          const first = await build(config, firstWire.client);
           owners.push(first);
-          const second = await adopt(config, secondWire.client);
+          const second = await build(config, secondWire.client);
           owners.push(second);
           const invocation = github(first).build({
             op: 'issue.create',
@@ -245,7 +247,7 @@ describe('explicit host GitHub broker ownership', () => {
       const wire = await reportWire();
       let agent: Agent | undefined;
       try {
-        agent = await adopt(config, wire.client);
+        agent = await build(config, wire.client);
         const tool = github(agent);
         await expect(
           tool.buildAndExecute(
@@ -274,7 +276,7 @@ describe('explicit host GitHub broker ownership', () => {
       const wire = await reportWire(true);
       let agent: Agent | undefined;
       try {
-        agent = await adopt(config, wire.client);
+        agent = await build(config, wire.client);
         const tool = github(agent);
         const pending = tool.buildAndExecute(
           { op: 'issue.view', number: 1 },
@@ -305,45 +307,16 @@ describe('explicit host GitHub broker ownership', () => {
 
   it('omits a missing broker and respects tool exclusions with an explicit broker', async () => {
     await withConfig(async (config) => {
-      const missing = await adopt(config);
+      const missing = await build(config);
       try {
         expect(missing.tools.get('github')).toBeUndefined();
       } finally {
         await missing.dispose();
       }
       const wire = await reportWire();
-      const settingsService = new SettingsService();
-      settingsService.set('tools.disabled', ['github']);
-      const excluded = await fromConfig(
-        config,
-        settingsService,
-        { activation: { authMode: 'none' } },
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        wire.client,
-      );
+      const excluded = await build(config, wire.client, {
+        excludeTools: ['github'],
+      });
       try {
         expect(excluded.tools.get('github')).toBeUndefined();
         expect(wire.accepted()).toStrictEqual([]);
@@ -360,39 +333,12 @@ describe('explicit host GitHub broker ownership', () => {
       const cleanupFailure = new Error('Owned report transport cleanup failed');
       let failure: unknown;
       try {
-        await fromConfig(
-          config,
-          new SettingsService(),
-          { sessionId: '', activation: { authMode: 'none' } },
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          wire.client,
-          async (): Promise<void> => {
+        await build(config, wire.client, {
+          sessionId: '',
+          disposeGitHubBroker: async (): Promise<void> => {
             throw cleanupFailure;
           },
-        );
+        });
       } catch (error: unknown) {
         failure = error;
       }
@@ -401,7 +347,7 @@ describe('explicit host GitHub broker ownership', () => {
         if (!(failure instanceof AggregateError))
           throw new Error('Missing aggregated bootstrap error');
         expect(failure.errors).toContain(cleanupFailure);
-        const peer = await adopt(config, wire.client);
+        const peer = await build(config, wire.client);
         try {
           expect((await readReport(peer)).error).toBeUndefined();
         } finally {
@@ -417,53 +363,19 @@ describe('explicit host GitHub broker ownership', () => {
     await withConfig(async (config) => {
       const caller = await reportWire();
       const owned = await reportWire();
-      const peer = await adopt(config, caller.client);
+      const peer = await build(config, caller.client);
       const primary = new Error('Host report tool preparation failed');
       const cleanup = new Error('Transferred host report transport failed');
       try {
         let failure: unknown;
         try {
-          await fromConfig(
-            config,
-            new SettingsService(),
-            { activation: { authMode: 'none' } },
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            owned.client,
-            async (): Promise<void> => {
+          await build(config, owned.client, {
+            disposeGitHubBroker: async (): Promise<void> => {
               await owned.stop();
               throw cleanup;
             },
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            (): void => {
-              throw primary;
-            },
-          );
+            providerContributions: failingContributions(primary),
+          });
         } catch (error: unknown) {
           failure = error;
         }
@@ -495,20 +407,8 @@ describe('explicit host GitHub broker ownership', () => {
   it('assembles created roots with explicit transport transfer and closes the owned server exactly once', async () => {
     await withConfig(async (config) => {
       const wire = await reportWire();
-      const agent = await createAgent({
-        provider: 'openai',
-        model: 'report-host-model',
-        auth: {
-          apiKey: 'local-provider-key',
-          baseUrl: 'http://127.0.0.1:1/v1',
-        },
-        workingDir: config.getWorkingDir(),
+      const agent = await build(config, wire.client, {
         sessionId: 'created-report-host',
-        harness: { includeProcessCwd: false },
-        skillsSupport: false,
-        mcpEnabled: false,
-        telemetry: { enabled: false },
-        githubBrokerClient: wire.client,
         disposeGitHubBroker: wire.stop,
       });
       try {
