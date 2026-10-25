@@ -2,19 +2,26 @@ import {
   jsonlHookCommand,
   removeJsonlHook,
 } from './helpers/jsonl-hook-command.js';
-import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from './helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
 import { describe, expect, it } from 'bun:test';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import type { AgentConfig } from '../config-types.js';
+import { fromConfig } from '../fromConfig.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 /**
  * @license
@@ -27,27 +34,95 @@ function requirePath(path: string | undefined): string {
   return path;
 }
 
+interface RoutedPair {
+  readonly agent: Agent;
+  readonly sibling: Agent;
+}
+
+/**
+ * Two independent agents a host builds with `fromConfig` from one `Config`
+ * (`AgentConfig` carries no `enableHooks`, so the test owns the `Config` when
+ * hooks are configured). Each has its own client, history, journal and hook
+ * runner; both record into the one chats directory of the `Config`.
+ */
+async function withRoutedPair(
+  authority: CredentialAuthority,
+  scenario: (pair: RoutedPair) => Promise<void>,
+  hooks?: AgentConfig['hooks'],
+): Promise<void> {
+  const home = await mkdtemp(join(tmpdir(), 'recording-hook-routing-home-'));
+  const previousHome = process.env.LLXPRT_CONFIG_HOME;
+  process.env.LLXPRT_CONFIG_HOME = home;
+  const directory = await realpath(
+    await mkdtemp(join(tmpdir(), 'recording-hook-routing-')),
+  );
+  const config = new Config({
+    ...toConfigParameters({
+      provider: 'fake',
+      model: 'fake-model',
+      workingDir: directory,
+      ...(hooks === undefined ? {} : { hooks }),
+    }),
+    interactive: true,
+    ...(hooks === undefined ? {} : { enableHooks: true }),
+  });
+  const settings = new SettingsService();
+  for (const [key, value] of Object.entries(config.getInitialSettings()))
+    settings.set(key, value);
+  const agents: Agent[] = [];
+  const open = async (): Promise<Agent> => {
+    const agent = await fromConfig(
+      config,
+      settings,
+      { sessionId: randomUUID() + '-recording-hook-routing' },
+      authority,
+    );
+    agents.push(agent);
+    return agent;
+  };
+  try {
+    const agent = await open();
+    const sibling = await open();
+    await scenario({ agent, sibling });
+  } finally {
+    await runCleanupSteps([
+      ...[...agents].reverse().map((agent) => async () => {
+        if (agent.session.getRecording().enabled)
+          await agent.session.setRecording({ enabled: false });
+        await agent.dispose();
+      }),
+      () => config.dispose(),
+      () => rm(config.projectTempDir, { recursive: true, force: true }),
+      () => rm(directory, { recursive: true, force: true }),
+      () => {
+        if (previousHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
+        else process.env.LLXPRT_CONFIG_HOME = previousHome;
+      },
+      () => rm(home, { recursive: true, force: true }),
+    ]);
+  }
+}
+
 describe('borrowed facade lifecycle hook transcript routing', () => {
   useRecordingPrompts();
+  const credentials = useOwnedCredentials();
+  useFakeResponsesReplay('multi-turn-text.jsonl');
   it('routes manual PreCompress command input through the current facade owner', async () => {
     const output = join(tmpdir(), `recording-hook-owner-${randomUUID()}.jsonl`);
     try {
-      await withRecordingLifetimeFixture(
-        async (
-          agent,
-          _config,
-          _settingsOwner,
-          _settingsService,
-          _oauthManager,
-          borrow,
-        ) => {
-          const sibling = await borrow();
-          await agent.setHistory([
+      await withRoutedPair(
+        credentials().authority,
+        async ({ agent, sibling }) => {
+          const seed = [
             {
-              speaker: 'human',
-              blocks: [{ type: 'text', text: 'seed compression hook' }],
+              speaker: 'human' as const,
+              blocks: [
+                { type: 'text' as const, text: 'seed compression hook' },
+              ],
             },
-          ]);
+          ];
+          await agent.setHistory(seed);
+          await sibling.setHistory(seed);
           await agent.session.setRecording({ enabled: true });
           const aPath = requirePath(agent.session.getRecording().path);
           await sibling.session.setRecording({ enabled: true });
@@ -65,20 +140,17 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
           ]);
           expect(inputs[0].session_id).not.toBe(inputs[1].session_id);
         },
-        undefined,
         {
-          hooks: {
-            [HookEventName.PreCompress]: [
-              {
-                hooks: [
-                  {
-                    type: HookType.Command,
-                    command: jsonlHookCommand(output),
-                  },
-                ],
-              },
-            ],
-          },
+          [HookEventName.PreCompress]: [
+            {
+              hooks: [
+                {
+                  type: HookType.Command,
+                  command: jsonlHookCommand(output),
+                },
+              ],
+            },
+          ],
         },
       );
     } finally {
@@ -97,22 +169,17 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
       }
     };
     try {
-      await withRecordingLifetimeFixture(
-        async (
-          agent,
-          _config,
-          _settingsOwner,
-          _settingsService,
-          _oauthManager,
-          borrow,
-        ) => {
-          const sibling = await borrow();
-          await agent.setHistory([
+      await withRoutedPair(
+        credentials().authority,
+        async ({ agent, sibling }) => {
+          const seed = [
             {
-              speaker: 'human',
-              blocks: [{ type: 'text', text: 'seed model hook' }],
+              speaker: 'human' as const,
+              blocks: [{ type: 'text' as const, text: 'seed model hook' }],
             },
-          ]);
+          ];
+          await agent.setHistory(seed);
+          await sibling.setHistory(seed);
           await agent.session.setRecording({ enabled: true });
           const aPath = requirePath(agent.session.getRecording().path);
           await sibling.session.setRecording({ enabled: true });
@@ -130,20 +197,17 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
           ]);
           expect(inputs[0].session_id).not.toBe(inputs[1].session_id);
         },
-        undefined,
         {
-          hooks: {
-            [HookEventName.BeforeModel]: [
-              {
-                hooks: [
-                  {
-                    type: HookType.Command,
-                    command: jsonlHookCommand(output),
-                  },
-                ],
-              },
-            ],
-          },
+          [HookEventName.BeforeModel]: [
+            {
+              hooks: [
+                {
+                  type: HookType.Command,
+                  command: jsonlHookCommand(output),
+                },
+              ],
+            },
+          ],
         },
       );
     } finally {
@@ -165,19 +229,17 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
         .split('\n')
         .map((line) => JSON.parse(line));
     try {
-      await withRecordingLifetimeFixture(
-        async (
-          agent,
-          _config,
-          _settingsOwner,
-          _settingsService,
-          _oauthManager,
-          borrow,
-        ) => {
-          const sibling = await borrow();
-          await agent.setHistory([
-            { speaker: 'human', blocks: [{ type: 'text', text: 'seed A' }] },
-          ]);
+      await withRoutedPair(
+        credentials().authority,
+        async ({ agent, sibling }) => {
+          const seed = [
+            {
+              speaker: 'human' as const,
+              blocks: [{ type: 'text' as const, text: 'seed A' }],
+            },
+          ];
+          await agent.setHistory(seed);
+          await sibling.setHistory(seed);
           await agent.session.setRecording({ enabled: true });
           const aPath = requirePath(agent.session.getRecording().path);
           await sibling.session.setRecording({ enabled: true });
@@ -218,20 +280,17 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
           expect(inputs[0].session_id).toBe(inputs[2].session_id);
           expect(inputs[1].session_id).toBe(inputs[3].session_id);
         },
-        undefined,
         {
-          hooks: {
-            [HookEventName.SessionEnd]: [
-              {
-                hooks: [
-                  {
-                    type: HookType.Command,
-                    command: jsonlHookCommand(output),
-                  },
-                ],
-              },
-            ],
-          },
+          [HookEventName.SessionEnd]: [
+            {
+              hooks: [
+                {
+                  type: HookType.Command,
+                  command: jsonlHookCommand(output),
+                },
+              ],
+            },
+          ],
         },
       );
     } finally {
@@ -240,16 +299,9 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
   }, 30000);
 
   it('reads each exact owner after start, stop and resume even when Config and client are borrowed', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        agent,
-        _config,
-        _settingsOwner,
-        _settingsService,
-        _oauthManager,
-        borrow,
-      ) => {
-        const sibling = await borrow();
+    await withRoutedPair(
+      credentials().authority,
+      async ({ agent, sibling }) => {
         const a: string[] = [];
         const b: string[] = [];
         agent.hooks.onHookExecution((request) => {

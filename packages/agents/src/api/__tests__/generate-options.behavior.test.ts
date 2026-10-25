@@ -10,10 +10,8 @@ import {
 } from '@vybestack/llxprt-code-settings';
 import { withOwners } from './turn-revision-capture.fixture.js';
 import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
-import {
-  withGenerationOwner,
-  generationGate,
-} from './helpers/generation-owner-fixture.js';
+import { withGenerateOptionsAgent } from './helpers/generate-options-agent.js';
+import { gate as generationGate } from './helpers/async-child-disposal-join-fixture.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentInput } from '../agent.js';
 import { buildAgentFromContent } from './helpers/agentHarness.js';
@@ -35,24 +33,21 @@ describe('Agent.generate request options', () => {
       ],
     };
     const before = structuredClone(config);
-    const cleanup = await withGenerationOwner(
-      async (owner, _clients, provider) => {
-        expect(await owner.generate('neutral configuration', { config })).toBe(
-          'turn one reply',
-        );
-        expect(provider.requests[0].invocation?.modelBehavior).toMatchObject({
-          'reasoning.enabled': true,
-          'reasoning.budgetTokens': 128,
-          'reasoning.effort': 'low',
-        });
-        expect(provider.requests[0].invocation?.cliSettings).toMatchObject({
-          'reasoning.includeInResponse': false,
-        });
-        expect(provider.requests[0].tools).toStrictEqual(config.tools);
-        expect(config).toStrictEqual(before);
-      },
-      'fake',
-    );
+    const cleanup = await withGenerateOptionsAgent(async (owner, provider) => {
+      expect(await owner.generate('neutral configuration', { config })).toBe(
+        'turn one reply',
+      );
+      expect(provider.requests[0].invocation.modelBehavior).toMatchObject({
+        'reasoning.enabled': true,
+        'reasoning.budgetTokens': 128,
+        'reasoning.effort': 'low',
+      });
+      expect(provider.requests[0].invocation.cliSettings).toMatchObject({
+        'reasoning.includeInResponse': false,
+      });
+      expect(provider.requests[0].tools).toStrictEqual(config.tools);
+      expect(config).toStrictEqual(before);
+    });
     expect(cleanup).toStrictEqual([]);
   });
   it('preserves configured load-balancer member identity and request-local utility overrides', async () => {
@@ -120,15 +115,12 @@ describe('Agent.generate request options', () => {
     });
   });
   it('preserves an explicitly empty prompt ID in the provider request', async () => {
-    const cleanup = await withGenerationOwner(
-      async (owner, _clients, provider) => {
-        expect(await owner.generate('empty ID request', { promptId: '' })).toBe(
-          'turn one reply',
-        );
-        expect(provider.requests[0].metadata?.__logicalRequestId).toBe('');
-      },
-      'fake',
-    );
+    const cleanup = await withGenerateOptionsAgent(async (owner, provider) => {
+      expect(await owner.generate('empty ID request', { promptId: '' })).toBe(
+        'turn one reply',
+      );
+      expect(provider.requests[0].metadata.__logicalRequestId).toBe('');
+    });
     expect(cleanup).toStrictEqual([]);
   });
   it('owns nested input and configuration before held Gemini acquisition and preserves the prompt ID and supported request fields', async () => {
@@ -149,8 +141,8 @@ describe('Agent.generate request options', () => {
       },
       systemInstruction: 'admitted system instruction',
     };
-    const cleanup = await withGenerationOwner(
-      async (owner, _clients, provider) => {
+    const cleanup = await withGenerateOptionsAgent(
+      async (owner, provider) => {
         const pending = owner.generate(input, {
           config,
           model: 'utility-model-x',
@@ -166,22 +158,22 @@ describe('Agent.generate request options', () => {
         held.release();
         expect(await pending).toBe('turn one reply');
         const request = provider.requests[0];
-        expect(request.resolved?.model).toBe('utility-model-x');
-        expect(request.invocation?.modelParams).toMatchObject({
+        expect(request.resolved.model).toBe('utility-model-x');
+        expect(request.invocation.modelParams).toMatchObject({
           temperature: 0.3,
           top_p: 0.8,
           top_k: 12,
         });
         expect(request.modelParameters?.genericMaxOutputTokens).toBe(16000);
-        expect(request.invocation?.modelBehavior['reasoning.enabled']).toBe(
+        expect(request.invocation.modelBehavior['reasoning.enabled']).toBe(
           false,
         );
         expect(request.tools).toStrictEqual([]);
         expect(request.systemInstruction).toBe('admitted system instruction');
-        expect(request.metadata?.__logicalRequestId).toBe(
+        expect(request.metadata.__logicalRequestId).toBe(
           'subagent-auto-prompt',
         );
-        expect(request.metadata?.geminiDirectOverrides).toStrictEqual({
+        expect(request.metadata.geminiDirectOverrides).toStrictEqual({
           toolConfig: {
             functionCallingConfig: {
               mode: 'NONE',
@@ -195,11 +187,12 @@ describe('Agent.generate request options', () => {
         expect(input.text).toBe('later input mutation');
         expect(config.temperature).toBe(0.9);
       },
-      'gemini',
-      undefined,
-      async () => {
-        entered.release();
-        await held.promise;
+      {
+        alias: 'gemini',
+        prepareTokenizer: async () => {
+          entered.release();
+          await held.promise;
+        },
       },
     );
     expect(cleanup).toStrictEqual([]);
@@ -223,8 +216,8 @@ describe('Agent.generate request options', () => {
   it.each(forms)(
     'normalizes supplied input without fabricating history %j',
     async (input) => {
-      const cleanup = await withGenerationOwner(
-        async (owner, _clients, provider) => {
+      const cleanup = await withGenerateOptionsAgent(
+        async (owner, provider) => {
           expect(await owner.generate(input, undefined)).toBe('turn one reply');
           expect(
             provider.requests[0].contents.map(({ speaker, blocks }) => ({
@@ -238,7 +231,6 @@ describe('Agent.generate request options', () => {
             },
           ]);
         },
-        'fake',
       );
       expect(cleanup).toStrictEqual([]);
     },
@@ -270,28 +262,26 @@ describe('Agent.generate request options', () => {
         ],
       },
     ];
-    const cleanup = await withGenerationOwner(
-      async (owner, _clients, provider) => {
-        await owner.generate(input, undefined);
-        expect(
-          provider.requests[0].contents.map(({ speaker, blocks }) => ({
-            speaker,
-            blocks,
-          })),
-        ).toStrictEqual([...input]);
-      },
-      'fake',
-    );
+    const cleanup = await withGenerateOptionsAgent(async (owner, provider) => {
+      await owner.generate(input, undefined);
+      expect(
+        provider.requests[0].contents.map(({ speaker, blocks }) => ({
+          speaker,
+          blocks,
+        })),
+      ).toStrictEqual([...input]);
+    });
     expect(cleanup).toStrictEqual([]);
   });
 
   it('does not acquire or request for empty input and does not execute tool-only output', async () => {
-    const cleanup = await withGenerationOwner(
-      async (owner, clients, provider) => {
+    const cleanup = await withGenerateOptionsAgent(
+      async (owner, provider, tokenizer) => {
         expect(await owner.generate([], { writeHistory: true })).toBe('');
         expect(provider.requests).toStrictEqual([]);
-        expect(clients).toHaveLength(2);
+        expect(tokenizer.preparations()).toBe(0);
       },
+      { alias: 'gemini' },
     );
     expect(cleanup).toStrictEqual([]);
     const built = await buildAgentFromContent(

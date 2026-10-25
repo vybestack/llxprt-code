@@ -13,7 +13,7 @@ import {
   failCredentialProxyShutdown,
   observeCredentialProxyStarts,
 } from './helpers/owned-credential-fixture.js';
-import { withGenerationOwner } from './helpers/generation-owner-fixture.js';
+import { withGenerateOptionsAgent } from './helpers/generate-options-agent.js';
 
 describe('generation fixture acquisition cleanup', () => {
   useRecordingPrompts();
@@ -23,7 +23,7 @@ describe('generation fixture acquisition cleanup', () => {
     const shutdown = failCredentialProxyShutdown(secondary);
     let failure: unknown;
     try {
-      await withGenerationOwner(async () => {
+      await withGenerateOptionsAgent(async () => {
         throw primary;
       });
     } catch (error) {
@@ -54,7 +54,7 @@ describe('generation fixture acquisition cleanup', () => {
     });
     try {
       await expect(
-        withGenerationOwner(async () => {
+        withGenerateOptionsAgent(async () => {
           throw new Error('Failed acquisition must not publish a scenario');
         }),
       ).rejects.toBe(failure);
