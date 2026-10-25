@@ -31,7 +31,6 @@ import {
 const repositoryRoot = resolve(import.meta.dirname, '../../../..');
 
 describe('headless selected telemetry export cleanup', () => {
-  useFakeResponsesReplay('plain-text.jsonl');
   it('surfaces direct-created Agent retirement failure instead of logging and returning success', async () => {
     const [result] = await Promise.allSettled([runCleanupFailure(false)]);
     if (result.status !== 'rejected')
@@ -52,6 +51,10 @@ describe('headless selected telemetry export cleanup', () => {
   });
 
   it('exits the native public CLI subprocess nonzero with primary and cleanup failures on stderr', async () => {
+    // The fixture contributes its own failing provider; the fake replay seam
+    // registers only FakeProvider and would hide it.
+    const childEnv = { ...process.env };
+    delete childEnv.LLXPRT_FAKE_RESPONSES;
     const child = spawn(
       process.execPath,
       [
@@ -68,7 +71,7 @@ describe('headless selected telemetry export cleanup', () => {
       {
         cwd: repositoryRoot,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: process.env,
+        env: childEnv,
       },
     );
     let stderr = '';
@@ -86,88 +89,94 @@ describe('headless selected telemetry export cleanup', () => {
     expect(stderr).toContain('EISDIR');
   });
 
-  it('retires the actual CLI owner after accepted file export fails during headless finalization', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'headless-export-failure-'));
-    const route = await openRouteBPreflight({
-      config: {
-        sessionId: 'headless-failure',
+  describe('with the fake provider replay', () => {
+    useFakeResponsesReplay('plain-text.jsonl');
+    it('retires the actual CLI owner after accepted file export fails during headless finalization', async () => {
+      const directory = mkdtempSync(join(tmpdir(), 'headless-export-failure-'));
+      const route = await openRouteBPreflight({
+        config: {
+          sessionId: 'headless-failure',
+          model: 'headless-failure',
+          tools: [],
+          coreTools: [],
+          mcpEnabled: false,
+          extensionsEnabled: false,
+          interactive: false,
+          harness: {
+            forceInteractive: false,
+            forceConfirmations: false,
+            includeProcessCwd: false,
+          },
+          telemetry: {
+            enabled: true,
+            logPrompts: false,
+            outfile: join(directory, 'headless-failure.jsonl'),
+          },
+        },
+      });
+      await route.prepare();
+      const agent = await route.createAgent({
+        provider: 'fake',
         model: 'headless-failure',
-        tools: [],
-        coreTools: [],
-        mcpEnabled: false,
-        extensionsEnabled: false,
-        interactive: false,
-        harness: {
-          forceInteractive: false,
-          forceConfirmations: false,
-          includeProcessCwd: false,
-        },
-        telemetry: {
-          enabled: true,
-          logPrompts: false,
-          outfile: join(directory, 'headless-failure.jsonl'),
-        },
-      },
-    });
-    await route.prepare();
-    const agent = await route.createAgent({
-      provider: 'fake',
-      model: 'headless-failure',
-    });
-    const outfile = join(directory, 'headless-failure.jsonl');
-    const marker = join(directory, 'cleanup-joined.txt');
-    const settingsFile = {
-      path: join(directory, 'unused-settings.json'),
-      settings: {},
-    };
-    const settings = new LoadedSettings(
-      settingsFile,
-      settingsFile,
-      settingsFile,
-      settingsFile,
-      true,
-    );
-    __resetCleanupStateForTesting();
-    const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('Unexpected headless process exit');
-    });
-    unlinkSync(outfile);
-    mkdirSync(outfile);
-    registerCleanup(async () => {
-      writeFileSync(marker, 'accepted cleanup');
-      rmSync(outfile, { recursive: true, force: true });
-      await agent.dispose();
-    });
-    let cleanupFailures: unknown[] = [];
-    try {
-      const outcomes = await Promise.allSettled([
-        dispatchInteractiveOrNonInteractive({
-          config: route.config,
-          agent,
-          settings,
-          workspaceRoot: directory,
-          hasPipedInput: true,
-          readStdinData: () => Promise.resolve('local fake response'),
-          runtimeSettings: route.preflight,
-        }),
-      ]);
-      expect(outcomes[0].status).toBe('rejected');
-      expect(existsSync(marker)).toBe(true);
-      expect(route.preflight.isTelemetryEnabled()).toBe(false);
-    } finally {
-      exit.mockRestore();
-      rmSync(outfile, { recursive: true, force: true });
-      __resetCleanupStateForTesting();
-      const cleanup = await Promise.allSettled([
-        Promise.resolve().then(() => agent.dispose()),
-        Promise.resolve().then(() => route.close()),
-      ]);
-      cleanupFailures = cleanup.flatMap((result) =>
-        result.status === 'rejected' ? [result.reason] : [],
+      });
+      const outfile = join(directory, 'headless-failure.jsonl');
+      const marker = join(directory, 'cleanup-joined.txt');
+      const settingsFile = {
+        path: join(directory, 'unused-settings.json'),
+        settings: {},
+      };
+      const settings = new LoadedSettings(
+        settingsFile,
+        settingsFile,
+        settingsFile,
+        settingsFile,
+        true,
       );
-      rmSync(directory, { recursive: true, force: true });
-    }
-    if (cleanupFailures.length > 0)
-      throw new AggregateError(cleanupFailures, 'Headless test cleanup failed');
+      __resetCleanupStateForTesting();
+      const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('Unexpected headless process exit');
+      });
+      unlinkSync(outfile);
+      mkdirSync(outfile);
+      registerCleanup(async () => {
+        writeFileSync(marker, 'accepted cleanup');
+        rmSync(outfile, { recursive: true, force: true });
+        await agent.dispose();
+      });
+      let cleanupFailures: unknown[] = [];
+      try {
+        const outcomes = await Promise.allSettled([
+          dispatchInteractiveOrNonInteractive({
+            config: route.config,
+            agent,
+            settings,
+            workspaceRoot: directory,
+            hasPipedInput: true,
+            readStdinData: () => Promise.resolve('local fake response'),
+            runtimeSettings: route.preflight,
+          }),
+        ]);
+        expect(outcomes[0].status).toBe('rejected');
+        expect(existsSync(marker)).toBe(true);
+        expect(route.preflight.isTelemetryEnabled()).toBe(false);
+      } finally {
+        exit.mockRestore();
+        rmSync(outfile, { recursive: true, force: true });
+        __resetCleanupStateForTesting();
+        const cleanup = await Promise.allSettled([
+          Promise.resolve().then(() => agent.dispose()),
+          Promise.resolve().then(() => route.close()),
+        ]);
+        cleanupFailures = cleanup.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : [],
+        );
+        rmSync(directory, { recursive: true, force: true });
+      }
+      if (cleanupFailures.length > 0)
+        throw new AggregateError(
+          cleanupFailures,
+          'Headless test cleanup failed',
+        );
+    });
   });
 });
