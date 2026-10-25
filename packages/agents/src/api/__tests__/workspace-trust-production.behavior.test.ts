@@ -1,4 +1,3 @@
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
 import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { WorkspaceAuthorityComposition } from '../workspace-authority-composition.js';
@@ -9,7 +8,7 @@ import { WorkspaceAuthorityComposition } from '../workspace-authority-compositio
  */
 
 import { describe, expect, it } from 'bun:test';
-import { toConfigParameters } from '@vybestack/llxprt-code-agents';
+import { createAgent, toConfigParameters } from '@vybestack/llxprt-code-agents';
 import {
   Config,
   ApprovalMode,
@@ -19,7 +18,7 @@ import {
   coreEvents,
   CoreEvent,
 } from '@vybestack/llxprt-code-core/utils/events.js';
-import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 
 function declaration(): Config {
   return new Config(
@@ -47,8 +46,9 @@ function deferred(): { promise: Promise<void>; resolve(): void } {
 }
 
 describe('Production workspace trust authority', () => {
+  useFakeResponsesReplay('plain-text.jsonl');
+
   it('denies immediately through a borrowed authority before transition settlement and preserves that authority after facade retirement', async () => {
-    const config = declaration();
     const trust = new WorkspaceTrustLifecycle({ localTrust: true });
     const gate = deferred();
     const release = trust.subscribeTrustTransition(() => gate.promise);
@@ -57,27 +57,19 @@ describe('Production workspace trust authority', () => {
       events.push(trusted);
     };
     coreEvents.on(CoreEvent.FolderTrustChanged, listener);
-    const adoptedSettings1 = createSessionSettingsFixture(config);
-    const agent = await fromConfig(
-      config,
-      adoptedSettings1.settingsService,
-      {},
-      adoptedSettings1.settingsOwner,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      trust,
-    );
+    const agent = await createAgent({
+      provider: 'fake',
+      model: 'fake-model',
+      workingDir: process.cwd(),
+      sessionId: 'shared-trust-root',
+      folderTrust: true,
+      approvalMode: ApprovalMode.AUTO_EDIT,
+      telemetry: { enabled: false },
+      recording: { enabled: false },
+      mcpEnabled: false,
+      skillsSupport: false,
+      trustPort: trust,
+    });
     let denied: Promise<void> | undefined;
     try {
       expect(agent.getApprovalMode()).toBe(ApprovalMode.AUTO_EDIT);
@@ -103,7 +95,6 @@ describe('Production workspace trust authority', () => {
       await agent.dispose();
       coreEvents.off(CoreEvent.FolderTrustChanged, listener);
       await trust.dispose();
-      await config.dispose();
     }
   });
   it('rejects authority initialization after retirement without republishing borrowed trust events', async (): Promise<void> => {

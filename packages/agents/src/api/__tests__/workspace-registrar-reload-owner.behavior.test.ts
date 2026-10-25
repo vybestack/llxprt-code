@@ -1,9 +1,5 @@
-import { openSkillsCaller } from './helpers/skills-fixture-caller.js';
-import { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
-import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { SkillPolicy } from '@vybestack/llxprt-code-core/skills/workspace-skill-owner.js';
-import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import {
   afterAll,
   afterEach,
@@ -17,10 +13,13 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { registerActivateSkillTool } from '../../skill-tool-registrar.js';
-import { AgentConfig } from '../config-types.js';
-import { AgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  openSkillWorkspaceSession,
+  type SkillWorkspaceSession,
+} from './helpers/skill-workspace-session.js';
 
 describe('workspace registrar and skill reload root admission', () => {
   let promptDirectory: string;
@@ -39,31 +38,10 @@ describe('workspace registrar and skill reload root admission', () => {
     await rm(promptDirectory, { recursive: true, force: true });
   });
 
+  useFakeResponsesReplay('plain-text.jsonl');
   const credentials = useOwnedCredentials();
 
-  let caller: Awaited<ReturnType<typeof openSkillsCaller>>;
-
-  async function openCaller(
-    fixture: string,
-    overrides: Readonly<Partial<AgentConfig>> = {},
-    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
-    skillSettings: Pick<
-      ConfigParameters,
-      'enableExtensionReloading' | 'storageRoot'
-    > = {},
-    extensionLoader?: ExtensionLoader,
-    skillOperations?: WorkspaceSkillAssemblyOperations,
-  ): Promise<void> {
-    caller = await openSkillsCaller({
-      fixture: new URL('./fixtures/' + fixture, import.meta.url),
-      overrides,
-      authority: credentials().authority,
-      factories: suppliedFactories,
-      parameters: skillSettings,
-      extensionLoader,
-      operations: skillOperations,
-    });
-  }
+  let caller: SkillWorkspaceSession;
 
   let directory: string;
 
@@ -75,9 +53,9 @@ describe('workspace registrar and skill reload root admission', () => {
     reloadPolicy = async () => ({});
     const evidence = join(directory, 'mcp');
     await mkdir(evidence);
-    await openCaller(
-      'plain-text.jsonl',
-      {
+    caller = await openSkillWorkspaceSession({
+      authority: credentials().authority,
+      overrides: {
         workingDir: directory,
         skillsSupport: true,
         mcpServers: {
@@ -94,14 +72,11 @@ describe('workspace registrar and skill reload root admission', () => {
         },
         harness: { includeProcessCwd: false },
       },
-      {},
-      {},
-      undefined,
-      {
+      operations: {
         reloadPolicy: () => reloadPolicy(),
         registerTools: registerActivateSkillTool,
       },
-    );
+    });
     const failures = await caller.mcp.awaitDiscovery();
     if (failures.size > 0)
       throw new Error(
