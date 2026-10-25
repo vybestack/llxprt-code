@@ -125,29 +125,31 @@ describe('suffix fixture failure cleanup', () => {
     expect(existsSync(root)).toBe(false);
   });
 
-  it('cleans up when generating a seed row fails', async () => {
-    let root = '';
-    const failure = new Error('suffix seed failure');
-    await expect(
-      withSuffixFixtureGraph(
-        3,
-        (directory) => {
-          root = directory;
-          return realGraph(directory);
-        },
-        async (): Promise<void> => {
-          throw new Error('callback must not run after seed failure');
-        },
-        0,
-        (index) => {
-          if (index === 1) throw failure;
-          return suffixRow(index);
-        },
-      ),
-    ).rejects.toBe(failure);
-    expect(root.length).toBeGreaterThan(0);
-    expect(existsSync(root)).toBe(false);
-  });
+  for (const failingIndex of [0, 1, 257]) {
+    it(`cleans up when generating seed row ${failingIndex} fails`, async () => {
+      let root = '';
+      const failure = new Error('suffix seed failure');
+      await expect(
+        withSuffixFixtureGraph(
+          failingIndex + 1,
+          (directory) => {
+            root = directory;
+            return realGraph(directory);
+          },
+          async (): Promise<void> => {
+            throw new Error('callback must not run after seed failure');
+          },
+          0,
+          (index) => {
+            if (index === failingIndex) throw failure;
+            return suffixRow(index);
+          },
+        ),
+      ).rejects.toBe(failure);
+      expect(root.length).toBeGreaterThan(0);
+      expect(existsSync(root)).toBe(false);
+    });
+  }
 
   it('removes the directory when graph construction fails', async () => {
     let root = '';

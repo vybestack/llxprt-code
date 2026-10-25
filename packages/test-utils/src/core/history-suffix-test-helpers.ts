@@ -79,17 +79,20 @@ export function suffixSeeder(service: {
       run = [];
       await service.addBatch(batch);
     };
-    for (const row of rows) {
-      if (row.blocks.length === 0) {
-        await flush();
-        writeHistoricalRow(service, row);
-        continue;
+    try {
+      for (const row of rows) {
+        if (row.blocks.length === 0) {
+          await flush();
+          writeHistoricalRow(service, row);
+          continue;
+        }
+        run.push(row);
+        if (run.length === SEED_BATCH_ROWS) await flush();
       }
-      run.push(row);
-      if (run.length === SEED_BATCH_ROWS) await flush();
+      await flush();
+    } finally {
+      await service.waitForCommit();
     }
-    await flush();
-    await service.waitForCommit();
   };
 }
 
@@ -123,8 +126,11 @@ export async function withSuffixFixtureGraph<
       );
       return await action(service, ownership, counters);
     } finally {
-      await service.dispose();
-      await recording.dispose();
+      try {
+        await service.dispose();
+      } finally {
+        await recording.dispose();
+      }
     }
   } finally {
     rmSync(root, { recursive: true, force: true });
