@@ -5,6 +5,7 @@
  */
 
 import { scriptsTestFileWeight } from './scripts-test-weights.js';
+import { journalTestFileWeight } from './journal-test-weights.js';
 
 /**
  * Partition selection shared by the Bun test runners that split one workspace
@@ -178,15 +179,19 @@ export function selectRootPartition<T extends { readonly file: string }>(
 
 /**
  * Applies a partition identity to a resolved file list, balancing by the
- * scripts test weights so slow files spread across the legs.
+ * recorded workspace weights so slow files spread across the legs.
  */
 export function selectWeightedPartition<T extends { readonly file: string }>(
   entries: readonly T[],
   identity: PartitionIdentity | null,
   repoRoot: string,
 ): readonly T[] {
-  return selectRootPartition(entries, identity, (file) =>
-    scriptsTestFileWeight(repoRoot, file),
+  return selectRootPartition(
+    entries,
+    identity,
+    (file) =>
+      journalTestFileWeight(repoRoot, file) ??
+      scriptsTestFileWeight(repoRoot, file),
   );
 }
 

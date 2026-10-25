@@ -925,11 +925,18 @@ export interface MatrixRow {
  * partitioned too (issue #854): the suite outgrew the 45-minute job limit as
  * one leg, and its runner consumes the same partition variable. `scripts`
  * runs ~85 minutes of 8192-row BODY tests in total (issue #854); four legs
- * balanced by recorded weight keep each near 22 minutes.
+ * balanced by recorded weight keep each near 22 minutes. Core uses eight
+ * weighted legs and providers twelve: their serial scheduling estimates are
+ * 1008 and 1252 seconds per leg, including ten seconds per unmeasured file.
+ * Core's cancelled CI run covered only 590 of 1037 files; providers' earlier
+ * cancelled run covered 233 of 988. See lib/journal-test-weights.ts for the
+ * samples and the successful-seed correction to early-failure timings.
  */
 export const SHARD_PARTITION_COUNTS: Readonly<Record<string, number>> = {
   cli: 3,
   agents: 3,
+  core: 8,
+  providers: 12,
   scripts: 4,
 };
 

@@ -25,8 +25,8 @@
   "shardTimingsSeconds": {
     "cli": 703,
     "agents": 289,
-    "providers": 185,
-    "core": 130,
+    "providers": 1252,
+    "core": 1008,
     "rest": 55,
     "scripts": 270
   },

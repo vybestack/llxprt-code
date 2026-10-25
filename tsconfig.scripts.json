@@ -101,6 +101,7 @@
     "scripts/tests/doc-placement-guard.test.ts",
     "scripts/tests/doc-tree-invariants.test.ts",
     "scripts/tests/test-shards.test.ts",
+    "scripts/tests/journal-test-partition.test.ts",
     "scripts/tests/test-shard-orchestrator.test.ts",
     "scripts/tests/token-divergence.test.ts",
     "scripts/tests/ambient-runtime-symbols-guard.ts",

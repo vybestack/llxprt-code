@@ -58,6 +58,7 @@ import {
   killTimedOutChild,
 } from './lib/bun-test-retry.js';
 import {
+  PARTITION_ENV_VAR,
   parsePartitionIdentity,
   reportEmptySelection,
   selectWeightedPartition,
@@ -213,7 +214,7 @@ export function resolveTsconfigOverride(
   throw new Error(`Tsconfig override is not a file: ${absolutePath}`);
 }
 
-function parseArgs(argv: string[]): CliOptions {
+function parseArgs(argv: string[], partition?: string): CliOptions {
   const options: CliOptions = {
     workspace: null,
     tsconfig: null,
@@ -299,6 +300,7 @@ function parseArgs(argv: string[]): CliOptions {
     }
   }
 
+  options.partition ??= parsePartitionIdentity(partition);
   return options;
 }
 
@@ -575,7 +577,7 @@ export async function runBunTests(
   argv: string[],
   dependencies: BunTestRunnerDependencies,
 ): Promise<number> {
-  const options = parseArgs(argv);
+  const options = parseArgs(argv, dependencies.environment[PARTITION_ENV_VAR]);
   const tsconfigOverride = resolveTsconfig(options, dependencies);
   const all = resolveSelectedFiles(options, dependencies);
   const files = selectWeightedPartition(
@@ -634,6 +636,7 @@ export async function runBunTests(
     guard.captureBaseline();
     await startGlobalSetups(files, started, dependencies);
     const sessionEnv = buildSessionEnv(dependencies.environment, session);
+    delete sessionEnv[PARTITION_ENV_VAR];
     const outcome = await runAllFiles(
       files,
       tsconfigOverride,

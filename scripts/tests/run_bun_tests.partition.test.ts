@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { PARTITION_ENV_VAR } from '../lib/bun-test-partition.js';
 import {
   resolveTsconfigOverride,
   runBunTests,
@@ -23,15 +24,20 @@ describe('runBunTests --partition', () => {
 
   async function dryRun(
     names: string[],
-    partition: string,
+    partition: string | undefined,
+    environment: NodeJS.ProcessEnv = {},
   ): Promise<{ status: number; stdout: string[]; stderr: string[] }> {
     const stdout: string[] = [];
     const stderr: string[] = [];
-    const status = await runBunTests(['--dry-run', '--partition', partition], {
+    const argv =
+      partition === undefined
+        ? ['--dry-run']
+        : ['--dry-run', '--partition', partition];
+    const status = await runBunTests(argv, {
       repoRoot: '/repo',
       invocationDirectory: '/repo',
       executable: '/bin/bun',
-      environment: {},
+      environment,
       resolveFiles: () => entries(names),
       resolveTsconfig: resolveTsconfigOverride,
       spawn: () => ({ exitCode: 0, signalCode: null }),
@@ -68,5 +74,24 @@ describe('runBunTests --partition', () => {
 
   it('rejects a noncanonical partition identity', async () => {
     await expect(dryRun(['a'], '2-3')).rejects.toThrow('canonical partition');
+  });
+
+  it('consumes the CI partition environment when no flag is supplied', async () => {
+    const names = ['a', 'b', 'c', 'd', 'e', 'f'];
+    const first = await dryRun(names, undefined, {
+      [PARTITION_ENV_VAR]: '1of2',
+    });
+    const second = await dryRun(names, undefined, {
+      [PARTITION_ENV_VAR]: '2of2',
+    });
+    const files = (output: string[]): string[] =>
+      output.filter((line) => line.includes('.test.ts'));
+    expect(first.status).toBe(0);
+    expect(second.status).toBe(0);
+    expect(files(first.stdout)).toHaveLength(3);
+    expect(files(second.stdout)).toHaveLength(3);
+    expect([...files(first.stdout), ...files(second.stdout)].sort()).toEqual(
+      names.map((name) => `  [/repo] /repo/${name}.test.ts`),
+    );
   });
 });

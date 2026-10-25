@@ -109,12 +109,12 @@ describe('affected-test-shards selector — CLI partition matrix (issue #3185)',
     for (const row of matrix) expect(row.shard).toBe('cli');
   });
 
-  it('a non-cli shard creates one 1of1 row', () => {
+  it('an unpartitioned shard creates one 1of1 row', () => {
     const matrix = recordsToMatrix(
-      runSelectorRecords(['packages/providers/src/BaseProvider.test.ts']),
+      runSelectorRecords(['packages/storage/src/Storage.test.ts']),
     );
     expect(matrix).toHaveLength(1);
-    expect(matrix[0]?.shard).toBe('providers');
+    expect(matrix[0]?.shard).toBe('rest');
     expect(matrix[0]?.partition).toBe('1of1');
   });
 
@@ -159,9 +159,37 @@ describe('affected-test-shards selector — CLI partition matrix (issue #3185)',
     const cli = buildMatrix(['cli']);
     expect(cli).toHaveLength(3);
     expect(cli.map((r) => r.partition)).toEqual(['1of3', '2of3', '3of3']);
+    const rest = buildMatrix(['rest']);
+    expect(rest).toHaveLength(1);
+    expect(rest[0]?.partition).toBe('1of1');
     const core = buildMatrix(['core']);
-    expect(core).toHaveLength(1);
-    expect(core[0]?.partition).toBe('1of1');
+    expect(core.map((row) => row.partition)).toEqual([
+      '1of8',
+      '2of8',
+      '3of8',
+      '4of8',
+      '5of8',
+      '6of8',
+      '7of8',
+      '8of8',
+    ]);
+    expect(core.every((row) => row.shard === 'core')).toBe(true);
+    const providers = buildMatrix(['providers']);
+    expect(providers.map((row) => row.partition)).toEqual([
+      '1of12',
+      '2of12',
+      '3of12',
+      '4of12',
+      '5of12',
+      '6of12',
+      '7of12',
+      '8of12',
+      '9of12',
+      '10of12',
+      '11of12',
+      '12of12',
+    ]);
+    expect(providers.every((row) => row.shard === 'providers')).toBe(true);
     expect(buildMatrix([])).toEqual([]);
     const full = buildMatrix(ALL_SHARDS);
     expect([...new Set(full.map((r) => r.shard))]).toEqual(ALL_SHARDS);
