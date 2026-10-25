@@ -12,6 +12,7 @@ import {
 } from './recording-primary-edits.js';
 
 import type { PendingRecorderWrites } from './pendingRecorderWrites.js';
+import { JournalSession } from './journalSession.js';
 
 interface RecordingOwner {
   readonly recorder: JournalRecordingService;
@@ -22,8 +23,36 @@ interface RecordingOwner {
 export class RecordingPrimary {
   private pending: Omit<RecordingOwner, 'owner'> | undefined;
   private selected: RecordingOwner | undefined;
+  private admission: JournalSession | undefined;
 
   constructor(private readonly host: AdoptionHost) {}
+
+  async retirePrimary(session: JournalSession): Promise<void> {
+    if (!session.named && this.admission === undefined) {
+      this.admission = session;
+      return;
+    }
+    this.admission ??= await JournalSession.createUnlinked();
+    await session.close();
+  }
+
+  admissionStore(origin: string | undefined): JournalSession['store'] {
+    const state = this.host.state();
+    if (
+      state.adopted === undefined ||
+      origin === undefined ||
+      origin === state.mirrors.primaryOriginId()
+    )
+      return state.session.store;
+    if (this.admission === undefined)
+      throw new Error('Adopted recording has no independent admission journal');
+    return this.admission.store;
+  }
+
+  async close(): Promise<void> {
+    await this.admission?.close();
+    this.admission = undefined;
+  }
 
   async attach(
     recorder: JournalRecordingService,

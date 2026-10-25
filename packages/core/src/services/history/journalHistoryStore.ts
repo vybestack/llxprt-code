@@ -168,7 +168,7 @@ export class JournalHistoryStore
       this.startupAdmissions.append(draft, origin);
       return;
     }
-    const store = this.session.store;
+    const store = this.topology.admissionStore(origin);
     const current = this.appendRun;
     const extending =
       current !== undefined &&
@@ -177,11 +177,7 @@ export class JournalHistoryStore
     if (!extending && this.queuedAppendRuns >= 32)
       throw new Error('Journal append range admission budget exceeded');
     const admitted = store.admissions.admit(draft);
-    if (
-      current !== undefined &&
-      current.origin === origin &&
-      current.store === store
-    ) {
+    if (extending) {
       current.end = admitted.end;
       current.count++;
       current.rowsAfter = ++this.tentativeRows;
@@ -397,6 +393,7 @@ export class JournalHistoryStore
         this.boundary = state.resumeBoundary;
       },
       drained: () => this.queue,
+      retirePrimary: (session) => this.topology.retirePrimary(session),
       mirrorsOf: (session, owners, listeners) =>
         this.mirrorsOf(session, owners, listeners),
     };
@@ -823,6 +820,7 @@ export class JournalHistoryStore
       async () => beforeClose?.(),
       ...[...this.openDumps].map((dump) => () => dump.close()),
       () => this.publication.close(),
+      () => this.topology.close(),
       async () => {
         if (this.journal !== undefined)
           await this.checkpointLifetime.closePrimary(

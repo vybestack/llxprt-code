@@ -34,6 +34,7 @@ export interface AdoptionHost {
   install(state: PrimaryState): void;
   /** Resolves once every operation queued so far has settled. */
   drained(): Promise<void>;
+  retirePrimary(session: JournalSession): Promise<void>;
   mirrorsOf(
     session: JournalSession,
     owners: JournalOwners,
@@ -229,7 +230,8 @@ function settledOnce(
     commit: async () => {
       settle();
       // An adopted file is its recorder's; the recorder closes it.
-      if (previous.adopted === undefined) await previous.session.close();
+      if (previous.adopted === undefined)
+        await host.retirePrimary(previous.session);
       if (replaced.length > 0 || previous.adopted !== undefined) {
         previous.mirrors.fireRetired(retired);
       }
