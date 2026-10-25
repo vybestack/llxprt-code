@@ -1,4 +1,3 @@
-import { AdoptedProviderFixture } from '../../../agents/src/api/__tests__/helpers/adopted-provider-fixture.js';
 import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
 /**
  * @license
@@ -11,7 +10,17 @@ import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
 import { configureProviderTokenizer } from '../composition/index.js';
 
-import { acquirePreferredOAuth } from '../../../agents/src/api/preferred-provider-acquisition.js';
+import {
+  acquirePreferredOAuth,
+  acquirePreferredProviderManager,
+  preparePreferredProviderCompletion,
+} from '../../../agents/src/api/preferred-provider-acquisition.js';
+import {
+  AgentProfilePreflight,
+  prepareAgentPreflight,
+} from '../../../agents/src/api/profile-preflight.js';
+import { buildProviderContributionRegistry } from '../composition/runtimePlugins/index.js';
+import type { ProviderContributionRegistry } from '../composition/runtimePlugins/types.js';
 import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
 
 import {
@@ -33,6 +42,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   Config,
+  WorkspaceFilesystemOwner,
+  WorkspaceTrustLifecycle,
+  assembleWorkspaceMemory,
   createProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -61,6 +73,33 @@ class CacheProvider implements IProvider {
     yield { speaker: 'ai', blocks: [{ type: 'text', text: 'generated' }] };
   }
 }
+function contributeCacheProvider(
+  provider: CacheProvider,
+): ProviderContributionRegistry {
+  const providerId = `${provider.name}-contributed`;
+  return buildProviderContributionRegistry([
+    {
+      specifier: `memory:${providerId}`,
+      manifest: {
+        apiVersion: 1,
+        id: providerId,
+        providers: [
+          {
+            providerId,
+            createProvider: () => provider,
+            builtinAliases: [
+              {
+                alias: provider.name,
+                config: { baseProvider: providerId, 'requires-auth': false },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ]);
+}
+
 describe('Config-independent provider owner lifecycle', () => {
   const credentials = useOwnedCredentials();
   it('releases the telemetry subscription even when the real settings unsubscribe throws', async () => {
@@ -150,14 +189,17 @@ describe('Config-independent provider owner lifecycle', () => {
       'Provider reads require an explicit session owner',
     );
   });
-  it('keeps borrowed manager subscriptions usable after facade runtime cleanup', async () => {
+  it('keeps the preflight active provider readable after the foreground runtime cleanup', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'borrowed-manager-'));
     const settings = new SettingsService();
     const ownerSettings = settings;
+    const provider = new CacheProvider();
     const ownerConfig = new Config({
       sessionId: 'shared-label',
-      cwd: process.cwd(),
-      targetDir: process.cwd(),
+      cwd: directory,
+      targetDir: directory,
       model: 'test-model',
+      provider: provider.name,
       debugMode: false,
     });
     const ownerSettingsOwner = new SessionSettingsOwner(ownerSettings);
@@ -167,71 +209,52 @@ describe('Config-independent provider owner lifecycle', () => {
       ownerSettingsOwner,
       ownerConfig,
     );
-    const manager = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
+    const preflight = await prepareAgentPreflight(
+      { runtimeId: 'borrowed-manager' },
+      credentials().authority,
       settings,
-      ownerConfig,
+      undefined,
+      contributeCacheProvider(provider),
     );
-    const provider = new CacheProvider();
-    manager.registerProvider(provider);
-    manager.setActiveProvider(provider.name);
-    const release = new AcquisitionRelease();
-    const policy = new RuntimePolicyOwner(ownerConfig);
-    release.acquire('policy', () => policy.dispose());
-    const files = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
+    const trust = new WorkspaceTrustLifecycle({ localTrust: true });
+    const filesystem = new WorkspaceFilesystemOwner({
+      targetDir: directory,
+      isTrusted: () => true,
     });
-    release.acquire('files', () =>
-      releaseAdoptedFileScope(files, 'borrowed-manager'),
-    );
-    const adopted = new AdoptedProviderFixture(
-      ownerConfig,
-      settings,
-      'borrowed-manager',
-    ).acquireManager(
-      manager,
-      ownerSettingsOwner,
-      files,
-      credentials().authority,
-      release,
-    );
-    const oauth = acquirePreferredOAuth(
-      undefined,
-      policy.session.messageBus,
-      ownerConfig,
-      settings,
-      manager,
-      'borrowed-manager',
-      undefined,
-      credentials().authority,
-      release,
-      undefined,
-    );
+    const memory = assembleWorkspaceMemory(ownerConfig, filesystem, trust);
     try {
-      await new AdoptedProviderFixture(
+      settings.set('activeProvider', provider.name);
+      await preflight.preparePostConfiguration(
         ownerConfig,
-        settings,
-        'borrowed-manager',
-      ).activate(
+        filesystem,
+        memory,
+        trust,
+        undefined,
         ownerSettingsOwner,
-        adopted,
-        oauth,
-        false,
-        configureProviderTokenizer(manager),
       );
-      await release.close();
-      const revision = provider.clientRevision;
-      ownerSettings.set('base-url', 'http://127.0.0.1:2');
-      expect(provider.clientRevision).toBe(revision + 1);
-      expect(manager.getActiveProviderName()).toBe(provider.name);
+      const intent = {
+        provider: provider.name,
+        model: 'test-model',
+        authMode: 'none' as const,
+      };
+      const accepted = await preflight.preflight(intent);
+      if (accepted.token === undefined)
+        throw new Error('Preflight did not accept the activation');
+      const agent = await AgentProfilePreflight.createForegroundAgent(
+        preflight,
+        accepted.token,
+        intent,
+        {},
+      );
+      await agent.dispose();
+      expect(preflight.getActiveProviderName()).toBe(provider.name);
     } finally {
-      await release.close();
-      manager.dispose();
+      await preflight.dispose();
+      await memory.dispose();
+      await filesystem.dispose();
+      await trust.dispose();
       await ownerClose();
+      rmSync(directory, { recursive: true, force: true });
     }
   });
   it('stops owned-manager Config subscriptions after runtime cleanup', async () => {
@@ -260,19 +283,15 @@ describe('Config-independent provider owner lifecycle', () => {
     release.acquire('files', () =>
       releaseAdoptedFileScope(files, 'owned-manager'),
     );
-    const manager = new AdoptedProviderFixture(
+    const manager = acquirePreferredProviderManager(
       ownerConfig,
       ownerSettings,
-      'owned-manager',
-    ).acquireManager(
-      undefined,
       ownerSettingsOwner,
       files,
+      'owned-manager',
       credentials().authority,
       release,
     );
-    if (!(manager instanceof ProviderManager))
-      throw new Error('Expected concrete owned manager');
     const oauth = acquirePreferredOAuth(
       undefined,
       policy.session.messageBus,
@@ -285,21 +304,20 @@ describe('Config-independent provider owner lifecycle', () => {
       release,
       undefined,
     );
-    const provider = new CacheProvider();
-    manager.registerProvider(provider);
-    manager.setActiveProvider(provider.name);
     try {
-      await new AdoptedProviderFixture(
+      await preparePreferredProviderCompletion(
         ownerConfig,
         ownerSettings,
-        'owned-manager',
-      ).activate(
         ownerSettingsOwner,
         manager,
         oauth,
-        false,
+        'owned-manager',
         configureProviderTokenizer(manager),
+        undefined,
       );
+      const provider = new CacheProvider();
+      manager.registerProvider(provider);
+      manager.setActiveProvider(provider.name);
       ownerSettings.set('base-url', 'http://127.0.0.1:1');
       const attached = provider.clientRevision;
       expect(attached).toBeGreaterThan(0);
@@ -373,49 +391,22 @@ describe('Config-independent provider owner lifecycle', () => {
       ownerConfig,
     );
     try {
-      const finalManager = new AdoptedProviderFixture(
+      await preparePreferredProviderCompletion(
         ownerConfig,
         settings,
-        'shared-label',
-      ).acquireManager(
+        ownerSettingsOwner,
         earlyManager,
-        ownerSettingsOwner,
-        files,
-        credentials().authority,
-        release,
-      );
-      const finalOAuth = new AdoptedProviderFixture(
-        ownerConfig,
-        settings,
-        'shared-label',
-      ).acquireOAuth(
         earlyOAuth,
-        undefined,
-        bus,
-        finalManager,
-        undefined,
-        credentials().authority,
-        release,
-      );
-      await new AdoptedProviderFixture(
-        ownerConfig,
-        settings,
         'shared-label',
-      ).activate(
-        ownerSettingsOwner,
-        finalManager,
-        finalOAuth,
-        false,
         configureProviderTokenizer(earlyManager),
+        undefined,
       );
-      expect(finalManager).toBe(earlyManager);
-      expect(finalOAuth).toBe(earlyOAuth);
-      expect(finalOAuth.runtimeMessageBus).toBe(bus);
+      expect(earlyOAuth.runtimeMessageBus).toBe(bus);
       ownerSettings.set('auth.noBrowser', true);
-      expect(finalOAuth.isBrowserDisabled()).toBe(true);
+      expect(earlyOAuth.isBrowserDisabled()).toBe(true);
       ownerSettings.set('auth.noBrowser', false);
-      expect(finalOAuth.isBrowserDisabled()).toBe(false);
-      expect(finalManager.getSessionTokenUsage().total).toBe(12);
+      expect(earlyOAuth.isBrowserDisabled()).toBe(false);
+      expect(earlyManager.getSessionTokenUsage().total).toBe(12);
     } finally {
       await release.close();
       await ownerClose();

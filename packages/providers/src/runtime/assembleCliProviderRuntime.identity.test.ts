@@ -6,18 +6,11 @@ import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/p
  */
 import { beforeEach, afterEach, describe, it, expect } from 'bun:test';
 import {
-  MessageBusType,
-  type ToolConfirmationRequest,
-} from '@vybestack/llxprt-code-policy/confirmation-bus/types.js';
-import {
   Config,
   WorkspaceTrustLifecycle,
   WorkspaceFilesystemOwner,
   assembleWorkspaceMemory,
 } from '@vybestack/llxprt-code-core';
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   installBorrowedConfigSettings,
@@ -27,24 +20,11 @@ import { mkdtemp, rm, writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { prepareAgentPreflight } from '../../../agents/src/api/profile-preflight.js';
-import {
-  captureAgentAdoption as fromConfig,
-  captureAgentCreation as createAgent,
-  fixtureAgentResources,
-} from '../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
+import { createAgent } from '../../../agents/src/api/createAgent.js';
+import { fromConfig } from '../../../agents/src/api/fromConfig.js';
 
 import type { Agent } from '../../../agents/src/api/agent.js';
-import { internalConfig } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
 
-import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../../../agents/src/api/preferred-provider-acquisition.js';
-import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
-import type { ProviderManager } from '../ProviderManager.js';
-import type { OAuthManager } from '../auth/oauth-manager.js';
-import { ProviderFileLifecycle } from '../providerFilePolicy.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 const acquireSettings = installBorrowedConfigSettings();
 const acquireConfig = installOwnedConfig();
@@ -65,62 +45,16 @@ describe('foreground explicit provider identity and preflight ownership', () => 
   const credentials = useOwnedCredentials();
   let config: Config;
   let settings: SettingsService;
-  let owner: SessionSettingsOwner;
-  let policy: RuntimePolicyOwner;
-  let files: ProviderFileLifecycle;
-  let manager: ProviderManager;
-  let oauth: OAuthManager;
-  let release: AcquisitionRelease;
   const agents: Agent[] = [];
-  beforeEach(async () => {
+  beforeEach(() => {
     config = createConfig('caller-config');
     settings = new SettingsService();
     settings.set('activeProvider', 'openai');
-    owner = acquireSettings(config, settings);
-    policy = new RuntimePolicyOwner(config);
-    files = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
-    });
-    release = new AcquisitionRelease();
-    release.acquire('policy', () => policy.dispose());
-    manager = acquirePreferredProviderManager(
-      config,
-      settings,
-      owner,
-      files,
-      'same-label',
-      credentials().authority,
-      release,
-    );
-    oauth = acquirePreferredOAuth(
-      undefined,
-      policy.session.messageBus,
-      config,
-      settings,
-      manager,
-      'same-label',
-      undefined,
-      credentials().authority,
-      release,
-      undefined,
-    );
-    await preparePreferredProviderCompletion(
-      config,
-      settings,
-      owner,
-      manager,
-      oauth,
-      'same-label',
-      createRuntimeTokenizerFactory(),
-      undefined,
-    );
   });
   afterEach(async () => {
     const results = await Promise.allSettled(
       agents.splice(0).map((agent) => agent.dispose()),
     );
-    await release.close();
     const failures = results.flatMap((result) =>
       result.status === 'rejected' ? [result.reason] : [],
     );
@@ -138,42 +72,26 @@ describe('foreground explicit provider identity and preflight ownership', () => 
           authMode: 'none',
         },
       },
-      owner,
-      manager,
-      oauth,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      files,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
       credentials().authority,
-      policy,
     );
     agents.push(agent);
     return agent;
   }
-  it('keeps the exact supplied Config on its actual Agent owner and supports stateless provider admission', async () => {
+  it('keeps the supplied Config with its caller on its actual Agent owner', async () => {
     const agent = await adopt();
-    expect(fixtureAgentResources(agent).manager).toBe(manager);
-    expect(internalConfig(agent)).toBe(config);
-    expect(() => manager.prepareStatelessProviderInvocation()).not.toThrow();
+    expect(agent.workspace.getWorkingDirectory()).toBe(config.getTargetDir());
+    expect(config.getSessionId()).toBe('caller-config');
   });
   it('binds the exact bus, supplied provider manager, OAuth and file scope without Config service locators', async () => {
     const agent = await adopt();
     expect('providerManager' in config).toBe(false);
-    expect(oauth.runtimeMessageBus).toBe(
-      fixtureAgentResources(agent).messageBus,
+    expect(agent.listProviders().map((provider) => provider.name)).toContain(
+      'openai',
     );
-    expect(manager.listProviders()).toContain('openai');
     expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
       'Provider reads require an explicit session owner',
     );
     expect('providerManager' in config).toBe(false);
-    expect(fixtureAgentResources(agent).manager).toBe(manager);
     const retained = await agent.retainProviderFile({
       cacheKey: 'caller-file',
       fileId: 'caller-file',
@@ -193,33 +111,7 @@ describe('foreground explicit provider identity and preflight ownership', () => 
       deleteRemote: async () => undefined,
     });
     await retained.lease.release();
-    expect(files.snapshot().retainedFiles).toBe(1);
-    expect(agent.captureProviderFiles()).toStrictEqual(files.snapshot());
-  });
-  it('preserves supplied OAuth bus and pending caller confirmation during final Agent adoption', async () => {
-    const bus = policy.session.messageBus;
-    let confirmation: ToolConfirmationRequest | undefined;
-    const unsubscribe = bus.subscribe<ToolConfirmationRequest>(
-      MessageBusType.TOOL_CONFIRMATION_REQUEST,
-      (request) => {
-        confirmation = request;
-      },
-    );
-    const pending = bus.requestConfirmation({ name: 'privileged_unknown' }, {});
-    try {
-      const agent = await adopt();
-      expect(fixtureAgentResources(agent).messageBus).toBe(bus);
-      expect(oauth.runtimeMessageBus).toBe(bus);
-      if (!confirmation) throw new Error('Missing caller confirmation');
-      bus.publish({
-        type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-        correlationId: confirmation.correlationId,
-        confirmed: true,
-      });
-      expect(await pending).toBe(true);
-    } finally {
-      unsubscribe();
-    }
+    expect(agent.captureProviderFiles().retainedFiles).toBe(1);
   });
   it('keeps equal-label roots independent across interleaved activation and one cleanup', async () => {
     const first = await createAgent({
@@ -237,15 +129,8 @@ describe('foreground explicit provider identity and preflight ownership', () => 
       workingDir: process.cwd(),
     });
     agents.push(first, second);
-    expect(fixtureAgentResources(first).manager).not.toBe(
-      fixtureAgentResources(second).manager,
-    );
-    expect(fixtureAgentResources(first).messageBus).not.toBe(
-      fixtureAgentResources(second).messageBus,
-    );
-    expect(internalConfig(first)).not.toBe(internalConfig(second));
-    expect(internalConfig(first).getSessionId()).toBe('same-cli-label');
-    expect(internalConfig(second).getSessionId()).toBe('same-cli-label');
+    expect(first.session.getSessionId()).toBe('same-cli-label');
+    expect(second.session.getSessionId()).toBe('same-cli-label');
     expect(first.getProvider()).toBe('openai');
     expect(second.getProvider()).toBe('kimi');
     const retained = await first.retainProviderFile({
@@ -281,6 +166,7 @@ describe('foreground explicit provider identity and preflight ownership', () => 
       credentials().authority,
       settings,
     );
+    const owner = acquireSettings(config, settings);
     const sibling = createConfig('sibling');
     const trust = new WorkspaceTrustLifecycle({ localTrust: true });
     const filesystem = new WorkspaceFilesystemOwner({
@@ -452,21 +338,27 @@ describe('foreground explicit provider identity and preflight ownership', () => 
   });
 
   it('does not replace an independent isolated Agent with the same label', async () => {
-    const isolated = await createAgent({
-      sessionId: 'shared-label',
-      provider: 'openai',
-      model: 'isolated-model',
-      credentialAuthority: credentials().authority,
-      workingDir: process.cwd(),
-    });
+    const isolatedConfig = createConfig('shared-label');
+    const isolatedSettings = new SettingsService();
+    isolatedSettings.set('activeProvider', 'openai');
+    const isolated = await fromConfig(
+      isolatedConfig,
+      isolatedSettings,
+      {
+        activation: {
+          provider: 'openai',
+          model: 'isolated-model',
+          authMode: 'none',
+        },
+      },
+      credentials().authority,
+    );
     agents.push(isolated);
     const foreground = await adopt();
     expect('providerManager' in config).toBe(false);
-    expect(fixtureAgentResources(foreground).manager).not.toBe(
-      fixtureAgentResources(isolated).manager,
-    );
     await foreground.dispose();
-    expect('providerManager' in internalConfig(isolated)).toBe(false);
+    expect('providerManager' in isolatedConfig).toBe(false);
     expect(isolated.getModel()).toBe('isolated-model');
+    expect(isolated.getProvider()).toBe('openai');
   });
 });

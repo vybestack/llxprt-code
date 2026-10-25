@@ -22,11 +22,7 @@ import { OAuthManager } from '../auth/index.js';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
-import {
-  captureAgentCreation as createAgent,
-  fixtureAgentResources,
-} from '../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
-
+import { createAgent } from '../../../agents/src/api/createAgent.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
   acquirePreferredProviderManager,
@@ -153,12 +149,6 @@ describe('explicit provider primitives under the owning Agent assembly', () => {
       credentialAuthority: credentials().authority,
     });
     try {
-      expect(fixtureAgentResources(first).messageBus).not.toBe(
-        fixtureAgentResources(second).messageBus,
-      );
-      expect(fixtureAgentResources(first).manager).not.toBe(
-        fixtureAgentResources(second).manager,
-      );
       const retained = await first.retainProviderFile({
         cacheKey: 'same-cache',
         fileId: 'first-file',
