@@ -31,7 +31,6 @@ import { ShellJobOwner } from '../session/shell-job-owner.js';
 import { LoopRunLifetime } from './loop-run-lifetime.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
 import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type {
@@ -55,26 +54,6 @@ import { TaskTool, type TaskToolDependencies } from '../tools/task.js';
 import { buildAgentClientFactory } from './agentBootstrap.js';
 
 export { TaskLaunchOwner } from '../session/task-launch-owner.js';
-
-export type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
-
-/**
- * Builds the {@link AgentRuntimeFactoryBindings} descriptor wiring the
- * agents-owned concrete primitives (AgentClient, CoreToolScheduler,
- * TaskToolRegistration) behind the core-owned contract types.
- *
- * Internal Agents assembly uses this descriptor for owned runtimes. Hosts
- * use createAgent/fromConfig or activation bootstrap, which install defaults
- * without exposing the assembly descriptor (#3222).
- */
-export function createAgentRuntimeFactoryBindings(
-  mediaStore?: LocalMediaStore,
-): AgentRuntimeFactoryBindings {
-  return {
-    agentClientFactory: buildAgentClientFactory(mediaStore),
-    taskToolRegistration: (registration) => registration,
-  };
-}
 
 /**
  * Constructs an agents-owned {@link AgentClientContract} for a detached

@@ -11,7 +11,6 @@ import { ProxyTokenStore } from '@vybestack/llxprt-code-auth/proxy/proxy-token-s
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AgentProfilePreflight } from '../profile-preflight.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
@@ -46,92 +45,70 @@ async function workspace(): Promise<Config> {
 describe('Preflight acquisition closure', () => {
   const credentials = useOwnedCredentials();
 
-  for (const stage of ['memory', 'native']) {
-    it(`joins accepted ${stage} acquisition before repeated disposal releases credentials`, async () => {
-      const config = await workspace();
-      const preflight = await AgentProfilePreflight.create(
-        { runtimeId: config.getSessionId() },
-        credentials().authority,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      const entered = deferred();
-      const release = deferred();
-      const create = SessionClientOwner.create;
-      const refresh = WorkspaceMemoryOwner.prototype.refresh;
-      let native: SessionClientOwner | undefined;
-      const interception =
-        stage === 'native'
-          ? spyOn(SessionClientOwner, 'create').mockImplementation(
-              async (...args) => {
-                native = await create(...args);
-                entered.resolve();
-                await release.promise;
-                return native;
-              },
-            )
-          : spyOn(WorkspaceMemoryOwner.prototype, 'refresh').mockImplementation(
-              async function (this: WorkspaceMemoryOwner) {
-                const result = await refresh.call(this);
-                entered.resolve();
-                await release.promise;
-                return result;
-              },
-            );
-      const assertClosed = (): void => {
-        expect(() => preflight.captureSettings()).toThrow('disposed');
-      };
-      const preparation = preflight.prepareConfiguredWorkspace(
-        config,
-        () => {},
-      );
-      const result = preparation.then(
-        () => null,
-        (error: unknown) => error,
-      );
-      try {
-        await entered.promise;
-        await expect(
-          preflight.prepareConfiguredWorkspace(config, () => {}),
-        ).rejects.toThrow('already');
-        let disposed = false;
-        const closing = preflight.dispose();
-        const repeated = preflight.dispose();
-        void closing.then(() => {
-          disposed = true;
-        });
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-        expect(disposed).toBe(false);
-        expect(credentials().snapshot()).toStrictEqual([0]);
-        expect(credentials().keySnapshot()).toStrictEqual([0]);
-        assertClosed();
-        release.resolve();
-        expect(await result).toBeInstanceOf(Error);
-        await Promise.all([closing, repeated]);
-        await preflight.dispose();
-        assertClosed();
-        expect(credentials().snapshot()).toStrictEqual([1]);
-        expect(credentials().keySnapshot()).toStrictEqual([1]);
-        const nativeRead = native?.conversation.getHistory;
-        expect(
-          stage === 'native'
-            ? nativeRead
-            : preflight.captureSettings.bind(preflight),
-        ).toThrow('disposed');
-      } finally {
-        release.resolve();
-        interception.mockRestore();
-        await result;
-        await preflight.dispose();
-        await native?.dispose();
-        await config.dispose();
-      }
+  it('joins accepted memory acquisition before repeated disposal releases credentials', async () => {
+    const config = await workspace();
+    const preflight = await AgentProfilePreflight.create(
+      { runtimeId: config.getSessionId() },
+      credentials().authority,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
+    const entered = deferred();
+    const release = deferred();
+    const refresh = WorkspaceMemoryOwner.prototype.refresh;
+    const interception = spyOn(
+      WorkspaceMemoryOwner.prototype,
+      'refresh',
+    ).mockImplementation(async function (this: WorkspaceMemoryOwner) {
+      const result = await refresh.call(this);
+      entered.resolve();
+      await release.promise;
+      return result;
     });
-  }
+    const assertClosed = (): void => {
+      expect(() => preflight.captureSettings()).toThrow('disposed');
+    };
+    const preparation = preflight.prepareConfiguredWorkspace(config, () => {});
+    const result = preparation.then(
+      () => null,
+      (error: unknown) => error,
+    );
+    try {
+      await entered.promise;
+      await expect(
+        preflight.prepareConfiguredWorkspace(config, () => {}),
+      ).rejects.toThrow('already');
+      let disposed = false;
+      const closing = preflight.dispose();
+      const repeated = preflight.dispose();
+      void closing.then(() => {
+        disposed = true;
+      });
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(disposed).toBe(false);
+      expect(credentials().snapshot()).toStrictEqual([0]);
+      expect(credentials().keySnapshot()).toStrictEqual([0]);
+      assertClosed();
+      release.resolve();
+      expect(await result).toBeInstanceOf(Error);
+      await Promise.all([closing, repeated]);
+      await preflight.dispose();
+      assertClosed();
+      expect(credentials().snapshot()).toStrictEqual([1]);
+      expect(credentials().keySnapshot()).toStrictEqual([1]);
+      expect(preflight.captureSettings.bind(preflight)).toThrow('disposed');
+    } finally {
+      release.resolve();
+      interception.mockRestore();
+      await result;
+      await preflight.dispose();
+      await config.dispose();
+    }
+  });
 
-  it('preserves acquisition error identity and borrowed settings after failed preparation', async () => {
+  it('preserves the identity of a host failure and borrowed settings after failed preparation', async () => {
     const config = await workspace();
     const settings = new SettingsService();
     const owner = new SessionSettingsOwner(settings);
@@ -143,18 +120,16 @@ describe('Preflight acquisition closure', () => {
       undefined,
       undefined,
     );
-    const failure = new Error('native acquisition failed');
-    const create = SessionClientOwner.create;
-    const interception = spyOn(SessionClientOwner, 'create').mockImplementation(
-      async (...args) => {
-        const native = await create(...args);
-        await native.dispose();
-        throw failure;
-      },
-    );
+    const failure = new Error('host preparation failed');
     try {
       await expect(
-        preflight.prepareConfiguredWorkspace(config, () => {}, owner),
+        preflight.prepareConfiguredWorkspace(
+          config,
+          () => {
+            throw failure;
+          },
+          owner,
+        ),
       ).rejects.toBe(failure);
       await preflight.dispose();
       owner.writeUserParameter('survives', 'borrowed');
@@ -162,7 +137,6 @@ describe('Preflight acquisition closure', () => {
       expect(credentials().snapshot()).toStrictEqual([1]);
       expect(credentials().keySnapshot()).toStrictEqual([1]);
     } finally {
-      interception.mockRestore();
       await preflight.dispose();
       await owner.dispose();
       await config.dispose();

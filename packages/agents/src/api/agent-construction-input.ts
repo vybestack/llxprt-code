@@ -34,7 +34,6 @@ export interface AgentConstructionInput {
   filesystemOwnership: AgentConfig['filesystemOwnership'];
   editorCallbacks: AgentConfig['editorCallbacks'];
   toolSchedulerFactory: AgentConfig['toolSchedulerFactory'];
-  runtimeFactoryBindings: AgentConfig['runtimeFactoryBindings'];
   tokenStore: AgentConfig['tokenStore'];
 }
 
@@ -66,7 +65,6 @@ export function parseAgentConstruction(
     filesystemOwnership,
     editorCallbacks,
     toolSchedulerFactory,
-    runtimeFactoryBindings,
     tokenizerFactory: _tokenizerFactory,
     contentGeneratorFactory: _contentGeneratorFactory,
     tokenStore,
@@ -108,7 +106,6 @@ export function parseAgentConstruction(
     filesystemOwnership,
     editorCallbacks,
     toolSchedulerFactory,
-    runtimeFactoryBindings,
     tokenStore,
     suppliedMediaOwner,
   };

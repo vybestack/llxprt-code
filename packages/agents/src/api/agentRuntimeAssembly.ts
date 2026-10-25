@@ -76,13 +76,11 @@ import type { SessionClientOwner } from '../session/session-client-owner.js';
  */
 
 import type {
-  AgentRuntimeFactoryBindings,
   ContentGenerator,
   RuntimeContentGeneratorFactory,
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -171,10 +169,6 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
   private mcpOptions!: CreatedAgentMcpOptions;
   private resolvedAuth!: ReturnType<typeof resolveAuthType>;
 
-  private agentClientFactory: AgentClientFactory | undefined;
-  private taskToolRegistration:
-    | AgentRuntimeFactoryBindings['taskToolRegistration']
-    | undefined;
   private policyOwner!: RuntimePolicyOwner;
   private github: HostGitHubBrokerOwner | undefined;
   private onApproval: AgentConfig['onApproval'];
@@ -253,10 +247,6 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
       this.contentSelection = raw.contentGeneratorFactory;
       this.profileReads = raw.definitionOwner?.profileReads;
       this.authority = authority;
-      this.agentClientFactory =
-        construction.runtimeFactoryBindings?.agentClientFactory;
-      this.taskToolRegistration =
-        construction.runtimeFactoryBindings?.taskToolRegistration;
       this.onApproval = construction.onApproval;
       this.preferredOAuthPrompt = construction.onOAuthPrompt;
       this.editorCallbacks = construction.editorCallbacks;
@@ -446,9 +436,9 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
         this.tokenizerFactory,
         this.files,
         this.preferredMediaOwner,
-        this.agentClientFactory,
+        undefined,
         mcpRuntime,
-        this.taskToolRegistration,
+        undefined,
         (this.parsed.harness?.forceConfirmations ?? true) &&
           this.config.isInteractive(),
         this.mcpOptions.imageOperation,

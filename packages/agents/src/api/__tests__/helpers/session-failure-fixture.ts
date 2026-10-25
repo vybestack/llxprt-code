@@ -7,17 +7,25 @@ import { afterEach, vi } from 'bun:test';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { createAgent } from '../../createAgent.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { AggregateDisposeError } from '../../disposeErrors.js';
-import { buildAgentClientFactory } from '../../agentBootstrap.js';
-import { createAgentRuntimeFactoryBindings } from '../../runtimeFactories.js';
+import { openClientOwner } from './client-owner-session.js';
+
+/** The owner reports its client's failure inside nested aggregates. */
+function failureLeaves(failure: unknown): readonly unknown[] {
+  return failure instanceof AggregateError ||
+    failure instanceof AggregateDisposeError
+    ? failure.errors.flatMap(failureLeaves)
+    : [failure];
+}
 
 /**
- * Builds agents through `createAgent` whose session client fails its
- * disposal. The failure is injected on the real client the agent retains,
- * the last one its client factory returned (an instance spy). The returned function disposes the
- * agent and yields the failures its disposal reports.
+ * Builds domain-level `SessionClientOwner`s (through `openClientOwner`, whose
+ * client factory is the parameter production fills) whose session client
+ * fails its disposal. The failure is injected on the real client the owner
+ * retains, the last one its client factory returned (an instance spy). The
+ * returned function closes the owner stack and yields the failures its
+ * disposal reports.
  */
 export function installFailingSessionFixture(): (
   failure: Error,
@@ -40,36 +48,27 @@ export function installFailingSessionFixture(): (
       await mkdtemp(join(tmpdir(), 'failing-session-')),
     );
     directories.push(directory);
-    const bindings = createAgentRuntimeFactoryBindings();
-    const createClient = buildAgentClientFactory();
-    const built: AgentClientContract[] = [];
-    const agent = await createAgent({
-      provider: 'fake',
-      model: 'fake-model',
-      workingDir: directory,
-      runtimeFactoryBindings: {
-        ...bindings,
-        agentClientFactory: (...operands) => {
-          const client = createClient(...operands);
-          built.push(client);
-          return client;
-        },
+    const opened = await openClientOwner(
+      new CredentialAuthority(),
+      {
+        provider: 'fake',
+        model: 'fake-model',
+        workingDir: directory,
+        harness: { includeProcessCwd: false },
       },
-    });
-    // Activation replaces and disposes clients while the agent is built, so
-    // the failure goes on the client the finished agent retains.
-    const retained = built[built.length - 1];
-    vi.spyOn(retained, 'dispose').mockImplementation(async () => {
+      { provider: 'fake', model: 'fake-model' },
+    );
+    vi.spyOn(opened.client, 'dispose').mockImplementation(async () => {
       throw failure;
     });
     return async (): Promise<readonly unknown[]> =>
-      Promise.resolve(agent.dispose()).then(
+      opened.close().then(
         () => {
           throw new Error('Expected session cleanup failure');
         },
         (error: unknown) => {
           if (!(error instanceof AggregateDisposeError)) throw error;
-          return error.errors;
+          return failureLeaves(error);
         },
       );
   };

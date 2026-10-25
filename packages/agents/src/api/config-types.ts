@@ -28,10 +28,7 @@ import type { SessionOverrideReads } from '@vybestack/llxprt-code-settings';
  * @requirement:REQ-001
  */
 import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import type {
-  AgentRuntimeFactoryBindings,
-  TokenStore,
-} from '@vybestack/llxprt-code-core';
+import type { TokenStore } from '@vybestack/llxprt-code-core';
 
 import type { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
 
@@ -425,7 +422,6 @@ export interface AgentConfig
    * The factory function itself is never disposed.
    */
   readonly toolSchedulerFactory?: AgentSchedulerFactory;
-  readonly runtimeFactoryBindings?: AgentRuntimeFactoryBindings;
   readonly tokenizerFactory?: RuntimeTokenizerFactory;
   readonly contentGeneratorFactory?: RuntimeContentGeneratorFactory<ContentGenerator>;
   readonly tokenStore?: TokenStore;

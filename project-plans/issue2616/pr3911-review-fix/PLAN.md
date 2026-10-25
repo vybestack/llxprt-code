@@ -1426,7 +1426,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T6.D2a B2 conservation check, delete fixtures and capture helpers, E9a
 - [x] T6.D1a B2 delete unreachable adopt inputs, adoption-with-preflight route, AgentAdoptionIntent options
 - [x] T6.D1b B2 delete unset activation inputs and the borrowed-client parameter
-- [ ] T6.D2b B2 delete AgentConfig.runtimeFactoryBindings and its descriptor, E3 part 2, final checks
+- [x] T6.D2b B2 delete AgentConfig.runtimeFactoryBindings and its descriptor, E3 part 2, final checks
 - [ ] T7.0 B3 refresh phase 7 inventory (all subclasses, including PreparedActivation)
 - [ ] T7.0b B3 replace nested PreparedActivation with AgentActivationBootstrap.forPreflight
 - [ ] T7.1 B3 edge SessionProviderOwner to SessionProviderControl

@@ -59,7 +59,6 @@ import type { StreamEvent } from './chatSessionTypes.js';
 import type { Config } from '../config/config.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { ContentGenerator } from './contentGenerator.js';
-import type { TaskToolRegistration } from '../config/toolRegistryFactory.js';
 import type { ModelOutput } from '../llm-types/modelEnvelope.js';
 import type { AgentMessageInput } from '../llm-types/agentMessageInput.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
@@ -288,15 +287,3 @@ export type AgentClientFactory = (
   workspacePaths?: WorkspacePathOperations,
   instructions?: InstructionReadOperations,
 ) => AgentClientContract;
-
-/**
- * Aggregation of the agent-runtime factory primitives the composition
- * root wires into Config. Single source of truth — both agents and providers
- * import this from core (no duplicated structural re-declaration).
- */
-export interface AgentRuntimeFactoryBindings {
-  agentClientFactory: AgentClientFactory;
-  taskToolRegistration: (
-    defaultRegistration: TaskToolRegistration,
-  ) => TaskToolRegistration;
-}
