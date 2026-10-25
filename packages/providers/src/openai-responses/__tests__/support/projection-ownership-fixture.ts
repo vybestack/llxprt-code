@@ -8,6 +8,7 @@ import { deserialize, serialize } from 'node:v8';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
   ProviderRequestRows,
+  ProviderRequestSource,
   ProviderRequestSelection,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -87,6 +88,7 @@ export function projectionDiskRows(
     );
   }
   const rows: ProviderRequestRows = {
+    callerOwned: true,
     count: rowCount,
     readAt(index: number, signal?: AbortSignal): IContent {
       signal?.throwIfAborted();
@@ -227,12 +229,23 @@ export async function projectionRuntime(
         ...ephemerals,
       },
     });
+  const sourceFor = (
+    rows: ProviderRequestRows | ProviderRequestSelection,
+    signal?: AbortSignal,
+  ): ProviderRequestSource => ({
+    openProviderRequest: async () => ({
+      ...rows,
+      callerOwned: true,
+      close: () => {},
+    }),
+    [Symbol.asyncIterator]: () => rows.openReader(signal),
+  });
   const options = (
     rows: ProviderRequestRows | ProviderRequestSelection,
     signal?: AbortSignal,
     ephemerals: Record<string, unknown> = {},
   ): GenerateChatOptions => ({
-    contents: { [Symbol.asyncIterator]: () => rows.openReader(signal) },
+    contents: sourceFor(rows, signal),
     ...('close' in rows ? { requestRows: rows } : {}),
     contentCount: rows.count,
     invocation: invocationFor(ephemerals),

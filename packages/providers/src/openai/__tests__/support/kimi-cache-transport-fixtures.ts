@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { readAtOf } from '../../../__tests__/requestRowsTestSupport.js';
 import { bindProviderFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderFiles.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -206,7 +207,8 @@ export async function captureResponsesWire(
       authToken: 'test-key',
     },
   });
-  const rows = {
+  const rows: ProviderRequestSelection = {
+    callerOwned: true,
     count: RESPONSES_MEDIA_HISTORY.length,
     readAt: readAtOf(RESPONSES_MEDIA_HISTORY),
     openReader: (): AsyncGenerator<IContent, void> =>

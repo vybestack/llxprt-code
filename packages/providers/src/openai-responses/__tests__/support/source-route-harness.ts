@@ -42,6 +42,7 @@ export interface SourceRouteHarness {
 
 export function rowsOf(list: readonly IContent[]): ProviderRequestRows {
   return {
+    callerOwned: true,
     count: list.length,
     readAt: readAtOf(list),
     async *openReader(signal?: AbortSignal): AsyncGenerator<IContent, void> {

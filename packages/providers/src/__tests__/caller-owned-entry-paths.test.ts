@@ -38,7 +38,10 @@ async function drain(
 }
 
 describe('caller-owned public entry paths', () => {
-  for (const entry of ['base', 'load-balancer', 'logging', 'retry'] as const) {
+  const entries: ReadonlyArray<
+    'base' | 'load-balancer' | 'logging' | 'retry' | 'copied-selection'
+  > = ['base', 'load-balancer', 'logging', 'retry', 'copied-selection'];
+  for (const entry of entries) {
     it(`${entry} forwards bare arrays with identical wire bytes and no files`, async () => {
       const bodies: string[] = [];
       const server = Bun.serve({
@@ -116,10 +119,33 @@ describe('caller-owned public entry paths', () => {
       });
       try {
         await drain(provider, options);
-        const creates = await operationFileCreates(
-          () => drain(provider, { ...options, contents: rows }),
-          true,
-        );
+        const creates = await operationFileCreates(async () => {
+          if (entry !== 'copied-selection') {
+            await drain(provider, { ...options, contents: rows });
+            return;
+          }
+          const selection =
+            await callerOwnedRawProviderSource(rows).openProviderRequest();
+          try {
+            await drain(
+              provider,
+              copyProviderRequestOptions({
+                ...options,
+                requestRows: selection,
+                contentCount: selection.count,
+                contents: {
+                  async *[Symbol.asyncIterator](): AsyncGenerator<IContent> {
+                    yield await Promise.reject<IContent>(
+                      new Error('Unrelated contents consumed'),
+                    );
+                  },
+                },
+              }),
+            );
+          } finally {
+            await selection.close();
+          }
+        }, true);
         expect(creates).toStrictEqual({ files: [], directories: [] });
         expect(bodies).toHaveLength(2);
         expect(bodies[1]).toBe(bodies[0]);

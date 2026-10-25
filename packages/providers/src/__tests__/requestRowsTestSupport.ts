@@ -42,6 +42,7 @@ export function trackedRequestRows(
   let opened = 0;
   let closed = 0;
   return {
+    callerOwned: true,
     count: rows.length,
     readAt: readAtOf(rows),
     async *openReader(signal) {

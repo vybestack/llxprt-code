@@ -138,6 +138,7 @@ export function diskTextFixture(
     references,
     retained,
     rows: {
+      callerOwned: true,
       count: 64,
       readAt(index: number, signal?: AbortSignal): IContent {
         signal?.throwIfAborted();
