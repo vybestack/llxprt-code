@@ -1,4 +1,3 @@
-import { adoptFixture } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 import { AgentActivationBootstrap } from '../../../agents/src/api/activationPreflightState.js';
 import type { AgentProfilePreflight } from '../../../agents/src/api/profile-preflight.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -46,19 +45,16 @@ export function requireReceipt(owner: ObservedBootstrap): {
 export async function expectInvalidReceipt(
   owner: ObservedBootstrap,
 ): Promise<void> {
+  const operation = owner.operation;
+  if (!(operation instanceof AgentActivationBootstrap))
+    throw new Error('Missing actual activation owner');
+  const { activation, activationPreflight } = requireReceipt(owner);
+  // The production foreground route rejects a closed operation before it
+  // validates the token.
   await expect(
-    adoptFixture(
-      owner.config,
-      owner.settingsService,
-      { activation: requireReceipt(owner).activation },
-      undefined,
-      owner.providerManager,
-      undefined,
-      undefined,
-      undefined,
-      requireReceipt(owner).activationPreflight,
-    ),
-  ).rejects.toThrow('token is invalid or already consumed');
+    (async () =>
+      operation.createForeground(activationPreflight.token, activation, {}))(),
+  ).rejects.toThrow('Activation bootstrap is disposed');
 }
 
 export async function expectClosed(owner: ObservedBootstrap): Promise<void> {
