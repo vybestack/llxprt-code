@@ -2,6 +2,9 @@ import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
 import { openRouteBPreflight } from './helpers/route-b-preflight.js';
+import { openClientOwner } from './helpers/client-owner-session.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { ownerClients } from './helpers/session-client-capture.js';
 import { describe, it, expect, spyOn } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -24,14 +27,10 @@ import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtim
 import { AgentClient } from '../../core/client.js';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { createAgent } from '../createAgent.js';
+import { AgentExecutionCoordinator } from '../agentExecutionCoordinator.js';
 import type { AgentConfig } from '../config-types.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-import {
-  buildAgent,
-  drain,
-  isDoneEvent,
-  fixtureAgentResources,
-} from './helpers/agentHarness.js';
+import { drain, isDoneEvent } from './helpers/agentHarness.js';
 
 /**
  * @license
@@ -164,26 +163,6 @@ async function withTelemetryConversation<T>(
   return withTelemetryAgent(async (agent, telemetry) =>
     fn(agent, await seedRecordedConversation(agent), telemetry),
   );
-}
-
-/**
- * The construction route the client-retirement scenario still uses: it reads
- * the published client through the agent-resource capture (see the T6.B72
- * record, "Unobservable reads").
- */
-async function withCapturedRecordedConversation<T>(
-  fn: (agent: Agent, recordingPath: string) => Promise<T>,
-): Promise<T> {
-  const workingDir = mkdtempSync(join(tmpdir(), 'llxprt-clear-conversation-'));
-  const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-    workingDir,
-  });
-  try {
-    return await fn(agent, await seedRecordedConversation(agent));
-  } finally {
-    await cleanup();
-    rmSync(workingDir, { recursive: true, force: true });
-  }
 }
 
 describe('starting a new conversation session', () => {
@@ -421,32 +400,82 @@ describe('starting a new conversation session', () => {
     });
   });
 
-  it('closes admission when client retirement fails', async () => {
-    await withCapturedRecordedConversation(async (agent, oldPath) => {
-      const oldId = recordingSessionId(oldPath);
-      const previous = fixtureAgentResources(agent).publishedClient(agent);
-      const original = previous.dispose.bind(previous);
-      const failure = spyOn(previous, 'dispose').mockImplementationOnce(
-        async () => {
-          await original();
-          throw new Error('retirement failed');
+  describe('client retirement', () => {
+    const credentials = useOwnedCredentials();
+
+    it('closes admission when client retirement fails', async () => {
+      const directory = mkdtempSync(join(tmpdir(), 'clear-client-retirement-'));
+      const opened = await openClientOwner(
+        credentials().authority,
+        {
+          provider: 'fake',
+          model: 'fake-model',
+          workingDir: directory,
+          interactive: true,
+          harness: { includeProcessCwd: false },
         },
+        { provider: 'fake', model: 'fake-model' },
       );
+      const coordinator = new AgentExecutionCoordinator();
+      const session = opened.owner.createSessionControl(
+        'facade',
+        () => 'clear-client-retirement-runtime',
+        (operation) => coordinator.withIdleBoundary(operation),
+        () => coordinator.closeAdmission(),
+        () => {},
+        () => 'fake',
+        () => 'fake-model',
+      );
+      let closeAttempted = false;
       try {
-        await expect(agent.session.startNewSession()).rejects.toThrow(
-          'retirement failed',
+        await opened.client.restoreHistory(RECORDED_CONVERSATION);
+        await session.setRecording({ enabled: true });
+        const oldId = session.getSessionId();
+        const clients = ownerClients(opened.owner);
+        const previous = clients[clients.length - 1];
+        const original = previous.dispose.bind(previous);
+        const failure = spyOn(previous, 'dispose').mockImplementationOnce(
+          async () => {
+            await original();
+            throw new Error('retirement failed');
+          },
         );
-        expect(agent.session.getSessionId()).toBe(oldId);
-        await expect(drain(agent.stream('must remain closed'))).rejects.toThrow(
-          'closed',
-        );
-        expect(() =>
-          agent.setEphemeralSetting('reasoning.includeInResponse', false),
-        ).toThrow('closed');
+        try {
+          await expect(session.startNewSession()).rejects.toThrow(
+            'retirement failed',
+          );
+          expect(session.getSessionId()).toBe(oldId);
+          expect(() =>
+            coordinator.admit({
+              controller: new AbortController(),
+              finished: Promise.resolve(),
+              finish: () => {},
+              close: async () => {},
+              retirements: [],
+            }),
+          ).toThrow('closed');
+          expect(() => coordinator.assertSettingsAdmission()).toThrow('closed');
+          await expect(session.startNewSession()).rejects.toThrow('closed');
+          await expect(session.getHistory()).rejects.toThrow(
+            'Session disposed',
+          );
+          await session.dispose();
+          closeAttempted = true;
+          await expect(opened.close()).rejects.toThrow(
+            'Session client cleanup failed',
+          );
+        } finally {
+          failure.mockRestore();
+        }
       } finally {
-        failure.mockRestore();
+        await runCleanupSteps([
+          () => session.dispose(),
+          () => (closeAttempted ? undefined : opened.close()),
+          () => coordinator.dispose(),
+          () => rmSync(directory, { recursive: true, force: true }),
+        ]);
       }
-    });
+    }, 30000);
   });
 
   it('leaves no prior conversation turns for the next model request', async () => {
