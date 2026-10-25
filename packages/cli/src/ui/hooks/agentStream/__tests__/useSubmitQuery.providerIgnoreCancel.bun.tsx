@@ -1,26 +1,22 @@
-import { adoptFixture as fromConfig } from '../../../../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 import { submissionOperations } from './submission-operations.js';
-import { CredentialAuthority } from '../../../../../../providers/src/auth/proxy/credential-store-factory.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import { streamPolicyOperations } from './stream-policy-operations.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 /**
  * End-to-end CLI regression for issue #3236 — "Cancelled turn whose provider
  * read never settles blocks follow-up prompts."
  *
- * Composition under test (REAL engine adopted via the public agents root, one
+ * Composition under test (REAL engine built by the public createAgent, one
  * controlled seam at the true provider transport boundary):
  *
  *   REAL useSubmitQuery + REAL useQueuedSubmissions + REAL useCancellation
  *     → REAL useAgentEventStream.runStream
- *       → REAL Agent facade (fromConfig adoption — public toConfigParameters
- *         + core Config, per the #3222 boundary doctrine)
+ *       → REAL Agent facade (createAgent with a contributed provider, per the
+ *         #3222 boundary doctrine)
  *         → REAL AgenticLoop + REAL AgentClient + REAL
  *           MessageStreamOrchestrator + REAL TodoContinuationService over a
  *           seeded on-disk task store in the isolated test data dir (the
@@ -78,31 +74,27 @@ import type { AgentRequestInput } from '@vybestack/llxprt-code-core/core/clientC
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import { LocalTodoStore } from '@vybestack/llxprt-code-tools';
 import type { Todo } from '@vybestack/llxprt-code-tools';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import type {
-  GenerateChatOptions,
-  IModel,
-  IProvider,
-  ProviderToolset,
-} from '@vybestack/llxprt-code-providers';
-// The agents package is consumed ONLY through its public root (#3222): the
-// engine below is assembled by fromConfig adoption, never by reaching into
-// package internals.
-// The agents package is consumed ONLY through its public root (#3222): the
-// engine below is assembled by fromConfig adoption, never by reaching into
-// package internals.
 import {
-  toConfigParameters,
+  OpenAIProvider,
+  type NormalizedGenerateChatOptions,
+} from '@vybestack/llxprt-code-providers';
+import { bindProviderAliasIdentity } from '@vybestack/llxprt-code-providers/composition/aliasProviderFactory.js';
+import { buildProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition/runtimePlugins/index.js';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { useOwnedCredentials } from '../../../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+// The agents package is consumed ONLY through its public root (#3222): the
+// engine below is assembled by createAgent, never by reaching into package
+// internals.
+import {
+  createAgent,
   type Agent,
   type AgentEvent,
   type AgentInput,
 } from '@vybestack/llxprt-code-agents';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import { agentStreamOperations } from './helpers/agentStreamOperations.js';
 
 // ─── Module mocks (UI-side only; the engine below is real) ──────────────────
@@ -149,16 +141,11 @@ void vi.mock('../streamUtils.js', () => ({
 const PROMPT_A_CONTENT = 'A partial answer before the transport hang';
 const SESSION_ID = 'issue3236-cli-session';
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
-// LLXPRT_FAKE_RESPONSES keeps fromConfig's default provider composition
-// FakeProvider-only (no real network providers, active mirror stays 'fake').
-// The fixture itself is never replayed: the controlled provider below owns
-// the 'fake' name before that composition runs, so its instance is never
-// called. The file must merely exist and parse.
-const FAKE_RESPONSES_FIXTURE = join(
-  TEST_DIR,
-  'fixtures',
-  'providerIgnoreCancel.fake.jsonl',
-);
+// A contributed alias, selected the way a host selects a provider. It is not
+// the built-in 'fake' provider: that one replays a response file.
+const CONTROLLED_ALIAS = 'controlled-transport';
+const CONTROLLED_PROVIDER_ID = 'controlled-transport-provider';
+const CONTROLLED_MODEL = 'fake-model';
 
 function aiTextContent(text: string): IContent {
   return { speaker: 'ai', blocks: [{ type: 'text', text }] };
@@ -250,20 +237,15 @@ async function* trackStreamLifetime(
 }
 
 function transportAbortSignal(
-  options: GenerateChatOptions,
+  options: NormalizedGenerateChatOptions,
 ): AbortSignal | undefined {
-  const fromMetadata = options.metadata?.['abortSignal'];
+  const fromMetadata = options.metadata['abortSignal'];
   if (fromMetadata instanceof AbortSignal) return fromMetadata;
-  const fromInvocation = options.invocation?.signal;
+  const fromInvocation = options.invocation.signal;
   return fromInvocation instanceof AbortSignal ? fromInvocation : undefined;
 }
 
-class ControlledTransportProvider implements IProvider {
-  readonly name = 'fake';
-  readonly isDefault = true;
-  // Satisfies ProviderManager.normalizeRuntimeInputs (baseURL-required check).
-  readonly baseProviderConfig = { baseURL: 'http://fake-provider.local' };
-
+class ControlledTransport {
   mode: 'turnA' | 'clean' = 'turnA';
   cleanRequests = 0;
   /** Resolves when the parked second read has registered its abort listener. */
@@ -280,46 +262,9 @@ class ControlledTransportProvider implements IProvider {
     return this.readSettled;
   }
 
-  async getAuthToken(): Promise<string> {
-    return 'fake-auth-token';
-  }
-
-  async getModels(): Promise<IModel[]> {
-    return [
-      {
-        id: 'fake-model',
-        name: 'fake-model',
-        provider: 'fake',
-        supportedToolFormats: ['auto'],
-      },
-    ];
-  }
-
-  getDefaultModel(): string {
-    return 'fake-model';
-  }
-
-  getCurrentModel(): string {
-    return 'fake-model';
-  }
-
-  generateChatCompletion(
-    options: GenerateChatOptions,
-  ): AsyncIterableIterator<IContent>;
-  generateChatCompletion(
-    content: IContent[],
-    tools?: ProviderToolset,
-    signal?: AbortSignal,
-  ): AsyncIterableIterator<IContent>;
-  async *generateChatCompletion(
-    optionsOrContent: GenerateChatOptions | IContent[],
-    _tools?: ProviderToolset,
-    _signal?: AbortSignal,
+  async *generate(
+    options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    const options: GenerateChatOptions = Array.isArray(optionsOrContent)
-      ? { contents: optionsOrContent }
-      : optionsOrContent;
-
     if (this.mode === 'turnA') {
       try {
         yield aiTextContent(PROMPT_A_CONTENT);
@@ -347,11 +292,59 @@ class ControlledTransportProvider implements IProvider {
   }
 }
 
-// ─── Real engine construction (fromConfig adoption, public root API) ────────
+class ControlledTransportProvider extends OpenAIProvider {
+  constructor(private readonly transport: ControlledTransport) {
+    super('test-key', 'http://controlled-transport.invalid/v1');
+  }
+
+  protected override generateChatCompletionWithOptions(
+    options: NormalizedGenerateChatOptions,
+  ): AsyncIterableIterator<IContent> {
+    return this.transport.generate(options);
+  }
+}
+
+function contributeControlledTransport(transport: ControlledTransport) {
+  return buildProviderContributionRegistry([
+    {
+      specifier: `memory:${CONTROLLED_PROVIDER_ID}`,
+      manifest: {
+        apiVersion: 1,
+        id: CONTROLLED_PROVIDER_ID,
+        providers: [
+          {
+            providerId: CONTROLLED_PROVIDER_ID,
+            createProvider: (entry) => {
+              const provider = new ControlledTransportProvider(transport);
+              bindProviderAliasIdentity(provider, entry.alias);
+              return provider;
+            },
+            builtinAliases: [
+              {
+                alias: CONTROLLED_ALIAS,
+                config: {
+                  baseProvider: CONTROLLED_PROVIDER_ID,
+                  'base-url': 'http://controlled-transport.invalid/v1',
+                  'requires-auth': false,
+                  defaultModel: CONTROLLED_MODEL,
+                  staticModels: [
+                    { id: CONTROLLED_MODEL, name: CONTROLLED_MODEL },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ]);
+}
+
+// ─── Real engine construction (createAgent, public root API) ────────────────
 
 interface EngineEnv {
   readonly agent: Agent;
-  readonly transport: ControlledTransportProvider;
+  readonly transport: ControlledTransport;
   readonly sessionId: string;
   startedPrompts(): readonly string[];
   maxConcurrent(): number;
@@ -359,115 +352,41 @@ interface EngineEnv {
   dispose(): Promise<void>;
 }
 
-async function createEngineEnv(): Promise<EngineEnv> {
-  const transport = new ControlledTransportProvider();
-  const prevFakeResponses = process.env.LLXPRT_FAKE_RESPONSES;
-  process.env.LLXPRT_FAKE_RESPONSES = FAKE_RESPONSES_FIXTURE;
-
-  const restoreEnv = (): void => {
-    if (prevFakeResponses === undefined) {
-      delete process.env.LLXPRT_FAKE_RESPONSES;
-    } else {
-      process.env.LLXPRT_FAKE_RESPONSES = prevFakeResponses;
-    }
+async function createEngineEnv(
+  credentialAuthority: CredentialAuthority,
+): Promise<EngineEnv> {
+  const transport = new ControlledTransport();
+  const builtAgent = await createAgent({
+    provider: CONTROLLED_ALIAS,
+    model: CONTROLLED_MODEL,
+    providerContributions: contributeControlledTransport(transport),
+    workingDir: TEST_DIR,
+    sessionId: SESSION_ID,
+    credentialAuthority,
+    harness: {
+      forceInteractive: false,
+      forceConfirmations: false,
+      includeProcessCwd: false,
+    },
+  });
+  const startedPrompts: string[] = [];
+  const streamConcurrency = createStreamConcurrencyProbe();
+  const recordingAgent = recordStreamPrompts(
+    builtAgent,
+    startedPrompts,
+    streamConcurrency,
+  );
+  return {
+    agent: recordingAgent,
+    transport,
+    sessionId: SESSION_ID,
+    startedPrompts: () => startedPrompts,
+    maxConcurrent: () => streamConcurrency.maxConcurrent(),
+    routedEvents: [],
+    dispose: async (): Promise<void> => {
+      await builtAgent.dispose().catch(() => undefined);
+    },
   };
-
-  let config: Config | undefined;
-  let providerManager: ProviderManager | undefined;
-  let settingsOwner: SessionSettingsOwner | undefined;
-  let agent: Agent | undefined;
-  let policyOwner: RuntimePolicyOwner | undefined;
-  try {
-    const params = {
-      ...toConfigParameters({
-        provider: 'fake',
-        model: 'fake-model',
-        workingDir: TEST_DIR,
-        sessionId: SESSION_ID,
-      }),
-    };
-    config = new Config(params);
-    const settingsService = new SettingsService();
-    policyOwner = new RuntimePolicyOwner(config);
-    const messageBus = policyOwner.session.messageBus;
-    const credentialAuthority = new CredentialAuthority();
-    settingsOwner = new SessionSettingsOwner(settingsService);
-    settingsOwner.bindTelemetry(config);
-    providerManager = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      settingsService,
-      config,
-      undefined,
-      credentialAuthority,
-      settingsOwner,
-    );
-    providerManager.registerProvider(transport);
-    providerManager.setActiveProvider(transport.name);
-    // No explicit config.initialize() here: fromConfig installs the default
-    // agent runtime factories (agentClientFactory et al.) and runs
-    // ensureInitialized during adoption — the factory-less Config idiom.
-    agent = await fromConfig(
-      config,
-      settingsService,
-      {
-        sessionId: SESSION_ID,
-        activation: { provider: 'fake', model: 'fake-model' },
-      },
-      settingsOwner,
-      providerManager,
-      undefined,
-      messageBus,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      credentialAuthority,
-      policyOwner,
-    );
-
-    const builtConfig = config;
-    const builtManager = providerManager;
-    const builtSettings = settingsOwner;
-    const builtAgent = agent;
-    const startedPrompts: string[] = [];
-    const streamConcurrency = createStreamConcurrencyProbe();
-    const recordingAgent = recordStreamPrompts(
-      builtAgent,
-      startedPrompts,
-      streamConcurrency,
-    );
-    return {
-      agent: recordingAgent,
-      transport,
-      sessionId: builtConfig.getSessionId(),
-      startedPrompts: () => startedPrompts,
-      maxConcurrent: () => streamConcurrency.maxConcurrent(),
-      routedEvents: [],
-      dispose: async (): Promise<void> => {
-        await builtAgent.dispose().catch(() => undefined);
-        builtManager.dispose();
-        await builtSettings.dispose();
-        await policyOwner?.dispose();
-        await builtConfig.dispose().catch(() => undefined);
-        restoreEnv();
-      },
-    };
-  } catch (error) {
-    await agent?.dispose().catch(() => undefined);
-    providerManager?.dispose();
-    await settingsOwner?.dispose();
-    await policyOwner?.dispose();
-    await config?.dispose().catch(() => undefined);
-    restoreEnv();
-    throw error;
-  }
 }
 
 // ─── Render harness (REAL queue store + REAL event-stream runner) ───────────
@@ -699,8 +618,10 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
     vi.clearAllMocks();
   });
 
+  const credentials = useOwnedCredentials();
+
   it('ends turn A via the abort race, then drains B and C exactly once, in order', async () => {
-    const env = await createEngineEnv();
+    const env = await createEngineEnv(credentials().authority);
     try {
       // Reported repro context: a real active task list on disk, seeded into
       // the SAME store the real engine's TodoContinuationService reads
