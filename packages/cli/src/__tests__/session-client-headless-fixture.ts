@@ -16,7 +16,6 @@ import {
 import { createSessionModelCommand } from '../runtime/session-model-command.js';
 
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { isDeepStrictEqual } from 'node:util';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -128,30 +127,9 @@ async function agentClosed(agent: Agent): Promise<boolean> {
   }
 }
 
-/**
- * What the pre-Agent activation client holds before the foreground handoff:
- * its history and the workspace root, both read through the public
- * `AgentActivationOperation` members.
- */
-interface ActivationHandoff {
-  readonly history: readonly unknown[];
-  readonly probeRoot: string;
-}
-
-async function readActivationHandoff(
-  activationOperation: AgentActivationOperation,
-): Promise<ActivationHandoff> {
-  return {
-    history: await activationOperation.readHistory(),
-    probeRoot: activationOperation.sessionClient.workspaceDirectories()[0],
-  };
-}
-
-async function handoffAdopted(
-  agent: Agent,
-  before: ActivationHandoff,
-): Promise<boolean> {
-  return isDeepStrictEqual(await agent.getHistory(), before.history);
+/** The workspace root the pre-Agent activation holds before the handoff. */
+function readProbeRoot(activationOperation: AgentActivationOperation): string {
+  return activationOperation.sessionClient.workspaceDirectories()[0];
 }
 
 async function record() {
@@ -164,7 +142,7 @@ async function record() {
     argv,
   } = await bootstrap();
   try {
-    const before = await readActivationHandoff(activationOperation);
+    const probeRoot = readProbeRoot(activationOperation);
     const agent = await createForegroundAgent(
       preflight,
       requireForegroundReceipt(activation),
@@ -174,15 +152,13 @@ async function record() {
     );
     try {
       await setupOwnerSessionRecording(config, agent, argv, null);
-      const ownerAdopted = await handoffAdopted(agent, before);
-      await verifyFilesystemAdoption(agent, before.probeRoot);
+      await verifyFilesystemAdoption(agent, probeRoot);
       const events = await stream(agent, 'local recorded prompt');
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('Missing recording path');
       await agent.dispose();
       return {
         headless,
-        ownerAdopted,
         ownerClosed: await agentClosed(agent),
         events,
         path,
@@ -229,7 +205,7 @@ async function profile() {
       argv,
       activationOperation,
     );
-    const before = await readActivationHandoff(activationOperation);
+    const probeRoot = readProbeRoot(activationOperation);
     const providerBefore = preflight.getActiveProviderName();
     const agent = await createForegroundAgent(
       preflight,
@@ -239,8 +215,7 @@ async function profile() {
       {},
     );
     try {
-      const ownerAdopted = await handoffAdopted(agent, before);
-      await verifyFilesystemAdoption(agent, before.probeRoot);
+      await verifyFilesystemAdoption(agent, probeRoot);
       const borrowedSurface = [
         'config',
         'manager',
@@ -260,10 +235,6 @@ async function profile() {
       const observations = {
         headless,
         authFailed: activation.authFailed,
-        ownerAdopted,
-        // The media store belongs to the client owner the handoff keeps, so
-        // the same history read covers it.
-        mediaAdopted: ownerAdopted,
         providerAdopted,
         borrowedSurface,
         runtimeHasManager: 'providerManager' in runtime,
