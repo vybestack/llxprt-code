@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { openCaller } from './helpers/caller-fixture.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openRouteAAgent } from './helpers/route-a-agent.js';
 import { randomUUID } from 'node:crypto';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { beforeAll, afterAll, describe, expect, it, spyOn } from 'bun:test';
@@ -103,8 +104,30 @@ describe('public Agent recording finalizer join', () => {
     }
   }
 
+  async function withRouteAFinalizerAgent(
+    scenario: (
+      agent: Agent,
+      chatsDir: string,
+      sessionId: string,
+    ) => Promise<void>,
+  ): Promise<void> {
+    const sessionId = 'recording-finalizer-' + randomUUID();
+    const route = await openRouteAAgent({
+      config: { sessionId, interactive: true },
+      intent: {
+        sessionId,
+        activation: { provider: 'fake', model: 'fake-model' },
+      },
+    });
+    try {
+      await scenario(route.agent, route.config.projectChatsDir, sessionId);
+    } finally {
+      await route.close();
+    }
+  }
+
   it('joins the final public-turn journal append before releasing its real lock', async () => {
-    await withRecordingFinalizerFixture(async (agent, chatsDir, sessionId) => {
+    await withRouteAFinalizerAgent(async (agent, chatsDir, sessionId) => {
       await agent.setHistory([
         {
           speaker: 'human',
