@@ -3,9 +3,10 @@ import type { DebugLogger } from '../../debug/index.js';
 import { logJournalRequestDiagnostics } from './journal-request-diagnostics.js';
 import type { IContent } from './IContent.js';
 import type { ProviderCuratedStreamOptions } from './provider-request-options.js';
-import { CallerOwnedRequestSource } from './caller-owned-request-source.js';
-import { streamResponsePlans } from './journal-response-units.js';
-import type { JournalResponsePlan } from './journal-response-plan.js';
+import {
+  callerOwnedPlans,
+  callerOwnedPlanRows,
+} from './caller-owned-plan-rows.js';
 import { HistoryReaderScope } from './historyReaderScope.js';
 import {
   assertRowIndex,
@@ -26,12 +27,13 @@ export async function callerOwnedProviderRequest(
 ): Promise<ProviderRequestSnapshot> {
   options.signal?.throwIfAborted();
   validateProviderRequestBoundaries(rows, tail);
-  const source = await CallerOwnedRequestSource.create(rows, tail);
-  const plans: JournalResponsePlan[] = [];
-  for await (const plan of streamResponsePlans(source)) {
-    options.signal?.throwIfAborted();
-    plans.push(plan);
-  }
+  const { source, plans } = await callerOwnedPlans(rows, tail, options.signal);
+  const hasEmptyAi = (row: IContent): boolean =>
+    row.speaker === 'ai' && row.blocks.length === 0;
+  const emptyAi =
+    rows.some(hasEmptyAi) || tail.some(hasEmptyAi)
+      ? await callerOwnedPlans(rows, tail, options.signal, true)
+      : undefined;
   if (diagnostics !== undefined)
     await logJournalRequestDiagnostics(
       source,
@@ -41,33 +43,14 @@ export async function callerOwnedProviderRequest(
       options.signal,
     );
   const scope = new HistoryReaderScope('Provider request snapshot is closed');
-  const readAt = (index: number, signal?: AbortSignal): Promise<IContent> =>
-    scope.read(async () => {
-      options.signal?.throwIfAborted();
-      signal?.throwIfAborted();
-      assertRowIndex(index, plans.length);
-      const plan = plans[index];
-      const blocks: IContent['blocks'] = [];
-      for await (const block of plan.openBlocks()) blocks.push(block);
-      return { ...plan.header, blocks };
-    });
-  async function* openReader(
-    signal?: AbortSignal,
-  ): AsyncGenerator<IContent, void, unknown> {
-    for (let index = 0; index < plans.length; index++) {
-      const row = await readAt(index, signal);
-      options.ownership?.retain(row);
-      try {
-        yield row;
-      } finally {
-        options.ownership?.release(row);
-      }
-    }
-  }
+  const selected = callerOwnedPlanRows(plans, scope, options);
   const first = plans.findIndex((plan) => plan.pending);
   return {
-    callerOwned: true,
-    count: plans.length,
+    ...selected,
+    emptyAiRows:
+      emptyAi === undefined
+        ? undefined
+        : callerOwnedPlanRows(emptyAi.plans, scope, options),
     pending: {
       inputCount: tail.length,
       firstOutputIndex: first < 0 ? undefined : first,
@@ -77,11 +60,10 @@ export async function callerOwnedProviderRequest(
       assertRowIndex(index, plans.length);
       return plans[index].pending;
     },
-    openReader: (signal) => scope.open(openReader(signal)),
-    readAt,
     close: async () => {
       await scope.close();
       source.close();
+      emptyAi?.source.close();
     },
   };
 }

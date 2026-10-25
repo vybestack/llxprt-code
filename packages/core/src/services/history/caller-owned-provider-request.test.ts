@@ -11,6 +11,30 @@ import type { IContent } from './IContent.js';
 import { callerOwnedProviderRequest } from './caller-owned-provider-request.js';
 
 describe('caller-owned provider overrides', () => {
+  it('keeps empty assistant turns in the converter view without changing normalized membership', async () => {
+    const snapshot = await callerOwnedProviderRequest([
+      { speaker: 'ai', blocks: [] },
+      { speaker: 'human', blocks: [{ type: 'text', text: 'next' }] },
+    ]);
+    const converterRows = snapshot.emptyAiRows;
+    if (converterRows === undefined)
+      throw new Error('Missing empty assistant view');
+    try {
+      expect(snapshot.count).toBe(1);
+      expect(converterRows.count).toBe(2);
+      expect(await converterRows.readAt(0)).toMatchObject({
+        speaker: 'ai',
+        blocks: [],
+      });
+      expect(await converterRows.readAt(1)).toStrictEqual(
+        await snapshot.readAt(0),
+      );
+    } finally {
+      await snapshot.close();
+    }
+    expect(() => converterRows.openReader()).toThrow('closed');
+    await expect(converterRows.readAt(0)).rejects.toThrow('closed');
+  });
   it('refuses to open a reader after its snapshot closes', async () => {
     const snapshot = await callerOwnedProviderRequest([
       { speaker: 'human', blocks: [{ type: 'text', text: 'closed request' }] },

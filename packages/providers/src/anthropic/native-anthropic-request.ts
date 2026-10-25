@@ -465,10 +465,14 @@ async function prepareCallerOwnedAnthropic(
   const plan = planAnthropicRequest(params);
   const settings = nativeSettings(params, plan);
   const envelope = buildRequestEnvelope(plan, params);
-  const engine = await callerOwnedAnthropicEngine(rows, settings, {
-    strip: plan.reasoningSettings.stripFromContext,
-    includeInContext: plan.reasoningSettings.includeInContext,
-  });
+  const engine = await callerOwnedAnthropicEngine(
+    rows.emptyAiRows ?? rows,
+    settings,
+    {
+      strip: plan.reasoningSettings.stripFromContext,
+      includeInContext: plan.reasoningSettings.includeInContext,
+    },
+  );
   let cache = plan.wantCaching
     ? await callerOwnedAnthropicCache(
         engine,

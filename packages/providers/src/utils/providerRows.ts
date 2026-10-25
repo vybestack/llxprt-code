@@ -49,6 +49,9 @@ function checkedRows(
 ): ProviderRequestRows {
   const { count } = rows;
   return Object.freeze({
+    ...(rows.emptyAiRows === undefined
+      ? {}
+      : { emptyAiRows: checkedRows(rows.emptyAiRows, requestSignal) }),
     ...(rows.native === undefined ? {} : { native: rows.native }),
     ...(rows.callerOwned === true ? { callerOwned: true } : {}),
     count,

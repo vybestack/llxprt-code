@@ -27,13 +27,15 @@ export class CallerOwnedRequestSource implements JournalResponseSource {
   private constructor(
     private readonly rows: readonly IContent[],
     private readonly tail: readonly IContent[],
+    private readonly preserveEmptyAi: boolean,
   ) {}
 
   static async create(
     rows: readonly IContent[],
     tail: readonly IContent[],
+    preserveEmptyAi = false,
   ): Promise<CallerOwnedRequestSource> {
-    const source = new CallerOwnedRequestSource(rows, tail);
+    const source = new CallerOwnedRequestSource(rows, tail, preserveEmptyAi);
     for await (const entry of source.entries()) {
       const draft = source.draft(entry.label);
       for (const occurrence of await planSourceRowOccurrences({
@@ -62,6 +64,12 @@ export class CallerOwnedRequestSource implements JournalResponseSource {
       : this.tail[index - this.rows.length];
   }
 
+  private included(row: IContent): boolean {
+    return (
+      row.blocks.length > 0 || (this.preserveEmptyAi && row.speaker === 'ai')
+    );
+  }
+
   private captured(
     label: bigint,
   ): NonNullable<CallerOwnedRequestSource['current']> {
@@ -72,10 +80,9 @@ export class CallerOwnedRequestSource implements JournalResponseSource {
         label,
         draft: {
           ...draft,
-          flags:
-            row.blocks.length > 0
-              ? draft.flags | ROW_FLAG.curated
-              : draft.flags,
+          flags: this.included(row)
+            ? draft.flags | ROW_FLAG.curated
+            : draft.flags,
         },
       };
     }
@@ -146,7 +153,7 @@ export class CallerOwnedRequestSource implements JournalResponseSource {
       index++
     ) {
       const next = BigInt(index + 1);
-      if (this.row(next).blocks.length > 0) return this.entryByLabel(next);
+      if (this.included(this.row(next))) return this.entryByLabel(next);
     }
     return undefined;
   }

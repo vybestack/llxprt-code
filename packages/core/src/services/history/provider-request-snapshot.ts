@@ -5,6 +5,8 @@ import type { IContent } from './IContent.js';
 import type { NativeProviderFormat } from './native-provider-format.js';
 
 export interface ProviderRequestRows {
+  /** Caller-owned normalization with empty assistant turns kept for converters that require placeholders. */
+  readonly emptyAiRows?: ProviderRequestRows;
   readonly callerOwned?: true;
   readonly native?: NativeProviderFormat;
   readonly count: number;
@@ -97,6 +99,9 @@ export function providerRequestRows(
   snapshot: ProviderRequestRows,
 ): ProviderRequestRows {
   return Object.freeze({
+    ...(snapshot.emptyAiRows === undefined
+      ? {}
+      : { emptyAiRows: snapshot.emptyAiRows }),
     ...(snapshot.native === undefined ? {} : { native: snapshot.native }),
     ...(snapshot.callerOwned === true ? { callerOwned: true } : {}),
     count: snapshot.count,
