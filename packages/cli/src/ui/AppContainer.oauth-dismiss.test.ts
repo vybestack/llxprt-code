@@ -154,6 +154,7 @@ function harness(): {
       dialogs,
       isOAuthCodeDialogOpen: open,
       getActiveProviderName: () => 'claudecode',
+      takeAuthOutcome: () => control.takeAuthOutcome(),
       setAuthError,
     });
     return React.createElement(
@@ -229,9 +230,6 @@ describe('prompt-triggered lazy authentication dialog', () => {
     Object.assign(getOAuthGlobalState(), {
       __oauth_needs_code: undefined,
       __oauth_provider: undefined,
-      __oauth_auth_complete: undefined,
-      __oauth_auth_error: undefined,
-      __oauth_browser_auth_complete: undefined,
     });
     for (const dir of directories.splice(0))
       rmSync(dir, { recursive: true, force: true });

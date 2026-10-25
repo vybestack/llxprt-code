@@ -31,9 +31,6 @@ function deferred<T>(): {
 const initialState: {
   __oauth_needs_code?: boolean;
   __oauth_provider?: string;
-  __oauth_browser_auth_complete?: boolean;
-  __oauth_auth_complete?: boolean;
-  __oauth_auth_error?: string;
 } = {};
 const oauthState = Object.assign(globalThis, initialState);
 
@@ -157,9 +154,6 @@ describe('Issue 3931 real OAuth provider and persistence lifecycle', () => {
     oauthState.__oauth_provider = undefined;
     const attempt = oauthUIBridge.getDialog();
     if (attempt) oauthUIBridge.dismissDialog(attempt.id);
-    oauthState.__oauth_browser_auth_complete = undefined;
-    oauthState.__oauth_auth_complete = undefined;
-    oauthState.__oauth_auth_error = undefined;
     for (const directory of directories.splice(0))
       rmSync(directory, { recursive: true, force: true });
   });
@@ -192,8 +186,7 @@ describe('Issue 3931 real OAuth provider and persistence lifecycle', () => {
         controller.abort(cancellation);
         expect(await backgroundResult).toBe(cancellation);
         expect({
-          error: oauthState.__oauth_auth_error,
-          complete: oauthState.__oauth_auth_complete,
+          ...h.manager.takeAuthOutcome(),
           needsCode: oauthState.__oauth_needs_code,
         }).toStrictEqual({
           error: undefined,
@@ -207,11 +200,10 @@ describe('Issue 3931 real OAuth provider and persistence lifecycle', () => {
         expect((await h.store.getToken('claudecode')) !== null).toBe(
           outcome === 'success',
         );
-        expect(oauthState.__oauth_auth_complete).toBe(outcome === 'success');
-        expect(oauthState.__oauth_auth_error !== undefined).toBe(
-          outcome === 'failure',
-        );
-        expect(oauthState.__oauth_auth_error ?? '').not.toContain('departed');
+        const settled = h.manager.takeAuthOutcome();
+        expect(settled.complete).toBe(outcome === 'success');
+        expect(settled.error !== undefined).toBe(outcome === 'failure');
+        expect(settled.error ?? '').not.toContain('departed');
       } finally {
         h.browser.resolve();
         h.provider.cancelAuth();
@@ -261,7 +253,7 @@ describe('Issue 3931 real OAuth provider and persistence lifecycle', () => {
       expect(redirect(requests[0])).toBe(
         'https://console.anthropic.com/oauth/code/callback',
       );
-      expect(oauthState.__oauth_auth_complete).toBeTruthy();
+      expect(h.manager.takeAuthOutcome().complete).toBe(true);
     } finally {
       h.provider.cancelAuth();
       await login.catch(() => undefined);
@@ -287,7 +279,7 @@ describe('Issue 3931 real OAuth provider and persistence lifecycle', () => {
     expect(redirect(requests[0])).toBe(
       new URL(urls[0] ?? '').searchParams.get('redirect_uri'),
     );
-    expect(oauthState.__oauth_auth_complete).toBeTruthy();
+    expect(h.manager.takeAuthOutcome().complete).toBe(true);
   });
 
   it.each(['success', 'failure'])(
@@ -310,7 +302,7 @@ describe('Issue 3931 real OAuth provider and persistence lifecycle', () => {
       await saveStarted.promise;
       const beforeSave = {
         dialog: oauthUIBridge.getDialog()?.status,
-        complete: oauthState.__oauth_auth_complete === true,
+        complete: h.manager.takeAuthOutcome().complete,
         token: await h.store.getToken('claudecode'),
       };
       if (outcome === 'success') save.resolve();
@@ -321,9 +313,8 @@ describe('Issue 3931 real OAuth provider and persistence lifecycle', () => {
         complete: false,
         token: null,
       });
-      expect(oauthState.__oauth_auth_complete === true).toBe(
-        outcome === 'success',
-      );
+      const settled = h.manager.takeAuthOutcome();
+      expect(settled.complete).toBe(outcome === 'success');
       expect(oauthUIBridge.getDialog()?.status).toBe(
         outcome === 'success' ? 'succeeded' : 'failed',
       );
@@ -331,9 +322,7 @@ describe('Issue 3931 real OAuth provider and persistence lifecycle', () => {
         outcome === 'success',
       );
       expect(oauthState.__oauth_needs_code).toBe(false);
-      expect(oauthState.__oauth_auth_error !== undefined).toBe(
-        outcome === 'failure',
-      );
+      expect(settled.error !== undefined).toBe(outcome === 'failure');
     },
   );
 
@@ -368,7 +357,7 @@ describe('Issue 3931 real OAuth provider and persistence lifecycle', () => {
       signalAuthCompletion: true,
     });
     expect(redirect(requests[0])).toBe('http://localhost:8766/callback');
-    expect(oauthState.__oauth_auth_complete).toBeTruthy();
+    expect(h.manager.takeAuthOutcome().complete).toBe(true);
     expect(await h.store.getToken('claudecode')).not.toBeNull();
   });
 });

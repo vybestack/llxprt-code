@@ -29,6 +29,11 @@ interface PendingEvent {
   readonly timestamp?: number;
 }
 
+export interface OAuthAuthOutcome {
+  readonly complete: boolean;
+  readonly error: string | undefined;
+}
+
 export interface OAuthDialogAttempt {
   readonly id: string;
   readonly provider: string;
@@ -57,6 +62,7 @@ class OAuthUIBridge {
   private callback: OAuthUICallback | null = null;
   private pending: PendingEvent[] = [];
   private dialogAttempt: OAuthDialogAttempt | undefined;
+  private authOutcome: OAuthAuthOutcome = { complete: false, error: undefined };
 
   private readonly dialogListeners = new Set<() => void>();
 
@@ -69,6 +75,26 @@ class OAuthUIBridge {
 
   private notifyDialog(): void {
     for (const listener of this.dialogListeners) listener();
+  }
+
+  /** Forget the previous login outcome when a new login starts. */
+  resetAuthOutcome(): void {
+    this.authOutcome = { complete: false, error: undefined };
+  }
+
+  completeAuth(): void {
+    this.authOutcome = { complete: true, error: undefined };
+  }
+
+  failAuth(message: string): void {
+    this.authOutcome = { complete: false, error: message };
+  }
+
+  /** Returns the recorded login outcome and clears it, so each is read once. */
+  takeAuthOutcome(): OAuthAuthOutcome {
+    const outcome = this.authOutcome;
+    this.authOutcome = { complete: false, error: undefined };
+    return outcome;
   }
 
   beginDialog(id: string, provider: string): void {

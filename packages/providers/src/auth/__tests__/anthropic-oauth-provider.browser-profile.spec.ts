@@ -116,9 +116,6 @@ function configureSuccessfulLocalCallback(): void {
 function clearOAuthGlobals(): void {
   delete (global as { __oauth_needs_code?: boolean }).__oauth_needs_code;
   delete (global as { __oauth_provider?: string }).__oauth_provider;
-  delete (global as { __oauth_browser_auth_complete?: boolean })
-    .__oauth_browser_auth_complete;
-  delete (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete;
 }
 
 function expectBrowserLaunch(

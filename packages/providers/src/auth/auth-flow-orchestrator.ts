@@ -20,7 +20,7 @@ import {
   oauthUIBridge,
   type OAuthTokenRequestMetadata,
   type OAuthTokenWithExtras,
-  type OAuthUICallback,
+  type OAuthUIBridge,
 } from '@vybestack/llxprt-code-auth';
 import { mergeRefreshedToken } from '@vybestack/llxprt-code-auth/token-merge.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
@@ -65,6 +65,12 @@ function ensureOAuthEnabled(
 const AUTH_LOCK_WAIT_MS = 60_000;
 
 type AuthLockWaitOutcome = 'acquired' | 'token-found' | 'timed-out';
+
+/** The manager-owned bridge operations a flight reports its outcome through. */
+export type AuthFlowUI = Pick<
+  OAuthUIBridge,
+  'emit' | 'resetAuthOutcome' | 'completeAuth' | 'failAuth'
+>;
 
 type AuthFlight = {
   readonly promise: Promise<void>;
@@ -128,6 +134,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     private readonly tokenStore: TokenStore,
     private readonly providerRegistry: ProviderRegistry,
     private readonly facadeRef: BucketFailoverOAuthManagerLike,
+    private readonly ui: AuthFlowUI,
     private runtimeMessageBus?: MessageBus,
     private readonly configureFailover: (
       providerName: string,
@@ -138,7 +145,6 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       readonly prompt?: unknown;
       readonly delay?: unknown;
     } = () => ({}),
-    private readonly emitMessage: OAuthUICallback = () => undefined,
   ) {}
 
   /**
@@ -186,10 +192,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
   ): Promise<void> {
     const shouldSignalAuthCompletion = options?.signalAuthCompletion ?? false;
     if (shouldSignalAuthCompletion) {
-      Object.assign(globalThis, {
-        __oauth_auth_complete: false,
-        __oauth_auth_error: undefined,
-      });
+      this.ui.resetAuthOutcome();
     }
     logger.debug(
       () => `[FLOW] authenticate() called for provider: ${providerName}`,
@@ -333,12 +336,11 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         () => oauthUIBridge.settleDialog(flight.attemptId),
         (error: unknown) => {
           const failure = oauthUIBridge.settleDialog(flight.attemptId, error);
-          if (failure !== undefined) this.emitMessage(failure);
+          if (failure !== undefined) this.ui.emit(failure);
           if (flight.signalAuthCompletion) {
-            Object.assign(globalThis, {
-              __oauth_auth_error:
-                error instanceof Error ? error.message : String(error),
-            });
+            this.ui.failAuth(
+              error instanceof Error ? error.message : String(error),
+            );
           }
         },
       )
@@ -383,7 +385,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       return;
     }
     flight.completionSignaled = true;
-    Object.assign(globalThis, { __oauth_auth_complete: true });
+    this.ui.completeAuth();
   }
 
   /**

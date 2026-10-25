@@ -6,6 +6,7 @@ import { readFixtureSessionAuthPolicy } from './__tests__/session-auth-policy-fi
  */
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { InteractiveAuthCoordinator } from './interactive-auth-coordinator.js';
 import type {
@@ -243,8 +244,8 @@ describe('OAuthManager wiring', () => {
       tokenStore,
       providerRegistry,
       manager,
+      expect.any(OAuthUIBridge),
       messageBus,
-      expect.any(Function),
       expect.any(Function),
       expect.any(Function),
     );

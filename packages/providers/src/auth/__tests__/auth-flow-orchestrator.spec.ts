@@ -24,6 +24,7 @@ import type {
   BucketFailoverOAuthManagerLike,
   AuthenticatorInterface,
 } from '../types.js';
+import { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 import { AuthFlowOrchestrator } from '../auth-flow-orchestrator.js';
 import { ProviderRegistry } from '../provider-registry.js';
 
@@ -119,6 +120,17 @@ function createFacadeRef(): BucketFailoverOAuthManagerLike {
   };
 }
 
+class RecordingAuthUI extends OAuthUIBridge {
+  completions = 0;
+
+  override completeAuth(): void {
+    this.completions += 1;
+    super.completeAuth();
+  }
+}
+
+let authUI = new RecordingAuthUI();
+
 function createOrchestrator(
   tokenStore: TokenStore,
   providerRegistry?: ProviderRegistry,
@@ -131,6 +143,7 @@ function createOrchestrator(
     tokenStore,
     registry,
     facade,
+    authUI,
     undefined,
     () => {},
     () => ({
@@ -146,16 +159,14 @@ function createOrchestrator(
 
 describe('AuthFlowOrchestrator', () => {
   beforeEach(() => {
+    authUI = new RecordingAuthUI();
     mockGetEphemeralSetting.mockImplementation((key: string) => {
       if (key === 'auth-bucket-delay') return 0;
       return undefined;
     });
   });
 
-  afterEach(() => {
-    delete (global as { __oauth_auth_complete?: boolean })
-      .__oauth_auth_complete;
-  });
+  afterEach(() => {});
 
   describe('authenticate() — auth lock parameters', () => {
     it('acquires auth lock with waitMs:60000', async () => {
@@ -306,8 +317,6 @@ describe('AuthFlowOrchestrator', () => {
 
   describe('authenticate() — auth completion signaling', () => {
     it('marks global auth complete after successful browser authentication', async () => {
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
       const tokenStore = makeTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
@@ -322,16 +331,10 @@ describe('AuthFlowOrchestrator', () => {
         signalAuthCompletion: true,
       });
 
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBe(true);
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
+      expect(authUI.takeAuthOutcome().complete).toBe(true);
     });
 
     it('marks global auth complete when a valid disk token is found under the auth lock', async () => {
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
       const tokenStore = makeTokenStore();
       const validToken = makeToken('existing-token', 3600);
       (
@@ -347,16 +350,10 @@ describe('AuthFlowOrchestrator', () => {
       });
 
       expect(provider.initiateAuth).not.toHaveBeenCalled();
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBe(true);
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
+      expect(authUI.takeAuthOutcome().complete).toBe(true);
     });
 
     it('marks global auth complete when an expired disk token refreshes successfully', async () => {
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
       const tokenStore = makeTokenStore();
       const expiredToken = makeToken('expired-token', -100);
       expiredToken.refresh_token = 'valid-refresh';
@@ -376,16 +373,10 @@ describe('AuthFlowOrchestrator', () => {
       });
 
       expect(provider.initiateAuth).not.toHaveBeenCalled();
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBe(true);
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
+      expect(authUI.takeAuthOutcome().complete).toBe(true);
     });
 
     it('marks global auth complete when auth lock times out but a valid disk token exists', async () => {
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
       const tokenStore = makeTokenStore();
       (
         tokenStore.acquireAuthLock as Mock<typeof tokenStore.acquireAuthLock>
@@ -403,16 +394,10 @@ describe('AuthFlowOrchestrator', () => {
       });
 
       expect(provider.initiateAuth).not.toHaveBeenCalled();
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBe(true);
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
+      expect(authUI.takeAuthOutcome().complete).toBe(true);
     });
 
     it('does not mark global auth complete when browser authentication fails', async () => {
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
       const tokenStore = makeTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
@@ -428,14 +413,10 @@ describe('AuthFlowOrchestrator', () => {
         }),
       ).rejects.toThrow(/browser auth failed/);
 
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBe(false);
+      expect(authUI.takeAuthOutcome().complete).toBe(false);
     });
 
     it('does not mark global auth complete by default', async () => {
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
       const tokenStore = makeTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
@@ -448,14 +429,10 @@ describe('AuthFlowOrchestrator', () => {
       await orchestrator.authenticate('anthropic', 'default');
 
       expect(provider.initiateAuth).toHaveBeenCalledOnce();
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBeUndefined();
+      expect(authUI.takeAuthOutcome().complete).toBe(false);
     });
 
     it('does not mark global auth complete when completion signaling is disabled', async () => {
-      delete (global as { __oauth_auth_complete?: boolean })
-        .__oauth_auth_complete;
       const tokenStore = makeTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
@@ -470,9 +447,7 @@ describe('AuthFlowOrchestrator', () => {
       });
 
       expect(provider.initiateAuth).toHaveBeenCalledOnce();
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBeUndefined();
+      expect(authUI.takeAuthOutcome().complete).toBe(false);
     });
   });
 
@@ -496,9 +471,7 @@ describe('AuthFlowOrchestrator', () => {
       pendingAuth.resolve(makeToken('shared-token'));
 
       await Promise.all([initiator, joiner]);
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBe(true);
+      expect(authUI.takeAuthOutcome().complete).toBe(true);
     });
 
     it('does not signal completion when a joined authentication rejects', async () => {
@@ -524,9 +497,7 @@ describe('AuthFlowOrchestrator', () => {
         'rejected',
         'rejected',
       ]);
-      expect(
-        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBe(false);
+      expect(authUI.takeAuthOutcome().complete).toBe(false);
     });
 
     it('signals completion once when both joined callers request it', async () => {
@@ -539,15 +510,6 @@ describe('AuthFlowOrchestrator', () => {
       ).mockImplementation(async () => pendingAuth.promise);
       registry.registerProvider(provider);
       const orchestrator = createOrchestrator(tokenStore, registry);
-      let signalCount = 0;
-      Object.defineProperty(global, '__oauth_auth_complete', {
-        configurable: true,
-        get: () => signalCount > 0,
-        set: (complete: boolean) => {
-          if (complete) signalCount += 1;
-        },
-      });
-
       const initiator = orchestrator.authenticate('anthropic', 'default', {
         signalAuthCompletion: true,
       });
@@ -558,7 +520,7 @@ describe('AuthFlowOrchestrator', () => {
       pendingAuth.resolve(makeToken('shared-token'));
 
       await Promise.all([initiator, joiner]);
-      expect(signalCount).toBe(1);
+      expect(authUI.completions).toBe(1);
     });
   });
 

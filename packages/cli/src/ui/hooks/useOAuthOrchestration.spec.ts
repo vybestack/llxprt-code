@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { oauthUIBridge } from '@vybestack/llxprt-code-auth';
+import { OAuthUIBridge, oauthUIBridge } from '@vybestack/llxprt-code-auth';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 import { renderHook } from '../../__tests__/render.js';
@@ -23,8 +23,10 @@ describe('useOAuthOrchestration', () => {
   let setAuthError: (error: string | null) => void;
   let store: DialogStore;
   let dialogs: ReturnType<typeof createDialogOpeners>;
+  let outcomes: OAuthUIBridge;
 
   beforeEach(() => {
+    outcomes = new OAuthUIBridge();
     vi.useFakeTimers();
     appDispatch = vi.fn();
     setAuthError = vi.fn();
@@ -32,8 +34,6 @@ describe('useOAuthOrchestration', () => {
     dialogs = createDialogOpeners(store);
     delete (global as Record<string, unknown>).__oauth_needs_code;
     delete (global as Record<string, unknown>).__oauth_provider;
-    delete (global as Record<string, unknown>).__oauth_browser_auth_complete;
-    delete (global as Record<string, unknown>).__oauth_auth_complete;
   });
 
   afterEach(() => {
@@ -42,8 +42,6 @@ describe('useOAuthOrchestration', () => {
     vi.useRealTimers();
     delete (global as Record<string, unknown>).__oauth_needs_code;
     delete (global as Record<string, unknown>).__oauth_provider;
-    delete (global as Record<string, unknown>).__oauth_browser_auth_complete;
-    delete (global as Record<string, unknown>).__oauth_auth_complete;
   });
 
   describe('provider guard (Issue #1878)', () => {
@@ -55,6 +53,7 @@ describe('useOAuthOrchestration', () => {
       renderHook(() =>
         useOAuthOrchestration({
           appDispatch,
+          takeAuthOutcome: () => outcomes.takeAuthOutcome(),
           dialogs,
           isOAuthCodeDialogOpen: false,
           getActiveProviderName,
@@ -77,6 +76,7 @@ describe('useOAuthOrchestration', () => {
       renderHook(() =>
         useOAuthOrchestration({
           appDispatch,
+          takeAuthOutcome: () => outcomes.takeAuthOutcome(),
           dialogs,
           isOAuthCodeDialogOpen: false,
           getActiveProviderName,
@@ -99,6 +99,7 @@ describe('useOAuthOrchestration', () => {
       renderHook(() =>
         useOAuthOrchestration({
           appDispatch,
+          takeAuthOutcome: () => outcomes.takeAuthOutcome(),
           dialogs,
           isOAuthCodeDialogOpen: false,
           getActiveProviderName,
@@ -124,6 +125,7 @@ describe('useOAuthOrchestration', () => {
       renderHook(() =>
         useOAuthOrchestration({
           appDispatch,
+          takeAuthOutcome: () => outcomes.takeAuthOutcome(),
           dialogs,
           isOAuthCodeDialogOpen: false,
           getActiveProviderName,
@@ -144,6 +146,7 @@ describe('useOAuthOrchestration', () => {
       renderHook(() =>
         useOAuthOrchestration({
           appDispatch,
+          takeAuthOutcome: () => outcomes.takeAuthOutcome(),
           dialogs,
           isOAuthCodeDialogOpen: false,
           setAuthError,
@@ -165,6 +168,7 @@ describe('useOAuthOrchestration', () => {
       renderHook(() =>
         useOAuthOrchestration({
           appDispatch,
+          takeAuthOutcome: () => outcomes.takeAuthOutcome(),
           dialogs,
           isOAuthCodeDialogOpen: true,
           setAuthError,
@@ -183,6 +187,7 @@ describe('useOAuthOrchestration', () => {
     renderHook(() =>
       useOAuthOrchestration({
         appDispatch,
+        takeAuthOutcome: () => outcomes.takeAuthOutcome(),
         dialogs,
         isOAuthCodeDialogOpen: true,
         setAuthError,
@@ -197,12 +202,13 @@ describe('useOAuthOrchestration', () => {
     oauthUIBridge.beginDialog('older-claude', 'claudecode');
     Object.assign(globalThis, {
       __oauth_provider: 'gemini',
-      __oauth_auth_complete: true,
     });
+    outcomes.completeAuth();
     dialogs.oauthCode.open({});
     renderHook(() =>
       useOAuthOrchestration({
         appDispatch,
+        takeAuthOutcome: () => outcomes.takeAuthOutcome(),
         dialogs,
         isOAuthCodeDialogOpen: true,
         setAuthError,

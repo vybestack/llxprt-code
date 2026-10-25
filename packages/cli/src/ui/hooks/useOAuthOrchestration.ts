@@ -17,7 +17,10 @@
  */
 
 import { useEffect } from 'react';
-import { oauthUIBridge } from '@vybestack/llxprt-code-auth';
+import {
+  oauthUIBridge,
+  type OAuthAuthOutcome,
+} from '@vybestack/llxprt-code-auth';
 import type { AppAction } from '../reducers/appReducer.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import {
@@ -30,6 +33,8 @@ interface UseOAuthOrchestrationOptions {
   dialogs: DialogOpeners;
   isOAuthCodeDialogOpen: boolean;
   getActiveProviderName?: () => string;
+  /** Undefined only when the root has no OAuth manager, so nothing to poll. */
+  takeAuthOutcome: (() => OAuthAuthOutcome) | undefined;
   setAuthError: (error: string | null) => void;
 }
 
@@ -65,6 +70,7 @@ export function useOAuthOrchestration({
   dialogs,
   isOAuthCodeDialogOpen,
   getActiveProviderName,
+  takeAuthOutcome,
   setAuthError,
 }: UseOAuthOrchestrationOptions): void {
   useEffect(() => {
@@ -98,17 +104,14 @@ export function useOAuthOrchestration({
   }, [dialogs, isOAuthCodeDialogOpen]);
 
   useEffect(() => {
+    if (takeAuthOutcome === undefined) return undefined;
     const interval = setInterval(() => {
-      const oauthState = getOAuthGlobalState();
-      if (oauthState.__oauth_auth_error !== undefined) {
-        if (!hasMatchingDialogAttempt()) {
-          setAuthError(oauthState.__oauth_auth_error);
-          dialogs.oauthCode.close();
-        }
-        oauthState.__oauth_auth_error = undefined;
+      const outcome = takeAuthOutcome();
+      if (outcome.error !== undefined && !hasMatchingDialogAttempt()) {
+        setAuthError(outcome.error);
+        dialogs.oauthCode.close();
       }
-      if (oauthState.__oauth_auth_complete === true) {
-        oauthState.__oauth_auth_complete = false;
+      if (outcome.complete) {
         setAuthError(null);
         appDispatch({ type: 'SET_NEEDS_RELOGIN', payload: false });
         dialogs.auth.close();
@@ -116,5 +119,5 @@ export function useOAuthOrchestration({
       }
     }, 100);
     return () => clearInterval(interval);
-  }, [appDispatch, dialogs, setAuthError]);
+  }, [appDispatch, dialogs, setAuthError, takeAuthOutcome]);
 }

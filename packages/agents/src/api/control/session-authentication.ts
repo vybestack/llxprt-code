@@ -5,7 +5,10 @@
  */
 
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
+import type {
+  OAuthAuthOutcome,
+  OAuthUICallback,
+} from '@vybestack/llxprt-code-auth';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { DiscoveredProvider } from './oauth-bucket-discovery.js';
 import { discoverProviderBuckets } from './oauth-bucket-discovery.js';
@@ -17,6 +20,7 @@ export type AgentSessionAuthentication = Pick<
   | 'unbindInteractiveAuthHost'
   | 'cancelInteractiveAuth'
   | 'getInteractiveAuthSessions'
+  | 'takeAuthOutcome'
   | 'getAuthStatus'
   | 'toggleOAuthEnabled'
   | 'authenticate'
@@ -67,6 +71,7 @@ function interactiveHostControl(
   | 'unbindInteractiveAuthHost'
   | 'cancelInteractiveAuth'
   | 'getInteractiveAuthSessions'
+  | 'takeAuthOutcome'
 > {
   const manager = (): OAuthManager => requireOAuthManager(oauth);
   return {
@@ -77,6 +82,7 @@ function interactiveHostControl(
     unbindInteractiveAuthHost: () => manager().unbindInteractiveAuthHost(),
     cancelInteractiveAuth: () => manager().cancelInteractiveAuth(),
     getInteractiveAuthSessions: () => manager().getInteractiveAuthSessions(),
+    takeAuthOutcome: (): OAuthAuthOutcome => manager().takeAuthOutcome(),
   };
 }
 

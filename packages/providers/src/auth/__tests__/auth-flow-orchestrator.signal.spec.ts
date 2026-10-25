@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ISecureStore } from '@vybestack/llxprt-code-auth';
+import { OAuthUIBridge, type ISecureStore } from '@vybestack/llxprt-code-auth';
 import { KeyringTokenStore } from '@vybestack/llxprt-code-core';
 import { AuthFlowOrchestrator } from '../auth-flow-orchestrator.js';
 import { ProviderRegistry } from '../provider-registry.js';
@@ -324,6 +324,7 @@ describe('AuthFlowOrchestrator signal threading', () => {
         tokenStore,
         registry,
         createFacade(tokenStore),
+        new OAuthUIBridge(),
       ),
       registry,
     };
@@ -646,6 +647,7 @@ describe('AuthFlowOrchestrator signal threading', () => {
         return registry;
       })(),
       createFacade(gatedStore),
+      new OAuthUIBridge(),
     );
     const controller = new AbortController();
 

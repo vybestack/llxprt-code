@@ -75,6 +75,7 @@ function createUnavailableOAuthControl(): OAuthControl {
     unbindInteractiveAuthHost: unavailableOAuth,
     cancelInteractiveAuth: unavailableOAuth,
     getInteractiveAuthSessions: unavailableOAuth,
+    takeAuthOutcome: unavailableOAuth,
     getAuthStatus: unavailableOAuth,
     toggleOAuthEnabled: unavailableOAuth,
     authenticate: unavailableOAuth,

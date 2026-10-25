@@ -22,6 +22,7 @@ export type {
   OAuthUICallback,
   OAuthInteractiveAuthOutcomeKind,
 } from './oauth-ui-events.js';
+export type { OAuthAuthOutcome } from './oauth-ui-bridge.js';
 export {
   OAuthUIBridge,
   oauthUIBridge,

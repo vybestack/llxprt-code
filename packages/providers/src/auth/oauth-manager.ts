@@ -32,6 +32,7 @@ import {
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import {
   OAuthUIBridge,
+  type OAuthAuthOutcome,
   type AuthLockStatus,
   type AuthLockRecoveryResult,
   type ForceRecoverOptions,
@@ -229,6 +230,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       tokenStore,
       this.providerRegistry,
       this, // facadeRef — satisfies BucketFailoverOAuthManagerLike
+      this.interactiveAuthUI,
       runtimeDeps?.messageBus,
       (providerName, buckets, metadata) =>
         this.configureBucketFailover(providerName, buckets, metadata),
@@ -236,7 +238,6 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
         prompt: this.readSessionAuthPolicy().bucketPrompt,
         delay: this.readSessionAuthPolicy().bucketDelay,
       }),
-      (event, timestamp) => this.interactiveAuthUI.emit(event, timestamp),
     );
     // Assign AFTER authFlowOrchestrator exists so the setter can propagate the
     // bus to the orchestrator. Idempotent with the constructor argument above,
@@ -508,6 +509,10 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
         : undefined,
       prompt.signal,
     );
+  }
+
+  takeAuthOutcome(): OAuthAuthOutcome {
+    return this.interactiveAuthUI.takeAuthOutcome();
   }
 
   attachInteractiveAuthMessages(callback: OAuthUICallback | null): void {
