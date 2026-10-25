@@ -1,5 +1,4 @@
-import { capturedSessionClient } from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
+import { ownerClients } from './helpers/session-client-capture.js';
 import { bindTurnModel } from '../../session/bind-turn-model.js';
 import { TurnToolExecutionOwner } from '../../session/turn-tool-execution-owner.js';
 import { bindSchedulerOwner } from '../../session/assembleSchedulerOwner.js';
@@ -42,7 +41,7 @@ import { describe, it } from 'bun:test';
 import { fileURLToPath } from 'node:url';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
 import { projectEvents, type MessageBus } from './helpers/fixture-data.js';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
 
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
@@ -53,7 +52,12 @@ import {
   resolveShellJobSettings,
   AsyncTaskManager,
 } from '@vybestack/llxprt-code-core';
-import { withFixtureAgent, drain } from './helpers/agentHarness.js';
+import {
+  withFixtureAgent,
+  drain,
+  createAgent,
+} from './helpers/agentHarness.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import {
@@ -105,7 +109,7 @@ import * as fc from 'fast-check';
  */
 async function driveReferenceLoop(
   config: Config,
-  agentClient: ReturnType<typeof capturedSessionClient>,
+  agentClient: AgentClientContract,
   messageBus: MessageBus,
   input: string,
   settingsOwner: SessionSettingsOwner,
@@ -234,196 +238,22 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
             const builtCallerDirectory = await realpath(
               await mkdtemp(join(tmpdir(), 'explicit-caller-')),
             );
-            const builtCallerOverrides: Readonly<Partial<AgentConfig>> = {};
-            const builtCallerSelection: AgentConfig = {
-              provider: 'fake',
-              model: 'fake-model',
-              sessionId: randomUUID(),
-              ...builtCallerOverrides,
-              workingDir: builtCallerDirectory,
-            };
-            const builtCallerParameters = {
-              ...toConfigParameters(builtCallerSelection),
-              ...{},
-            };
-            builtCallerParameters.interactive = true;
-
-            builtCallerParameters.includeDirectories = [
-              ...(builtCallerParameters.includeDirectories ?? []),
-              process.cwd(),
-            ];
-            const builtCallerConfig = new Config(builtCallerParameters);
-            const builtCallerFactories = {
-              ...createAgentRuntimeFactoryBindings(),
-              ...{},
-            };
-            const builtCallerSettings = new SettingsService();
-            for (const [key, value] of Object.entries(
-              builtCallerConfig.getInitialSettings(),
-            ))
-              builtCallerSettings.set(key, value);
-            const builtCallerPolicy = acquireConsumerPolicy(builtCallerConfig);
-
-            const builtCallerMcp = await buildTestMcpRuntime(
-              builtCallerConfig,
-              builtCallerPolicy.session.messageBus,
-              builtCallerOverrides,
-              undefined,
-              builtCallerPolicy,
-              undefined,
-            );
-            const builtCallerRuntimeId = 'caller-' + randomUUID();
-
-            const builtCallerSettingsOwner = new SessionSettingsOwner(
-              builtCallerSettings,
-            );
-
-            builtCallerSettingsOwner.initializeProviderSelection(
-              builtCallerConfig.getProvider(),
-              builtCallerConfig.getModel(),
-            );
-            builtCallerSettingsOwner.bindTelemetry(builtCallerConfig);
-            const builtCallerFiles = new ProviderFileLifecycle({
-              maxFiles: 100,
-              maxBytes: 512 * 1024 * 1024,
-            });
-            const builtCallerRelease = acquireConsumerRelease(
-              builtCallerSettingsOwner,
-              builtCallerFiles,
-              builtCallerRuntimeId,
-              builtCallerConfig.getSessionId(),
-            );
-            const builtCallerManager = acquirePreferredProviderManager(
-              builtCallerConfig,
-              builtCallerSettings,
-              builtCallerSettingsOwner,
-              builtCallerFiles,
-              builtCallerRuntimeId,
-              builtCredentials().authority,
-              builtCallerRelease,
-            );
-            const builtCallerTokenizer =
-              selectConsumerTokenizer(builtCallerManager);
-            const builtCallerContent = createConsumerContentGenerator();
-            const builtCallerOAuth = acquirePreferredOAuth(
-              undefined,
-              builtCallerPolicy.session.messageBus,
-              builtCallerConfig,
-              builtCallerSettings,
-              builtCallerManager,
-              builtCallerRuntimeId,
-              builtCallerMcp.profileDefinitions,
-              builtCredentials().authority,
-              builtCallerRelease,
-              undefined,
-            );
-            const builtCallerMedia = acquireConsumerMedia(
-              builtCallerConfig,
-              1024 * 1024 * 1024,
-            );
-            const builtCallerOwner = await createConsumerSessionClient(
-              builtCallerConfig,
-              builtCallerSettings,
-              builtCallerManager,
-              builtCallerFactories.agentClientFactory,
-              builtCallerMedia.store,
-              builtCallerMcp.readInstructions,
-              builtCallerMcp.workspacePaths,
-              builtCallerSettingsOwner,
-              builtCallerContent,
-              builtCallerTokenizer,
-            );
-            builtCallerOwner.bindMcpRuntime(builtCallerMcp);
-            builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
-              builtCallerOAuth.composeRetryOperations(provider),
-            );
-            builtCallerOwner.bindHooks();
-            const builtCallerClose = settleEngineRelease.bind(
-              undefined,
-              [
-                () => builtCallerOwner.dispose(),
-                () => builtCallerRelease.close(),
-                () => builtCallerMedia.dispose(),
-                () => builtCallerMcp.dispose(),
-                () => builtCallerConfig.dispose(),
-                () =>
-                  rm(builtCallerDirectory, { recursive: true, force: true }),
-              ],
-              builtCallerPreviousReplay,
-            );
             try {
-              await preparePreferredProviderCompletion(
-                builtCallerConfig,
-                builtCallerSettings,
-                builtCallerSettingsOwner,
-                builtCallerManager,
-                builtCallerOAuth,
-                builtCallerRuntimeId,
-                builtCallerTokenizer,
-                undefined,
-              );
-              await builtCallerMcp.initialize();
-              const activation = await executeProviderActivation(
-                builtCallerConfig,
-                builtCallerSelection.activation ?? {
-                  provider: builtCallerConfig.getProvider(),
-                  model: builtCallerConfig.getModel(),
+              const agent: Agent = await createAgent({
+                provider: 'fake',
+                model: 'fake-model',
+                sessionId: randomUUID(),
+                workingDir: builtCallerDirectory,
+                interactive: true,
+                includeDirectories: [process.cwd()],
+                harness: {
+                  forceInteractive: false,
+                  forceConfirmations: false,
+                  includeProcessCwd: false,
                 },
-                assembleProviderSwitch(
-                  builtCallerConfig,
-                  builtCallerSettings,
-                  builtCallerManager,
-                  builtCallerOAuth,
-                  () => 'agent',
-                  () => builtCallerOwner.refreshAuth(),
-                  builtCallerSettingsOwner,
-                ),
-                builtCallerSettings,
-                builtCallerManager,
-                (method) => builtCallerOwner.refreshAuth(method),
-                assembleModelSelection(builtCallerSettingsOwner),
-              );
-              requireCallerActivation(activation);
-              await builtCallerOwner.initializeTools();
-              await capturedSessionClient(builtCallerOwner).startChat();
-            } catch (primary) {
-              await cleanupAfterFailure(primary, builtCallerClose);
-            }
-
-            try {
-              const agent: Agent = await fromConfig(
-                builtCallerConfig,
-                builtCallerSettings,
-                {},
-                builtCallerSettingsOwner,
-                builtCallerManager,
-                undefined,
-                undefined,
-                builtCallerMcp,
-                undefined,
-                capturedSessionClient(builtCallerOwner),
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                () => ToolConfirmationOutcome.ProceedOnce,
-              );
+                credentialAuthority: builtCredentials().authority,
+                onApproval: () => ToolConfirmationOutcome.ProceedOnce,
+              });
               return await withFixtureAgent(agent, async () => {
                 const pathAEvents = await drain(agent.stream('hello'));
                 const pathA = projectEvents(pathAEvents);
@@ -460,8 +290,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
                   builtRefCallerParameters,
                 );
                 const builtRefCallerFactories = {
-                  ...createAgentRuntimeFactoryBindings(),
-                  ...{},
+                  agentClientFactory: buildAgentClientFactory(),
                 };
                 const builtRefCallerSettings = new SettingsService();
                 for (const [key, value] of Object.entries(
@@ -598,7 +427,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
                   );
                   requireCallerActivation(activation);
                   await builtRefCallerOwner.initializeTools();
-                  await capturedSessionClient(builtRefCallerOwner).startChat();
+                  await ownerClients(builtRefCallerOwner)[1].startChat();
                 } catch (primary) {
                   await cleanupAfterFailure(primary, builtRefCallerClose);
                 }
@@ -606,7 +435,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
                 try {
                   const pathBEvents = await driveReferenceLoop(
                     builtRefCallerConfig,
-                    capturedSessionClient(builtRefCallerOwner),
+                    ownerClients(builtRefCallerOwner)[1],
                     builtRefCallerPolicy.session.messageBus,
                     'hello',
                     builtRefCallerSettingsOwner,
@@ -619,7 +448,11 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
                 }
               });
             } finally {
-              await builtCallerClose();
+              if (builtCallerPreviousReplay === undefined)
+                delete process.env.LLXPRT_FAKE_RESPONSES;
+              else
+                process.env.LLXPRT_FAKE_RESPONSES = builtCallerPreviousReplay;
+              await rm(builtCallerDirectory, { recursive: true, force: true });
             }
           } finally {
             fixture.cleanup();
