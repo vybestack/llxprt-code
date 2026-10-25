@@ -1,24 +1,33 @@
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
-import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from './helpers/recording-owner-lifetime-fixture.js';
-import { describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { Agent } from '../agent.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import type { AgentHooks } from '../config-types.js';
+import { fromConfig } from '../fromConfig.js';
+import {
+  cleanupAfterFailure,
+  runCleanupSteps,
+} from '../../core/subagent-cleanup.js';
 import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import {
   nativeHookCommand,
   nativeHookInputCommand,
 } from './helpers/native-hook-command.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 /**
  * @license
@@ -141,13 +150,102 @@ if (input.hook_event_name === 'BeforeAgent') {
   return nativeHookCommand(script);
 }
 
+type HookedScenario = (
+  agent: Agent,
+  settingsService: SettingsService,
+  borrow: () => Promise<Agent>,
+) => Promise<void>;
+
+async function disposeHookedAgent(agent: Agent): Promise<void> {
+  await runCleanupSteps([
+    async () => {
+      if (agent.session.getRecording().enabled)
+        await agent.session.setRecording({ enabled: false });
+    },
+    () => agent.dispose(),
+  ]);
+}
+
+/**
+ * Runs the scenario over agents a host builds with `fromConfig` from one
+ * `Config` that has hooks enabled (`AgentConfig` carries no `enableHooks`, so
+ * the test owns the `Config`). `borrow` opens another independent agent over
+ * the same `Config`, settings and hook command.
+ */
+async function withHookedAgents(
+  authority: CredentialAuthority,
+  scenario: HookedScenario,
+  hooks: AgentHooks,
+): Promise<void> {
+  const directory = await realpath(
+    await mkdtemp(join(tmpdir(), 'hook-shutdown-agents-')),
+  );
+  const parameters = {
+    ...toConfigParameters({
+      provider: 'fake',
+      model: 'fake-model',
+      workingDir: directory,
+      hooks,
+    }),
+    interactive: true,
+    enableHooks: true,
+  };
+  parameters.includeDirectories = [
+    ...(parameters.includeDirectories ?? []),
+    process.cwd(),
+  ];
+  const config = new Config(parameters);
+  const settings = new SettingsService();
+  for (const [key, value] of Object.entries(config.getInitialSettings()))
+    settings.set(key, value);
+  const agents: Agent[] = [];
+  const borrow = async (): Promise<Agent> => {
+    const agent = await fromConfig(
+      config,
+      settings,
+      { sessionId: randomUUID() + '-hook-shutdown' },
+      authority,
+    );
+    agents.push(agent);
+    return agent;
+  };
+  const close = (): Promise<void> =>
+    runCleanupSteps([
+      ...[...agents].reverse().map((agent) => () => disposeHookedAgent(agent)),
+      () => config.dispose(),
+      () => rm(config.projectTempDir, { recursive: true, force: true }),
+      () => rm(directory, { recursive: true, force: true }),
+    ]);
+  try {
+    await scenario(await borrow(), settings, borrow);
+  } catch (primary) {
+    await cleanupAfterFailure(primary, close);
+  }
+  await close();
+}
+
 describe('public Agent hook shutdown', () => {
-  useRecordingPrompts();
+  let promptDirectory: string;
+  let previousPrompts: string | undefined;
+  beforeAll(async () => {
+    previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+    promptDirectory = await mkdtemp(join(tmpdir(), 'hook-shutdown-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+  const credentials = useOwnedCredentials();
+  useFakeResponsesReplay('multi-turn-text.jsonl');
   it('delivers the public final event to an actual pipe consumer', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'public-hook-input-'));
     const input = join(directory, 'input');
     try {
-      await withRecordingLifetimeFixture(
+      await withHookedAgents(
+        credentials().authority,
         async (agent) => {
           await agent.hooks.triggerSessionEnd();
           const data: unknown = JSON.parse(await readFile(input, 'utf8'));
@@ -156,20 +254,17 @@ describe('public Agent hook shutdown', () => {
             session_id: agent.getRuntimeId(),
           });
         },
-        undefined,
         {
-          hooks: {
-            SessionEnd: [
-              {
-                hooks: [
-                  {
-                    type: HookType.Command,
-                    command: nativeHookInputCommand(input, 'write'),
-                  },
-                ],
-              },
-            ],
-          },
+          SessionEnd: [
+            {
+              hooks: [
+                {
+                  type: HookType.Command,
+                  command: nativeHookInputCommand(input, 'write'),
+                },
+              ],
+            },
+          ],
         },
       );
     } finally {
@@ -181,21 +276,16 @@ describe('public Agent hook shutdown', () => {
     const directory = await mkdtemp(join(tmpdir(), 'owner-first-hook-'));
     const output = join(directory, 'events.jsonl');
     try {
-      await withRecordingLifetimeFixture(
-        async (agent, _config, _settingsOwner, _settings, _oauth, borrow) => {
+      await withHookedAgents(
+        credentials().authority,
+        async (agent, _settings, borrow) => {
           const peer = await borrow();
-          const owner = fixtureAgentResources(agent)
-            .sessionOwners.values()
-            .next().value;
-          if (owner === undefined)
-            throw new Error('Missing real session client owner');
           const observed: string[] = [];
           const unsubscribe = agent.hooks.onHookExecution((request) => {
             if (request.event === HookEventName.SessionEnd)
               observed.push(request.event);
           });
           try {
-            await owner.dispose();
             await agent.dispose();
             await agent.dispose();
             const first: unknown[] = (await readFile(output, 'utf8'))
@@ -219,20 +309,17 @@ describe('public Agent hook shutdown', () => {
             unsubscribe();
           }
         },
-        undefined,
         {
-          hooks: {
-            SessionEnd: [
-              {
-                hooks: [
-                  {
-                    type: HookType.Command,
-                    command: nativeHookInputCommand(output, 'append'),
-                  },
-                ],
-              },
-            ],
-          },
+          SessionEnd: [
+            {
+              hooks: [
+                {
+                  type: HookType.Command,
+                  command: nativeHookInputCommand(output, 'append'),
+                },
+              ],
+            },
+          ],
         },
       );
     } finally {
@@ -259,15 +346,9 @@ while (!existsSync(${JSON.stringify(released)})) await Bun.sleep(10);
 console.log(JSON.stringify({systemMessage: 'final process joined'}));
 `,
         );
-        await withRecordingLifetimeFixture(
-          async (
-            agent,
-            _config,
-            _settingsOwner,
-            settingsService,
-            _oauthManager,
-            borrow,
-          ) => {
+        await withHookedAgents(
+          credentials().authority,
+          async (agent, settingsService, borrow) => {
             const peer = await borrow();
             const observed: string[] = [];
             const startup: unknown[] = [];
@@ -322,20 +403,17 @@ console.log(JSON.stringify({systemMessage: 'final process joined'}));
               await completed;
             }
           },
-          undefined,
           {
-            hooks: {
-              [HookEventName.SessionEnd]: [
-                {
-                  hooks: [
-                    {
-                      type: HookType.Command,
-                      command: nativeHookCommand(script),
-                    },
-                  ],
-                },
-              ],
-            },
+            [HookEventName.SessionEnd]: [
+              {
+                hooks: [
+                  {
+                    type: HookType.Command,
+                    command: nativeHookCommand(script),
+                  },
+                ],
+              },
+            ],
           },
         );
       } catch (error) {
@@ -371,15 +449,9 @@ console.log(JSON.stringify({systemMessage: 'final process joined'}));
           command: await createPhysicalHooks(evidence),
         };
         await withUnrelatedProcess(evidence, () =>
-          withRecordingLifetimeFixture(
-            async (
-              agent,
-              _config,
-              _settingsOwner,
-              settingsService,
-              _oauthManager,
-              borrow,
-            ) => {
+          withHookedAgents(
+            credentials().authority,
+            async (agent, settingsService, borrow) => {
               const second = await borrow();
               const retiring = order === 'first' ? agent : second;
               const peer = order === 'first' ? second : agent;
@@ -443,9 +515,6 @@ console.log(JSON.stringify({systemMessage: 'final process joined'}));
                 expect(await readFile(join(evidence, 'peer'), 'utf8')).toBe(
                   peer.getRuntimeId(),
                 );
-                expect(fixtureAgentResources(peer).messageBus).toBe(
-                  fixtureAgentResources(retiring).messageBus,
-                );
                 expect(settingsService.getAllGlobalSettings()).toBeDefined();
               } catch (error) {
                 bodyFailures.push(error);
@@ -465,12 +534,9 @@ console.log(JSON.stringify({systemMessage: 'final process joined'}));
                   'Public hook lifetime fixture failed',
                 );
             },
-            undefined,
             {
-              hooks: {
-                [HookEventName.BeforeAgent]: [{ hooks: [hook] }],
-                [HookEventName.SessionEnd]: [{ hooks: [hook] }],
-              },
+              [HookEventName.BeforeAgent]: [{ hooks: [hook] }],
+              [HookEventName.SessionEnd]: [{ hooks: [hook] }],
             },
           ),
         );

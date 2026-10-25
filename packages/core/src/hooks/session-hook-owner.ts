@@ -37,6 +37,10 @@ export class SessionHookOwner {
     private readonly parent?: SessionHookOwner,
   ) {
     this.disabledNames = [...readDefinitions().disabledHooks];
+    // The hook system subscribes to the workspace trust authority, which the
+    // agent retires before the final SessionEnd runs. Build it while the
+    // authority is still live; a child owner delegates to its parent's system.
+    if (enabled && parent === undefined) this.requireSystem();
   }
 
   private admissionSignal(): AbortSignal {
