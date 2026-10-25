@@ -24,7 +24,7 @@ import {
   readSourceHead,
   remapOffset,
   type CopyStats,
-} from './recordCopy.js';
+} from './recordTransfer.js';
 import type { RelocationIndex } from './relocationIndex.js';
 import type { RowEntry } from './rowEntry.js';
 import { readRowTreeNode } from './rowTreeReader.js';

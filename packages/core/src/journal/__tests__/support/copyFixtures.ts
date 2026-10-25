@@ -6,7 +6,7 @@ import { JournalStore } from '../../journalStore.js';
 import { readMapEntries, readValueBody } from '../../mapEntries.js';
 import type { VersionEdit } from '../../groupEdits.js';
 import type { RecordAccess } from '../../recordAccess.js';
-import type { CopyDependencies } from '../../versionCopy.js';
+import type { CopyDependencies } from '../../versionTransfer.js';
 import { FAKE_NOW_MS, testJournalSeams } from './journalFixtures.js';
 import { SeededRandom } from './seededRandom.js';
 import {

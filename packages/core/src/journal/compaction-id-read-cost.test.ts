@@ -11,7 +11,7 @@ import { encodeIdTrieNode, ID_TRIE_PREFETCH_BYTES } from './idTrieNode.js';
 import { IdTrieReader } from './idTrieReader.js';
 import { createFileHandleReader } from './positionalFile.js';
 import { createRecordAccess } from './recordAccess.js';
-import { emptyCopyStats } from './recordCopy.js';
+import { emptyCopyStats } from './recordTransfer.js';
 import { RelocationIndex } from './relocationIndex.js';
 import { ROW_READ_WINDOW_BYTES } from './row-read-window.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';

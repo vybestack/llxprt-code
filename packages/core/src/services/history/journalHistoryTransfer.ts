@@ -9,7 +9,7 @@ import { acceptedRows } from '../../journal/mirrorSeed.js';
 import { OwnerDictionary } from '../../journal/ownerDictionary.js';
 import { UNOWNED } from '../../journal/ownerRules.js';
 import type { RecordAccess } from '../../journal/recordAccess.js';
-import { cloneVersion } from '../../journal/versionCopy.js';
+import { cloneVersion } from '../../journal/versionTransfer.js';
 import { HistoryAttachmentError } from './attachHistoryJournal.js';
 import {
   JournalSession,

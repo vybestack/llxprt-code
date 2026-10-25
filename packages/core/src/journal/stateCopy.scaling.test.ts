@@ -11,7 +11,7 @@ import {
   populatedSource,
 } from './__tests__/support/copyFixtures.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
-import { compactionCopy } from './versionCopy.js';
+import { compactionCopy } from './versionTransfer.js';
 import { trackPinnedAccess } from './__tests__/support/pinnedAccess.js';
 
 const accessOf = trackPinnedAccess();

@@ -14,7 +14,7 @@ import {
   type CopiedVersion,
   type CopyObserver,
   type CopyResult,
-} from '../../versionCopy.js';
+} from '../../versionTransfer.js';
 import {
   copyDepsWithoutEventLog,
   growAfterCheckpoint,

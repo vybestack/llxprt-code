@@ -14,7 +14,7 @@ import { KeyedMapReader } from '../journal/keyedMap.js';
 import type { RecordAccess } from '../journal/recordAccess.js';
 import { versionOf, type Version } from '../journal/version.js';
 import { resolveJournalDependencies } from '../journal/journalWriterOpen.js';
-import { cloneCheckpoint } from '../journal/versionCopy.js';
+import { cloneCheckpoint } from '../journal/versionTransfer.js';
 import {
   JournalSession,
   type JournalSessionOptions,

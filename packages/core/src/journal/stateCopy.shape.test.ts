@@ -15,7 +15,7 @@ import { ID_TRIE_LEAF_CAPACITY } from './idTrieNode.js';
 import { IdTrieReader } from './idTrieReader.js';
 import type { JournalStore } from './journalStore.js';
 import type { RecordAccess } from './recordAccess.js';
-import { cloneVersion, compactionCopy } from './versionCopy.js';
+import { cloneVersion, compactionCopy } from './versionTransfer.js';
 import { trackPinnedAccess } from './__tests__/support/pinnedAccess.js';
 
 const accessOf = trackPinnedAccess();

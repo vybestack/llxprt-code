@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
-import { cloneCheckpoint, compactionCopy } from './versionCopy.js';
+import { cloneCheckpoint, compactionCopy } from './versionTransfer.js';
 import { JournalStore } from './journalStore.js';
 import { MUTATION } from './recordKinds.js';
 import { copyDeps, openStore } from './__tests__/support/copyFixtures.js';

@@ -17,7 +17,7 @@ import {
   cloneCheckpoint,
   cloneVersion,
   compactionCopy,
-} from './versionCopy.js';
+} from './versionTransfer.js';
 import {
   copyDeps,
   growAfterCheckpoint,

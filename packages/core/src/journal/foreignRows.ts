@@ -2,7 +2,7 @@
 import { JournalFormatError } from './errors.js';
 import type { RecordAppender } from './groupAppender.js';
 import type { SourceRow } from './groupEdits.js';
-import { appendSourceRecord, readSourceHead } from './recordCopy.js';
+import { appendSourceRecord, readSourceHead } from './recordTransfer.js';
 import { entryForNewRow } from './rowDraft.js';
 import type { RowEntry } from './rowEntry.js';
 import { readRowIds, type RowIds } from './rowReads.js';

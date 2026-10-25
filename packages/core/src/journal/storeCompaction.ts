@@ -18,7 +18,7 @@ import {
   compactionCopy,
   compactionCopyUnlinked,
   type CopyResult,
-} from './versionCopy.js';
+} from './versionTransfer.js';
 
 /**
  * Step 6 of design 4.11: the copy is flushed, read back through `handle` and

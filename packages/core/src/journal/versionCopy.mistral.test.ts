@@ -5,7 +5,7 @@ import { ID_NS } from './idKeys.js';
 import type { IdFact } from './idFactCodec.js';
 import type { JournalStore } from './journalStore.js';
 import { readValueBody } from './mapEntries.js';
-import { cloneVersion } from './versionCopy.js';
+import { cloneVersion } from './versionTransfer.js';
 import {
   copyDeps,
   openStore,

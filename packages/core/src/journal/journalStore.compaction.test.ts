@@ -11,7 +11,7 @@ import { JournalWriterPoisonedError } from './errors.js';
 import { decodeJournalHeader } from './fileHeader.js';
 import { JournalStore } from './journalStore.js';
 import { openJournalReadOnly } from './journalReader.js';
-import { compactionCopy } from './versionCopy.js';
+import { compactionCopy } from './versionTransfer.js';
 import {
   copyDeps,
   growAfterCheckpoint,

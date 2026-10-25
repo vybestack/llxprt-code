@@ -4,7 +4,7 @@ import { describe, expect, it } from 'bun:test';
 import { MUTATION } from './recordKinds.js';
 import type { JournalStore } from './journalStore.js';
 import { OFFSET_FIELDS } from './offsetFields.js';
-import { cloneVersion } from './versionCopy.js';
+import { cloneVersion } from './versionTransfer.js';
 import {
   SESSION_STATE,
   copyDeps,

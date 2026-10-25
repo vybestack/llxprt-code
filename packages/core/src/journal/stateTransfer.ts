@@ -18,7 +18,7 @@ import { IdTrieReader } from './idTrieReader.js';
 import { encodeMapRef } from './keyedMap.js';
 import { readMapEntry, readValueBody, type MapEntry } from './mapEntries.js';
 import { OFFSET } from './offsetFields.js';
-import { remapOffset } from './recordCopy.js';
+import { remapOffset } from './recordTransfer.js';
 import { RECORD_KIND } from './recordKinds.js';
 
 /**
