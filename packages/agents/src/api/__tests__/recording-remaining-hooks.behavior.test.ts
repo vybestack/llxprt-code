@@ -2,16 +2,24 @@ import {
   jsonlHookCommand,
   removeJsonlHook,
 } from './helpers/jsonl-hook-command.js';
-import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from './helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { Agent } from '@vybestack/llxprt-code-agents';
+import { Agent, toConfigParameters } from '@vybestack/llxprt-code-agents';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { fromConfig } from '../fromConfig.js';
+import type { AgentHooks } from '../config-types.js';
+import {
+  cleanupAfterFailure,
+  runCleanupSteps,
+} from '../../core/subagent-cleanup.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { CompressionStrategy } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
   HookEventName,
@@ -31,6 +39,13 @@ type HookInput = {
   transcript_path: string;
 };
 
+const seed = [
+  {
+    speaker: 'human' as const,
+    blocks: [{ type: 'text' as const, text: 'seed' }],
+  },
+];
+
 function recordingPath(path: string | undefined): string {
   if (path === undefined) throw new Error('Missing recording path');
   return path;
@@ -43,7 +58,88 @@ async function readInputs(path: string): Promise<HookInput[]> {
     .map((line) => JSON.parse(line));
 }
 
+interface HookedAgent {
+  readonly agent: Agent;
+  readonly config: Config;
+}
+
+/**
+ * One agent built through `fromConfig` over the test's own `Config`
+ * (`AgentConfig` carries no `enableHooks`).
+ */
+async function openHookedAgent(
+  directory: string,
+  hooks: AgentHooks,
+  authority: CredentialAuthority,
+): Promise<HookedAgent> {
+  const parameters = {
+    ...toConfigParameters({
+      provider: 'fake',
+      model: 'fake-model',
+      sessionId: randomUUID(),
+      workingDir: directory,
+      hooks,
+    }),
+    interactive: true,
+    enableHooks: true,
+  };
+  parameters.includeDirectories = [
+    ...(parameters.includeDirectories ?? []),
+    process.cwd(),
+  ];
+  const config = new Config(parameters);
+  const settings = new SettingsService();
+  for (const [key, value] of Object.entries(config.getInitialSettings()))
+    settings.set(key, value);
+  try {
+    const agent = await fromConfig(
+      config,
+      settings,
+      { activation: { provider: 'fake', model: 'fake-model' } },
+      authority,
+    );
+    return { agent, config };
+  } catch (primary) {
+    return cleanupAfterFailure(primary, () => config.dispose());
+  }
+}
+
+/**
+ * Two independent agents (own `Config`, client, history and journal) that
+ * share one working directory, so one chats directory, and one hook command.
+ */
+async function withHookedPair(
+  authority: CredentialAuthority,
+  hooks: AgentHooks,
+  scenario: (agent: Agent, sibling: Agent) => Promise<void>,
+): Promise<void> {
+  const directory = await realpath(
+    await mkdtemp(join(tmpdir(), 'recording-remaining-agents-')),
+  );
+  const opened: HookedAgent[] = [];
+  try {
+    opened.push(await openHookedAgent(directory, hooks, authority));
+    opened.push(await openHookedAgent(directory, hooks, authority));
+    await scenario(opened[0].agent, opened[1].agent);
+  } finally {
+    await runCleanupSteps([
+      ...[...opened].reverse().map(
+        ({ agent }) =>
+          () =>
+            agent.dispose(),
+      ),
+      ...[...opened].reverse().map(
+        ({ config }) =>
+          () =>
+            config.dispose(),
+      ),
+      () => rm(directory, { recursive: true, force: true }),
+    ]);
+  }
+}
+
 async function verifyFacades(
+  authority: CredentialAuthority,
   events: readonly HookEventName[],
   drive: (agent: Agent, input: string) => Promise<void>,
   verify: (matched: HookInput[], paths: string[]) => void,
@@ -53,19 +149,26 @@ async function verifyFacades(
     `recording-remaining-hooks-${randomUUID()}.jsonl`,
   );
   try {
-    await withRecordingLifetimeFixture(
-      async (
-        agent,
-        _config,
-        _settingsOwner,
-        _settingsService,
-        _oauthManager,
-        borrow,
-      ) => {
-        const sibling = await borrow();
-        await agent.setHistory([
-          { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
-        ]);
+    await withHookedPair(
+      authority,
+      Object.fromEntries(
+        events.map((event) => [
+          event,
+          [
+            {
+              hooks: [
+                {
+                  type: HookType.Command,
+                  command: jsonlHookCommand(output),
+                },
+              ],
+            },
+          ],
+        ]),
+      ),
+      async (agent, sibling) => {
+        await agent.setHistory(seed);
+        await sibling.setHistory(seed);
         await agent.session.setRecording({ enabled: true });
         const aPath = recordingPath(agent.session.getRecording().path);
         await sibling.session.setRecording({ enabled: true });
@@ -85,25 +188,6 @@ async function verifyFacades(
           verify(matched, [aPath, bPath, '', resumed]);
         }
       },
-      undefined,
-      {
-        hooks: Object.fromEntries(
-          events.map((event) => [
-            event,
-            [
-              {
-                hooks: [
-                  {
-                    type: HookType.Command,
-                    command: jsonlHookCommand(output),
-                  },
-                ],
-              },
-            ],
-          ]),
-        ),
-      },
-      'recording-remaining-hooks.jsonl',
     );
   } finally {
     await removeJsonlHook(output);
@@ -112,8 +196,11 @@ async function verifyFacades(
 
 describe('borrowed facade remaining hook producers', () => {
   useRecordingPrompts();
+  useFakeResponsesReplay('recording-remaining-hooks.jsonl');
+  const credentials = useOwnedCredentials();
   it('attributes detached direct generation selection and model hooks to each executing facade', async () => {
     await verifyFacades(
+      credentials().authority,
       [
         HookEventName.BeforeToolSelection,
         HookEventName.BeforeModel,
@@ -135,6 +222,7 @@ describe('borrowed facade remaining hook producers', () => {
 
   it('attributes stream BeforeAgent and AfterAgent command hooks to each executing facade', async () => {
     await verifyFacades(
+      credentials().authority,
       [HookEventName.BeforeAgent, HookEventName.AfterAgent],
       async (agent, input) => {
         for await (const _event of agent.stream(input)) {
@@ -183,20 +271,25 @@ describe('borrowed facade remaining hook producers', () => {
       'getCompressionStrategy',
     ).mockReturnValue(strategy);
     try {
-      await withRecordingLifetimeFixture(
-        async (
-          agent,
-          _config,
-          _settingsOwner,
-          _settingsService,
-          _oauthManager,
-          borrow,
-        ) => {
-          const sibling = await borrow();
+      await withHookedPair(
+        credentials().authority,
+        {
+          [HookEventName.PreCompress]: [
+            {
+              hooks: [
+                {
+                  type: HookType.Command,
+                  command: jsonlHookCommand(output),
+                },
+              ],
+            },
+          ],
+        },
+        async (agent, sibling) => {
           agent.setEphemeralSetting('context-limit', 4096);
-          await agent.setHistory([
-            { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
-          ]);
+          sibling.setEphemeralSetting('context-limit', 4096);
+          await agent.setHistory(seed);
+          await sibling.setHistory(seed);
           await agent.session.setRecording({ enabled: true });
           const aPath = recordingPath(agent.session.getRecording().path);
           await sibling.session.setRecording({ enabled: true });
@@ -231,22 +324,6 @@ describe('borrowed facade remaining hook producers', () => {
           expect(inputs[0].session_id).toBe(inputs[2].session_id);
           expect(inputs[0].session_id).toBe(inputs[3].session_id);
         },
-        undefined,
-        {
-          hooks: {
-            [HookEventName.PreCompress]: [
-              {
-                hooks: [
-                  {
-                    type: HookType.Command,
-                    command: jsonlHookCommand(output),
-                  },
-                ],
-              },
-            ],
-          },
-        },
-        'recording-remaining-hooks.jsonl',
       );
     } finally {
       strategySpy.mockRestore();
