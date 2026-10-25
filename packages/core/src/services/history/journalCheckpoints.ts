@@ -2,7 +2,6 @@
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { JournalSession } from './journalSession.js';
 import type { JournalMirrors } from './journalMirrors.js';
-import { ContextRangeAccumulator } from './contextRange.js';
 import type {
   DetachedHistoryHost,
   DetachedState,
@@ -187,11 +186,12 @@ export async function withRollbackCheckpointOnJournal<T>(
       const before = host.snapshot();
       await restoreCheckpointVersion(store, host, mark);
       await store.waitForCommit();
-      const range = new ContextRangeAccumulator();
-      for await (const row of store.streamRows()) range.add(row);
       host.chronology.restore(state.chronology);
       host.apply(state.tokens, state.spans);
-      host.notify(state.tokens - before.tokens, range.snapshot(state.spans));
+      host.notify(
+        state.tokens - before.tokens,
+        store.contextRange(state.spans),
+      );
     });
   try {
     return await execute(restore);
