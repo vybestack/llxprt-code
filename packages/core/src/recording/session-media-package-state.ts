@@ -5,7 +5,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type {
   IContent,
@@ -81,11 +81,14 @@ export async function stagePersistedSessionStates(
       'Persisted session states',
     );
     index.add(history);
-    await writeFile(join(destinationDirectory, name), bytes, {
+    if (staged.length === 0)
+      await mkdir(join(destinationDirectory, 'state'), { mode: 0o700 });
+    const file = `state/persisted-${staged.length}.json`;
+    await writeFile(join(destinationDirectory, file), bytes, {
       mode: 0o600,
       flag: 'wx',
     });
-    staged.push(name);
+    staged.push(file);
   }
   return staged;
 }

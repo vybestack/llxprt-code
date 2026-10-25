@@ -20,6 +20,7 @@ import { hydrateRecordedMedia } from './recorded-media-transfer.js';
 import {
   exportSessionMediaPackage,
   importSessionMediaPackage,
+  validateSessionMediaPackage,
 } from '../recording/session-media-package.js';
 import type { IContent } from '../services/history/IContent.js';
 
@@ -345,7 +346,7 @@ describe('durable prepared snapshots', () => {
   });
 
   it('exports media retained only in a durable snapshot through a fresh owner', async () => {
-    await withOwners(async (directory, first) => {
+    await withOwners(async (directory, first, second) => {
       const journal = await record(first, join(directory, 'first'));
       const persistence = new SessionPersistenceService(
         {
@@ -384,6 +385,20 @@ describe('durable prepared snapshots', () => {
           join(directory, 'portable'),
         );
         expect(await fresh.store.getStoredByteLength()).toBe(8);
+        const validated = await validateSessionMediaPackage(
+          join(directory, 'portable'),
+        );
+        expect(validated.persistedStates).toHaveLength(1);
+        expect(validated.references).toHaveLength(2);
+        await importSessionMediaPackage(
+          join(directory, 'portable'),
+          join(directory, 'second', 'chats'),
+          'owner-project',
+          second.store,
+        );
+        expect(await second.store.readVerified(reference)).toStrictEqual(
+          new Uint8Array([8, 6, 4, 2]),
+        );
       } finally {
         await fresh.dispose();
       }
