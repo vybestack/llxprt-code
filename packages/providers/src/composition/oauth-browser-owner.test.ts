@@ -1,4 +1,3 @@
-import { AdoptedProviderFixture } from '../../../agents/src/api/__tests__/helpers/adopted-provider-fixture.js';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -13,7 +12,10 @@ import {
   createOwnerAuthCacheInvalidator,
   populateProviderManager,
 } from './index.js';
-import { acquirePreferredOAuth } from '../../../agents/src/api/preferred-provider-acquisition.js';
+import {
+  acquirePreferredOAuth,
+  acquirePreferredProviderManager,
+} from '../../../agents/src/api/preferred-provider-acquisition.js';
 
 import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
@@ -56,9 +58,7 @@ type Construction =
   | 'direct'
   | 'composition'
   | 'composition-context'
-  | 'isolated'
-  | 'adopted'
-  | 'adopted-live';
+  | 'isolated';
 const originalFetch = globalThis.fetch;
 const stubbedOwnerFetch: NetworkFetch = (input, init) =>
   globalThis.fetch(input, init);
@@ -131,11 +131,7 @@ describe('OAuth owner reads before registration', () => {
         }),
       });
       release.acquire('oauth', () => manager.dispose());
-      if (construction === 'adopted-live')
-        registerStandardOAuthProviders(manager, globalThis.fetch);
-      if (construction === 'adopted' || construction === 'adopted-live')
-        adoptOAuth(manager, release);
-      else registerStandardOAuthProviders(manager, globalThis.fetch);
+      registerStandardOAuthProviders(manager, globalThis.fetch);
       complete = true;
       return manager;
     } catch (primary) {
@@ -207,13 +203,15 @@ describe('OAuth owner reads before registration', () => {
     release.acquire('files', () =>
       releaseAdoptedFileScope(files, config.getSessionId()),
     );
-    const manager = new AdoptedProviderFixture(
+    const manager = acquirePreferredProviderManager(
       config,
       settings,
+      owner,
+      files,
       config.getSessionId(),
-    ).acquireManager(undefined, owner, files, credentials().authority, release);
-    if (!(manager instanceof ProviderManager))
-      throw new Error('Expected concrete isolated manager');
+      credentials().authority,
+      release,
+    );
     manager.bindNetworkFetch(stubbedOwnerFetch);
     return acquirePreferredOAuth(
       undefined,
@@ -228,42 +226,6 @@ describe('OAuth owner reads before registration', () => {
       undefined,
     );
   }
-  function adoptOAuth(oauth: OAuthManager, release: AcquisitionRelease): void {
-    const owner = new SessionSettingsOwner(settingsB);
-    release.acquire('settings', () => owner.dispose());
-    owner.bindTelemetry(configB);
-    const policy = new RuntimePolicyOwner(configB);
-    release.acquire('policy', () => policy.dispose());
-    const files = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
-    });
-    release.acquire('files', () =>
-      releaseAdoptedFileScope(files, configB.getSessionId()),
-    );
-    const manager = new AdoptedProviderFixture(
-      configB,
-      settingsB,
-      configB.getSessionId(),
-    ).acquireManager(undefined, owner, files, credentials().authority, release);
-    if (!(manager instanceof ProviderManager))
-      throw new Error('Expected concrete adopted manager');
-    manager.bindNetworkFetch(stubbedOwnerFetch);
-    new AdoptedProviderFixture(
-      configB,
-      settingsB,
-      configB.getSessionId(),
-    ).acquireOAuth(
-      oauth,
-      undefined,
-      policy.session.messageBus,
-      manager,
-      undefined,
-      credentials().authority,
-      release,
-    );
-  }
-
   beforeEach(() => {
     vi.spyOn(browser, 'shouldLaunchBrowser').mockImplementation(
       (options) => options?.forceManual !== true,
@@ -282,17 +244,13 @@ describe('OAuth owner reads before registration', () => {
 
   it.each([
     ['composition-context', 'codex'],
-    ['adopted-live', 'codex'],
     ['direct', 'codex'],
     ['composition', 'codex'],
     ['isolated', 'codex'],
-    ['adopted', 'codex'],
     ['composition-context', 'claudecode'],
-    ['adopted-live', 'claudecode'],
     ['direct', 'claudecode'],
     ['composition', 'claudecode'],
     ['isolated', 'claudecode'],
-    ['adopted', 'claudecode'],
   ] as const)(
     '%s %s preserves owner browser policy and bucket routing without an identity scope',
     async (construction, providerName) => {
@@ -395,8 +353,6 @@ describe('OAuth owner reads before registration', () => {
     'composition',
     'composition-context',
     'isolated',
-    'adopted',
-    'adopted-live',
   ] as const)(
     '%s uses each manager timeout and carries only its available requester identity',
     async (construction) => {
