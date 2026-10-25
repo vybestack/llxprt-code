@@ -16,7 +16,7 @@ import type {
   StrategyCompressionResult,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { RERUN_HINT_SUFFIX } from '../../HighDensityStrategy.js';
-import { findKeyParamForCallId } from './density-array-lookup.js';
+import { indexKeyParamsByCallId } from './density-array-lookup.js';
 
 export class HighDensityArrayOracle {
   async compress(
@@ -67,6 +67,7 @@ export class HighDensityArrayOracle {
 
     // STEP 3: Build new history — process head + preserve tail (@pseudocode lines 48-74)
     const newHistory: IContent[] = [];
+    const keyParams = indexKeyParamsByCallId(history);
 
     // 3a: Process entries before tail
     for (let i = 0; i < tailStartIndex; i++) {
@@ -76,7 +77,7 @@ export class HighDensityArrayOracle {
         newHistory.push(entry);
       } else {
         // Summarize tool response blocks (REQ-HD-008.3)
-        const summarized = this.summarizeToolResponseBlocks(entry, history);
+        const summarized = this.summarizeToolResponseBlocks(entry, keyParams);
         newHistory.push(summarized);
       }
     }
@@ -153,19 +154,19 @@ export class HighDensityArrayOracle {
    */
   private summarizeToolResponseBlocks(
     entry: IContent,
-    fullHistory: readonly IContent[],
+    keyParams: ReadonlyMap<string, string | undefined>,
   ): IContent {
     return {
       ...entry,
       blocks: entry.blocks.map((block) =>
         block.type !== 'tool_response'
           ? block
-          : ({
+          : {
               ...block,
-              result: this.buildToolSummaryText(block, fullHistory),
-            } as ToolResponseBlock),
+              result: this.buildToolSummaryText(block, keyParams),
+            },
       ),
-    } as IContent;
+    };
   }
 
   /**
@@ -178,7 +179,7 @@ export class HighDensityArrayOracle {
    */
   private buildToolSummaryText(
     block: ToolResponseBlock,
-    fullHistory: readonly IContent[],
+    keyParams: ReadonlyMap<string, string | undefined>,
   ): string {
     const toolName = block.toolName;
 
@@ -196,7 +197,7 @@ export class HighDensityArrayOracle {
     const outcome = hasError || looksLikeError ? 'error' : 'success';
 
     // Extract key param — look for matching tool_call by callId
-    const keyParam = findKeyParamForCallId(fullHistory, block.callId);
+    const keyParam = keyParams.get(block.callId);
 
     if (keyParam) {
       return `[${toolName} ${keyParam}: ${outcome} ${RERUN_HINT_SUFFIX}]`;
@@ -218,14 +219,17 @@ export class HighDensityArrayOracle {
     targetTokens: number,
     context: CompressionContext,
   ): Promise<IContent[]> {
+    const rowTokens: number[] = [];
+    let estimatedTokens = 0;
+    for (const row of history) {
+      const tokens = await context.estimateTokens([row]);
+      rowTokens.push(tokens);
+      estimatedTokens += tokens;
+    }
     let removeCount = 0;
-    let estimatedTokens = await context.estimateTokens(history);
-
     while (estimatedTokens > targetTokens && removeCount < headEnd) {
+      estimatedTokens -= rowTokens[removeCount];
       removeCount++;
-      estimatedTokens = await context.estimateTokens(
-        history.slice(removeCount),
-      );
     }
 
     return removeCount > 0 ? history.slice(removeCount) : history;
