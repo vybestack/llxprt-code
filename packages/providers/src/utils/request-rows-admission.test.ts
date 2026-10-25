@@ -8,7 +8,7 @@ import { acquireRequestRows } from './requestRowsLease.js';
 import { providerRowsOf } from './providerRows.js';
 
 import { normalizeLoadBalancerOptions } from '../loadBalancing/resolvedOptionsBuilder.js';
-import { replayableContents } from './collectContents.js';
+
 const rows: IContent[] = [
   { speaker: 'human', blocks: [{ type: 'text', text: 'first' }] },
   { speaker: 'ai', blocks: [{ type: 'text', text: 'second' }] },
@@ -30,7 +30,13 @@ describe('provider request source admission', () => {
   });
   it('rejects array iterators that omit the caller-owned source capability', async () => {
     await withoutFileCreation(async () => {
-      const scope = acquireRequestRows({ contents: replayableContents(rows) });
+      const scope = acquireRequestRows({
+        contents: {
+          async *[Symbol.asyncIterator](): AsyncGenerator<IContent> {
+            yield* rows;
+          },
+        },
+      });
       try {
         await expect(providerRowsOf(scope.options)).rejects.toThrow(
           'Provider contents require requestRows or an openProviderRequest source',

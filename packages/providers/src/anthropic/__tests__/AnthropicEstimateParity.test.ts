@@ -24,7 +24,7 @@ import {
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { createRuntimeTokenizerFactory } from '../../composition/runtimeTokenizerFactory.js';
 import { projectAnthropicPromptEnvelope } from '../../runtime/promptEnvelopeProjections.js';
-import { Gpt56SourceProjection } from '../../tokenizers/gpt56-source-projection.js';
+import { NativeAnthropicEstimateProjection } from '../native-anthropic-estimate.js';
 import {
   WIRE_ROUTES,
   buildRouteCallOptions,
@@ -182,7 +182,7 @@ describe.each(parityRoutes.map((parity) => [parity.id, parity] as const))(
           rowsOptions(parity, entry),
         );
         expect(projection.finalizedProjection).toBeInstanceOf(
-          Gpt56SourceProjection,
+          NativeAnthropicEstimateProjection,
         );
         const estimate = await estimatePromptEnvelope(
           provider.name,
