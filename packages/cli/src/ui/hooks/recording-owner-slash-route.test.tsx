@@ -7,10 +7,8 @@ import {
   createUnconfiguredHistoryReaders,
 } from '../../__tests__/unconfigured-model-command.js';
 const commandRegistry = createCommandRegistryFixture(null);
-import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { openRouteAAgent } from '../../../../agents/src/api/__tests__/helpers/route-a-agent.js';
+import { useFakeResponsesReplay } from '../../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
 import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { describe, expect, it, vi } from 'bun:test';
 import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
@@ -191,9 +189,11 @@ function slashInputs(
 }
 
 describe('interactive slash command recording route', () => {
-  useRecordingPrompts();
+  useFakeResponsesReplay('multi-turn-text.jsonl');
   it('selects the owner handler through the real processor and command context', async () => {
-    await withRecordingLifetimeFixture(async (agent) => {
+    const route = await openRouteAAgent({ config: { interactive: true } });
+    try {
+      const { agent } = route;
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
       ]);
@@ -218,11 +218,15 @@ describe('interactive slash command recording route', () => {
       });
       expect(await readFile(path, 'utf8')).toContain('owner-route');
       unmount();
-    });
+    } finally {
+      await route.close();
+    }
   }, 30000);
 
   it('keeps the raw command registry and context when no owner mode is supplied', async () => {
-    await withRecordingLifetimeFixture(async (agent) => {
+    const route = await openRouteAAgent({ config: { interactive: true } });
+    try {
+      const { agent } = route;
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
       ]);
@@ -247,6 +251,8 @@ describe('interactive slash command recording route', () => {
       });
       expect(await readFile(path, 'utf8')).not.toContain('raw-default');
       unmount();
-    });
+    } finally {
+      await route.close();
+    }
   }, 30000);
 });

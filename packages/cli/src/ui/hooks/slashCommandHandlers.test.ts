@@ -35,10 +35,8 @@ import { join } from 'node:path';
 import { CliSessionPersistence } from '../../cliSessionPersistence.js';
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { openRouteAAgent } from '../../../../agents/src/api/__tests__/helpers/route-a-agent.js';
+import { useFakeResponsesReplay } from '../../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
 import { createFakeAgent } from './agentStream/__tests__/helpers/createFakeAgent.js';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { getProjectHash, LocalMediaStore } from '@vybestack/llxprt-code-core';
@@ -54,7 +52,7 @@ import type { HistoryItemWithoutId } from '../types.js';
 const performResumeMock = vi.fn();
 
 describe('slashCommandHandlers', () => {
-  useRecordingPrompts();
+  useFakeResponsesReplay('multi-turn-text.jsonl');
   beforeEach(() => {
     performResumeMock.mockReset();
   });
@@ -91,7 +89,9 @@ describe('slashCommandHandlers', () => {
   });
 
   it('persists a slash error only through the selected owner recorder', async () => {
-    await withRecordingLifetimeFixture(async (agent) => {
+    const route = await openRouteAAgent({ config: { interactive: true } });
+    try {
+      const { agent } = route;
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },
       ]);
@@ -132,74 +132,75 @@ describe('slashCommandHandlers', () => {
         (await readFile(path, 'utf8')).match(/owner slash failure/g),
       ).toHaveLength(1);
       expect(rawWrite).not.toHaveBeenCalled();
-    });
+    } finally {
+      await route.close();
+    }
   }, 30000);
   it('routes slash failures to a resumed different owner, not the closed owner', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        agent,
-        _config,
-        _settingsOwner,
-        _settingsService,
-        _oauthManager,
-        borrow,
-      ) => {
-        await agent.setHistory([
-          { speaker: 'human', blocks: [{ type: 'text', text: 'first owner' }] },
-        ]);
-        await agent.session.setRecording({ enabled: true });
-        const firstPath = agent.session.getRecording().path;
-        if (!firstPath) throw new Error('No first recording path');
-        await agent.session.setRecording({ enabled: false });
-        const next = await borrow();
-        await next.setHistory([
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'second owner' }],
-          },
-        ]);
-        await next.session.setRecording({ enabled: true });
-        const secondPath = next.session.getRecording().path;
-        if (!secondPath) throw new Error('No second recording path');
-        const deps = createDeps(vi.fn());
-        await processSlashCommand(
-          {
-            ...deps,
-            commandContext: Object.assign(
-              {},
-              {
-                ...deps.commandContext,
-                recordingOwner: 'agent' as const,
-                services: { ...deps.commandContext.services, agent: next },
-              },
-            ),
-            resumeOwnedSession: null,
-            isMcpDiscoveryPending: () => false,
-            resumeRawSession: null,
-            replayResumedHistory: () => {},
-            recordCommandError: bindCommandErrorRecorder(
-              next.session.recordRecordingEvent.bind(next.session),
-              'agent',
-              undefined,
-            ),
-            commands: createCommands(() => {
-              throw new Error('resumed owner failure');
-            }),
-          },
-          '/help',
-        );
-        expect(await readFile(firstPath, 'utf8')).not.toContain(
-          'resumed owner failure',
-        );
-        expect(await readFile(secondPath, 'utf8')).toContain(
-          'resumed owner failure',
-        );
-      },
-    );
+    const route = await openRouteAAgent({ config: { interactive: true } });
+    const liveRoute = await openRouteAAgent({ config: { interactive: true } });
+    try {
+      const { agent } = route;
+      await agent.setHistory([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'first owner' }] },
+      ]);
+      await agent.session.setRecording({ enabled: true });
+      const firstPath = agent.session.getRecording().path;
+      if (!firstPath) throw new Error('No first recording path');
+      await agent.session.setRecording({ enabled: false });
+      const next = liveRoute.agent;
+      await next.setHistory([
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'second owner' }],
+        },
+      ]);
+      await next.session.setRecording({ enabled: true });
+      const secondPath = next.session.getRecording().path;
+      if (!secondPath) throw new Error('No second recording path');
+      const deps = createDeps(vi.fn());
+      await processSlashCommand(
+        {
+          ...deps,
+          commandContext: Object.assign(
+            {},
+            {
+              ...deps.commandContext,
+              recordingOwner: 'agent' as const,
+              services: { ...deps.commandContext.services, agent: next },
+            },
+          ),
+          resumeOwnedSession: null,
+          isMcpDiscoveryPending: () => false,
+          resumeRawSession: null,
+          replayResumedHistory: () => {},
+          recordCommandError: bindCommandErrorRecorder(
+            next.session.recordRecordingEvent.bind(next.session),
+            'agent',
+            undefined,
+          ),
+          commands: createCommands(() => {
+            throw new Error('resumed owner failure');
+          }),
+        },
+        '/help',
+      );
+      expect(await readFile(firstPath, 'utf8')).not.toContain(
+        'resumed owner failure',
+      );
+      expect(await readFile(secondPath, 'utf8')).toContain(
+        'resumed owner failure',
+      );
+    } finally {
+      await liveRoute.close();
+      await route.close();
+    }
   }, 30000);
 
   it('records /directory add once in the owner session JSONL', async () => {
-    await withRecordingLifetimeFixture(async (agent, config, settingsOwner) => {
+    const route = await openRouteAAgent({ config: { interactive: true } });
+    try {
+      const { agent, config } = route;
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },
       ]);
@@ -211,16 +212,7 @@ describe('slashCommandHandlers', () => {
         await mkdtemp(join(tmpdir(), 'recorded-workspace-admission-')),
       );
       const runtime = {
-        ...buildSlashCommandRuntimeForTest(
-          config,
-          agent,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          settingsOwner,
-        ),
+        ...buildSlashCommandRuntimeForTest(config, agent),
         getFolderTrust: () => false,
         shouldLoadMemoryFromIncludeDirectories: () => false,
       };
@@ -266,7 +258,9 @@ describe('slashCommandHandlers', () => {
       } finally {
         await rm(addedDirectory, { recursive: true, force: true });
       }
-    });
+    } finally {
+      await route.close();
+    }
   }, 30000);
 
   /**
@@ -298,7 +292,6 @@ describe('slashCommandHandlers', () => {
   }
 
   describe('processSlashCommand', () => {
-    useRecordingPrompts();
     it('sanitizes whitespace-separated secure commands before adding history', async () => {
       const addItem = vi.fn();
 
@@ -313,7 +306,6 @@ describe('slashCommandHandlers', () => {
   });
 
   describe('processSlashCommand cancellation', () => {
-    useRecordingPrompts();
     it('hands the action the signal of the controller registered for it', async () => {
       const addItem = vi.fn();
       let observedSignal: AbortSignal | undefined;
@@ -466,7 +458,6 @@ describe('slashCommandHandlers', () => {
   });
 
   describe('processSlashCommand history replay emoji filtering (#2888)', () => {
-    useRecordingPrompts();
     const USER_TEXT = 'nice \u{1F44D}';
     const MODEL_TEXT = 'Done \u2705';
     const MODEL_THOUGHT = 'hmm \u2705';
@@ -720,7 +711,9 @@ describe('slashCommandHandlers', () => {
     });
   });
   it('resumes legacy slash media through explicit client and recording owners without Config media lookup', async () => {
-    await withRecordingLifetimeFixture(async (agent, config) => {
+    const route = await openRouteAAgent({ config: { interactive: true } });
+    try {
+      const { agent, config } = route;
       const root = await mkdtemp(join(tmpdir(), 'slash-media-owner-'));
       const store = new LocalMediaStore({
         rootDirectory: join(root, 'media'),
@@ -803,70 +796,71 @@ describe('slashCommandHandlers', () => {
         await store.close();
         await rm(root, { recursive: true, force: true });
       }
-    });
+    } finally {
+      await route.close();
+    }
   });
 
   it('routes /continue through a real Agent owner without raw swap callbacks', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        agent,
-        config,
-        _settingsOwner,
-        _settingsService,
-        _oauthManager,
-        borrow,
-      ) => {
-        await agent.setHistory([
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'slash replay' }],
-          },
-        ]);
-        await agent.session.setRecording({ enabled: true });
-        const sourceId = (await agent.session.listSessions()).at(0)?.id;
-        if (!sourceId) throw new Error('Missing source');
-        await agent.session.setRecording({ enabled: false });
-        const next = await borrow();
-        await next.setHistory([
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'current live owner' }],
-          },
-        ]);
-        await next.session.setRecording({ enabled: true });
-        const deps = createDeps(vi.fn());
-        deps.config = composeFixtureRuntime(config);
-        deps.commandContext.services.agent = next;
-        deps.commandContext.recordingOwner = 'agent';
-        let loaded:
-          | Parameters<CommandOwnerFixture['ui']['loadHistory']>[0]
-          | undefined;
-        deps.commandContext.ui.loadHistory = (history) => {
-          loaded = history;
-        };
-        deps.commands = [
-          {
-            name: 'continue',
-            description: 'Continue session',
-            kind: CommandKind.BUILT_IN,
-            action: async () => ({
-              type: 'perform_resume',
-              sessionRef: sourceId,
-            }),
-          },
-        ];
-        deps.resumeOwnedSession = bindFixtureOwnerResume(
-          deps.commandContext,
-          deps.config,
-        );
-        await processSlashCommand(deps, `/continue ${sourceId}`);
-        expect(
-          loaded?.some(
-            (item) => item.type === 'user' && item.text === 'slash replay',
-          ),
-        ).toBe(true);
-        expect(next.session.getRecording().enabled).toBe(true);
-      },
-    );
+    const route = await openRouteAAgent({ config: { interactive: true } });
+    const liveRoute = await openRouteAAgent({
+      config: { interactive: true, workingDir: route.directory },
+    });
+    try {
+      const { agent, config } = route;
+      await agent.setHistory([
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'slash replay' }],
+        },
+      ]);
+      await agent.session.setRecording({ enabled: true });
+      const sourceId = (await agent.session.listSessions()).at(0)?.id;
+      if (!sourceId) throw new Error('Missing source');
+      await agent.session.setRecording({ enabled: false });
+      const next = liveRoute.agent;
+      await next.setHistory([
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'current live owner' }],
+        },
+      ]);
+      await next.session.setRecording({ enabled: true });
+      const deps = createDeps(vi.fn());
+      deps.config = composeFixtureRuntime(config);
+      deps.commandContext.services.agent = next;
+      deps.commandContext.recordingOwner = 'agent';
+      let loaded:
+        | Parameters<CommandOwnerFixture['ui']['loadHistory']>[0]
+        | undefined;
+      deps.commandContext.ui.loadHistory = (history) => {
+        loaded = history;
+      };
+      deps.commands = [
+        {
+          name: 'continue',
+          description: 'Continue session',
+          kind: CommandKind.BUILT_IN,
+          action: async () => ({
+            type: 'perform_resume',
+            sessionRef: sourceId,
+          }),
+        },
+      ];
+      deps.resumeOwnedSession = bindFixtureOwnerResume(
+        deps.commandContext,
+        deps.config,
+      );
+      await processSlashCommand(deps, `/continue ${sourceId}`);
+      expect(
+        loaded?.some(
+          (item) => item.type === 'user' && item.text === 'slash replay',
+        ),
+      ).toBe(true);
+      expect(next.session.getRecording().enabled).toBe(true);
+    } finally {
+      await liveRoute.close();
+      await route.close();
+    }
   }, 30000);
 });

@@ -6,17 +6,21 @@
 import { describe, expect, it } from 'bun:test';
 import { useMemo, useState } from 'react';
 import { Config } from '@vybestack/llxprt-code-core';
-import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import { bindHistoryTokenSubscription } from '../containers/AppContainer/hooks/historyTokenSubscriptions.js';
-import {
-  useCommandOwners,
-  commandOwnerClient,
-} from '../../__tests__/command-owner-fixture.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { buildUiRuntimeFromSource } from '../cliUiRuntime.js';
 import { RuntimeContextProvider } from '../../__tests__/runtime-context-fixture.js';
 import { useTokenMetricsTracking } from '../containers/AppContainer/hooks/useTokenMetricsTracking.js';
+
+function observeHistoryTokens(agent: Agent): () => number {
+  let latest = 0;
+  agent.session.subscribeHistoryTokens((count) => {
+    latest = count;
+  });
+  return () => latest;
+}
 
 describe('token metrics captured history ownership', () => {
   const makeOwner = useCommandOwners();
@@ -32,18 +36,12 @@ describe('token metrics captured history ownership', () => {
     await peer.setHistory([
       { speaker: 'human', blocks: [{ type: 'text', text: 'peer' }] },
     ]);
-    await commandOwnerClient(owner).startChat(
-      await commandOwnerClient(owner).getHistory(),
-    );
-    await commandOwnerClient(peer).startChat(
-      await commandOwnerClient(peer).getHistory(),
-    );
-    const ownedHistory = commandOwnerClient(owner).getHistoryService();
-    const peerHistory = commandOwnerClient(peer).getHistoryService();
-    if (!ownedHistory || !peerHistory)
-      throw new Error('Missing initialized token history');
-    await ownedHistory.waitForTokenUpdates();
-    await peerHistory.waitForTokenUpdates();
+    await owner.session.replaceHistory(await owner.session.getHistory());
+    await peer.session.replaceHistory(await peer.session.getHistory());
+    const ownedTokens = observeHistoryTokens(owner);
+    const peerTokens = observeHistoryTokens(peer);
+    await waitFor(() => expect(ownedTokens()).toBeGreaterThan(0));
+    await waitFor(() => expect(peerTokens()).toBeGreaterThan(0));
     const config = new Config({
       sessionId: 'token-host',
       cwd: process.cwd(),
@@ -57,11 +55,7 @@ describe('token metrics captured history ownership', () => {
       ({ active }) => {
         const [count, setCount] = useState(-1);
         const subscribeHistoryTokens = useMemo(
-          () =>
-            bindHistoryTokenSubscription(
-              () => commandOwnerClient(active).getHistoryService(),
-              new DebugLogger('llxprt:ui:tokentracking'),
-            ),
+          () => active.session.subscribeHistoryTokens.bind(active.session),
           [active],
         );
         useTokenMetricsTracking(
@@ -99,30 +93,24 @@ describe('token metrics captured history ownership', () => {
       },
     );
     try {
-      await waitFor(() =>
-        expect(hook.result.current).toBe(ownedHistory.getTotalTokens()),
-      );
+      await waitFor(() => expect(hook.result.current).toBe(ownedTokens()));
+      const ownedBefore = ownedTokens();
       await owner.addHistory({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'more owned history '.repeat(30) }],
       });
-      await ownedHistory.waitForTokenUpdates();
-      await waitFor(() =>
-        expect(hook.result.current).toBe(ownedHistory.getTotalTokens()),
-      );
+      await waitFor(() => expect(ownedTokens()).toBeGreaterThan(ownedBefore));
+      await waitFor(() => expect(hook.result.current).toBe(ownedTokens()));
       hook.rerender({ active: peer });
-      await waitFor(() =>
-        expect(hook.result.current).toBe(peerHistory.getTotalTokens()),
-      );
+      await waitFor(() => expect(hook.result.current).toBe(peerTokens()));
       await owner.dispose();
+      const peerBefore = peerTokens();
       await peer.addHistory({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'surviving peer history '.repeat(30) }],
       });
-      await peerHistory.waitForTokenUpdates();
-      await waitFor(() =>
-        expect(hook.result.current).toBe(peerHistory.getTotalTokens()),
-      );
+      await waitFor(() => expect(peerTokens()).toBeGreaterThan(peerBefore));
+      await waitFor(() => expect(hook.result.current).toBe(peerTokens()));
     } finally {
       hook.unmount();
       await config.dispose();
