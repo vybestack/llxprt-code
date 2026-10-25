@@ -76,6 +76,7 @@ async function createScope(
     telemetryAdapter: fixture.runtime.telemetry,
     toolsView: fixture.runtime.tools,
     contentGenerator: fixture.contentGenerator,
+    settingsSnapshot: {},
   };
   const { overrides } = createRuntimeOverrides(
     mcpRuntime.workspaceFilesystem.paths,

@@ -24,8 +24,10 @@ import type {
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import type { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import { type AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import type {
+  ToolSelectedRuntimeLoader,
+  ToolSelectedRuntimeLoaderResult,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { admitModelParameters } from '@vybestack/llxprt-code-core/runtime/admit-model-parameters.js';
 import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
@@ -106,7 +108,7 @@ export interface ChildAgentAcquisition {
 }
 
 export interface ChildAgentRuntimeFactories {
-  readonly runtimeLoader: typeof loadAgentRuntime;
+  readonly runtimeLoader: ToolSelectedRuntimeLoader;
   readonly scopeFactory: SubAgentScopeFactory;
 }
 
@@ -140,7 +142,7 @@ export class ChildAgentAssembly {
   private tokenizer!: RuntimeTokenizerFactory;
   private content!: RuntimeContentGeneratorFactory<ContentGenerator>;
   private client!: SessionClientOwner;
-  private loaded!: AgentRuntimeLoaderResult;
+  private loaded!: ToolSelectedRuntimeLoaderResult;
   private scope!: ChildAgentScope;
   private closing: Promise<void> | undefined;
 
@@ -419,11 +421,6 @@ export class ChildAgentAssembly {
       this.loaded.runtimeContext.state.provider,
       { profileId: this.settings.getCurrentProfileName() ?? undefined },
     );
-    const { toolRegistry } = this.loaded;
-    if (toolRegistry === undefined)
-      throw new Error(
-        'SubAgentScope.create requires a ToolRegistry in the runtime bundle or overrides.',
-      );
     return this.factories.scopeFactory(
       {
         name: this.data.subagent.name,
@@ -438,7 +435,7 @@ export class ChildAgentAssembly {
         admittedRuntime: this.loaded.runtimeContext,
         contentGenerator: this.loaded.contentGenerator,
         telemetry: this.loaded.telemetryRoot,
-        toolRegistry,
+        toolRegistry: this.loaded.toolRegistry,
         toolsView: this.loaded.runtimeContext.tools,
         settingsSnapshot: this.loaded.settingsSnapshot,
         foregroundConfig: this.acquisition.foregroundConfig,

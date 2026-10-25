@@ -201,6 +201,7 @@ export function createRuntimeBundle(label = 'bundle') {
     },
     contentGenerator: {},
     toolRegistry: fixtureToolSelection(),
+    settingsSnapshot: {},
   };
 }
 

@@ -78,6 +78,16 @@ export interface AgentRuntimeLoaderOptions {
   signal?: AbortSignal;
 }
 
+export interface ToolSelectedRuntimeProfileSnapshot
+  extends AgentRuntimeProfileSnapshot {
+  toolRegistry: ToolSelection;
+}
+
+export interface ToolSelectedRuntimeLoaderOptions
+  extends AgentRuntimeLoaderOptions {
+  profile: ToolSelectedRuntimeProfileSnapshot;
+}
+
 export interface AgentRuntimeLoaderResult {
   telemetryRoot: RootTelemetry;
   runtimeContext: AgentRuntimeContext;
@@ -89,6 +99,16 @@ export interface AgentRuntimeLoaderResult {
   toolRegistry?: ToolSelection;
   settingsSnapshot?: ReadonlySettingsSnapshot;
 }
+
+export interface ToolSelectedRuntimeLoaderResult
+  extends AgentRuntimeLoaderResult {
+  toolRegistry: ToolSelection;
+  settingsSnapshot: ReadonlySettingsSnapshot;
+}
+
+export type ToolSelectedRuntimeLoader = (
+  options: ToolSelectedRuntimeLoaderOptions,
+) => Promise<ToolSelectedRuntimeLoaderResult>;
 
 export type ContentGeneratorFactory = (
   config: ContentGeneratorConfig,
@@ -161,6 +181,12 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   throw error;
 }
 
+export function loadAgentRuntime(
+  options: ToolSelectedRuntimeLoaderOptions,
+): Promise<ToolSelectedRuntimeLoaderResult>;
+export function loadAgentRuntime(
+  options: AgentRuntimeLoaderOptions,
+): Promise<AgentRuntimeLoaderResult>;
 export async function loadAgentRuntime(
   options: AgentRuntimeLoaderOptions,
 ): Promise<AgentRuntimeLoaderResult> {

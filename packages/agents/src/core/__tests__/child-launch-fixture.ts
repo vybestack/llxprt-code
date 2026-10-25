@@ -22,7 +22,10 @@ import {
 } from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentRunPolicy } from '@vybestack/llxprt-code-core/session/session-settings-policies.js';
-import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import {
+  loadAgentRuntime,
+  type ToolSelectedRuntimeLoader,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -58,7 +61,7 @@ export interface TestChildLaunchOptions {
   readonly telemetry?: RootTelemetry;
   readRunPolicy: () => SubagentRunPolicy;
   runtimeFactoryBindings?: AgentRuntimeFactoryBindings;
-  runtimeLoader?: typeof loadAgentRuntime;
+  runtimeLoader?: ToolSelectedRuntimeLoader;
   scopeFactory?: typeof SubAgentScope.create;
   idFactory?: () => string;
   messageBus: MessageBus;

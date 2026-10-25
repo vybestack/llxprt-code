@@ -60,7 +60,10 @@ import {
   type OutputConfig,
   type OutputObject,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import type { AgentRuntimeProviderAdapter } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type {
+  AgentRuntimeProviderAdapter,
+  ReadonlySettingsSnapshot,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { RuntimeModel } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeModel.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
@@ -432,7 +435,10 @@ function findToolResponsesByCallId(
     );
 }
 
-async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
+async function runInteractiveDirect(
+  responses: readonly IContent[],
+  settingsSnapshot?: ReadonlySettingsSnapshot,
+): Promise<{
   readonly output: OutputObject;
   readonly requestContents: readonly IContent[][];
 }> {
@@ -478,6 +484,7 @@ async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
       readMcpInstructions: () => undefined,
       instructions: emptyInstructionReads,
       messageBus,
+      settingsSnapshot,
     }),
   );
   await scope.runInteractive(new ContextState());
@@ -510,6 +517,25 @@ describe('issue 3535 fatal-tool-error termination semantics', () => {
         [],
       ),
     ).toStrictEqual({ recovered: true, fatalCall: undefined });
+  });
+
+  it('applies the tool governance carried by the child settings snapshot', async () => {
+    const { requestContents } = await runInteractiveDirect(
+      [
+        toolCallBlock('uppercase', { text: 'governed' }, 'governed-call'),
+        stopped(),
+      ],
+      { tools: { disabled: ['uppercase'] } },
+    );
+
+    expect(
+      findToolResponsesByCallId(requestContents[1], 'governed-call'),
+    ).toMatchObject([
+      {
+        type: 'tool_response',
+        error: 'Tool "uppercase" is disabled in the current profile.',
+      },
+    ]);
   });
 
   it('recovers after a deduplicated fatal pair followed by a distinct successful call', async () => {

@@ -137,7 +137,7 @@ export interface SubAgentRuntimeInput {
   readonly telemetry: RootTelemetry;
   readonly toolRegistry: ToolSelection;
   readonly toolsView: ToolRegistryView;
-  readonly settingsSnapshot: ReadonlySettingsSnapshot | undefined;
+  readonly settingsSnapshot: ReadonlySettingsSnapshot;
   readonly foregroundConfig: Config;
 }
 
@@ -203,7 +203,7 @@ export class SubAgentScope implements ChildAgentScope {
     private readonly messageBus: MessageBus,
     private readonly toolConfig: ToolConfig | undefined,
     private readonly outputConfig: OutputConfig | undefined,
-    settingsSnapshot: ReadonlySettingsSnapshot | undefined,
+    settingsSnapshot: ReadonlySettingsSnapshot,
     parentAbortSignal: AbortSignal,
     private readonly dependencies: SubAgentDependencies,
     private readonly admitModelParameters: () => AdmittedModelParameters,

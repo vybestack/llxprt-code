@@ -46,7 +46,7 @@ import type {
   AgentRuntimeTelemetryAdapter,
   ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import type { ToolSelectedRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -286,7 +286,7 @@ export function createStatelessRuntimeBundle(
     history?: HistoryService;
     settings?: SettingsService;
   } = {},
-): AgentRuntimeLoaderResult {
+): ToolSelectedRuntimeLoaderResult {
   const toolsView = options.toolsView ?? createDefaultToolsView();
   const providerAdapter =
     options.providerAdapter ?? createDefaultProviderAdapter();
@@ -318,6 +318,7 @@ export function createStatelessRuntimeBundle(
     toolsView,
     contentGenerator,
     toolRegistry,
+    settingsSnapshot: {},
   };
 }
 
@@ -458,14 +459,14 @@ export function defaultEnvironmentLoader(): EnvironmentLoader {
 export function createRuntimeOverrides(
   workspacePaths: WorkspacePathOperations,
   options: {
-    runtimeBundle?: AgentRuntimeLoaderResult;
+    runtimeBundle?: ToolSelectedRuntimeLoaderResult;
     environmentLoader?: EnvironmentLoader;
     toolRegistry?: ToolSelection;
     settings?: SettingsService;
   } = {},
 ): {
   overrides: SubagentTestInputs;
-  runtimeBundle: AgentRuntimeLoaderResult;
+  runtimeBundle: ToolSelectedRuntimeLoaderResult;
   environmentLoader: EnvironmentLoader;
 } {
   const runtimeBundle =
@@ -507,7 +508,7 @@ export interface SubagentTestInputs {
   environmentContextLoader?: (
     runtime: AgentRuntimeContext,
   ) => Promise<Array<{ text?: string }>>;
-  runtimeBundle?: AgentRuntimeLoaderResult;
+  runtimeBundle?: ToolSelectedRuntimeLoaderResult;
   messageBus?: MessageBus;
 }
 
@@ -519,8 +520,6 @@ export function scopeInputs(
   if (runtime === undefined)
     throw new Error('scopeInputs requires a runtimeBundle.');
   const toolRegistry = inputs.toolRegistry ?? runtime.toolRegistry;
-  if (toolRegistry === undefined)
-    throw new Error('scopeInputs requires a toolRegistry.');
   const { state, tools } = runtime.runtimeContext;
   return [
     {

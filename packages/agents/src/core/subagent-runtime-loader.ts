@@ -17,7 +17,7 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type { AgentRuntimeLoaderOptions } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import type { ToolSelectedRuntimeLoaderOptions } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 
 export function buildSubagentRuntimeLoaderOptions(
   config: Config,
@@ -26,13 +26,13 @@ export function buildSubagentRuntimeLoaderOptions(
   providerManager: RuntimeProviderManager,
   tokenizerFactory: RuntimeTokenizerFactory,
   contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
-  toolRegistry: ToolSelection | undefined,
+  toolRegistry: ToolSelection,
   runtimeState: AgentRuntimeState,
   settingsSnapshot: ReadonlySettingsSnapshot,
   providerRuntime: ProviderRuntimeContext,
   contentGeneratorConfig: ContentGeneratorConfig,
   signal: AbortSignal | undefined,
-): AgentRuntimeLoaderOptions {
+): ToolSelectedRuntimeLoaderOptions {
   return {
     mediaStore,
     profile: {

@@ -19,6 +19,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { fixtureToolSelection } from './__tests__/subagentOrchestrator-test-helpers.js';
 import { createSubagentProviderRuntime } from './subagentRuntimeSetup.js';
 import { buildSubagentRuntimeLoaderOptions } from './subagent-runtime-loader.js';
 
@@ -78,6 +79,8 @@ describe('explicit child runtime loader inputs', () => {
       model: 'child-model',
     });
     const signal = new AbortController().signal;
+    const tools = fixtureToolSelection();
+    const snapshot = { tools: { disabled: ['shell'] } };
     const options = buildSubagentRuntimeLoaderOptions(
       config,
       settingsOwner,
@@ -85,9 +88,9 @@ describe('explicit child runtime loader inputs', () => {
       manager,
       tokenizerFactory,
       contentGeneratorFactory,
-      undefined,
+      tools,
       state,
-      {},
+      snapshot,
       runtime,
       { model: state.model },
       signal,
@@ -102,6 +105,8 @@ describe('explicit child runtime loader inputs', () => {
       expect(first.history.getCurated()).toHaveLength(1);
       expect(second.history.getCurated()).toHaveLength(0);
       expect(first.runtimeContext.state.sessionId).toBe('child-session');
+      expect(first.toolRegistry).toBe(tools);
+      expect(first.settingsSnapshot).toBe(snapshot);
       expect(first.telemetryRoot).toBe(settingsOwner.telemetry);
       expect(options.profile.readRuntimeSettings?.().contextLimit).toBe(8192);
       settings.set('context-limit', 4096);

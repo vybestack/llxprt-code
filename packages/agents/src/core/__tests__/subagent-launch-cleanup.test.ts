@@ -109,6 +109,7 @@ describe('subagent cleanup error retention', () => {
     async (stage) => {
       await withDisposalJoinFixture(async (fixture) => {
         const secondary = new Error('isolated token transport close failed');
+        const scopeFailure = new Error('child scope creation failed');
         const transport = failingTransportClose(
           credentials().authority,
           secondary,
@@ -135,6 +136,10 @@ describe('subagent cleanup error retention', () => {
             profileManager: fixture.agent.workspace.profileDefinitions,
             messageBus: new MessageBus(),
             readMcpInstructions: fixture.readMcpInstructions,
+            scopeFactory:
+              stage === 'scope' || stage === 'history'
+                ? () => Promise.reject(scopeFailure)
+                : undefined,
             runtimeLoader: async (options) => {
               const bundle = await loadAgentRuntime({
                 ...options,
@@ -142,7 +147,7 @@ describe('subagent cleanup error retention', () => {
                   ...options.profile,
                   ...(stage === 'loader'
                     ? { contentGeneratorConfig: undefined }
-                    : { toolRegistry: undefined }),
+                    : {}),
                 },
               });
               if (stage === 'history')
@@ -173,7 +178,7 @@ describe('subagent cleanup error retention', () => {
                   message:
                     stage === 'loader'
                       ? 'AgentRuntimeLoader requires contentGeneratorConfig when no contentGenerator override is supplied.'
-                      : 'SubAgentScope.create requires a ToolRegistry in the runtime bundle or overrides.',
+                      : scopeFailure.message,
                 },
           );
           expect(failures.slice(1, -1)).toMatchObject(

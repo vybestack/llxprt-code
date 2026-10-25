@@ -4,7 +4,7 @@ import {
 } from './helpers/session-client-capture.js';
 import {
   loadAgentRuntime,
-  type AgentRuntimeLoaderResult,
+  type ToolSelectedRuntimeLoaderResult,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
@@ -319,7 +319,7 @@ describe('Isolated child session client ownership', () => {
   });
   const credentials = useOwnedCredentials();
   it('withdraws child tool metadata immediately after adopted-store governance changes', async () => {
-    let childRuntime: AgentRuntimeLoaderResult | undefined;
+    let childRuntime: ToolSelectedRuntimeLoaderResult | undefined;
     await withChildOwner(
       async (
         orchestrator,
@@ -394,7 +394,7 @@ describe('Isolated child session client ownership', () => {
     }, credentials().authority);
   }, 30000);
   it('roots the child media store in the parent workspace project directory', async () => {
-    let childRuntime: AgentRuntimeLoaderResult | undefined;
+    let childRuntime: ToolSelectedRuntimeLoaderResult | undefined;
     await withChildOwner(
       async (orchestrator, _settings, _owner, parentMcp) => {
         const [parentDirectory] = parentMcp.workspacePaths.directories();
