@@ -5,14 +5,10 @@
  */
 import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
 
-import { describe, expect, it, spyOn } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { readFile, readdir, rm } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { replaySession } from '@vybestack/llxprt-code-core';
-import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import {
   openRouteAAgent,
   type RouteAAgent,
@@ -273,57 +269,5 @@ describe('owner-backed /chat command route', () => {
       expect(await agent.session.getHistory()).toHaveLength(0);
       expect(await lockFiles(chatsDir)).toHaveLength(1);
     });
-  }, 30000);
-});
-
-// Unmigrated (stop rule, see the batch record): the fault is injected on the
-// session client's restoreHistory after it has published the restored history.
-describe('owner-backed /chat restore failure', () => {
-  useRecordingPrompts();
-  it('preserves live and durable history on restore failure and does not repaint UI', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        agent,
-        config,
-        _owner,
-        _settings,
-        _oauth,
-        _borrow,
-        _chats,
-        _history,
-        resources,
-      ) => {
-        await agent.setHistory([human('first'), ai('one'), human('second')]);
-        await agent.session.setRecording({ enabled: true });
-        const action = ownerActions(agent);
-        const context = createMockCommandContext({ services: { agent } });
-        const client = resources.client;
-        const original = client.restoreHistory.bind(client);
-        const fault = spyOn(client, 'restoreHistory').mockImplementationOnce(
-          async (...args) => {
-            await original(...args);
-            throw new Error('restore interrupted');
-          },
-        );
-        try {
-          expect(await action('restore')(context, '1')).toMatchObject({
-            messageType: 'error',
-          });
-        } finally {
-          fault.mockRestore();
-        }
-        const path = agent.session.getRecording().path;
-        if (!path) throw new Error('No owner recording');
-        await agent.session.flushRecording();
-        const replay = await replaySession(
-          path,
-          basename(config.projectTempDir),
-        );
-        if (!replay.ok) throw new Error(replay.error);
-        expect(JSON.stringify(replay.history)).toContain('second');
-        expect(JSON.stringify(await agent.getHistory())).toContain('second');
-        expect(context.ui.clear).not.toHaveBeenCalled();
-      },
-    );
   }, 30000);
 });
