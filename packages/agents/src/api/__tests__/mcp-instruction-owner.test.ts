@@ -1,18 +1,8 @@
-import { createSubagentScope } from '../../core/__tests__/helpers/create-subagent-scope.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import { scopeInputs } from '../../core/__tests__/subagent-test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
-import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
-
-import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
-import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
-
 import { describe, expect, it } from 'bun:test';
 import { once } from 'node:events';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -20,27 +10,38 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { json } from 'node:stream/consumers';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import type { Agent } from '../agent.js';
-import { createRuntimeTokenizerFactory } from '@vybestack/llxprt-code-providers/composition/runtimeTokenizerFactory.js';
+import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { ProviderContentGenerator } from '@vybestack/llxprt-code-providers';
-import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { AgentResourceCapture } from './helpers/agent-resource-capture.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-
-import { toConfigParameters } from '../agentConfig.adapter.js';
-
+import { createRuntimeTokenizerFactory } from '@vybestack/llxprt-code-providers/composition/runtimeTokenizerFactory.js';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import type { Agent } from '../agent.js';
+import { createAgent } from '../createAgent.js';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
-import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import { awaitMcpDiscoveryReady } from './helpers/mcp-discovery-ready.js';
 
-const requestFetch: NetworkFetch = (input, init) =>
-  globalThis.fetch(input, init);
+const CHILD_TURN = 'Run the child.';
+const CHILD_GOAL = 'Return the requested text.';
+/** Only the child's own request carries the goal as a user message. */
+const CHILD_REQUEST = `{"role":"user","content":"${CHILD_GOAL}"}`;
+
+/**
+ * The parent request that must answer with a `task` tool call: the history
+ * ends with the user's child turn, not with a tool result.
+ */
+function isChildLaunch(body: unknown): boolean {
+  if (typeof body !== 'object' || body === null || !('messages' in body))
+    return false;
+  const { messages } = body;
+  if (!Array.isArray(messages)) return false;
+  const last: unknown = messages[messages.length - 1];
+  if (typeof last !== 'object' || last === null) return false;
+  if (!('role' in last) || last.role !== 'user') return false;
+  return 'content' in last && last.content === CHILD_TURN;
+}
 
 async function transport(): Promise<{
   url: string;
@@ -57,13 +58,36 @@ async function transport(): Promise<{
     }
     void json(request)
       .then((body: unknown) => {
-        bodies.push(JSON.stringify(body));
+        const text = JSON.stringify(body);
+        bodies.push(text);
         const streaming =
           typeof body === 'object' &&
           body !== null &&
           'stream' in body &&
           body.stream === true;
-        const message = { role: 'assistant', content: '{"ok":true}' };
+        const launchesChild = isChildLaunch(body);
+        const message = launchesChild
+          ? {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  ...(streaming ? { index: 0 } : {}),
+                  id: 'call_child_1',
+                  type: 'function',
+                  function: {
+                    name: 'task',
+                    arguments: JSON.stringify({
+                      subagent_name: 'instruction-child',
+                      goal_prompt: CHILD_GOAL,
+                      async: false,
+                      timeout_seconds: 20,
+                    }),
+                  },
+                },
+              ],
+            }
+          : { role: 'assistant', content: '{"ok":true}' };
         const response = {
           id: 'same-response',
           object: streaming ? 'chat.completion.chunk' : 'chat.completion',
@@ -73,7 +97,7 @@ async function transport(): Promise<{
             {
               index: 0,
               ...(streaming ? { delta: message } : { message }),
-              finish_reason: 'stop',
+              finish_reason: launchesChild ? 'tool_calls' : 'stop',
             },
           ],
           usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
@@ -120,111 +144,73 @@ describe('MCP instruction ownership', () => {
         (key) => [key, process.env[key]],
       ),
     );
-    process.env.LLXPRT_CONFIG_HOME = join(directory, 'home');
+    const configHome = join(directory, 'home');
+    process.env.LLXPRT_CONFIG_HOME = configHome;
     process.env.LLXPRT_DATA_HOME = join(directory, 'data');
     delete process.env.LLXPRT_FAKE_RESPONSES;
     const endpoint = await transport();
     interface Owner {
-      settingsService: ReturnType<
-        typeof createSessionSettingsFixture
-      >['settingsService'];
-      settingsOwner: ReturnType<
-        typeof createSessionSettingsFixture
-      >['settingsOwner'];
-      config: Config;
-      mcp: McpRuntimeOwner;
       agent: Agent;
-      client: AgentClientContract;
-      capture: AgentResourceCapture;
       instructionPath: string;
-      tokenizerFactory: RuntimeTokenizerFactory;
     }
     const owners: Owner[] = [];
     let auxiliaryTransport: ContentGenerator | undefined;
+    const tokenizerFactory = createRuntimeTokenizerFactory();
+    const profiles = new ProfileManager(join(configHome, 'profiles'));
+    await profiles.saveProfile('child-profile', {
+      version: 1,
+      provider: 'openai',
+      model: 'instruction-model',
+      modelParams: {},
+      ephemeralSettings: {
+        'auth-key': 'local-only',
+        'base-url': endpoint.url,
+      },
+    });
+    await new SubagentManager(
+      join(configHome, 'subagents'),
+      profiles,
+    ).saveSubagent('instruction-child', 'child-profile', 'Reply once.');
     async function owner(name: string): Promise<Owner> {
       const workingDir = join(directory, name);
       await mkdir(workingDir);
       const instructionPath = join(workingDir, 'instructions.txt');
       await writeFile(instructionPath, `INSTRUCTION_OWNER_${name}`);
-      const config = new Config({
-        ...toConfigParameters({
-          provider: 'openai',
-          model: 'instruction-model',
-          workingDir,
-          sessionId: 'same-instruction-session',
-          folderTrust: true,
-          skillsSupport: false,
-          telemetry: { enabled: false },
-          recording: { enabled: false },
-          mcpServers: {
-            same: {
-              command: process.execPath,
-              args: [
-                resolveRepositoryFixture(
-                  import.meta.url,
-                  'scripts/tests/mcp-instruction-stdio-fixture.ts',
-                ),
-                instructionPath,
-              ],
-            },
-          },
-        }),
-      });
-      const mcp = await createTestMcpRuntime(
-        { oauth: createTestOAuthBinding(), config },
-        {},
-      );
-      const settingsRoot = createSessionSettingsFixture(config);
-      const tokenizerFactory = createRuntimeTokenizerFactory();
-      const capture = new AgentResourceCapture();
-      const agent = await fromConfig(
-        config,
-        settingsRoot.settingsService,
-        {
-          sessionId: 'same-instruction-session',
-          activation: {
-            provider: 'openai',
-            model: 'instruction-model',
-            cliOverrides: { key: 'local-only', baseUrl: endpoint.url },
+      const agent = await createAgent({
+        provider: 'openai',
+        model: 'instruction-model',
+        auth: { apiKey: 'local-only', baseUrl: endpoint.url },
+        workingDir,
+        sessionId: 'same-instruction-session',
+        folderTrust: true,
+        approvalMode: ApprovalMode.YOLO,
+        coreTools: ['task'],
+        skillsSupport: false,
+        telemetry: { enabled: false },
+        recording: { enabled: false },
+        mcpServers: {
+          same: {
+            command: process.execPath,
+            args: [
+              resolveRepositoryFixture(
+                import.meta.url,
+                'scripts/tests/mcp-instruction-stdio-fixture.ts',
+              ),
+              instructionPath,
+            ],
           },
         },
-        settingsRoot.settingsOwner,
-        undefined,
-        undefined,
-        undefined,
-        mcp,
-        undefined,
-        undefined,
-        undefined,
+        onApproval: () => ToolConfirmationOutcome.ProceedOnce,
+        credentialAuthority: new CredentialAuthority(),
         tokenizerFactory,
-        {
+        contentGeneratorFactory: {
           createContentGenerator: () =>
             auxiliaryTransport ?? new ProviderContentGenerator(),
         },
-        capture.factories(undefined),
-      );
-      const client = capture.clients.slice(-1).values().next().value;
-      if (client === undefined)
-        throw new Error('MCP fixture did not acquire a client');
-
-      Object.defineProperty(config, 'getMcpInstructions', {
-        value: () => {
-          throw new Error('Config instruction lookup is forbidden');
-        },
       });
-      const result = {
-        ...settingsRoot,
-        config,
-        mcp,
-        agent,
-        client,
-        capture,
-        instructionPath,
-        tokenizerFactory,
-      };
+      const result = { agent, instructionPath };
       owners.push(result);
-      expect(Array.from(await mcp.awaitDiscovery())).toStrictEqual([]);
-      expect(mcp.readInstructions()).toContain(`INSTRUCTION_OWNER_${name}`);
+      await awaitMcpDiscoveryReady(agent);
       return result;
     }
     const signal = new AbortController().signal;
@@ -238,7 +224,7 @@ describe('MCP instruction ownership', () => {
       action: () => Promise<unknown>,
       present: string,
       absent: string,
-    ): Promise<void> {
+    ): Promise<string[]> {
       const start = endpoint.bodies.length;
       await action();
       const bodies = endpoint.bodies.slice(start);
@@ -247,12 +233,28 @@ describe('MCP instruction ownership', () => {
         expect(body).toContain(present);
         expect(body).not.toContain(absent);
       }
+      return bodies;
+    }
+    async function observedChild(
+      candidate: Awaited<ReturnType<typeof owner>>,
+      present: string,
+      absent: string,
+    ): Promise<void> {
+      const bodies = await observed(
+        () => turn(candidate, CHILD_TURN),
+        present,
+        absent,
+      );
+      expect(
+        bodies.filter((body) => body.includes(CHILD_REQUEST)).length,
+      ).toBeGreaterThan(0);
     }
     async function turn(
       candidate: Awaited<ReturnType<typeof owner>>,
+      prompt = 'Reply once.',
     ): Promise<void> {
       const events = [];
-      for await (const event of candidate.agent.stream('Reply once.', {
+      for await (const event of candidate.agent.stream(prompt, {
         signal,
         mcpDiscovery: 'await',
       }))
@@ -261,75 +263,10 @@ describe('MCP instruction ownership', () => {
         [],
       );
     }
-    async function child(
-      candidate: Awaited<ReturnType<typeof owner>>,
-    ): Promise<void> {
-      const config = candidate.config;
-      const state = createAgentRuntimeState({
-        runtimeId: 'same-child',
-        sessionId: 'same-child',
-        provider: 'openai',
-        model: 'instruction-model',
-      });
-      const runtimeBundle = await loadAgentRuntime({
-        mediaStore: requireMediaStore(candidate.client),
-        profile: {
-          config,
-          telemetry: candidate.settingsOwner.telemetry,
-          state,
-          promptEstimator: candidate.tokenizerFactory,
-          settings: candidate.settingsOwner.readRuntimePolicy(),
-          prepareProviderInvocation: (providerName, modelParameters, signal) =>
-            candidate.settingsOwner.prepareProviderInvocation(
-              state.runtimeId,
-              providerName,
-              modelParameters,
-              signal,
-              undefined,
-              requestFetch,
-            ),
-          readToolGovernance: () =>
-            candidate.settingsOwner.readToolGovernance(
-              config.getExcludeTools() ?? [],
-            ),
-          providerRuntime: createProviderRuntimeContext({
-            runtimeId: state.runtimeId,
-          }),
-          contentGeneratorConfig: candidate.client.getContentGeneratorConfig(),
-          toolRegistry: candidate.client.tools,
-          providerManager: candidate.capture.manager,
-        },
-      });
-      const scope = await createSubagentScope(
-        {
-          name: 'child',
-          prompt: { systemPrompt: 'Reply once.' },
-          model: { model: 'instruction-model', temp: 0, top_p: 1 },
-          run: { max_turns: 1, max_time_minutes: 1 },
-          toolConfig: undefined,
-          outputConfig: undefined,
-        },
-        ...scopeInputs(config, {
-          instructions: emptyInstructionReads,
-          workspacePaths: candidate.mcp.workspacePaths,
-          runtimeBundle,
-          messageBus: candidate.mcp.messageBus,
-          readMcpInstructions: candidate.mcp.readInstructions,
-          environmentContextLoader: async () => [],
-        }),
-      );
-      try {
-        await scope.runNonInteractive(new ContextState());
-      } finally {
-        await scope.dispose();
-      }
-    }
     try {
       const a = await owner('A');
       const b = await owner('B');
       expect(a.agent.getRuntimeId()).toBe(b.agent.getRuntimeId());
-      expect(a.mcp.messageBus).not.toBe(b.mcp.messageBus);
-      expect(a.client.tools).not.toBe(b.client.tools);
       await observed(
         () => turn(a),
         'INSTRUCTION_OWNER_A',
@@ -341,11 +278,7 @@ describe('MCP instruction ownership', () => {
         'INSTRUCTION_OWNER_A',
       );
       await observed(
-        () =>
-          a.client.generateDirectMessage(
-            { message: 'Direct request.' },
-            'same-direct',
-          ),
+        () => a.agent.generate('Direct request.'),
         'INSTRUCTION_OWNER_A',
         'INSTRUCTION_OWNER_B',
       );
@@ -384,7 +317,6 @@ describe('MCP instruction ownership', () => {
       };
       for (const candidate of [a, b]) {
         await candidate.agent.sessionClient.refreshAuth();
-        candidate.client = candidate.capture.publishedClient(candidate.agent);
       }
       await observed(
         () => a.agent.generateJson(messages, { type: 'object' }),
@@ -392,33 +324,20 @@ describe('MCP instruction ownership', () => {
         'INSTRUCTION_OWNER_B',
       );
       await observed(
-        () =>
-          b.client.generateContent(messages, {}, signal, 'instruction-model'),
+        () => b.agent.generateJson(messages, { type: 'object' }),
         'INSTRUCTION_OWNER_B',
         'INSTRUCTION_OWNER_A',
       );
-      await observed(
-        () => child(a),
-        'INSTRUCTION_OWNER_A',
-        'INSTRUCTION_OWNER_B',
-      );
-      await observed(
-        () => child(b),
-        'INSTRUCTION_OWNER_B',
-        'INSTRUCTION_OWNER_A',
-      );
+      await observedChild(a, 'INSTRUCTION_OWNER_A', 'INSTRUCTION_OWNER_B');
+      await observedChild(b, 'INSTRUCTION_OWNER_B', 'INSTRUCTION_OWNER_A');
       await writeFile(a.instructionPath, 'INSTRUCTION_REFRESH_A');
-      await a.mcp.refresh();
+      await a.agent.mcp.refresh();
       await observed(
         () => turn(a),
         'INSTRUCTION_REFRESH_A',
         'INSTRUCTION_OWNER_A',
       );
-      await observed(
-        () => child(a),
-        'INSTRUCTION_REFRESH_A',
-        'INSTRUCTION_OWNER_A',
-      );
+      await observedChild(a, 'INSTRUCTION_REFRESH_A', 'INSTRUCTION_OWNER_A');
       await observed(
         () => a.agent.generateJson(messages, { type: 'object' }),
         'INSTRUCTION_REFRESH_A',
@@ -428,10 +347,10 @@ describe('MCP instruction ownership', () => {
       const start = endpoint.bodies.length;
       await turn(a);
       await a.agent.generateJson(messages, { type: 'object' });
-      await child(a);
-      expect(endpoint.bodies.slice(start).join('\n')).not.toContain(
-        'INSTRUCTION_REFRESH_A',
-      );
+      await turn(a, CHILD_TURN);
+      const revoked = endpoint.bodies.slice(start);
+      expect(revoked.some((body) => body.includes(CHILD_REQUEST))).toBe(true);
+      expect(revoked.join('\n')).not.toContain('INSTRUCTION_REFRESH_A');
       await observed(
         () => turn(b),
         'INSTRUCTION_OWNER_B',
@@ -444,8 +363,6 @@ describe('MCP instruction ownership', () => {
     } finally {
       for (const candidate of owners) {
         await candidate.agent.dispose();
-        await candidate.mcp.dispose();
-        await candidate.config.dispose();
       }
       await endpoint.stop();
       for (const [key, value] of Object.entries(environment)) {
