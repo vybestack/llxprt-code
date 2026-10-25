@@ -1,4 +1,4 @@
-import { adoptFixture } from '../../agents/src/api/__tests__/helpers/adoption-fixture.js';
+import { useFakeResponsesReplay } from '../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
 import { fromConfig } from '@vybestack/llxprt-code-agents';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -114,7 +114,10 @@ async function disposeOwnedConfigs(): Promise<void> {
   }
 }
 
-function makeUnconfiguredConfig(outputFormat?: OutputFormat): {
+function makeUnconfiguredConfig(
+  outputFormat?: OutputFormat,
+  selection?: { readonly provider: string; readonly model: string },
+): {
   credentialAuthority: CredentialAuthority;
   config: Config;
   runtimeSettings: { store: SettingsService; owner: SessionSettingsOwner };
@@ -124,7 +127,8 @@ function makeUnconfiguredConfig(outputFormat?: OutputFormat): {
     sessionId: 'test-session',
     targetDir: directory,
     cwd: directory,
-    model: PLACEHOLDER_MODEL,
+    model: selection?.model ?? PLACEHOLDER_MODEL,
+    ...(selection !== undefined ? { provider: selection.provider } : {}),
     debugMode: false,
     interactive: false,
     outputFormat,
@@ -192,6 +196,7 @@ function makeSettings(): LoadedSettings {
 }
 
 describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
+  useFakeResponsesReplay('plain-text.jsonl');
   afterEach(disposeOwnedConfigs);
   let originalEnv: Map<string, string | undefined>;
   let fromConfigMock: Mock<typeof original.fromConfig>;
@@ -396,34 +401,15 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
   it('passes through when a provider IS explicitly configured', async () => {
     const { config, runtimeSettings, credentialAuthority } =
-      makeUnconfiguredConfig();
+      makeUnconfiguredConfig(undefined, {
+        provider: 'fake',
+        model: 'fake-model',
+      });
     const providerManager = configureProvider(
       config,
       'openai',
       credentialAuthority,
       runtimeSettings,
-    );
-
-    fromConfigMock.mockImplementation(
-      (suppliedConfig, store, intent, authority) =>
-        adoptFixture(
-          suppliedConfig,
-          store,
-          intent,
-          runtimeSettings.owner,
-          providerManager,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          authority,
-        ),
     );
 
     await runNonInteractive({
@@ -453,34 +439,15 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
   it('passes through when LLXPRT_DEFAULT_PROVIDER selects a provider', async () => {
     process.env.LLXPRT_DEFAULT_PROVIDER = 'anthropic';
     const { config, runtimeSettings, credentialAuthority } =
-      makeUnconfiguredConfig();
+      makeUnconfiguredConfig(undefined, {
+        provider: 'fake',
+        model: 'fake-model',
+      });
     const providerManager = configureProvider(
       config,
       'anthropic',
       credentialAuthority,
       runtimeSettings,
-    );
-
-    fromConfigMock.mockImplementation(
-      (suppliedConfig, store, intent, authority) =>
-        adoptFixture(
-          suppliedConfig,
-          store,
-          intent,
-          runtimeSettings.owner,
-          providerManager,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          authority,
-        ),
     );
 
     await runNonInteractive({
