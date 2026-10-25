@@ -1,4 +1,3 @@
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -17,16 +16,10 @@ import {
   deferred,
   installIdeCleanup,
 } from './helpers/ide-lifecycle-companion.js';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
-import { toConfigParameters } from '@vybestack/llxprt-code-agents';
+import { createAgent, toConfigParameters } from '@vybestack/llxprt-code-agents';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import {
-  MCPOAuthTokenStorage,
-  KeychainTokenStorage,
-} from '@vybestack/llxprt-code-mcp';
-import { openBrowserSecurely } from '@vybestack/llxprt-code-core';
+import { fromConfig } from '../fromConfig.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { WorkspaceIdeOwner } from '@vybestack/llxprt-code-core/services/workspace-ide-owner.js';
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
@@ -63,41 +56,11 @@ async function domainFixture(initialize = true): Promise<{
   return { owner, domain, trust, transport };
 }
 
-function createSessionSettingsFixture(config: Config): {
-  settingsService: SettingsService;
-  settingsOwner: SessionSettingsOwner;
-} {
+function createSeededSettings(config: Config): SettingsService {
   const settingsService = new SettingsService();
   for (const [name, value] of Object.entries(config.getInitialSettings()))
     settingsService.set(name, value);
-  const settingsOwner = new SessionSettingsOwner(settingsService);
-  settingsOwner.initializeProviderSelection(
-    config.getProvider(),
-    config.getModel(),
-  );
-  cleanup.push(async () => {
-    await settingsOwner.dispose();
-  });
-  return { settingsService, settingsOwner };
-}
-
-function createWorkspace(
-  config: Config,
-  trust: WorkspaceTrustLifecycle,
-): Promise<McpRuntimeOwner> {
-  return createTestMcpRuntime(
-    {
-      oauth: {
-        tokenStorage: new MCPOAuthTokenStorage(
-          new KeychainTokenStorage('llxprt-cli-mcp-oauth'),
-        ),
-        openBrowser: openBrowserSecurely,
-      },
-      config,
-      trustPort: trust,
-    },
-    {},
-  );
+  return settingsService;
 }
 
 const diffOutcomes: Array<'accepted' | 'rejected'> = ['accepted', 'rejected'];
@@ -299,20 +262,19 @@ describe('Independent IDE transport lifetime', () => {
         }),
       );
       cleanup.push(() => config.dispose());
-      const adoptedSettings1 = createSessionSettingsFixture(config);
+      const authority = new CredentialAuthority();
       const first = await fromConfig(
         config,
-        adoptedSettings1.settingsService,
+        createSeededSettings(config),
         {},
-        adoptedSettings1.settingsOwner,
+        authority,
       );
       cleanup.push(() => first.dispose());
-      const adoptedSettings2 = createSessionSettingsFixture(config);
       const second = await fromConfig(
         config,
-        adoptedSettings2.settingsService,
+        createSeededSettings(config),
         {},
-        adoptedSettings2.settingsOwner,
+        authority,
       );
       cleanup.push(() => second.dispose());
       await first.ide.setIdeClientConnected();
@@ -375,50 +337,20 @@ describe('Independent IDE transport lifetime', () => {
         () => trust.dispose(),
         () => ide.dispose(),
       );
-      const adoptedSettings3 = createSessionSettingsFixture(config);
-      const first = await fromConfig(
-        config,
-        adoptedSettings3.settingsService,
-        {},
-        adoptedSettings3.settingsOwner,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        trust,
-        ide,
-      );
-      const adoptedSettings4 = createSessionSettingsFixture(config);
-      const second = await fromConfig(
-        config,
-        adoptedSettings4.settingsService,
-        {},
-        adoptedSettings4.settingsOwner,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        trust,
-        ide,
-      );
+      const agentConfig = {
+        provider: '',
+        model: '',
+        workingDir: process.cwd(),
+        folderTrust: false,
+        mcpEnabled: false,
+        skillsSupport: false,
+        telemetry: { enabled: false },
+        recording: { enabled: false },
+        trustPort: trust,
+        idePort: ide,
+      };
+      const first = await createAgent(agentConfig);
+      const second = await createAgent(agentConfig);
       cleanup.push(
         () => first.dispose(),
         () => second.dispose(),
@@ -482,63 +414,30 @@ describe('Independent IDE transport lifetime', () => {
     const host = await setup();
     const lease = await client();
     await lease.connect();
-    const config = new Config(
-      toConfigParameters({
-        provider: '',
-        model: '',
-        workingDir: process.cwd(),
-        mcpEnabled: false,
-        skillsSupport: false,
-        telemetry: { enabled: false },
-        recording: { enabled: false },
-      }),
-    );
-    cleanup.push(() => config.dispose());
     const acquire = vi
       .spyOn(IdeClient, 'create')
       .mockImplementationOnce(async () => lease);
     const failure = new Error('public adoption interrupted');
     try {
-      const adoptedSettings5 = createSessionSettingsFixture(config);
       await expect(
-        fromConfig(
-          config,
-          adoptedSettings5.settingsService,
-          {},
-          adoptedSettings5.settingsOwner,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          () => {
-            throw failure;
+        createAgent({
+          provider: '',
+          model: '',
+          workingDir: process.cwd(),
+          mcpEnabled: false,
+          skillsSupport: false,
+          telemetry: { enabled: false },
+          recording: { enabled: false },
+          tokenizerFactory: {
+            prepareTokenizer: () => {
+              throw failure;
+            },
+            getTokenizer: () => undefined,
+            estimatePrompt: () => {
+              throw failure;
+            },
           },
-        ),
+        }),
       ).rejects.toThrow('public adoption interrupted');
       await host.sessions[0].streamClosed.promise;
       expect(lease.getConnectionStatus().status).toBe(
@@ -641,18 +540,6 @@ describe('Independent IDE transport lifetime', () => {
 
   it('physically retires the owned transport despite failures releasing every trust listener', async (): Promise<void> => {
     const host = await setup();
-    const config = new Config(
-      toConfigParameters({
-        provider: '',
-        model: '',
-        workingDir: process.cwd(),
-        ide: { mode: true },
-        mcpEnabled: false,
-        skillsSupport: false,
-        telemetry: { enabled: false },
-        recording: { enabled: false },
-      }),
-    );
     const trust = new WorkspaceTrustLifecycle({ localTrust: true });
     const subscribe = trust.subscribeTrustChange.bind(trust);
     const failure = new Error('Listener release failed');
@@ -665,32 +552,18 @@ describe('Independent IDE transport lifetime', () => {
           throw failure;
         };
       });
-    cleanup.push(
-      () => config.dispose(),
-      () => trust.dispose(),
-    );
-    const workspace = await createWorkspace(config, trust);
-    const adoptedSettings6 = createSessionSettingsFixture(config);
-    const agent = await fromConfig(
-      config,
-      adoptedSettings6.settingsService,
-      { mcpOwnership: 'agent' },
-      adoptedSettings6.settingsOwner,
-      undefined,
-      undefined,
-      undefined,
-      workspace,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      trust,
-    );
+    cleanup.push(() => trust.dispose());
+    const agent = await createAgent({
+      provider: '',
+      model: '',
+      workingDir: process.cwd(),
+      ide: { mode: true },
+      mcpEnabled: false,
+      skillsSupport: false,
+      telemetry: { enabled: false },
+      recording: { enabled: false },
+      trustPort: trust,
+    });
     cleanup.push(async () => {
       await agent.dispose().catch(() => undefined);
     });
@@ -702,9 +575,7 @@ describe('Independent IDE transport lifetime', () => {
       await expect(agent.dispose()).rejects.toBeInstanceOf(Error);
       await host.sessions[0].streamClosed.promise;
       expect(host.sessions[0].closed).toBe(true);
-      expect(() => workspace.workspaceMemory.operations.snapshot()).toThrow(
-        'disposed',
-      );
+      expect(() => agent.memory.getMemory()).toThrow('disposed');
       await trust.setIdeTrustLive(undefined);
       await trust.setTrustedFolderLive(false);
       expect(trust.isTrustedFolder()).toBe(false);

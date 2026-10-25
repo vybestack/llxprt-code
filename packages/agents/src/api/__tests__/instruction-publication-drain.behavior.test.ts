@@ -1,48 +1,18 @@
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import { describe, expect, it, vi, beforeAll, afterAll } from 'bun:test';
-import { mkdtemp, writeFile, rm, realpath } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
-import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../adoption-release.js';
-import { buildAgentClientFactory } from '../agentBootstrap.js';
-import { randomUUID } from 'node:crypto';
-import {
-  runCleanupSteps,
-  cleanupAfterFailure,
-} from '../../core/subagent-cleanup.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { fileURLToPath } from 'node:url';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { describe, expect, it, beforeAll, afterAll } from 'bun:test';
+import { mkdtemp, writeFile, rm, realpath } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+
 function gate(): { readonly promise: Promise<void>; release(): void } {
   let release = (): void => {};
   const promise = new Promise<void>((resolve) => {
@@ -50,6 +20,77 @@ function gate(): { readonly promise: Promise<void>; release(): void } {
   });
   return { promise, release };
 }
+
+interface InstructionCountHold {
+  /** Resolves when the instruction text reaches the held `countTokens` call. */
+  readonly entered: Promise<void>;
+  readonly release: () => void;
+  /** Length of the instruction text the held call received, 0 until released. */
+  readonly countedCharacters: () => number;
+}
+
+/**
+ * A tokenizer factory supplied through the public `tokenizerFactory` input.
+ * `updateSystemInstruction` ends by counting the system instruction's tokens,
+ * so holding the next `countTokens` call after `hold()` holds exactly the
+ * in-flight instruction publication.
+ */
+function createHoldableTokenizer(): {
+  readonly factory: RuntimeTokenizerFactory;
+  readonly hold: () => InstructionCountHold;
+} {
+  let armed:
+    | { entered: ReturnType<typeof gate>; release: ReturnType<typeof gate> }
+    | undefined;
+  let counted = 0;
+  const factory: RuntimeTokenizerFactory = {
+    getTokenizer: () => ({
+      fallbackPolicy: 'deny',
+      countTokens: async (content: unknown): Promise<number> => {
+        const text = String(content);
+        const held = armed;
+        if (held === undefined) return text.length;
+        armed = undefined;
+        held.entered.release();
+        await held.release.promise;
+        counted = text.length;
+        return text.length;
+      },
+    }),
+    estimatePrompt: async (request) => ({
+      count: await request.legacyEstimate(),
+      method: 'calibrated',
+      family: 'test-holdable',
+      estimatorVersion: 'test-holdable-v1',
+      assetRevision: 'none',
+      projectionRevision: request.projectionRevision,
+    }),
+  };
+  return {
+    factory,
+    hold: () => {
+      const held = { entered: gate(), release: gate() };
+      armed = held;
+      return {
+        entered: held.entered.promise,
+        release: () => held.release.release(),
+        countedCharacters: () => counted,
+      };
+    },
+  };
+}
+
+async function exercise(
+  survivor: Agent,
+): Promise<{ error: unknown; maxOutputTokens: unknown }> {
+  const result = await survivor.chat('peer after admitted disposal');
+  survivor.setModelParam('maxOutputTokens', 79);
+  return {
+    error: result.error,
+    maxOutputTokens: survivor.getModelParams().maxOutputTokens,
+  };
+}
+
 describe('admitted instruction publication disposal', () => {
   let promptDirectory: string;
   const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
@@ -64,228 +105,64 @@ describe('admitted instruction publication disposal', () => {
     await rm(promptDirectory, { recursive: true, force: true });
   });
   const credentials = useOwnedCredentials();
+  useFakeResponsesReplay('multi-turn-text.jsonl');
 
   it.each([false, true])(
     'joins asynchronous assembly and retains the borrowed caller reader (peer closes first: %s)',
     async (peerFirst) => {
-      const directory = await mkdtemp(join(tmpdir(), 'instruction-drain-'));
+      const directory = await realpath(
+        await mkdtemp(join(tmpdir(), 'instruction-drain-')),
+      );
       await writeFile(
         join(directory, 'LLXPRT.md'),
         'Physical admitted instructions.',
       );
-      const callerPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-      process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-        new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
-      );
-      const callerDirectory = await realpath(directory);
-      const callerConfig = new Config(
-        toConfigParameters({
-          provider: 'fake',
-          model: 'fake-model',
-          sessionId: randomUUID(),
-          workingDir: callerDirectory,
-        }),
-      );
-      const callerSettings = new SettingsService();
-      const callerPolicy = new RuntimePolicyOwner(callerConfig);
-      const callerMessageBus = callerPolicy.session.messageBus;
-      const callerMcp = await createTestMcpRuntime(
-        {
-          oauth: {
-            openBrowser: async () => {
-              throw new Error('Unexpected browser request');
-            },
-            tokenStorage: new MCPOAuthTokenStorage({
-              getCredentials: async () => null,
-              setCredentials: async () => {
-                throw new Error('Unexpected token write');
-              },
-              deleteCredentials: async () => {},
-              listServers: async () => [],
-              getAllCredentials: async () => new Map(),
-              clearAll: async () => {},
-            }),
-          },
-          config: callerConfig,
-          policy: { owner: callerPolicy, ownership: 'runtime' },
-        },
-        {},
-      );
-
-      const callerRuntimeId = 'engine-' + randomUUID();
-      const callerRelease = new AcquisitionRelease();
-      const callerSettingsOwner = new SessionSettingsOwner(callerSettings);
-      callerRelease.acquire('settings', () => callerSettingsOwner.dispose());
-      callerSettingsOwner.initializeProviderSelection(
-        callerConfig.getProvider(),
-        callerConfig.getModel(),
-      );
-      callerSettingsOwner.bindTelemetry(callerConfig);
-      const callerFiles = new ProviderFileLifecycle({
-        maxFiles: 100,
-        maxBytes: 512 * 1024 * 1024,
-      });
-      for (const scope of [callerRuntimeId, callerConfig.getSessionId()])
-        callerRelease.acquire('files', () =>
-          releaseAdoptedFileScope(callerFiles, scope),
-        );
-      const callerManager = acquirePreferredProviderManager(
-        callerConfig,
-        callerSettings,
-        callerSettingsOwner,
-        callerFiles,
-        callerRuntimeId,
-        credentials().authority,
-        callerRelease,
-      );
-      const callerTokenizer = configureProviderTokenizer(callerManager);
-      const callerContent = createRuntimeContentGeneratorFactory();
-      const callerOAuth = acquirePreferredOAuth(
-        undefined,
-        callerMessageBus,
-        callerConfig,
-        callerSettings,
-        callerManager,
-        callerRuntimeId,
-        callerMcp.profileDefinitions,
-        credentials().authority,
-        callerRelease,
-        undefined,
-      );
-      const callerMedia = new SessionMediaOwner(
-        callerConfig.projectTempDir,
-        1024 * 1024,
-      );
-      const callerOwner = await createCapturedSessionOwner(
-        callerConfig,
-        assembleTaskSchemaPolicy(callerSettings),
-        callerManager,
-        buildAgentClientFactory(),
-        callerMedia.store,
-        callerMcp.readInstructions,
-        callerMcp.workspacePaths,
-        callerSettingsOwner,
-        callerContent,
-        callerTokenizer,
-      );
-      callerOwner.bindMcpRuntime(callerMcp);
-      callerOwner.bindHooks();
-      const callerClose = settleEngineRelease.bind(
-        undefined,
-        [
-          () => callerOwner.dispose(),
-          () => callerRelease.close(),
-          () => callerMedia.dispose(),
-          () => callerMcp.dispose(),
-          () => callerConfig.dispose(),
-          () => rm(callerDirectory, { recursive: true, force: true }),
-        ],
-        callerPreviousReplay,
-      );
-      try {
-        await preparePreferredProviderCompletion(
-          callerConfig,
-          callerSettings,
-          callerSettingsOwner,
-          callerManager,
-          callerOAuth,
-          callerRuntimeId,
-          callerTokenizer,
-          undefined,
-        );
-        await callerMcp.initialize();
-        await callerOwner.initializeTools();
-        await callerOwner.refreshAuth();
-        await capturedSessionClient(callerOwner).startChat();
-      } catch (primary) {
-        await cleanupAfterFailure(primary, callerClose);
-      }
-
-      const agent = await fromConfig(
-        callerConfig,
-        callerSettings,
-        {},
-        callerSettingsOwner,
-        callerManager,
-        undefined,
-        callerMessageBus,
-        callerMcp,
-        undefined,
-        capturedSessionClient(callerOwner),
-      );
-      const peer = await fromConfig(
-        callerConfig,
-        callerSettings,
-        {},
-        callerSettingsOwner,
-        callerManager,
-        undefined,
-        callerMessageBus,
-        callerMcp,
-      );
-      const entered = gate();
-      const release = gate();
-      const client = capturedSessionClient(callerOwner);
-      const assemble = client.updateSystemInstruction.bind(client);
-      let publishedCharacters = 0;
-      const observer = vi
-        .spyOn(client, 'updateSystemInstruction')
-        .mockImplementation(
-          async (
-            instructions = callerOwner.instructionReads,
-          ): Promise<void> => {
-            entered.release();
-            await release.promise;
-            await assemble(instructions);
-            publishedCharacters = instructions.snapshot().memoryContent.length;
-          },
-        );
+      const tokenizer = createHoldableTokenizer();
+      let agent: Agent | undefined;
+      let peer: Agent | undefined;
+      let hold: InstructionCountHold | undefined;
       let closed = false;
       let publication: Promise<unknown> | undefined;
       let closing: Promise<void> | undefined;
       try {
-        agent.memory.setMemory('Admitted facade instructions.');
-        publication = callerMcp.refreshContext();
-        await entered.promise;
+        agent = await createAgent({
+          provider: 'fake',
+          model: 'fake-model',
+          workingDir: directory,
+          credentialAuthority: credentials().authority,
+          tokenizerFactory: tokenizer.factory,
+        });
+        peer = await createAgent({
+          provider: 'fake',
+          model: 'fake-model',
+          workingDir: directory,
+          credentialAuthority: credentials().authority,
+        });
+        await agent.chat('open the chat before publishing');
+        hold = tokenizer.hold();
+        publication = agent.memory.refresh();
+        await hold.entered;
         if (peerFirst) await peer.dispose();
         closing = agent.dispose().then(() => {
           closed = true;
         });
         await Promise.resolve();
         expect(closed).toBe(false);
-        release.release();
+        hold.release();
         await publication;
         await closing;
-        expect(publishedCharacters).toBeGreaterThan(0);
-        callerSettingsOwner.writeUserParameter('maxOutputTokens', 79);
-        expect(callerSettings.get('maxOutputTokens')).toBe(79);
-        await client.updateSystemInstruction();
-        expect(client.isInitialized()).toBe(true);
-        const result = peerFirst
-          ? undefined
-          : await peer.chat('peer after admitted disposal');
-        expect(result?.error).toBeUndefined();
+        expect(hold.countedCharacters()).toBeGreaterThan(0);
+        const survivor = peerFirst ? undefined : await exercise(peer);
+        expect(survivor?.error).toBeUndefined();
+        expect(survivor?.maxOutputTokens).toBe(peerFirst ? undefined : 79);
       } finally {
-        release.release();
+        hold?.release();
         await Promise.allSettled([publication, closing]);
-        observer.mockRestore();
-        await agent.dispose();
-        await peer.dispose();
-        await callerClose();
+        await agent?.dispose();
+        await peer?.dispose();
         await rm(directory, { recursive: true, force: true });
       }
     },
     30000,
   );
 });
-async function settleEngineRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previousReplay: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
-  }
-}
