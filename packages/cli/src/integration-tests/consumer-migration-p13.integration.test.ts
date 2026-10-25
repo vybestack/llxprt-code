@@ -40,7 +40,11 @@ import {
 
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-import { prepareIntegrationPreflight } from './__tests__/prepare-preflight.js';
+import { buildProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition/runtimePlugins/index.js';
+
+import { openRouteBPreflight } from '../../../agents/src/api/__tests__/helpers/route-b-preflight.js';
+
+import { type Agent } from '@vybestack/llxprt-code-agents';
 
 describe('explicit provider primitive owners', () => {
   const credentials = useOwnedCredentials();
@@ -249,31 +253,63 @@ describe('explicit provider primitive owners', () => {
       });
 
       it('CLI foreground assembly exposes the provider manager on its Config', async () => {
-        let manager: RuntimeProviderManager | undefined;
-        const preflight = await prepareIntegrationPreflight(
-          config,
-          new SettingsService(),
-          credentials().authority,
-          'p13-consumer-test',
-          (selected) => {
-            manager = selected;
-          },
+        const testProvider = createTestProvider(
+          'test-cli-provider',
+          'test-default-model',
         );
+        const route = await openRouteBPreflight({
+          authority: credentials().authority,
+          runtimeId: 'p13-consumer-test',
+          contributions: buildProviderContributionRegistry([
+            {
+              specifier: 'memory:test-cli-provider',
+              manifest: {
+                apiVersion: 1,
+                id: 'test-cli-provider',
+                providers: [
+                  {
+                    providerId: 'test-cli-provider',
+                    createProvider: () => testProvider,
+                    builtinAliases: [
+                      {
+                        alias: 'test-cli-provider',
+                        config: {
+                          baseProvider: 'test-cli-provider',
+                          'requires-auth': false,
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ]),
+          config: {
+            sessionId: 'p13-consumer-test',
+            provider: undefined,
+            model: 'test-model',
+          },
+        });
+        let agent: Agent | undefined;
         try {
-          if (manager === undefined)
-            throw new Error('Missing preflight manager');
-          const testProvider = createTestProvider(
+          await route.prepare();
+          agent = await route.createAgent({
+            provider: 'test-cli-provider',
+            model: 'test-default-model',
+          });
+          expect(agent.providerReads.listProviders()).toContain(
             'test-cli-provider',
-            'test-default-model',
           );
-          manager.registerProvider(testProvider);
-          expect(manager.listProviders()).toContain('test-cli-provider');
-          expect('providerFileLifecycle' in preflight).toBe(false);
-          expect(preflight.captureProviderFiles().retainedFiles > 0).toBe(
+          expect('providerFileLifecycle' in route.preflight).toBe(false);
+          expect(route.preflight.captureProviderFiles().retainedFiles > 0).toBe(
             false,
           );
         } finally {
-          await preflight.dispose();
+          try {
+            await agent?.dispose();
+          } finally {
+            await route.close();
+          }
         }
       });
 

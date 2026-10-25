@@ -1,4 +1,3 @@
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,46 +7,26 @@ import { type IProvider } from '@vybestack/llxprt-code-providers';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { buildProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition/runtimePlugins/index.js';
+
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 
 import {
-  initializeTestAgent,
-  createTempDirectory,
-  cleanupTempDirectory,
-} from './test-utils.js';
+  openRouteBPreflight,
+  type RouteBPreflight,
+} from '../../../agents/src/api/__tests__/helpers/route-b-preflight.js';
 
-import {
-  type Agent,
-  type AgentProfilePreflight,
-  switchActiveProvider,
-} from '@vybestack/llxprt-code-agents';
+import { cleanupAfterFailure } from '../../../agents/src/core/subagent-cleanup.js';
 
-import { type RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/index.js';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 
-import { Config } from '@vybestack/llxprt-code-core';
+import { type ProviderSwitcher } from '@vybestack/llxprt-code-core';
 
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-
-import { prepareIntegrationPreflight } from './__tests__/prepare-preflight.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
 describe('explicit provider primitive owners', () => {
   const credentials = useOwnedCredentials();
   describe('provider behavior', () => {
-    const managerReleases: Array<() => void | Promise<void>> = [];
-
-    afterEach(async () => {
-      const failures: unknown[] = [];
-      for (const release of managerReleases.splice(0).reverse()) {
-        try {
-          await release();
-        } catch (error) {
-          failures.push(error);
-        }
-      }
-      if (failures.length > 0)
-        throw new AggregateError(failures, 'Provider owner cleanup failed');
-    });
-
     // ─────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────
@@ -104,53 +83,21 @@ describe('explicit provider primitive owners', () => {
      * provider command's use of runtime APIs.
      */
     describe('Provider switching reachable through CLI/runtime flow', () => {
-      let tempDir: string;
-      let config: Config;
-      let settingsOwner: SessionSettingsOwner;
-      let sessionRoot: Awaited<ReturnType<typeof initializeTestAgent>>;
-      let providerManager: RuntimeProviderManager;
-      let settingsService: SettingsService;
-      let preflight: AgentProfilePreflight;
-      let sessionClient: Pick<Agent['sessionClient'], 'refreshAuth'>;
+      let root: ProviderSwitchingRoot;
+      let preflight: RouteBPreflight['preflight'];
+      let switchProvider: ProviderSwitcher;
 
       beforeEach(async () => {
-        tempDir = await createTempDirectory();
-        config = new Config({
-          sessionId: 'p13-switch',
-          targetDir: tempDir,
-          debugMode: false,
-          cwd: tempDir,
-          model: 'test-model',
-        });
-        settingsService = new SettingsService();
-        preflight = await prepareIntegrationPreflight(
-          config,
-          settingsService,
-          credentials().authority,
-          'p13-switch-test',
-          (manager) => {
-            providerManager = manager;
-          },
-        );
-        settingsOwner = new SessionSettingsOwner(settingsService);
-        sessionRoot = await initializeTestAgent(
-          config,
-          providerManager,
-          settingsService,
-          settingsOwner,
-        );
-        sessionClient = sessionRoot.sessionClient;
-
-        // Register test providers
-        const providerA = createTestProvider('provider-a', 'model-a');
-        const providerB = createTestProvider('provider-b', 'model-b');
-        providerManager.registerProvider(providerA);
-        providerManager.registerProvider(providerB);
+        root = await openProviderSwitchingRoot(credentials().authority, [
+          createTestProvider('provider-a', 'model-a'),
+          createTestProvider('provider-b', 'model-b'),
+        ]);
+        preflight = root.route.preflight;
+        switchProvider = root.switchProvider;
       });
 
       afterEach(async () => {
-        await preflight.dispose();
-        await cleanupTempDirectory(tempDir);
+        await root.close();
       });
 
       /**
@@ -161,27 +108,14 @@ describe('explicit provider primitive owners', () => {
        * successfully changes the active provider.
        */
       it('switchActiveProvider changes active provider through CLI runtime path', async () => {
-        await providerManager.setActiveProvider('provider-a');
-        expect(sessionRoot.providerReads.getActiveProviderName()).toBe(
-          'provider-a',
-        );
+        const agent = await root.openAgent();
+        await preflight.setActiveProvider('provider-a');
+        expect(agent.providerReads.getActiveProviderName()).toBe('provider-a');
 
-        const result = await switchActiveProvider(
-          'provider-b',
-          {},
-          config,
-          settingsService,
-          providerManager,
-          null,
-          undefined,
-          () => sessionClient.refreshAuth(),
-          settingsOwner,
-        );
+        const result = await switchProvider('provider-b', {});
         expect(result.changed).toBe(true);
         expect(result.nextProvider).toBe('provider-b');
-        expect(sessionRoot.providerReads.getActiveProviderName()).toBe(
-          'provider-b',
-        );
+        expect(agent.providerReads.getActiveProviderName()).toBe('provider-b');
       });
 
       /**
@@ -191,8 +125,9 @@ describe('explicit provider primitive owners', () => {
        * listProviders through the CLI runtime accessor returns all
        * registered providers.
        */
-      it('listProviders returns registered providers through CLI runtime path', () => {
-        const providers = sessionRoot.providerReads.listProviders();
+      it('listProviders returns registered providers through CLI runtime path', async () => {
+        const agent = await root.openAgent();
+        const providers = agent.providerReads.listProviders();
         expect(providers).toContain('provider-a');
         expect(providers).toContain('provider-b');
       });
@@ -205,20 +140,11 @@ describe('explicit provider primitive owners', () => {
        * runtime path after switching.
        */
       it('providerStatus reflects current provider after switch', async () => {
-        await providerManager.setActiveProvider('provider-a');
+        const agent = await root.openAgent();
+        await preflight.setActiveProvider('provider-a');
 
-        await switchActiveProvider(
-          'provider-b',
-          {},
-          config,
-          settingsService,
-          providerManager,
-          null,
-          undefined,
-          () => sessionClient.refreshAuth(),
-          settingsOwner,
-        );
-        const status = sessionRoot.providerReads.providerStatus();
+        await switchProvider('provider-b', {});
+        const status = agent.providerReads.providerStatus();
         expect(status.providerName).toBe('provider-b');
       });
 
@@ -229,21 +155,105 @@ describe('explicit provider primitive owners', () => {
        * Switching to the same provider is idempotent through the CLI path.
        */
       it('switchActiveProvider is idempotent when switching to same provider', async () => {
-        await providerManager.setActiveProvider('provider-a');
+        await preflight.setActiveProvider('provider-a');
 
-        const result = await switchActiveProvider(
-          'provider-a',
-          {},
-          config,
-          settingsService,
-          providerManager,
-          null,
-          undefined,
-          () => sessionClient.refreshAuth(),
-          settingsOwner,
-        );
+        const result = await switchProvider('provider-a', {});
         expect(result.changed).toBe(false);
       });
     });
   });
 });
+
+/** Registers each provider the way a host registers one: as a contribution. */
+function contributeProviders(providers: readonly IProvider[]) {
+  return buildProviderContributionRegistry(
+    providers.map((provider) => {
+      const providerId = `${provider.name}-test-provider`;
+      return {
+        specifier: `memory:${providerId}`,
+        manifest: {
+          apiVersion: 1,
+          id: providerId,
+          providers: [
+            {
+              providerId,
+              createProvider: () => provider,
+              builtinAliases: [
+                {
+                  alias: provider.name,
+                  config: {
+                    baseProvider: providerId,
+                    'requires-auth': false,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      };
+    }),
+  );
+}
+
+interface ProviderSwitchingRoot {
+  readonly route: RouteBPreflight;
+  /** The production provider switch of the prepared preflight. */
+  readonly switchProvider: ProviderSwitcher;
+  /** Builds the foreground Agent with `provider-a` active. */
+  readonly openAgent: () => Promise<Agent>;
+  readonly close: () => Promise<void>;
+}
+
+async function openProviderSwitchingRoot(
+  authority: RouteBPreflight['authority'],
+  providers: readonly IProvider[],
+): Promise<ProviderSwitchingRoot> {
+  const route = await openRouteBPreflight({
+    authority,
+    runtimeId: 'p13-switch-test',
+    contributions: contributeProviders(providers),
+    config: {
+      sessionId: 'p13-switch',
+      provider: undefined,
+      model: 'test-model',
+    },
+  });
+  const settingsOwner = new SessionSettingsOwner(route.settings);
+  let agent: Agent | undefined;
+  const close = async (): Promise<void> => {
+    try {
+      await agent?.dispose();
+    } finally {
+      try {
+        await route.close();
+      } finally {
+        await settingsOwner.dispose();
+      }
+    }
+  };
+  try {
+    for (const [key, value] of Object.entries(
+      route.config.getInitialSettings(),
+    ))
+      route.settings.set(key, value);
+    settingsOwner.initializeProviderSelection(
+      route.config.getProvider(),
+      route.config.getModel(),
+    );
+    await route.prepare({ settingsOwner });
+    return {
+      route,
+      switchProvider: route.preflight.captureSwitchOperation(),
+      openAgent: async () => {
+        agent = await route.createAgent({
+          provider: 'provider-a',
+          model: 'model-a',
+        });
+        return agent;
+      },
+      close,
+    };
+  } catch (primary) {
+    return cleanupAfterFailure(primary, close);
+  }
+}

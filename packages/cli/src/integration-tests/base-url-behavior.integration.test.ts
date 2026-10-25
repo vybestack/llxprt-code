@@ -1,8 +1,3 @@
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import type {
-  Agent,
-  AgentProfilePreflight,
-} from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -23,18 +18,17 @@ import {
   ProfileManager,
 } from '@vybestack/llxprt-code-settings';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
+import { buildProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition/runtimePlugins/index.js';
+import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition/runtimePlugins/types.js';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { cleanupAfterFailure } from '../../../agents/src/core/subagent-cleanup.js';
 import {
-  Config,
-  type RuntimeProviderManager,
-} from '@vybestack/llxprt-code-core';
-import { prepareIntegrationPreflight } from './__tests__/prepare-preflight.js';
+  openRouteBPreflight,
+  type RouteBPreflight,
+} from '../../../agents/src/api/__tests__/helpers/route-b-preflight.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
-import {
-  createTempDirectory,
-  cleanupTempDirectory,
-  initializeTestAgent,
-} from './test-utils.js';
-import { switchActiveProvider } from '@vybestack/llxprt-code-agents';
 import { setProviderBaseUrl } from '../../../agents/src/api/providerConfigUtils.js';
 
 /**
@@ -46,61 +40,35 @@ import { setProviderBaseUrl } from '../../../agents/src/api/providerConfigUtils.
  */
 describe('Base URL Runtime Helper Integration', () => {
   const credentials = useOwnedCredentials();
-  let tempDir: string;
-  let config: Config;
+  let root: BaseUrlRoot;
   let settingsOwner: SessionSettingsOwner;
-  let sessionRoot: Awaited<ReturnType<typeof initializeTestAgent>>;
-  let providerManager: RuntimeProviderManager;
   let profileManager: ProfileManager;
   let settingsService: SettingsService;
-  let preflight: AgentProfilePreflight;
-  let sessionClient: Pick<Agent['sessionClient'], 'refreshAuth'>;
+  let preflight: RouteBPreflight['preflight'];
+  let switchProvider: ProviderSwitcher;
 
   beforeEach(async () => {
-    tempDir = await createTempDirectory();
-
-    config = new Config({
-      sessionId: 'test-session',
-      targetDir: tempDir,
-      debugMode: false,
-      model: 'test-model',
-      cwd: tempDir,
-    });
-    settingsService = new SettingsService();
-    const runtimeId = 'base-url-test-runtime';
-    preflight = await prepareIntegrationPreflight(
-      config,
-      settingsService,
-      credentials().authority,
-      runtimeId,
-      (manager) => {
-        providerManager = manager;
-      },
-    );
-    settingsOwner = new SessionSettingsOwner(settingsService);
-    sessionRoot = await initializeTestAgent(
-      config,
-      providerManager,
-      settingsService,
-      settingsOwner,
-    );
-    sessionClient = sessionRoot.sessionClient;
+    root = await openBaseUrlRoot(credentials().authority);
+    settingsOwner = root.settingsOwner;
+    settingsService = root.route.settings;
+    preflight = root.route.preflight;
+    switchProvider = root.switchProvider;
 
     // Explicit per-test directory: the no-argument constructor resolves the
     // ambient global config root, which is the developer's own on a machine
     // where the suite runs without storage isolation.
-    profileManager = new ProfileManager(path.join(tempDir, 'profiles'));
+    profileManager = new ProfileManager(
+      path.join(root.route.directory, 'profiles'),
+    );
   });
 
   afterEach(async () => {
-    await preflight.dispose();
-    await cleanupTempDirectory(tempDir);
+    await root.close();
   });
 
   it('applies custom base URL via runtime helper', async () => {
-    const provider = createMockProvider('openai');
-    providerManager.registerProvider(provider);
-    await providerManager.setActiveProvider('openai');
+    const agent = await root.openAgent();
+    await preflight.setActiveProvider('openai');
 
     const customUrl = 'https://custom.openai.api/v1';
     const result = await setProviderBaseUrl(
@@ -116,13 +84,12 @@ describe('Base URL Runtime Helper Integration', () => {
     expect(settingsService.getProviderSettings('openai')['base-url']).toBe(
       customUrl,
     );
-    expect(sessionRoot.getEphemeralSetting('base-url')).toBe(customUrl);
+    expect(agent.getEphemeralSetting('base-url')).toBe(customUrl);
   });
 
   it('clears base URL when helper receives empty or "none" values', async () => {
-    const provider = createMockProvider('openai');
-    providerManager.registerProvider(provider);
-    await providerManager.setActiveProvider('openai');
+    const agent = await root.openAgent();
+    await preflight.setActiveProvider('openai');
 
     await setProviderBaseUrl(
       'https://custom.openai.api/v1',
@@ -148,7 +115,7 @@ describe('Base URL Runtime Helper Integration', () => {
     expect(
       settingsService.getProviderSettings('openai')['base-url'],
     ).toBeUndefined();
-    expect(sessionRoot.getEphemeralSetting('base-url')).toBeUndefined();
+    expect(agent.getEphemeralSetting('base-url')).toBeUndefined();
 
     const emptyResult = await setProviderBaseUrl(
       '',
@@ -165,10 +132,7 @@ describe('Base URL Runtime Helper Integration', () => {
   });
 
   it('stores base URL even when provider lacks direct override hook', async () => {
-    const provider = createMockProvider('gemini');
-
-    providerManager.registerProvider(provider);
-    await providerManager.setActiveProvider('gemini');
+    await preflight.setActiveProvider('gemini');
 
     const result = await setProviderBaseUrl(
       'https://gemini.example/v1',
@@ -185,12 +149,7 @@ describe('Base URL Runtime Helper Integration', () => {
   });
 
   it('clears previous provider base URL when switching providers', async () => {
-    const providerA = createMockProvider('openai');
-    const providerB = createMockProvider('anthropic');
-    providerManager.registerProvider(providerA);
-    providerManager.registerProvider(providerB);
-
-    await providerManager.setActiveProvider('openai');
+    await preflight.setActiveProvider('openai');
     await setProviderBaseUrl(
       'https://provider-a.example',
       {
@@ -203,29 +162,17 @@ describe('Base URL Runtime Helper Integration', () => {
       'https://provider-a.example',
     );
 
-    await switchActiveProvider(
-      'anthropic',
-      {},
-      config,
-      settingsService,
-      providerManager,
-      null,
-      undefined,
-      () => sessionClient.refreshAuth(),
-      settingsOwner,
-    );
+    await switchProvider('switch-target', {});
     expect(
       settingsService.getProviderSettings('openai')['base-url'],
     ).toBeUndefined();
     expect(
-      settingsService.getProviderSettings('anthropic')['base-url'],
+      settingsService.getProviderSettings('switch-target')['base-url'],
     ).toBeUndefined();
   });
 
   it('preserves profile base URL when loading via ProfileManager', async () => {
-    const provider = createMockProvider('openai');
-    providerManager.registerProvider(provider);
-    await providerManager.setActiveProvider('openai');
+    await preflight.setActiveProvider('openai');
 
     const profile: Profile = {
       version: 1,
@@ -258,15 +205,73 @@ describe('Base URL Runtime Helper Integration', () => {
   });
 });
 
-function createMockProvider(
-  name: string,
-): IProvider & { baseUrl?: string; clearState?: () => void } {
-  const provider: IProvider & {
-    baseUrl?: string;
-    clearState?: () => void;
-  } = {
+interface BaseUrlRoot {
+  readonly route: RouteBPreflight;
+  readonly settingsOwner: SessionSettingsOwner;
+  /** The production provider switch of the prepared preflight. */
+  readonly switchProvider: ProviderSwitcher;
+  /** Builds the foreground Agent with `openai` active. */
+  readonly openAgent: () => Promise<Agent>;
+  readonly close: () => Promise<void>;
+}
+
+async function openBaseUrlRoot(
+  authority: RouteBPreflight['authority'],
+): Promise<BaseUrlRoot> {
+  const route = await openRouteBPreflight({
+    authority,
+    runtimeId: 'base-url-test-runtime',
+    contributions: contributeMockProviders(['gemini', 'switch-target']),
+    config: {
+      sessionId: 'test-session',
+      provider: undefined,
+      model: 'test-model',
+    },
+  });
+  const settingsOwner = new SessionSettingsOwner(route.settings);
+  let agent: Agent | undefined;
+  const close = async (): Promise<void> => {
+    try {
+      await agent?.dispose();
+    } finally {
+      try {
+        await route.close();
+      } finally {
+        await settingsOwner.dispose();
+      }
+    }
+  };
+  try {
+    for (const [key, value] of Object.entries(
+      route.config.getInitialSettings(),
+    ))
+      route.settings.set(key, value);
+    settingsOwner.initializeProviderSelection(
+      route.config.getProvider(),
+      route.config.getModel(),
+    );
+    await route.prepare({ settingsOwner });
+    return {
+      route,
+      settingsOwner,
+      switchProvider: route.preflight.captureSwitchOperation(),
+      openAgent: async () => {
+        agent = await route.createAgent({
+          provider: 'openai',
+          model: 'test-model',
+        });
+        return agent;
+      },
+      close,
+    };
+  } catch (primary) {
+    return cleanupAfterFailure(primary, close);
+  }
+}
+
+function createMockProvider(name: string): IProvider {
+  return {
     name,
-    baseUrl: undefined,
     async getModels() {
       return [
         {
@@ -287,10 +292,37 @@ function createMockProvider(
       return 'test-model';
     },
   };
+}
 
-  provider.clearState = () => {
-    provider.baseUrl = undefined;
-  };
-
-  return provider;
+/** Registers each mock the way a host registers a provider: as a contribution. */
+function contributeMockProviders(
+  names: readonly string[],
+): ProviderContributionRegistry {
+  return buildProviderContributionRegistry(
+    names.map((name) => {
+      const providerId = `${name}-mock-provider`;
+      return {
+        specifier: `memory:${providerId}`,
+        manifest: {
+          apiVersion: 1,
+          id: providerId,
+          providers: [
+            {
+              providerId,
+              createProvider: () => createMockProvider(name),
+              builtinAliases: [
+                {
+                  alias: name,
+                  config: {
+                    baseProvider: providerId,
+                    'requires-auth': false,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      };
+    }),
+  );
 }
