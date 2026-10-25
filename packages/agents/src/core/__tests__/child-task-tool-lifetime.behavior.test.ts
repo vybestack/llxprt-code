@@ -1,4 +1,4 @@
-import { fixtureAgentResources } from '../../api/__tests__/helpers/agent-resource-capture.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { SubAgentScope } from '../subagent.js';
 /**
  * @license
@@ -110,7 +110,11 @@ describe('child task tool lifetime', () => {
       let heldSignal: AbortSignal | undefined;
       let toolSettled = false;
       const effects: string[] = [];
-      const bus = fixtureAgentResources(fixture.agent).messageBus;
+      const policy = new RuntimePolicyOwner(
+        fixture.config,
+        fixture.workspaceTrust,
+      );
+      const bus = policy.session.messageBus;
       const registry = new ToolRegistry(
         new CoreToolRegistryHostAdapter(fixture.config),
         new CoreMessageBusAdapter(bus),
@@ -198,6 +202,7 @@ describe('child task tool lifetime', () => {
         await first.dispose();
         await sibling.dispose();
         clearScript();
+        await policy.dispose();
       }
       expect(credentials().keySnapshot()).toStrictEqual([1, 1]);
     });
@@ -206,6 +211,10 @@ describe('child task tool lifetime', () => {
     await withDisposalJoinFixture(async (fixture) => {
       const entered = gate();
       const prepared = gate();
+      const policy = new RuntimePolicyOwner(
+        fixture.config,
+        fixture.workspaceTrust,
+      );
       const orchestrator = createTestChildOrchestrator({
         credentialAuthority: credentials().authority,
         workspaceTrust: fixture.workspaceTrust,
@@ -217,7 +226,7 @@ describe('child task tool lifetime', () => {
         foregroundConfig: fixture.config,
         subagentManager: fixture.agent.workspace.subagentDefinitions,
         profileManager: fixture.agent.workspace.profileDefinitions,
-        messageBus: fixtureAgentResources(fixture.agent).messageBus,
+        messageBus: policy.session.messageBus,
         readMcpInstructions: fixture.readMcpInstructions,
         scopeFactory: (launch, runtime, operations) =>
           SubAgentScope.create(launch, runtime, {
@@ -256,6 +265,7 @@ describe('child task tool lifetime', () => {
         fixture.releaseWork();
         await settled;
         await child.dispose();
+        await policy.dispose();
       }
     });
   }, 30000);
