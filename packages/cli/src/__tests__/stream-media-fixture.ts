@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type Agent } from '@vybestack/llxprt-code-agents';
 import { createAgentRuntimeFactoryBindings } from '../../../agents/src/api/runtimeFactories.js';
-import { McpRuntimeOwner } from '../../../agents/src/api/mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from '../../../agents/src/api/__tests__/helpers/create-mcp-runtime.js';
 import {
   KeychainTokenStorage,
   MCPOAuthTokenStorage,
@@ -114,20 +114,18 @@ async function createInfrastructure(
     ),
   );
   manager.setActiveProvider('fake');
-  const mcp = await McpRuntimeOwner.create(
+  const mcp = await createTestMcpRuntime(
     {
-      tokenStorage: new MCPOAuthTokenStorage(
-        new KeychainTokenStorage('stream-media-fixture'),
-      ),
-      openBrowser: openBrowserSecurely,
+      oauth: {
+        tokenStorage: new MCPOAuthTokenStorage(
+          new KeychainTokenStorage('stream-media-fixture'),
+        ),
+        openBrowser: openBrowserSecurely,
+      },
+      config,
+      policy: { owner: policy, ownership: 'caller' },
     },
-    config,
-    policy.session.messageBus,
-    undefined,
-    undefined,
-    undefined,
-    policy,
-    'caller',
+    {},
   );
   retain(() => mcp.dispose());
   return { config, settings, settingsOwner, policy, credentials, manager, mcp };

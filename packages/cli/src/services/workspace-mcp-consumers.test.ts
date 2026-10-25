@@ -43,7 +43,7 @@ import { assembleProviderSwitch } from '../../../agents/src/api/providerSwitchAs
 import { assembleModelSelection } from '../../../agents/src/api/model-selection.js';
 import { AgentConfig } from '../../../agents/src/api/config-types.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { McpRuntimeOwner } from '../../../agents/src/api/mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from '../../../agents/src/api/__tests__/helpers/create-mcp-runtime.js';
 import { type Agent } from '@vybestack/llxprt-code-agents';
 import {
   startCatalogFixture,
@@ -431,7 +431,10 @@ describe('production CLI workspace MCP consumers', () => {
       mcpServers: { physical: { httpUrl: server.url, trust: true } },
       telemetry: { enabled: false },
     });
-    const root = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
+    const root = await createTestMcpRuntime(
+      { oauth: createTestOAuthBinding(), config },
+      {},
+    );
     try {
       await root.initialize();
       await waitFor(() =>

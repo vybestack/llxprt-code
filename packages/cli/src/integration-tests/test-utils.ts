@@ -23,7 +23,7 @@ import type {
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
-import { McpRuntimeOwner } from '../../../agents/src/api/mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from '../../../agents/src/api/__tests__/helpers/create-mcp-runtime.js';
 import { type Agent } from '@vybestack/llxprt-code-agents';
 import { afterEach } from 'bun:test';
 
@@ -116,15 +116,13 @@ export async function initializeTestAgent(
   );
   const policyOwner = new RuntimePolicyOwner(config);
   const sessionMessageBus = policyOwner.session.messageBus;
-  const mcpOwner = await McpRuntimeOwner.create(
-    createTestOAuthBinding(),
-    config,
-    sessionMessageBus,
-    undefined,
-    undefined,
-    undefined,
-    policyOwner,
-    'runtime',
+  const mcpOwner = await createTestMcpRuntime(
+    {
+      oauth: createTestOAuthBinding(),
+      config,
+      policy: { owner: policyOwner, ownership: 'runtime' },
+    },
+    {},
   );
   const agent = await fromConfig(
     config,

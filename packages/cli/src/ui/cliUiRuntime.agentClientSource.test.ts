@@ -12,7 +12,7 @@ import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
-import { McpRuntimeOwner } from '../../../agents/src/api/mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from '../../../agents/src/api/__tests__/helpers/create-mcp-runtime.js';
 import { toConfigParameters } from '../../../agents/src/api/agentConfig.adapter.js';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -94,29 +94,27 @@ describe('UI session client ownership', () => {
     const fixtureSettings = new SettingsService();
     const fixturePolicy = new RuntimePolicyOwner(fixtureConfig);
     const fixtureMessageBus = fixturePolicy.session.messageBus;
-    const fixtureMcp = await McpRuntimeOwner.create(
+    const fixtureMcp = await createTestMcpRuntime(
       {
-        openBrowser: async () => {
-          throw new Error('Unexpected browser request');
-        },
-        tokenStorage: new MCPOAuthTokenStorage({
-          getCredentials: async () => null,
-          setCredentials: async () => {
-            throw new Error('Unexpected token write');
+        oauth: {
+          openBrowser: async () => {
+            throw new Error('Unexpected browser request');
           },
-          deleteCredentials: async () => {},
-          listServers: async () => [],
-          getAllCredentials: async () => new Map(),
-          clearAll: async () => {},
-        }),
+          tokenStorage: new MCPOAuthTokenStorage({
+            getCredentials: async () => null,
+            setCredentials: async () => {
+              throw new Error('Unexpected token write');
+            },
+            deleteCredentials: async () => {},
+            listServers: async () => [],
+            getAllCredentials: async () => new Map(),
+            clearAll: async () => {},
+          }),
+        },
+        config: fixtureConfig,
+        policy: { owner: fixturePolicy, ownership: 'runtime' },
       },
-      fixtureConfig,
-      fixtureMessageBus,
-      undefined,
-      undefined,
-      undefined,
-      fixturePolicy,
-      'runtime',
+      {},
     );
 
     const fixtureRuntimeId = 'engine-' + randomUUID();
@@ -355,29 +353,27 @@ describe('UI session client ownership', () => {
     const fixtureSettings = new SettingsService();
     const fixturePolicy = new RuntimePolicyOwner(fixtureConfig);
     const fixtureMessageBus = fixturePolicy.session.messageBus;
-    const fixtureMcp = await McpRuntimeOwner.create(
+    const fixtureMcp = await createTestMcpRuntime(
       {
-        openBrowser: async () => {
-          throw new Error('Unexpected browser request');
-        },
-        tokenStorage: new MCPOAuthTokenStorage({
-          getCredentials: async () => null,
-          setCredentials: async () => {
-            throw new Error('Unexpected token write');
+        oauth: {
+          openBrowser: async () => {
+            throw new Error('Unexpected browser request');
           },
-          deleteCredentials: async () => {},
-          listServers: async () => [],
-          getAllCredentials: async () => new Map(),
-          clearAll: async () => {},
-        }),
+          tokenStorage: new MCPOAuthTokenStorage({
+            getCredentials: async () => null,
+            setCredentials: async () => {
+              throw new Error('Unexpected token write');
+            },
+            deleteCredentials: async () => {},
+            listServers: async () => [],
+            getAllCredentials: async () => new Map(),
+            clearAll: async () => {},
+          }),
+        },
+        config: fixtureConfig,
+        policy: { owner: fixturePolicy, ownership: 'runtime' },
       },
-      fixtureConfig,
-      fixtureMessageBus,
-      undefined,
-      undefined,
-      undefined,
-      fixturePolicy,
-      'runtime',
+      {},
     );
 
     const fixtureRuntimeId = 'engine-' + randomUUID();
