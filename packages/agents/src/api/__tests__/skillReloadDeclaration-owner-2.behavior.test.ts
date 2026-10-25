@@ -1,19 +1,15 @@
-import { openSkillsCaller } from './helpers/skills-fixture-caller.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import {
   buildAgent,
   internalConfig,
   type Agent,
 } from './helpers/agentHarness.js';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
   activateSkillDeclaration,
   modelVisibleSkillNames,
@@ -87,7 +83,6 @@ describe('skill reload reaches the model @issue:3379', () => {
     else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
     await rm(promptDirectory, { recursive: true, force: true });
   });
-  const callerCredentials = useOwnedCredentials();
   async function withWorkspace(
     initialSkills: string[],
     run: (ctx: {
@@ -95,7 +90,6 @@ describe('skill reload reaches the model @issue:3379', () => {
       config: Config;
       workspace: string;
     }) => Promise<void>,
-    operations?: WorkspaceSkillAssemblyOperations,
   ): Promise<void> {
     const workspace = mkdtempSync(join(tmpdir(), 'llxprt-skill-reload-'));
     for (const name of initialSkills) {
@@ -104,48 +98,12 @@ describe('skill reload reaches the model @issue:3379', () => {
     // The storage-isolation preload points LLXPRT_AGENTS_HOME at a temp root,
     // so discovery never reads the real ~/.agents/skills here; the strict set
     // assertions only ever see this workspace's skills.
-    let agent: Agent;
-    let cleanup: () => Promise<void>;
-    if (operations === undefined) {
-      const owned = await buildAgent('plain-text.jsonl', {
-        skillsSupport: true,
-        workingDir: workspace,
-      });
-      agent = owned.agent;
-      cleanup = owned.cleanup;
-    } else {
-      const {
-        config: callerCallerConfig,
-        settings: callerCallerSettings,
-        settingsOwner: callerCallerSettingsOwner,
-        manager: callerCallerManager,
-        mcp: callerCallerMcp,
-        close: callerCallerClose,
-        client: callerCallerClient,
-      } = await openSkillsCaller({
-        fixture: new URL('./fixtures/plain-text.jsonl', import.meta.url),
-        authority: callerCredentials().authority,
-        overrides: {
-          skillsSupport: true,
-          workingDir: workspace,
-        },
-        operations,
-      });
-
-      agent = await fromConfig(
-        callerCallerConfig,
-        callerCallerSettings,
-        {},
-        callerCallerSettingsOwner,
-        callerCallerManager,
-        undefined,
-        undefined,
-        callerCallerMcp,
-        undefined,
-        callerCallerClient,
-      );
-      cleanup = callerCallerClose;
-    }
+    const owned = await buildAgent('plain-text.jsonl', {
+      skillsSupport: true,
+      workingDir: workspace,
+    });
+    const agent = owned.agent;
+    const cleanup = owned.cleanup;
     try {
       const config = await settle(agent);
       await run({ agent, config, workspace });

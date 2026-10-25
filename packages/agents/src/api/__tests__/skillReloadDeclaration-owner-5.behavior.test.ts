@@ -1,15 +1,13 @@
-import { openSkillsCaller } from './helpers/skills-fixture-caller.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import { internalConfig, type Agent } from './helpers/agentHarness.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import { modelVisibleSkillNames } from './helpers/skills-fixture-declarations.js';
+import { openSkillsOwner } from './helpers/skills-owner-session.js';
+import { clientModelVisibleSkillNames } from './helpers/skills-fixture-declarations.js';
 
 /**
  * @license
@@ -47,18 +45,6 @@ function writeSkill(workspace: string, name: string): void {
   );
 }
 
-/**
- * Drives one turn so a live chat session exists with a tool list, which is the
- * state a reload has to update. The registrar is already installed by
- * `createAgent`; nothing here supplies it.
- */
-async function settle(agent: Agent): Promise<Config> {
-  for await (const _event of agent.stream('hello')) {
-    // Drain the turn so the chat session and its tool list exist.
-  }
-  return internalConfig(agent);
-}
-
 describe('workspace skill root lifetime @issue:2615', () => {
   let promptDirectory: string;
   const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
@@ -73,6 +59,7 @@ describe('workspace skill root lifetime @issue:2615', () => {
     await rm(promptDirectory, { recursive: true, force: true });
   });
 
+  useFakeResponsesReplay('plain-text.jsonl');
   const builtCredentials = useOwnedCredentials();
 
   it('publishes actual extension skills on load, restart and exact unload', async () => {
@@ -81,41 +68,17 @@ describe('workspace skill root lifetime @issue:2615', () => {
     );
     writeSkill(workspace, 'native');
 
-    const {
-      config: builtCallerConfig,
-      settings: builtCallerSettings,
-      settingsOwner: builtCallerSettingsOwner,
-      manager: builtCallerManager,
-      mcp: builtCallerMcp,
-      close: builtCallerClose,
-      client: builtCallerClient,
-    } = await openSkillsCaller({
-      fixture: new URL('./fixtures/plain-text.jsonl', import.meta.url),
+    const { mcp, client, skills, close } = await openSkillsOwner({
       authority: builtCredentials().authority,
       overrides: {
         skillsSupport: true,
         workingDir: workspace,
       },
-      operations: undefined,
       parameters: { enableExtensionReloading: true },
     });
 
-    let agent: Agent | undefined;
     try {
-      agent = await fromConfig(
-        builtCallerConfig,
-        builtCallerSettings,
-        {},
-        builtCallerSettingsOwner,
-        builtCallerManager,
-        undefined,
-        undefined,
-        builtCallerMcp,
-        undefined,
-        builtCallerClient,
-      );
-      await settle(agent);
-      const loader = builtCallerMcp.extensionOperations;
+      const loader = mcp.extensionOperations;
       const extension = {
         name: 'skill-pack',
         version: '1',
@@ -132,21 +95,20 @@ describe('workspace skill root lifetime @issue:2615', () => {
         ],
       };
       await loader.load(extension);
-      expect(modelVisibleSkillNames(agent).sort()).toStrictEqual([
+      expect(clientModelVisibleSkillNames(client).sort()).toStrictEqual([
         'extension-skill',
         'native',
       ]);
       await loader.restart(extension);
-      expect(modelVisibleSkillNames(agent).sort()).toStrictEqual([
+      expect(clientModelVisibleSkillNames(client).sort()).toStrictEqual([
         'extension-skill',
         'native',
       ]);
       await loader.unload(extension);
-      expect(modelVisibleSkillNames(agent)).toStrictEqual(['native']);
-      expect(agent.skills.get('extension-skill')).toBeUndefined();
+      expect(clientModelVisibleSkillNames(client)).toStrictEqual(['native']);
+      expect(skills.get('extension-skill')).toBeUndefined();
     } finally {
-      await agent?.dispose();
-      await builtCallerClose();
+      await close();
       rmSync(workspace, { recursive: true, force: true });
     }
   });

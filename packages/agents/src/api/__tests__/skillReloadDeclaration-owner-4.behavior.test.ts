@@ -1,19 +1,15 @@
-import { openSkillsCaller } from './helpers/skills-fixture-caller.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import {
   buildAgent,
   internalConfig,
   type Agent,
 } from './helpers/agentHarness.js';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { modelVisibleSkillNames } from './helpers/skills-fixture-declarations.js';
 
 /**
@@ -77,7 +73,6 @@ describe('workspace skill root lifetime @issue:2615', () => {
     else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
     await rm(promptDirectory, { recursive: true, force: true });
   });
-  const callerCredentials = useOwnedCredentials();
   async function withWorkspace(
     initialSkills: string[],
     run: (ctx: {
@@ -85,7 +80,6 @@ describe('workspace skill root lifetime @issue:2615', () => {
       config: Config;
       workspace: string;
     }) => Promise<void>,
-    operations?: WorkspaceSkillAssemblyOperations,
   ): Promise<void> {
     const workspace = mkdtempSync(join(tmpdir(), 'llxprt-skill-reload-'));
     for (const name of initialSkills) {
@@ -94,48 +88,12 @@ describe('workspace skill root lifetime @issue:2615', () => {
     // The storage-isolation preload points LLXPRT_AGENTS_HOME at a temp root,
     // so discovery never reads the real ~/.agents/skills here; the strict set
     // assertions only ever see this workspace's skills.
-    let agent: Agent;
-    let cleanup: () => Promise<void>;
-    if (operations === undefined) {
-      const owned = await buildAgent('plain-text.jsonl', {
-        skillsSupport: true,
-        workingDir: workspace,
-      });
-      agent = owned.agent;
-      cleanup = owned.cleanup;
-    } else {
-      const {
-        config: callerCallerConfig,
-        settings: callerCallerSettings,
-        settingsOwner: callerCallerSettingsOwner,
-        manager: callerCallerManager,
-        mcp: callerCallerMcp,
-        close: callerCallerClose,
-        client: callerCallerClient,
-      } = await openSkillsCaller({
-        fixture: new URL('./fixtures/plain-text.jsonl', import.meta.url),
-        authority: callerCredentials().authority,
-        overrides: {
-          skillsSupport: true,
-          workingDir: workspace,
-        },
-        operations,
-      });
-
-      agent = await fromConfig(
-        callerCallerConfig,
-        callerCallerSettings,
-        {},
-        callerCallerSettingsOwner,
-        callerCallerManager,
-        undefined,
-        undefined,
-        callerCallerMcp,
-        undefined,
-        callerCallerClient,
-      );
-      cleanup = callerCallerClose;
-    }
+    const owned = await buildAgent('plain-text.jsonl', {
+      skillsSupport: true,
+      workingDir: workspace,
+    });
+    const agent = owned.agent;
+    const cleanup = owned.cleanup;
     try {
       const config = await settle(agent);
       await run({ agent, config, workspace });
@@ -145,8 +103,6 @@ describe('workspace skill root lifetime @issue:2615', () => {
       rmSync(workspace, { recursive: true, force: true });
     }
   }
-
-  const builtCredentials = useOwnedCredentials();
 
   it('keeps same-project same-label workspace catalogues and policy independent', async () => {
     await withWorkspace(
@@ -179,60 +135,5 @@ describe('workspace skill root lifetime @issue:2615', () => {
         }
       },
     );
-  });
-
-  it('keeps caller Config identity and skills alive after borrowed facade disposal', async () => {
-    const workspace = mkdtempSync(join(tmpdir(), 'borrowed-workspace-skills-'));
-    writeSkill(workspace, 'alpha');
-
-    const {
-      config: builtCallerConfig,
-      settings: builtCallerSettings,
-      settingsOwner: builtCallerSettingsOwner,
-      manager: builtCallerManager,
-      mcp: builtCallerMcp,
-      close: builtCallerClose,
-      client: builtCallerClient,
-    } = await openSkillsCaller({
-      fixture: new URL('./fixtures/plain-text.jsonl', import.meta.url),
-      authority: builtCredentials().authority,
-      overrides: {
-        skillsSupport: true,
-        workingDir: workspace,
-      },
-      operations: undefined,
-    });
-
-    let agent: Agent | undefined;
-    try {
-      agent = await fromConfig(
-        builtCallerConfig,
-        builtCallerSettings,
-        {},
-        builtCallerSettingsOwner,
-        builtCallerManager,
-        undefined,
-        undefined,
-        builtCallerMcp,
-        undefined,
-        builtCallerClient,
-      );
-      expect(internalConfig(agent)).toBe(builtCallerConfig);
-      await settle(agent);
-      await agent.dispose();
-      writeSkill(workspace, 'beta');
-      await builtCallerMcp.workspaceSkills.operations.reload();
-      expect(
-        builtCallerMcp.workspaceSkills.operations
-          .list()
-          .map((skill) => skill.name)
-          .sort(),
-      ).toStrictEqual(['alpha', 'beta']);
-      expect('skillManager' in builtCallerConfig).toBe(false);
-    } finally {
-      await agent?.dispose();
-      await builtCallerClose();
-      rmSync(workspace, { recursive: true, force: true });
-    }
   });
 });

@@ -1,6 +1,6 @@
-import { openSkillsCaller } from './helpers/skills-fixture-caller.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -8,17 +8,11 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { registerActivateSkillTool } from '../../skill-tool-registrar.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import {
-  buildAgent,
-  internalConfig,
-  type Agent,
-} from './helpers/agentHarness.js';
+import type { SkillsControl } from '../control/skillsControl.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import {
-  modelVisibleSkillNames,
-  observedSkillClient,
-} from './helpers/skills-fixture-declarations.js';
+import { clientModelVisibleSkillNames } from './helpers/skills-fixture-declarations.js';
+import { openSkillsOwner } from './helpers/skills-owner-session.js';
 
 /**
  * @license
@@ -56,18 +50,6 @@ function writeSkill(workspace: string, name: string): void {
   );
 }
 
-/**
- * Drives one turn so a live chat session exists with a tool list, which is the
- * state a reload has to update. The registrar is already installed by
- * `createAgent`; nothing here supplies it.
- */
-async function settle(agent: Agent): Promise<Config> {
-  for await (const _event of agent.stream('hello')) {
-    // Drain the turn so the chat session and its tool list exist.
-  }
-  return internalConfig(agent);
-}
-
 describe('workspace skill publication compensation', () => {
   let promptDirectory: string;
   const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
@@ -81,11 +63,13 @@ describe('workspace skill publication compensation', () => {
     else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
     await rm(promptDirectory, { recursive: true, force: true });
   });
+  useFakeResponsesReplay('plain-text.jsonl');
   const callerCredentials = useOwnedCredentials();
   async function withWorkspace(
     initialSkills: string[],
     run: (ctx: {
-      agent: Agent;
+      client: AgentClientContract;
+      skills: SkillsControl;
       config: Config;
       workspace: string;
     }) => Promise<void>,
@@ -98,87 +82,47 @@ describe('workspace skill publication compensation', () => {
     // The storage-isolation preload points LLXPRT_AGENTS_HOME at a temp root,
     // so discovery never reads the real ~/.agents/skills here; the strict set
     // assertions only ever see this workspace's skills.
-    let agent: Agent;
-    let cleanup: () => Promise<void>;
-    if (operations === undefined) {
-      const owned = await buildAgent('plain-text.jsonl', {
+    const { client, skills, config, close } = await openSkillsOwner({
+      authority: callerCredentials().authority,
+      overrides: {
         skillsSupport: true,
         workingDir: workspace,
-      });
-      agent = owned.agent;
-      cleanup = owned.cleanup;
-    } else {
-      const {
-        config: callerCallerConfig,
-        settings: callerCallerSettings,
-        settingsOwner: callerCallerSettingsOwner,
-        manager: callerCallerManager,
-        mcp: callerCallerMcp,
-        close: callerCallerClose,
-        client: callerCallerClient,
-      } = await openSkillsCaller({
-        fixture: new URL('./fixtures/plain-text.jsonl', import.meta.url),
-        authority: callerCredentials().authority,
-        overrides: {
-          skillsSupport: true,
-          workingDir: workspace,
-        },
-        operations,
-      });
-
-      agent = await fromConfig(
-        callerCallerConfig,
-        callerCallerSettings,
-        {},
-        callerCallerSettingsOwner,
-        callerCallerManager,
-        undefined,
-        undefined,
-        callerCallerMcp,
-        undefined,
-        callerCallerClient,
-      );
-      cleanup = callerCallerClose;
-    }
+      },
+      operations,
+    });
     try {
-      const config = await settle(agent);
-      await run({ agent, config, workspace });
+      await run({ client, skills, config, workspace });
     } finally {
-      await agent.dispose();
-      await cleanup();
+      await close();
       rmSync(workspace, { recursive: true, force: true });
     }
   }
 
-  useOwnedCredentials();
-
   it('restores actual provider declarations and registration after publication mutates then rejects', async () => {
     await withWorkspace(
       ['alpha'],
-      async ({ agent, config, workspace }) => {
-        expect(modelVisibleSkillNames(agent)).toStrictEqual(['alpha']);
-        const publish = observedSkillClient(agent).setTools.bind(
-          observedSkillClient(agent),
-        );
+      async ({ client, skills, config, workspace }) => {
+        expect(clientModelVisibleSkillNames(client)).toStrictEqual(['alpha']);
+        const publish = client.setTools.bind(client);
         const fault = vi
-          .spyOn(observedSkillClient(agent), 'setTools')
+          .spyOn(client, 'setTools')
           .mockImplementationOnce(async () => {
             await publish();
-            expect(modelVisibleSkillNames(agent).sort()).toStrictEqual([
+            expect(clientModelVisibleSkillNames(client).sort()).toStrictEqual([
               'beta',
             ]);
             throw new Error('publication failed after mutation');
           });
         writeSkill(workspace, 'beta');
         try {
-          await expect(agent.skills.reload()).rejects.toThrow(
+          await expect(skills.reload()).rejects.toThrow(
             'publication failed after mutation',
           );
           expect(config.getDisabledSkills()).toStrictEqual([]);
-          expect(agent.skills.list().map((skill) => skill.name)).toStrictEqual([
+          expect(skills.list().map((skill) => skill.name)).toStrictEqual([
             'alpha',
           ]);
-          expect(modelVisibleSkillNames(agent)).toStrictEqual(['alpha']);
+          expect(clientModelVisibleSkillNames(client)).toStrictEqual(['alpha']);
         } finally {
           fault.mockRestore();
         }
@@ -191,15 +135,13 @@ describe('workspace skill publication compensation', () => {
   });
 
   it('reports the publication and compensation failures after restoring the real registration', async () => {
-    await withWorkspace(['alpha'], async ({ agent, workspace }) => {
-      expect(modelVisibleSkillNames(agent)).toStrictEqual(['alpha']);
-      const publish = observedSkillClient(agent).setTools.bind(
-        observedSkillClient(agent),
-      );
+    await withWorkspace(['alpha'], async ({ client, skills, workspace }) => {
+      expect(clientModelVisibleSkillNames(client)).toStrictEqual(['alpha']);
+      const publish = client.setTools.bind(client);
       const failed = new Error('candidate publication failed');
       const compensation = new Error('compensation publication failed');
       const fault = vi
-        .spyOn(observedSkillClient(agent), 'setTools')
+        .spyOn(client, 'setTools')
         .mockImplementationOnce(async () => {
           await publish();
           throw failed;
@@ -210,7 +152,7 @@ describe('workspace skill publication compensation', () => {
         });
       writeSkill(workspace, 'beta');
       try {
-        const error: unknown = await agent.skills
+        const error: unknown = await skills
           .reload()
           .catch((reason: unknown) => reason);
         if (!(error instanceof Error) || !('cause' in error))
@@ -221,7 +163,7 @@ describe('workspace skill publication compensation', () => {
         if (!(error.cause instanceof AggregateError))
           throw new Error('Expected aggregated publication errors');
         expect(error.cause.errors).toStrictEqual([failed, compensation]);
-        expect(modelVisibleSkillNames(agent)).toStrictEqual(['alpha']);
+        expect(clientModelVisibleSkillNames(client)).toStrictEqual(['alpha']);
       } finally {
         fault.mockRestore();
       }
