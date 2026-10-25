@@ -256,6 +256,13 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     );
   }
 
+  /**
+   * Session-scoped leases for the work this facade admits: standalone text
+   * generation and JSON/embedding calls on a possibly borrowed client. The
+   * session aborts and joins them without disposing the client, so unrelated
+   * work on a borrowed client is untouched. Leases only join; the caller
+   * receives each outcome, and the join does not report it again.
+   */
   private readonly auxiliary = new AuxiliaryWork();
 
   private textGeneration!: SessionTextGeneration;
@@ -283,23 +290,24 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
   ): Promise<Record<string, unknown>> {
     const client = this.getAgentClient();
     const input = [...contents];
-    return client.generateJson(
-      input,
-      { ...schema },
-      signal ?? new AbortController().signal,
-      model,
+    return this.auxiliary.run(
+      (acceptedSignal) =>
+        client.generateJson(input, { ...schema }, acceptedSignal, model),
+      signal,
     );
   }
 
   generateEmbedding(texts: readonly string[]): Promise<number[][]> {
     const client = this.getAgentClient();
-    return client.generateEmbedding([...texts]);
+    return this.auxiliary.run((signal) =>
+      client.generateEmbedding([...texts], signal),
+    );
   }
 
   readonly closeAuxiliaryAdmission = this.auxiliary.close.bind(this.auxiliary);
 
   async joinAuxiliaryShutdown(): Promise<void> {
-    // The facade joins before flushing; this owner reports the result in dispose.
+    // The facade joins before flushing; the lease join reports nothing.
     await Promise.allSettled([this.closeAuxiliaryAdmission()]);
   }
 

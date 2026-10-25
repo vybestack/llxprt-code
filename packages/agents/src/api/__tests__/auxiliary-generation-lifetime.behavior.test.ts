@@ -62,6 +62,9 @@ import { gate } from './helpers/recording-finalizer-join-fixture.js';
  * SPDX-License-Identifier: Apache-2.0
  */
 
+// What a held transport throws once it observes the session's cancellation.
+const OBSERVED_ABORT = 'Held transport observed session cancellation';
+
 function contents(): IContent[] {
   return [
     { speaker: 'human', blocks: [{ type: 'text', text: 'Generate a value' }] },
@@ -502,16 +505,16 @@ describe('auxiliary generation lifetime', () => {
       const generator =
         capturedSessionClient(builtCallerOwner).getContentGenerator();
       const failure = new Error('Held transport failed');
-      generator.generateContent = async () => {
+      let cancellation: AbortSignal | undefined;
+      const heldTransport = async (signal: AbortSignal | undefined) => {
+        cancellation = signal;
         entered.release();
         await release.promise;
-        throw failure;
+        throw signal?.aborted === true ? new Error(OBSERVED_ABORT) : failure;
       };
-      generator.embedContent = async () => {
-        entered.release();
-        await release.promise;
-        throw failure;
-      };
+      generator.generateContent = (request) =>
+        heldTransport(request.abortSignal);
+      generator.embedContent = (request) => heldTransport(request.abortSignal);
       const agent = await fromConfig(
         builtCallerConfig,
         builtCallerSettings,
@@ -549,9 +552,9 @@ describe('auxiliary generation lifetime', () => {
         await expect(agent.generateEmbedding(['late'])).rejects.toThrow(
           /closed|disposed/,
         );
-        await Promise.resolve();
-        await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 20));
         expect(finished).toBe(false);
+        expect(cancellation?.aborted).toBe(true);
         capturedSessionClient(
           peerCallerOwner,
         ).getContentGenerator().embedContent = async ({ texts }) => ({
@@ -565,7 +568,9 @@ describe('auxiliary generation lifetime', () => {
           ).length,
         ).toBe(1);
         release.release();
-        expect(await result).toBeInstanceOf(Error);
+        expect(await result).toMatchObject({
+          message: expect.stringContaining(OBSERVED_ABORT),
+        });
         expect(await outcome).toBeUndefined();
         generator.embedContent = async ({ texts }) => ({
           embeddings: texts.map((text) => [text.length]),
@@ -587,6 +592,66 @@ describe('auxiliary generation lifetime', () => {
       }
     });
   }
+
+  it('leaves unrelated work on a borrowed client running when the facade closes', async () => {
+    await openbuiltCaller('plain-text.jsonl');
+    await capturedSessionClient(builtCallerOwner).startChat();
+    const client = capturedSessionClient(builtCallerOwner);
+    const admitted = gate();
+    const unrelated = gate();
+    const release = gate();
+    const signals: Record<'admitted' | 'unrelated', AbortSignal | undefined> = {
+      admitted: undefined,
+      unrelated: undefined,
+    };
+    client.getContentGenerator().embedContent = async ({
+      texts,
+      abortSignal,
+    }) => {
+      const owner = texts[0] === 'unrelated' ? 'unrelated' : 'admitted';
+      signals[owner] = abortSignal;
+      (owner === 'unrelated' ? unrelated : admitted).release();
+      await release.promise;
+      if (abortSignal?.aborted === true) throw new Error(OBSERVED_ABORT);
+      return { embeddings: texts.map((text) => [text.length]) };
+    };
+    const agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      undefined,
+      builtCallerMcp,
+      undefined,
+      client,
+    );
+    const facadeCall = agent.generateEmbedding(['admitted']).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    const directCall = client.generateEmbedding(['unrelated']);
+    try {
+      await admitted.promise;
+      await unrelated.promise;
+      const closing = agent.dispose();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(signals.admitted?.aborted).toBe(true);
+      expect(signals.unrelated?.aborted).toBe(false);
+      release.release();
+      await closing;
+      expect(await facadeCall).toMatchObject({
+        message: expect.stringContaining(OBSERVED_ABORT),
+      });
+      expect(await directCall).toStrictEqual([[9]]);
+    } finally {
+      release.release();
+      await facadeCall;
+      await directCall.catch(() => undefined);
+      await builtCallerClose();
+    }
+  });
 
   it('joins raw client embedding work before removing owned listeners', async () => {
     await openbuiltCaller('plain-text.jsonl');
