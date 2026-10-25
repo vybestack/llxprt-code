@@ -1,4 +1,3 @@
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import { describe, expect, it } from 'bun:test';
 import { buildAgent } from './helpers/agentHarness.js';
 
@@ -14,9 +13,7 @@ describe('createAgent with declarative activation intent (#2374 finding 1)', () 
     try {
       expect(agent.getProvider()).toBe('fake');
       expect(agent.getModel()).toBe('fake-model');
-      expect(fixtureAgentResources(agent).manager.getActiveProviderName()).toBe(
-        'fake',
-      );
+      expect(agent.providerReads.getActiveProviderName()).toBe('fake');
     } finally {
       await cleanup();
     }
@@ -57,9 +54,7 @@ describe('createAgent with declarative activation intent (#2374 finding 1)', () 
       // must NOT report the stale parsed-provider 'openai'.
       expect(agent.getProvider()).toBe('fake');
       expect(agent.getModel()).toBe('fake-model');
-      expect(fixtureAgentResources(agent).manager.getActiveProviderName()).toBe(
-        'fake',
-      );
+      expect(agent.providerReads.getActiveProviderName()).toBe('fake');
     } finally {
       await cleanup();
     }
