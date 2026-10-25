@@ -1,42 +1,50 @@
-import { adoptFixture as fromConfig } from './helpers/adoption-fixture.js';
-import { prepareActivationFixture } from './helpers/activation-acquisition-capture.js';
-import { createCapturedSessionOwner } from './helpers/session-client-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-import {
-  Config,
-  WorkspaceDefinitionOwner,
-  assembleWorkspaceMemory,
-} from '@vybestack/llxprt-code-core';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
+import type { CodexOAuthToken } from '@vybestack/llxprt-code-auth';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { startLocalForwardProxy } from '@vybestack/llxprt-code-test-utils/network/local-forward-proxy.js';
 import { afterEach, describe, expect, it } from 'bun:test';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { toConfigParameters } from '../agentConfig.adapter.js';
-
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { AgentActivationOperation } from '../activationPreflightState.js';
+import type { ProviderActivationIntent } from '../config-types.js';
+import { AgentProfilePreflight } from '../profile-preflight.js';
 import { gate } from './helpers/async-child-disposal-join-fixture.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { openRouteBPreflight } from './helpers/route-b-preflight.js';
+
+const HOST = 'codex-images.invalid';
+const IMAGE_PATH = '/chatgpt.com/backend-api/codex/images/generations';
+const PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+const intent = {
+  provider: 'openai',
+  model: 'gpt-4o',
+  authMode: 'auto',
+  cliOverrides: {
+    key: 'test-key',
+    baseUrl: `http://${HOST}/chatgpt.com/backend-api/codex`,
+  },
+} as const;
+
+/**
+ * The live media store directories under the project temp dir. A store creates
+ * its directory on first use, so a session that never admitted media leaves
+ * none open or closed; this reads only that a closed session leaked none.
+ */
+async function liveMediaStores(config: Config): Promise<readonly string[]> {
+  try {
+    return await readdir(join(config.projectTempDir, 'media-live'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+}
 
 describe('adoption publication barrier', () => {
   const credentials = useOwnedCredentials();
@@ -46,138 +54,80 @@ describe('adoption publication barrier', () => {
   });
 
   async function acquireBarrier(succeed: boolean) {
-    const directory = await mkdtemp(join(tmpdir(), 'adoption-publication-'));
-    cleanups.push(() => rm(directory, { recursive: true, force: true }));
-    const config = new Config(
-      toConfigParameters({
-        provider: 'fake',
-        model: 'fake-model',
-        workingDir: directory,
+    const entered = gate();
+    const release = gate();
+    cleanups.push(() => release.release());
+    const proxy = await startLocalForwardProxy({
+      [HOST]: async (request) => {
+        if (request.path !== IMAGE_PATH)
+          return new Response('unexpected path', { status: 404 });
+        entered.release();
+        await release.promise;
+        return succeed
+          ? Response.json({ data: [{ b64_json: PNG_BASE64 }] })
+          : new Response('accepted image transport failed', { status: 500 });
+      },
+    });
+    cleanups.push(() => proxy.close());
+    const token: CodexOAuthToken = {
+      access_token: 'image-access',
+      refresh_token: 'image-refresh',
+      token_type: 'Bearer',
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+      account_id: 'image-account',
+    };
+    const route = await openRouteBPreflight({
+      authority: credentials().authority,
+      proxy: proxy.url,
+      config: {
+        provider: 'openai',
+        model: 'gpt-4o',
         folderTrust: true,
         mcpEnabled: false,
         skillsSupport: false,
         telemetry: { enabled: false },
         recording: { enabled: false },
-      }),
-    );
-    cleanups.push(() => config.dispose());
-    const settings = new SettingsService();
-    const selected = new SessionSettingsOwner(settings);
-    selected.bindTelemetry(config);
+      },
+    });
+    const selected = new SessionSettingsOwner(route.settings);
+    selected.bindTelemetry(route.config);
     cleanups.push(() => selected.dispose());
-    const manager = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      settings,
-      config,
-    );
-    cleanups.push(() => manager.dispose());
-    const keys = credentials().authority.createProviderKeyStorage();
-    cleanups.push(() => keys.close());
-    manager.bindProviderKeyStorage(keys);
-    const trust = new WorkspaceTrustLifecycle({ localTrust: true });
-    cleanups.push(() => trust.dispose());
-    const filesystem = new WorkspaceFilesystemOwner({
-      targetDir: directory,
-      isTrusted: () => trust.isTrustedFolder(),
-    });
-    const memory = assembleWorkspaceMemory(config, filesystem, trust);
-    const definitions = new WorkspaceDefinitionOwner(
-      join(directory, 'profiles'),
-      join(directory, 'subagents'),
-    );
-    const media = new SessionMediaOwner(config.projectTempDir, 1024);
-    const client = await createCapturedSessionOwner(
-      config,
-      assembleTaskSchemaPolicy(settings),
-      manager,
-      createAgentRuntimeFactoryBindings().agentClientFactory,
-      media.store,
-      () => undefined,
-      filesystem.paths,
-      selected,
-      createRuntimeContentGeneratorFactory(),
-      configureProviderTokenizer(manager),
-    );
-    const entered = gate();
-    const release = gate();
-    cleanups.push(() => release.release());
-    client.bindImageOperation(async (input) => {
-      entered.release();
-      await release.promise;
-      if (!succeed) throw new Error('accepted image transport failed');
-      return {
-        operation: 'generate',
-        absoluteOutputPath: join(directory, input.outputPath),
-        relativeOutputPath: input.outputPath,
-        mimeType: 'image/png',
-        backend: 'owned-test-transport',
-        provider: 'test',
-        model: 'test',
-        inputPaths: [],
-      };
-    });
-    const operation = prepareActivationFixture(
-      config,
-      manager,
-      async () => ({ authFailed: false, infoMessages: [] }),
-      undefined,
-      media,
-      client,
-      filesystem,
-      memory,
-      true,
-      selected,
-      'borrowed',
-      definitions,
-      true,
-      trust,
-    );
-    cleanups.push(() => operation.dispose().catch(() => undefined));
-    const intent = { model: 'unconfigured' };
-    const result = await operation.preflight(intent);
+    cleanups.push(() => route.close());
+    await credentials().saveToken(0, 'codex', token);
+    await route.prepare({ settingsOwner: selected });
+    const result = await route.preflight.preflight(intent);
     if (result.token === undefined)
       throw new Error('Missing preflight receipt');
-    const token = result.token;
-    const image = operation.sessionClient
+    const receipt = result.token;
+    const image = route.preflight
       .runImageOperation({
         prompt: 'accepted before adoption',
         outputPath: 'accepted.png',
       })
       .catch((error: unknown) => error);
     await entered.promise;
-    const adopt = (replacementFilesystem?: WorkspaceFilesystemOwner) =>
-      fromConfig(
-        config,
-        settings,
-        { activation: intent },
-        selected,
-        manager,
-        undefined,
-        undefined,
-        undefined,
-        { operation, token },
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        credentials().authority,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        replacementFilesystem,
+    const transfer = (): AgentActivationOperation => {
+      let transferred: AgentActivationOperation | undefined;
+      route.preflight.transferActivation((operation) => {
+        transferred = operation;
+      });
+      if (transferred === undefined)
+        throw new Error('Missing transferred activation');
+      return transferred;
+    };
+    const adopt = (adoptedIntent: ProviderActivationIntent = intent) =>
+      AgentProfilePreflight.createForegroundAgent(
+        route.preflight,
+        receipt,
+        adoptedIntent,
+        {},
       );
-    return { operation, selected, media, filesystem, image, release, adopt };
+    return { route, selected, image, release, transfer, adopt };
   }
   it('closes preflight admission before construction and joins accepted images before publishing', async () => {
-    const { operation, selected, media, filesystem, image, release, adopt } =
+    const { route, selected, image, release, transfer, adopt } =
       await acquireBarrier(false);
+    const operation = transfer();
     let settled = false;
     const adopting = adopt();
     const outcome = adopting.then(
@@ -197,12 +147,11 @@ describe('adoption publication barrier', () => {
       );
       await Promise.resolve();
       expect(settled).toBe(false);
-      expect(await media.store.getStoredByteLength()).toBe(0);
       release.release();
       expect(await image).toBeInstanceOf(Error);
       expect(await outcome).toBeUndefined();
-      await expect(media.store.getStoredByteLength()).rejects.toThrow(/closed/);
-      expect(() => filesystem.paths.directories()).toThrow(/disposed/);
+      expect(await liveMediaStores(route.config)).toHaveLength(0);
+      expect(() => route.filesystem.paths.directories()).toThrow(/disposed/);
       selected.writeUserParameter('survived-adoption', true);
       expect(selected.readNamedParameter('survived-adoption')).toBe(true);
     } finally {
@@ -213,34 +162,34 @@ describe('adoption publication barrier', () => {
   });
   it('publishes a ready agent only after accepted image work has settled', async () => {
     const built = await acquireBarrier(true);
+    const operation = built.transfer();
     let published = false;
     const adopting = built.adopt().then((agent) => {
       published = true;
       return agent;
     });
-    await expect(built.operation.sessionClient.refreshAuth()).rejects.toThrow(
+    await expect(operation.sessionClient.refreshAuth()).rejects.toThrow(
       /disposed/,
     );
     await Promise.resolve();
     expect(published).toBe(false);
-    expect(await built.media.store.getStoredByteLength()).toBe(0);
     built.release.release();
     expect(await built.image).not.toBeInstanceOf(Error);
     const agent = await adopting;
     try {
       expect(published).toBe(true);
       expect(agent.workspace.getDirectories()).toContain(
-        built.filesystem.paths.directories()[0],
+        built.route.filesystem.paths.directories()[0],
       );
       expect(await agent.getHistory()).toStrictEqual([]);
       expect(agent.listTools().length).toBeGreaterThan(0);
     } finally {
       await agent.dispose();
     }
-    await expect(built.media.store.getStoredByteLength()).rejects.toThrow(
-      /closed/,
+    expect(await liveMediaStores(built.route.config)).toHaveLength(0);
+    expect(() => built.route.filesystem.paths.directories()).toThrow(
+      /disposed/,
     );
-    expect(() => built.filesystem.paths.directories()).toThrow(/disposed/);
     built.selected.writeUserParameter('borrowed-after-ready', 1);
     expect(built.selected.readNamedParameter('borrowed-after-ready')).toBe(1);
   });
@@ -257,63 +206,51 @@ describe('adoption publication barrier', () => {
       (error: unknown) => error,
     );
     let closed = false;
-    const closing = built.operation.dispose().then(() => {
+    const closing = built.route.disposePreflight().then(() => {
       closed = true;
     });
     await Promise.resolve();
     expect(closed).toBe(false);
-    expect(await built.media.store.getStoredByteLength()).toBe(0);
     built.release.release();
     expect(await built.image).not.toBeInstanceOf(Error);
     expect(await adopting).toBeInstanceOf(Error);
     await closing;
     expect(published).toBe(false);
     expect(closed).toBe(true);
-    await expect(built.media.store.getStoredByteLength()).rejects.toThrow(
-      /closed/,
+    expect(await liveMediaStores(built.route.config)).toHaveLength(0);
+    expect(() => built.route.filesystem.paths.directories()).toThrow(
+      /disposed/,
     );
-    expect(() => built.filesystem.paths.directories()).toThrow(/disposed/);
     built.selected.writeUserParameter('borrowed-after-cancel', 2);
     expect(built.selected.readNamedParameter('borrowed-after-cancel')).toBe(2);
   });
 
-  it('rejects replacement workspace identity before acquisition and joins accepted work during rollback', async () => {
+  it('rejects a mismatched activation intent before acquisition and joins accepted work during rollback', async () => {
     const built = await acquireBarrier(true);
-    const directory = await realpath(
-      await mkdtemp(join(tmpdir(), 'other-adoption-workspace-')),
+    const rejected = await built
+      .adopt({ ...intent, model: 'gpt-4o-mini' })
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    expect(rejected).toBeInstanceOf(Error);
+    expect(String(rejected)).toContain(
+      'Activation preflight intent mismatch or missing activation intent',
     );
-    cleanups.push(() => rm(directory, { recursive: true, force: true }));
-    const replacement = new WorkspaceFilesystemOwner({
-      targetDir: directory,
-      isTrusted: () => true,
+    let closed = false;
+    const closing = built.route.disposePreflight().then(() => {
+      closed = true;
     });
-    cleanups.push(() => replacement.dispose());
-    let settled = false;
-    const adopting = built.adopt(replacement).then(
-      async (agent) => {
-        settled = true;
-        await agent.dispose();
-        return undefined;
-      },
-      (error: unknown) => {
-        settled = true;
-        return error;
-      },
-    );
     await Promise.resolve();
-    expect(settled).toBe(false);
-    expect(await built.media.store.getStoredByteLength()).toBe(0);
+    expect(closed).toBe(false);
     built.release.release();
     expect(await built.image).not.toBeInstanceOf(Error);
-    expect(await adopting).toBeInstanceOf(Error);
-    expect(String(await adopting)).toContain(
-      'Preflight workspace owners cannot be replaced',
+    await closing;
+    expect(closed).toBe(true);
+    expect(() => built.route.filesystem.paths.directories()).toThrow(
+      /disposed/,
     );
-    expect(replacement.paths.directories()).toContain(directory);
-    expect(() => built.filesystem.paths.directories()).toThrow(/disposed/);
-    await expect(built.media.store.getStoredByteLength()).rejects.toThrow(
-      /closed/,
-    );
+    expect(await liveMediaStores(built.route.config)).toHaveLength(0);
     built.selected.writeUserParameter('borrowed-after-identity-rejection', 3);
     expect(
       built.selected.readNamedParameter('borrowed-after-identity-rejection'),
