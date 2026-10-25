@@ -407,9 +407,10 @@ export class AgentClient
   }
 
   async addHistory(content: IContent) {
-    // Ensure chat is initialized before adding history
+    // Start the chat from the history restored before the first turn, the
+    // same way a turn does, so the added item appends to it.
     if (!this.hasChatInitialized()) {
-      await this.resetChat();
+      this.chat = await this.startChat(this._previousHistory ?? []);
     }
     await this.getChat().admitAndAddHistory(content);
   }
