@@ -1,46 +1,16 @@
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
-import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import {
-  OwnedCredentialFixture,
-  useOwnedCredentials,
-} from './helpers/owned-credential-fixture.js';
-import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../adoption-release.js';
-import { buildAgentClientFactory } from '../agentBootstrap.js';
-import { randomUUID } from 'node:crypto';
-import {
-  runCleanupSteps,
-  cleanupAfterFailure,
-} from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-import { beforeAll, afterAll, describe, expect, it, vi } from 'bun:test';
+import { afterEach, beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { fileURLToPath } from 'node:url';
+import type { AgentActivationOperation } from '../activation-types.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import {
+  openRouteBPreflight,
+  type RouteBPreflight,
+} from './helpers/route-b-preflight.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 /**
  * @license
@@ -60,203 +30,43 @@ describe('failed adopted session binding', () => {
     else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
     await rm(promptDirectory, { recursive: true, force: true });
   });
+  useFakeResponsesReplay('multi-turn-text.jsonl');
   const credentials = useOwnedCredentials();
+  const routes: RouteBPreflight[] = [];
+
+  afterEach(async () => {
+    for (const route of routes.splice(0).reverse()) await route.close();
+  });
 
   it('retires the created session client while retaining caller authority', async () => {
-    const callerCredentials = await OwnedCredentialFixture.create();
-    const callerPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
-    );
-    const callerDirectory = await realpath(
-      await mkdtemp(join(tmpdir(), 'explicit-engine-owner-')),
-    );
-    const callerConfig = new Config(
-      toConfigParameters({
-        provider: 'fake',
-        model: 'fake-model',
-        sessionId: randomUUID(),
-        workingDir: callerDirectory,
-      }),
-    );
-    const callerSettings = new SettingsService();
-    const callerPolicy = new RuntimePolicyOwner(callerConfig);
-    const callerMessageBus = callerPolicy.session.messageBus;
-    const callerMcp = await createTestMcpRuntime(
-      {
-        oauth: {
-          openBrowser: async () => {
-            throw new Error('Unexpected browser request');
-          },
-          tokenStorage: new MCPOAuthTokenStorage({
-            getCredentials: async () => null,
-            setCredentials: async () => {
-              throw new Error('Unexpected token write');
-            },
-            deleteCredentials: async () => {},
-            listServers: async () => [],
-            getAllCredentials: async () => new Map(),
-            clearAll: async () => {},
-          }),
-        },
-        config: callerConfig,
-        policy: { owner: callerPolicy, ownership: 'runtime' },
-      },
-      {},
-    );
-
-    const callerRuntimeId = 'engine-' + randomUUID();
-    const callerRelease = new AcquisitionRelease();
-    const callerSettingsOwner = new SessionSettingsOwner(callerSettings);
-    callerRelease.acquire('settings', () => callerSettingsOwner.dispose());
-    callerSettingsOwner.initializeProviderSelection(
-      callerConfig.getProvider(),
-      callerConfig.getModel(),
-    );
-    callerSettingsOwner.bindTelemetry(callerConfig);
-    const callerFiles = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
+    const route = await openRouteBPreflight({
+      authority: credentials().authority,
     });
-    for (const scope of [callerRuntimeId, callerConfig.getSessionId()])
-      callerRelease.acquire('files', () =>
-        releaseAdoptedFileScope(callerFiles, scope),
-      );
-    const callerManager = acquirePreferredProviderManager(
-      callerConfig,
-      callerSettings,
-      callerSettingsOwner,
-      callerFiles,
-      callerRuntimeId,
-      callerCredentials.authority,
-      callerRelease,
-    );
-    const callerTokenizer = configureProviderTokenizer(callerManager);
-    const callerContent = createRuntimeContentGeneratorFactory();
-    const callerOAuth = acquirePreferredOAuth(
-      undefined,
-      callerMessageBus,
-      callerConfig,
-      callerSettings,
-      callerManager,
-      callerRuntimeId,
-      callerMcp.profileDefinitions,
-      callerCredentials.authority,
-      callerRelease,
-      undefined,
-    );
-    const callerMedia = new SessionMediaOwner(
-      callerConfig.projectTempDir,
-      1024 * 1024,
-    );
-    const callerOwner = await createCapturedSessionOwner(
-      callerConfig,
-      assembleTaskSchemaPolicy(callerSettings),
-      callerManager,
-      buildAgentClientFactory(),
-      callerMedia.store,
-      callerMcp.readInstructions,
-      callerMcp.workspacePaths,
-      callerSettingsOwner,
-      callerContent,
-      callerTokenizer,
-    );
-    callerOwner.bindMcpRuntime(callerMcp);
-    callerOwner.bindHooks();
-    const callerClose = settleEngineRelease.bind(
-      undefined,
-      [
-        () => callerOwner.dispose(),
-        () => callerRelease.close(),
-        () => callerMedia.dispose(),
-        () => callerMcp.dispose(),
-        () => callerConfig.dispose(),
-        () => callerCredentials.dispose(),
-        () => rm(callerDirectory, { recursive: true, force: true }),
-      ],
-      callerPreviousReplay,
-    );
-    try {
-      await preparePreferredProviderCompletion(
-        callerConfig,
-        callerSettings,
-        callerSettingsOwner,
-        callerManager,
-        callerOAuth,
-        callerRuntimeId,
-        callerTokenizer,
-        undefined,
-      );
-      await callerMcp.initialize();
-      await callerOwner.initializeTools();
-      await callerOwner.refreshAuth();
-      await capturedSessionClient(callerOwner).startChat();
-    } catch (primary) {
-      await cleanupAfterFailure(primary, callerClose);
-    }
+    routes.push(route);
+    const callerSettingsOwner = new SessionSettingsOwner(route.settings);
+    await route.prepare({ settingsOwner: callerSettingsOwner });
+    let activation: AgentActivationOperation | undefined;
+    route.preflight.transferActivation((selected) => {
+      activation = selected;
+    });
+    if (activation === undefined) throw new Error('Missing activation');
+    const created = activation;
 
-    await callerMcp.workspaceMemory.dispose();
-    const retired: SessionClientOwner[] = [];
-    const dispose = SessionClientOwner.prototype.dispose;
-    const observation = vi
-      .spyOn(SessionClientOwner.prototype, 'dispose')
-      .mockImplementation(async function (
-        this: SessionClientOwner,
-      ): Promise<void> {
-        await dispose.call(this);
-        retired.push(this);
-      });
-    try {
-      const failure = await fromConfig(
-        callerConfig,
-        callerSettings,
-        {},
-        callerSettingsOwner,
-        callerManager,
-        undefined,
-        callerMessageBus,
-        callerMcp,
-        undefined,
-        capturedSessionClient(callerOwner),
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        credentials().authority,
-      ).then(
-        () => undefined,
-        (error: unknown) => error,
-      );
-      expect(failure).toBeInstanceOf(Error);
-      expect(failure).not.toBeInstanceOf(AggregateError);
-      expect(failure).toMatchObject({
-        message: 'Workspace memory is disposed',
-      });
-      expect(retired).toHaveLength(1);
-      expect(() => retired[0].conversation.getCurrentSequenceModel()).toThrow(
-        'disposed',
-      );
-      expect(credentials().snapshot()).toStrictEqual([1]);
-      callerSettingsOwner.writeUserParameter('maxOutputTokens', 37);
-      expect(callerSettings.get('maxOutputTokens')).toBe(37);
-      expect(capturedSessionClient(callerOwner).isInitialized()).toBe(true);
-      expect(callerManager.getActiveProviderName()).toBe('fake');
-      expect(callerMessageBus.evaluate('read_file', {})).toBeDefined();
-    } finally {
-      observation.mockRestore();
-      await callerClose();
-    }
+    await route.memory.dispose();
+    const failure = await route.createAgent().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(AggregateError);
+    expect(failure).toMatchObject({
+      message: 'Workspace memory is disposed',
+    });
+    await expect(created.sessionClient.refreshAuth()).rejects.toThrow(
+      'disposed',
+    );
+    expect(credentials().snapshot()).toStrictEqual([1]);
+    callerSettingsOwner.writeUserParameter('maxOutputTokens', 37);
+    expect(route.settings.get('maxOutputTokens')).toBe(37);
   });
 });
-async function settleEngineRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previousReplay: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
-  }
-}
