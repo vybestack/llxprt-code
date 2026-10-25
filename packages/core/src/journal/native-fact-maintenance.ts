@@ -59,8 +59,8 @@ export async function maintainNativeFacts(
     );
     invalidated = !appended;
   }
-  const rebuilt = explicit && !appended;
-  if (rebuilt || (!explicit && registration.append === undefined)) {
+  const rebuilt = !appended;
+  if (rebuilt) {
     const previous = await writer.get(['version']);
     const generation = nativeFactVersion(
       (previous?.[0] ?? 0) + (previous?.[1] ?? 0) * 0x1_0000_0000 + 1,
