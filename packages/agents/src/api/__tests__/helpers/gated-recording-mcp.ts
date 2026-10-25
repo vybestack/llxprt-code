@@ -22,6 +22,7 @@ const effectLine = z.discriminatedUnion('event', [
     arguments: z.record(z.unknown()),
   }),
   z.object({ event: z.literal('finished') }),
+  z.object({ event: z.literal('discovery-entered') }),
 ]);
 
 export type RecordedMcpEffect = z.infer<typeof effectLine>;
@@ -35,6 +36,11 @@ export interface GatedRecordingMcpOptions {
   readonly gated?: boolean;
   /** The server's `trust` setting. Defaults to true (no confirmation). */
   readonly trust?: boolean;
+  /**
+   * When true, the server's `tools/list` response is held until
+   * `releaseDiscovery()`. Defaults to false (discovery answers at once).
+   */
+  readonly gateDiscovery?: boolean;
 }
 
 /**
@@ -55,6 +61,13 @@ export interface GatedRecordingMcp {
   readonly entered: (count?: number) => Promise<void>;
   /** Lets every held and later call return. */
   readonly release: () => Promise<void>;
+  /**
+   * Resolves once the server has received `count` held `tools/list` requests
+   * (default 1). Requires `gateDiscovery: true`.
+   */
+  readonly discoveryEntered: (count?: number) => Promise<void>;
+  /** Lets every held and later `tools/list` request answer. Requires `gateDiscovery: true`. */
+  readonly releaseDiscovery: () => Promise<void>;
   /** Removes the temporary directory. */
   readonly close: () => Promise<void>;
 }
@@ -85,12 +98,29 @@ export async function createGatedRecordingMcp(
   const directory = await mkdtemp(join(tmpdir(), 'gated-recording-mcp-'));
   const effectsFile = join(directory, 'effects.jsonl');
   const releaseFile = join(directory, 'release');
+  const discoveryReleaseFile = join(directory, 'discovery-release');
+  const gateDiscovery = options.gateDiscovery === true;
   await writeFile(effectsFile, '');
   const effects = async (): Promise<readonly RecordedMcpEffect[]> =>
     (await readFile(effectsFile, 'utf8'))
       .split('\n')
       .filter((line) => line !== '')
       .map((line) => effectLine.parse(JSON.parse(line)));
+  const waitForEffects = async (
+    event: RecordedMcpEffect['event'],
+    count: number,
+    what: string,
+  ): Promise<void> => {
+    const deadline = Date.now() + ENTERED_TIMEOUT_MS;
+    while (
+      (await effects()).filter((effect) => effect.event === event).length <
+      count
+    ) {
+      if (Date.now() > deadline)
+        throw new Error(`${what} was not entered ${count} time(s)`);
+      await sleep(10);
+    }
+  };
   return {
     serverName,
     toolName: options.toolName,
@@ -102,6 +132,9 @@ export async function createGatedRecordingMcp(
           effectsFile,
           options.toolName,
           ...(options.gated === true ? [releaseFile] : []),
+          ...(gateDiscovery
+            ? [`--discovery-release=${discoveryReleaseFile}`]
+            : []),
         ],
         trust: options.trust ?? true,
       },
@@ -121,18 +154,18 @@ export async function createGatedRecordingMcp(
         throw new Error(`MCP tool ${options.toolName} was not discovered`);
       return handle;
     },
-    entered: async (count = 1) => {
-      const deadline = Date.now() + ENTERED_TIMEOUT_MS;
-      while (
-        (await effects()).filter((effect) => effect.event === 'entered')
-          .length < count
-      ) {
-        if (Date.now() > deadline)
-          throw new Error(`MCP tool was not entered ${count} time(s)`);
-        await sleep(10);
-      }
+    entered: (count = 1) => waitForEffects('entered', count, 'MCP tool'),
+    discoveryEntered: (count = 1) => {
+      if (!gateDiscovery)
+        throw new Error('discoveryEntered requires gateDiscovery: true');
+      return waitForEffects('discovery-entered', count, 'MCP discovery');
     },
     release: () => writeFile(releaseFile, ''),
+    releaseDiscovery: () => {
+      if (!gateDiscovery)
+        throw new Error('releaseDiscovery requires gateDiscovery: true');
+      return writeFile(discoveryReleaseFile, '');
+    },
     close: () => rm(directory, { recursive: true, force: true }),
   };
 }
