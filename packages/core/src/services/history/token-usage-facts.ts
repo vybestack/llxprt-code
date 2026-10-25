@@ -44,7 +44,7 @@ export interface StoredTokenUsageUnit {
 }
 const registrationIdentity = {
   kind: 'token-usage',
-  revision: '1',
+  revision: '2',
 } satisfies Pick<NeutralRowFactRegistration, 'kind' | 'revision'>;
 
 export function decodeTokenUsageFacts(
@@ -77,7 +77,7 @@ export async function tokenUsagePlanSignature(
     hash.update(
       stableStringify({
         ...ref,
-        at: { ...ref.at, label: ref.at.label.toString() },
+        at: { part: ref.at.part, block: ref.at.block },
         stamp: previousStamp,
       }),
     );

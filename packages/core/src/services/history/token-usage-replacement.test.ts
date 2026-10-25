@@ -58,6 +58,52 @@ async function replaceResponse(
 }
 
 describe('token usage after response replacement', () => {
+  it('reuses unchanged row counts when purge replacements allocate new labels', async () => {
+    let calls = 0;
+    const session = await JournalSession.createUnlinked({
+      eagerTokenUsageFacts: true,
+      tokenUsageCountTokens: (text) => {
+        calls++;
+        return text.length;
+      },
+    });
+    const rows: IContent[] = Array.from({ length: 40 }, (_, index) => ({
+      speaker: 'human',
+      metadata: {
+        chronology: { seq: index + 1, userTurn: 1, step: 0, recordedAt: 1 },
+      },
+      blocks: [
+        { type: 'text', text: `${index}:`.padEnd(65536, 'x') },
+        {
+          type: 'media',
+          encoding: 'base64',
+          mimeType: 'image/png',
+          data: 'YQ==',
+        },
+      ],
+    }));
+    try {
+      await session.append(rows);
+      expect(calls).toBe(40);
+      for (let index = 0; index < rows.length; index++) {
+        const changed = rows.map((row, at) => ({
+          ...row,
+          blocks: at <= index ? row.blocks.slice(0, 1) : row.blocks,
+        }));
+        await session.store.commit([
+          {
+            kind: 'replace',
+            rows: changed.map((row) => encodeContentRow(row, { owner: 0 })),
+          },
+        ]);
+        await verifyMeasurements(session);
+        expect(calls).toBe(41 + index);
+      }
+    } finally {
+      await session.close();
+    }
+  });
+
   for (const result of ['a longer replacement result', 'x']) {
     it(`refreshes a distant call after a purge changes its response to ${JSON.stringify(result)}`, async () => {
       const session = await JournalSession.createUnlinked({

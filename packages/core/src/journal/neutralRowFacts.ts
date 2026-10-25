@@ -1,8 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writeNeutralRowFact } from './neutral-row-fact-storage.js';
 import {
-  readNeutralRowFact,
-  writeNeutralRowFact,
-} from './neutral-row-fact-storage.js';
+  previousNeutralFacts,
+  reusableNeutralFact,
+} from './neutral-row-fact-reuse.js';
 import { filledVersion } from './filled-version.js';
 import { decodeDecimal, encodeDecimal } from './metaFacts.js';
 import type { BuildContext, BuiltGroup } from './groupBuildShared.js';
@@ -138,9 +139,15 @@ export async function fillNeutralRowFacts(
   const snapshot = snapshotOf(ctx, built, appender);
   try {
     const entries = entriesForFill(ctx, built, appender, source, since);
+    const prior = previousNeutralFacts(ctx);
     for await (const entry of entries) {
       const key = neutralRowFactKey(registration, entry.label);
-      const previous = await readNeutralRowFact(batch.queries, key);
+      const previous = await reusableNeutralFact(
+        batch.queries,
+        prior,
+        registration,
+        entry,
+      );
       const value = await registration.measure(snapshot, entry, previous);
       await writeNeutralRowFact(batch, key, value);
     }
