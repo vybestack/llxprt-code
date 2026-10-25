@@ -7,6 +7,7 @@ import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/h
 import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { normalizeToAnthropicToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+import { nativeAnthropicCallIds } from './anthropic-native-calls.js';
 import { projectAnthropicUnit } from './anthropic-unit-facts.js';
 import type { AnthropicRequestRepairIndex } from './anthropic-repair-index.js';
 import {
@@ -67,7 +68,8 @@ export type AnthropicRepairRows = Pick<
   IndexedJournalRequestSnapshot,
   'count' | 'normalizedCount' | 'normalizedPosition'
 > &
-  Pick<ProviderRequestRows, 'readAt'> & {
+  Pick<ProviderRequestRows, 'readAt'> &
+  Partial<Pick<IndexedJournalRequestSnapshot, 'planAt'>> & {
     readonly rawDump?: boolean;
     rawResultsAt?(at: number): Promise<RepairMessage | undefined>;
     rawChainAt?(
@@ -317,6 +319,11 @@ export class AnthropicRepairSource<
   private async *callsAt(
     at: number,
   ): AsyncGenerator<{ readonly id: string; readonly unit: number }> {
+    if (this.normalized && this.query.planAt !== undefined) {
+      for (const id of nativeAnthropicCallIds(await this.query.planAt(at)))
+        yield { id, unit: at };
+      return;
+    }
     const row = await this.row(at);
     if (row?.speaker !== 'ai') return;
     for (const block of row.blocks) {
