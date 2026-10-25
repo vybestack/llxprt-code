@@ -45,6 +45,13 @@ async function withConnectedAgent(
   }
 }
 
+const BARRIER_MS = 20;
+const SOCKET_CLOSE_WAIT_MS = 2000;
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 function recordSettlement(
   fixture: NoAuthMcpFixture,
   operation: Promise<unknown>,
@@ -61,55 +68,93 @@ function recordSettlement(
     });
 }
 
-function deleteIndexesAfter(
+async function socketsClosed(fixture: NoAuthMcpFixture): Promise<void> {
+  const deadline = Date.now() + SOCKET_CLOSE_WAIT_MS;
+  while (fixture.liveSockets() > 0 && Date.now() < deadline) await delay(5);
+}
+
+interface HeldDisposal {
+  readonly outcome: 'fulfilled' | 'rejected';
+  readonly events: readonly string[];
+}
+
+/**
+ * Starts `operation`, waits until the fixture holds `method`, disposes, waits
+ * across a timer barrier with the hold still armed, then releases it.
+ */
+async function disposeWhileHeld(
   fixture: NoAuthMcpFixture,
-  marker: string,
-): number[] {
-  const start = fixture.events.indexOf(marker);
-  return fixture.events
-    .map((event, index) => (event === 'delete' && index > start ? index : -1))
-    .filter((index) => index !== -1);
+  method: string,
+  start: () => Promise<unknown>,
+  dispose: () => Promise<void>,
+): Promise<HeldDisposal> {
+  fixture.hold(method);
+  const settlement = recordSettlement(fixture, start(), 'operation-settled');
+  await fixture.waitUntilHeld(method);
+  const first = fixture.events.length;
+  const disposing = dispose().then(() => fixture.events.push('disposed'));
+  await delay(BARRIER_MS);
+  fixture.release(method);
+  await disposing;
+  const outcome = await settlement;
+  await socketsClosed(fixture);
+  return {
+    outcome,
+    events: fixture.events.slice(first),
+  };
+}
+
+function expectOperationJoinedBeforeDisposal(
+  fixture: NoAuthMcpFixture,
+  result: HeldDisposal,
+): void {
+  const settled = result.events.indexOf('operation-settled');
+  const disposed = result.events.indexOf('disposed');
+  expect(settled).toBeGreaterThanOrEqual(0);
+  expect(disposed).toBeGreaterThan(settled);
+  expect(fixture.liveSockets()).toBe(0);
+  expect(fixture.liveSessions()).toBe(0);
 }
 
 describe('MCP runtime retirement with MCP operations in flight (characterization)', () => {
+  it('a plain agent.dispose terminates the MCP session and leaves no connection open', async () => {
+    await withConnectedAgent(async (agent, fixture) => {
+      expect(fixture.liveSessions()).toBe(1);
+      await agent.dispose();
+      await socketsClosed(fixture);
+      expect(fixture.events).toContain('delete:session-1');
+      expect(fixture.liveSessions()).toBe(0);
+      expect(fixture.liveSockets()).toBe(0);
+    });
+  });
+
   it.each(['initialize', 'resources/list'])(
-    'agent.mcp.refresh held on %s has settled before dispose fulfills, with no session closed ahead of it',
+    'agent.mcp.refresh held on %s settles before dispose fulfills and leaves no connection open',
     async (method) => {
       await withConnectedAgent(async (agent, fixture) => {
-        fixture.hold(method);
-        const refreshing = recordSettlement(
+        const result = await disposeWhileHeld(
           fixture,
-          agent.mcp.refresh('same'),
-          'refresh-settled',
+          method,
+          () => agent.mcp.refresh('same'),
+          () => agent.dispose(),
         );
-        await fixture.waitUntilHeld(method);
-        const disposing = agent.dispose();
-        fixture.release(method);
-        await disposing;
-        expect(fixture.events).toContain('refresh-settled');
-        await refreshing;
-        const settled = fixture.events.indexOf('refresh-settled');
-        for (const index of deleteIndexesAfter(fixture, `held:${method}`))
-          expect(index).toBeGreaterThan(settled);
+        expect(result.events).toContain(`abandoned:${method}`);
+        expectOperationJoinedBeforeDisposal(fixture, result);
       });
     },
   );
 
-  it('agent.mcp.readResource held on resources/read is cancelled and settled before dispose fulfills, and no session closes ahead of it', async () => {
+  it('agent.mcp.readResource held on resources/read is cancelled and settled before dispose fulfills and leaves no connection open', async () => {
     await withConnectedAgent(async (agent, fixture) => {
-      fixture.hold('resources/read');
-      const reading = recordSettlement(
+      const result = await disposeWhileHeld(
         fixture,
-        agent.mcp.readResource('same', 'test://same'),
-        'read-settled',
+        'resources/read',
+        () => agent.mcp.readResource('same', 'test://same'),
+        () => agent.dispose(),
       );
-      await fixture.waitUntilHeld('resources/read');
-      await agent.dispose();
-      expect(fixture.events).toContain('read-settled');
-      expect(await reading).toBe('rejected');
-      const settled = fixture.events.indexOf('read-settled');
-      for (const index of deleteIndexesAfter(fixture, 'held:resources/read'))
-        expect(index).toBeGreaterThan(settled);
+      expect(result.outcome).toBe('rejected');
+      expect(result.events).toContain('abandoned:resources/read');
+      expectOperationJoinedBeforeDisposal(fixture, result);
     });
   });
 });

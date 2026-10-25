@@ -212,7 +212,7 @@ export class McpRuntimeOwner implements AgentMcpOperations {
   private allowedServers: string[] | undefined;
   private readonly serverCommand: ReturnType<Config['getMcpServerCommand']>;
   private readonly debugMode: boolean;
-  private readonly reloadOperations = new Set<Promise<void>>();
+  private readonly reconfigurationOperations = new Set<Promise<void>>();
   readonly readServerSettings = (): WorkspaceMcpSettings => {
     if (this.stopped) throw new Error('MCP runtime is stopped');
     return projectWorkspaceMcpSettings(this.serverSettings, this.extensions);
@@ -608,8 +608,10 @@ export class McpRuntimeOwner implements AgentMcpOperations {
 
   async refresh(server?: string): Promise<void> {
     const manager = this.requireManager();
-    if (server === undefined) await manager.restart();
-    else await manager.restartServer(server);
+    await trackSessionPublication(
+      this.reconfigurationOperations,
+      server === undefined ? manager.restart() : manager.restartServer(server),
+    );
   }
 
   async awaitDiscovery(): Promise<ReadonlyMap<string, string>> {
@@ -653,17 +655,15 @@ export class McpRuntimeOwner implements AgentMcpOperations {
         new Error('MCP server reload is not available in this composition.'),
       );
     const binding = this.mcpSettings;
-    const operation = updateWorkspaceExtensionDefinitions(
-      this.definitionContributions,
-      () => this.reloadAcceptedServers(manager, binding),
-      () => this.extensions.slice(),
-      this.workspaceMemory,
+    return trackSessionPublication(
+      this.reconfigurationOperations,
+      updateWorkspaceExtensionDefinitions(
+        this.definitionContributions,
+        () => this.reloadAcceptedServers(manager, binding),
+        () => this.extensions.slice(),
+        this.workspaceMemory,
+      ),
     );
-    this.reloadOperations.add(operation);
-    void operation
-      .finally(() => this.reloadOperations.delete(operation))
-      .catch(() => undefined);
-    return operation;
   }
 
   private reloadAcceptedServers(
@@ -686,13 +686,11 @@ export class McpRuntimeOwner implements AgentMcpOperations {
 
   private publishSessionTools(): Promise<void> {
     if (this.stopped) return Promise.resolve();
-    return this.trackPublication(this.publishAcceptedSessionTools());
-  }
-
-  private publishAcceptedSessionTools(): Promise<void> {
-    return publishSessionTools(
-      () => this.sessionBindings,
-      () => this.isStopped(),
+    return this.trackPublication(
+      publishSessionTools(
+        () => this.sessionBindings,
+        () => this.isStopped(),
+      ),
     );
   }
 
@@ -728,11 +726,6 @@ export class McpRuntimeOwner implements AgentMcpOperations {
       manager?.cancelDiscovery(),
     );
     void this.discoveryClosing.catch(() => undefined);
-    this.managerClosing = Promise.resolve().then(async () => {
-      await Promise.allSettled([this.catalogs.dispose()]);
-      await manager?.stop();
-    });
-    void this.managerClosing.catch(() => undefined);
     this.catalogs.closeAdmission();
     this.workspaceSkills.closeAdmission();
     this.authority.closeAdmission();
@@ -767,10 +760,20 @@ export class McpRuntimeOwner implements AgentMcpOperations {
     return this.disposal;
   }
 
+  // Admission closure aborts accepted work; connections are physically retired
+  // only after refresh, reload and extension work has been joined.
+  private retireConnections(): void {
+    this.managerClosing = Promise.resolve().then(async () => {
+      await Promise.allSettled([this.catalogs.dispose()]);
+      await this.manager?.stop();
+    });
+    void this.managerClosing.catch(() => undefined);
+  }
+
   private async closePublicationResources(): Promise<
     Array<PromiseSettledResult<void>>
   > {
-    await Promise.allSettled([...this.reloadOperations]);
+    await Promise.allSettled([...this.reconfigurationOperations]);
     await this.workspaceExtensions.joinAccepted();
     await Promise.allSettled([
       this.initialization,
@@ -811,6 +814,7 @@ export class McpRuntimeOwner implements AgentMcpOperations {
   ): Promise<void> {
     const failures: unknown[] = [];
     const publicationClosures = await this.closePublicationResources();
+    this.retireConnections();
     failures.push(
       ...(await joinMcpRetirementOperations([
         initialization,
