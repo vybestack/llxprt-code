@@ -1,6 +1,6 @@
 import {
   createCapturedSessionOwner,
-  capturedSessionClient,
+  ownerClients,
 } from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
@@ -39,10 +39,7 @@ import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { fileURLToPath } from 'node:url';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import {
-  createAgentRuntimeFactoryBindings,
-  AgentRuntimeFactoryBindings,
-} from '../runtimeFactories.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
@@ -52,6 +49,7 @@ import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoad
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { transferHistoryToNewClient } from '@vybestack/llxprt-code-core/config/agentClientLifecycle.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createTestAgentClient } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import {
@@ -106,8 +104,6 @@ describe('explicit session authentication lifecycle', () => {
 
   let builtCallerClose: () => Promise<void>;
 
-  let builtCallerFactories: AgentRuntimeFactoryBindings;
-
   let builtCallerRelease: AcquisitionRelease;
 
   let builtCallerFiles: ProviderFileLifecycle;
@@ -122,10 +118,16 @@ describe('explicit session authentication lifecycle', () => {
     typeof createRuntimeContentGeneratorFactory
   >;
 
+  function sessionClient(): AgentClientContract {
+    const clients = ownerClients(builtCallerOwner);
+    if (clients.length === 0)
+      throw new Error('Session owner has built no client');
+    return clients[clients.length - 1];
+  }
+
   async function openbuiltCaller(
     fixture: string,
     overrides: Readonly<Partial<AgentConfig>> = {},
-    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
     skillSettings: Pick<
       ConfigParameters,
       'enableExtensionReloading' | 'storageRoot'
@@ -162,10 +164,6 @@ describe('explicit session authentication lifecycle', () => {
         process.cwd(),
       ];
     builtCallerConfig = new Config(parameters);
-    builtCallerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...suppliedFactories,
-    };
     builtCallerSettings = new SettingsService();
     for (const [key, value] of Object.entries(
       builtCallerConfig.getInitialSettings(),
@@ -190,7 +188,7 @@ describe('explicit session authentication lifecycle', () => {
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
-      builtCallerFactories.agentClientFactory,
+      buildAgentClientFactory(),
       media.store,
       builtCallerMcp.readInstructions,
       builtCallerMcp.workspacePaths,
@@ -308,7 +306,7 @@ describe('explicit session authentication lifecycle', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await capturedSessionClient(builtCallerOwner).startChat();
+    await sessionClient().startChat();
   }
 
   async function withSession(run: () => Promise<void>): Promise<void> {
@@ -333,15 +331,9 @@ describe('explicit session authentication lifecycle', () => {
   it('initializes a replacement without conversation history', async () => {
     await withSession(async () => {
       await builtCallerOwner.refreshAuth();
-      await capturedSessionClient(builtCallerOwner).startChat(
-        await capturedSessionClient(builtCallerOwner).getHistory(),
-      );
-      expect(capturedSessionClient(builtCallerOwner).isInitialized()).toBe(
-        true,
-      );
-      expect(
-        await capturedSessionClient(builtCallerOwner).getHistory(),
-      ).toStrictEqual([]);
+      await sessionClient().startChat(await sessionClient().getHistory());
+      expect(sessionClient().isInitialized()).toBe(true);
+      expect(await sessionClient().getHistory()).toStrictEqual([]);
     });
   });
 
@@ -434,19 +426,15 @@ describe('explicit session authentication lifecycle', () => {
         oauth.composeRetryOperations(provider),
       );
       await builtCallerOwner.refreshAuth();
-      await capturedSessionClient(builtCallerOwner).startChat(
-        await capturedSessionClient(builtCallerOwner).getHistory(),
-      );
-      expect(capturedSessionClient(builtCallerOwner).isInitialized()).toBe(
-        true,
-      );
+      await sessionClient().startChat(await sessionClient().getHistory());
+      expect(sessionClient().isInitialized()).toBe(true);
       expect(logins).toBe(0);
     });
   });
 
   it('preserves history and caller OAuth ownership after refresh', async () => {
     await withSession(async () => {
-      await capturedSessionClient(builtCallerOwner).setHistory(history);
+      await sessionClient().setHistory(history);
       const oauth = new OAuthManager(new MemoryTokenStore(), undefined, {
         config: builtCallerConfig,
       });
@@ -454,16 +442,12 @@ describe('explicit session authentication lifecycle', () => {
         oauth.composeRetryOperations(provider),
       );
       await builtCallerOwner.refreshAuth();
-      await capturedSessionClient(builtCallerOwner).startChat(
-        await capturedSessionClient(builtCallerOwner).getHistory(),
-      );
+      await sessionClient().startChat(await sessionClient().getHistory());
       expect(
-        (await capturedSessionClient(builtCallerOwner).getHistory()).map(
-          ({ speaker, blocks }) => ({
-            speaker,
-            blocks,
-          }),
-        ),
+        (await sessionClient().getHistory()).map(({ speaker, blocks }) => ({
+          speaker,
+          blocks,
+        })),
       ).toStrictEqual(history);
       expect(await oauth.getTokenStore().listProviders()).toStrictEqual([]);
     });
