@@ -198,12 +198,14 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
   }
 
   async assemble(): Promise<Agent> {
-    const authority =
-      this.rawConfig.credentialAuthority ??
-      new HostCredentialOwner(process.env).authority;
+    // Everything the caller transferred is owned from here on, so host
+    // credential acquisition sits inside the same rollback as the rest.
     const images = prepareImageConstruction(this.rawConfig.imageOperation);
     try {
       this.github = assembleHostGitHubBroker(this.rawConfig);
+      const authority =
+        this.rawConfig.credentialAuthority ??
+        new HostCredentialOwner(process.env).authority;
       const input = {
         ...this.rawConfig,
         credentialAuthority: authority,
@@ -214,13 +216,17 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
       await this.finish();
       return this.agent;
     } catch (primary) {
-      const results = await Promise.allSettled([
-        this.github?.cleanupFailedConstruction(),
-        images.cleanupFailedConstruction(),
-      ]);
-      const failures = results.flatMap((result) =>
-        result.status === 'rejected' ? [result.reason] : [],
-      );
+      const failures: unknown[] = [];
+      for (const cleanup of [
+        () => this.github?.cleanupFailedConstruction(),
+        () => images.cleanupFailedConstruction(),
+      ]) {
+        try {
+          await cleanup();
+        } catch (failure) {
+          failures.push(failure);
+        }
+      }
       if (failures.length > 0)
         throw new AggregateError(
           [primary, ...failures],

@@ -119,6 +119,130 @@ describe('preferred Agent acquisition release', () => {
     }
   });
 
+  const HOST_CREDENTIAL_ERROR =
+    'Capability transport requires LLXPRT_CREDENTIAL_SOCKET';
+
+  // A capability descriptor without its socket is a real host input that
+  // makes HostCredentialOwner throw; the environment is restored afterwards.
+  async function withUnusableHostCredentialEnvironment(
+    run: () => Promise<void>,
+  ): Promise<void> {
+    const previousFd = process.env.LLXPRT_CAPABILITY_FD;
+    const previousSocket = process.env.LLXPRT_CREDENTIAL_SOCKET;
+    process.env.LLXPRT_CAPABILITY_FD = 'invalid-host-descriptor';
+    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+    try {
+      await run();
+    } finally {
+      if (previousFd === undefined) delete process.env.LLXPRT_CAPABILITY_FD;
+      else process.env.LLXPRT_CAPABILITY_FD = previousFd;
+      if (previousSocket === undefined)
+        delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+      else process.env.LLXPRT_CREDENTIAL_SOCKET = previousSocket;
+    }
+  }
+
+  it('releases the transferred image resource when host credential acquisition rejects', async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), 'preferred-host-credential-'),
+    );
+    const file = join(directory, 'transferred-image-resource');
+    await writeFile(file, 'actual transferred construction resource');
+    let releases = 0;
+    try {
+      await withUnusableHostCredentialEnvironment(async () => {
+        await expect(
+          createAgent({
+            provider: 'openai',
+            model: 'unacquired-model',
+            workingDir: directory,
+            imageOperation: {
+              ownership: 'agent',
+              run: async () => {
+                throw new Error('Credential failure must not run images');
+              },
+              dispose: async () => {
+                releases++;
+                await unlink(file);
+              },
+            },
+          }),
+        ).rejects.toThrow(HOST_CREDENTIAL_ERROR);
+      });
+      await expect(access(file)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(releases).toBe(1);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('aggregates image cleanup failure behind the host credential acquisition error', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'preferred-host-cleanup-'));
+    const cleanupFailure = new Error('image cleanup failed');
+    let releases = 0;
+    try {
+      let rejection: unknown;
+      await withUnusableHostCredentialEnvironment(async () => {
+        rejection = await createAgent({
+          provider: 'openai',
+          model: 'unacquired-model',
+          workingDir: directory,
+          imageOperation: {
+            ownership: 'agent',
+            run: async () => {
+              throw new Error('Credential failure must not run images');
+            },
+            dispose: async () => {
+              releases++;
+              throw cleanupFailure;
+            },
+          },
+        }).then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+      });
+      expect(rejection).toBeInstanceOf(AggregateError);
+      if (!(rejection instanceof AggregateError))
+        throw new Error('Missing aggregated rejection');
+      expect(rejection.errors[0]).toBeInstanceOf(Error);
+      expect((rejection.errors[0] as Error).message).toBe(
+        HOST_CREDENTIAL_ERROR,
+      );
+      expect(rejection.errors.slice(1)).toStrictEqual([cleanupFailure]);
+      expect(releases).toBe(1);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('disposes the transferred GitHub broker transport when host credential acquisition rejects', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'preferred-host-github-'));
+    let disposals = 0;
+    try {
+      await withUnusableHostCredentialEnvironment(async () => {
+        await expect(
+          createAgent({
+            provider: 'openai',
+            model: 'unacquired-model',
+            workingDir: directory,
+            githubBrokerClient: {
+              runOperation: async () => {
+                throw new Error('Credential failure must not run GitHub');
+              },
+            },
+            disposeGitHubBroker: async () => {
+              disposals++;
+            },
+          }),
+        ).rejects.toThrow(HOST_CREDENTIAL_ERROR);
+      });
+      expect(disposals).toBe(1);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it('releases acquired key transport before rejecting token acquisition', async () => {
     const primary = new Error('token transport unavailable');
     const authority = new (class extends CredentialAuthority {
