@@ -8,7 +8,10 @@ import { act, Suspense, useEffect } from 'react';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
+import {
+  setImmediate as nextTurn,
+  setTimeout as delay,
+} from 'node:timers/promises';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { renderHook, waitFor } from '../../../../__tests__/render.js';
 import { drain } from '../../../../../../agents/src/api/__tests__/helpers/agentHarness.js';
@@ -29,6 +32,7 @@ import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import { streamPolicyOperations } from './stream-policy-operations.js';
 import { submissionOperations } from './submission-operations.js';
 import { agentStreamOperations } from './helpers/agentStreamOperations.js';
+import { observeNotices } from './helpers/notice-gates.js';
 import {
   createLoadedSettings,
   createMockOverrides,
@@ -163,22 +167,20 @@ const SHELL_COMMANDS: Record<string, string> = {
   'shell cancelled': 'sleep 30',
 };
 
-async function awaitTerminal(
-  agent: Agent,
-  kind: 'subagent' | 'shell',
+/** The hook publishes a held notice to React state after the owner hands it over. */
+function awaitQueued(
+  rendered: ReturnType<typeof renderNotificationQueue>,
 ): Promise<void> {
-  const job = agent.tasks.list().find((item) => item.kind === kind);
-  if (!job) throw new Error(`Missing launched public ${kind} job`);
-  await waitFor(
-    () => expect(agent.tasks.get(job.id)?.status).not.toBe('running'),
-    { timeout: 15000 },
+  return waitFor(() =>
+    expect(rendered.result.current.queuedSubmissions).toHaveLength(1),
   );
 }
 
 /**
  * Runs background work to a terminal state through the public tools: the
  * `task` tool with a scripted held child, or `run_shell_command` with
- * `is_background`. The returned handle closes the child's HTTP server.
+ * `is_background`. Completion is observed through the notice gates, not here.
+ * The returned handle closes the child's HTTP server.
  */
 async function finishBackgroundWork(
   agent: Agent,
@@ -187,7 +189,6 @@ async function finishBackgroundWork(
   if (outcome.startsWith('task')) {
     const task = await launchHeldNotificationTask(agent);
     task.release(outcome === 'task failed');
-    await awaitTerminal(agent, 'subagent');
     return task;
   }
   const shellTool = agent.tools.get('run_shell_command');
@@ -199,29 +200,25 @@ async function finishBackgroundWork(
   const job = agent.tasks.list().find((item) => item.kind === 'shell');
   if (!job) throw new Error('Missing launched public shell job');
   if (outcome === 'shell cancelled') await agent.tasks.cancel(job.id);
-  await awaitTerminal(agent, 'shell');
   return { close: async () => {} };
 }
 
-async function awaitHistoryContains(agent: Agent, text: string): Promise<void> {
-  await waitFor(
-    async () =>
-      expect(JSON.stringify(await agent.getHistory())).toContain(text),
-    { timeout: 5000 },
-  );
+async function expectHistoryContains(
+  agent: Agent,
+  text: string,
+): Promise<void> {
+  expect(JSON.stringify(await agent.getHistory())).toContain(text);
 }
 
 /**
  * Admission is rejected while any notice is pending, delivery is in flight or
- * shell groups are draining, so an admitted switch means all of that settled.
+ * shell groups are draining. The owner acknowledges a delivery on the turns
+ * that follow the hook's return, so one event-loop turn passes before the
+ * single switch.
  */
-async function awaitNewSessionAdmitted(agent: Agent): Promise<void> {
-  await waitFor(
-    async () => {
-      await agent.session.startNewSession();
-    },
-    { timeout: 5000 },
-  );
+async function admitNewSession(agent: Agent): Promise<void> {
+  await nextTurn();
+  await agent.session.startNewSession();
 }
 
 /**
@@ -261,6 +258,7 @@ describe('background notification queue ownership', () => {
       credentials().authority,
     );
     const cleanup = settleDisposal(dispose);
+    const notices = observeNotices(agent);
     const suspension = createDeferred<void>();
     const committed = { current: StreamingState.Idle };
     const state: Parameters<typeof renderNotificationQueue>[4] = {
@@ -289,10 +287,11 @@ describe('background notification queue ownership', () => {
       });
       expect(committed.current).toBe(StreamingState.Idle);
       work = await finishBackgroundWork(agent, 'task failed');
-      await awaitHistoryContains(agent, CHILD_FAILURE);
+      await notices.delivered(1);
+      await expectHistoryContains(agent, CHILD_FAILURE);
       expect(committed.current).toBe(StreamingState.Idle);
       expect(attempts).toBe(1);
-      await awaitNewSessionAdmitted(agent);
+      await admitNewSession(agent);
       expect(await agent.getHistory()).toStrictEqual([]);
     } finally {
       state.current = StreamingState.Idle;
@@ -310,6 +309,7 @@ describe('background notification queue ownership', () => {
         credentials().authority,
       );
       const cleanup = settleDisposal(dispose);
+      const notices = observeNotices(agent);
       const state = { current: StreamingState.Idle };
       const suppressed = { current: deferral === 'clear' };
       const entered = createDeferred<void>();
@@ -336,13 +336,12 @@ describe('background notification queue ownership', () => {
       let work: Awaited<ReturnType<typeof finishBackgroundWork>> | undefined;
       try {
         work = await finishBackgroundWork(agent, 'task failed');
-        await waitFor(() => {
-          const ready =
-            deferral === 'clear'
-              ? rendered.result.current.queuedSubmissions.length === 1
-              : attempts === 1;
-          expect(ready).toBe(true);
-        });
+        if (deferral === 'clear') {
+          await notices.arrived(1);
+          await awaitQueued(rendered);
+        } else {
+          await entered.promise;
+        }
         if (deferral === 'cancel while busy') {
           act(() => {
             state.current = StreamingState.Responding;
@@ -376,7 +375,8 @@ describe('background notification queue ownership', () => {
           state.current = StreamingState.Idle;
           rendered.rerender();
         });
-        await awaitHistoryContains(agent, CHILD_FAILURE);
+        await notices.delivered(2);
+        await expectHistoryContains(agent, CHILD_FAILURE);
         await delay(350);
         expect(attempts).toBe(deferral === 'clear' ? 1 : 2);
         expect(JSON.stringify(await agent.getHistory())).toContain(
@@ -467,9 +467,11 @@ describe('background notification queue ownership', () => {
       if (!runStream) throw new Error('Expected production stream runner');
       let attempts = 0;
       let runnerSettled = false;
+      const attemptStarted = createDeferred<void>();
       const release = createDeferred<void>();
       runner.current = async (query, signal, promptId) => {
         attempts++;
+        attemptStarted.resolve();
         await release.promise;
         try {
           return await runStream(query, signal, promptId);
@@ -480,7 +482,7 @@ describe('background notification queue ownership', () => {
       let work: Awaited<ReturnType<typeof finishBackgroundWork>> | undefined;
       try {
         work = await finishBackgroundWork(agent, 'task failed');
-        await waitFor(() => expect(attempts).toBe(1));
+        await attemptStarted.promise;
         act(() => {
           state.current = StreamingState.Responding;
           rendered.rerender();
@@ -523,6 +525,7 @@ describe('background notification queue ownership', () => {
         credentials().authority,
       );
       const cleanup = settleDisposal(dispose);
+      const notices = observeNotices(agent);
       const suppressed = { current: retirement !== 'stream failure' };
       let attempts = 0;
       const rendered = renderNotificationQueue(
@@ -540,13 +543,8 @@ describe('background notification queue ownership', () => {
       let work: Awaited<ReturnType<typeof finishBackgroundWork>> | undefined;
       try {
         work = await finishBackgroundWork(agent, 'task failed');
-        await waitFor(() => {
-          const ready =
-            retirement === 'stream failure'
-              ? attempts === 1
-              : rendered.result.current.queuedSubmissions.length === 1;
-          expect(ready).toBe(true);
-        });
+        await notices.arrived(1);
+        if (retirement !== 'stream failure') await awaitQueued(rendered);
         if (retirement === 'reserved unmount') {
           act(() => {
             suppressed.current = false;
@@ -575,7 +573,8 @@ describe('background notification queue ownership', () => {
             },
           },
         );
-        await awaitHistoryContains(agent, CHILD_FAILURE);
+        await notices.delivered(2);
+        await expectHistoryContains(agent, CHILD_FAILURE);
         await delay(350);
         expect(delivered).toBe(1);
         expect(JSON.stringify(await agent.getHistory())).toContain(
@@ -608,6 +607,7 @@ describe('background notification queue ownership', () => {
         credentials().authority,
       );
       const cleanup = settleDisposal(dispose);
+      const notices = observeNotices(agent);
       const submissions: React.MutableRefObject<QueuedSubmission[]> = {
         current: [],
       };
@@ -629,7 +629,12 @@ describe('background notification queue ownership', () => {
       );
       let work: Awaited<ReturnType<typeof finishBackgroundWork>> | undefined;
       try {
+        // Let the subscription's own startup evaluation pass, so the next one
+        // is the owner reacting to the completion.
+        await nextTurn();
+        const completionSeen = notices.evaluated();
         work = await finishBackgroundWork(agent, outcome);
+        await completionSeen;
         await delay(350);
         expect(delivered).toHaveLength(0);
         expect(rendered.result.current.queuedSubmissions).toHaveLength(0);
@@ -640,8 +645,9 @@ describe('background notification queue ownership', () => {
           state.current = StreamingState.Idle;
           rendered.rerender();
         });
-        await waitFor(() => expect(delivered).toHaveLength(1));
-        await awaitNewSessionAdmitted(agent);
+        await notices.delivered(1);
+        expect(delivered).toHaveLength(1);
+        await admitNewSession(agent);
         expect(delivered).toHaveLength(1);
         expect(await agent.getHistory()).toStrictEqual([]);
       } finally {
@@ -657,6 +663,7 @@ describe('background notification queue ownership', () => {
       credentials().authority,
     );
     const cleanup = settleDisposal(dispose);
+    const notices = observeNotices(agent);
     let task:
       | Awaited<ReturnType<typeof launchHeldNotificationTask>>
       | undefined;
@@ -694,9 +701,8 @@ describe('background notification queue ownership', () => {
     try {
       task = await launchHeldNotificationTask(agent);
       task.release();
-      await waitFor(() =>
-        expect(rendered.result.current.queuedSubmissions).toHaveLength(1),
-      );
+      await notices.arrived(1);
+      await awaitQueued(rendered);
       act(() => {
         suppressed.current = false;
         rendered.result.current.scheduleNextQueuedSubmission();
@@ -725,8 +731,9 @@ describe('background notification queue ownership', () => {
           },
         },
       );
-      await awaitHistoryContains(agent, 'OLD_SESSION_OUTPUT');
-      await awaitNewSessionAdmitted(agent);
+      await notices.delivered(2);
+      await expectHistoryContains(agent, 'OLD_SESSION_OUTPUT');
+      await admitNewSession(agent);
       expect(await agent.getHistory()).toStrictEqual([]);
       recovery.unmount();
     } finally {
@@ -743,6 +750,7 @@ describe('background notification queue ownership', () => {
       credentials().authority,
     );
     const cleanup = settleDisposal(dispose);
+    const notices = observeNotices(agent);
     let task:
       | Awaited<ReturnType<typeof launchHeldNotificationTask>>
       | undefined;
@@ -774,9 +782,8 @@ describe('background notification queue ownership', () => {
     try {
       task = await launchHeldNotificationTask(agent);
       task.release();
-      await waitFor(() =>
-        expect(rendered.result.current.queuedSubmissions).toHaveLength(1),
-      );
+      await notices.arrived(1);
+      await awaitQueued(rendered);
       const switchWithQueuedCompletion = agent.session.startNewSession();
       await expect(switchWithQueuedCompletion).rejects.toThrow(
         'completion notices',
@@ -792,7 +799,7 @@ describe('background notification queue ownership', () => {
       );
       release.resolve();
       await streamed.promise;
-      await awaitNewSessionAdmitted(agent);
+      await admitNewSession(agent);
       expect(await agent.getHistory()).toStrictEqual([]);
     } finally {
       release.resolve();
