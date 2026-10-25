@@ -3,10 +3,11 @@ import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
 import { openRouteBPreflight } from './helpers/route-b-preflight.js';
+import { openClientOwner } from './helpers/client-owner-session.js';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Config } from '@vybestack/llxprt-code-core';
@@ -81,6 +82,43 @@ async function withRouteBAgents(
       () => rm(root, { recursive: true, force: true }),
     ]);
   }
+}
+
+/**
+ * The session control owns the Config's session identity (the ownership mode
+ * `createAgent` and the foreground route both use). The client's history read
+ * has no Agent form and no public input makes it fail, so the subject is the
+ * SessionControl a SessionClientOwner builds over its real client, with a
+ * one-shot fault wrapped around that client's `getHistory` on the instance
+ * (the same form as session-restore-history-failure.behavior.test.ts).
+ */
+async function openControl(
+  authority: CredentialAuthority,
+  directory: string,
+  sessionId: string,
+) {
+  const opened = await openClientOwner(
+    authority,
+    {
+      provider: 'fake',
+      model: 'fake-model',
+      workingDir: directory,
+      sessionId,
+      interactive: true,
+      harness: { includeProcessCwd: false },
+    },
+    { provider: 'fake', model: 'fake-model' },
+  );
+  const session = opened.owner.createSessionControl(
+    'config',
+    () => sessionId,
+    (operation) => operation(),
+    () => {},
+    () => {},
+    () => 'fake',
+    () => 'fake-model',
+  );
+  return { opened, session };
 }
 
 describe('Agent recording identity transitions', () => {
@@ -266,6 +304,63 @@ describe('Agent recording identity transitions', () => {
       await runCleanupSteps(
         [...routes].reverse().map((route) => () => route.close()),
       );
+    }
+  }, 30000);
+
+  it('releases prepared recording and lock when reading prior history fails before adoption', async () => {
+    const directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'resume-history-read-failure-')),
+    );
+    const cleanups: Array<() => Promise<void>> = [];
+    try {
+      const source = await openControl(
+        credentials().authority,
+        directory,
+        'history-source',
+      );
+      cleanups.push(() => source.opened.close());
+      await source.opened.client.restoreHistory([
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'history-source-turn' }],
+        },
+      ]);
+      await source.session.setRecording({ enabled: true });
+      await source.session.setRecording({ enabled: false });
+      await source.session.dispose();
+      await source.opened.close();
+      cleanups.pop();
+
+      const { opened, session } = await openControl(
+        credentials().authority,
+        directory,
+        'history-owner',
+      );
+      cleanups.push(
+        () => session.dispose(),
+        () => opened.close(),
+      );
+      const { config, client } = opened;
+      const failure = new Error('prior history unavailable');
+      const fault = spyOn(client, 'getHistory').mockRejectedValueOnce(failure);
+      try {
+        await expect(session.resume('history-source')).rejects.toThrow(failure);
+      } finally {
+        fault.mockRestore();
+      }
+      expect(config.getSessionId()).toBe('history-owner');
+      expect(session.getRecording().enabled).toBe(false);
+      expect(await locks(config.projectChatsDir)).toStrictEqual([]);
+      const restored = await session.resume('history-source');
+      expect(JSON.stringify(restored)).toContain('history-source-turn');
+      expect(config.getSessionId()).toBe('history-source');
+      await session.setRecording({ enabled: false });
+      expect(await locks(config.projectChatsDir)).toStrictEqual([]);
+    } finally {
+      await runCleanupSteps([
+        ...cleanups.reverse(),
+        () => rm(directory, { recursive: true, force: true }),
+      ]);
     }
   }, 30000);
 });

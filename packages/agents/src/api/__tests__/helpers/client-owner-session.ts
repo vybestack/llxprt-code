@@ -60,6 +60,8 @@ export interface ClientOwnerOptions {
 
 export interface OpenedClientOwner {
   readonly owner: SessionClientOwner;
+  /** The Config the owner was built over; the test reads its session identity and storage paths. */
+  readonly config: Config;
   readonly client: AgentClientContract;
   readonly close: () => Promise<void>;
 }
@@ -235,7 +237,7 @@ export async function openClientOwner(
     ]);
   try {
     const client = await activateAndStart(stack, owner, activation);
-    return { owner, client, close };
+    return { owner, config, client, close };
   } catch (primary) {
     return cleanupAfterFailure(primary, close);
   }
