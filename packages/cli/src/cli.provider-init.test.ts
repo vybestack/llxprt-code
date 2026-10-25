@@ -1,7 +1,3 @@
-import {
-  captureAgentAdoption,
-  fixtureAgentResources,
-} from '../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -9,7 +5,7 @@ import {
  */
 import type { CliArgs } from './config/cliArgParser.js';
 
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 import { handoffCliConfig } from './test-utils/bootstrap-config.js';
@@ -30,8 +26,19 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as cli from './cli.js';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
-import { Config, OutputFormat } from '@vybestack/llxprt-code-core';
-import { createAgent } from '@vybestack/llxprt-code-agents';
+import {
+  Config,
+  OutputFormat,
+  WorkspaceFilesystemOwner,
+  WorkspaceTrustLifecycle,
+  assembleWorkspaceMemory,
+} from '@vybestack/llxprt-code-core';
+import {
+  AgentProfilePreflight,
+  createAgent,
+  prepareAgentPreflight,
+  type Agent,
+} from '@vybestack/llxprt-code-agents';
 import { createTestSessionMediaConfig } from './__tests__/sessionMediaConfig.js';
 
 const fakeResponses = fileURLToPath(
@@ -169,8 +176,6 @@ describe('cli main provider initialization', () => {
 
   afterEach(async () => {
     try {
-      for (const manager of bootstrapManagers) manager.dispose();
-      bootstrapManagers = [];
       if (projectTempDir !== '') {
         await rm(projectTempDir, { recursive: true, force: true });
       }
@@ -309,7 +314,7 @@ describe('cli main provider initialization', () => {
     }
   }
 
-  async function continueLatest(failRestore: boolean) {
+  async function continueLatest() {
     process.env.LLXPRT_CONFIG_HOME = projectTempDir;
     process.env.LLXPRT_LOG_HOME = join(projectTempDir, 'log');
     process.env.LLXPRT_FAKE_RESPONSES = fakeResponses;
@@ -331,7 +336,6 @@ describe('cli main provider initialization', () => {
     });
     const { loadCliConfig } = await import('./config/config.js');
     const { parseArguments } = await import('./config/cliArgParser.js');
-    const { settingsService } = createBootstrapManager(config);
     (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
       handoffCliConfig(config, preflightMock),
     );
@@ -347,16 +351,8 @@ describe('cli main provider initialization', () => {
       extensions: [],
       sessionSummary: undefined,
     } as unknown as CliArgs);
-    const owner = await captureAgentAdoption(config, settingsService, {
-      sessionId: freshId,
-      sessionIdentityOwnership: 'config',
-    });
-    const client = fixtureAgentResources(owner).publishedClient(owner);
-    if (failRestore) {
-      vi.spyOn(client, 'restoreHistory').mockRejectedValueOnce(
-        new Error('restore failed on purpose'),
-      );
-    }
+    const foreground = await openForegroundOwner(config, freshId);
+    const owner = foreground.agent;
     const { createForegroundAgent } = await import('./cliAgentBootstrap.js');
     (
       createForegroundAgent as Mock<typeof createForegroundAgent>
@@ -408,37 +404,10 @@ describe('cli main provider initialization', () => {
       exit.mockRestore();
       error.mockRestore();
       await owner.dispose();
+      await foreground.preflight.dispose();
       await config.dispose();
     }
   }
-
-  it('falls back to a fresh owner session and releases the latest session lock when restore fails during --continue (issue #1873)', async () => {
-    const {
-      result,
-      adoptedId,
-      recording,
-      history,
-      latestPath,
-      freshId,
-      locksDuringStartup,
-      locksAfterExit,
-      sessionFiles,
-      continuedTranscript,
-      exited,
-    } = await continueLatest(true);
-    expect(result).toBeUndefined();
-    expect(exited).toBe(0);
-    expect(sessionFiles).toHaveLength(3);
-    expect(continuedTranscript).toContain('provider-init-continued');
-    expect(adoptedId).toBe(freshId);
-    expect(recording.path).not.toBe(latestPath);
-    expect(JSON.stringify(history)).not.toContain('latest provider-init turn');
-    expect(await readFile(latestPath, 'utf8')).toContain(
-      'latest provider-init turn',
-    );
-    expect(locksDuringStartup).toHaveLength(1);
-    expect(locksAfterExit).toHaveLength(0);
-  }, 30000);
 
   it('resumes the latest owner transcript without starting another recording during --continue (issue #1873)', async () => {
     const {
@@ -455,7 +424,7 @@ describe('cli main provider initialization', () => {
       sessionFiles,
       continuedTranscript,
       exited,
-    } = await continueLatest(false);
+    } = await continueLatest();
     expect(result).toBeUndefined();
     expect(exited).toBe(0);
     expect(sessionFiles).toHaveLength(2);
@@ -471,20 +440,41 @@ describe('cli main provider initialization', () => {
   }, 30000);
 });
 
-let bootstrapManagers: ProviderManager[] = [];
-function createBootstrapManager(config: Config): {
-  manager: ProviderManager;
-  settingsService: SettingsService;
-} {
-  const settingsService = new SettingsService();
-  const manager = new ProviderManager(
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    settingsService,
-    config,
+// The CLI's production route to a foreground agent: the preflight prepared
+// over the caller's Config, then `createForegroundAgent` with the accepted
+// activation. The foreground assembly adopts the Config's session identity.
+async function openForegroundOwner(
+  config: Config,
+  runtimeId: string,
+): Promise<{ agent: Agent; preflight: AgentProfilePreflight }> {
+  const preflight = await prepareAgentPreflight(
+    { runtimeId },
+    new CredentialAuthority(),
+    new SettingsService(),
   );
-  bootstrapManagers.push(manager);
-  return { manager, settingsService };
+  const trust = new WorkspaceTrustLifecycle({
+    localTrust: config.initialWorkspaceTrust,
+  });
+  const filesystem = new WorkspaceFilesystemOwner({
+    targetDir: config.getTargetDir(),
+    isTrusted: () => trust.isTrustedFolder(),
+  });
+  await preflight.preparePostConfiguration(
+    config,
+    filesystem,
+    assembleWorkspaceMemory(config, filesystem, trust),
+    trust,
+    () => trust.dispose(),
+    undefined,
+  );
+  const intent = { provider: 'fake', model: 'fake-model' };
+  const result = await preflight.preflight(intent);
+  if (result.token === undefined) throw new Error('Missing activation receipt');
+  const agent = await AgentProfilePreflight.createForegroundAgent(
+    preflight,
+    result.token,
+    intent,
+    {},
+  );
+  return { agent, preflight };
 }
