@@ -1,4 +1,3 @@
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -12,12 +11,10 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-core';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers/providerFilePolicy.js';
 import { createAgent, type Agent } from '../index.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { startLocalConnectProxy } from './helpers/local-connect-proxy.js';
+import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
 
 class MemoryStore implements TokenStore {
   private readonly tokens = new Map<string, OAuthToken>();
@@ -93,7 +90,7 @@ describe('public Agent same-label Kimi files', () => {
     async ({ failDeletion, adoptConfig, proxied }) => {
       const proxy = proxied ? await startLocalConnectProxy() : undefined;
       const agents: Agent[] = [];
-      const configs: Config[] = [];
+      const routes: RouteAAgent[] = [];
       const deleted: string[] = [];
       const requests: string[] = [];
       let deletionFailed = false;
@@ -209,30 +206,15 @@ describe('public Agent same-label Kimi files', () => {
           agents.push(
             await (async (): Promise<Agent> => {
               if (adoptConfig) {
-                const config = new Config({
-                  sessionId: 'distinct-caller-config-scope',
-                  cwd: process.cwd(),
-                  targetDir: process.cwd(),
-                  debugMode: false,
-                  provider: 'kimi',
-                  model: 'kimi-k3',
-                  proxy: proxy?.url,
-                });
-                configs.push(config);
-                const settings = new SettingsService();
-                settings.set('provider-files', 'session');
-                settings.set('kimi.experimental-video', true);
-                const fileOptions = {
-                  maxFiles: 10,
-                  maxBytes: 1024 * 1024,
-                  proxy: proxy?.url,
-                };
-                const lifecycle = new ProviderFileLifecycle(fileOptions);
-                fileOptions.proxy = 'http://127.0.0.1:1';
-                return fromConfig(
-                  config,
-                  settings,
-                  {
+                const route = await openRouteAAgent({
+                  config: {
+                    sessionId: 'distinct-caller-config-scope',
+                    workingDir: process.cwd(),
+                    provider: 'kimi',
+                    model: 'kimi-k3',
+                    proxy: proxy?.url,
+                  },
+                  intent: {
                     sessionId: 'same-kimi-label',
                     activation: {
                       provider: 'kimi',
@@ -243,20 +225,12 @@ describe('public Agent same-label Kimi files', () => {
                       },
                     },
                   },
-                  undefined,
-                  undefined,
-                  undefined,
-                  undefined,
-                  undefined,
-                  undefined,
-                  undefined,
-                  lifecycle,
-                  undefined,
-                  undefined,
-                  undefined,
-                  undefined,
-                  credentials().authority,
-                );
+                  authority: credentials().authority,
+                });
+                routes.push(route);
+                route.settings.set('provider-files', 'session');
+                route.settings.set('kimi.experimental-video', true);
+                return route.agent;
               }
               const options = {
                 credentialAuthority: credentials().authority,
@@ -300,7 +274,9 @@ describe('public Agent same-label Kimi files', () => {
         expect(credentials().snapshot()).toStrictEqual(
           adoptConfig ? [1, 0] : [],
         );
-        expect(configs.map((config) => config.getSessionId())).toStrictEqual(
+        expect(
+          routes.map((route) => route.config.getSessionId()),
+        ).toStrictEqual(
           adoptConfig
             ? ['distinct-caller-config-scope', 'distinct-caller-config-scope']
             : [],
@@ -362,7 +338,7 @@ describe('public Agent same-label Kimi files', () => {
       } finally {
         releaseHeld();
         await Promise.allSettled(agents.map((agent) => agent.dispose()));
-        await Promise.allSettled(configs.map((config) => config.dispose()));
+        await Promise.allSettled(routes.map((route) => route.close()));
         await new Promise<void>((resolve, reject) => {
           server.close((error) => (error ? reject(error) : resolve()));
           server.closeAllConnections();

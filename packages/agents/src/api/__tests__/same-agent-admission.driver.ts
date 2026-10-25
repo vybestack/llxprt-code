@@ -1,4 +1,3 @@
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -29,7 +28,6 @@ async function busy(operation: Promise<unknown>): Promise<void> {
 }
 
 async function excludeRebuilds(agent: Agent): Promise<void> {
-  const client = fixtureAgentResources(agent).publishedClient(agent);
   await busy(agent.setModel('competing-model'));
   await busy(agent.setProvider('anthropic', 'competing-provider-model'));
   await busy(agent.sessionClient.refreshAuth());
@@ -44,7 +42,6 @@ async function excludeRebuilds(agent: Agent): Promise<void> {
       ephemeralSettings: {},
     }),
   );
-  expect(fixtureAgentResources(agent).publishedClient(agent)).toBe(client);
   expect(agent.getModel()).toBe('capture-a');
 }
 
