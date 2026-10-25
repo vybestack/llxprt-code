@@ -11,7 +11,7 @@ import {
   openClientToolOwner,
   type ClientToolOwner,
   type ClientToolOwnerOptions,
-} from '../../__tests__/client-tool-owner-mcp-fixture.js';
+} from '../../__tests__/client-tool-owner-agent-fixture.js';
 
 describe('Agent-owned CLI client tools', () => {
   const cleanupOwners: Array<() => Promise<void>> = [];

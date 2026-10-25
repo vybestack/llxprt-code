@@ -10,7 +10,7 @@ import {
   openClientToolOwner,
   type ClientToolOwner,
   type ClientToolOwnerOptions,
-} from '../../__tests__/client-tool-owner-mcp-fixture.js';
+} from '../../__tests__/client-tool-owner-agent-fixture.js';
 
 function gate() {
   let release = (): void => {

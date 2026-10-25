@@ -6,6 +6,7 @@
 
 import { act } from 'react';
 import { afterEach, describe, expect, it } from 'bun:test';
+import { PolicyDecision } from '@vybestack/llxprt-code-core';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import { cleanup } from '../../__tests__/render.js';
@@ -13,7 +14,7 @@ import {
   openClientToolOwner,
   type ClientToolOwner,
   type ClientToolOwnerOptions,
-} from '../../__tests__/client-tool-owner-mcp-fixture.js';
+} from '../../__tests__/client-tool-owner-agent-fixture.js';
 
 describe('Agent-owned CLI client tools', () => {
   const cleanupOwners: Array<() => Promise<void>> = [];
@@ -37,8 +38,8 @@ describe('Agent-owned CLI client tools', () => {
   }
 
   it('routes equal-call-id confirmations to their own bus', async () => {
-    const a = await owner('alpha', { trust: false });
-    const b = await owner('beta', { trust: false });
+    const a = await owner('alpha', { decision: PolicyDecision.ASK_USER });
+    const b = await owner('beta', { decision: PolicyDecision.ASK_USER });
     act(() => {
       void a.hook.result.current[1](
         a.request('same-id'),

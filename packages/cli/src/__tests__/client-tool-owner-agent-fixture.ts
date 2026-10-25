@@ -5,7 +5,7 @@
  */
 import { expect } from 'bun:test';
 import { fileURLToPath } from 'node:url';
-import { type Agent } from '@vybestack/llxprt-code-agents';
+import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 import {
   PolicyDecision,
   type CompletedToolCall,
@@ -13,7 +13,10 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { createGatedRecordingMcp } from '../../../agents/src/api/__tests__/helpers/gated-recording-mcp.js';
-import { openRouteAAgent } from '../../../agents/src/api/__tests__/helpers/route-a-agent.js';
+import {
+  openRouteAAgent,
+  type RouteAAgent,
+} from '../../../agents/src/api/__tests__/helpers/route-a-agent.js';
 import {
   cleanupAfterFailure,
   runCleanupSteps,
@@ -24,20 +27,40 @@ import { renderHook } from './render.js';
 const noop = (): void => {};
 
 const CLIENT_TOOL = 'external_record';
-const PLAIN_TEXT_REPLAY = fileURLToPath(
-  new URL(
-    '../../../agents/src/api/__tests__/fixtures/plain-text.jsonl',
-    import.meta.url,
+const REPLAYS = {
+  /** One plain-text model turn. */
+  'plain-text': fileURLToPath(
+    new URL(
+      '../../../agents/src/api/__tests__/fixtures/plain-text.jsonl',
+      import.meta.url,
+    ),
   ),
-);
+  /** A `model-call` tool call to the owner's tool, then `Finished`. */
+  'model-then-finished': fileURLToPath(
+    new URL(
+      './fixtures/client-tool-model-then-finished.jsonl',
+      import.meta.url,
+    ),
+  ),
+} as const;
 
 type SchedulerHook = ReturnType<
   typeof renderHook<ReturnType<typeof useReactToolScheduler>>
 >;
 
 export interface ClientToolOwnerOptions {
-  /** The policy decision for the owner's client tool. Defaults to ALLOW. */
+  /**
+   * The policy decision for the owner's client tool. Defaults to ALLOW;
+   * ASK_USER makes a call wait for an approval.
+   */
   readonly decision?: PolicyDecision;
+  /**
+   * The model's turns, through the fake-responses replay seam. Defaults to
+   * `plain-text`: the owner starts the chat with one setup turn so client
+   * channel completions are persisted. `model-then-finished` leaves the chat
+   * to the scenario, whose first turn calls the owner's tool and then ends.
+   */
+  readonly replay?: keyof typeof REPLAYS;
   /** When false the mounted scheduler hook is unmounted right away. */
   readonly awaitReady?: boolean;
 }
@@ -58,13 +81,20 @@ export interface ClientToolOwner {
   readonly release: () => Promise<void>;
   /** The owner's label once per tool call its MCP server received. */
   readonly effects: () => Promise<readonly string[]>;
+  /** The agent's name for the owner's tool (what a request must call). */
+  readonly toolName: string;
   /** A client-initiated request for the owner's tool. */
   readonly request: (callId: string) => ToolCallRequestInfo;
+  /**
+   * A second agent built through `fromConfig` on this owner's `Config`,
+   * settings and credential authority, closed with the owner.
+   */
+  readonly borrow: () => Promise<Agent>;
 }
 
-function enterReplay(): () => void {
+function enterReplay(replay: keyof typeof REPLAYS): () => void {
   const previous = process.env.LLXPRT_FAKE_RESPONSES;
-  process.env.LLXPRT_FAKE_RESPONSES = PLAIN_TEXT_REPLAY;
+  process.env.LLXPRT_FAKE_RESPONSES = REPLAYS[replay];
   return (): void => {
     if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
     else process.env.LLXPRT_FAKE_RESPONSES = previous;
@@ -95,6 +125,17 @@ function mountScheduler(
   );
 }
 
+function borrowRouteAAgent(
+  route: Pick<RouteAAgent, 'config' | 'settings' | 'authority'>,
+): Promise<Agent> {
+  return fromConfig(
+    route.config,
+    route.settings,
+    { activation: { provider: 'fake', model: 'fake-model' } },
+    route.authority,
+  );
+}
+
 export async function openClientToolOwner(
   name: string,
   options: ClientToolOwnerOptions = {},
@@ -103,7 +144,8 @@ export async function openClientToolOwner(
   readonly close: () => Promise<void>;
 }> {
   const decision = options.decision ?? PolicyDecision.ALLOW;
-  const restoreReplay = enterReplay();
+  const replay = options.replay ?? 'plain-text';
+  const restoreReplay = enterReplay(replay);
   const steps: Array<() => void | Promise<void>> = [];
   const close = (): Promise<void> =>
     runCleanupSteps(steps.splice(0).reverse()).finally(restoreReplay);
@@ -137,7 +179,7 @@ export async function openClientToolOwner(
       () => mcp.release(),
     );
     const agent = route.agent;
-    await agent.chat('Start the conversation');
+    if (replay === 'plain-text') await agent.chat('Start the conversation');
     const toolName = (await mcp.tool(agent)).name;
     const completed: CompletedToolCall[][] = [];
     const hook = mountScheduler(agent, completed);
@@ -154,6 +196,7 @@ export async function openClientToolOwner(
         (await mcp.effects())
           .filter((effect) => effect.event === 'entered')
           .map(() => name),
+      toolName,
       request: (callId) => ({
         callId,
         name: toolName,
@@ -161,6 +204,12 @@ export async function openClientToolOwner(
         isClientInitiated: true,
         prompt_id: callId,
       }),
+      borrow: async () => {
+        const borrowed = await borrowRouteAAgent(route);
+        steps.push(() => borrowed.dispose());
+        await mcp.tool(borrowed);
+        return borrowed;
+      },
     };
     return { owner, close };
   } catch (primary) {
