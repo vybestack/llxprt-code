@@ -1,6 +1,6 @@
 import {
   createCapturedSessionOwner,
-  capturedSessionClient,
+  ownerClients,
 } from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
@@ -39,10 +39,7 @@ import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { fileURLToPath } from 'node:url';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import {
-  createAgentRuntimeFactoryBindings,
-  AgentRuntimeFactoryBindings,
-} from '../runtimeFactories.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
@@ -51,6 +48,7 @@ import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
 async function settleEngineRelease(
   steps: ReadonlyArray<() => void | Promise<void>>,
@@ -98,8 +96,6 @@ describe('explicit session authentication lifecycle', () => {
 
   let builtCallerClose: () => Promise<void>;
 
-  let builtCallerFactories: AgentRuntimeFactoryBindings;
-
   let builtCallerRelease: AcquisitionRelease;
 
   let builtCallerFiles: ProviderFileLifecycle;
@@ -114,10 +110,16 @@ describe('explicit session authentication lifecycle', () => {
     typeof createRuntimeContentGeneratorFactory
   >;
 
+  function sessionClient(): AgentClientContract {
+    const clients = ownerClients(builtCallerOwner);
+    if (clients.length === 0)
+      throw new Error('Session owner has built no client');
+    return clients[clients.length - 1];
+  }
+
   async function openbuiltCaller(
     fixture: string,
     overrides: Readonly<Partial<AgentConfig>> = {},
-    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
     skillSettings: Pick<
       ConfigParameters,
       'enableExtensionReloading' | 'storageRoot'
@@ -154,10 +156,6 @@ describe('explicit session authentication lifecycle', () => {
         process.cwd(),
       ];
     builtCallerConfig = new Config(parameters);
-    builtCallerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...suppliedFactories,
-    };
     builtCallerSettings = new SettingsService();
     for (const [key, value] of Object.entries(
       builtCallerConfig.getInitialSettings(),
@@ -182,7 +180,7 @@ describe('explicit session authentication lifecycle', () => {
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
-      builtCallerFactories.agentClientFactory,
+      buildAgentClientFactory(),
       media.store,
       builtCallerMcp.readInstructions,
       builtCallerMcp.workspacePaths,
@@ -300,7 +298,7 @@ describe('explicit session authentication lifecycle', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await capturedSessionClient(builtCallerOwner).startChat();
+    await sessionClient().startChat();
   }
 
   async function withSession(run: () => Promise<void>): Promise<void> {
@@ -313,23 +311,19 @@ describe('explicit session authentication lifecycle', () => {
   }
   it('disposes the retired client without disposing the replacement', async () => {
     await withSession(async () => {
-      const previous = capturedSessionClient(builtCallerOwner);
+      const previous = sessionClient();
       const previousListeners = builtCallerSettingsOwner[
         'modelNotifications'
       ].listeners(CoreEvent.ModelChanged);
       await builtCallerOwner.refreshAuth();
-      expect(previous).not.toBe(capturedSessionClient(builtCallerOwner));
+      expect(previous).not.toBe(sessionClient());
       expect(
         builtCallerSettingsOwner['modelNotifications']
           .listeners(CoreEvent.ModelChanged)
           .filter((listener) => previousListeners.includes(listener)),
       ).toStrictEqual([]);
-      await capturedSessionClient(builtCallerOwner).startChat(
-        await capturedSessionClient(builtCallerOwner).getHistory(),
-      );
-      expect(capturedSessionClient(builtCallerOwner).isInitialized()).toBe(
-        true,
-      );
+      await sessionClient().startChat(await sessionClient().getHistory());
+      expect(sessionClient().isInitialized()).toBe(true);
     });
   });
 });
