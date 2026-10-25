@@ -5,7 +5,11 @@ import { SubAgentScope } from '../subagent.js';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -101,6 +105,18 @@ function modelResponse(text: string, call?: string): Response {
 }
 
 describe('child task tool lifetime', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'child-lifetime-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
   const credentials = useOwnedCredentials();
 
   it('joins a cancelled held tool before releasing child resources while its same-label sibling completes real tool work', async () => {

@@ -1395,6 +1395,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
   - [ ] T6.B158 B2 migration batch, 1 points, agents/src/api/__tests__: turn-revision-capture.fixture.ts (file list and dependencies in B2-batches.md)
   - [ ] T6.B159 B2 migration batch, 9 points, rule 6 (cross-directory by rule): session-client-child-owner.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
 - [ ] T6.Pk B2 production fixes found by migrated scenarios (added when needed)
+- [x] T6.P9 a child disposed during preparation never starts its model
 - [x] T6.P8 resuming after detached generation does not duplicate the seeded history
 - [x] T6.P7 activation owner retirement order is a named production unit
 - [x] T6.P5 setHistory then addHistory keeps the restored history on a fresh agent

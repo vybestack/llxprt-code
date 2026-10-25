@@ -347,6 +347,9 @@ export class SubAgentScope implements ChildAgentScope {
       this.tryBucketFailover,
       this.readCurrentBucket,
     );
+    // dispose() during the awaited preparation found no active controller to
+    // abort, so the closed admission is the only record that the owner left.
+    if (this.closed) throw new Error('Subagent scope is disposed');
     if (!chat) {
       this.output.terminate_reason = SubagentTerminateMode.ERROR;
       return null;
