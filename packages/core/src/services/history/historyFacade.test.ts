@@ -160,10 +160,11 @@ function useTempChatsDir(): {
 }
 
 const resources: Array<{ dispose(): Promise<void> }> = [];
-afterEach(async () => {
+
+async function disposeResources(): Promise<void> {
   for (const resource of resources.splice(0).reverse())
     await resource.dispose();
-});
+}
 
 function makeHistory(
   options?: ConstructorParameters<typeof HistoryService>[0],
@@ -222,6 +223,7 @@ async function seqOfPositionFromEnd(
 describe('HistoryService facade construction (P05b3)', () => {
   const chatsDir = useTempChatsDir();
   beforeEach(chatsDir.setup);
+  afterEach(disposeResources);
   afterEach(chatsDir.cleanup);
   it('accepts an injected journal store and exposes the facade surface', () => {
     const recorder = makeRecorder('injected');
@@ -269,6 +271,7 @@ describe('HistoryService facade construction (P05b3)', () => {
 describe('HistoryService facade read APIs (P05b3)', () => {
   const chatsDir = useTempChatsDir();
   beforeEach(chatsDir.setup);
+  afterEach(disposeResources);
   afterEach(chatsDir.cleanup);
   it('add → getAll round-trips with the current shape', async () => {
     const service = makeHistory({ recording: makeRecorder('reads') });
@@ -326,6 +329,7 @@ describe('HistoryService facade read APIs (P05b3)', () => {
 describe('HistoryService facade retention property (P05b3)', () => {
   const chatsDir = useTempChatsDir();
   beforeEach(chatsDir.setup);
+  afterEach(disposeResources);
   afterEach(chatsDir.cleanup);
   it('releases early-turn payloads after N adds with no compression', async () => {
     const service = makeHistory();
@@ -398,6 +402,7 @@ describe('HistoryService facade retention property (P05b3)', () => {
 describe('HistoryService facade mutation durability (P05b3)', () => {
   const chatsDir = useTempChatsDir();
   beforeEach(chatsDir.setup);
+  afterEach(disposeResources);
   afterEach(chatsDir.cleanup);
   it('lands add, pop, density, synthetic-insert, and clear in the journal', async () => {
     const recorder = makeRecorder('durable');
@@ -498,6 +503,7 @@ describe('HistoryService facade mutation durability (P05b3)', () => {
 describe('HistoryService facade context-range boundaries (P05b3)', () => {
   const chatsDir = useTempChatsDir();
   beforeEach(chatsDir.setup);
+  afterEach(disposeResources);
   afterEach(chatsDir.cleanup);
   it('reports the boundary of the curated history after adds', async () => {
     const service = makeHistory({
@@ -569,6 +575,7 @@ describe('HistoryService facade context-range boundaries (P05b3)', () => {
 describe('HistoryService facade context-range clear (P05b3)', () => {
   const chatsDir = useTempChatsDir();
   beforeEach(chatsDir.setup);
+  afterEach(disposeResources);
   afterEach(chatsDir.cleanup);
   it('emits on clear with a zero-entry range', async () => {
     const service = makeHistory({
