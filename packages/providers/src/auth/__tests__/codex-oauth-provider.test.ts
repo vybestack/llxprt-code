@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { CodexOAuthProvider } from '../codex-oauth-provider.js';
 import { CodexOAuthTokenSchema } from '@vybestack/llxprt-code-auth';
@@ -74,6 +75,7 @@ describe('CodexOAuthProvider', () => {
       lockDir: path.join(tempDir, 'locks'),
     });
     provider = new CodexOAuthProvider(globalThis.fetch, tokenStore);
+    provider.bindUIPort(new OAuthUIBridge());
   });
 
   afterEach(async () => {

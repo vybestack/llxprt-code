@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import {
   afterEach,
@@ -155,6 +156,7 @@ describe('CodexOAuthProvider external cancellation', () => {
     vi.spyOn(ClipboardService, 'copyToClipboard').mockResolvedValue(undefined);
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     provider = new CodexOAuthProvider(globalThis.fetch, makeTokenStore());
+    provider.bindUIPort(new OAuthUIBridge());
     deviceStarts = 0;
     installDeviceFlow(provider, () => {
       deviceStarts += 1;

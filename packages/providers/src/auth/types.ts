@@ -18,6 +18,7 @@ import type {
   OAuthTokenRequestMetadata,
   TokenStore,
   OAuthUICallback,
+  OAuthProviderUIPort,
 } from '@vybestack/llxprt-code-auth';
 
 export type {
@@ -118,6 +119,12 @@ export interface OAuthProvider {
    * into the manager's private provider registry.
    */
   setAddItem?(callback: OAuthUICallback): void;
+
+  /**
+   * Optional. The registering manager hands the provider the dialog state it
+   * owns, so a login only ever touches the dialog of the manager it runs in.
+   */
+  bindUIPort?(port: OAuthProviderUIPort): void;
 
   /**
    * Optional method to set the authentication context (e.g. the bucket name)

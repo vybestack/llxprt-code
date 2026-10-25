@@ -21,6 +21,11 @@ export type AgentSessionAuthentication = Pick<
   | 'cancelInteractiveAuth'
   | 'getInteractiveAuthSessions'
   | 'takeAuthOutcome'
+  | 'getCodeRequest'
+  | 'clearCodeRequest'
+  | 'getDialog'
+  | 'subscribeDialog'
+  | 'dismissDialog'
   | 'getAuthStatus'
   | 'toggleOAuthEnabled'
   | 'authenticate'
@@ -72,6 +77,11 @@ function interactiveHostControl(
   | 'cancelInteractiveAuth'
   | 'getInteractiveAuthSessions'
   | 'takeAuthOutcome'
+  | 'getCodeRequest'
+  | 'clearCodeRequest'
+  | 'getDialog'
+  | 'subscribeDialog'
+  | 'dismissDialog'
 > {
   const manager = (): OAuthManager => requireOAuthManager(oauth);
   return {
@@ -83,6 +93,11 @@ function interactiveHostControl(
     cancelInteractiveAuth: () => manager().cancelInteractiveAuth(),
     getInteractiveAuthSessions: () => manager().getInteractiveAuthSessions(),
     takeAuthOutcome: (): OAuthAuthOutcome => manager().takeAuthOutcome(),
+    getCodeRequest: () => manager().getCodeRequest(),
+    clearCodeRequest: () => manager().clearCodeRequest(),
+    getDialog: () => manager().getDialog(),
+    subscribeDialog: (listener) => manager().subscribeDialog(listener),
+    dismissDialog: (id) => manager().dismissDialog(id),
   };
 }
 

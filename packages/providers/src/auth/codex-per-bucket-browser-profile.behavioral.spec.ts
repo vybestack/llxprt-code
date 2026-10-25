@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 import {
   afterEach,
   beforeEach,
@@ -130,6 +131,7 @@ describe('Codex per-bucket browser profile selection', () => {
       },
     );
 
+    provider.bindUIPort(new OAuthUIBridge());
     provider.setAuthContext({ bucket: 'work' });
     const workAuth = provider.initiateAuth();
     provider.setAuthContext({ bucket: 'personal' });

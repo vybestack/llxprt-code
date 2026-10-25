@@ -23,7 +23,7 @@ import {
   GracefulErrorHandler,
   RetryHandler,
 } from '@vybestack/llxprt-code-auth/oauth-errors.js';
-import { oauthUIBridge } from '@vybestack/llxprt-code-auth/oauth-ui-bridge.js';
+import type { OAuthProviderUIPort } from '@vybestack/llxprt-code-auth/oauth-ui-bridge.js';
 import {
   openBrowserSecurely,
   shouldLaunchBrowser,
@@ -90,6 +90,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   private addItem?: OAuthUICallback;
   private currentAuthBucket?: string;
   private dialogAttemptId?: string;
+  private ui?: OAuthProviderUIPort;
 
   /**
    * @plan PLAN-20250823-AUTHFIXES.P06
@@ -116,9 +117,22 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     this.tokenStore = tokenStore;
     this.addItem = addItem;
     this.initGuard = new InitializationGuard('wrap', this.name);
-    this.dialog = new AuthCodeDialog();
+    this.dialog = new AuthCodeDialog(() => this.requireUI().clearCodeRequest());
 
     // DO NOT call initializeToken() - lazy initialization pattern
+  }
+
+  bindUIPort(port: OAuthProviderUIPort): void {
+    this.ui = port;
+  }
+
+  private requireUI(): OAuthProviderUIPort {
+    if (this.ui === undefined) {
+      throw new Error(
+        `OAuth provider ${this.name} has no UI port; register it with an OAuthManager before authenticating.`,
+      );
+    }
+    return this.ui;
   }
 
   /**
@@ -276,7 +290,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     if (this.addItem) {
       this.addItem(historyItem);
     } else {
-      oauthUIBridge.emit(historyItem);
+      this.requireUI().emit(historyItem);
     }
     debugLogger.log('Visit the following URL to authorize:');
     debugLogger.log(deviceCodeUrl);
@@ -341,7 +355,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       if (this.addItem) {
         this.addItem(warning);
       } else {
-        oauthUIBridge.emit(warning);
+        this.requireUI().emit(warning);
       }
     }
   }
@@ -351,14 +365,13 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * Assigns this.pendingAuthPromise and this.dialog, and marks global auth state.
    */
   private armPendingAuthDialog(): void {
+    const ui = this.requireUI();
     if (this.dialogAttemptId) {
-      oauthUIBridge.beginDialog(this.dialogAttemptId, this.name);
+      ui.beginDialog(this.dialogAttemptId, this.name);
     }
-    (global as unknown as { __oauth_provider: string }).__oauth_provider =
-      'claudecode';
 
     this.pendingAuthPromise = new Promise<string>((resolve, reject) => {
-      const innerDialog = new AuthCodeDialog();
+      const innerDialog = new AuthCodeDialog(() => ui.clearCodeRequest());
       const innerPromise = innerDialog.waitForAuthCode();
       this.dialog = innerDialog;
 
@@ -387,8 +400,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     });
 
     void this.pendingAuthPromise.catch(() => undefined);
-    (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code =
-      true;
+    ui.requestCode(this.name);
   }
 
   /**
@@ -480,10 +492,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           redirectUri,
         );
 
-        // Clear the dialog flag on successful auth
-        (
-          global as unknown as { __oauth_needs_code: boolean }
-        ).__oauth_needs_code = false;
+        this.requireUI().clearCodeRequest();
 
         this.logger.debug(() => 'Successfully authenticated with Claude Code!');
 

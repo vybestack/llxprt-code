@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 import {
   advanceTimersByTimeAsync,
   runAllTimersAsync,
@@ -71,6 +72,8 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
     };
 
     provider = new CodexOAuthProvider(globalThis.fetch, mockTokenStore);
+
+    provider.bindUIPort(new OAuthUIBridge());
   });
 
   afterEach(() => {

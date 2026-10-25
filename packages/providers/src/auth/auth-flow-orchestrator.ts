@@ -17,7 +17,6 @@
 
 import { randomUUID } from 'node:crypto';
 import {
-  oauthUIBridge,
   type OAuthTokenRequestMetadata,
   type OAuthTokenWithExtras,
   type OAuthUIBridge,
@@ -69,7 +68,7 @@ type AuthLockWaitOutcome = 'acquired' | 'token-found' | 'timed-out';
 /** The manager-owned bridge operations a flight reports its outcome through. */
 export type AuthFlowUI = Pick<
   OAuthUIBridge,
-  'emit' | 'resetAuthOutcome' | 'completeAuth' | 'failAuth'
+  'emit' | 'resetAuthOutcome' | 'completeAuth' | 'failAuth' | 'settleDialog'
 >;
 
 type AuthFlight = {
@@ -333,9 +332,9 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
   ): Promise<void> {
     const settlement: Promise<void> = flight.promise
       .then(
-        () => oauthUIBridge.settleDialog(flight.attemptId),
+        () => this.ui.settleDialog(flight.attemptId),
         (error: unknown) => {
-          const failure = oauthUIBridge.settleDialog(flight.attemptId, error);
+          const failure = this.ui.settleDialog(flight.attemptId, error);
           if (failure !== undefined) this.ui.emit(failure);
           if (flight.signalAuthCompletion) {
             this.ui.failAuth(

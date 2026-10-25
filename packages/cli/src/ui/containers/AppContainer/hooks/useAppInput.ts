@@ -40,7 +40,6 @@ import { useInputHistoryStore } from '../../../hooks/useInputHistoryStore.js';
 import { shouldClearTodos } from '../../../hooks/useTodoPausePreserver.js';
 import { type HistoryItem } from '../../../types.js';
 import { submitOAuthCode } from '../../../oauth-submission.js';
-import { getPendingOAuthProvider } from '../../../oauthGlobalState.js';
 import type { PromptTextGenerator } from '../../../hooks/usePromptCompletion.js';
 import type { EditorType } from '@vybestack/llxprt-code-core';
 import type { AppState, AppAction } from '../../../reducers/appReducer.js';
@@ -245,7 +244,7 @@ function useInputBuffer(
       submitOAuthCode(
         {
           submitCode: oauthControl.submitCode,
-          getActiveProvider: getPendingOAuthProvider,
+          getActiveProvider: () => oauthControl.getCodeRequest().provider,
         },
         code,
       );

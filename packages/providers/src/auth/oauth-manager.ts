@@ -33,6 +33,8 @@ import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import {
   OAuthUIBridge,
   type OAuthAuthOutcome,
+  type OAuthCodeRequest,
+  type OAuthDialogAttempt,
   type AuthLockStatus,
   type AuthLockRecoveryResult,
   type ForceRecoverOptions,
@@ -290,6 +292,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * @param provider - The OAuth provider to register
    */
   registerProvider(provider: OAuthProvider): void {
+    provider.bindUIPort?.(this.interactiveAuthUI);
     this.providerRegistry.registerProvider(provider);
   }
 
@@ -513,6 +516,25 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
 
   takeAuthOutcome(): OAuthAuthOutcome {
     return this.interactiveAuthUI.takeAuthOutcome();
+  }
+
+  getCodeRequest(): OAuthCodeRequest {
+    return this.interactiveAuthUI.getCodeRequest();
+  }
+
+  clearCodeRequest(): void {
+    this.interactiveAuthUI.clearCodeRequest();
+  }
+
+  getDialog(): OAuthDialogAttempt | undefined {
+    return this.interactiveAuthUI.getDialog();
+  }
+
+  subscribeDialog = (listener: () => void): (() => void) =>
+    this.interactiveAuthUI.subscribeDialog(listener);
+
+  dismissDialog(id: string): void {
+    this.interactiveAuthUI.dismissDialog(id);
   }
 
   attachInteractiveAuthMessages(callback: OAuthUICallback | null): void {

@@ -5,18 +5,12 @@
  */
 import { describe, expect, it } from 'bun:test';
 import type { OAuthFetch } from '@vybestack/llxprt-code-auth/types.js';
+import { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-auth';
 import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function dialogIsWaitingForCode(): boolean {
-  return (
-    (globalThis as unknown as { __oauth_needs_code?: boolean })
-      .__oauth_needs_code === true
-  );
 }
 
 async function waitUntil(condition: () => boolean): Promise<void> {
@@ -53,6 +47,7 @@ class MemoryTokenStore implements TokenStore {
 }
 
 function createProvider(): {
+  ui: OAuthUIBridge;
   readonly provider: AnthropicOAuthProvider;
   readonly exchanges: string[];
 } {
@@ -75,12 +70,14 @@ function createProvider(): {
     () => undefined,
     () => true,
   );
-  return { provider, exchanges };
+  const ui = new OAuthUIBridge();
+  provider.bindUIPort(ui);
+  return { provider, exchanges, ui };
 }
 
 describe('AnthropicOAuthProvider initiation honors cancellation', () => {
   it('rejects with the abort reason while waiting for the manual code, clears the dialog and starts the next attempt fresh', async () => {
-    const { provider, exchanges } = createProvider();
+    const { provider, exchanges, ui } = createProvider();
     const controller = new AbortController();
     const reason = new Error('caller gave up');
     const attempt = provider.initiateAuth(controller.signal).then(
@@ -88,7 +85,7 @@ describe('AnthropicOAuthProvider initiation honors cancellation', () => {
       (error: unknown) => error,
     );
     try {
-      await waitUntil(dialogIsWaitingForCode);
+      await waitUntil(() => ui.getCodeRequest().needsCode);
 
       controller.abort(reason);
       const outcome = await Promise.race([
@@ -96,11 +93,11 @@ describe('AnthropicOAuthProvider initiation honors cancellation', () => {
         sleep(1000).then(() => 'still-pending' as const),
       ]);
       expect(outcome).toBe(reason);
-      expect(dialogIsWaitingForCode()).toBe(false);
+      expect(ui.getCodeRequest().needsCode).toBe(false);
       expect(exchanges).toHaveLength(0);
 
       const next = provider.initiateAuth();
-      await waitUntil(dialogIsWaitingForCode);
+      await waitUntil(() => ui.getCodeRequest().needsCode);
       provider.submitAuthCode('manual-code#manual-state');
       const token = await next;
       expect(token.access_token).toBe('claude-access');
@@ -112,7 +109,7 @@ describe('AnthropicOAuthProvider initiation honors cancellation', () => {
   });
 
   it('rejects with the abort reason without starting an attempt when the signal is already aborted', async () => {
-    const { provider, exchanges } = createProvider();
+    const { provider, exchanges, ui } = createProvider();
     const reason = new Error('already gone');
     const controller = new AbortController();
     controller.abort(reason);
@@ -126,7 +123,7 @@ describe('AnthropicOAuthProvider initiation honors cancellation', () => {
     ]);
     try {
       expect(outcome).toBe(reason);
-      expect(dialogIsWaitingForCode()).toBe(false);
+      expect(ui.getCodeRequest().needsCode).toBe(false);
       expect(exchanges).toHaveLength(0);
     } finally {
       provider.cancelAuth();

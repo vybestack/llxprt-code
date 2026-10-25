@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { OAuthUIBridge, oauthUIBridge } from '@vybestack/llxprt-code-auth';
+import { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 
 import { act } from 'react';
@@ -20,14 +20,10 @@ describe('useOAuthOrchestration', () => {
   beforeEach(() => {
     outcomes = new OAuthUIBridge();
     vi.useFakeTimers();
-    delete (global as { __oauth_needs_code?: boolean }).__oauth_needs_code;
   });
 
   afterEach(() => {
-    const attempt = oauthUIBridge.getDialog();
-    if (attempt) oauthUIBridge.dismissDialog(attempt.id);
     vi.useRealTimers();
-    delete (global as { __oauth_needs_code?: boolean }).__oauth_needs_code;
   });
 
   it('opens OAuth code dialog when a provider needs a manual code', () => {
@@ -39,23 +35,21 @@ describe('useOAuthOrchestration', () => {
     renderHook(() =>
       useOAuthOrchestration({
         appDispatch,
-        takeAuthOutcome: () => outcomes.takeAuthOutcome(),
+        oauth: outcomes,
         dialogs,
         isOAuthCodeDialogOpen: false,
         setAuthError,
       }),
     );
 
-    (global as { __oauth_needs_code?: boolean }).__oauth_needs_code = true;
+    outcomes.requestCode('claudecode');
 
     act(() => {
       vi.advanceTimersByTime(100);
     });
 
     expect(hasDialogRequest(store, 'oauthCode')).toBe(true);
-    expect(
-      (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
-    ).toBe(false);
+    expect(outcomes.getCodeRequest().needsCode).toBe(false);
   });
 
   it('clears relogin state and closes auth dialogs when authentication completes', () => {
@@ -69,7 +63,7 @@ describe('useOAuthOrchestration', () => {
     renderHook(() =>
       useOAuthOrchestration({
         appDispatch,
-        takeAuthOutcome: () => outcomes.takeAuthOutcome(),
+        oauth: outcomes,
         dialogs,
         isOAuthCodeDialogOpen: true,
         setAuthError,
@@ -98,19 +92,19 @@ describe('useOAuthOrchestration', () => {
     const store = createDialogStore();
     const dialogs = createDialogOpeners(store);
     dialogs.oauthCode.open({});
-    oauthUIBridge.beginDialog('persisted-attempt', 'claudecode');
+    outcomes.beginDialog('persisted-attempt', 'claudecode');
 
     renderHook(() =>
       useOAuthOrchestration({
         appDispatch,
-        takeAuthOutcome: () => outcomes.takeAuthOutcome(),
+        oauth: outcomes,
         dialogs,
         isOAuthCodeDialogOpen: true,
         setAuthError,
       }),
     );
 
-    oauthUIBridge.settleDialog('persisted-attempt');
+    outcomes.settleDialog('persisted-attempt');
 
     act(() => {
       vi.advanceTimersByTime(100);
@@ -131,7 +125,7 @@ describe('useOAuthOrchestration', () => {
     const { unmount } = renderHook(() =>
       useOAuthOrchestration({
         appDispatch: () => {},
-        takeAuthOutcome: () => outcomes.takeAuthOutcome(),
+        oauth: outcomes,
         dialogs,
         isOAuthCodeDialogOpen: true,
         setAuthError: (error) => {
@@ -140,8 +134,8 @@ describe('useOAuthOrchestration', () => {
       }),
     );
     try {
-      oauthUIBridge.beginDialog('failed-attempt', 'claudecode');
-      oauthUIBridge.settleDialog(
+      outcomes.beginDialog('failed-attempt', 'claudecode');
+      outcomes.settleDialog(
         'failed-attempt',
         new Error('Synthetic persistence failure'),
       );
@@ -150,7 +144,7 @@ describe('useOAuthOrchestration', () => {
       });
       expect(hasDialogRequest(store, 'oauthCode')).toBe(true);
       expect(authErrors).toHaveLength(0);
-      expect(oauthUIBridge.getDialog()?.status).toBe('failed');
+      expect(outcomes.getDialog()?.status).toBe('failed');
     } finally {
       unmount();
     }
@@ -172,7 +166,7 @@ describe('useOAuthOrchestration', () => {
     renderHook(() =>
       useOAuthOrchestration({
         appDispatch: () => {},
-        takeAuthOutcome: () => ownerA.takeAuthOutcome(),
+        oauth: ownerA,
         dialogs: dialogsA,
         isOAuthCodeDialogOpen: false,
         setAuthError: (error) => {
@@ -183,7 +177,7 @@ describe('useOAuthOrchestration', () => {
     renderHook(() =>
       useOAuthOrchestration({
         appDispatch: dispatchB,
-        takeAuthOutcome: () => ownerB.takeAuthOutcome(),
+        oauth: ownerB,
         dialogs: dialogsB,
         isOAuthCodeDialogOpen: false,
         setAuthError: (error) => {
@@ -216,7 +210,7 @@ describe('useOAuthOrchestration', () => {
     const { unmount } = renderHook(() =>
       useOAuthOrchestration({
         appDispatch,
-        takeAuthOutcome: undefined,
+        oauth: undefined,
         dialogs,
         isOAuthCodeDialogOpen: false,
         setAuthError,

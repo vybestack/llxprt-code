@@ -1086,7 +1086,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T3.5 A4 retained interactive handlers, Claude Code cancellation, close order
 - [x] T3.6 E2 MCP admission closure split from connection retirement; disposal after borrowing facades
 - [x] T4.1 B5 attempt outcomes per manager
-- [ ] T4.2 B5 dialog state per manager, singleton deleted
+- [x] T4.2 B5 dialog state per manager, singleton deleted
 - [ ] T5.1 B1 agents key storage from owner
 - [ ] T5.2a B1 host key storage reaches the interactive UI
 - [ ] T5.2b B1 Config key methods deleted, negative control

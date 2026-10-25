@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 import {
   describe,
   it,
@@ -48,6 +49,7 @@ function isOAuthUrlLog(line: string): boolean {
  */
 describe('AnthropicOAuthProvider fallback behavior', () => {
   let provider: AnthropicOAuthProvider;
+  let ui: OAuthUIBridge;
   let tokenStore: TokenStore;
   let deviceFlow: AnthropicDeviceFlow;
   const DEVICE_CODE_URL =
@@ -75,6 +77,8 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
     } satisfies TokenStore;
 
     provider = new AnthropicOAuthProvider(globalThis.fetch, tokenStore);
+    ui = new OAuthUIBridge();
+    provider.bindUIPort(ui);
     deviceFlow = (
       provider as unknown as {
         deviceFlow: AnthropicDeviceFlow;
@@ -128,8 +132,6 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    delete (global as { __oauth_needs_code?: boolean }).__oauth_needs_code;
-    delete (global as { __oauth_provider?: string }).__oauth_provider;
   });
 
   describe('Problem 1: Always display device code URL', () => {
@@ -211,10 +213,8 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
       // Wait for the async flow to reach the point where it sets up dialog
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // __oauth_needs_code should be set true when callback is available
-      expect(
-        (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
-      ).toBe(true);
+      // the code request should be set when callback is available
+      expect(ui.getCodeRequest().needsCode).toBe(true);
 
       // Resolve callback to complete auth
       callbackResolve!({ code: 'auth-code', state: 'generated-state' });
@@ -236,10 +236,8 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
       // Phase 4: initiateAuth now returns the token
       const token = await provider.initiateAuth();
 
-      // After successful callback, __oauth_needs_code should be cleared
-      expect(
-        (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
-      ).toBeFalsy();
+      // After successful callback, the code request should be cleared
+      expect(ui.getCodeRequest().needsCode).toBeFalsy();
 
       // Phase 4: Provider no longer calls saveToken - OAuthManager handles persistence
       expect(tokenStore.saveToken).not.toHaveBeenCalled();
@@ -267,9 +265,7 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Dialog should still be open for manual entry
-      expect(
-        (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
-      ).toBe(true);
+      expect(ui.getCodeRequest().needsCode).toBe(true);
 
       // Complete via manual code entry
       provider.submitAuthCode('manual-code#manual-state');
@@ -295,9 +291,7 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // First attempt should have dialog open
-      expect(
-        (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
-      ).toBe(true);
+      expect(ui.getCodeRequest().needsCode).toBe(true);
 
       // Start second auth attempt - should cancel the first
       const cancelAuthSpy = vi.spyOn(provider, 'cancelAuth');
@@ -315,7 +309,7 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
       await secondAuth.catch(() => undefined);
     });
 
-    it('should clear __oauth_needs_code on cancelAuth', async () => {
+    it('should clear the code request on cancelAuth', async () => {
       startLocalOAuthCallbackMock.mockRejectedValue(
         new Error('callback unavailable'),
       );
@@ -323,30 +317,21 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
       const authPromise = provider.initiateAuth();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      expect(
-        (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
-      ).toBe(true);
+      expect(ui.getCodeRequest().needsCode).toBe(true);
 
       provider.cancelAuth();
 
-      expect(
-        (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
-      ).toBe(false);
+      expect(ui.getCodeRequest().needsCode).toBe(false);
 
       await authPromise.catch(() => undefined);
     });
 
-    it('should clear __oauth_needs_code on completeAuth', async () => {
-      // Set up the global flag as if dialog was shown
-      (
-        global as unknown as { __oauth_needs_code: boolean }
-      ).__oauth_needs_code = true;
+    it('should clear the code request on completeAuth', async () => {
+      ui.requestCode('claudecode');
 
       await provider.completeAuth('test-code#test-state');
 
-      expect(
-        (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
-      ).toBe(false);
+      expect(ui.getCodeRequest().needsCode).toBe(false);
     });
   });
 });

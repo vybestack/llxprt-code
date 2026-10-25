@@ -9,7 +9,7 @@ import React, { act, useState, useSyncExternalStore } from 'react';
 import { Text } from 'ink';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { KeyringTokenStore, oauthUIBridge } from '@vybestack/llxprt-code-auth';
+import { KeyringTokenStore } from '@vybestack/llxprt-code-auth';
 import {
   InteractiveAuthError,
   OAuthManager,
@@ -29,7 +29,6 @@ import {
   selectDialogOpen,
 } from './stores/dialog/dialogStore.js';
 import { createDialogOpeners } from './stores/dialog/dialogOpeners.js';
-import { getOAuthGlobalState } from './oauthGlobalState.js';
 import type { HistoryItemWithoutId } from './types.js';
 import { Colors } from './colors.js';
 
@@ -154,7 +153,7 @@ function harness(): {
       dialogs,
       isOAuthCodeDialogOpen: open,
       getActiveProviderName: () => 'claudecode',
-      takeAuthOutcome: () => control.takeAuthOutcome(),
+      oauth: control,
       setAuthError,
     });
     return React.createElement(
@@ -163,6 +162,7 @@ function harness(): {
       open
         ? React.createElement(OAuthCodeDialog, {
             provider: 'claudecode',
+            dialogState: control,
             onClose: () => dialogs.oauthCode.close(),
             onSubmit: (code: string) => provider.submitAuthCode(code),
           })
@@ -216,21 +216,12 @@ async function request(manager: OAuthManager): Promise<{ kind: string }> {
 
 describe('prompt-triggered lazy authentication dialog', () => {
   beforeEach(() => {
-    oauthUIBridge.clearPending();
     vi.useFakeTimers();
   });
   afterEach(async () => {
     for (const manager of managers.splice(0)) await manager.dispose();
-    oauthUIBridge.clearCallback();
-    oauthUIBridge.clearPending();
-    const attempt = oauthUIBridge.getDialog();
-    if (attempt) oauthUIBridge.dismissDialog(attempt.id);
     vi.restoreAllMocks();
     vi.useRealTimers();
-    Object.assign(getOAuthGlobalState(), {
-      __oauth_needs_code: undefined,
-      __oauth_provider: undefined,
-    });
     for (const dir of directories.splice(0))
       rmSync(dir, { recursive: true, force: true });
   });

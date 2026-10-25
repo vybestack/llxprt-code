@@ -37,7 +37,7 @@ import { ThemeDialog } from './ThemeDialog.js';
 import { WorkspaceMigrationDialog } from './WorkspaceMigrationDialog.js';
 import { AuthDialog } from './AuthDialog.js';
 import { OAuthCodeDialog } from './OAuthCodeDialog.js';
-import { getPendingOAuthProvider } from '../oauthGlobalState.js';
+import { useOAuthControl } from '../contexts/OAuthControlContext.js';
 import { EditorSettingsDialog } from './EditorSettingsDialog.js';
 import { ProviderDialog } from './ProviderDialog.js';
 import { LoadProfileDialog } from './LoadProfileDialog.js';
@@ -203,16 +203,36 @@ export function renderAuthDialog(
   );
 }
 
+function OAuthCodeDialogHost({
+  uiActions,
+  handleOAuthCodeSubmit,
+}: {
+  uiActions: AppCommands;
+  handleOAuthCodeSubmit: (code: string) => void;
+}) {
+  const oauthControl = useOAuthControl();
+  const provider = firstNonEmptyString(
+    oauthControl.getCodeRequest().provider,
+    'unknown',
+  );
+  return (
+    <OAuthCodeDialog
+      provider={provider}
+      dialogState={oauthControl}
+      onClose={uiActions.handleOAuthCodeDialogClose}
+      onSubmit={handleOAuthCodeSubmit}
+    />
+  );
+}
+
 export function renderOAuthCodeDialog(
   uiActions: AppCommands,
   handleOAuthCodeSubmit: (code: string) => void,
 ) {
-  const provider = firstNonEmptyString(getPendingOAuthProvider(), 'unknown');
   return (
-    <OAuthCodeDialog
-      provider={provider}
-      onClose={uiActions.handleOAuthCodeDialogClose}
-      onSubmit={handleOAuthCodeSubmit}
+    <OAuthCodeDialogHost
+      uiActions={uiActions}
+      handleOAuthCodeSubmit={handleOAuthCodeSubmit}
     />
   );
 }

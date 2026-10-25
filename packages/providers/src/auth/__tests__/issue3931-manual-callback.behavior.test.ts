@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { KeyringTokenStore, oauthUIBridge } from '@vybestack/llxprt-code-auth';
+import { KeyringTokenStore } from '@vybestack/llxprt-code-auth';
 import * as browserLauncher from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
 import { AnthropicOAuthProvider } from '../anthropic-oauth-provider.js';
 import { OAuthManager } from '../oauth-manager.js';
@@ -27,12 +27,6 @@ function deferred<T>(): {
   });
   return { promise, resolve: resolveValue, reject: rejectValue };
 }
-
-const initialState: {
-  __oauth_needs_code?: boolean;
-  __oauth_provider?: string;
-} = {};
-const oauthState = Object.assign(globalThis, initialState);
 
 const directories: string[] = [];
 function harness(persistence?: {
@@ -150,10 +144,6 @@ describe('Issue 3931 real OAuth provider and persistence lifecycle', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
-    oauthState.__oauth_needs_code = undefined;
-    oauthState.__oauth_provider = undefined;
-    const attempt = oauthUIBridge.getDialog();
-    if (attempt) oauthUIBridge.dismissDialog(attempt.id);
     for (const directory of directories.splice(0))
       rmSync(directory, { recursive: true, force: true });
   });
@@ -187,7 +177,7 @@ describe('Issue 3931 real OAuth provider and persistence lifecycle', () => {
         expect(await backgroundResult).toBe(cancellation);
         expect({
           ...h.manager.takeAuthOutcome(),
-          needsCode: oauthState.__oauth_needs_code,
+          needsCode: h.manager.getCodeRequest().needsCode,
         }).toStrictEqual({
           error: undefined,
           complete: false,
@@ -220,7 +210,7 @@ describe('Issue 3931 real OAuth provider and persistence lifecycle', () => {
     });
     await h.browserStarted;
     try {
-      expect(oauthState.__oauth_needs_code).toBeTruthy();
+      expect(h.manager.getCodeRequest().needsCode).toBe(true);
       h.provider.submitAuthCode('manual-code');
       await login;
       expect(redirect(requests[0])).toBe(
@@ -301,7 +291,7 @@ describe('Issue 3931 real OAuth provider and persistence lifecycle', () => {
       h.callback.resolve({ code: 'callback-code', state: 'callback-state' });
       await saveStarted.promise;
       const beforeSave = {
-        dialog: oauthUIBridge.getDialog()?.status,
+        dialog: h.manager.getDialog()?.status,
         complete: h.manager.takeAuthOutcome().complete,
         token: await h.store.getToken('claudecode'),
       };
@@ -315,13 +305,13 @@ describe('Issue 3931 real OAuth provider and persistence lifecycle', () => {
       });
       const settled = h.manager.takeAuthOutcome();
       expect(settled.complete).toBe(outcome === 'success');
-      expect(oauthUIBridge.getDialog()?.status).toBe(
+      expect(h.manager.getDialog()?.status).toBe(
         outcome === 'success' ? 'succeeded' : 'failed',
       );
       expect((await h.store.getToken('claudecode')) !== null).toBe(
         outcome === 'success',
       );
-      expect(oauthState.__oauth_needs_code).toBe(false);
+      expect(h.manager.getCodeRequest().needsCode).toBe(false);
       expect(settled.error !== undefined).toBe(outcome === 'failure');
     },
   );
@@ -342,7 +332,7 @@ describe('Issue 3931 real OAuth provider and persistence lifecycle', () => {
     h.callback.resolve({ code: 'bad-code', state: 'state' });
     expect(await result).toBe('failure');
     expect(vi.getTimerCount()).toBe(0);
-    expect(oauthState.__oauth_needs_code).toBe(false);
+    expect(h.manager.getCodeRequest().needsCode).toBe(false);
     expect(await h.store.getToken('claudecode')).toBeNull();
     // A new public waiter must replace a cancelled dialog, never the old pending one.
     const requests = interceptExchange();

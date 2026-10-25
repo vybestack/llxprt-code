@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 import {
   describe,
   it,
@@ -56,6 +57,8 @@ describe('CodexOAuthProvider fallback behavior', () => {
     };
 
     provider = new CodexOAuthProvider(globalThis.fetch, mockTokenStore);
+
+    provider.bindUIPort(new OAuthUIBridge());
 
     // Mock shouldLaunchBrowser to return true (interactive mode)
     vi.spyOn(secureBrowserModule, 'shouldLaunchBrowser').mockReturnValue(true);

@@ -34,6 +34,20 @@ export interface OAuthAuthOutcome {
   readonly error: string | undefined;
 }
 
+export interface OAuthCodeRequest {
+  readonly needsCode: boolean;
+  readonly provider: string | undefined;
+}
+
+/** What an OAuth provider may do to its manager's dialog state. */
+export interface OAuthProviderUIPort {
+  emit(event: OAuthUIEvent, timestamp?: number): number | undefined;
+  beginDialog(id: string, provider: string): void;
+  settleDialog(id: string, error?: unknown): OAuthUIEvent | undefined;
+  requestCode(provider: string): void;
+  clearCodeRequest(): void;
+}
+
 export interface OAuthDialogAttempt {
   readonly id: string;
   readonly provider: string;
@@ -54,15 +68,19 @@ export interface OAuthDialogAttempt {
  * - {@link clearCallback} detaches the handler but preserves the buffer (so
  *   events survive a UI remount).
  *
- * A stable global hook `(global).__oauth_add_item` is installed at module load
- * and routes through {@link oauthUIBridge.emit}, preserving compatibility with
- * any consumer (e.g. core's `oauth2.ts`) that reads that global directly.
+ * Each OAuth manager owns one bridge. The bridge also holds that manager's
+ * dialog attempt, manual-code request and login outcome, so two managers in
+ * one process never share dialog state.
  */
-class OAuthUIBridge {
+class OAuthUIBridge implements OAuthProviderUIPort {
   private callback: OAuthUICallback | null = null;
   private pending: PendingEvent[] = [];
   private dialogAttempt: OAuthDialogAttempt | undefined;
   private authOutcome: OAuthAuthOutcome = { complete: false, error: undefined };
+  private codeRequest: OAuthCodeRequest = {
+    needsCode: false,
+    provider: undefined,
+  };
 
   private readonly dialogListeners = new Set<() => void>();
 
@@ -97,6 +115,20 @@ class OAuthUIBridge {
     return outcome;
   }
 
+  /** A provider needs the user to paste an authorization code. */
+  requestCode(provider: string): void {
+    this.codeRequest = { needsCode: true, provider };
+  }
+
+  /** The code request was answered or abandoned; the provider stays known. */
+  clearCodeRequest(): void {
+    this.codeRequest = { ...this.codeRequest, needsCode: false };
+  }
+
+  getCodeRequest(): OAuthCodeRequest {
+    return this.codeRequest;
+  }
+
   beginDialog(id: string, provider: string): void {
     this.dialogAttempt = { id, provider, status: 'pending' };
     this.notifyDialog();
@@ -115,8 +147,7 @@ class OAuthUIBridge {
 
   /**
    * Settle the pending dialog attempt. Returns the failure event for the
-   * caller to deliver through its own message owner; this process-wide bridge
-   * has no host callback of its own for a session's messages.
+   * caller to deliver through its own message owner.
    */
   settleDialog(id: string, error?: unknown): OAuthUIEvent | undefined {
     const attempt = this.dialogAttempt;
@@ -196,18 +227,3 @@ class OAuthUIBridge {
 
 /** The bridge class, exported for consumers that need to construct their own instance (e.g. tests). */
 export { OAuthUIBridge };
-
-/** Singleton bridge instance. */
-export const oauthUIBridge = new OAuthUIBridge();
-
-/**
- * Stable global bridge: always exists from module load, routes through the
- * singleton. Never deleted — events buffer when no handler is attached.
- *
- * Preserves the historical `(global).__oauth_add_item` contract so existing
- * consumers (e.g. core's oauth2.ts path) keep working unchanged.
- */
-(global as Record<string, unknown>).__oauth_add_item = (
-  event: OAuthUIEvent,
-  timestamp?: number,
-): number | undefined => oauthUIBridge.emit(event, timestamp);

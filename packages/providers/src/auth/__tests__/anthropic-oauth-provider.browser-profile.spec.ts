@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 import {
   describe,
   it,
@@ -113,11 +114,6 @@ function configureSuccessfulLocalCallback(): void {
   });
 }
 
-function clearOAuthGlobals(): void {
-  delete (global as { __oauth_needs_code?: boolean }).__oauth_needs_code;
-  delete (global as { __oauth_provider?: string }).__oauth_provider;
-}
-
 function expectBrowserLaunch(
   openBrowserSpy: ReturnType<typeof vi.spyOn>,
   options: BrowserLaunchOptions | undefined,
@@ -146,6 +142,7 @@ describe('AnthropicOAuthProvider browser profile association', () => {
       undefined,
       (name, bucket) => association(name, bucket),
     );
+    provider.bindUIPort(new OAuthUIBridge());
     stubDeviceFlow(provider);
 
     openBrowserSpy = vi
@@ -156,7 +153,6 @@ describe('AnthropicOAuthProvider browser profile association', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    clearOAuthGlobals();
   });
 
   it('launches the associated browser/profile when an association exists', async () => {

@@ -1,3 +1,4 @@
+import { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 import {
   describe,
   it,
@@ -45,6 +46,7 @@ function oauthErrorMessage(error: unknown): string {
 
 describe('AnthropicOAuthProvider local callback flow', () => {
   let provider: AnthropicOAuthProvider;
+  let ui: OAuthUIBridge;
   let tokenStore: TokenStore;
   let deviceFlow: coreModule.AnthropicDeviceFlow;
   let shouldLaunchBrowserSpy: Mock<(...args: never[]) => unknown>;
@@ -71,6 +73,8 @@ describe('AnthropicOAuthProvider local callback flow', () => {
     } satisfies TokenStore;
 
     provider = new AnthropicOAuthProvider(globalThis.fetch, tokenStore);
+    ui = new OAuthUIBridge();
+    provider.bindUIPort(ui);
     deviceFlow = (
       provider as unknown as {
         deviceFlow: coreModule.AnthropicDeviceFlow;
@@ -127,8 +131,6 @@ describe('AnthropicOAuthProvider local callback flow', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    delete (global as { __oauth_needs_code?: boolean }).__oauth_needs_code;
-    delete (global as { __oauth_provider?: string }).__oauth_provider;
   });
 
   it('uses local callback when browser launch is available', async () => {
@@ -159,10 +161,8 @@ describe('AnthropicOAuthProvider local callback flow', () => {
       expect.objectContaining({ access_token: 'local-token' }),
     );
 
-    // After successful callback, __oauth_needs_code is cleared (false)
-    expect(
-      (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
-    ).toBeFalsy();
+    // After successful callback, the code request is cleared (false)
+    expect(ui.getCodeRequest().needsCode).toBeFalsy();
     expect(waitForCallback).toHaveBeenCalled();
     expect(shutdown).toHaveBeenCalled();
   });
@@ -181,10 +181,8 @@ describe('AnthropicOAuthProvider local callback flow', () => {
     await manualPromise.catch(() => undefined);
 
     expect(startLocalOAuthCallbackMock).toHaveBeenCalled();
-    // After cancelAuth(), __oauth_needs_code is cleared (false)
-    expect(
-      (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
-    ).toBe(false);
+    // After cancelAuth(), the code request is cleared (false)
+    expect(ui.getCodeRequest().needsCode).toBe(false);
   });
 
   it('does not wait on a newer dialog after an auth attempt becomes stale', async () => {
@@ -299,8 +297,6 @@ describe('AnthropicOAuthProvider local callback flow', () => {
       ]),
     ).resolves.toBe('token exchange failed');
     expect(shutdown).toHaveBeenCalled();
-    expect(
-      (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
-    ).toBe(false);
+    expect(ui.getCodeRequest().needsCode).toBe(false);
   });
 });

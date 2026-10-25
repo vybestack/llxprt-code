@@ -10,7 +10,7 @@ import {
   type OAuthUICallback,
 } from '@vybestack/llxprt-code-auth';
 import { CodexDeviceFlow } from '@vybestack/llxprt-code-auth/flows/codex-device-flow.js';
-import { oauthUIBridge } from '@vybestack/llxprt-code-auth/oauth-ui-bridge.js';
+import type { OAuthProviderUIPort } from '@vybestack/llxprt-code-auth/oauth-ui-bridge.js';
 import { CodexOAuthTokenSchema } from '@vybestack/llxprt-code-auth/types.js';
 import type {
   CodexOAuthToken,
@@ -96,6 +96,7 @@ export class CodexOAuthProvider implements OAuthProvider {
   private logger: DebugLogger;
   private tokenStore: TokenStore;
   private addItem?: OAuthUICallback;
+  private ui?: OAuthProviderUIPort;
   private initGuard: InitializationGuard;
   private authInProgressByBucket: Map<string, AuthFlightState> = new Map();
   private currentAuthBucket?: string;
@@ -116,6 +117,19 @@ export class CodexOAuthProvider implements OAuthProvider {
     this.addItem = addItem;
     // Codex uses rethrow mode — no OAuthError wrapping, simpler semantics
     this.initGuard = new InitializationGuard('rethrow');
+  }
+
+  bindUIPort(port: OAuthProviderUIPort): void {
+    this.ui = port;
+  }
+
+  private requireUI(): OAuthProviderUIPort {
+    if (this.ui === undefined) {
+      throw new Error(
+        `OAuth provider ${this.name} has no UI port; register it with an OAuthManager before authenticating.`,
+      );
+    }
+    return this.ui;
   }
 
   /**
@@ -441,7 +455,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     if (this.addItem) {
       this.addItem(historyItem);
     } else {
-      oauthUIBridge.emit(historyItem);
+      this.requireUI().emit(historyItem);
     }
 
     debugLogger.log('Please visit the following URL to authenticate:');
@@ -674,12 +688,13 @@ export class CodexOAuthProvider implements OAuthProvider {
       return this.addItem;
     }
 
-    const urlDelivered = oauthUIBridge.emit(urlHistoryItem);
-    oauthUIBridge.emit(deviceCodeItem);
+    const ui = this.requireUI();
+    const urlDelivered = ui.emit(urlHistoryItem);
+    ui.emit(deviceCodeItem);
 
     if (urlDelivered !== undefined) {
       return (event: OAuthUIEvent, timestamp?: number): number =>
-        oauthUIBridge.emit(event, timestamp) ?? -1;
+        ui.emit(event, timestamp) ?? -1;
     }
 
     process.stdout.write('\nCodex Device Authorization\n');

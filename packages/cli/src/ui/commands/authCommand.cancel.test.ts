@@ -5,7 +5,6 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { oauthUIBridge } from '@vybestack/llxprt-code-auth';
 import {
   InteractiveAuthCoordinator,
   type InteractiveAuthChallenge,
@@ -73,15 +72,11 @@ describe('/auth cancel', () => {
     coordinator = new InteractiveAuthCoordinator();
     await coordinator.dispose();
     coordinator.unbindHost();
-    oauthUIBridge.clearCallback();
-    oauthUIBridge.clearPending();
   });
 
   afterEach(async () => {
     await coordinator.dispose();
     coordinator.unbindHost();
-    oauthUIBridge.clearCallback();
-    oauthUIBridge.clearPending();
   });
 
   it('cancels active authentication sessions and reports retry guidance', async () => {

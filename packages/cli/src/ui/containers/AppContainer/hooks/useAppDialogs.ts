@@ -238,9 +238,7 @@ function useDialogsAuthProviders(
   const { addItem } = p.turnStore.commands;
   const auth = useAuthCommand(dialogs, st.setAuthError);
   const oauthControl = useOAuthControl();
-  const takeAuthOutcome = oauthControl.isAvailable()
-    ? oauthControl.takeAuthOutcome
-    : undefined;
+  const oauth = oauthControl.isAvailable() ? oauthControl : undefined;
   const isOAuthCodeDialogOpen = useStoreSelector(store.store, (state) =>
     selectDialogOpen(state, 'oauthCode'),
   );
@@ -249,7 +247,7 @@ function useDialogsAuthProviders(
     dialogs,
     isOAuthCodeDialogOpen,
     getActiveProviderName,
-    takeAuthOutcome,
+    oauth,
     setAuthError: st.setAuthError,
   });
   const editor = useEditorSettings(

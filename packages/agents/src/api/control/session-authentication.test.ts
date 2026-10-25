@@ -21,4 +21,15 @@ describe('assembleSessionAuthentication without an OAuth manager', () => {
       'OAuth runtime infrastructure is unavailable.',
     );
   });
+
+  it('fails when the dialog state is requested instead of returning an empty dialog', () => {
+    const control = assembleSessionAuthentication(undefined, () => {});
+
+    expect(() => control.getCodeRequest()).toThrow(
+      'OAuth runtime infrastructure is unavailable.',
+    );
+    expect(() => control.getDialog()).toThrow(
+      'OAuth runtime infrastructure is unavailable.',
+    );
+  });
 });
