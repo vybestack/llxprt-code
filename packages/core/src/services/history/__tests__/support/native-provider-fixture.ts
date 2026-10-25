@@ -14,6 +14,7 @@ export async function openNativeProviderFixture(
 ): Promise<ProviderRequestSnapshot> {
   const session = await JournalSession.createUnlinked({
     unlinkedDirectory: root,
+    tokenUsageCountTokens: (text) => text.length,
   });
   const store = new JournalHistoryStore(session);
   try {
