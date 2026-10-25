@@ -7,6 +7,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { matchesPersistedSession } from './persisted-session-selection.js';
 import type {
   IContent,
   MediaReferenceBlock,
@@ -52,8 +53,11 @@ export async function stagePersistedSessionStates(
   const staged: string[] = [];
   let aggregateBytes = 0;
   for (const name of names) {
+    const path = join(sourceDirectory, name);
+    if (!(await matchesPersistedSession(path, sessionId, projectHash)))
+      continue;
     const bytes = await readBoundedFile(
-      join(sourceDirectory, name),
+      path,
       MAX_PERSISTED_STATE_BYTES,
       'Persisted session state',
     );
@@ -63,7 +67,9 @@ export async function stagePersistedSessionStates(
       parsed['sessionId'] !== sessionId ||
       parsed['projectHash'] !== projectHash
     )
-      continue;
+      throw new Error(
+        'Persisted session state ownership changed during export',
+      );
     const history = parsed['history'];
     if (
       parsed['version'] !== SUPPORTED_PERSISTED_SESSION_VERSION ||
