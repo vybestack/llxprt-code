@@ -20,7 +20,11 @@ import {
   type ToolConfirmationRequest,
 } from '@vybestack/llxprt-code-policy';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
-import { WorkspacePolicyOwner, SessionPolicyOwner } from './policy-owner.js';
+import {
+  WorkspacePolicyOwner,
+  SessionPolicyOwner,
+  RuntimePolicyOwner,
+} from './policy-owner.js';
 import { gateReadFile } from '../utils/__tests__/gated-read-file.js';
 
 function fixture(): {
@@ -147,6 +151,107 @@ describe('Explicit policy owner boundaries', () => {
     await first.dispose();
     await second.dispose();
     workspace.dispose();
+  });
+
+  it('keeps user rules and withdraws MCP Trusted rules when trust is revoked', async () => {
+    const config = new Config({
+      sessionId: 'trust-revoke',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+      model: 'test',
+      trustedFolder: true,
+    });
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: config.initialWorkspaceTrust,
+    });
+    const engine = new PolicyEngine(config.getPolicyEngineConfig());
+    const workspace = new WorkspacePolicyOwner(config, trust, engine);
+    const owner = new RuntimePolicyOwner(config, trust, workspace);
+    try {
+      engine.addRule({
+        toolName: 'trusted-server__tool',
+        decision: PolicyDecision.ALLOW,
+        priority: 2.2,
+        source: 'Settings (MCP Trusted)',
+      });
+      engine.addRule({
+        toolName: 'user-tool',
+        decision: PolicyDecision.DENY,
+        priority: 2.9,
+        source: 'User Defined',
+      });
+
+      void trust.setTrustedFolderLive(false);
+
+      expect(
+        owner.session.decisions.evaluate(
+          'trusted-server__tool',
+          {},
+          'trusted-server',
+        ),
+      ).toBe(PolicyDecision.ASK_USER);
+      expect(owner.session.decisions.evaluate('user-tool', {})).toBe(
+        PolicyDecision.DENY,
+      );
+    } finally {
+      await owner.dispose();
+      workspace.dispose();
+      await trust.dispose();
+      await config.dispose();
+    }
+  });
+
+  it('rebuilds configured MCP trust rules when trust is gained', async () => {
+    const config = new Config({
+      sessionId: 'trust-gain',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+      model: 'test',
+      trustedFolder: false,
+      mcpServers: { 'trusted-server': { trust: true } },
+    });
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: config.initialWorkspaceTrust,
+    });
+    const engine = new PolicyEngine(config.getPolicyEngineConfig());
+    const workspace = new WorkspacePolicyOwner(config, trust, engine);
+    const owner = new RuntimePolicyOwner(config, trust, workspace);
+    try {
+      engine.addRule({
+        toolName: 'user-tool',
+        decision: PolicyDecision.DENY,
+        priority: 2.9,
+        source: 'User Defined',
+      });
+
+      expect(
+        owner.session.decisions.evaluate(
+          'trusted-server__tool',
+          {},
+          'trusted-server',
+        ),
+      ).toBe(PolicyDecision.ASK_USER);
+
+      void trust.setTrustedFolderLive(true);
+
+      expect(
+        owner.session.decisions.evaluate(
+          'trusted-server__tool',
+          {},
+          'trusted-server',
+        ),
+      ).toBe(PolicyDecision.ALLOW);
+      expect(owner.session.decisions.evaluate('user-tool', {})).toBe(
+        PolicyDecision.DENY,
+      );
+    } finally {
+      await owner.dispose();
+      workspace.dispose();
+      await trust.dispose();
+      await config.dispose();
+    }
   });
 
   it('settles a pending ask on session disposal without cancelling a sibling ask', async () => {

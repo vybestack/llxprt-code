@@ -40,6 +40,36 @@ describe('Explicit workspace trust lifetime', () => {
     await Promise.all([first.dispose(), peer.dispose()]);
   });
 
+  it('ignores setTrustedFolderLive(false) when the IDE says trusted', async (): Promise<void> => {
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: false,
+      ideTrust: true,
+    });
+    const admissions: boolean[] = [];
+    trust.subscribeTrustChange((transition) => {
+      admissions.push(transition.trusted);
+    });
+    await trust.setTrustedFolderLive(false);
+    expect(trust.isTrustedFolder()).toBe(true);
+    expect(admissions).toStrictEqual([]);
+    await trust.dispose();
+  });
+
+  it('ignores setTrustedFolderLive(true) when the IDE says untrusted', async (): Promise<void> => {
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: true,
+      ideTrust: false,
+    });
+    const admissions: boolean[] = [];
+    trust.subscribeTrustChange((transition) => {
+      admissions.push(transition.trusted);
+    });
+    await trust.setTrustedFolderLive(true);
+    expect(trust.isTrustedFolder()).toBe(false);
+    expect(admissions).toStrictEqual([]);
+    await trust.dispose();
+  });
+
   it('publishes effective admission immediately despite blocked asynchronous settlement and ignores redundant writes', async (): Promise<void> => {
     const trust = new WorkspaceTrustLifecycle({ localTrust: false });
     const entered = deferred();
