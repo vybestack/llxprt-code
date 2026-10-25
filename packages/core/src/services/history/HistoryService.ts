@@ -362,6 +362,9 @@ export class HistoryService extends HistoryServiceReads {
       this.runSynchronousHistoryMutation(() => {
         this.disposeInternal().then(resolve, reject);
       });
+    }).catch((error: unknown) => {
+      this.disposal = undefined;
+      throw error;
     }));
   }
 
@@ -387,6 +390,7 @@ export class HistoryService extends HistoryServiceReads {
     // Chronology counters are intentionally NOT reset: seq must never be reused
     // (NG8) so that items added after dispose() never collide with earlier ones.
     await journalDisposal;
+    await this.waitForOwnershipSettlement();
   }
 
   /**

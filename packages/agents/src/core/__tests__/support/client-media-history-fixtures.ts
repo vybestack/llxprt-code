@@ -39,7 +39,7 @@ export function inlineMediaHistory(data: string = PNG_BASE64): IContent[] {
 }
 
 export class FailOnceReleaseStore extends LocalMediaStore {
-  private releaseFailurePending = true;
+  releaseFailurePending = true;
 
   override async release(contentId: string, ownerId: string): Promise<void> {
     if (this.releaseFailurePending) {

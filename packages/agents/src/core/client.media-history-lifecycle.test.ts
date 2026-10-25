@@ -745,6 +745,7 @@ function registerAdmissionCase12(): void {
         rootDirectory: join(directory, 'media'),
         quotaBytes: 1024 * 1024,
       });
+      store.releaseFailurePending = false;
       await configureRealChatStartup(store);
       const chat = await client.startChat([]);
       await client.setHistory(inlineMediaHistory());
@@ -754,6 +755,7 @@ function registerAdmissionCase12(): void {
         throw new Error('Expected initialized media reference');
       }
 
+      store.releaseFailurePending = true;
       await expect(client.dispose()).rejects.toThrow(
         'Agent client disposal failed',
       );
