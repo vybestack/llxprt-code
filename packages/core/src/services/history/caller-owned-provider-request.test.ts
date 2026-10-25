@@ -18,6 +18,26 @@ describe('caller-owned provider overrides', () => {
     await snapshot.close();
     expect(() => snapshot.openReader()).toThrow('snapshot is closed');
   });
+  it('preserves caller-supplied thinking instead of applying history curation', async () => {
+    const row: IContent = {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'thinking',
+          thought: 'provider input',
+          sourceField: 'thinking',
+        },
+      ],
+      metadata: {},
+    };
+    const snapshot = await callerOwnedProviderRequest([row]);
+    try {
+      expect(snapshot.count).toBe(1);
+      expect(await snapshot.readAt(0)).toStrictEqual(row);
+    } finally {
+      await snapshot.close();
+    }
+  });
   it('rejects an override that lost its indexed snapshot opener without staging it', async () => {
     await withCoreSuffixFixture(1, async (history) => {
       const override = {

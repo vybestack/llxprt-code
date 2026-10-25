@@ -7,7 +7,7 @@ import type { RowIds, StoredRow } from '../../journal/rowReads.js';
 import type { IContent } from './IContent.js';
 import type { JournalResponseSource } from './journal-response-source.js';
 import { encodeContentRow, encodeContentBlock } from './journalRowCodec.js';
-import { isCuratedContent } from './historyCuration.js';
+import { ROW_FLAG } from '../../journal/rowRecord.js';
 import { planSourceRowOccurrences } from './source-fact-planner.js';
 
 export class CallerOwnedRequestSource implements JournalResponseSource {
@@ -65,11 +65,20 @@ export class CallerOwnedRequestSource implements JournalResponseSource {
   private captured(
     label: bigint,
   ): NonNullable<CallerOwnedRequestSource['current']> {
-    if (this.current?.label !== label)
+    if (this.current?.label !== label) {
+      const row = this.row(label);
+      const draft = encodeContentRow(row, { owner: 0 });
       this.current = {
         label,
-        draft: encodeContentRow(this.row(label), { owner: 0 }),
+        draft: {
+          ...draft,
+          flags:
+            row.blocks.length > 0
+              ? draft.flags | ROW_FLAG.curated
+              : draft.flags,
+        },
       };
+    }
     return this.current;
   }
 
@@ -137,7 +146,7 @@ export class CallerOwnedRequestSource implements JournalResponseSource {
       index++
     ) {
       const next = BigInt(index + 1);
-      if (isCuratedContent(this.row(next))) return this.entryByLabel(next);
+      if (this.row(next).blocks.length > 0) return this.entryByLabel(next);
     }
     return undefined;
   }
