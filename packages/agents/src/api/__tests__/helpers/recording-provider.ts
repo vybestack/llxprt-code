@@ -91,9 +91,20 @@ function waitFor(open: Promise<void>, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export function createRecordingProvider(
-  options: RecordingProviderOptions = {},
-): RecordingProvider {
+type ContributionPlugin = Parameters<
+  typeof buildProviderContributionRegistry
+>[0][number];
+
+interface RecordingProviderHandle {
+  readonly alias: string;
+  readonly requests: readonly RecordedRequest[];
+  readonly hold: () => RequestHold;
+}
+
+function createRecordingPlugin(options: RecordingProviderOptions): {
+  readonly plugin: ContributionPlugin;
+  readonly handle: RecordingProviderHandle;
+} {
   const alias = options.alias ?? 'recording-local';
   const providerId = `${alias}-provider`;
   const responseText = options.responseText ?? 'recorded';
@@ -121,42 +132,65 @@ export function createRecordingProvider(
     return { entered, release };
   };
 
-  const contributions = buildProviderContributionRegistry([
-    {
-      specifier: `memory:${providerId}`,
-      manifest: {
-        apiVersion: 1,
-        id: providerId,
-        providers: [
-          {
-            providerId,
-            createProvider: (entry) => {
-              const provider = new RecordingOpenAIProvider(
-                record,
-                responseText,
-              );
-              bindProviderAliasIdentity(provider, entry.alias);
-              return provider;
-            },
-            builtinAliases: [
-              {
-                alias,
-                config: {
-                  baseProvider: providerId,
-                  'base-url': 'http://recording-provider.invalid/v1',
-                  'requires-auth': false,
-                  defaultModel: 'recording-default',
-                  staticModels: [
-                    { id: 'recording-default', name: 'Recording default' },
-                  ],
-                },
-              },
-            ],
+  const plugin: ContributionPlugin = {
+    specifier: `memory:${providerId}`,
+    manifest: {
+      apiVersion: 1,
+      id: providerId,
+      providers: [
+        {
+          providerId,
+          createProvider: (entry) => {
+            const provider = new RecordingOpenAIProvider(record, responseText);
+            bindProviderAliasIdentity(provider, entry.alias);
+            return provider;
           },
-        ],
-      },
+          builtinAliases: [
+            {
+              alias,
+              config: {
+                baseProvider: providerId,
+                'base-url': 'http://recording-provider.invalid/v1',
+                'requires-auth': false,
+                defaultModel: 'recording-default',
+                staticModels: [
+                  { id: 'recording-default', name: 'Recording default' },
+                ],
+              },
+            },
+          ],
+        },
+      ],
     },
-  ]);
+  };
+  return { plugin, handle: { alias, requests, hold } };
+}
 
-  return { alias, contributions, requests, hold };
+export function createRecordingProvider(
+  options: RecordingProviderOptions = {},
+): RecordingProvider {
+  const { plugin, handle } = createRecordingPlugin(options);
+  return {
+    ...handle,
+    contributions: buildProviderContributionRegistry([plugin]),
+  };
+}
+
+/**
+ * Several recording providers contributed through one registry, in the order
+ * of `options`. Each entry needs its own `alias`.
+ */
+export function createRecordingProviders(
+  options: readonly RecordingProviderOptions[],
+): {
+  readonly contributions: ProviderContributionRegistry;
+  readonly providers: ReadonlyArray<Omit<RecordingProvider, 'contributions'>>;
+} {
+  const built = options.map(createRecordingPlugin);
+  return {
+    contributions: buildProviderContributionRegistry(
+      built.map(({ plugin }) => plugin),
+    ),
+    providers: built.map(({ handle }) => handle),
+  };
 }
