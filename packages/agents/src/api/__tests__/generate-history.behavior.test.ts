@@ -6,14 +6,23 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as recordingFs from 'node:fs/promises';
 import { withOwners } from './turn-revision-capture.fixture.js';
-import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from './helpers/recording-owner-lifetime-fixture.js';
-import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
+import { randomUUID } from 'node:crypto';
+import { readFile, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import type { AgentConfig } from '../config-types.js';
+import { fromConfig } from '../fromConfig.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { buildAgentFromContent } from './helpers/agentHarness.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
 import { generationGate } from './helpers/generation-owner-fixture.js';
 import { nativeHookInputCommand } from './helpers/native-hook-command.js';
 import {
@@ -24,6 +33,144 @@ import type {
   InlineMediaBlock,
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
+/**
+ * A replay file holding the numbered turns (1-based) of a fixture. Each agent
+ * a host builds has its own provider with its own turn counter, so the turns
+ * one shared provider would have answered to a facade, in call order, go to
+ * that facade's own file.
+ */
+async function writeReplay(
+  directory: string,
+  name: string,
+  fixture: string,
+  turns: readonly number[],
+): Promise<string> {
+  const lines = (
+    await readFile(join(import.meta.dir, 'fixtures', fixture), 'utf8')
+  )
+    .trim()
+    .split('\n');
+  const path = join(directory, name);
+  await writeFile(path, turns.map((turn) => lines[turn - 1]).join('\n') + '\n');
+  return path;
+}
+
+/**
+ * Two independent Route A agents over one working directory (so one chats
+ * directory), each built while the replay seam names its own turns.
+ */
+async function withRouteAPair(
+  authority: CredentialAuthority,
+  fixture: string,
+  turns: {
+    readonly agent: readonly number[];
+    readonly peer: readonly number[];
+  },
+  scenario: (agent: Agent, peer: Agent) => Promise<void>,
+): Promise<void> {
+  const routes: RouteAAgent[] = [];
+  const replays = await mkdtemp(join(tmpdir(), 'generate-history-replays-'));
+  try {
+    process.env.LLXPRT_FAKE_RESPONSES = await writeReplay(
+      replays,
+      'agent.jsonl',
+      fixture,
+      turns.agent,
+    );
+    const first = await openRouteAAgent({
+      authority,
+      config: { interactive: true },
+    });
+    routes.push(first);
+    process.env.LLXPRT_FAKE_RESPONSES = await writeReplay(
+      replays,
+      'peer.jsonl',
+      fixture,
+      turns.peer,
+    );
+    routes.push(
+      await openRouteAAgent({
+        authority,
+        config: { interactive: true, workingDir: first.directory },
+      }),
+    );
+    await scenario(routes[0].agent, routes[1].agent);
+  } finally {
+    await runCleanupSteps([
+      ...[...routes].reverse().map((route) => () => route.close()),
+      () => rm(replays, { recursive: true, force: true }),
+    ]);
+  }
+}
+
+/**
+ * Two independent agents a host builds with `fromConfig`, each from its own
+ * `Config` with hooks enabled (`AgentConfig` carries no `enableHooks`, so the
+ * test owns the `Config`s) over one working directory, each with its own
+ * replayed turns.
+ */
+async function withHookedPair(
+  authority: CredentialAuthority,
+  fixture: string,
+  turns: {
+    readonly agent: readonly number[];
+    readonly peer: readonly number[];
+  },
+  hooks: NonNullable<AgentConfig['hooks']>,
+  scenario: (agent: Agent, peer: Agent) => Promise<void>,
+): Promise<void> {
+  const directory = await realpath(
+    await mkdtemp(join(tmpdir(), 'generate-history-hooked-')),
+  );
+  const configs: Config[] = [];
+  const agents: Agent[] = [];
+  const open = async (replay: string): Promise<Agent> => {
+    const config = new Config({
+      ...toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        workingDir: directory,
+        hooks,
+      }),
+      interactive: true,
+      enableHooks: true,
+    });
+    configs.push(config);
+    const settings = new SettingsService();
+    for (const [key, value] of Object.entries(config.getInitialSettings()))
+      settings.set(key, value);
+    process.env.LLXPRT_FAKE_RESPONSES = replay;
+    const agent = await fromConfig(
+      config,
+      settings,
+      { activation: { provider: 'fake', model: 'fake-model' } },
+      authority,
+    );
+    agents.push(agent);
+    return agent;
+  };
+  try {
+    const agent = await open(
+      await writeReplay(directory, 'agent.jsonl', fixture, turns.agent),
+    );
+    const peer = await open(
+      await writeReplay(directory, 'peer.jsonl', fixture, turns.peer),
+    );
+    await scenario(agent, peer);
+  } finally {
+    await runCleanupSteps([
+      ...[...agents].reverse().map((agent) => async () => {
+        if (agent.session.getRecording().enabled)
+          await agent.session.setRecording({ enabled: false });
+        await agent.dispose();
+      }),
+      ...configs.map((config) => () => config.dispose()),
+      () => rm(directory, { recursive: true, force: true }),
+    ]);
+  }
+}
 
 function textHistory(history: readonly IContent[]): object[] {
   return history.map(({ speaker, blocks }) => ({ speaker, blocks }));
@@ -39,110 +186,8 @@ const input: IContent = {
 
 describe('Agent.generate independent history flags', () => {
   useRecordingPrompts();
-  it('propagates failed history publication without a partial exchange or a successful text result', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        agent,
-        _config,
-        _owner,
-        _settings,
-        _oauth,
-        _borrow,
-        _chats,
-        history,
-      ) => {
-        await agent.setHistory(structuredClone(seed));
-        await agent.session.setRecording({ enabled: true });
-        const path = agent.session.getRecording().path;
-        if (path === undefined) throw new Error('Missing generation recording');
-        const failure = new Error('history publication rejected');
-        const release = history.registerBatchParticipant(async () => {
-          throw failure;
-        });
-        try {
-          await expect(
-            agent.generate('must roll back', { writeHistory: true }),
-          ).rejects.toBe(failure);
-          expect(textHistory(await agent.getHistory())).toStrictEqual(seed);
-          expect(await readFile(path, 'utf8')).not.toContain('must roll back');
-        } finally {
-          release();
-        }
-        expect(await agent.generate('owner still usable')).toBe(
-          'turn two reply',
-        );
-      },
-    );
-  });
-  it('joins a held history publication before recording release and rolls back a cancelled exchange', async () => {
-    let shutdownFailure: unknown;
-    const fixtureResult = withRecordingLifetimeFixture(
-      async (
-        agent,
-        _config,
-        _owner,
-        _settings,
-        _oauth,
-        _borrow,
-        _chats,
-        history,
-      ) => {
-        await agent.setHistory(structuredClone(seed));
-        await agent.session.setRecording({ enabled: true });
-        const recording = agent.session.getRecording().path;
-        if (recording === undefined) throw new Error('Missing recording path');
-        const entered = generationGate();
-        const held = generationGate();
-        const releaseParticipant = history.registerBatchParticipant(
-          async () => {
-            entered.release();
-            await held.promise;
-            return { publish: () => {}, rollback: () => {} };
-          },
-        );
-        const pending = agent.generate('cancelled publication', {
-          writeHistory: true,
-        });
-        const result = pending.then(
-          () => undefined,
-          (error: unknown) => error,
-        );
-        await entered.promise;
-        let disposed = false;
-        const closing = agent.dispose().then(
-          () => {
-            disposed = true;
-          },
-          (error: unknown) => {
-            shutdownFailure = error;
-            disposed = true;
-          },
-        );
-        try {
-          expect(disposed).toBe(false);
-          expect(agent.session.getRecording().enabled).toBe(true);
-          held.release();
-          expect(await result).toMatchObject({ name: 'AbortError' });
-          await closing;
-          expect(textHistory(history.getAll())).toStrictEqual(seed);
-          expect(await readFile(recording, 'utf8')).not.toContain(
-            'cancelled publication',
-          );
-          expect(agent.session.getRecording().enabled).toBe(false);
-        } finally {
-          held.release();
-          releaseParticipant();
-        }
-      },
-    );
-    const failure = await fixtureResult.then(
-      () => undefined,
-      (error: unknown) => error,
-    );
-    expect(shutdownFailure).toBeUndefined();
-    expect(failure).toBeUndefined();
-  });
-
+  useFakeResponsesReplay('multi-turn-text.jsonl');
+  const credentials = useOwnedCredentials();
   it('preserves response blocks and usage from earlier chunks in the written AI entry', async () => {
     const media: InlineMediaBlock = {
       type: 'media',
@@ -210,10 +255,28 @@ describe('Agent.generate independent history flags', () => {
       HookEventName.AfterModel,
     ];
     try {
-      await withRecordingLifetimeFixture(
-        async (agent, _config, _owner, _settings, _oauth, borrow) => {
-          const peer = await borrow();
+      await withHookedPair(
+        credentials().authority,
+        'recording-remaining-hooks.jsonl',
+        { agent: [1, 3, 4], peer: [2] },
+        Object.fromEntries(
+          events.map((event) => [
+            event,
+            [
+              {
+                hooks: [
+                  {
+                    type: HookType.Command,
+                    command: nativeHookInputCommand(output, 'append'),
+                  },
+                ],
+              },
+            ],
+          ]),
+        ),
+        async (agent, peer) => {
           await agent.setHistory(structuredClone(seed));
+          await peer.setHistory(structuredClone(seed));
           await agent.session.setRecording({ enabled: true });
           const aPath = agent.session.getRecording().path;
           await peer.session.setRecording({ enabled: true });
@@ -273,36 +336,20 @@ describe('Agent.generate independent history flags', () => {
           }
           expect(textHistory(await agent.getHistory())).toStrictEqual(seed);
         },
-        undefined,
-        {
-          hooks: Object.fromEntries(
-            events.map((event) => [
-              event,
-              [
-                {
-                  hooks: [
-                    {
-                      type: HookType.Command,
-                      command: nativeHookInputCommand(output, 'append'),
-                    },
-                  ],
-                },
-              ],
-            ]),
-          ),
-        },
-        'recording-remaining-hooks.jsonl',
       );
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
   });
 
-  it('records a requested generation exchange only in the invoking facade and keeps a borrowed primary usable after facade disposal', async () => {
-    await withRecordingLifetimeFixture(
-      async (agent, _config, _owner, _settings, _oauth, borrow) => {
-        const peer = await borrow();
+  it('records a requested generation exchange only in the invoking facade and keeps the other agent usable after facade disposal', async () => {
+    await withRouteAPair(
+      credentials().authority,
+      'multi-turn-text.jsonl',
+      { agent: [2], peer: [1] },
+      async (agent, peer) => {
         await agent.setHistory(structuredClone(seed));
+        await peer.setHistory(structuredClone(seed));
         await agent.session.setRecording({ enabled: true });
         const aPath = agent.session.getRecording().path;
         await peer.session.setRecording({ enabled: true });
@@ -328,10 +375,13 @@ describe('Agent.generate independent history flags', () => {
   });
 
   it('joins the invoking facade recording append before generation returns', async () => {
-    await withRecordingLifetimeFixture(
-      async (agent, _config, _owner, _settings, _oauth, borrow) => {
-        const peer = await borrow();
+    await withRouteAPair(
+      credentials().authority,
+      'multi-turn-text.jsonl',
+      { agent: [2], peer: [1] },
+      async (agent, peer) => {
         await agent.setHistory(structuredClone(seed));
+        await peer.setHistory(structuredClone(seed));
         await agent.session.setRecording({ enabled: true });
         await peer.session.setRecording({ enabled: true });
         const aPath = agent.session.getRecording().path;

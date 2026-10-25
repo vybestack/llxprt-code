@@ -955,6 +955,10 @@ export class SessionControl
         service,
         this.persistence.forRecording(service.getSessionId()),
       );
+      // The seed was just written to the journal. History held outside the
+      // HistoryService (set before the chat starts) reaches the service later,
+      // when the chat starts; the integration must treat it as recorded then.
+      integration.rememberRecordedHistory(history);
       const subscribed = this.attachHistory(integration);
       this.recording = service;
       this.integration = integration;
