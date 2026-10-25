@@ -1205,7 +1205,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T5.6 B6 tool catalog and child assembly inputs
 - [x] T5.7 E7 typed ProviderFileLifecycle
 - [x] T6.0-list B2 inventory file list and slices
-- [ ] T6.0-Sxx B2 inventory slices (ids added by T6.0-list; S27 added by the phase 6 inventory decisions)
+- [x] T6.0-Sxx B2 inventory slices (ids added by T6.0-list; S27 added by the phase 6 inventory decisions)
   - [x] T6.0-S01 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
   - [x] T6.0-S02 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
   - [x] T6.0-S03 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
@@ -1232,7 +1232,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
   - [x] T6.0-S24 B2 inventory slice: packages/providers/src/runtime, 7 files (file list in B2-batches.md)
   - [x] T6.0-S25 B2 inventory slice: providers small directories (1 dirs, each under 5 files), 1 files (file list in B2-batches.md)
   - [x] T6.0-S26 B2 inventory slice: packages/zed-acp/src, 6 files (file list in B2-batches.md)
-  - [ ] T6.0-S27 B2 inventory slice: helpers/adopted-provider-fixture.ts and its 8 importers (added by the phase 6 inventory decisions; file list from `git grep -l "adopted-provider-fixture" -- packages`)
+  - [x] T6.0-S27 B2 inventory slice: helpers/adopted-provider-fixture.ts and its 8 importers (added by the phase 6 inventory decisions; file list from `git grep -l "adopted-provider-fixture" -- packages`)
 - [ ] T6.0-agg B2 inventory aggregation and batches
 - [ ] T6.Bxx B2 migration batches (ids added by T6.0-agg)
 - [ ] T6.Pk B2 production fixes found by migrated scenarios (added when needed)
