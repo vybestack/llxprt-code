@@ -21,7 +21,11 @@ import { readMapEntries, readValueBody, type MapEntry } from './mapEntries.js';
 import type { JournalFileHandle } from './positionalFile.js';
 import { OFFSET } from './offsetFields.js';
 import { createRecordAccess, type RecordAccess } from './recordAccess.js';
-import { emptyCopyStats, remapOffset, type CopyStats } from './recordTransfer.js';
+import {
+  emptyCopyStats,
+  remapOffset,
+  type CopyStats,
+} from './recordTransfer.js';
 import { MUTATION } from './recordKinds.js';
 import { RelocationIndex, type RelocationStats } from './relocationIndex.js';
 import { copyStateMap, type StatePolicy } from './stateTransfer.js';

@@ -750,11 +750,7 @@ export class JournalStore {
             edits,
             appender,
             effect === undefined ? appender : effectAppender(appender, effect),
-            nativeFactRegistration(
-              this.buildContext(),
-              this.rowFormats,
-              this.factIndex,
-            ),
+            this.registerNativeFacts(),
           );
           ({ plan, built, edits: resolvedEdits, facts: factIndex } = prepared);
           streamedAppend = prepared.streamedAppend;
@@ -806,6 +802,14 @@ export class JournalStore {
         streamedAppend,
       },
       resolvedEdits,
+    );
+  }
+
+  private registerNativeFacts(): ReturnType<typeof nativeFactRegistration> {
+    return nativeFactRegistration(
+      this.buildContext(),
+      this.rowFormats,
+      this.factIndex,
     );
   }
 
