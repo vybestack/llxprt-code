@@ -73,10 +73,8 @@ export function responsePlan(
     async *openBlocks() {
       for (const ref of blocks) {
         const block = await resolveBlock(source, ref, known);
-        yield sanitizeProviderContentForSerialization({
-          speaker: header.speaker,
-          blocks: [block],
-        }).blocks[0];
+        // Decoding owns this block; journal admission already sanitized its JSON.
+        yield block;
       }
     },
   };
