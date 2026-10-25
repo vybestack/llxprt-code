@@ -1,5 +1,3 @@
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -15,23 +13,17 @@ import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/com
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as path from 'node:path';
 import type { Profile } from '@vybestack/llxprt-code-settings';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { Config } from '@vybestack/llxprt-code-core';
-import {
-  ProfileManager,
-  SettingsService,
-} from '@vybestack/llxprt-code-settings';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import {
   createTempDirectory,
   cleanupTempDirectory,
   initializeTestConfig,
-  initializeTestAgent,
 } from './test-utils.js';
 
 describe('Ephemeral Settings Integration Tests', () => {
   let tempDir: string;
   let config: Config;
-  let settingsService: SettingsService;
   let sessionRoot: Awaited<ReturnType<typeof initializeTestConfig>>;
   let profileManager: ProfileManager;
   let originalHome: string | undefined;
@@ -62,13 +54,7 @@ describe('Ephemeral Settings Integration Tests', () => {
     });
 
     // Initialize the config
-    settingsService = new SettingsService();
-    sessionRoot = await initializeTestAgent(
-      config,
-      undefined,
-      settingsService,
-      new SessionSettingsOwner(settingsService),
-    );
+    sessionRoot = await initializeTestConfig(config);
   });
 
   afterEach(async () => {
@@ -133,17 +119,6 @@ describe('Ephemeral Settings Integration Tests', () => {
 
   describe('Custom Headers Application', () => {
     it('should make custom headers available for API requests', async () => {
-      // Create a ProviderManager bound to this config's runtime
-      const providerManager = new ProviderManager(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        settingsService,
-        config,
-      );
-      configureProviderTokenizer(providerManager);
-
       // Set custom headers via ephemeral settings
       const customHeaders = {
         'X-Custom-Header': 'test-value',
@@ -170,17 +145,6 @@ describe('Ephemeral Settings Integration Tests', () => {
 
   describe('Streaming Settings Application', () => {
     it('should default to streaming enabled when not set', async () => {
-      // Create a ProviderManager bound to this config's runtime
-      const providerManager = new ProviderManager(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        settingsService,
-        config,
-      );
-      configureProviderTokenizer(providerManager);
-
       // Get ephemeral settings - streaming should not be set initially
       const ephemeralSettings = sessionRoot.getEphemeralSettings();
       expect(ephemeralSettings['streaming']).toBeUndefined();

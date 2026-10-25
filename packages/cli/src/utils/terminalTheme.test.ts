@@ -1,4 +1,3 @@
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -19,8 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Config, coreEvents } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestAgent } from '../integration-tests/test-utils.js';
+import { initializeTestConfig } from '../integration-tests/test-utils.js';
 
 import type { LoadedSettings } from '../config/settings.js';
 import { setupTerminalAndTheme } from './terminalTheme.js';
@@ -59,7 +57,6 @@ void vi.mock('../ui/themes/theme-manager.js', () => ({
 
 describe('setupTerminalAndTheme', () => {
   let config: Config;
-  let settingsService: SettingsService;
   let mockSettings: LoadedSettings;
   let workspaceRoot: string;
 
@@ -67,7 +64,6 @@ describe('setupTerminalAndTheme', () => {
     vi.clearAllMocks();
 
     workspaceRoot = await mkdtemp(join(tmpdir(), 'terminal-theme-'));
-    settingsService = new SettingsService();
     config = new Config({
       cwd: workspaceRoot,
       targetDir: workspaceRoot,
@@ -77,12 +73,7 @@ describe('setupTerminalAndTheme', () => {
       sessionId: 'test-session',
       model: 'test-model',
     });
-    await initializeTestAgent(
-      config,
-      undefined,
-      settingsService,
-      new SessionSettingsOwner(settingsService),
-    );
+    await initializeTestConfig(config);
 
     // Create a minimal mock LoadedSettings
     mockSettings = {

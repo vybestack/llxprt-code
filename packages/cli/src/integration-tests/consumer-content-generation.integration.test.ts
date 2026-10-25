@@ -1,4 +1,3 @@
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -15,7 +14,6 @@ import {
   createOwnedOAuthManager,
   createOwnedTokenStoreClose,
   NodeFileSystem,
-  configureProviderTokenizer,
   createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
 
@@ -28,7 +26,9 @@ import {
   createContentGenerator,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 
-import { initializeTestAgent } from './test-utils.js';
+import { buildProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition/runtimePlugins/index.js';
+import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition/runtimePlugins/types.js';
+import { openRouteBPreflight } from '../../../agents/src/api/__tests__/helpers/route-b-preflight.js';
 
 import {
   Config,
@@ -103,6 +103,61 @@ describe('explicit provider primitive owners', () => {
       };
     }
 
+    /** Registers the provider the way a host does: as a provider contribution. */
+    function contributeTestProvider(
+      provider: IProvider,
+    ): ProviderContributionRegistry {
+      const providerId = `${provider.name}-contribution`;
+      return buildProviderContributionRegistry([
+        {
+          specifier: `memory:${providerId}`,
+          manifest: {
+            apiVersion: 1,
+            id: providerId,
+            providers: [
+              {
+                providerId,
+                createProvider: () => provider,
+                builtinAliases: [
+                  {
+                    alias: provider.name,
+                    config: {
+                      baseProvider: providerId,
+                      'requires-auth': false,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ]);
+    }
+
+    /**
+     * Builds the foreground agent through the production preflight route with
+     * the provider active. The agent is disposed before its preflight route.
+     */
+    async function openProviderAgent(sessionId: string, provider: IProvider) {
+      const route = await openRouteBPreflight({
+        authority: credentials().authority,
+        config: {
+          sessionId,
+          provider: undefined,
+          model: provider.getDefaultModel(),
+        },
+        contributions: contributeTestProvider(provider),
+      });
+      managerReleases.push(() => route.close());
+      await route.prepare();
+      const agent = await route.createAgent({
+        provider: provider.name,
+        model: provider.getDefaultModel(),
+      });
+      managerReleases.push(() => agent.dispose());
+      return { agent, config: route.config };
+    }
+
     // ─────────────────────────────────────────────────────────────────
     // Requirement 3: Provider-backed generation/content-generator path
     // ─────────────────────────────────────────────────────────────────
@@ -140,82 +195,12 @@ describe('explicit provider primitive owners', () => {
        * routed through providers.
        */
       it('ContentGeneratorConfig constructs through the wired factory without manager data', async () => {
-        const settingsService = new SettingsService();
-        const runtime = createProviderRuntimeContext({});
-        const selectedSettings6 = settingsService;
-        const selectedContext6 = runtime;
-        const selectedConfig6 = undefined;
-        const selectedAuthority6 = credentials().authority;
-        const manager = new ProviderManager(
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          selectedSettings6,
-          selectedConfig6,
-          selectedContext6,
-          undefined,
-          undefined,
-        );
-        managerReleases.push(() => manager.dispose());
-        if (manager.peekProviderKeyStorage() === undefined) {
-          const keys = selectedAuthority6.createProviderKeyStorage();
-          managerReleases.push(() => keys.close());
-          manager.bindProviderKeyStorage(keys);
-        }
-        const tokens6 = selectedAuthority6.createTokenStore();
-        let transferredTokens6 = false;
-        const closeTokens6 = createOwnedTokenStoreClose(tokens6);
-        managerReleases.push(() =>
-          transferredTokens6 ? undefined : closeTokens6(),
-        );
-        const ownedOAuth6 = createOwnedOAuthManager(
-          tokens6,
-          undefined,
-          undefined,
-          selectedConfig6,
-          manager,
-          selectedSettings6,
-        );
-        managerReleases.push(() => ownedOAuth6.dispose());
-        transferredTokens6 = true;
-        populateProviderManager(
-          manager,
-          ownedOAuth6,
-          tokens6,
-          selectedSettings6,
-          new NodeFileSystem(),
-          selectedConfig6,
-          undefined,
-          undefined,
-          true,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
-
-        // Register a provider so config wiring can proceed
         const testProvider = createTestProvider('test-provider', 'test-model');
-        manager.registerProvider(testProvider);
-
-        const config = new Config({
-          sessionId: 'p13-content',
-          targetDir: tempDir,
-          debugMode: false,
-          cwd: tempDir,
-          model: 'test-model',
-        });
-
-        // Initialize the explicit Agent owner on this manager.
-        const settingsOwner = new SessionSettingsOwner(settingsService);
-        const owner = await initializeTestAgent(
-          config,
-          manager,
-          settingsService,
-          settingsOwner,
+        const { agent: owner, config } = await openProviderAgent(
+          'p13-content',
+          testProvider,
         );
-        configureProviderTokenizer(manager);
         const selectedFactoriesContent = createRuntimeContentGeneratorFactory();
-        manager.setActiveProvider('test-provider');
         await owner.sessionClient.refreshAuth();
 
         const contentGenConfig = {
@@ -249,61 +234,7 @@ describe('explicit provider primitive owners', () => {
        * core importing provider-owned types.
        */
       it('contentGeneratorFactory injection path produces a provider-backed generator', async () => {
-        const settingsService = new SettingsService();
-        const runtime = createProviderRuntimeContext({});
-        const selectedSettings7 = settingsService;
-        const selectedContext7 = runtime;
-        const selectedConfig7 = undefined;
-        const selectedAuthority7 = credentials().authority;
-        const manager = new ProviderManager(
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          selectedSettings7,
-          selectedConfig7,
-          selectedContext7,
-          undefined,
-          undefined,
-        );
-        managerReleases.push(() => manager.dispose());
-        if (manager.peekProviderKeyStorage() === undefined) {
-          const keys = selectedAuthority7.createProviderKeyStorage();
-          managerReleases.push(() => keys.close());
-          manager.bindProviderKeyStorage(keys);
-        }
-        const tokens7 = selectedAuthority7.createTokenStore();
-        let transferredTokens7 = false;
-        const closeTokens7 = createOwnedTokenStoreClose(tokens7);
-        managerReleases.push(() =>
-          transferredTokens7 ? undefined : closeTokens7(),
-        );
-        const ownedOAuth7 = createOwnedOAuthManager(
-          tokens7,
-          undefined,
-          undefined,
-          selectedConfig7,
-          manager,
-          selectedSettings7,
-        );
-        managerReleases.push(() => ownedOAuth7.dispose());
-        transferredTokens7 = true;
-        populateProviderManager(
-          manager,
-          ownedOAuth7,
-          tokens7,
-          selectedSettings7,
-          new NodeFileSystem(),
-          selectedConfig7,
-          undefined,
-          undefined,
-          true,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
-
         const testProvider = createTestProvider('test-provider', 'test-model');
-        manager.registerProvider(testProvider);
 
         // Simulate a factory that creates a content generator (like CLI wiring does)
         const fakeContentGenerator = new ProviderContentGenerator();
@@ -312,25 +243,12 @@ describe('explicit provider primitive owners', () => {
           createContentGenerator: () => fakeContentGenerator,
         };
 
-        const config = new Config({
-          sessionId: 'p13-factory',
-          targetDir: tempDir,
-          debugMode: false,
-          cwd: tempDir,
-          model: 'test-model',
-        });
-
         // Initialize the explicit Agent owner before refreshing generation.
-        const settingsOwner = new SessionSettingsOwner(settingsService);
-        const owner = await initializeTestAgent(
-          config,
-          manager,
-          settingsService,
-          settingsOwner,
+        const { agent: owner, config } = await openProviderAgent(
+          'p13-factory',
+          testProvider,
         );
-        configureProviderTokenizer(manager);
         const selectedFactoriesContent = createRuntimeContentGeneratorFactory();
-        manager.setActiveProvider('test-provider');
         await owner.sessionClient.refreshAuth();
 
         const contentGenConfig = {
