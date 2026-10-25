@@ -1,14 +1,43 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { existsSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import {
+  estimatePromptEnvelope,
+  type PromptEnvelopeProjection,
+} from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { requestSelection } from './__tests__/support/request-selection.js';
-import { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
+import { NativeResponsesEstimateProjection } from './native-responses-estimate.js';
 import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
 import {
   projectionEndpoint,
   projectionRuntime,
 } from './__tests__/support/projection-ownership-fixture.js';
 import { diskTextFixture as projectionDiskRows } from './__tests__/support/disk-text-fixture.js';
+
+async function releasedProjection(
+  projection: PromptEnvelopeProjection,
+  setup: Awaited<ReturnType<typeof projectionRuntime>>,
+  before: ReadonlySet<string>,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  expect(projection.finalizedProjection).toBeInstanceOf(
+    NativeResponsesEstimateProjection,
+  );
+  const estimate = estimatePromptEnvelope(
+    setup.provider.name,
+    projection,
+    setup.factory,
+  );
+  if (signal?.aborted === true)
+    await expect(estimate).rejects.toBe(signal.reason);
+  else await expect(estimate).rejects.toThrow('closed');
+  const remaining = readdirSync(getScratchRoot()).filter(
+    (name) => !before.has(name),
+  );
+  expect(remaining).toStrictEqual([]);
+  return remaining.length === 0;
+}
 
 async function lifecycle(
   returnBeforeNext: boolean | 'throw',
@@ -22,7 +51,7 @@ async function lifecycle(
   const controller = new AbortController();
   const options = setup.options(requestSelection(disk.rows), controller.signal);
   const projection = await setup.provider.projectPromptEnvelope(options);
-  const source = projection.finalizedProjection;
+  const before = new Set(readdirSync(getScratchRoot()));
   const stream = setup.provider.generateChatCompletion({
     ...options,
     promptEnvelopeTransportToken: projection.transportToken,
@@ -50,18 +79,15 @@ async function lifecycle(
       expect(await settled).toBe('stop disk HTTP upload');
       await stream.return?.();
     }
-    if (!(source instanceof Gpt56SourceProjection))
-      throw new Error('Missing sealed source');
-    expect(
-      source.promptSegments.every(
-        (segment) => !existsSync(segment.source.path),
-      ),
-    ).toBe(true);
+    const released = await releasedProjection(
+      projection,
+      setup,
+      before,
+      controller.signal,
+    );
     expect(disk.state.active).toBe(0);
     expect(activeRequestBodyCount()).toBe(0);
-    return source.promptSegments.every(
-      (segment) => !existsSync(segment.source.path),
-    );
+    return released;
   } finally {
     http.readBody.release();
     http.respond.release();
@@ -73,7 +99,7 @@ async function lifecycle(
   }
 }
 
-describe('actual disk source send lifetime', () => {
+describe('actual native source send lifetime', () => {
   it('releases sent ownership when the consumer returns after the first actual response chunk', async () => {
     const disk = projectionDiskRows(false, false);
     const http = projectionEndpoint(false);
@@ -83,7 +109,7 @@ describe('actual disk source send lifetime', () => {
     );
     const options = setup.options(requestSelection(disk.rows));
     const projection = await setup.provider.projectPromptEnvelope(options);
-    const source = projection.finalizedProjection;
+    const before = new Set(readdirSync(getScratchRoot()));
     const stream = setup.provider.generateChatCompletion({
       ...options,
       promptEnvelopeTransportToken: projection.transportToken,
@@ -93,13 +119,7 @@ describe('actual disk source send lifetime', () => {
     try {
       expect((await stream.next()).done).toBe(false);
       await stream.return?.();
-      if (!(source instanceof Gpt56SourceProjection))
-        throw new Error('Missing sealed source');
-      expect(
-        source.promptSegments.every(
-          (segment) => !existsSync(segment.source.path),
-        ),
-      ).toBe(true);
+      expect(await releasedProjection(projection, setup, before)).toBe(true);
       expect(activeRequestBodyCount()).toBe(0);
     } finally {
       await stream.return?.();
@@ -111,14 +131,14 @@ describe('actual disk source send lifetime', () => {
   });
 });
 
-describe('unstarted and aborted disk source send lifetime', () => {
+describe('unstarted and aborted native source send lifetime', () => {
   it('releases a prepared token when the consumer throws before first next', async () => {
     expect(await lifecycle('throw')).toBe(true);
   }, 120000);
   it('releases a prepared token when returned before the first provider next', async () => {
     expect(await lifecycle(true)).toBe(true);
   }, 120000);
-  it('aborts a paused actual HTTP send and closes owned segments and body leases', async () => {
+  it('aborts a paused actual HTTP send and closes the native prompt and body leases', async () => {
     expect(await lifecycle(false)).toBe(true);
   }, 120000);
 });

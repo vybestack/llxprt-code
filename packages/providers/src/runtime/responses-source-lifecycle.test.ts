@@ -86,14 +86,17 @@ describe('Responses source deterministic lifecycle', () => {
     const reader = prompt.body(prompt.envelope())[Symbol.asyncIterator]();
     try {
       let next = await reader.next();
-      while (!next.done && !new TextDecoder().decode(next.value).endsWith('x'))
+      while (
+        next.done !== true &&
+        !new TextDecoder().decode(next.value).endsWith('x')
+      )
         next = await reader.next();
       expect(next.done).toBe(false);
       expect(next.value?.byteLength).toBeLessThan(70_000);
       controller.abort(reason);
       await expect(reader.next()).rejects.toBe(reason);
     } finally {
-      await reader.return?.();
+      await reader.return();
       await prompt.dispose();
     }
   });

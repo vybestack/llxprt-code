@@ -1,46 +1,57 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { existsSync, unlinkSync } from 'node:fs';
+import { readdirSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { requestSelection } from './__tests__/support/request-selection.js';
-import { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
-import { diskResponsesBodyBytes } from './responses-disk-body.js';
+import { NativeResponsesEstimateProjection } from './native-responses-estimate.js';
+import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
 import { diskTextFixture } from './__tests__/support/disk-text-fixture.js';
 import { projectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
 
-async function failedBody(source: Gpt56SourceProjection): Promise<void> {
-  for await (const bytes of diskResponsesBodyBytes(
-    { model: 'gpt-5.6', input: [], stream: true, instructions: '' },
-    source,
-  ))
-    void bytes;
-}
-
-describe('actual prepared disk segment reader ownership', () => {
-  it('propagates source I/O failure and releases the body lease so unused preparation can remove every remaining segment', async () => {
+describe('actual prepared native reader ownership', () => {
+  it('propagates source I/O failure and releases the body lease without creating prompt segments', async () => {
     const disk = diskTextFixture(false, false);
     const setup = await projectionRuntime('http://127.0.0.1:1/v1', disk.root);
-    const projection = await setup.provider.projectPromptEnvelope(
-      setup.options(requestSelection(disk.rows)),
-    );
-    const source = projection.finalizedProjection;
-    if (!(source instanceof Gpt56SourceProjection))
-      throw new Error('Missing sealed actual projection');
+    const before = new Set(readdirSync(getScratchRoot()));
+    const options = setup.options(requestSelection(disk.rows));
+    const projection = await setup.provider.projectPromptEnvelope(options);
+    const savedFetch = globalThis.fetch;
     try {
-      const input = source.promptSegments.find(
-        (segment) => segment.promptKey === 'input',
+      expect(projection.finalizedProjection).toBeInstanceOf(
+        NativeResponsesEstimateProjection,
       );
-      if (input === undefined) throw new Error('Missing actual input segment');
-      if (input.wireSource === undefined)
-        throw new Error('Missing actual input wire segment');
-      unlinkSync(input.wireSource.path);
-      await expect(failedBody(source)).rejects.toThrow('ENOENT');
+      unlinkSync(join(disk.root, '0.row'));
+      await expect(
+        estimatePromptEnvelope(setup.provider.name, projection, setup.factory),
+      ).rejects.toThrow('ENOENT');
+      globalThis.fetch = Object.assign(
+        async (
+          _input: Parameters<typeof fetch>[0],
+          init?: RequestInit,
+        ): Promise<Response> => {
+          await new Response(init?.body).text();
+          throw new Error('Broken source unexpectedly completed');
+        },
+        { preconnect: savedFetch.preconnect },
+      );
+      const stream = setup.provider.generateChatCompletion({
+        ...options,
+        promptEnvelopeTransportToken: projection.transportToken,
+      });
+      await expect(stream.next()).rejects.toThrow('ENOENT');
       await projection.releaseIfUnsent?.();
+      await expect(
+        estimatePromptEnvelope(setup.provider.name, projection, setup.factory),
+      ).rejects.toThrow('closed');
       expect(
-        source.promptSegments.every(
-          (segment) => !existsSync(segment.source.path),
-        ),
-      ).toBe(true);
+        readdirSync(getScratchRoot()).filter((name) => !before.has(name)),
+      ).toStrictEqual([]);
+      expect(disk.state.active).toBe(0);
+      expect(activeRequestBodyCount()).toBe(0);
     } finally {
+      globalThis.fetch = savedFetch;
       await projection.releaseIfUnsent?.();
       disk.close();
       await setup.config.dispose();

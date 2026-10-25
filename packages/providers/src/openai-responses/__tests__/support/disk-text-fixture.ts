@@ -132,6 +132,14 @@ export function diskTextFixture(
       join(root, `${index}.row`),
       serialize(diskTextRow(index, large)),
     );
+  function readRow(index: number): IContent {
+    const previous = retain ? retained[index] : undefined;
+    if (previous !== undefined) return previous;
+    const row: IContent = deserialize(readFileSync(join(root, `${index}.row`)));
+    references.push(new WeakRef(row));
+    if (retain) retained[index] = row;
+    return row;
+  }
   return {
     root,
     state,
@@ -144,7 +152,7 @@ export function diskTextFixture(
         signal?.throwIfAborted();
         assertRowIndex(index, 64);
         if (state.closed) throw new Error('Disk source is closed');
-        return deserialize(readFileSync(join(root, `${index}.row`)));
+        return readRow(index);
       },
       async *openReader(signal?: AbortSignal): AsyncGenerator<IContent, void> {
         state.opened++;
@@ -153,11 +161,7 @@ export function diskTextFixture(
           for (let index = 0; index < 64; index++) {
             signal?.throwIfAborted();
             if (state.closed) throw new Error('Disk source is closed');
-            const row: IContent = deserialize(
-              readFileSync(join(root, `${index}.row`)),
-            );
-            references.push(new WeakRef(row));
-            if (retain) retained.push(row);
+            const row = readRow(index);
             state.pulled++;
             yield row;
           }

@@ -24,13 +24,9 @@ import {
   type PromptEnvelopeEstimate,
   type PromptEnvelopeProjection,
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import type {
-  RuntimePromptEstimateRequest,
-  RuntimeTokenizerFactory,
-} from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { PROJECTION_REVISION } from '../../runtime/promptEnvelopeProjections.js';
-import { Gpt56SourceProjection } from '../../tokenizers/gpt56-source-projection.js';
-import { promptTextPieces } from '../../tokenizers/source-family-input.js';
+import { createRuntimeTokenizerFactory } from '../../composition/runtimeTokenizerFactory.js';
+import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
 
 void vi.mock('openai', () => ({
   default: class FakeOpenAI {
@@ -66,7 +62,7 @@ function buildCallOptions(
   provider: OpenAIResponsesProvider,
   overrides: Parameters<typeof createProviderCallOptions>[0],
 ) {
-  return createProviderCallOptions({
+  return streamCallOptions({
     providerName: provider.name,
     resolved: {
       model: 'gpt-4o',
@@ -77,44 +73,15 @@ function buildCallOptions(
   });
 }
 
-async function finalizedPromptLength(
-  request: RuntimePromptEstimateRequest,
-): Promise<number> {
-  const projection = request.finalizedProjection;
-  // Responses requests are sent from prompt-key files on disk; the legacy
-  // JSON prompt text is the concatenation of their pieces.
-  if (projection instanceof Gpt56SourceProjection) {
-    let length = 0;
-    for await (const piece of promptTextPieces(projection))
-      length += piece.length;
-    return length;
-  }
-  throw new Error('Expected a finalized provider prompt projection');
-}
-
-function createLengthTokenizerFactory(): RuntimeTokenizerFactory {
-  return {
-    getTokenizer: () => undefined,
-    estimatePrompt: async (request) => ({
-      count: await finalizedPromptLength(request),
-      method: 'exact',
-      family: 'projection-length-fixture',
-      estimatorVersion: '1',
-      assetRevision: 'fixture',
-      projectionRevision: request.projectionRevision,
-    }),
-  };
-}
-
-/** The finalized prompt length of the request the projection will send. */
-async function projectedLength(
+/** The finalized prompt token count of the request the projection will send. */
+async function projectedTokens(
   provider: OpenAIResponsesProvider,
   projection: PromptEnvelopeProjection,
 ): Promise<number> {
   const estimate = await estimatePromptEnvelope(
     provider.name,
     projection,
-    createLengthTokenizerFactory(),
+    createRuntimeTokenizerFactory(),
   );
   return estimate.transmittedTokens;
 }
@@ -197,7 +164,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       }),
     );
 
-    expect(await projectedLength(provider, projection)).toBeGreaterThan(0);
+    expect(await projectedTokens(provider, projection)).toBeGreaterThan(0);
     expect(provider.promptAuthResolutions).toStrictEqual([]);
   });
 
@@ -214,7 +181,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
     const estimate = await estimatePromptEnvelope(
       provider.name,
       projection,
-      createLengthTokenizerFactory(),
+      createRuntimeTokenizerFactory(),
     );
 
     expect(estimate.statefulParentUsed).toBe(false);
@@ -255,7 +222,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
     const fullHistory = await provider.projectPromptEnvelope(
       buildCallOptions(provider, { contents }),
     );
-    const factory = createLengthTokenizerFactory();
+    const factory = createRuntimeTokenizerFactory();
 
     const estimate = await estimatePromptEnvelope(
       provider.name,
@@ -312,7 +279,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
     const estimate = await estimatePromptEnvelope(
       provider.name,
       projection,
-      createLengthTokenizerFactory(),
+      createRuntimeTokenizerFactory(),
     );
 
     expect(estimate.retainedBaselineTokens).toBe(1_000);
@@ -365,7 +332,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
         ephemerals: { 'responses-stateful': true },
       }),
     );
-    const factory = createLengthTokenizerFactory();
+    const factory = createRuntimeTokenizerFactory();
 
     const configuredEstimate = await estimatePromptEnvelope(
       provider.name,
@@ -431,7 +398,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       const fullHistory = await provider.projectPromptEnvelope(
         buildCallOptions(provider, { contents }),
       );
-      const factory = createLengthTokenizerFactory();
+      const factory = createRuntimeTokenizerFactory();
       const statefulEstimate = await estimatePromptEnvelope(
         provider.name,
         stateful,
@@ -556,8 +523,8 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       }),
     );
 
-    const smallTokens = await projectedLength(provider, small);
-    const largeTokens = await projectedLength(provider, large);
+    const smallTokens = await projectedTokens(provider, small);
+    const largeTokens = await projectedTokens(provider, large);
     expect(largeTokens).toBeGreaterThan(smallTokens);
   });
 
@@ -586,8 +553,8 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       }),
     );
 
-    const withoutTokens = await projectedLength(provider, withoutTools);
-    const withTokens = await projectedLength(provider, withTools);
+    const withoutTokens = await projectedTokens(provider, withoutTools);
+    const withTokens = await projectedTokens(provider, withTools);
     expect(withTokens).toBeGreaterThan(withoutTokens);
   });
 
@@ -608,8 +575,8 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
         'Always answer with extensive detail, follow every formatting rule, explain assumptions, and avoid unsupported speculation in every response.',
     });
 
-    const withoutTokens = await projectedLength(provider, withoutInstruction);
-    const withTokens = await projectedLength(provider, withLongInstruction);
+    const withoutTokens = await projectedTokens(provider, withoutInstruction);
+    const withTokens = await projectedTokens(provider, withLongInstruction);
     expect(withTokens).toBeGreaterThan(withoutTokens);
   });
 
@@ -723,8 +690,8 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
     const large = await project('A'.repeat(100_000));
 
     expect(small.unsupportedMedia[0]?.mediaType).toBe('audio');
-    expect(await projectedLength(provider, large)).toBe(
-      await projectedLength(provider, small),
+    expect(await projectedTokens(provider, large)).toBe(
+      await projectedTokens(provider, small),
     );
   });
 
