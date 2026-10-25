@@ -5,7 +5,7 @@
  */
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 
 export type AgentRetainedProviderFile = Omit<
   Parameters<ProviderFileLifecycle['retain']>[0],
@@ -23,12 +23,10 @@ export interface AgentProviderFileOperations {
 }
 
 export function assembleProviderFileOperations(
-  owner: object | undefined,
+  owner: ProviderFileLifecycle,
   scopeId: string,
   assertAdmission: () => void,
 ): AgentProviderFileOperations {
-  if (!(owner instanceof ProviderFileLifecycle))
-    throw new Error('Agent requires its provider-file owner');
   return {
     async retainProviderFile(input) {
       assertAdmission();
@@ -40,13 +38,16 @@ export function assembleProviderFileOperations(
 }
 
 export class SessionProviderFileBinding {
-  private lifecycle: object | undefined;
+  private lifecycle: ProviderFileLifecycle | undefined;
   private retry: ((provider: string) => ProviderRetryOperations) | undefined;
   private cleanup: ((scope: string) => Promise<void>) | undefined;
 
   bind(
-    client: Pick<AgentClientContract, 'bindProviderFiles'>,
-    lifecycle: object,
+    client: Pick<
+      AgentClientContract<ProviderFileLifecycle>,
+      'bindProviderFiles'
+    >,
+    lifecycle: ProviderFileLifecycle,
     retry: (provider: string) => ProviderRetryOperations,
     cleanup: ((scope: string) => Promise<void>) | undefined,
   ): void {
@@ -58,7 +59,12 @@ export class SessionProviderFileBinding {
     this.bindClient(client);
   }
 
-  bindClient(client: Pick<AgentClientContract, 'bindProviderFiles'>): void {
+  bindClient(
+    client: Pick<
+      AgentClientContract<ProviderFileLifecycle>,
+      'bindProviderFiles'
+    >,
+  ): void {
     if (this.lifecycle !== undefined && this.retry !== undefined)
       client.bindProviderFiles?.(this.lifecycle, this.retry);
   }
@@ -71,6 +77,8 @@ export class SessionProviderFileBinding {
     scope: string,
     assertAdmission: () => void,
   ): AgentProviderFileOperations {
+    if (this.lifecycle === undefined)
+      throw new Error('Agent requires its provider-file owner');
     return assembleProviderFileOperations(
       this.lifecycle,
       scope,

@@ -16,6 +16,7 @@ import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runti
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { MiddleOutStrategy } from './MiddleOutStrategy.js';
 import { OneShotStrategy } from './OneShotStrategy.js';
 import {
@@ -40,7 +41,10 @@ describe('compression media composition', () => {
       const bindings = createHistoryProviderFileBindingStore(
         new HistoryService(),
       );
-      const lifecycle = {};
+      const lifecycle = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 1024,
+      });
       const selectedConfig = createRuntimeConfigStub(new SettingsService());
       let completedRequests = 0;
       const requestDirectories: Array<string | undefined> = [];
@@ -48,7 +52,7 @@ describe('compression media composition', () => {
         requestMediaResolver?: RequestMediaResolver;
         requestMediaBudgetBytes?: number;
         requestProviderFileBindings?: ProviderFileBindingStore;
-        requestProviderFileLifecycle?: object;
+        requestProviderFileLifecycle?: ProviderFileLifecycle;
         requestWorkspaceDirectory?: string;
       } = {
         requestMediaResolver: undefined,

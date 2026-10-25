@@ -1,3 +1,4 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 /**
  * @license
@@ -130,7 +131,7 @@ export class StreamProcessor {
     private readonly mediaResolver: RequestMediaResolutionService | undefined,
     private readonly requestMediaBudgetBytes: number | undefined,
     private providerFileBindings: ProviderFileBindingStore | undefined,
-    private readonly providerFileLifecycle: object | undefined,
+    private readonly providerFileLifecycle: ProviderFileLifecycle | undefined,
     private readonly tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
     private readonly readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],
     private readonly conversationManager: ConversationManager,

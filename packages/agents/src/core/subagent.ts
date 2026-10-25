@@ -1,3 +1,4 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {
   runInteractiveIteration,
   buildSubagentInitialMessages,
@@ -148,7 +149,7 @@ export interface SubAgentOperationPorts {
   readonly loadEnvironmentContext: EnvironmentContextLoader;
   readonly readApprovalMode: () => ApprovalMode;
   readonly admitModelParameters: () => AdmittedModelParameters;
-  readonly providerFiles: object | undefined;
+  readonly providerFiles: ProviderFileLifecycle | undefined;
   readonly hooks: HookExecutionOwner;
   readonly tryBucketFailover: ProviderRetryOperations['tryBucketFailover'];
   readonly readCurrentBucket: ProviderRetryOperations['readCurrentBucket'];
@@ -196,7 +197,7 @@ export class SubAgentScope implements ChildAgentScope {
     private readonly workspacePaths: WorkspacePathOperations,
     private readonly readMcpInstructions: () => string | undefined,
     private readonly instructions: InstructionReadOperations,
-    private readonly providerFileLifecycle: object | undefined,
+    private readonly providerFileLifecycle: ProviderFileLifecycle | undefined,
     private readonly tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
     private readonly readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],
     private readonly messageBus: MessageBus,

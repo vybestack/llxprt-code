@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type {
   ContentGenerator,
   ProfileDefinitionReads,
@@ -158,7 +159,7 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
   }
 
   bindProviderFiles(
-    lifecycle: object,
+    lifecycle: ProviderFileLifecycle,
     retry: (provider: string) => ProviderRetryOperations,
     cleanup?: (scopeId: string) => Promise<void>,
   ): void {

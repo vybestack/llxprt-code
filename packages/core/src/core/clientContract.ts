@@ -170,7 +170,7 @@ export interface AgentChatContract {
  * Structural contract for the agent client.
  * Core-owned; the concrete AgentClient class implements this.
  */
-export interface AgentClientContract {
+export interface AgentClientContract<TLifecycle = never> {
   bindModelNotifications?(subscribe: SubscribeModelChanges): void;
   readonly tools: ToolSelection;
   bindToolSelection(selection: ToolSelection): void;
@@ -194,7 +194,7 @@ export interface AgentClientContract {
     readGovernance: () => ToolGovernance,
   ): void;
   bindProviderFiles?(
-    lifecycle: object,
+    lifecycle: TLifecycle,
     composeRetryOperations: (provider: string) => ProviderRetryOperations,
   ): void;
   bindTokenization?(

@@ -1,3 +1,4 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 /**
@@ -92,7 +93,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     private readonly mediaResolver: RequestMediaResolutionService | undefined,
     private readonly requestMediaBudgetBytes: number | undefined,
     private readonly providerFileBindings: ProviderFileBindingStore | undefined,
-    private readonly providerFileLifecycle: object | undefined,
+    private readonly providerFileLifecycle: ProviderFileLifecycle | undefined,
   ) {}
 
   readonly name = 'middle-out' as const;

@@ -95,6 +95,7 @@ import { resolveRawTokenDeltaNotifier } from '../logging/attemptLifecycle.js';
 import type { ModelDefaultRule } from '../composition/providerAliases.js';
 import { createUnallowedModelParametersResolver as makeResolver } from '../openai-responses/unallowedModelParameters.js';
 
+import type { ProviderFileLifecycle } from '../providerFilePolicy.js';
 import { buildContinuationMessages } from './OpenAIRequestBuilder.js';
 import { extractContinuationChunkText } from './OpenAIStreamChunkText.js';
 import {
@@ -133,7 +134,7 @@ interface DispatchResponseOptions {
 }
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
-  protected requestProviderFileLifecycle?: object;
+  protected requestProviderFileLifecycle?: ProviderFileLifecycle;
   protected requestProviderFileBindings?: ProviderFileBindingStore;
   protected requestWorkspaceDirectory?: string;
   private readonly textToolParser = new GemmaToolCallParser();

@@ -1,3 +1,4 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProfileDefinitionReads } from '@vybestack/llxprt-code-core';
@@ -475,7 +476,7 @@ export async function resolveLoadBalancedCompressionProvider(
   mediaResolver: RequestMediaResolutionService | undefined,
   requestMediaBudgetBytes: number | undefined,
   providerFileBindings: ProviderFileBindingStore | undefined,
-  providerFileLifecycle: object | undefined,
+  providerFileLifecycle: ProviderFileLifecycle | undefined,
 ): Promise<CompressionProviderResult> {
   const candidates = await buildCompressionLoadBalancerCandidates(
     ctx,
@@ -563,7 +564,7 @@ export async function resolveCompressionProvider(
   mediaResolver: RequestMediaResolutionService | undefined,
   requestMediaBudgetBytes: number | undefined,
   providerFileBindings: ProviderFileBindingStore | undefined,
-  providerFileLifecycle: object | undefined,
+  providerFileLifecycle: ProviderFileLifecycle | undefined,
   config: Config | undefined,
 ): Promise<CompressionProviderResult> {
   if (!profileName) {

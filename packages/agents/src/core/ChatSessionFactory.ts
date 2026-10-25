@@ -1,3 +1,4 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type {
   ProfileDefinitionReads,
   RuntimeTokenizerFactory,
@@ -56,7 +57,7 @@ export { buildSystemInstruction } from './system-instruction.js';
 export interface CreateChatSessionDeps {
   readonly requestDiagnostics?: ProviderRequestDiagnostics;
   readonly telemetry: RootTelemetry;
-  readonly providerFileLifecycle?: object;
+  readonly providerFileLifecycle?: ProviderFileLifecycle;
   readonly composeRetryOperations?: (
     provider: string,
   ) => ProviderRetryOperations;
@@ -236,7 +237,7 @@ async function buildChatFromRuntime(
   readToolGovernance: () => ToolGovernance,
   profileDefinitions: CreateChatSessionDeps['profileDefinitions'],
   promptEstimator: CreateChatSessionDeps['promptEstimator'],
-  lifecycle: object | undefined,
+  lifecycle: ProviderFileLifecycle | undefined,
   retry: CreateChatSessionDeps['composeRetryOperations'],
   telemetry: RootTelemetry,
   requestDiagnostics: ProviderRequestDiagnostics | undefined,

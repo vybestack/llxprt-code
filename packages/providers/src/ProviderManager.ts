@@ -14,6 +14,7 @@ import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/s
 
 import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
 import { BaseProvider } from './BaseProvider.js';
+import type { ProviderFileLifecycle } from './providerFilePolicy.js';
 import { type IProvider, type GenerateChatOptions } from './IProvider.js';
 import { type IProviderManager } from './IProviderManager.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -145,7 +146,7 @@ export class ProviderManager implements IProviderManager {
     private readonly mediaResolver: RequestMediaResolutionService | undefined,
     private readonly requestMediaBudgetBytes: number | undefined,
     private readonly providerFileBindings: ProviderFileBindingStore | undefined,
-    private readonly providerFileLifecycle: object | undefined,
+    private readonly providerFileLifecycle: ProviderFileLifecycle | undefined,
     settingsService?: RuntimeSettingsState,
     config?: Config,
     runtime?: ProviderRuntimeContext,

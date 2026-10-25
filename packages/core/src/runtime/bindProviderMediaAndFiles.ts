@@ -9,12 +9,12 @@ import type { ProviderFileBindingStore } from './providerRuntimeContext.js';
 import { bindProviderMedia } from './bindProviderMedia.js';
 import { bindProviderFiles } from './bindProviderFiles.js';
 
-export function bindProviderMediaAndFiles<T extends object>(
+export function bindProviderMediaAndFiles<T extends object, TLifecycle>(
   provider: T,
   mediaResolver: RequestMediaResolutionService | undefined,
   mediaBudgetBytes: number | undefined,
   fileBindings: ProviderFileBindingStore | undefined,
-  fileLifecycle: object | undefined,
+  fileLifecycle: TLifecycle | undefined,
   workspaceDirectory: string | undefined,
 ): T {
   return bindProviderFiles(

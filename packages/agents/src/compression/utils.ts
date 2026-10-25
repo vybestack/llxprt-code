@@ -1,3 +1,4 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 /**
@@ -259,7 +260,7 @@ export async function runVerificationPass(
   mediaResolver: RequestMediaResolutionService | undefined,
   requestMediaBudgetBytes: number | undefined,
   providerFileBindings: ProviderFileBindingStore | undefined,
-  providerFileLifecycle: object | undefined,
+  providerFileLifecycle: ProviderFileLifecycle | undefined,
   resolvedRuntime?: ProviderRequestCollaborators,
   resolvedConfig?: Config,
   resolvedOptions?: RuntimeGenerateChatOptions['resolved'],
@@ -427,7 +428,7 @@ export function bindCompressionProvider(
   mediaResolver: RequestMediaResolutionService | undefined,
   budgetBytes: number | undefined,
   bindings: ProviderFileBindingStore | undefined,
-  lifecycle: object | undefined,
+  lifecycle: ProviderFileLifecycle | undefined,
   workspaceDirectory: string | undefined,
 ): IProvider {
   return bindProviderMediaAndFiles(

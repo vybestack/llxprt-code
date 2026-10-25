@@ -1,3 +1,4 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { finishClientDisposal } from './client-disposal.js';
 import { AuxiliaryWork } from './auxiliary-work.js';
 import * as modelNotifications from './client-model-subscriptions.js';
@@ -169,10 +170,10 @@ export class AgentClient
     assertSessionClientProvider(this.selectionManager, manager);
   }
 
-  private providerFileLifecycle: object | undefined;
+  private providerFileLifecycle: ProviderFileLifecycle | undefined;
   private composeRetryOperations: CreateChatSessionDeps['composeRetryOperations'];
   bindProviderFiles(
-    lifecycle: object,
+    lifecycle: ProviderFileLifecycle,
     composeRetryOperations: NonNullable<
       CreateChatSessionDeps['composeRetryOperations']
     >,

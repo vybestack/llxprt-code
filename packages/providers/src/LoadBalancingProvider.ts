@@ -5,6 +5,7 @@
  */
 
 import { ProviderMediaFileAdapter } from '@vybestack/llxprt-code-core/runtime/provider-media-file-adapter.js';
+import type { ProviderFileLifecycle } from './providerFilePolicy.js';
 import type {
   IProvider,
   GenerateChatOptions,
@@ -129,7 +130,7 @@ interface PreparedLoadBalancerTarget {
  * Load balancing provider that distributes requests across multiple sub-profiles
  */
 export class LoadBalancingProvider
-  extends ProviderMediaFileAdapter
+  extends ProviderMediaFileAdapter<ProviderFileLifecycle>
   implements IProvider
 {
   readonly name = 'load-balancer';

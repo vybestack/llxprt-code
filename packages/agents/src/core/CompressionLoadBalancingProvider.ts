@@ -1,3 +1,4 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -68,7 +69,7 @@ export class CompressionLoadBalancingProvider implements IProvider {
     private readonly mediaResolver: RequestMediaResolutionService | undefined,
     private readonly requestMediaBudgetBytes: number | undefined,
     private providerFileBindings: ProviderFileBindingStore | undefined,
-    private readonly providerFileLifecycle: object | undefined,
+    private readonly providerFileLifecycle: ProviderFileLifecycle | undefined,
   ) {
     if (candidates.length === 0) {
       throw new Error('Load-balanced compression profile requires subprofiles');

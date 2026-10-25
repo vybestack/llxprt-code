@@ -1,3 +1,4 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import { createHistoryProviderFileBindingStore } from '@vybestack/llxprt-code-core/services/history/provider-file-binding.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
@@ -604,7 +605,7 @@ export interface CreateChatObjectParams {
 
 export async function createChatObject(
   params: CreateChatObjectParams,
-  providerFileLifecycle: object | undefined,
+  providerFileLifecycle: ProviderFileLifecycle | undefined,
   tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
   readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],
 ): Promise<ChatSession | null> {
@@ -766,7 +767,7 @@ function instantiateChat(
   contentGenerator: ContentGenerator,
   _logger: { debug: (fn: () => string) => void },
   systemPromptAssembler: SystemPromptAssembler | undefined,
-  providerFileLifecycle: object | undefined,
+  providerFileLifecycle: ProviderFileLifecycle | undefined,
   requestMediaBudgetBytes: number,
   tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
   readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],

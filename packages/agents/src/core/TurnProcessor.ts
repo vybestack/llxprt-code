@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {
   INVALID_CONTENT_RETRY_OPTIONS,
   StreamEventType,
@@ -154,7 +155,7 @@ export class TurnProcessor {
     private readonly mediaResolver: RequestMediaResolutionService | undefined,
     private readonly requestMediaBudgetBytes: number | undefined,
     private providerFileBindings: ProviderFileBindingStore | undefined,
-    private readonly providerFileLifecycle: object | undefined,
+    private readonly providerFileLifecycle: ProviderFileLifecycle | undefined,
     private readonly compressionHandler: CompressionHandler,
     private readonly providerResolver: (contextLabel: string) => IProvider,
     private readonly providerRuntimeBuilder: (

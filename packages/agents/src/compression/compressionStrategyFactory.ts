@@ -1,3 +1,4 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 /**
@@ -49,7 +50,7 @@ export function getCompressionStrategy(
   mediaResolver: RequestMediaResolutionService | undefined,
   requestMediaBudgetBytes: number | undefined,
   providerFileBindings: ProviderFileBindingStore | undefined,
-  providerFileLifecycle: object | undefined,
+  providerFileLifecycle: ProviderFileLifecycle | undefined,
 ): CompressionStrategy {
   switch (name) {
     case 'middle-out':

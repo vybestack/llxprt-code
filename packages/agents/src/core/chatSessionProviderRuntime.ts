@@ -11,10 +11,8 @@ import type { CompletedToolCall } from './coreToolScheduler.js';
 
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { NoActiveProviderError } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import {
-  ANTHROPIC_DEFAULT_BASE_URL,
-  ProviderFileLifecycle,
-} from '@vybestack/llxprt-code-providers';
+import { ANTHROPIC_DEFAULT_BASE_URL } from '@vybestack/llxprt-code-providers';
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 
 export function resolveProviderBaseUrl(
   provider: IProvider,
@@ -52,10 +50,10 @@ export function initialProviderBaseUrl(
 }
 
 export async function cleanupChatSessionProviderFiles(
-  lifecycle: object | undefined,
+  lifecycle: ProviderFileLifecycle | undefined,
   runtimeId: string,
 ): Promise<void> {
-  if (!(lifecycle instanceof ProviderFileLifecycle)) return;
+  if (lifecycle === undefined) return;
   const result = await lifecycle.cleanupScope('session', runtimeId);
   if (result.failed > 0) {
     throw new Error(

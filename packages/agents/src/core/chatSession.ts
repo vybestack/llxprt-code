@@ -1,3 +1,4 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {
   ChatHistoryAdmissions,
   appendGenerationHistory,
@@ -111,8 +112,8 @@ export interface SendMessageParams {
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { CompressionHandler } from '../compression/CompressionHandler.js';
 import {
+  beginSemanticMediaPurge,
   createSemanticMediaPurgeSession,
-  requiresObservedSemanticPurgeCacheWrite,
 } from './chatSessionMediaLifecycle.js';
 import { createCompressionHookTrigger } from './compressionHookWiring.js';
 import { resolveCompressionProvider } from './CompressionProfileResolver.js';
@@ -257,7 +258,7 @@ export class ChatSession {
     private readonly mediaResolver: RequestMediaResolutionService | undefined,
     private readonly requestMediaBudgetBytes: number | undefined,
     private providerFileBindings: ProviderFileBindingStore | undefined,
-    private readonly providerFileLifecycle: object | undefined,
+    private readonly providerFileLifecycle: ProviderFileLifecycle | undefined,
     tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
     readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],
     _contentGenerator: ContentGenerator,
@@ -596,22 +597,11 @@ export class ChatSession {
   private _beginSemanticMediaPurge(
     execution?: AgentChatRecordingExecution,
   ): ReturnType<SemanticMediaPurgeSession['begin']> {
-    const purge = this.semanticMediaPurge;
-    if (!purge.isEnabled()) return Promise.resolve(undefined);
-    const active = this.runtimeContext.provider.getActiveProvider();
-    const desiredName = this.runtimeState.provider;
-    const provider =
-      active.name === desiredName
-        ? active
-        : this.runtimeContext.provider.getProviderByName?.(desiredName);
-    if (provider === undefined) {
-      throw new Error(
-        `Provider '${desiredName}' is unavailable for semantic media purge`,
-      );
-    }
-    return purge.begin(
-      requiresObservedSemanticPurgeCacheWrite(this.runtimeContext, provider),
-      execution?.persistSemanticMediaPurge,
+    return beginSemanticMediaPurge(
+      this.semanticMediaPurge,
+      this.runtimeContext,
+      this.runtimeState.provider,
+      execution,
     );
   }
 
