@@ -52,17 +52,20 @@ async function measure(
   await settle();
   const before = usage();
   const retainedRows: IContent[] = [];
+  function readAt(index: number): IContent {
+    return {
+      speaker: index % 2 === 0 ? 'human' : 'ai',
+      blocks: [
+        {
+          type: 'text',
+          text: `${index}:${randomBytes(6144).toString('base64')}`,
+        },
+      ],
+    };
+  }
   async function* rows(): AsyncIterable<IContent> {
     for (let index = 0; index < count; index++) {
-      const row: IContent = {
-        speaker: index % 2 === 0 ? 'human' : 'ai',
-        blocks: [
-          {
-            type: 'text',
-            text: `${index}:${randomBytes(6144).toString('base64')}`,
-          },
-        ],
-      };
+      const row = readAt(index);
       if (eager) retainedRows.push(row);
       yield row;
     }
@@ -77,7 +80,18 @@ async function measure(
         });
         return eagerBody;
       })()
-    : buildProviderDumpBodyStream({ providerName, history: { rows } });
+    : buildProviderDumpBodyStream({
+        providerName,
+        history: {
+          rows,
+          callerOwnedRows: {
+            callerOwned: true,
+            count,
+            readAt,
+            openReader: rows,
+          },
+        },
+      });
   const iterator = streamPrettyJson(body)[Symbol.asyncIterator]();
   let found = false;
   while (!found) {
