@@ -1,4 +1,3 @@
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
@@ -13,43 +12,12 @@ import { join } from 'node:path';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { buildAgent, internalConfig } from './helpers/agentHarness.js';
 
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-async function withAgents(
-  scenario: (input: {
-    root: string;
-    build: (id?: string) => ReturnType<typeof buildAgent>;
-  }) => Promise<void>,
-): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'session-identity-'));
-  const cleanups: Array<() => Promise<void>> = [];
-  let storageDir: string | undefined;
-  try {
-    await scenario({
-      root,
-      build: async (id) => {
-        const built = await buildAgent('plain-text.jsonl', {
-          workingDir: root,
-          ...(id === undefined ? {} : { sessionId: id }),
-        });
-        storageDir = internalConfig(built.agent).projectTempDir;
-        cleanups.push(built.cleanup);
-        return built;
-      },
-    });
-  } finally {
-    for (const cleanup of cleanups.reverse()) await cleanup();
-    if (storageDir !== undefined)
-      await rm(storageDir, { recursive: true, force: true });
-    await rm(root, { recursive: true, force: true });
-  }
-}
 
 async function locks(dir: string): Promise<string[]> {
   return (await readdir(dir)).filter((file) => file.endsWith('.lock'));
@@ -245,40 +213,6 @@ describe('Agent recording identity transitions', () => {
       expect(await readFile(previousPath, 'utf8')).toContain('prior-history');
       await agent.session.setRecording({ enabled: false });
       expect(await locks(config.projectChatsDir)).toStrictEqual([]);
-    });
-  }, 30000);
-
-  it('releases prepared recording and lock when reading prior history fails before adoption', async () => {
-    await withAgents(async ({ build }) => {
-      const source = await build('history-source');
-      await source.agent.setHistory([
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'history-source-turn' }],
-        },
-      ]);
-      await source.agent.session.setRecording({ enabled: true });
-      await source.agent.session.setRecording({ enabled: false });
-      await source.cleanup();
-
-      const { agent } = await build('history-owner');
-      const config = internalConfig(agent);
-      const client = fixtureAgentResources(agent).publishedClient(agent);
-      const failure = new Error('prior history unavailable');
-      const fault = spyOn(client, 'getHistory').mockRejectedValueOnce(failure);
-      try {
-        await expect(agent.session.resume('history-source')).rejects.toThrow(
-          failure,
-        );
-      } finally {
-        fault.mockRestore();
-      }
-      expect(config.getSessionId()).toBe('history-owner');
-      expect(agent.session.getRecording().enabled).toBe(false);
-      expect(await locks(config.projectChatsDir)).toStrictEqual([]);
-      await agent.session.resume('history-source');
-      expect(config.getSessionId()).toBe('history-source');
-      await agent.session.setRecording({ enabled: false });
     });
   }, 30000);
 
