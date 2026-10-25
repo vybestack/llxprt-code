@@ -137,7 +137,11 @@ export class JournalTailSource implements JournalResponseSource {
   }
 
   measurementChanged(label: bigint): boolean {
-    return this.isTail(label) || label === this.projection?.label;
+    return (
+      this.isTail(label) ||
+      label === this.projection?.label ||
+      this.projection?.headerLabels?.includes(label) === true
+    );
   }
 
   appendSequence(label: bigint): bigint {
@@ -159,8 +163,8 @@ export class JournalTailSource implements JournalResponseSource {
     readonly labels: readonly bigint[];
     readonly maxRows: number;
   }> {
-    const labels = new Set<bigint>();
-    let maxRows = this.tailRows.length + this.overlay.size;
+    const labels = new Set(this.projection?.headerLabels);
+    let maxRows = this.tailRows.length + this.overlay.size + labels.size;
     if (this.projection?.label !== undefined) {
       const label = this.projection.label;
       labels.add(label);

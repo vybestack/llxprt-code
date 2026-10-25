@@ -136,7 +136,7 @@ export function nativePurgeProviderRequest(
           : (await snapshot.entryAt(boundary.contentIndex)).label;
       projection = {
         ...(explicit
-          ? {}
+          ? { headerLabels: boundaryLabel === undefined ? [] : [boundaryLabel] }
           : {
               label: changedLabel,
               removedBlock: candidate.removesBlock
