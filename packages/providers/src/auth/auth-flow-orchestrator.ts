@@ -36,6 +36,7 @@ import type {
 } from './types.js';
 
 import type { MultiBucketAuthResult } from './MultiBucketAuthenticator.js';
+import { abortableDelay } from './abortable-delay.js';
 import { buildLockRecoveryHint } from './auth-lock-recovery-hint.js';
 import type { ProviderRegistry } from './provider-registry.js';
 
@@ -817,6 +818,8 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       signal,
     );
 
+    throwIfAborted(signal);
+
     if (result.cancelled) {
       throw new Error(
         `Multi-bucket authentication cancelled after ${result.authenticatedBuckets.length} of ${unauthenticatedBuckets.length} buckets`,
@@ -852,13 +855,14 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       providerName,
       unauthenticatedBuckets,
       readPolicy,
+      signal,
     );
     const onDelay = async (ms: number, bucket: string): Promise<void> => {
       debugLogger.log(
         `(waiting ${ms / 1000} seconds before opening browser...)\n`,
       );
       logger.debug(`Waiting ${ms}ms before authenticating bucket: ${bucket}`);
-      await new Promise((resolve) => setTimeout(resolve, ms));
+      await abortableDelay(ms, signal);
     };
 
     const authenticator = MultiBucketAuthenticator.fromCallbacks({
@@ -965,8 +969,10 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     providerName: string,
     buckets: string[],
     readPolicy: () => { readonly prompt?: unknown; readonly delay?: unknown },
+    signal: AbortSignal | undefined,
   ): (provider: string, bucket: string) => Promise<boolean> {
     return async (provider: string, bucket: string): Promise<boolean> => {
+      throwIfAborted(signal);
       if (this.userDismissedAuthPrompt) {
         logger.debug(
           'User previously dismissed auth prompt in this session, proceeding directly',
@@ -988,6 +994,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         bucket,
         buckets.indexOf(bucket) + 1,
         buckets.length,
+        signal,
       );
 
       if (showPrompt === true) {
@@ -995,6 +1002,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
           'Prompt mode enabled - waiting indefinitely for user approval',
         );
         const result = await confirmPromise;
+        throwIfAborted(signal);
         logger.debug('User responded to bucket auth confirmation', { result });
         if (!result) {
           this.userDismissedAuthPrompt = true;
@@ -1002,10 +1010,17 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         return result;
       }
 
-      const timeoutPromise = new Promise<'timeout'>((resolve) =>
-        setTimeout(() => resolve('timeout'), 3000),
-      );
-      const result = await Promise.race([confirmPromise, timeoutPromise]);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeoutPromise = new Promise<'timeout'>((resolve) => {
+        timer = setTimeout(() => resolve('timeout'), 3000);
+      });
+      let result: boolean | 'timeout';
+      try {
+        result = await Promise.race([confirmPromise, timeoutPromise]);
+      } finally {
+        clearTimeout(timer);
+      }
+      throwIfAborted(signal);
 
       if (result !== 'timeout') {
         logger.debug('TUI responded to bucket auth confirmation', { result });
@@ -1023,7 +1038,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       debugLogger.log(
         `(waiting ${delay / 1000} seconds - switch browser window if needed...)\n`,
       );
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await abortableDelay(delay, signal);
       return true;
     };
   }

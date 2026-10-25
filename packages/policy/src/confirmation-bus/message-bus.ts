@@ -193,22 +193,32 @@ export class MessageBus {
     bucket: string,
     bucketIndex: number,
     totalBuckets: number,
+    signal?: AbortSignal,
   ): Promise<boolean> {
     const correlationId = randomUUID();
 
     return new Promise<boolean>((resolve) => {
+      if (signal?.aborted === true) {
+        resolve(false);
+        return;
+      }
       const cancel = this.cancelConfirmation(
-        () => clearTimeout(timeout),
+        () => {
+          clearTimeout(timeout);
+          signal?.removeEventListener('abort', cancel);
+        },
         () => unsubscribe(),
         resolve,
       );
       const timeout = setTimeout(cancel, this.confirmationTimeoutMs);
+      signal?.addEventListener('abort', cancel, { once: true });
 
       const unsubscribe = this.subscribe<BucketAuthConfirmationResponse>(
         MessageBusType.BUCKET_AUTH_CONFIRMATION_RESPONSE,
         (response) => {
           if (response.correlationId === correlationId) {
             clearTimeout(timeout);
+            signal?.removeEventListener('abort', cancel);
             unsubscribe();
             this.pendingConfirmations.delete(cancel);
             resolve(response.confirmed);
