@@ -47,14 +47,12 @@ async function measureSpan(
   for await (const atom of engine.atoms(span.start * 4)) {
     if (atom.key >= span.end * 4) break;
     firstRole ??= atom.role;
-    const anchored =
-      !atom.repair &&
-      (await plan.query.planAt(atom.end ?? Math.floor(atom.key / 4))).header
-        .metadata?.cacheAnchor === true;
+    const unit = await plan.query.planAt(atom.end ?? Math.floor(atom.key / 4));
+    const anchored = !atom.repair && unit.header.metadata?.cacheAnchor === true;
     const purge =
       !atom.repair &&
-      (await plan.query.planAt(atom.end ?? Math.floor(atom.key / 4))).header
-        .metadata?.semanticMediaPurgeBoundary !== undefined;
+      unit.header.metadata?.semanticMediaPurgeBoundary?.blockIndex ===
+        unit.blocks.length - 1;
     const before = cache.run?.role === atom.role ? cache.run.blocks : 0;
     cache = beginAnthropicCacheAtom(cache, atom.role, atom.chain);
     let emitted = false;
