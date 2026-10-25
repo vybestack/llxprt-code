@@ -15,6 +15,8 @@
  */
 
 import { isDeepStrictEqual } from 'node:util';
+import { HistoryMediaOwnership } from '../../storage/history-media-ownership.js';
+import type { LocalMediaStore } from '../../storage/local-media-store.js';
 import type {
   ToolRankingOverlay,
   ToolRankingPolicy,
@@ -85,6 +87,31 @@ export type PreparedProfileAdoption = (() => void) & {
 
 export class HistoryService extends HistoryServiceReads {
   private disposal: Promise<void> | undefined;
+  private runtimeMediaOwner:
+    | {
+        readonly store: LocalMediaStore;
+        readonly owner: HistoryMediaOwnership;
+        readonly registered: Promise<void>;
+      }
+    | undefined;
+
+  async registerRuntimeMediaOwner(
+    store: LocalMediaStore,
+  ): Promise<HistoryMediaOwnership> {
+    if (this.runtimeMediaOwner === undefined) {
+      const owner = new HistoryMediaOwnership(store);
+      this.runtimeMediaOwner = {
+        store,
+        owner,
+        registered: this.registerMediaOwner(owner),
+      };
+    }
+    const held = this.runtimeMediaOwner;
+    if (held.store !== store)
+      throw new Error('A runtime history cannot use different media stores');
+    await held.registered;
+    return held.owner;
+  }
 
   /**
    * @param options.recording injects the journal store. Omitted, the service

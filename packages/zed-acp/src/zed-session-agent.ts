@@ -283,7 +283,7 @@ export async function buildZedSessionAgent(
       },
     });
   } catch (error) {
-    await settleFailedZedSession(error, agent, terminalSetup, disposeConfig);
+    await settleSessionFailure(error, agent, terminalSetup, disposeConfig);
     throw error;
   }
   return {
@@ -352,9 +352,9 @@ async function disposeSessionInfrastructure(
       'ACP session infrastructure cleanup failed',
     );
 }
-export async function settleFailedZedSession(
+export async function settleSessionFailure(
   error: unknown,
-  agent: Agent | undefined,
+  agent: Pick<Agent, 'dispose'> | undefined,
   terminalSetup: { readonly terminals: TerminalManager | null } | undefined,
   disposeConfig: () => Promise<void>,
 ): Promise<void> {

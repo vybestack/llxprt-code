@@ -14,7 +14,6 @@ import { buildToolGovernance } from '@vybestack/llxprt-code-tools';
  */
 
 import { HistoryService } from '../services/history/HistoryService.js';
-import { HistoryMediaOwnership } from '../storage/history-media-ownership.js';
 import type {
   AgentRuntimeContext,
   AgentRuntimeContextFactoryOptions,
@@ -361,34 +360,12 @@ function freezeProviderRuntime(
  * factory below is synchronous and cannot await the registration, so a context
  * built with a `mediaStore` must be passed here before its history is used.
  */
-const runtimeMediaOwners = new WeakMap<
-  HistoryService,
-  {
-    readonly store: AgentRuntimeContext['mediaStore'];
-    readonly owner: HistoryMediaOwnership;
-    readonly registered: Promise<void>;
-  }
->();
-
 export async function registerRuntimeMediaOwner(
   context: AgentRuntimeContext,
 ): Promise<void> {
   const store = context.mediaStore;
   if (store === undefined) return;
-  let held = runtimeMediaOwners.get(context.history);
-  if (held === undefined) {
-    const owner = new HistoryMediaOwnership(store);
-    held = {
-      store,
-      owner,
-      registered: context.history.registerMediaOwner(owner),
-    };
-    runtimeMediaOwners.set(context.history, held);
-  }
-  if (held.store !== store)
-    throw new Error('A runtime history cannot use different media stores');
-  await held.registered;
-  const owner = held.owner;
+  const owner = await context.history.registerRuntimeMediaOwner(store);
   context.mediaAdmission?.bindHistoryRelease((contentId) =>
     owner.releaseReference(contentId),
   );

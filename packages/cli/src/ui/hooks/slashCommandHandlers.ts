@@ -652,7 +652,8 @@ async function performOwnerSessionResume(
   context: CommandContext,
   action: PerformResumeActionReturn,
 ): Promise<SlashCommandProcessorResult> {
-  const agent = requireSessionAgent(context);
+  const agent = context.services.agent;
+  if (agent === null) throw new Error('Session agent is unavailable');
   try {
     const limits = historyLimitsFromSettings(context.services.settings);
     const replay =
