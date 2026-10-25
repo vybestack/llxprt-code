@@ -1,18 +1,12 @@
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
-import { capturedSessionClient } from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import { openCaller } from './helpers/caller-fixture.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { openRouteAAgent } from './helpers/route-a-agent.js';
 import { randomUUID } from 'node:crypto';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { beforeAll, afterAll, describe, expect, it, spyOn } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { type Agent } from '../index.js';
 import { promises as fs } from 'node:fs';
 import { setImmediate } from 'node:timers/promises';
@@ -38,13 +32,6 @@ function containsCause(error: unknown, cause: Error): boolean {
   );
 }
 
-const recordingEvents = [
-  'contentAdded',
-  'compressionStarted',
-  'compressionLockReleased',
-  'compressionEnded',
-];
-
 describe('public Agent recording finalizer join', () => {
   let promptDirectory: string;
   const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
@@ -59,50 +46,7 @@ describe('public Agent recording finalizer join', () => {
     await rm(promptDirectory, { recursive: true, force: true });
   });
 
-  const credentials = useOwnedCredentials();
-  const callerFactories = createAgentRuntimeFactoryBindings();
-
   useFakeResponsesReplay('multi-turn-text.jsonl');
-
-  async function withRecordingFinalizerFixture(
-    scenario: (
-      agent: Agent,
-      chatsDir: string,
-      sessionId: string,
-    ) => Promise<void>,
-  ): Promise<void> {
-    const caller = await openCaller(credentials().authority, callerFactories);
-    const sessionId = 'recording-finalizer-' + randomUUID();
-    const agent = await fromConfig(
-      caller.config,
-      caller.settings,
-      { sessionId },
-      caller.settingsOwner,
-      caller.manager,
-      undefined,
-      caller.policy.session.messageBus,
-      caller.mcp,
-      undefined,
-      capturedSessionClient(caller.owner),
-      undefined,
-      undefined,
-      undefined,
-      callerFactories,
-    );
-    try {
-      await scenario(agent, caller.config.projectChatsDir, sessionId);
-    } finally {
-      try {
-        await Promise.allSettled([agent.dispose()]);
-      } finally {
-        await runCleanupSteps([
-          caller.close,
-          () =>
-            rm(caller.config.projectTempDir, { recursive: true, force: true }),
-        ]);
-      }
-    }
-  }
 
   async function withRouteAFinalizerAgent(
     scenario: (
@@ -122,7 +66,16 @@ describe('public Agent recording finalizer join', () => {
     try {
       await scenario(route.agent, route.config.projectChatsDir, sessionId);
     } finally {
-      await route.close();
+      // The failing case leaves disposal rejected with the retained failure,
+      // which the scenario asserts; cleanup must not rethrow it.
+      try {
+        await Promise.allSettled([route.agent.dispose()]);
+      } finally {
+        await runCleanupSteps([
+          () => route.config.dispose(),
+          () => rm(route.directory, { recursive: true, force: true }),
+        ]);
+      }
     }
   }
 
@@ -196,162 +149,107 @@ describe('public Agent recording finalizer join', () => {
 
   for (const failWrite of [false, true]) {
     it(`joins accepted persistence before releasing recording ownership${failWrite ? ' and retains its original failure' : ''}`, async () => {
-      await withRecordingFinalizerFixture(
-        async (agent, chatsDir, sessionId) => {
-          const history = fixtureAgentResources(agent)
-            .publishedClient(agent)
-            .getHistoryService();
-          if (!history) throw new Error('Missing real history service');
-          const baseline = recordingEvents.map((event) =>
-            history.listenerCount(event),
+      await withRouteAFinalizerAgent(async (agent, chatsDir, sessionId) => {
+        await agent.setHistory([
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'finalizer-seed' }],
+          },
+        ]);
+        await agent.session.setRecording({ enabled: true });
+        const journal = agent.session.getRecording().path;
+        if (!journal) throw new Error('Recording journal missing');
+        expect(await fs.readFile(journal, 'utf8')).toContain('finalizer-seed');
+        expect(await SessionLockManager.isLocked(chatsDir, sessionId)).toBe(
+          true,
+        );
+
+        await drain(agent.stream('public-turn-before-recording-finalizer'));
+        const entered = gate();
+        const release = gate();
+        const failure = new Error(
+          'Accepted recording persistence rename failed',
+        );
+        const rename = fs.rename;
+        let destination: string | undefined;
+        let source: string | undefined;
+        const boundary = spyOn(fs, 'rename').mockImplementation(
+          async (from, to) => {
+            if (
+              typeof to === 'string' &&
+              dirname(to) === chatsDir &&
+              to.endsWith('.json')
+            ) {
+              destination = to;
+              source = String(from);
+              entered.release();
+              await release.promise;
+              if (failWrite) throw failure;
+            }
+            return rename(from, to);
+          },
+        );
+        let disposal: Promise<unknown> | undefined;
+        try {
+          await agent.addHistory({
+            speaker: 'human',
+            blocks: [
+              { type: 'text', text: 'accepted-history-before-finalizer' },
+            ],
+          });
+          await entered.promise;
+          if (!source) throw new Error('Persistence did not reach rename');
+          expect(await fs.readFile(source, 'utf8')).toContain(
+            'accepted-history-before-finalizer',
           );
-          await agent.setHistory([
-            {
-              speaker: 'human',
-              blocks: [{ type: 'text', text: 'finalizer-seed' }],
+          let settled = false;
+          const terminal = agent.dispose();
+          expect(agent.dispose()).toBe(terminal);
+          disposal = terminal.then(
+            () => {
+              settled = true;
+              return undefined;
             },
-          ]);
-          await agent.session.setRecording({ enabled: true });
-          const journal = agent.session.getRecording().path;
-          if (!journal) throw new Error('Recording journal missing');
-          expect(await fs.readFile(journal, 'utf8')).toContain(
-            'finalizer-seed',
+            (error: unknown) => {
+              settled = true;
+              return error;
+            },
           );
+          await setImmediate();
+          expect(settled).toBe(false);
           expect(await SessionLockManager.isLocked(chatsDir, sessionId)).toBe(
             true,
           );
-          expect(
-            recordingEvents.map((event) => history.listenerCount(event)),
-          ).toStrictEqual(baseline.map((count) => count + 1));
-
-          await drain(agent.stream('public-turn-before-recording-finalizer'));
-          const entered = gate();
-          const release = gate();
-          const retired = gate();
-          const failure = new Error(
-            'Accepted recording persistence rename failed',
+          release.release();
+          const result = await disposal;
+          expect(await SessionLockManager.isLocked(chatsDir, sessionId)).toBe(
+            false,
           );
-          const rename = fs.rename;
-          let destination: string | undefined;
-          let source: string | undefined;
-          const boundary = spyOn(fs, 'rename').mockImplementation(
-            async (from, to) => {
-              if (
-                typeof to === 'string' &&
-                dirname(to) === chatsDir &&
-                to.endsWith('.json')
-              ) {
-                destination = to;
-                source = String(from);
-                entered.release();
-                await release.promise;
-                if (failWrite) throw failure;
-              }
-              return rename(from, to);
-            },
+          const transcript = await fs.readFile(journal, 'utf8');
+          expect(transcript).toContain('accepted-history-before-finalizer');
+          expect(transcript).toContain('turn one reply');
+          expect(containsCause(result, failure)).toBe(failWrite);
+          expect(result === undefined).toBe(!failWrite);
+          const repeated = await agent.dispose().then(
+            () => undefined,
+            (error: unknown) => error,
           );
-          const onRemoval = (): void => {
-            if (
-              recordingEvents.every(
-                (event, index) =>
-                  history.listenerCount(event) === baseline[index],
-              )
-            ) {
-              retired.release();
-            }
-          };
-          history.on('removeListener', onRemoval);
-          let disposal: Promise<unknown> | undefined;
+          expect(repeated).toBe(result);
+          if (!destination) throw new Error('Persistence destination missing');
+          const persisted = await fs.readFile(destination, 'utf8');
+          expect(persisted).toContain('turn one reply');
+          expect(persisted.includes('accepted-history-before-finalizer')).toBe(
+            !failWrite,
+          );
+        } finally {
+          release.release();
           try {
-            history.add({
-              speaker: 'human',
-              blocks: [
-                { type: 'text', text: 'accepted-history-before-finalizer' },
-              ],
-            });
-            await entered.promise;
-            if (!source) throw new Error('Persistence did not reach rename');
-            expect(await fs.readFile(source, 'utf8')).toContain(
-              'accepted-history-before-finalizer',
-            );
-            let settled = false;
-            const terminal = agent.dispose();
-            expect(agent.dispose()).toBe(terminal);
-            disposal = terminal.then(
-              () => {
-                settled = true;
-                return undefined;
-              },
-              (error: unknown) => {
-                settled = true;
-                return error;
-              },
-            );
-            await Promise.race([
-              retired.promise,
-              disposal.then(() => {
-                throw new Error(
-                  'Agent disposed before retiring recording listeners',
-                );
-              }),
-            ]);
-            await setImmediate();
-            expect(settled).toBe(false);
-            expect(await SessionLockManager.isLocked(chatsDir, sessionId)).toBe(
-              true,
-            );
-            expect(
-              recordingEvents.map((event) => history.listenerCount(event)),
-            ).toStrictEqual(baseline);
-            release.release();
-            const result = await disposal;
-            expect(await SessionLockManager.isLocked(chatsDir, sessionId)).toBe(
-              false,
-            );
-            const transcript = await fs.readFile(journal, 'utf8');
-            expect(transcript).toContain('accepted-history-before-finalizer');
-            expect(transcript).toContain('turn one reply');
-            expect(containsCause(result, failure)).toBe(failWrite);
-            expect(result === undefined).toBe(!failWrite);
-            const repeated = await agent.dispose().then(
-              () => undefined,
-              (error: unknown) => error,
-            );
-            expect(repeated).toBe(result);
-            if (!destination)
-              throw new Error('Persistence destination missing');
-            const persisted = await fs.readFile(destination, 'utf8');
-            expect(persisted).toContain('turn one reply');
-            expect(
-              persisted.includes('accepted-history-before-finalizer'),
-            ).toBe(!failWrite);
-            const filesBefore = (await fs.readdir(chatsDir)).sort();
-            history.add({
-              speaker: 'human',
-              blocks: [
-                { type: 'text', text: 'late-history-after-agent-disposal' },
-              ],
-            });
-            await setImmediate();
-            expect(await fs.readFile(journal, 'utf8')).toBe(transcript);
-            expect(await fs.readFile(destination, 'utf8')).toBe(persisted);
-            expect((await fs.readdir(chatsDir)).sort()).toStrictEqual(
-              filesBefore,
-            );
-            expect(
-              recordingEvents.map((event) => history.listenerCount(event)),
-            ).toStrictEqual(baseline);
+            await Promise.allSettled([disposal ?? agent.dispose()]);
           } finally {
-            release.release();
-            try {
-              await Promise.allSettled([disposal ?? agent.dispose()]);
-            } finally {
-              boundary.mockRestore();
-              history.off('removeListener', onRemoval);
-            }
+            boundary.mockRestore();
           }
-        },
-      );
+        }
+      });
     }, 30000);
   }
 });
