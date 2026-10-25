@@ -88,7 +88,7 @@ export async function finishStoreFormats(
 ): ReturnType<typeof fillRowFormats> {
   const filled = await fillStoreFormats(
     context,
-    await fillNeutralRowFacts(context, built, appender),
+    await fillNeutralRowFacts(context, built, appender, edits),
     appender,
     edits,
     policies,
