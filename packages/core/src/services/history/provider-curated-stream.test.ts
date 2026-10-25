@@ -60,6 +60,23 @@ async function digest(
 const logger = new DebugLogger('test:provider-curated-stream');
 
 describe('journal-backed provider normalization', () => {
+  it('releases the decoded row when a provider stream stops early', async () => {
+    await withCoreSuffixFixture(8, async (history, owners, counters) => {
+      const stream = history.getCuratedForProviderStream();
+      try {
+        const first = await stream.next();
+        expect(first.done).toBe(false);
+        expect(counters.snapshot().rowsDecoded).toBe(1);
+        expect(counters.snapshot().peakDecodedRows).toBe(1);
+        expect(owners.snapshot().liveRows).toBe(1);
+      } finally {
+        await stream.return(undefined);
+      }
+      expect(owners.snapshot().liveRows).toBe(0);
+      expect(counters.snapshot().rowsDecoded).toBe(1);
+    });
+  });
+
   for (const size of [512, 8192]) {
     it(`matches old provider bytes for ${size} mixed tool/media rows without eager history`, async () => {
       const input = Array.from({ length: size }, (_, index) =>
@@ -82,6 +99,7 @@ describe('journal-backed provider normalization', () => {
             8 * 1024 * 1024,
           );
           expect(counters.snapshot().peakDecodedRows).toBe(1);
+          expect(counters.snapshot().rowsDecoded).toBe(oracle.length);
         },
         2048,
         providerFixtureRow,

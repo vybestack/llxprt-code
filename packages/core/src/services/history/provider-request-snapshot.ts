@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { JournalReadCounters } from '../../recording/journalCounters.js';
+import { countDecodedRow } from './journalRowCounters.js';
 import type { IContent } from './IContent.js';
 import type { NativeProviderFormat } from './native-provider-format.js';
 
@@ -108,9 +110,17 @@ export interface ProviderRequestSnapshot extends ProviderRequestSelection {
 
 export async function* streamProviderContentSnapshot(
   snapshot: ProviderRequestSnapshot,
+  counters?: JournalReadCounters,
 ): AsyncGenerator<IContent, void, unknown> {
   try {
-    yield* snapshot.openReader();
+    for await (const row of snapshot.openReader()) {
+      const release = countDecodedRow(row, counters);
+      try {
+        yield row;
+      } finally {
+        release();
+      }
+    }
   } finally {
     await snapshot.close();
   }

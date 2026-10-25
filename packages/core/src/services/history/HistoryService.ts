@@ -87,6 +87,7 @@ export type PreparedProfileAdoption = (() => void) & {
 
 export class HistoryService extends HistoryServiceReads {
   private disposal: Promise<void> | undefined;
+  private readonly providerReadCounters: HistoryServiceJournalOptions['attachmentCounters'];
   private runtimeMediaOwner:
     | {
         readonly store: LocalMediaStore;
@@ -123,6 +124,7 @@ export class HistoryService extends HistoryServiceReads {
    */
   constructor(options: HistoryServiceJournalOptions = {}) {
     super(options);
+    this.providerReadCounters = options.attachmentCounters;
   }
 
   openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
@@ -725,8 +727,12 @@ export class HistoryService extends HistoryServiceReads {
         historyOverride,
       );
     };
+    const counters = this.providerReadCounters;
     const stream = async function* () {
-      yield* streamProviderContentSnapshot(await openProviderRequest());
+      yield* streamProviderContentSnapshot(
+        await openProviderRequest(),
+        counters,
+      );
     };
     return Object.assign(stream(), { openProviderRequest });
   }
