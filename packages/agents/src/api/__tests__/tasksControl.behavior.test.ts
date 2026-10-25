@@ -6,25 +6,43 @@
 
 import { describe, it, expect } from 'bun:test';
 import fc from 'fast-check';
-import type { Agent } from '../agent.js';
-import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
 import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
-import { buildAgent } from './helpers/agentHarness.js';
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import { assembleTaskOwner } from '../agent-shell-assembly.js';
+import { createTasksControl } from '../control/tasksControl.js';
+import { ShellJobOwner } from '../../session/shell-job-owner.js';
+import type { TaskLaunchOwner } from '../../session/task-launch-owner.js';
 
-function taskOwner(agent: Agent): TaskLaunchOwner {
-  const owner = fixtureAgentResources(agent).taskOwner;
-  if (!(owner instanceof TaskLaunchOwner)) {
-    throw new Error('Expected Agent task owner');
-  }
-  return owner;
+/**
+ * The task control the foreground assembly hands out as `agent.tasks`
+ * (`createTasksControl`) over the task and shell owners built the way that
+ * assembly builds them (`assembleTaskOwner`, `ShellJobOwner` over the resolved
+ * shell settings).
+ */
+function openTasks(): {
+  agentTasks: ReturnType<typeof createTasksControl>;
+  owner: TaskLaunchOwner;
+  cleanup(): Promise<void>;
+} {
+  const settings = new SettingsService();
+  const owner = assembleTaskOwner(settings);
+  const shell = new ShellJobOwner(() => resolveShellJobSettings(settings));
+  return {
+    agentTasks: createTasksControl(owner, shell),
+    owner,
+    cleanup: async () => {
+      shell.closeAdmission();
+      owner.closeAdmissionAndAbort();
+      await Promise.allSettled([shell.dispose(), owner.join()]);
+    },
+  };
 }
 
 async function seedTask(
-  agent: Agent,
+  owner: TaskLaunchOwner,
   input: Parameters<AsyncTaskManager['registerTask']>[0],
 ): Promise<void> {
-  const owner = taskOwner(agent);
   await owner.start(async (launch, publish) => {
     owner.manager.registerTask(input);
     launch.register(input.id);
@@ -34,13 +52,13 @@ async function seedTask(
 
 describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-COREAPIGAP.P07 @requirement:REQ-003', () => {
   it('T7 seed N running tasks on the real manager, cancelAllRunning returns N and leaves listRunning empty @requirement:REQ-003 @scenario:cancel-all-count @given:a real manager seeded with 2 running tasks via the owning task manager @when:agent.tasks.cancelAllRunning() is called @then:the returned count === 2 AND a subsequent agent.tasks.listRunning() has length 0 (terminal idempotent state)', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    const { agentTasks, owner, cleanup } = openTasks();
     try {
-      const mgr = taskOwner(agent).manager;
+      const mgr = owner.manager;
       expect(mgr).toBeDefined();
       const ids = ['t7-a', 't7-b'];
       for (const id of ids) {
-        await seedTask(agent, {
+        await seedTask(owner, {
           id,
           subagentName: 's',
           goalPrompt: 'g',
@@ -48,22 +66,22 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
         });
       }
       // Both tasks are 'running' before the call.
-      expect(agent.tasks.listRunning()).toHaveLength(2);
-      const cancelled = await agent.tasks.cancelAllRunning();
+      expect(agentTasks.listRunning()).toHaveLength(2);
+      const cancelled = await agentTasks.cancelAllRunning();
       expect(cancelled).toBe(2);
       // Idempotent terminal state: no running tasks remain.
-      expect(agent.tasks.listRunning()).toHaveLength(0);
+      expect(agentTasks.listRunning()).toHaveLength(0);
     } finally {
       await cleanup();
     }
   });
 
   it('T8 projection strips abortController from the public view of a running task @requirement:REQ-003 @scenario:no-abortController @given:a real manager seeded with 1 running task that carries an AbortController on the core manager @when:agent.tasks.list() is called @then:the projected view does NOT include an abortController key (Object.keys(view) omits it AND "abortController" in view === false)', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    const { agentTasks, owner, cleanup } = openTasks();
     try {
-      const mgr = taskOwner(agent).manager;
+      const mgr = owner.manager;
       const ac = new AbortController();
-      await seedTask(agent, {
+      await seedTask(owner, {
         id: 't8-x',
         subagentName: 's',
         goalPrompt: 'g',
@@ -73,7 +91,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
       const coreTask = mgr.getTask('t8-x')!;
       expect(coreTask.abortController).toBe(ac);
       // The PUBLIC view MUST NOT expose it.
-      const list = agent.tasks.list();
+      const list = agentTasks.list();
       expect(list.length).toBeGreaterThanOrEqual(1);
       const view = list.find((v) => v.id === 't8-x')!;
       expect(view).toBeDefined();
@@ -98,16 +116,16 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
   });
 
   it('T10 list/listRunning/get/cancel fidelity over a mix of running, completed, and cancelled tasks @requirement:REQ-003 @scenario:fidelity @given:a real manager seeded with 2 running tasks where 1 is then completed @when:list/listRunning/get(knownId)/get(missing)/cancel(knownId)/cancel(missing) are called @then:list() length === 2 (both tasks remain in history); listRunning() length === 1; get(knownId) returns the projected view with matching id; get(missing) === undefined; cancel(knownId) === true; cancel(missing) === false', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    const { agentTasks, owner, cleanup } = openTasks();
     try {
-      const mgr = taskOwner(agent).manager;
-      await seedTask(agent, {
+      const mgr = owner.manager;
+      await seedTask(owner, {
         id: 't10-run',
         subagentName: 's',
         goalPrompt: 'g',
         abortController: new AbortController(),
       });
-      await seedTask(agent, {
+      await seedTask(owner, {
         id: 't10-done',
         subagentName: 's',
         goalPrompt: 'g',
@@ -118,35 +136,35 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
         true,
       );
       // list() reflects ALL tasks (both remain in history).
-      const all = agent.tasks.list();
+      const all = agentTasks.list();
       expect(all).toHaveLength(2);
       // listRunning() reflects ONLY the still-running task.
-      const running = agent.tasks.listRunning();
+      const running = agentTasks.listRunning();
       expect(running).toHaveLength(1);
       expect(running[0].id).toBe('t10-run');
       // get(knownId) returns the projected view with the matching id.
-      const known = agent.tasks.get('t10-done');
+      const known = agentTasks.get('t10-done');
       expect(known).toBeDefined();
       expect(known!.id).toBe('t10-done');
       // The projected view never leaks abortController.
       expect('abortController' in known!).toBe(false);
       // get(missing) === undefined.
-      expect(agent.tasks.get('does-not-exist')).toBeUndefined();
+      expect(agentTasks.get('does-not-exist')).toBeUndefined();
       // cancel(knownId running) === true.
-      expect(await agent.tasks.cancel('t10-run')).toBe(true);
+      expect(await agentTasks.cancel('t10-run')).toBe(true);
       // cancel(missing) === false.
-      expect(await agent.tasks.cancel('does-not-exist')).toBe(false);
+      expect(await agentTasks.cancel('does-not-exist')).toBe(false);
     } finally {
       await cleanup();
     }
   });
 
   it('T11 completed/failed projection: terminal tasks carry completedAt, failed tasks carry error, running tasks omit BOTH @requirement:REQ-003 @scenario:optional-field-projection @given:a real manager seeded with 3 running tasks (t11-run stays running, t11-done is completed, t11-fail is failed) @when:agent.tasks.get() is called for each terminal task @then:the completed view has completedAt:number>0 AND has NO error key; the failed view has error===the seed AND completedAt:number>0; the running view OMITS both completedAt and error keys', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    const { agentTasks, owner, cleanup } = openTasks();
     try {
-      const mgr = taskOwner(agent).manager;
+      const mgr = owner.manager;
       for (const id of ['t11-run', 't11-done', 't11-fail']) {
-        await seedTask(agent, {
+        await seedTask(owner, {
           id,
           subagentName: 's',
           goalPrompt: 'g',
@@ -162,7 +180,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
       expect(mgr.failTask('t11-fail', 'boom')).toBe(true);
 
       // Completed view: completedAt present, error key ABSENT (not undefined).
-      const done = agent.tasks.get('t11-done')!;
+      const done = agentTasks.get('t11-done')!;
       expect(done.id).toBe('t11-done');
       expect(typeof done.completedAt).toBe('number');
       expect(done.completedAt).toBeGreaterThan(0);
@@ -171,7 +189,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
       expect(Object.keys(done)).not.toContain('error');
 
       // Failed view: error present with the seeded value, completedAt present.
-      const failed = agent.tasks.get('t11-fail')!;
+      const failed = agentTasks.get('t11-fail')!;
       expect(failed.id).toBe('t11-fail');
       expect(failed.error).toBe('boom');
       expect('error' in failed).toBe(true);
@@ -181,7 +199,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
 
       // Running view: BOTH optional keys ABSENT (the always-spread mutant
       // would inject { completedAt: undefined } and { error: undefined }).
-      const running = agent.tasks.get('t11-run')!;
+      const running = agentTasks.get('t11-run')!;
       expect(running.id).toBe('t11-run');
       expect('completedAt' in running).toBe(false);
       expect('error' in running).toBe(false);
@@ -258,13 +276,13 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
             .string({ minLength: 1 })
             .filter((s) => !s.includes(' ') && !s.includes('-')),
           async (kind, suffix) => {
-            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            const { agentTasks, owner, cleanup } = openTasks();
             try {
-              const mgr = taskOwner(agent).manager;
+              const mgr = owner.manager;
               const termId = `prop-term-${suffix}`;
               const controlId = `prop-ctrl-${suffix}`;
               for (const id of [termId, controlId]) {
-                await seedTask(agent, {
+                await seedTask(owner, {
                   id,
                   subagentName: 's',
                   goalPrompt: 'g',
@@ -278,9 +296,9 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
                   ? mgr.completeTask(termId, { result: 'ok' } as never)
                   : mgr.failTask(termId, `err-${suffix}`);
               // MIN-2 distinct cases: complete + fail both exercised.
-              const termView = agent.tasks.get(termId)!;
+              const termView = agentTasks.get(termId)!;
               // Never-terminated control: BOTH optional keys absent.
-              const controlView = agent.tasks.get(controlId)!;
+              const controlView = agentTasks.get(controlId)!;
               observations.push({
                 ok,
                 completedAtType: typeof termView.completedAt,
@@ -338,17 +356,17 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
           { minLength: 1, maxLength: 5, selector: (r) => r.id },
         ),
         async (tasks) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+          const { agentTasks, owner, cleanup } = openTasks();
           try {
             for (const t of tasks) {
-              await seedTask(agent, {
+              await seedTask(owner, {
                 id: t.id,
                 subagentName: 's',
                 goalPrompt: t.goalPrompt,
                 abortController: new AbortController(),
               });
             }
-            const views = agent.tasks.list();
+            const views = agentTasks.list();
             // MIN-2 distinct cases are exercised by the generator (1..5 tasks).
             expect(views).toHaveLength(tasks.length);
             const viewIds = new Set(views.map((v) => v.id));
@@ -377,7 +395,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
           { minLength: 0, maxLength: 5 },
         ),
         async (n, ids) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+          const { agentTasks, owner, cleanup } = openTasks();
           try {
             // Use exactly n ids from the generated pool (trim/pad not needed —
             // uniqueArray with minLength:0, maxLength:5 yields distinct ids).
@@ -386,18 +404,18 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
               chosen.push(`prop-cancel-pad-${chosen.length}`);
             }
             for (const id of chosen) {
-              await seedTask(agent, {
+              await seedTask(owner, {
                 id,
                 subagentName: 's',
                 goalPrompt: 'g',
                 abortController: new AbortController(),
               });
             }
-            expect(agent.tasks.listRunning()).toHaveLength(n);
-            const cancelled = await agent.tasks.cancelAllRunning();
+            expect(agentTasks.listRunning()).toHaveLength(n);
+            const cancelled = await agentTasks.cancelAllRunning();
             // MIN-2 distinct cases are exercised by the generator (0..5).
             expect(cancelled).toBe(n);
-            expect(agent.tasks.listRunning()).toHaveLength(0);
+            expect(agentTasks.listRunning()).toHaveLength(0);
           } finally {
             await cleanup();
           }

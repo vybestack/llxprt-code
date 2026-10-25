@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { json } from 'node:stream/consumers';
 import { tmpdir } from 'node:os';
 import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { captureAgentCreation as createAgent } from './helpers/agent-resource-capture.js';
 
 function barrier(): { readonly promise: Promise<void>; release(): void } {
@@ -236,6 +237,7 @@ async function createOwner(
   endpoint: string,
   temperature: number,
   continueOnFailedApiCall = false,
+  credentialAuthority?: CredentialAuthority,
 ): Promise<Agent> {
   const workingDir = join(directory, name);
   await mkdir(workingDir);
@@ -246,6 +248,7 @@ async function createOwner(
     workingDir,
     sessionId: 'same-turn-capture-label',
     auth: { apiKey: 'turn-capture-local-only', baseUrl: endpoint },
+    ...(credentialAuthority === undefined ? {} : { credentialAuthority }),
     telemetry: { enabled: false },
     recording: { enabled: false },
     mcpEnabled: false,
@@ -276,6 +279,7 @@ export async function withOwners(
   continueOnFailedApiCall = failRequest > 0,
   failStatus = 413,
   responseText = 'Transport completed.',
+  credentialAuthority?: CredentialAuthority,
 ): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), 'turn-capture-'));
   const environment = Object.fromEntries(
@@ -311,6 +315,7 @@ export async function withOwners(
       endpointA.url,
       0.2,
       continueOnFailedApiCall,
+      credentialAuthority,
     );
     agents = [...agents, a];
     const b = await createOwner(directory, 'b', endpointB.url, 0.7);
