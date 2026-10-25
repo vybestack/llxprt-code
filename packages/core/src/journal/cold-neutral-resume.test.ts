@@ -12,7 +12,7 @@ import { readNeutralRowFact } from './neutral-row-fact-storage.js';
 
 describe('cold neutral fact resume', () => {
   const directory = useTempDir('cold-neutral-resume-');
-  it.each([16, 128])(
+  it.each([1, 16, 128])(
     'measures only three appended rows after %i stored token facts',
     async (size) => {
       let reads = 0;

@@ -11,9 +11,13 @@ import { snapshotOf } from './formatFill.js';
 import { IdFactBatch } from './idFactBatch.js';
 import { IdTrieReader } from './idTrieReader.js';
 import { KeyedMapBatch, KeyedMapReader } from './keyedMap.js';
-import { readRowTreeNode } from './rowTreeReader.js';
+import { isDeepStrictEqual } from 'node:util';
+import { rootRef } from './groupSegments.js';
+import { entryByLabel } from './rowTreeQueries.js';
+import { readRowTreeNode, type RowTreeRootRef } from './rowTreeReader.js';
 import type { RowEntry } from './rowEntry.js';
 import type { VersionSnapshot } from './versionSnapshot.js';
+import type { Version } from './version.js';
 
 export interface NeutralRowFactRegistration {
   readonly kind: 'token-usage';
@@ -42,16 +46,39 @@ async function* changedEntries(
   appender: RecordAppender,
   offset: number,
   since: number,
+  sourceRoot: RowTreeRootRef | undefined,
 ): AsyncGenerator<RowEntry> {
   if (offset === 0 || offset < since) return;
-  const node = await readRowTreeNode(
-    ctx.readGroup(appender.nextOffset),
-    offset,
-  );
-  if (node.kind === 'leaf') yield* node.entries;
-  else
+  const access = ctx.readGroup(appender.nextOffset);
+  const node = await readRowTreeNode(access, offset);
+  if (node.kind === 'leaf') {
+    for (const entry of node.entries) {
+      const previous = await entryByLabel(access, sourceRoot, entry.label);
+      if (!isDeepStrictEqual(entry, previous)) yield entry;
+    }
+  } else
     for (const child of node.slots)
-      yield* changedEntries(ctx, appender, child.childOffset, since);
+      yield* changedEntries(
+        ctx,
+        appender,
+        child.childOffset,
+        since,
+        sourceRoot,
+      );
+}
+
+function entriesForFill(
+  ctx: BuildContext,
+  built: BuiltGroup,
+  appender: RecordAppender,
+  source: Version | undefined,
+  since: number,
+): Iterable<RowEntry> | AsyncIterable<RowEntry> {
+  if (source === ctx.published && since > 0 && built.changedRows !== undefined)
+    return built.changedRows;
+  const sourceRoot =
+    since > 0 && source !== undefined ? rootRef(source) : undefined;
+  return changedEntries(ctx, appender, built.state.rowRoot, since, sourceRoot);
 }
 
 export async function fillNeutralRowFacts(
@@ -96,10 +123,7 @@ export async function fillNeutralRowFacts(
   );
   const snapshot = snapshotOf(ctx, built, appender);
   try {
-    const entries =
-      source === ctx.published && since > 0 && built.changedRows !== undefined
-        ? built.changedRows
-        : changedEntries(ctx, appender, built.state.rowRoot, since);
+    const entries = entriesForFill(ctx, built, appender, source, since);
     for await (const entry of entries) {
       const key = neutralRowFactKey(registration, entry.label);
       const previous = await readNeutralRowFact(batch.queries, key);
