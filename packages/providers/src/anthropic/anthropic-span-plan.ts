@@ -165,12 +165,13 @@ export class AnthropicSpanPlan {
           anchor[0] < oldStart + row.oldCount,
       );
       if (removed) continue;
-      const at = this.coordinates.forward(anchor[0]);
-      if (
-        at < this.query.count &&
-        (await this.query.planAt(at)).header.metadata?.cacheAnchor === true
-      )
-        return anchor[0];
+      const end = Math.min(
+        this.query.count,
+        this.coordinates.forward(anchor[1] - 1) + 1,
+      );
+      for (let at = this.coordinates.forward(anchor[0]); at < end; at++)
+        if ((await this.query.planAt(at)).header.metadata?.cacheAnchor === true)
+          return anchor[0];
     }
     return undefined;
   }
@@ -263,8 +264,19 @@ export class AnthropicSpanPlan {
         Math.max(end, this.coordinates.forward(message.end) + 1),
       );
     }
-    const first = await this.query.unitEntryAt(start);
-    start -= first.unit;
+    // A split source row can begin inside an earlier thinking chain.
+    // Close both boundaries before mixing measured and persisted messages.
+    let previousStart: number;
+    do {
+      previousStart = start;
+      const first = await this.query.unitEntryAt(start);
+      start -= first.unit;
+      const rounded = this.coordinates.backward(start);
+      for await (const message of this.index.messages(rounded)) {
+        if (message.start > rounded) break;
+        start = Math.min(start, this.coordinates.forward(message.start));
+      }
+    } while (start < previousStart);
     const last = await this.query.unitEntryAt(end - 1);
     const changed = this.query.viewPlan.changedSources.find(
       (row) => row.entry.label === last.entry.label,
