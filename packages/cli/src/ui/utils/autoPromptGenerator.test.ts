@@ -1,4 +1,3 @@
-import { fixtureAgentResources } from '../../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -94,12 +93,7 @@ describe('generateAutoPrompt', () => {
         expect(clients[1].disposed).toBe(0);
         expect(provider.requests).toHaveLength(1);
         expect(provider.requests[0].tools).toStrictEqual([]);
-        const nativeOwner = fixtureAgentResources(owner)
-          .sessionOwners.values()
-          .next().value;
-        if (nativeOwner === undefined)
-          throw new Error('Missing native generation owner');
-        await nativeOwner.dispose();
+        await owner.dispose();
         expect(clients[2].disposed).toBe(1);
       },
     );
@@ -163,17 +157,12 @@ describe('generateAutoPrompt', () => {
   it('throws when no live or detached client is available', async () => {
     const cleanup = await withGenerationOwner(
       async (owner, clients, provider) => {
-        const nativeOwner = fixtureAgentResources(owner)
-          .sessionOwners.values()
-          .next().value;
-        if (nativeOwner === undefined)
-          throw new Error('Missing native generation owner');
-        await nativeOwner.dispose();
+        await owner.dispose();
         await expect(
           generateAutoPrompt('No clients', (input, options) =>
             owner.generate(input, options),
           ),
-        ).rejects.toThrow('Session client owner is disposed');
+        ).rejects.toThrow('Agent is closed');
         expect(clients).toHaveLength(2);
         expect(provider.requests).toHaveLength(0);
       },
