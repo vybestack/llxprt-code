@@ -1115,8 +1115,34 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T5.5 B6 McpRuntimeOwner.create(acquisition, operations), four production callers
 - [x] T5.6 B6 tool catalog and child assembly inputs
 - [x] T5.7 E7 typed ProviderFileLifecycle
-- [ ] T6.0-list B2 inventory file list and slices
+- [x] T6.0-list B2 inventory file list and slices
 - [ ] T6.0-Sxx B2 inventory slices (ids added by T6.0-list)
+  - [ ] T6.0-S01 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
+  - [ ] T6.0-S02 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
+  - [ ] T6.0-S03 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
+  - [ ] T6.0-S04 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
+  - [ ] T6.0-S05 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
+  - [ ] T6.0-S06 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
+  - [ ] T6.0-S07 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
+  - [ ] T6.0-S08 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
+  - [ ] T6.0-S09 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
+  - [ ] T6.0-S10 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
+  - [ ] T6.0-S11 B2 inventory slice: packages/agents/src/api/__tests__, 20 files (file list in B2-batches.md)
+  - [ ] T6.0-S12 B2 inventory slice: packages/agents/src/api/__tests__, 14 files (file list in B2-batches.md)
+  - [ ] T6.0-S13 B2 inventory slice: packages/agents/src/api/__tests__/helpers, 15 files (file list in B2-batches.md)
+  - [ ] T6.0-S14 B2 inventory slice: packages/agents/src/core, 7 files (file list in B2-batches.md)
+  - [ ] T6.0-S15 B2 inventory slice: packages/agents/src/core/agenticLoop/__tests__, 6 files (file list in B2-batches.md)
+  - [ ] T6.0-S16 B2 inventory slice: agents small directories (4 dirs, each under 5 files), 9 files (file list in B2-batches.md)
+  - [ ] T6.0-S17 B2 inventory slice: packages/cli/src, 11 files (file list in B2-batches.md)
+  - [ ] T6.0-S18 B2 inventory slice: packages/cli/src/__tests__, 7 files (file list in B2-batches.md)
+  - [ ] T6.0-S19 B2 inventory slice: packages/cli/src/ui/contexts, 6 files (file list in B2-batches.md)
+  - [ ] T6.0-S20 B2 inventory slice: packages/cli/src/ui/hooks, 16 files (file list in B2-batches.md)
+  - [ ] T6.0-S21 B2 inventory slice: cli small directories (12 dirs, each under 5 files), 11 files (file list in B2-batches.md)
+  - [ ] T6.0-S22 B2 inventory slice: cli small directories (12 dirs, each under 5 files), 10 files (file list in B2-batches.md)
+  - [ ] T6.0-S23 B2 inventory slice: core small directories (4 dirs, each under 5 files), 8 files (file list in B2-batches.md)
+  - [ ] T6.0-S24 B2 inventory slice: packages/providers/src/runtime, 7 files (file list in B2-batches.md)
+  - [ ] T6.0-S25 B2 inventory slice: providers small directories (1 dirs, each under 5 files), 1 files (file list in B2-batches.md)
+  - [ ] T6.0-S26 B2 inventory slice: packages/zed-acp/src, 6 files (file list in B2-batches.md)
 - [ ] T6.0-agg B2 inventory aggregation and batches
 - [ ] T6.Bxx B2 migration batches (ids added by T6.0-agg)
 - [ ] T6.Pk B2 production fixes found by migrated scenarios (added when needed)
