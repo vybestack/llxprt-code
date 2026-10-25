@@ -1,4 +1,3 @@
-import { AdoptedProviderFixture } from '../../../agents/src/api/__tests__/helpers/adopted-provider-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -63,7 +62,6 @@ describe('explicit OAuth owner identity', () => {
   async function openFirst(
     kind: RuntimeKind,
     store: TokenStore | undefined,
-    supplied: OAuthManager | undefined,
     config: Config | undefined,
   ): Promise<void> {
     const release = new AcquisitionRelease();
@@ -119,39 +117,23 @@ describe('explicit OAuth owner identity', () => {
         settings,
         config,
       );
-      if (supplied !== undefined) {
-        firstOAuth = new AdoptedProviderFixture(
-          config,
-          settings,
-          'same-label',
-        ).acquireOAuth(
-          supplied,
-          store,
-          policy.session.messageBus,
-          firstManager,
-          undefined,
-          credentials().authority,
-          release,
-        );
-      } else {
-        const tokens = store ?? credentials().authority.createTokenStore();
-        if (store === undefined)
-          release.acquire('tokens', createOwnedTokenStoreClose(tokens));
-        firstOAuth = createOwnerOAuthManager(
-          tokens,
-          createFileOAuthSettingsProvider(),
-          policy.session.messageBus,
-          createOAuthProfileReads(config.profileDirectory),
-          createSessionAuthPolicyReader(settings),
-          () => firstManager.getAuthIdentity(),
-          undefined,
-          createOwnerAuthCacheInvalidator((provider) =>
-            firstManager.getProviderByName(provider),
-          ),
-          firstManager.fetchNetwork,
-        );
-        release.acquire('oauth', () => firstOAuth.dispose());
-      }
+      const tokens = store ?? credentials().authority.createTokenStore();
+      if (store === undefined)
+        release.acquire('tokens', createOwnedTokenStoreClose(tokens));
+      firstOAuth = createOwnerOAuthManager(
+        tokens,
+        createFileOAuthSettingsProvider(),
+        policy.session.messageBus,
+        createOAuthProfileReads(config.profileDirectory),
+        createSessionAuthPolicyReader(settings),
+        () => firstManager.getAuthIdentity(),
+        undefined,
+        createOwnerAuthCacheInvalidator((provider) =>
+          firstManager.getProviderByName(provider),
+        ),
+        firstManager.fetchNetwork,
+      );
+      release.acquire('oauth', () => firstOAuth.dispose());
       complete = true;
     } catch (primary) {
       await cleanupAfterFailure(primary, () =>
@@ -180,7 +162,6 @@ describe('explicit OAuth owner identity', () => {
   async function openSecond(
     kind: RuntimeKind,
     store: TokenStore | undefined,
-    supplied: OAuthManager | undefined,
     config: Config | undefined,
     settings: SettingsService,
   ): Promise<void> {
@@ -236,39 +217,23 @@ describe('explicit OAuth owner identity', () => {
         settings,
         config,
       );
-      if (supplied !== undefined) {
-        secondOAuth = new AdoptedProviderFixture(
-          config,
-          settings,
-          'same-label',
-        ).acquireOAuth(
-          supplied,
-          store,
-          policy.session.messageBus,
-          secondManager,
-          undefined,
-          credentials().authority,
-          release,
-        );
-      } else {
-        const tokens = store ?? credentials().authority.createTokenStore();
-        if (store === undefined)
-          release.acquire('tokens', createOwnedTokenStoreClose(tokens));
-        secondOAuth = createOwnerOAuthManager(
-          tokens,
-          createFileOAuthSettingsProvider(),
-          policy.session.messageBus,
-          createOAuthProfileReads(config.profileDirectory),
-          createSessionAuthPolicyReader(settings),
-          () => secondManager.getAuthIdentity(),
-          undefined,
-          createOwnerAuthCacheInvalidator((provider) =>
-            secondManager.getProviderByName(provider),
-          ),
-          secondManager.fetchNetwork,
-        );
-        release.acquire('oauth', () => secondOAuth.dispose());
-      }
+      const tokens = store ?? credentials().authority.createTokenStore();
+      if (store === undefined)
+        release.acquire('tokens', createOwnedTokenStoreClose(tokens));
+      secondOAuth = createOwnerOAuthManager(
+        tokens,
+        createFileOAuthSettingsProvider(),
+        policy.session.messageBus,
+        createOAuthProfileReads(config.profileDirectory),
+        createSessionAuthPolicyReader(settings),
+        () => secondManager.getAuthIdentity(),
+        undefined,
+        createOwnerAuthCacheInvalidator((provider) =>
+          secondManager.getProviderByName(provider),
+        ),
+        secondManager.fetchNetwork,
+      );
+      release.acquire('oauth', () => secondOAuth.dispose());
       complete = true;
     } catch (primary) {
       await cleanupAfterFailure(primary, () =>
@@ -285,27 +250,15 @@ describe('explicit OAuth owner identity', () => {
     );
   }
   it('gives same-label runtime owners distinct default credential stores', async () => {
-    await openFirst('agent', undefined, undefined, undefined);
-    await openSecond(
-      'agent',
-      undefined,
-      undefined,
-      undefined,
-      new SettingsService(),
-    );
+    await openFirst('agent', undefined, undefined);
+    await openSecond('agent', undefined, undefined, new SettingsService());
     expect(firstOAuth.getTokenStore()).not.toBe(secondOAuth.getTokenStore());
   });
   it('keeps caller-owned credentials separate across interleaved same-label runtimes', async () => {
     const firstStore = new MemoryTokenStore();
     const secondStore = new MemoryTokenStore();
-    await openFirst('agent', firstStore, undefined, undefined);
-    await openSecond(
-      'agent',
-      secondStore,
-      undefined,
-      undefined,
-      new SettingsService(),
-    );
+    await openFirst('agent', firstStore, undefined);
+    await openSecond('agent', secondStore, undefined, new SettingsService());
     expect(firstOAuth.getTokenStore()).toBe(firstStore);
     expect(secondOAuth.getTokenStore()).toBe(secondStore);
     await Promise.all([
@@ -329,10 +282,9 @@ describe('explicit OAuth owner identity', () => {
       await oauth.toggleOAuthEnabled('owner-identity');
   }
   it('routes same-label owners outside ALS independently and reads activation overrides', async () => {
-    await openFirst('agent', undefined, undefined, undefined);
+    await openFirst('agent', undefined, undefined);
     await openSecond(
       'cli-interactive',
-      undefined,
       undefined,
       undefined,
       new SettingsService(),
@@ -366,14 +318,8 @@ describe('explicit OAuth owner identity', () => {
     ]);
   });
   it('reads CLI manager identity changes without borrowing the active runtime', async () => {
-    await openFirst('agent', undefined, undefined, undefined);
-    await openSecond(
-      'cli-bootstrap',
-      undefined,
-      undefined,
-      firstConfig,
-      firstSettings,
-    );
+    await openFirst('agent', undefined, undefined);
+    await openSecond('cli-bootstrap', undefined, firstConfig, firstSettings);
     expect(secondSettings).toBe(firstSettings);
     firstSettings.set('auth.noBrowser', true);
     expect(secondOAuth.isBrowserDisabled()).toBe(true);
@@ -396,32 +342,11 @@ describe('explicit OAuth owner identity', () => {
     ]);
   });
   it('rejects background authentication without a host using a typed error', async () => {
-    await openFirst('subagent', undefined, undefined, undefined);
+    await openFirst('subagent', undefined, undefined);
     await enable(firstOAuth);
     await expect(
       firstOAuth.getToken('owner-identity', 'required'),
     ).rejects.toBeInstanceOf(InteractiveAuthUnavailableError);
-  });
-  it('preserves an adopted OAuth manager owner when the adopting runtime activates', async () => {
-    await openFirst('cli-interactive', undefined, undefined, undefined);
-    await enable(firstOAuth);
-    await openSecond(
-      'agent',
-      undefined,
-      firstOAuth,
-      firstConfig,
-      firstSettings,
-    );
-    activateSecond('adopter-active', 'subagent');
-
-    const challenges: InteractiveAuthChallenge[] = [];
-    secondOAuth.bindInteractiveAuthHost(async (challenge) => {
-      challenges.push(challenge);
-    });
-    await secondOAuth.getToken('owner-identity', 'adopted');
-    expect(challenges.map((c) => c.requester)).toStrictEqual([
-      { runtimeId: 'same-label', runtimeKind: 'cli-interactive' },
-    ]);
   });
   it('keeps undefined identity unregistered and excludes mismatched requester IDs', async () => {
     const challenges: InteractiveAuthChallenge[] = [];
