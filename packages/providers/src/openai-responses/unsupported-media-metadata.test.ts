@@ -130,6 +130,37 @@ describe('native Responses media fixtures', () => {
   }
 
   describe('ordinary Responses media projection metadata', () => {
+    it('classifies native media from block plans without materializing request rows', async () => {
+      const provider = new OpenAIResponsesProvider('token-test');
+      const fixture = await journalSendFixture(mediaRows());
+      fixtures.push(fixture);
+      const indexed = fixture.selection.native?.indexed;
+      if (indexed === undefined)
+        throw new Error('Expected native media source');
+      const originalRead = indexed.readAt.bind(indexed);
+      let rowReads = 0;
+      indexed.readAt = (index, signal) => {
+        rowReads++;
+        return originalRead(index, signal);
+      };
+      const contents = {
+        openProviderRequest: async () => fixture.selection,
+        [Symbol.asyncIterator]: () => fixture.selection.openReader(),
+      };
+      const projection = await projectSourcePrompt(
+        provider,
+        options(provider, contents),
+      );
+      try {
+        expect(
+          projection.unsupportedMedia.map((entry) => entry.mediaType),
+        ).toStrictEqual(['audio', 'audio', 'video', 'unknown']);
+        expect(rowReads).toBe(0);
+      } finally {
+        await projection.releaseIfUnsent?.();
+      }
+    });
+
     it.each([true, false])(
       'reports actual URL and inline categories with PDF enabled=%s without a media plugin',
       async (pdfEnabled) => {

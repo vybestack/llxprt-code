@@ -41,8 +41,33 @@ export async function statefulUnsupportedMedia(
       entry.responseBlocks === 0
     )
       continue;
-    const row = await rows.readAt(index);
-    unsupported.push(...unsupportedMediaForRow(row, pdfEnabled));
+    if (indexed === undefined) {
+      const row = await rows.readAt(index);
+      unsupported.push(...unsupportedMediaForRow(row, pdfEnabled));
+    } else {
+      unsupported.push(
+        ...(await unsupportedMediaForPlan(indexed, index, pdfEnabled)),
+      );
+    }
+  }
+  return unsupported;
+}
+
+async function unsupportedMediaForPlan(
+  indexed: NativeProviderFormat['indexed'],
+  index: number,
+  pdfEnabled: boolean,
+): Promise<UnsupportedMediaEntry[]> {
+  const plan = await indexed.planAt(index);
+  const unsupported: UnsupportedMediaEntry[] = [];
+  for await (const block of plan.openBlocks()) {
+    if (block.type === 'media')
+      unsupported.push(
+        ...unsupportedMediaForRow(
+          { ...plan.header, blocks: [block] },
+          pdfEnabled,
+        ),
+      );
   }
   return unsupported;
 }
