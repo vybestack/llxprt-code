@@ -163,12 +163,7 @@ async function appendIndexedFacts(
       {},
       index,
     );
-    await writeAtomFacts(
-      index,
-      engine,
-      writer,
-      Math.max(0, previous.aggregate.units - 2),
-    );
+    await writeAtomFacts(index, engine, writer, previous.aggregate.units);
     await writeAnthropicCacheWindows(engine, writer, previous.aggregate.units);
     return true;
   } finally {
