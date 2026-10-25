@@ -70,6 +70,7 @@ describe('HistoryService replacement compensation with real primary and mirror',
           range: history.getContextRange(),
           chronology: history.detachedValues.host().chronology.snapshot(),
           version: await diskVersion(fileOf(primary.recording)),
+          mirrorVersion: await diskVersion(fileOf(mirror.recording)),
           primaryEntries: await persistedEntries(fileOf(primary.recording)),
           mirrorEntries: await persistedEntries(fileOf(mirror.recording)),
         };
@@ -139,15 +140,10 @@ describe('HistoryService replacement compensation with real primary and mirror',
           'finalize',
           'contextRangeChanged',
         ].includes(stage);
-        let nextOffset = mirrorEntries[0].recordOffset;
-        const expectedEntries = before.mirrorEntries.map((entry) => {
-          const recordOffset = afterAck ? nextOffset : entry.recordOffset;
-          nextOffset += entry.recordLength;
-          return { ...entry, recordOffset };
-        });
-        expect(mirrorEntries).toStrictEqual(expectedEntries);
+        // Settled mirror checkpoints restore their original row records.
+        expect(mirrorEntries).toStrictEqual(before.mirrorEntries);
         expect(
-          mirrorEntries[0].recordOffset > before.mirrorEntries[0].recordOffset,
+          (await diskVersion(fileOf(mirror.recording))) > before.mirrorVersion,
         ).toBe(afterAck);
         expect(before.tokens).toBeGreaterThan(0);
         expect(history.getTotalTokens() - before.tokens).toBe(0);
