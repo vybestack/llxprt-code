@@ -32,7 +32,7 @@ describe('stream purge transaction lifecycle', () => {
           expect(Object.isFrozen(transaction.base)).toBe(true);
           expect(Object.isFrozen(transaction.candidate)).toBe(true);
         } finally {
-          transaction.close();
+          await transaction.close();
         }
       },
       2048,
@@ -67,7 +67,7 @@ describe('stream purge transaction lifecycle', () => {
           }
           expect(count).toBe(3);
         } finally {
-          transaction.close();
+          await transaction.close();
         }
         expect(owners.snapshot().liveRows).toBe(0);
       },
@@ -114,7 +114,7 @@ describe('semantic purge request and abort lifecycle', () => {
           for await (const row of transaction.base.streamRows())
             expect(row.metadata?.semanticMediaPurgeBoundary).toBeUndefined();
         } finally {
-          transaction.close();
+          await transaction.close();
         }
       },
       2048,

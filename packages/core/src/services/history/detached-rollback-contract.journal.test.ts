@@ -116,11 +116,11 @@ describe('native detached failure compensation', () => {
                 expect(before.every((ownerId) => ownerId > 0)).toBe(true);
                 expect(after).toStrictEqual(before);
               } finally {
-                restored.close();
+                await restored.close();
               }
               expect(owners.snapshot().liveRows).toBe(0);
             } finally {
-              prior.close();
+              await prior.close();
             }
           },
         );

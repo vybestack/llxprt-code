@@ -85,7 +85,7 @@ describe('every offset-based read holds a pin for its lifetime (D-ORCH-6)', () =
     expect(
       (await snapshot.readRow(await snapshot.entryAt(0))).rawIds,
     ).toStrictEqual(['a']);
-    snapshot.close();
+    await snapshot.close();
     await store.idle();
     expect(renames()).toBe(1);
     await expect(snapshot.entryAt(0)).rejects.toThrow(RELEASED);
@@ -105,7 +105,7 @@ describe('every offset-based read holds a pin for its lifetime (D-ORCH-6)', () =
     expect((await read.access.readRecordHead(trailer, 'TRAILER')).offset).toBe(
       trailer,
     );
-    read.close();
+    await read.close();
     await store.idle();
     expect(renames()).toBe(1);
     expect(() => read.access.readRecordHead(trailer, 'TRAILER')).toThrow(
@@ -126,7 +126,7 @@ describe('every offset-based read holds a pin for its lifetime (D-ORCH-6)', () =
 
     expect(renames()).toBe(0);
     expect(await facts.fact('a')).toStrictEqual(before);
-    facts.close();
+    await facts.close();
     await store.idle();
     expect(renames()).toBe(1);
     await expect(facts.fact('a')).rejects.toThrow(RELEASED);
@@ -146,7 +146,7 @@ describe('every offset-based read holds a pin for its lifetime (D-ORCH-6)', () =
       trailer,
     );
     expect(group.writtenLabels).toHaveLength(1);
-    group.close();
+    await group.close();
     await store.idle();
     expect(renames()).toBe(1);
     expect(() => group.read.access.readRecordHead(trailer)).toThrow(RELEASED);
@@ -192,7 +192,7 @@ describe('every offset-based read holds a pin for its lifetime (D-ORCH-6)', () =
   it('releasing a pin twice is a mistake and throws', async () => {
     const { store } = await pinnedStore(file('twice.llxj'));
     const read = await store.openRead();
-    read.close();
+    await read.close();
     expect(() => read.close()).toThrow('released twice');
     await store.close();
   });

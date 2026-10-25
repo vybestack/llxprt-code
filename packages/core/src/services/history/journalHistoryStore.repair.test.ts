@@ -137,7 +137,7 @@ describe('journal history store repair and media owner', () => {
         'next',
       ]);
       expect(await ownersOf(session)).toStrictEqual([0, 2, 2, 0, 0]);
-      repair.close();
+      await repair.close();
     });
 
     it('treats a response anywhere in the history as an answer', async () => {

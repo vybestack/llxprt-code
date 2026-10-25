@@ -60,7 +60,7 @@ describe('semantic request row isolation', () => {
         }),
       ).toBe(false);
     } finally {
-      attempt.finalize();
+      await attempt.finalize();
     }
   });
   it('does not open an aborted request traversal', async () => {
@@ -74,7 +74,7 @@ describe('semantic request row isolation', () => {
       if (!source) throw new Error('Missing request rows');
       await expect(Array.fromAsync(source)).rejects.toBe(failure);
     } finally {
-      attempt.finalize();
+      await attempt.finalize();
     }
   });
 });

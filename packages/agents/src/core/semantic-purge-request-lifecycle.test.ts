@@ -64,7 +64,7 @@ describe('semantic request stream backpressure', () => {
       expect(ownership.snapshot().liveRows).toBe(before.liveRows);
     } finally {
       await rows.return?.();
-      attempt.finalize();
+      await attempt.finalize();
       await history.dispose();
     }
   });
@@ -117,7 +117,7 @@ describe('semantic request stream reader exits', () => {
         );
         expect(ownership.snapshot().liveRows - before).toBe(0);
       } finally {
-        attempt.finalize();
+        await attempt.finalize();
         await history.dispose();
       }
     },

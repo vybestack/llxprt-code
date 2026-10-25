@@ -211,7 +211,7 @@ describe('JournalHistoryStore over an opener', () => {
     const batch = await store.committedBatch(2);
     const batched: string[] = [];
     for await (const content of batch.rows()) batched.push(textOf(content));
-    batch.retire();
+    await batch.retire();
     expect(batched).toStrictEqual(['row 3', 'row 4']);
     expect(snapshot().rowsDecoded).toBe(6);
     expect(ownership.snapshot().liveRows).toBe(0);

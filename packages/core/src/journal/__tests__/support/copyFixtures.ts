@@ -86,7 +86,7 @@ export async function mapContents(
       which === 'state' ? version.roots.stateRoot : version.roots.metaRoot;
     return await mapContentsAt(read.access, root);
   } finally {
-    read.close();
+    await read.close();
   }
 }
 

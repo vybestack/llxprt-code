@@ -62,7 +62,7 @@ async function assertRequestValues(
     }
     expect(index).toBe(4);
   } finally {
-    request.close();
+    await request.close();
   }
 }
 

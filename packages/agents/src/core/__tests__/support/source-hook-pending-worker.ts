@@ -82,7 +82,7 @@ async function run(root: string): Promise<void> {
       await source.close();
     }
   } finally {
-    snapshot.close();
+    await snapshot.close();
     await setup.history.dispose();
     await hooks.dispose();
   }

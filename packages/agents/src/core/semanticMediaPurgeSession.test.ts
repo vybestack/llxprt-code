@@ -98,8 +98,8 @@ describe('SemanticMediaPurgeSession: keeps the selected image in an explicit-cac
       expect(candidate[0]?.blocks).toStrictEqual([
         { type: 'text', text: 'inspect' },
       ]);
-      attempt.finalize();
     });
+    await attempt.finalize();
   });
 });
 
@@ -151,7 +151,7 @@ describe('SemanticMediaPurgeSession: uses the purge candidate directly when expl
       { type: 'text', text: 'inspect' },
       { type: 'text', text: 'A green build result.' },
     ]);
-    attempt.finalize();
+    await attempt.finalize();
   });
 });
 
@@ -182,8 +182,8 @@ describe('SemanticMediaPurgeSession: exposes the exact candidate and commits it 
       expect(rows[0]?.blocks).toStrictEqual([
         { type: 'text', text: 'inspect' },
       ]);
-      attempt.finalize();
     });
+    await attempt.finalize();
   });
 });
 
@@ -290,8 +290,8 @@ describe('SemanticMediaPurgeSession: commits exact-match cache evidence for remo
       expect(rows[0]?.blocks).toStrictEqual([
         { type: 'text', text: 'inspect' },
       ]);
-      attempt.finalize();
     });
+    await attempt.finalize();
   });
 });
 
@@ -352,7 +352,7 @@ describe('SemanticMediaPurgeSession: holds the next purge until a committed atte
     await Promise.resolve();
     expect(secondResolved).toBe(false);
 
-    first.finalize();
+    await first.finalize();
 
     expect(await secondPromise).toBeUndefined();
   });
@@ -476,7 +476,7 @@ describe('SemanticMediaPurgeSession: keeps the purge lease when committed rollba
     await Promise.resolve();
 
     expect(secondResolved).toBeFalsy();
-    first.finalize();
-    (await secondPromise)?.finalize();
+    await first.finalize();
+    await (await secondPromise)?.finalize();
   });
 });

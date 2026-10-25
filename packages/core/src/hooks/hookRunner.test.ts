@@ -135,7 +135,7 @@ function registerDiskSourceTests(): void {
 
     it('closes a real command on disk reader failure', async () => {
       await fixture([rich], async (snapshot, owners, root) => {
-        snapshot.close();
+        await snapshot.close();
         const result = await hookRunner.executeHookWithRequestRows(
           command('setInterval(() => {}, 1000)'),
           HookEventName.BeforeModel,

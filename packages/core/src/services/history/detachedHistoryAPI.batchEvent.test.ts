@@ -28,10 +28,13 @@ describe('notifyDetachedRows', () => {
       events.push(batch);
     });
 
-    notifyDetachedRows(
+    const notification = notifyDetachedRows(
       history,
       undefined,
       sourceOf([textRow('a'), textRow('b')]),
+    ).then(
+      () => ({ completed: true }),
+      (error: unknown) => ({ error }),
     );
 
     expect(events).toHaveLength(1);
@@ -43,6 +46,7 @@ describe('notifyDetachedRows', () => {
       const block = row.blocks[0];
       texts.push(block.type === 'text' ? block.text : '');
     }
+    expect(await notification).toStrictEqual({ completed: true });
     expect(texts).toStrictEqual(['a', 'b']);
     await history.dispose();
   });
@@ -51,9 +55,10 @@ describe('notifyDetachedRows', () => {
     const history = new HistoryService();
     const ownership = new RowOwnership();
     const live: number[] = [];
+    let consumed: Promise<void> | undefined;
     history.on('contentBatchAdded', (batch) => {
       if (!('rows' in batch)) throw new Error('Expected a row source');
-      void (async () => {
+      consumed = (async () => {
         for await (const row of batch.rows()) {
           void row;
           live.push(ownership.snapshot().liveRows);
@@ -61,12 +66,14 @@ describe('notifyDetachedRows', () => {
       })();
     });
 
-    notifyDetachedRows(
-      history,
-      ownership,
-      sourceOf([textRow('a'), textRow('b'), textRow('c')]),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await Promise.all([
+      notifyDetachedRows(
+        history,
+        ownership,
+        sourceOf([textRow('a'), textRow('b'), textRow('c')]),
+      ),
+      consumed,
+    ]);
 
     expect(live).toStrictEqual([1, 1, 1]);
     expect(ownership.snapshot().liveRows).toBe(0);

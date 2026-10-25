@@ -37,7 +37,7 @@ describe('journal session metadata (issue #1611)', () => {
   }
 
   async function recordTitles(
-    titles: readonly (string | null)[],
+    titles: ReadonlyArray<string | null>,
   ): Promise<string> {
     const recording = create();
     for (const title of titles) recording.recordSessionMetadata(title);

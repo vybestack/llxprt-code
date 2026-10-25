@@ -74,7 +74,7 @@ describe('bounded request selection preserves semantic pending membership', () =
       expect(selected.flatMap((row) => row.text)).not.toContain('old prompt');
       expect(snapshot.pending.inputCount).toBe(3);
     } finally {
-      snapshot.close();
+      await snapshot.close();
       await history.dispose();
     }
     expect(history.owners.every((owner) => owner.closed)).toBe(true);

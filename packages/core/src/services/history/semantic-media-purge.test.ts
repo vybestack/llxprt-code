@@ -152,7 +152,7 @@ const success: SemanticMediaPurgeOutcome = {
 };
 
 async function cleanupPurge(): Promise<void> {
-  for (const transaction of transactions.splice(0)) transaction.close();
+  for (const transaction of transactions.splice(0)) await transaction.close();
   for (const history of histories.splice(0)) await history.dispose();
 }
 

@@ -204,7 +204,7 @@ describe('HistoryService persisted replacement byte boundaries', () => {
         try {
           rowOffset = (await snapshot.entryAt(0)).recordOffset;
         } finally {
-          snapshot.close();
+          await snapshot.close();
         }
         const bytes = await readFile(fileOf(recorder.recording));
         const reader = await openJournalReadOnly(fileOf(recorder.recording));
