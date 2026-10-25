@@ -1,15 +1,13 @@
-import { openSkillsCaller } from './helpers/skills-fixture-caller.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import { internalConfig, type Agent } from './helpers/agentHarness.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import { modelVisibleSkillNames } from './helpers/skills-fixture-declarations.js';
+import { clientSkillNames } from './helpers/skill-declaration-reads.js';
+import { openSkillWorkspaceSession } from './helpers/skill-workspace-session.js';
 
 import { ACTIVATE_SKILL_TOOL_NAME } from '@vybestack/llxprt-code-tools';
 
@@ -49,18 +47,6 @@ function writeSkill(workspace: string, name: string): void {
   );
 }
 
-/**
- * Drives one turn so a live chat session exists with a tool list, which is the
- * state a reload has to update. The registrar is already installed by
- * `createAgent`; nothing here supplies it.
- */
-async function settle(agent: Agent): Promise<Config> {
-  for await (const _event of agent.stream('hello')) {
-    // Drain the turn so the chat session and its tool list exist.
-  }
-  return internalConfig(agent);
-}
-
 function publicationGate(): { promise: Promise<void>; release(): void } {
   let release = (): void => {};
   const promise = new Promise<void>((resolve) => {
@@ -83,6 +69,7 @@ describe('workspace skill publication compensation', () => {
     await rm(promptDirectory, { recursive: true, force: true });
   });
 
+  useFakeResponsesReplay('plain-text.jsonl');
   const builtCredentials = useOwnedCredentials();
 
   it('joins accepted queued reloads before withdrawing declarations and denying disposed activation', async () => {
@@ -90,47 +77,28 @@ describe('workspace skill publication compensation', () => {
     writeSkill(workspace, 'alpha');
 
     const {
-      config: builtCallerConfig,
-      settings: builtCallerSettings,
-      settingsOwner: builtCallerSettingsOwner,
-      manager: builtCallerManager,
       mcp: builtCallerMcp,
-      close: builtCallerClose,
       client: builtCallerClient,
-    } = await openSkillsCaller({
-      fixture: new URL('./fixtures/plain-text.jsonl', import.meta.url),
+      close,
+    } = await openSkillWorkspaceSession({
       authority: builtCredentials().authority,
       overrides: {
         skillsSupport: true,
         workingDir: workspace,
       },
-      operations: undefined,
     });
 
-    const agent = await fromConfig(
-      builtCallerConfig,
-      builtCallerSettings,
-      {},
-      builtCallerSettingsOwner,
-      builtCallerManager,
-      undefined,
-      undefined,
-      builtCallerMcp,
-      undefined,
-      builtCallerClient,
-    );
     const entered = publicationGate();
     const released = publicationGate();
     const owner = builtCallerMcp.workspaceSkills;
     let disposal: Promise<void> | undefined;
-    await settle(agent);
     const publish = builtCallerClient.setTools.bind(builtCallerClient);
     const publications: string[][] = [];
     const fault = vi
       .spyOn(builtCallerClient, 'setTools')
       .mockImplementation(async () => {
         await publish();
-        publications.push(modelVisibleSkillNames(agent).sort());
+        publications.push(clientSkillNames(builtCallerClient).sort());
         if (publications.length === 1) {
           entered.release();
           await released.promise;
@@ -157,8 +125,10 @@ describe('workspace skill publication compensation', () => {
         [],
       ]);
       expect(owner.operations.list()).toStrictEqual([]);
-      expect(modelVisibleSkillNames(agent)).toStrictEqual([]);
-      expect(agent.tools.get(ACTIVATE_SKILL_TOOL_NAME)).toBeUndefined();
+      expect(clientSkillNames(builtCallerClient)).toStrictEqual([]);
+      expect(
+        builtCallerClient.tools.getTool(ACTIVATE_SKILL_TOOL_NAME),
+      ).toBeUndefined();
       expect(builtCallerMcp.isStopped()).toBe(false);
       expect(builtCallerClient.isInitialized()).toBe(true);
       await builtCallerClient.setTools();
@@ -166,8 +136,7 @@ describe('workspace skill publication compensation', () => {
       released.release();
       fault.mockRestore();
       await disposal;
-      await agent.dispose();
-      await builtCallerClose();
+      await close();
       rmSync(workspace, { recursive: true, force: true });
     }
   });

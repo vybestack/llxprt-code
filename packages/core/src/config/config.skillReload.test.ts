@@ -187,6 +187,71 @@ describe('workspace reload refreshes the model-facing skill surface @issue:3379'
     }
   });
 
+  it('rejects an enabled reload without its MessageBus', async () => {
+    await writeSkill('alpha');
+    const config = new Config({
+      sessionId: 'skill-session',
+      targetDir: directory,
+      cwd: directory,
+      model: 'test-model',
+      debugMode: false,
+      skillsSupport: true,
+    });
+    const { composeWorkspaceSkills } = await import('./skill-tool-sync.js');
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: config.initialWorkspaceTrust,
+    });
+    const filesystem = new WorkspaceFilesystemOwner({
+      targetDir: config.getTargetDir(),
+      isTrusted: () => trust.isTrustedFolder(),
+    });
+    let bus: MessageBus | undefined = new MessageBus();
+    const tooling = new WorkspaceToolCatalogOwner(config, bus, trust);
+    const registrations: string[][] = [];
+    const publishingOwner = composeWorkspaceSkills(
+      config,
+      (directory, approved) =>
+        filesystem.admitSkillDirectory(directory, approved),
+      () => filesystem.notifyTrustChanged(),
+      trust,
+      () => bus,
+      {
+        reloadPolicy: async () => ({}),
+        registerTools: (_registry, service) => {
+          registrations.push(service.listSkills().map((skill) => skill.name));
+        },
+      },
+      () => {
+        const lease = tooling.acceptSkillPublication();
+        return {
+          registry: lease.registry,
+          publish: async () => {},
+          release: lease.release,
+        };
+      },
+    );
+    try {
+      await publishingOwner.initialize();
+      expect(registrations).toStrictEqual([['alpha']]);
+      bus = undefined;
+      await writeSkill('beta');
+      await expect(publishingOwner.operations.reload()).rejects.toThrow(
+        'Missing workspace skill MessageBus',
+      );
+      expect(
+        publishingOwner.operations.list().map((skill) => skill.name),
+      ).toStrictEqual(['alpha']);
+      expect(registrations).toStrictEqual([['alpha']]);
+    } finally {
+      bus = new MessageBus();
+      await publishingOwner.dispose();
+      await tooling.dispose();
+      await filesystem.dispose();
+      await trust.dispose();
+      await config.dispose();
+    }
+  });
+
   it('completes without a chat session to refresh', async () => {
     await build();
     await expect(owner.operations.reload()).resolves.toBeUndefined();

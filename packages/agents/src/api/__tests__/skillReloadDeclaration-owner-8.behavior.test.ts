@@ -1,19 +1,14 @@
-import { openSkillsCaller } from './helpers/skills-fixture-caller.js';
 import { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import { internalConfig, type Agent } from './helpers/agentHarness.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import {
-  clientModelVisibleSkillNames,
-  modelVisibleSkillNames,
-} from './helpers/skills-fixture-declarations.js';
+import { clientSkillNames } from './helpers/skill-declaration-reads.js';
+import { openSkillWorkspaceSession } from './helpers/skill-workspace-session.js';
 
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
 
@@ -53,18 +48,6 @@ function writeSkill(workspace: string, name: string): void {
   );
 }
 
-/**
- * Drives one turn so a live chat session exists with a tool list, which is the
- * state a reload has to update. The registrar is already installed by
- * `createAgent`; nothing here supplies it.
- */
-async function settle(agent: Agent): Promise<Config> {
-  for await (const _event of agent.stream('hello')) {
-    // Drain the turn so the chat session and its tool list exist.
-  }
-  return internalConfig(agent);
-}
-
 describe('enabled extension joint root shutdown', () => {
   let promptDirectory: string;
   const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
@@ -79,6 +62,7 @@ describe('enabled extension joint root shutdown', () => {
     await rm(promptDirectory, { recursive: true, force: true });
   });
 
+  useFakeResponsesReplay('plain-text.jsonl');
   const firstCredentials = useOwnedCredentials();
 
   const secondCredentials = useOwnedCredentials();
@@ -95,14 +79,10 @@ describe('enabled extension joint root shutdown', () => {
 
     const {
       config: firstCallerConfig,
-      settings: firstCallerSettings,
-      settingsOwner: firstCallerSettingsOwner,
-      manager: firstCallerManager,
       mcp: firstCallerMcp,
       close: firstCallerClose,
       client: firstCallerClient,
-    } = await openSkillsCaller({
-      fixture: new URL('./fixtures/plain-text.jsonl', import.meta.url),
+    } = await openSkillWorkspaceSession({
       authority: firstCredentials().authority,
       overrides: {
         skillsSupport: true,
@@ -111,20 +91,14 @@ describe('enabled extension joint root shutdown', () => {
         definitionOwner: definitions,
         definitionOwnership: 'caller',
       },
-      operations: undefined,
       parameters: { enableExtensionReloading: true },
     });
 
     const {
-      config: secondCallerConfig,
-      settings: secondCallerSettings,
-      settingsOwner: secondCallerSettingsOwner,
-      manager: secondCallerManager,
       mcp: secondCallerMcp,
       close: secondCallerClose,
       client: secondCallerClient,
-    } = await openSkillsCaller({
-      fixture: new URL('./fixtures/plain-text.jsonl', import.meta.url),
+    } = await openSkillWorkspaceSession({
       authority: secondCredentials().authority,
       overrides: {
         skillsSupport: true,
@@ -132,34 +106,9 @@ describe('enabled extension joint root shutdown', () => {
         workingDir: workspace,
         sessionId: firstCallerConfig.getSessionId(),
       },
-      operations: undefined,
       parameters: { enableExtensionReloading: true },
     });
 
-    const agent = await fromConfig(
-      firstCallerConfig,
-      firstCallerSettings,
-      { mcpOwnership: 'agent' },
-      firstCallerSettingsOwner,
-      firstCallerManager,
-      undefined,
-      undefined,
-      firstCallerMcp,
-      undefined,
-      firstCallerClient,
-    );
-    const sibling = await fromConfig(
-      secondCallerConfig,
-      secondCallerSettings,
-      {},
-      secondCallerSettingsOwner,
-      secondCallerManager,
-      undefined,
-      undefined,
-      secondCallerMcp,
-      undefined,
-      secondCallerClient,
-    );
     const loader = firstCallerMcp.extensionOperations;
     const siblingLoader = secondCallerMcp.extensionOperations;
     const extension = {
@@ -197,13 +146,11 @@ describe('enabled extension joint root shutdown', () => {
       },
     };
     try {
-      await settle(agent);
-      await settle(sibling);
       await loader.load(extension);
       await firstCallerMcp.awaitDiscovery();
       await siblingLoader.load({ ...extension, mcpServers: {} });
       expect(firstCallerConfig.getEnableExtensionReloading()).toBe(true);
-      expect(modelVisibleSkillNames(agent).sort()).toStrictEqual([
+      expect(clientSkillNames(firstCallerClient).sort()).toStrictEqual([
         'extension-skill',
         'native',
       ]);
@@ -217,7 +164,7 @@ describe('enabled extension joint root shutdown', () => {
       expect(mcpNames).toHaveLength(1);
       const subagents = firstCallerMcp.subagentDefinitions;
       expect(await subagents.listSubagents()).toContain('extension-agent');
-      await agent.dispose();
+      await firstCallerMcp.dispose();
       expect(firstCallerMcp.isStopped()).toBe(true);
       expect(loader.list()).toStrictEqual([]);
       expect(() => catalog.getAllTools()).toThrow('closed');
@@ -225,21 +172,19 @@ describe('enabled extension joint root shutdown', () => {
       expect(await definitions.subagentReads.listSubagents()).not.toContain(
         'extension-agent',
       );
-      expect(clientModelVisibleSkillNames(firstCallerClient)).toStrictEqual([]);
+      expect(clientSkillNames(firstCallerClient)).toStrictEqual([]);
       expect(secondCallerMcp.isStopped()).toBe(false);
-      expect(modelVisibleSkillNames(sibling).sort()).toStrictEqual([
+      expect(clientSkillNames(secondCallerClient).sort()).toStrictEqual([
         'extension-skill',
         'native',
       ]);
       expect(siblingLoader.list()).toHaveLength(1);
       await secondCallerMcp.workspaceSkills.operations.reload();
-      expect(modelVisibleSkillNames(sibling).sort()).toStrictEqual([
+      expect(clientSkillNames(secondCallerClient).sort()).toStrictEqual([
         'extension-skill',
         'native',
       ]);
     } finally {
-      await agent.dispose();
-      await sibling.dispose();
       await firstCallerClose();
       await definitions.dispose();
       await secondCallerClose();
