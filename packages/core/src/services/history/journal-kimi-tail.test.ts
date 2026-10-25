@@ -30,6 +30,35 @@ async function assertMutation(
 
 describe('request-only Kimi mappings', () => {
   const directory = useTempDir('kimi-tail-');
+  it('counts split-row fallbacks only before their cumulative native unit', async () => {
+    const session = await JournalSession.create(
+      `${directory()}/split-fallback.llxj`,
+      { journal: testJournalSeams().dependencies },
+    );
+    const rows: readonly IContent[] = [
+      { speaker: 'ai', blocks: [call('known', 'read')] },
+      {
+        speaker: 'tool',
+        blocks: [call('c', ''), { ...response(''), toolName: 'run' }],
+      },
+    ];
+    try {
+      await session.append(rows);
+      await session.store.commit([{ kind: 'kimi' }]);
+      const pin = await session.store.snapshot();
+      const indexed = await IndexedJournalRequestSnapshot.create(pin);
+      try {
+        await assertKimiTail(indexed, await oldTailUnits(rows, []));
+        expect(await indexed.kimiCounterBefore(3)).toBe(2);
+      } finally {
+        await indexed.close();
+        await pin.close();
+      }
+    } finally {
+      await session.close();
+    }
+  });
+
   it('overrides two earlier calls with a named pending duplicate without changing the pin', async () => {
     const session = await JournalSession.create(
       `${directory()}/duplicate.llxj`,

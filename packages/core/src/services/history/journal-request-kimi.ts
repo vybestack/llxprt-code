@@ -95,7 +95,12 @@ export class JournalRequestKimi {
         this.source.facts,
       );
       consumed += emitted.unmapped.filter(
-        (use) => use.occurrence.position.unit < selected.unit,
+        (use) =>
+          use.occurrence.position.unit +
+            (use.occurrence.position.part === 0
+              ? 0
+              : 1 + Number(selected.entry.answered > 0)) <
+          selected.unit,
       ).length;
     }
     return kimiSafeCount(this.count + kimiSafeCount(consumed));
