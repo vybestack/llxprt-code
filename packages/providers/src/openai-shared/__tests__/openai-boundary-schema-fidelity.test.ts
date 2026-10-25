@@ -5,6 +5,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { activeRequestBodyCount } from '../../utils/requestScopedBody.js';
+import { journalSendFixture } from '../../__tests__/support/journal-send-fixture.js';
 import { expectedBoundaryBody } from './openai-boundary-oracle.js';
 import {
   optionsFor,
@@ -28,8 +29,8 @@ async function captureBody(
   let pulled = 0;
   let opens = 0;
   let closed = false;
-  const contents: AsyncIterable<IContent> = {
-    async *[Symbol.asyncIterator]() {
+  const source: Iterable<IContent> = {
+    *[Symbol.iterator]() {
       opens += 1;
       try {
         for (let index = 0; index < rows; index += 1) {
@@ -46,7 +47,25 @@ async function captureBody(
   };
   let declarations = mode === 'nonempty' ? tools : undefined;
   if (mode === 'empty') declarations = [];
-  const options = optionsFor(name, contents, declarations);
+  const fixture = await journalSendFixture(source, [], {
+    directory: join(
+      import.meta.dir,
+      '../../../../../tmp/fix-prov3/boundary-fixtures',
+    ),
+  });
+  const options = {
+    ...optionsFor(
+      name,
+      {
+        async *[Symbol.asyncIterator]() {
+          yield* source;
+        },
+      },
+      declarations,
+    ),
+    requestRows: fixture.selection,
+    contentCount: fixture.selection.count,
+  };
   const original = globalThis.fetch;
   const bodies: string[] = [];
   globalThis.fetch = Object.assign(
@@ -79,6 +98,7 @@ async function captureBody(
     return bodies[0];
   } finally {
     globalThis.fetch = original;
+    await fixture.close();
   }
 }
 async function observeBody(
