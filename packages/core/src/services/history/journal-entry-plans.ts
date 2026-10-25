@@ -4,10 +4,10 @@ import { completedResponseParts } from './journal-reconstruction.js';
 import { selfResponsePlan } from './journal-self-plan.js';
 import { responseAdjacent } from './journal-response-slots.js';
 import type { JournalResponsePlan } from './journal-response-plan.js';
-import type { JournalTailSource } from './journal-tail-source.js';
+import type { JournalRequestBase } from './journal-request-projection.js';
 
 export async function* journalEntryPlans(
-  source: JournalTailSource,
+  source: JournalRequestBase,
   entry: RowEntry,
   nextEntry?: RowEntry | null,
 ): AsyncGenerator<JournalResponsePlan> {

@@ -6,11 +6,20 @@ import type { RowEntry } from '../../journal/rowEntry.js';
 import type { RowIds, StoredRow } from '../../journal/rowReads.js';
 import type { IContent } from './IContent.js';
 import type { JournalResponseSource } from './journal-response-source.js';
-import { encodeContentRow } from './journalRowCodec.js';
+import { encodeContentRow, encodeContentBlock } from './journalRowCodec.js';
+import { isCuratedContent } from './historyCuration.js';
 import { planSourceRowOccurrences } from './source-fact-planner.js';
 
 export class CallerOwnedRequestSource implements JournalResponseSource {
   private readonly ids = new Map<string, IdFact>();
+  private current:
+    | {
+        readonly label: bigint;
+        readonly draft: ReturnType<typeof encodeContentRow>;
+        stored?: StoredRow;
+        entry?: RowEntry;
+      }
+    | undefined;
   readonly facts = {
     fact: async (id: string): Promise<IdFact | undefined> => this.ids.get(id),
   };
@@ -53,31 +62,55 @@ export class CallerOwnedRequestSource implements JournalResponseSource {
       : this.tail[index - this.rows.length];
   }
 
+  private captured(
+    label: bigint,
+  ): NonNullable<CallerOwnedRequestSource['current']> {
+    if (this.current?.label !== label)
+      this.current = {
+        label,
+        draft: encodeContentRow(this.row(label), { owner: 0 }),
+      };
+    return this.current;
+  }
+
   private draft(label: bigint): ReturnType<typeof encodeContentRow> {
-    return encodeContentRow(this.row(label), { owner: 0 });
+    return this.captured(label).draft;
+  }
+
+  close(): void {
+    this.current = undefined;
   }
 
   private stored(label: bigint): StoredRow {
-    const draft = this.draft(label);
-    return {
+    const current = this.captured(label);
+    const { draft } = current;
+    return (current.stored ??= {
       header: encodeRowDraft(label, draft).header,
       rawIds: draft.ids.map((id) => id.rawId),
       meta: draft.meta,
       blocks: draft.blocks.map((block) => block.bytes),
-    };
+    });
+  }
+
+  private entry(label: bigint): RowEntry {
+    const current = this.captured(label);
+    return (current.entry ??= entryForNewRow(
+      encodeRowDraft(label, current.draft),
+      0,
+    ));
   }
 
   async *entries(): AsyncGenerator<RowEntry> {
     for (let index = 0; index < this.rows.length + this.tail.length; index++) {
       const label = BigInt(index + 1);
-      yield entryForNewRow(encodeRowDraft(label, this.draft(label)), 0);
+      yield this.entry(label);
     }
   }
 
   async entryByLabel(label: bigint): Promise<RowEntry | undefined> {
     if (label < 1n || label > BigInt(this.rows.length + this.tail.length))
       return undefined;
-    return entryForNewRow(encodeRowDraft(label, this.draft(label)), 0);
+    return this.entry(label);
   }
 
   async readIds(entry: RowEntry): Promise<RowIds> {
@@ -94,8 +127,22 @@ export class CallerOwnedRequestSource implements JournalResponseSource {
   }
 
   async readBlock(entry: RowEntry, index: number): Promise<Uint8Array> {
-    return this.draft(entry.label).blocks[index].bytes;
+    return encodeContentBlock(this.row(entry.label).blocks[index]).bytes;
   }
+
+  async nextCuratedAfter(label: bigint): Promise<RowEntry | undefined> {
+    for (
+      let index = Number(label);
+      index < this.rows.length + this.tail.length;
+      index++
+    ) {
+      const next = BigInt(index + 1);
+      if (isCuratedContent(this.row(next))) return this.entryByLabel(next);
+    }
+    return undefined;
+  }
+
+  readonly header = (row: IContent): IContent => row;
 
   readonly isTail = (label: bigint): boolean =>
     label > BigInt(this.rows.length);

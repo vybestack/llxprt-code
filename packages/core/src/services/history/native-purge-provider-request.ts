@@ -31,6 +31,7 @@ export function prepareJournalProviderRequest(
         override,
         request.tail,
         request.options,
+        { logger: request.logger, isCompressing: request.isCompressing },
       );
     if (override !== undefined) {
       if (!isNativeProviderHistory(override))

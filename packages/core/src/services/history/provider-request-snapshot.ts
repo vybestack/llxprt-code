@@ -52,23 +52,30 @@ export function isProviderRequestSource(
   );
 }
 
+export function validateProviderRequestBoundaries(
+  ...sources: ReadonlyArray<readonly IContent[]>
+): void {
+  let boundaryIdentity: object | undefined;
+  for (const rows of sources)
+    for (const row of rows) {
+      const boundary = row.metadata?.semanticMediaPurgeBoundary;
+      if (boundary === undefined) continue;
+      if (
+        boundaryIdentity !== undefined &&
+        boundaryIdentity !== boundary.boundaryId
+      )
+        throw new Error(
+          'Provider request has conflicting semantic purge boundaries',
+        );
+      boundaryIdentity = boundary.boundaryId;
+    }
+}
+
 /** A selection over rows already resident in memory; closing it releases nothing. */
 export function inMemoryRequestSelection(
   rows: readonly IContent[],
 ): ProviderRequestSelection {
-  let boundaryIdentity: object | undefined;
-  for (const row of rows) {
-    const boundary = row.metadata?.semanticMediaPurgeBoundary;
-    if (boundary === undefined) continue;
-    if (
-      boundaryIdentity !== undefined &&
-      boundaryIdentity !== boundary.boundaryId
-    )
-      throw new Error(
-        'Provider request has conflicting semantic purge boundaries',
-      );
-    boundaryIdentity = boundary.boundaryId;
-  }
+  validateProviderRequestBoundaries(rows);
   return {
     count: rows.length,
     async *openReader(signal) {

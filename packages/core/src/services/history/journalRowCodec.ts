@@ -197,7 +197,7 @@ function speakerCode(speaker: IContent['speaker']): number {
   return code;
 }
 
-function encodeBlock(block: ContentBlock): DraftBlock {
+export function encodeContentBlock(block: ContentBlock): DraftBlock {
   const type = BLOCK_TYPE[block.type] as number | undefined;
   if (type === undefined) {
     throw new JournalFormatError(
@@ -273,7 +273,7 @@ export function encodeContentRow(
             },
       ),
     ),
-    blocks: content.blocks.map(encodeBlock),
+    blocks: content.blocks.map(encodeContentBlock),
   };
 }
 

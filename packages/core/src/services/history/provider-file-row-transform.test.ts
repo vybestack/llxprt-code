@@ -148,6 +148,7 @@ describe('provider file binding through a disk row transform', () => {
       512,
       async (history) => {
         history.setTokenizerFactory(exactTokenizer());
+        const previousTokens = history.getTotalTokens();
         const failure = new Error('binding token publication');
         history.once('tokensUpdated', () => {
           throw failure;
@@ -161,7 +162,7 @@ describe('provider file binding through a disk row transform', () => {
           ),
         ).toBe(failure);
         await verifyRows(history, 512, false);
-        expect(history.getTotalTokens()).toBe(0);
+        expect(history.getTotalTokens()).toBe(previousTokens);
         expect(owners.snapshot().liveRows).toBe(0);
       },
       2048,

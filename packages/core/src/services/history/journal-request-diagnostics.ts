@@ -4,7 +4,7 @@ import { ROW_FLAG, ROW_ID_KIND } from '../../journal/rowRecord.js';
 import type { RowEntry } from '../../journal/rowEntry.js';
 import { streamCuratedProviderHistory } from './historyCuration.js';
 import { decodeStoredRow, decodeStoredBlock } from './journalRowCodec.js';
-import type { JournalTailSource } from './journal-tail-source.js';
+import type { JournalRequestBase } from './journal-request-projection.js';
 import {
   completedResponseParts,
   callTarget,
@@ -17,8 +17,13 @@ import {
 } from './providerDiagnostics.js';
 import type { IContent } from './IContent.js';
 
+interface DiagnosticSource extends JournalRequestBase {
+  isTail(label: bigint): boolean;
+  header(row: IContent, entry: RowEntry): IContent;
+}
+
 async function* historyRows(
-  source: JournalTailSource,
+  source: DiagnosticSource,
   signal?: AbortSignal,
 ): AsyncGenerator<IContent> {
   for await (const entry of source.entries()) {
@@ -46,7 +51,7 @@ function* reconstructedCalls(
 }
 
 async function logReconstruction(
-  source: JournalTailSource,
+  source: DiagnosticSource,
   logger: DebugLogger,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -59,7 +64,7 @@ async function logReconstruction(
 }
 
 async function logUnmatchedRow(
-  source: JournalTailSource,
+  source: DiagnosticSource,
   entry: RowEntry,
   logger: DebugLogger,
 ): Promise<void> {
@@ -79,7 +84,7 @@ async function logUnmatchedRow(
 }
 
 async function logUnmatched(
-  source: JournalTailSource,
+  source: DiagnosticSource,
   logger: DebugLogger,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -91,7 +96,7 @@ async function logUnmatched(
 }
 
 async function hasOutputAnchor(
-  source: JournalTailSource,
+  source: DiagnosticSource,
   entries: ReadonlyArray<RowEntry | undefined>,
 ): Promise<boolean> {
   for (const entry of entries) {
@@ -103,7 +108,7 @@ async function hasOutputAnchor(
 }
 
 async function logAnchors(
-  source: JournalTailSource,
+  source: DiagnosticSource,
   outputCount: number,
   logger: DebugLogger,
   signal?: AbortSignal,
@@ -125,7 +130,7 @@ async function logAnchors(
 }
 
 export async function logJournalRequestDiagnostics(
-  source: JournalTailSource,
+  source: DiagnosticSource,
   outputCount: number,
   logger: DebugLogger,
   isCompressing: boolean,

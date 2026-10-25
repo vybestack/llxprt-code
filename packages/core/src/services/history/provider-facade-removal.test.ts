@@ -1,8 +1,21 @@
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { tmpdir } from 'node:os';
+import { openNativeProviderFixture } from './__tests__/support/native-provider-fixture.js';
+import type { NativeProviderHistory } from './native-purge-provider-request.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+
+function nativeOverride(
+  rows: () => AsyncGenerator<IContent, void, unknown>,
+): NativeProviderHistory {
+  return {
+    prepareProviderSnapshot: () =>
+      openNativeProviderFixture(tmpdir(), rows(), 2),
+    [Symbol.asyncIterator]: rows,
+  };
+}
 
 class CursorOnlyHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
@@ -29,7 +42,11 @@ describe('provider history stream facade', () => {
         events.push('close');
       }
     }
-    const rows = history.getCuratedForProviderStream([], undefined, input());
+    const rows = history.getCuratedForProviderStream(
+      [],
+      undefined,
+      nativeOverride(input),
+    );
     try {
       expect(events).toStrictEqual([]);
       const first = await rows.next();
@@ -60,7 +77,11 @@ describe('provider history stream facade', () => {
         closed = true;
       }
     }
-    const rows = history.getCuratedForProviderStream([], undefined, input());
+    const rows = history.getCuratedForProviderStream(
+      [],
+      undefined,
+      nativeOverride(input),
+    );
     try {
       await expect(rows.next()).rejects.toBe(failure);
       expect(closed).toBe(true);
