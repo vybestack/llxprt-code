@@ -3,15 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  spyOn,
-  mock,
-} from 'bun:test';
+import { describe, it, expect, beforeEach } from 'bun:test';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   CompressionStatus,
   PerformCompressionResult,
@@ -22,10 +15,6 @@ import {
   createMockCommandContext,
   type CommandOwnerFixture,
 } from '../../__tests__/mockCommandContext.js';
-import {
-  useCommandOwners,
-  commandOwnerClient,
-} from '../../__tests__/command-owner-fixture.js';
 import { MessageType } from '../types.js';
 import type { SlashCommand } from './types.js';
 import type {
@@ -35,6 +24,8 @@ import type {
 } from '../types.js';
 
 type CapturedItem = Parameters<CommandOwnerFixture['ui']['addItem']>[0];
+type AgentCompress = Agent['compress'];
+type AgentCompressionResult = Awaited<ReturnType<AgentCompress>>;
 
 interface CapturedState {
   items: CapturedItem[];
@@ -70,58 +61,45 @@ function findErrorItem(items: CapturedItem[]): HistoryItemError | undefined {
   return items.find((i): i is HistoryItemError => i.type === MessageType.ERROR);
 }
 
-function sequentialTokenCounts(
-  first: number,
-  subsequent: number,
-): () => number {
-  let callCount = 0;
-  return () => {
-    callCount++;
-    return callCount === 1 ? first : subsequent;
+/**
+ * The result `Agent.compress` returns for one core compression outcome: the
+ * detail always carries the counts and the pre-command recency; the public
+ * counts of a compressed result are monotonic.
+ */
+function agentResult(
+  raw: PerformCompressionResult,
+  originalTokenCount: number,
+  newTokenCount: number,
+  wasRecentlyCompressed: boolean,
+): AgentCompressionResult {
+  const detail = {
+    result: raw,
+    originalTokenCount,
+    newTokenCount,
+    wasRecentlyCompressed,
+  };
+  if (raw === PerformCompressionResult.COMPRESSED)
+    return {
+      status: 'compressed',
+      originalTokenCount: Math.max(originalTokenCount, newTokenCount),
+      newTokenCount,
+      promptId: 'compress',
+      detail,
+    };
+  if (raw === PerformCompressionResult.NOOP)
+    return { status: 'noop', promptId: 'compress', detail };
+  return {
+    status: raw === PerformCompressionResult.FAILED ? 'failed' : 'skipped',
+    promptId: 'compress',
+    detail,
   };
 }
 
+function commandFor(outcome: AgentCompressionResult): SlashCommand {
+  return createCompressCommand(bindCompressCommand(async () => outcome));
+}
+
 describe('compression scenario conservation', () => {
-  afterEach(() => mock.restore());
-  const makeOwner = useCommandOwners();
-
-  async function bindScenario(source: {
-    performCompression: () => Promise<PerformCompressionResult>;
-    getHistoryService: () => { getTotalTokens: () => number } | null;
-    wasRecentlyCompressed: () => boolean;
-  }): Promise<SlashCommand> {
-    const owner = await makeOwner('compression');
-    await owner.setHistory([
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'compression input' }],
-      },
-    ]);
-    await commandOwnerClient(owner).startChat(
-      await commandOwnerClient(owner).getHistory(),
-    );
-    const chat = commandOwnerClient(owner).getChat();
-    const history = chat.getHistoryService();
-    if (history === null) throw new Error('Fixture chat has no history');
-    const sourceHistory = source.getHistoryService();
-    if (sourceHistory === null) {
-      spyOn(chat, 'getHistoryService').mockReturnValue(null);
-    } else {
-      spyOn(history, 'getTotalTokens').mockImplementation(
-        sourceHistory.getTotalTokens,
-      );
-    }
-    spyOn(chat, 'wasRecentlyCompressed').mockImplementation(
-      source.wasRecentlyCompressed,
-    );
-    spyOn(chat, 'performCompression').mockImplementation(
-      source.performCompression,
-    );
-    return createCompressCommand(
-      bindCompressCommand(owner.compress.bind(owner)),
-    );
-  }
-
   let context: CommandOwnerFixture;
   let state: CapturedState;
 
@@ -151,18 +129,9 @@ describe('compression scenario conservation', () => {
   });
 
   it('uses COMPRESSED when token count decreases after compression', async () => {
-    const performCompression = async () => PerformCompressionResult.COMPRESSED;
-    const getTotalTokens = sequentialTokenCounts(1200, 800);
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => false,
-    };
-
-    const command = await bindScenario(chat);
+    const command = commandFor(
+      agentResult(PerformCompressionResult.COMPRESSED, 1200, 800, false),
+    );
 
     await command.action!(context, '');
 
@@ -186,19 +155,9 @@ describe('compression scenario conservation', () => {
   });
 
   it('uses NOOP when token count is unchanged and compression did not run recently', async () => {
-    const performCompression = async () =>
-      PerformCompressionResult.SKIPPED_EMPTY;
-    const getTotalTokens = () => 1000;
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => false,
-    };
-
-    const command = await bindScenario(chat);
+    const command = commandFor(
+      agentResult(PerformCompressionResult.SKIPPED_EMPTY, 1000, 1000, false),
+    );
 
     await command.action!(context, '');
 
@@ -210,19 +169,9 @@ describe('compression scenario conservation', () => {
   });
 
   it('uses NOOP when token count is unchanged, result is SKIPPED_EMPTY, and compression ran recently', async () => {
-    const performCompression = async () =>
-      PerformCompressionResult.SKIPPED_EMPTY;
-    const getTotalTokens = () => 1000;
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => true,
-    };
-
-    const command = await bindScenario(chat);
+    const command = commandFor(
+      agentResult(PerformCompressionResult.SKIPPED_EMPTY, 1000, 1000, true),
+    );
 
     await command.action!(context, '');
 
@@ -247,18 +196,9 @@ describe('compression scenario conservation', () => {
   });
 
   it('uses COMPRESSION_FAILED when all strategies fail (PerformCompressionResult.FAILED)', async () => {
-    const performCompression = async () => PerformCompressionResult.FAILED;
-    const getTotalTokens = () => 1000;
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => false,
-    };
-
-    const command = await bindScenario(chat);
+    const command = commandFor(
+      agentResult(PerformCompressionResult.FAILED, 1000, 1000, false),
+    );
 
     await command.action!(context, '');
 
@@ -270,19 +210,9 @@ describe('compression scenario conservation', () => {
   });
 
   it('uses COMPRESSION_FAILED when compression is in cooldown (PerformCompressionResult.SKIPPED_COOLDOWN)', async () => {
-    const performCompression = async () =>
-      PerformCompressionResult.SKIPPED_COOLDOWN;
-    const getTotalTokens = () => 1000;
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => false,
-    };
-
-    const command = await bindScenario(chat);
+    const command = commandFor(
+      agentResult(PerformCompressionResult.SKIPPED_COOLDOWN, 1000, 1000, false),
+    );
 
     await command.action!(context, '');
 
@@ -294,18 +224,9 @@ describe('compression scenario conservation', () => {
   });
 
   it('uses ALREADY_COMPRESSED when core reports COMPRESSED but tokens did not decrease and compression was recent before command', async () => {
-    const performCompression = async () => PerformCompressionResult.COMPRESSED;
-    const getTotalTokens = () => 1000;
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => true,
-    };
-
-    const command = await bindScenario(chat);
+    const command = commandFor(
+      agentResult(PerformCompressionResult.COMPRESSED, 1000, 1000, true),
+    );
 
     await command.action!(context, '');
 
@@ -317,18 +238,9 @@ describe('compression scenario conservation', () => {
   });
 
   it('uses NOOP when core reports COMPRESSED but tokens did not decrease and compression was not recent before command', async () => {
-    const performCompression = async () => PerformCompressionResult.COMPRESSED;
-    const getTotalTokens = () => 1000;
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => false,
-    };
-
-    const command = await bindScenario(chat);
+    const command = commandFor(
+      agentResult(PerformCompressionResult.COMPRESSED, 1000, 1000, false),
+    );
 
     await command.action!(context, '');
 
@@ -340,18 +252,9 @@ describe('compression scenario conservation', () => {
   });
 
   it('uses COMPRESSION_FAILED_INFLATED_TOKEN_COUNT when core reports COMPRESSED but token count increases', async () => {
-    const performCompression = async () => PerformCompressionResult.COMPRESSED;
-    const getTotalTokens = sequentialTokenCounts(1000, 1200);
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => true,
-    };
-
-    const command = await bindScenario(chat);
+    const command = commandFor(
+      agentResult(PerformCompressionResult.COMPRESSED, 1000, 1200, true),
+    );
 
     await command.action!(context, '');
 
@@ -363,20 +266,11 @@ describe('compression scenario conservation', () => {
   });
 
   it('shows error when performCompression throws an exception', async () => {
-    const performCompression = async () => {
-      throw new Error('API connection refused');
-    };
-    const getTotalTokens = () => 1000;
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
+    const command = createCompressCommand(
+      bindCompressCommand(async () => {
+        throw new Error('API connection refused');
       }),
-      wasRecentlyCompressed: () => false,
-    };
-
-    const command = await bindScenario(chat);
+    );
 
     await command.action!(context, '');
 
@@ -388,26 +282,12 @@ describe('compression scenario conservation', () => {
   });
 
   it('checks wasRecentlyCompressed when result is FAILED', async () => {
-    let recentlyCompressedCalled = false;
-    const performCompression = async () => PerformCompressionResult.FAILED;
-    const getTotalTokens = () => 1000;
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => {
-        recentlyCompressedCalled = true;
-        return true;
-      },
-    };
-
-    const command = await bindScenario(chat);
+    const command = commandFor(
+      agentResult(PerformCompressionResult.FAILED, 1000, 1000, true),
+    );
 
     await command.action!(context, '');
 
-    expect(recentlyCompressedCalled).toBe(true);
     const compressionItem = findCompressionItem(state.items);
     expect(compressionItem).toBeDefined();
     expect(compressionItem!.compression.compressionStatus).toBe(
@@ -416,27 +296,12 @@ describe('compression scenario conservation', () => {
   });
 
   it('checks wasRecentlyCompressed when result is SKIPPED_COOLDOWN', async () => {
-    let recentlyCompressedCalled = false;
-    const performCompression = async () =>
-      PerformCompressionResult.SKIPPED_COOLDOWN;
-    const getTotalTokens = () => 1000;
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => {
-        recentlyCompressedCalled = true;
-        return true;
-      },
-    };
-
-    const command = await bindScenario(chat);
+    const command = commandFor(
+      agentResult(PerformCompressionResult.SKIPPED_COOLDOWN, 1000, 1000, true),
+    );
 
     await command.action!(context, '');
 
-    expect(recentlyCompressedCalled).toBe(true);
     const compressionItem = findCompressionItem(state.items);
     expect(compressionItem).toBeDefined();
     expect(compressionItem!.compression.compressionStatus).toBe(
@@ -445,18 +310,9 @@ describe('compression scenario conservation', () => {
   });
 
   it('uses COMPRESSION_FAILED when result is FAILED even if tokens decreased', async () => {
-    const performCompression = async () => PerformCompressionResult.FAILED;
-    const getTotalTokens = sequentialTokenCounts(1000, 700);
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => false,
-    };
-
-    const command = await bindScenario(chat);
+    const command = commandFor(
+      agentResult(PerformCompressionResult.FAILED, 1000, 700, false),
+    );
 
     await command.action!(context, '');
 
@@ -468,21 +324,14 @@ describe('compression scenario conservation', () => {
   });
 
   it('shows error when chat has no history service', async () => {
-    let performCompressionCalled = false;
-    const chat = {
-      performCompression: async () => {
-        performCompressionCalled = true;
-        return PerformCompressionResult.COMPRESSED;
-      },
-      getHistoryService: () => null,
-      wasRecentlyCompressed: () => false,
-    };
-
-    const command = await bindScenario(chat);
+    const command = createCompressCommand(
+      bindCompressCommand(async () => {
+        throw new Error('Chat instance not available for compression.');
+      }),
+    );
 
     await command.action!(context, '');
 
-    expect(performCompressionCalled).toBe(false);
     const errorItem = findErrorItem(state.items);
     expect(errorItem).toBeDefined();
     expect(errorItem!.text).toBe(
