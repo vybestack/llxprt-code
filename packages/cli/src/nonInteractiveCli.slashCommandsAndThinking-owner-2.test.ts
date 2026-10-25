@@ -134,9 +134,6 @@ function runWithMcpBus(
     params,
     mockRuntimeSettings.owner,
     mockProviderManager,
-    mockRuntimeSettings.store,
-    mockRuntimeSettings.owner,
-    mockCredentialAuthority,
     async () => {
       const agent = await fromConfig(
         params.config,

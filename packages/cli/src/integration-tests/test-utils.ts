@@ -1,57 +1,19 @@
-import { adoptFixture } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  MCPOAuthTokenStorage,
-  type McpOAuthBinding,
-  type OAuthCredentials,
-} from '@vybestack/llxprt-code-mcp';
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import * as http from 'http';
-import type {
-  Config,
-  RuntimeProviderManager,
-} from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
-import { createTestMcpRuntime } from '../../../agents/src/api/__tests__/helpers/create-mcp-runtime.js';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { afterEach } from 'bun:test';
-
-function createTestOAuthBinding(): McpOAuthBinding {
-  let credentials = new Map<string, OAuthCredentials>();
-  return {
-    openBrowser: async () => {
-      throw new Error('Browser was not configured for this test');
-    },
-    tokenStorage: new MCPOAuthTokenStorage({
-      getCredentials: async (name) => credentials.get(name) ?? null,
-      setCredentials: async (value) => {
-        credentials = new Map(credentials).set(value.serverName, value);
-      },
-      deleteCredentials: async (name) => {
-        credentials = new Map(
-          [...credentials].filter(([serverName]) => serverName !== name),
-        );
-      },
-      listServers: async () => [...credentials.keys()],
-      getAllCredentials: async () => new Map(credentials),
-      clearAll: async () => {
-        credentials = new Map();
-      },
-    }),
-  };
-}
 
 const roots = new Set<() => Promise<void>>();
 afterEach(async () => {
@@ -107,46 +69,6 @@ export async function initializeTestConfig(config: Config): Promise<Agent> {
   );
   roots.add(async () => {
     await agent.dispose();
-    await config.dispose();
-  });
-  return agent;
-}
-
-export async function initializeTestAgent(
-  config: Config,
-  providerManager: RuntimeProviderManager | undefined,
-  settingsService: SettingsService,
-  settingsOwner: SessionSettingsOwner,
-): Promise<Agent> {
-  settingsOwner.initializeProviderSelection(
-    config.getProvider(),
-    config.getModel(),
-  );
-  const policyOwner = new RuntimePolicyOwner(config);
-  const sessionMessageBus = policyOwner.session.messageBus;
-  const mcpOwner = await createTestMcpRuntime(
-    {
-      oauth: createTestOAuthBinding(),
-      config,
-      policy: { owner: policyOwner, ownership: 'runtime' },
-    },
-    {},
-  );
-  const agent = await adoptFixture(
-    config,
-    settingsService,
-    { mcpOwnership: 'caller' },
-    settingsOwner,
-    providerManager,
-    undefined,
-    sessionMessageBus,
-    mcpOwner,
-  );
-  roots.add(async () => {
-    await agent.dispose();
-    await mcpOwner.dispose();
-    await settingsOwner.dispose();
-    await policyOwner.dispose();
     await config.dispose();
   });
   return agent;

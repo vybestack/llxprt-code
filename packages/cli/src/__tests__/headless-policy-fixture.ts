@@ -1,5 +1,3 @@
-import { adoptFixture as fromConfig } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
-
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -17,10 +15,7 @@ import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-agents/constants.js';
-import {
-  runNonInteractive,
-  buildNonInteractiveActivationIntent,
-} from '../__tests__/noninteractive-run-fixture.js';
+import { runNonInteractive } from '../__tests__/noninteractive-run-fixture.js';
 
 export function makeHeadlessConfig(sessionId: string): {
   credentialAuthority: CredentialAuthority;
@@ -71,10 +66,7 @@ export async function runHeadlessPolicyFixture(
     Parameters<typeof runNonInteractive>[0]['runtimeSettings']
   >,
   providerManager: ProviderManager,
-  settingsService: SettingsService,
-  settingsOwner: SessionSettingsOwner,
-  credentialAuthority: CredentialAuthority,
-  acquireAgent?: (policy: RuntimePolicyOwner) => Promise<Agent>,
+  acquireAgent: (policy: RuntimePolicyOwner) => Promise<Agent>,
 ): Promise<void> {
   const policyOwner = new RuntimePolicyOwner(params.config);
   try {
@@ -83,37 +75,7 @@ export async function runHeadlessPolicyFixture(
       runtimeSettings: params.runtimeSettings ?? runtimeSettings,
       hasActiveProvider: () => providerManager.hasActiveProvider(),
       isTrustedFolder: () => policyOwner.trust.isTrustedFolder(),
-      acquireAgent:
-        acquireAgent === undefined
-          ? () =>
-              fromConfig(
-                params.config,
-                settingsService,
-                {
-                  sessionId: params.config.getSessionId(),
-                  sessionIdentityOwnership: 'config',
-                  activation: buildNonInteractiveActivationIntent(
-                    params.config,
-                    params.settings,
-                  ),
-                  mcpOwnership: 'agent',
-                },
-                settingsOwner,
-                providerManager,
-                undefined,
-                policyOwner.session.messageBus,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                credentialAuthority,
-                policyOwner,
-              )
-          : () => acquireAgent(policyOwner),
+      acquireAgent: () => acquireAgent(policyOwner),
     });
   } finally {
     await policyOwner.dispose();

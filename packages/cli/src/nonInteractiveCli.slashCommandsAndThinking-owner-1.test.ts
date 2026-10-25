@@ -20,7 +20,6 @@ import {
   type Mock,
 } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import {
   makeHeadlessConfig,
@@ -75,8 +74,6 @@ function makeConfig(sessionId: string): ReturnType<typeof makeHeadlessConfig> {
   return root;
 }
 
-let mockCredentialAuthority: CredentialAuthority;
-
 let mockProviderManager: ProviderManager;
 
 let mockRuntimeSettings: {
@@ -99,9 +96,6 @@ function runWithMcpBus(
     params,
     mockRuntimeSettings.owner,
     mockProviderManager,
-    mockRuntimeSettings.store,
-    mockRuntimeSettings.owner,
-    mockCredentialAuthority,
     async () => {
       acquisitions.count += 1;
       return agent;
@@ -215,7 +209,6 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     agentState.events = [{ type: 'done', reason: 'stop' }];
 
     const builtOwner = makeConfig('test-session');
-    mockCredentialAuthority = builtOwner.credentialAuthority;
     mockConfig = builtOwner.config;
     mockProviderManager = builtOwner.manager;
     mockRuntimeSettings = {

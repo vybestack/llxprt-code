@@ -101,9 +101,6 @@ async function runWithMcpBus(
       params,
       mockRuntimeSettings.owner,
       mockProviderManager,
-      mockRuntimeSettings.store,
-      mockRuntimeSettings.owner,
-      mockCredentialAuthority,
       async () => {
         acquisitions.count += 1;
         scripted = await createScriptedHeadlessMcpOwner(agentState.events);
