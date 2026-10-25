@@ -1,73 +1,114 @@
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import {
-  Config,
-  ConfigParameters,
-} from '@vybestack/llxprt-code-core/config/config.js';
-import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { createMcpApprovalPolicy } from '@vybestack/llxprt-code-core/policy/mcp-approval.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
+import { CoreToolHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreToolHostAdapter.js';
+import { ToolDispatchAdmission } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  CheckAsyncTasksTool,
-  ReadFileTool,
-} from '@vybestack/llxprt-code-tools';
+import { ReadFileTool, WriteFileTool } from '@vybestack/llxprt-code-tools';
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import {
-  cleanupAfterFailure,
-  runCleanupSteps,
-} from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { SessionToolCatalogOwner } from '../../session/session-tool-catalog-owner.js';
-import { releaseAdoptedFileScope } from '../adoption-release.js';
 import { toConfigParameters } from '../agentConfig.adapter.js';
-import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
-import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
-import { AgentResourceCapture } from './helpers/agent-resource-capture.js';
-import type { Agent } from '../agent.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { assembleModelSelection } from '../model-selection.js';
-import {
-  acquirePreferredOAuth,
-  acquirePreferredProviderManager,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
-import { executeProviderActivation } from '../providerActivationExecutor.js';
-import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
-import {
-  AgentRuntimeFactoryBindings,
-  createAgentRuntimeFactoryBindings,
-  createTaskRegistration,
-} from '../runtimeFactories.js';
+import { createTaskRegistration } from '../runtimeFactories.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { openRouteAAgent, RouteAAgent } from './helpers/route-a-agent.js';
 
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+/** The workspace ports a host builds from one `Config`, with no agent on top. */
+interface DomainWorkspace {
+  readonly config: Config;
+  readonly settingsOwner: SessionSettingsOwner;
+  readonly mcpRuntime: McpRuntimeOwner;
+  readonly directory: string;
+  readonly host: () => CoreToolHostAdapter;
+  readonly close: () => Promise<void>;
+}
+
+async function openDomainWorkspace(): Promise<DomainWorkspace> {
+  const directory = await realpath(
+    await mkdtemp(join(tmpdir(), 'session-tools-')),
+  );
+  await writeFile(join(directory, 'input.txt'), 'seven physical apples');
+  const selection = toConfigParameters({
+    provider: 'fake',
+    model: 'fake-model',
+    sessionId: randomUUID(),
+    workingDir: directory,
+    folderTrust: true,
+    telemetry: { enabled: false },
+    recording: { enabled: false },
+  });
+  const config = new Config({
+    ...selection,
+    interactive: true,
+    includeDirectories: [
+      ...(selection.includeDirectories ?? []),
+      process.cwd(),
+    ],
+  });
+  const settings = new SettingsService();
+  for (const [key, value] of Object.entries(config.getInitialSettings()))
+    settings.set(key, value);
+  const settingsOwner = new SessionSettingsOwner(settings);
+  settingsOwner.initializeProviderSelection(
+    config.getProvider(),
+    config.getModel(),
+  );
+  settingsOwner.bindTelemetry(config);
+  const policy = new RuntimePolicyOwner(config);
+  const mcpRuntime = await buildTestMcpRuntime(
+    config,
+    policy.session.messageBus,
+    {},
+    undefined,
+    policy,
+  );
+  const close = (): Promise<void> =>
+    runCleanupSteps([
+      () => mcpRuntime.dispose(),
+      () => settingsOwner.dispose(),
+      () => config.dispose(),
+      () => rm(directory, { recursive: true, force: true }),
+    ]);
+  try {
+    await mcpRuntime.initialize();
+  } catch (primary) {
+    await runCleanupSteps([close]);
+    throw primary;
+  }
+  return {
+    config,
+    settingsOwner,
+    mcpRuntime,
+    directory,
+    host: () =>
+      new CoreToolHostAdapter(
+        config,
+        mcpRuntime.workspacePaths,
+        mcpRuntime.workspaceFiles,
+        mcpRuntime.workspaceIgnore,
+        mcpRuntime.workspaceScans,
+        () => settingsOwner.readToolExecutionPolicy(),
+        mcpRuntime.trust,
+        settingsOwner.telemetry,
+      ),
+    close,
+  };
+}
 
 describe('session executable tool ownership', () => {
   let promptDirectory: string;
@@ -82,261 +123,37 @@ describe('session executable tool ownership', () => {
     else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
     await rm(promptDirectory, { recursive: true, force: true });
   });
-
+  useFakeResponsesReplay('plain-text.jsonl');
   const credentials = useOwnedCredentials();
-  let callerConfig: Config;
-  let callerSettings: SettingsService;
-  let callerSettingsOwner: SessionSettingsOwner;
-  let callerPolicy: RuntimePolicyOwner;
-  let callerMcp: McpRuntimeOwner;
-  let callerManager: ReturnType<typeof acquirePreferredProviderManager>;
-  let callerOwner: SessionClientOwner;
-  let callerClose: () => Promise<void>;
-  let callerFactories: AgentRuntimeFactoryBindings;
-  let callerRelease: AcquisitionRelease;
-  let callerFiles: ProviderFileLifecycle;
-  let callerRuntimeId: string;
-  let callerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let callerTokenizer: ReturnType<typeof configureProviderTokenizer>;
-  let callerContent: ReturnType<typeof createRuntimeContentGeneratorFactory>;
 
-  async function openCaller(
-    fixture: string,
-    overrides: Readonly<Partial<AgentConfig>> = {},
-    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
-    skillSettings: Pick<
-      ConfigParameters,
-      'enableExtensionReloading' | 'storageRoot'
-    > = {},
-    extensionLoader?: ExtensionLoader,
-    skillOperations?: WorkspaceSkillAssemblyOperations,
-  ): Promise<void> {
-    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('./fixtures/' + fixture, import.meta.url),
-    );
-    const directory = await realpath(
-      await mkdtemp(join(tmpdir(), 'caller-adoption-')),
-    );
-    const selection: AgentConfig = {
-      provider: 'fake',
-      model: 'fake-model',
-      sessionId: randomUUID(),
-      ...overrides,
-      workingDir:
-        overrides.workingDir === undefined
-          ? directory
-          : await realpath(overrides.workingDir),
-    };
-    const parameters = { ...toConfigParameters(selection), ...skillSettings };
-    parameters.interactive = true;
-    if (overrides.hooks !== undefined) parameters.enableHooks = true;
-    if (
-      overrides.filesystemOwner === undefined &&
-      (overrides.harness?.includeProcessCwd ?? true)
-    )
-      parameters.includeDirectories = [
-        ...(parameters.includeDirectories ?? []),
-        process.cwd(),
-      ];
-    callerConfig = new Config(parameters);
-    callerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...suppliedFactories,
-    };
-    callerSettings = new SettingsService();
-    for (const [key, value] of Object.entries(
-      callerConfig.getInitialSettings(),
-    ))
-      callerSettings.set(key, value);
-    callerPolicy = new RuntimePolicyOwner(callerConfig);
-    injectConfirmationForcingPolicy(callerPolicy.session.confirmation);
-    callerMcp = await buildTestMcpRuntime(
-      callerConfig,
-      callerPolicy.session.messageBus,
-      overrides,
-      extensionLoader,
-      callerPolicy,
-      skillOperations,
-    );
-    acquireCallerProviders();
-    const media = new SessionMediaOwner(
-      callerConfig.projectTempDir,
-      1024 * 1024 * 1024,
-    );
-    callerOwner = await createCapturedSessionOwner(
-      callerConfig,
-      assembleTaskSchemaPolicy(callerSettings),
-      callerManager,
-      callerFactories.agentClientFactory,
-      media.store,
-      callerMcp.readInstructions,
-      callerMcp.workspacePaths,
-      callerSettingsOwner,
-      callerContent,
-      callerTokenizer,
-    );
-    callerOwner.bindMcpRuntime(callerMcp);
-    callerOwner.bindProviderFiles(callerFiles, (provider) =>
-      callerOAuth.composeRetryOperations(provider),
-    );
-    callerOwner.bindHooks();
-    callerClose = settleEngineRelease.bind(
-      undefined,
-      [
-        () => callerOwner.dispose(),
-        () => callerRelease.close(),
-        () => media.dispose(),
-        () => callerMcp.dispose(),
-        () => callerConfig.dispose(),
-        () => rm(directory, { recursive: true, force: true }),
-      ],
-      previousReplay,
-    );
-    try {
-      await preparePreferredProviderCompletion(
-        callerConfig,
-        callerSettings,
-        callerSettingsOwner,
-        callerManager,
-        callerOAuth,
-        callerRuntimeId,
-        callerTokenizer,
-        undefined,
-      );
-      await callerMcp.initialize();
-      await activateCallerClient(selection.activation);
-    } catch (primary) {
-      await cleanupAfterFailure(primary, callerClose);
-    }
-  }
-  function acquireCallerProviders(): void {
-    callerRuntimeId = 'caller-' + randomUUID();
-    callerRelease = new AcquisitionRelease();
-    callerSettingsOwner = new SessionSettingsOwner(callerSettings);
-    callerRelease.acquire('settings', () => callerSettingsOwner.dispose());
-    callerSettingsOwner.initializeProviderSelection(
-      callerConfig.getProvider(),
-      callerConfig.getModel(),
-    );
-    callerSettingsOwner.bindTelemetry(callerConfig);
-    callerFiles = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
+  /**
+   * One Route A agent over a workspace that holds `input.txt`. A peer passes
+   * the first agent's directory as `workingDir` so both share the workspace.
+   */
+  async function openWorkspace(
+    coreTools?: string[],
+    workingDir?: string,
+  ): Promise<RouteAAgent> {
+    const workspace = await openRouteAAgent({
+      authority: credentials().authority,
+      config: {
+        ...(workingDir === undefined ? {} : { workingDir }),
+        coreTools,
+        folderTrust: true,
+        telemetry: { enabled: false },
+        recording: { enabled: false },
+      },
     });
-    for (const scope of [callerRuntimeId, callerConfig.getSessionId()])
-      callerRelease.acquire('files', () =>
-        releaseAdoptedFileScope(callerFiles, scope),
-      );
-    callerManager = acquirePreferredProviderManager(
-      callerConfig,
-      callerSettings,
-      callerSettingsOwner,
-      callerFiles,
-      callerRuntimeId,
-      credentials().authority,
-      callerRelease,
+    await writeFile(
+      join(workingDir ?? workspace.directory, 'input.txt'),
+      'seven physical apples',
     );
-    const factoriesTokenizer = configureProviderTokenizer(callerManager);
-    const factoriesContent = createRuntimeContentGeneratorFactory();
-    callerTokenizer = factoriesTokenizer;
-    callerContent = factoriesContent;
-    callerOAuth = acquirePreferredOAuth(
-      undefined,
-      callerPolicy.session.messageBus,
-      callerConfig,
-      callerSettings,
-      callerManager,
-      callerRuntimeId,
-      callerMcp.profileDefinitions,
-      credentials().authority,
-      callerRelease,
-      undefined,
-    );
-  }
-  async function activateCallerClient(
-    intent: ProviderActivationIntent = {
-      provider: callerConfig.getProvider(),
-      model: callerConfig.getModel(),
-    },
-  ): Promise<void> {
-    const activation = await executeProviderActivation(
-      callerConfig,
-      intent,
-      assembleProviderSwitch(
-        callerConfig,
-        callerSettings,
-        callerManager,
-        callerOAuth,
-        () => 'agent',
-        () => callerOwner.refreshAuth(),
-        callerSettingsOwner,
-      ),
-      callerSettings,
-      callerManager,
-      (method) => callerOwner.refreshAuth(method),
-      assembleModelSelection(callerSettingsOwner),
-    );
-    requireCallerActivation(activation);
-    await callerOwner.initializeTools();
-    await capturedSessionClient(callerOwner).startChat();
-  }
-
-  let directory: string;
-  async function openWorkspace(coreTools?: string[]): Promise<void> {
-    directory = await realpath(await mkdtemp(join(tmpdir(), 'session-tools-')));
-    await writeFile(join(directory, 'input.txt'), 'seven physical apples');
-    await openCaller('plain-text.jsonl', {
-      workingDir: directory,
-      coreTools,
-      folderTrust: true,
-      telemetry: { enabled: false },
-      recording: { enabled: false },
-    });
-  }
-  async function closeWorkspace(): Promise<void> {
-    await runCleanupSteps([
-      callerClose,
-      () => rm(directory, { recursive: true, force: true }),
-    ]);
-  }
-  const adoptedClients = new WeakMap<Agent, AgentClientContract>();
-  function capturedAdoptedClient(agent: Agent): AgentClientContract {
-    const client = adoptedClients.get(agent);
-    if (client === undefined)
-      throw new Error('Missing actual adopted client capture');
-    return client;
-  }
-  async function adopt() {
-    const capture = new AgentResourceCapture();
-    const agent = await fromConfig(
-      callerConfig,
-      callerSettings,
-      {},
-      callerSettingsOwner,
-      callerManager,
-      undefined,
-      undefined,
-      callerMcp,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      capture.factories(undefined),
-    );
-    const client = capture.clients.slice(-1).values().next().value;
-    if (client === undefined)
-      throw new Error('Adoption did not acquire a client');
-    adoptedClients.set(agent, client);
-    return agent;
+    return workspace;
   }
 
   it('publishes executable tooling from independent workspace ports', async () => {
-    await openWorkspace();
-    const config = callerConfig;
-    const settingsOwner = callerSettingsOwner;
-    const mcpRuntime = callerMcp;
+    const workspace = await openDomainWorkspace();
+    const { config, settingsOwner, mcpRuntime, directory } = workspace;
     const catalog = new SessionToolCatalogOwner(
       config,
       () => settingsOwner.readRegistryPolicy([]),
@@ -388,18 +205,16 @@ describe('session executable tool ownership', () => {
       );
       expect(String(result.llmContent)).toContain('seven physical apples');
     } finally {
-      await catalog.dispose();
-      await closeWorkspace();
+      await runCleanupSteps([() => catalog.dispose(), workspace.close]);
     }
   });
 
   it('registers an argument-specific ShellTool allowlist without registering ReadFileTool', async () => {
-    await openWorkspace(['ShellTool(git status)']);
-    const agent = await adopt();
+    const workspace = await openWorkspace(['ShellTool(git status)']);
     try {
-      const shell = agent.tools.get('run_shell_command');
+      const shell = workspace.agent.tools.get('run_shell_command');
       expect(shell).toBeDefined();
-      expect(agent.tools.get('read_file')).toBeUndefined();
+      expect(workspace.agent.tools.get('read_file')).toBeUndefined();
       if (!shell) throw new Error('Missing governed shell');
       const result = await shell.buildAndExecute(
         { command: 'git status' },
@@ -407,15 +222,14 @@ describe('session executable tool ownership', () => {
       );
       expect(String(result.llmContent)).toContain('not a git repository');
     } finally {
-      await agent.dispose();
-      await closeWorkspace();
+      await workspace.close();
     }
   });
 
   it('reads and writes physical files without selecting runtime tooling through Config', async () => {
-    await openWorkspace();
-    const agent = await adopt();
-    Object.defineProperty(callerConfig, 'getToolRegistry', {
+    const workspace = await openWorkspace();
+    const { agent, config, directory } = workspace;
+    Object.defineProperty(config, 'getToolRegistry', {
       configurable: true,
       value: (): never => {
         throw new Error('Config cannot select executable tooling');
@@ -441,14 +255,13 @@ describe('session executable tool ownership', () => {
         '49 apple pairs',
       );
     } finally {
-      await agent.dispose();
-      await closeWorkspace();
+      await workspace.close();
     }
   });
 
   it('rejects retained dispatch after disabling a tool and after facade disposal', async () => {
-    await openWorkspace();
-    const agent = await adopt();
+    const workspace = await openWorkspace();
+    const { agent, settings, directory } = workspace;
     try {
       const tool = agent.tools.get('write_file');
       if (!tool) throw new Error('Missing write tool');
@@ -456,14 +269,14 @@ describe('session executable tool ownership', () => {
         absolute_path: join(directory, 'forbidden.txt'),
         content: 'must not be written',
       });
-      callerSettings.set('tools.disabled', ['write_file']);
+      settings.set('tools.disabled', ['write_file']);
       await expect(
         invocation.execute(new AbortController().signal),
       ).rejects.toThrow('unavailable');
       await expect(readFile(join(directory, 'forbidden.txt'))).rejects.toThrow(
         'ENOENT',
       );
-      callerSettings.set('tools.disabled', []);
+      settings.set('tools.disabled', []);
       await agent.dispose();
       await expect(
         tool.buildAndExecute(
@@ -475,25 +288,24 @@ describe('session executable tool ownership', () => {
         ),
       ).rejects.toThrow('closed');
     } finally {
-      await agent.dispose();
-      await closeWorkspace();
+      await workspace.close();
     }
   });
 
   it('keeps executable file and shell tooling usable in a peer sharing the workspace', async () => {
-    await openWorkspace();
-    const first = await adopt();
-    const second = await adopt();
+    const first = await openWorkspace();
+    let second: RouteAAgent | undefined;
     try {
-      await first.dispose();
-      const read = second.tools.get('read_file');
-      const shell = second.tools.get('run_shell_command');
+      second = await openWorkspace(undefined, first.directory);
+      await first.agent.dispose();
+      const read = second.agent.tools.get('read_file');
+      const shell = second.agent.tools.get('run_shell_command');
       if (!read || !shell) throw new Error('Peer tooling was withdrawn');
       expect(
         String(
           (
             await read.buildAndExecute(
-              { absolute_path: join(directory, 'input.txt') },
+              { absolute_path: join(first.directory, 'input.txt') },
               new AbortController().signal,
             )
           ).llmContent,
@@ -505,14 +317,13 @@ describe('session executable tool ownership', () => {
       );
       expect(String(output.llmContent)).toContain('49');
     } finally {
-      await first.dispose();
-      await second.dispose();
-      await closeWorkspace();
+      await runCleanupSteps([() => second?.close(), first.close]);
     }
   });
+
   it('rejects a retained session shell invocation without writing after facade close', async () => {
-    await openWorkspace();
-    const agent = await adopt();
+    const workspace = await openWorkspace();
+    const { agent, directory } = workspace;
     try {
       const shell = agent.tools.get('run_shell_command');
       if (!shell) throw new Error('Missing shell tooling');
@@ -527,35 +338,34 @@ describe('session executable tool ownership', () => {
         readFile(join(directory, 'retained-shell.txt')),
       ).rejects.toThrow('ENOENT');
     } finally {
-      await agent.dispose();
-      await closeWorkspace();
+      await workspace.close();
     }
   });
-  it('denies validated retained file dispatch after its session closes', async () => {
-    await openWorkspace();
-    const agent = await adopt();
+
+  it('denies retained file dispatch through buildAndExecute after its session closes', async () => {
+    const workspace = await openWorkspace();
+    const { agent, directory } = workspace;
     const signal = new AbortController().signal;
-    const tool = capturedAdoptedClient(agent).tools.getTool('write_file');
+    const tool = agent.tools.get('write_file');
     if (!tool) throw new Error('Missing executable writer');
     const file = join(directory, 'validated-retained.txt');
     try {
       await agent.dispose();
       await expect(
-        tool.validateBuildAndExecute(
+        tool.buildAndExecute(
           { absolute_path: file, content: 'forbidden' },
           signal,
         ),
       ).rejects.toThrow('closed');
       await expect(readFile(file, 'utf8')).rejects.toThrow('ENOENT');
     } finally {
-      await agent.dispose();
-      await closeWorkspace();
+      await workspace.close();
     }
   });
 
   it('rejects a retained async task status invocation after session closure', async () => {
-    await openWorkspace();
-    const agent = await adopt();
+    const workspace = await openWorkspace();
+    const { agent } = workspace;
     try {
       const status = agent.tools.get('check_async_tasks');
       if (!status) throw new Error('Missing task status tooling');
@@ -565,28 +375,28 @@ describe('session executable tool ownership', () => {
         invocation.execute(new AbortController().signal),
       ).rejects.toThrow('closed');
     } finally {
-      await agent.dispose();
-      await closeWorkspace();
+      await workspace.close();
     }
   });
-  it('denies direct retained asynchronous-status dispatch after session closure', async () => {
-    await openWorkspace();
-    const agent = await adopt();
-    const status =
-      capturedAdoptedClient(agent).tools.getTool('check_async_tasks');
-    if (!(status instanceof CheckAsyncTasksTool))
-      throw new Error('Missing status tool');
+
+  it('denies retained asynchronous-status dispatch through buildAndExecute after session closure', async () => {
+    const workspace = await openWorkspace();
+    const { agent } = workspace;
     try {
+      const status = agent.tools.get('check_async_tasks');
+      if (!status) throw new Error('Missing task status tooling');
       await agent.dispose();
-      await expect(status.execute({})).rejects.toThrow('closed');
+      await expect(
+        status.buildAndExecute({}, new AbortController().signal),
+      ).rejects.toThrow('closed');
     } finally {
-      await agent.dispose();
-      await closeWorkspace();
+      await workspace.close();
     }
   });
+
   it('closes retained executable admission synchronously when facade disposal starts', async () => {
-    await openWorkspace();
-    const agent = await adopt();
+    const workspace = await openWorkspace();
+    const { agent, directory } = workspace;
     const writer = agent.tools.get('write_file');
     if (!writer) throw new Error('Missing writer');
     try {
@@ -602,46 +412,109 @@ describe('session executable tool ownership', () => {
         readFile(join(directory, 'late.txt'), 'utf8'),
       ).rejects.toThrow('ENOENT');
     } finally {
-      await agent.dispose();
-      await closeWorkspace();
+      await workspace.close();
     }
   });
-  it('rejects direct file reads when the caller has already cancelled admission', async () => {
-    await openWorkspace();
-    const agent = await adopt();
+
+  it('rejects file reads through buildAndExecute with the caller abort reason when admission is already cancelled', async () => {
+    const workspace = await openWorkspace();
+    const { agent, directory } = workspace;
     try {
-      const tool = capturedAdoptedClient(agent).tools.getTool('read_file');
-      if (!(tool instanceof ReadFileTool)) throw new Error('Missing reader');
+      const tool = agent.tools.get('read_file');
+      if (!tool) throw new Error('Missing reader');
       const cancelled = new AbortController();
       const failure = new Error('Caller cancelled physical read');
       cancelled.abort(failure);
       await expect(
-        tool.execute(
+        tool.buildAndExecute(
           { absolute_path: join(directory, 'input.txt') },
           cancelled.signal,
         ),
       ).rejects.toBe(failure);
     } finally {
-      await agent.dispose();
-      await closeWorkspace();
+      await workspace.close();
     }
   });
 });
 
-async function settleEngineRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previousReplay: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
+describe('tool dispatch admission binding', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+  function boundReader(
+    admission: ToolDispatchAdmission,
+    workspace: DomainWorkspace,
+  ): ReadFileTool {
+    const bound = admission.bind(
+      new ReadFileTool(workspace.host()),
+      () => true,
+    );
+    if (!(bound instanceof ReadFileTool)) throw new Error('Missing reader');
+    return bound;
   }
-}
 
-function requireCallerActivation(
-  result: Awaited<ReturnType<typeof executeProviderActivation>>,
-): void {
-  if (result.authFailed) throw result.authError;
-}
+  it('denies validated dispatch of a bound file writer after the admission closes', async () => {
+    const workspace = await openDomainWorkspace();
+    try {
+      const admission = new ToolDispatchAdmission();
+      const writer = admission.bind(
+        new WriteFileTool(workspace.host()),
+        () => true,
+      );
+      const file = join(workspace.directory, 'validated-retained.txt');
+      await admission.close();
+      await expect(
+        writer.validateBuildAndExecute(
+          { absolute_path: file, content: 'forbidden' },
+          new AbortController().signal,
+        ),
+      ).rejects.toThrow('closed');
+      await expect(readFile(file, 'utf8')).rejects.toThrow('ENOENT');
+    } finally {
+      await workspace.close();
+    }
+  });
+
+  it('denies direct dispatch of a bound reader without a signal after the admission closes', async () => {
+    const workspace = await openDomainWorkspace();
+    try {
+      const admission = new ToolDispatchAdmission();
+      const reader = boundReader(admission, workspace);
+      const params = { absolute_path: join(workspace.directory, 'input.txt') };
+      expect(String((await reader.execute(params)).llmContent)).toContain(
+        'seven physical apples',
+      );
+      await admission.close();
+      await expect(reader.execute(params)).rejects.toThrow('closed');
+    } finally {
+      await workspace.close();
+    }
+  });
+
+  it('rejects direct dispatch of a bound reader with the caller abort reason when the signal is already aborted', async () => {
+    const workspace = await openDomainWorkspace();
+    try {
+      const reader = boundReader(new ToolDispatchAdmission(), workspace);
+      const cancelled = new AbortController();
+      const failure = new Error('Caller cancelled physical read');
+      cancelled.abort(failure);
+      await expect(
+        reader.execute(
+          { absolute_path: join(workspace.directory, 'input.txt') },
+          cancelled.signal,
+        ),
+      ).rejects.toBe(failure);
+    } finally {
+      await workspace.close();
+    }
+  });
+});
