@@ -1,7 +1,5 @@
-import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { openRouteAAgent } from '../../../../agents/src/api/__tests__/helpers/route-a-agent.js';
+import { useFakeResponsesReplay } from '../../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
 import { describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../__tests__/render.js';
@@ -57,7 +55,7 @@ void vi.mock(
 const { useProviderDialog } = await import('./useProviderDialog.js');
 
 describe('provider switch notices', () => {
-  useRecordingPrompts();
+  useFakeResponsesReplay('multi-turn-text.jsonl');
   it('delivers endpoint, model and authentication notices to the message history', async () => {
     const messages: Array<{
       type: MessageType;
@@ -92,7 +90,9 @@ describe('provider switch notices', () => {
     unmount();
   });
   it('records a provider selection in the Agent session exactly once', async () => {
-    await withRecordingLifetimeFixture(async (agent) => {
+    const route = await openRouteAAgent({ config: { interactive: true } });
+    try {
+      const { agent } = route;
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },
       ]);
@@ -126,6 +126,8 @@ describe('provider switch notices', () => {
       expect(lines.join('\n')).toContain('owner-provider');
       expect(rawWrite).not.toHaveBeenCalled();
       unmount();
-    });
+    } finally {
+      await route.close();
+    }
   }, 30000);
 });

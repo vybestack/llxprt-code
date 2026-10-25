@@ -7,10 +7,7 @@ import { describe, expect, it } from 'bun:test';
 import { act } from 'react';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { renderHook } from '../../__tests__/render.js';
-import {
-  useCommandOwners,
-  commandOwnerClient,
-} from '../../__tests__/command-owner-fixture.js';
+import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
@@ -27,7 +24,7 @@ describe('workspace command registration operations', () => {
     const sibling = await makeOwner('workspace-registration-sibling');
     const legacyOwner = {
       tools: owner.tools,
-      agentClient: commandOwnerClient(owner),
+      agentClient: owner.sessionClient,
       getEphemeralSetting: owner.getEphemeralSetting.bind(owner),
       setEphemeralSetting: owner.setEphemeralSetting.bind(owner),
     };
@@ -46,7 +43,9 @@ describe('workspace command registration operations', () => {
           actual.setEphemeralSetting.bind(actual),
           () => 0,
           () => {},
-          commandOwnerClient(actual).setTools.bind(commandOwnerClient(actual)),
+          async () => {
+            await actual.sessionClient.publishTools();
+          },
           actual.policy.getRules.bind(actual.policy),
           actual.policy.getDefaultDecision.bind(actual.policy),
           actual.policy.isNonInteractive.bind(actual.policy),
@@ -58,9 +57,7 @@ describe('workspace command registration operations', () => {
           actual.tasks.listRunning.bind(actual.tasks),
           actual.tasks.get.bind(actual.tasks),
           actual.tasks.cancel.bind(actual.tasks),
-          commandOwnerClient(actual).addDirectoryContext.bind(
-            commandOwnerClient(actual),
-          ),
+          actual.addDirectoryContext.bind(actual),
           () => {},
           actual.sessionClient.runImageOperation.bind(actual.sessionClient),
           () => undefined,
@@ -72,7 +69,7 @@ describe('workspace command registration operations', () => {
           actual: owner,
           decoy: {
             tools: sibling.tools,
-            agentClient: commandOwnerClient(sibling),
+            agentClient: sibling.sessionClient,
             getEphemeralSetting: sibling.getEphemeralSetting.bind(sibling),
             setEphemeralSetting: sibling.setEphemeralSetting.bind(sibling),
           },
