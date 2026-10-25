@@ -488,6 +488,47 @@ describe('AgentClient (client.ts)', () => {
       }
     });
   });
+  describe('auxiliary work disposal', () => {
+    it('joins raw client embedding work before removing owned listeners', async () => {
+      let entered = (): void => {};
+      const transportEntered = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      let release = (): void => {};
+      const transportReleased = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      mockEmbedContentFn.mockImplementation(
+        async ({ texts }: { texts: string[] }) => {
+          entered();
+          await transportReleased;
+          return { embeddings: texts.map((text) => [text.length]) };
+        },
+      );
+      const pending = client.generateEmbedding(['one', 'two']);
+      await transportEntered;
+      const closing = client.dispose();
+      let finished = false;
+      void closing.then(() => {
+        finished = true;
+      });
+      try {
+        await expect(client.generateEmbedding(['late'])).rejects.toThrow(
+          /closed/,
+        );
+        await Promise.resolve();
+        expect(finished).toBe(false);
+        release();
+        expect((await pending).length).toBe(2);
+        await closing;
+      } finally {
+        release();
+        await pending;
+        await closing;
+      }
+    });
+  });
+
   describe('interactionMode wiring', () => {
     it('passes interactionMode interactive when config.isInteractive() returns true', async () => {
       const setSystemInstruction = vi.fn();
