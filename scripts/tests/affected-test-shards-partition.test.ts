@@ -210,13 +210,30 @@ describe('affected-test-shards selector — CLI partition matrix (issue #3185)',
     ]);
   });
 
-  it('agents splits into three partitions so no single leg outgrows the job limit', async () => {
+  it('agents splits into twenty weighted partitions so no single leg outgrows the job limit', async () => {
     const { buildMatrix } = await loadSelector();
     const agents = buildMatrix(['agents']);
     expect(agents.map((r) => `${r.shard}:${r.partition}`)).toEqual([
-      'agents:1of3',
-      'agents:2of3',
-      'agents:3of3',
+      'agents:1of20',
+      'agents:2of20',
+      'agents:3of20',
+      'agents:4of20',
+      'agents:5of20',
+      'agents:6of20',
+      'agents:7of20',
+      'agents:8of20',
+      'agents:9of20',
+      'agents:10of20',
+      'agents:11of20',
+      'agents:12of20',
+      'agents:13of20',
+      'agents:14of20',
+      'agents:15of20',
+      'agents:16of20',
+      'agents:17of20',
+      'agents:18of20',
+      'agents:19of20',
+      'agents:20of20',
     ]);
   });
 });

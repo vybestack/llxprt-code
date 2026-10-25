@@ -24,7 +24,7 @@
   "shardOrder": ["cli", "agents", "providers", "core", "rest", "scripts"],
   "shardTimingsSeconds": {
     "cli": 703,
-    "agents": 289,
+    "agents": 1027,
     "providers": 1252,
     "core": 1008,
     "rest": 55,

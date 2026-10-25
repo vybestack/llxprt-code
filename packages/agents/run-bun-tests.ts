@@ -40,7 +40,7 @@ import {
 import {
   PARTITION_ENV_VAR,
   parsePartitionIdentity,
-  selectPartition,
+  selectWeightedPartition,
 } from '../../scripts/lib/bun-test-partition.js';
 import { spawn } from 'node:child_process';
 import {
@@ -186,6 +186,17 @@ export function discoverTestFiles(root: string): string[] {
   return TEST_ROOTS.flatMap((testRoot) =>
     findTestFiles(join(root, testRoot)),
   ).sort();
+}
+
+export function selectAgentsTestFiles(
+  root: string,
+  identity?: string,
+): string[] {
+  return selectWeightedPartition(
+    discoverTestFiles(root).map((file) => ({ file })),
+    parsePartitionIdentity(identity),
+    join(root, '../..'),
+  ).map((entry) => entry.file);
 }
 
 interface TestResult {
@@ -367,7 +378,10 @@ async function main(): Promise<void> {
   const partitionIdentity = parsePartitionIdentity(
     process.env[PARTITION_ENV_VAR],
   );
-  const testFiles = selectPartition(discoveredFiles, partitionIdentity);
+  const testFiles = selectAgentsTestFiles(
+    WORKSPACE_ROOT,
+    process.env[PARTITION_ENV_VAR],
+  ).map((file) => relative(WORKSPACE_ROOT, file));
 
   const partitionNote =
     partitionIdentity !== null && partitionIdentity.count > 1
