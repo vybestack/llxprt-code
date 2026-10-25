@@ -80,6 +80,8 @@ export function heapCensus(snapshotPath?: string): HeapCensus {
   if (result.bytes <= 0 || result.objects <= 0)
     throw new Error('Empty heap census');
   if (snapshotPath) writeFileSync(snapshotPath, JSON.stringify(snapshot));
+  for (const value of Object.values(snapshot))
+    if (Array.isArray(value)) value.length = 0;
   return result;
 }
 
