@@ -9,8 +9,37 @@ import type { Version } from './version.js';
 
 export const NATIVE_FACT_NAMESPACE = ID_NS.nativeScalar;
 export const ACTIVE_FACT_INDEX = 'native:scalar-index';
-export const NATIVE_FACTS_THROUGH = 'native:scalar-through';
 const utf8 = new TextEncoder();
+
+export function nativeFactCoverage(value: Uint8Array | undefined):
+  | {
+      readonly scope: string;
+      readonly through: bigint;
+    }
+  | undefined {
+  if (value === undefined) return undefined;
+  if (value.byteLength < 8)
+    throw new JournalFormatError('Invalid native fact coverage');
+  return {
+    scope: new TextDecoder().decode(value.subarray(8)),
+    through: new DataView(
+      value.buffer,
+      value.byteOffset,
+      value.byteLength,
+    ).getBigUint64(0, true),
+  };
+}
+
+export function encodeNativeFactCoverage(
+  scope: string,
+  through: number,
+): Uint8Array {
+  const bytes = utf8.encode(scope);
+  const value = new Uint8Array(8 + bytes.byteLength);
+  new DataView(value.buffer).setBigUint64(0, BigInt(through), true);
+  value.set(bytes, 8);
+  return value;
+}
 export type NativeFactKey = ReadonlyArray<string | number>;
 
 function keyOf(scope: string, key: NativeFactKey): Uint8Array {

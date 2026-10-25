@@ -1,5 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { decodeDecimal, encodeDecimal } from './metaFacts.js';
 import { maintainNativeFacts } from './native-fact-maintenance.js';
 import type { VersionEdit } from './groupEdits.js';
 import {
@@ -14,7 +13,8 @@ import { IdTrieReader } from './idTrieReader.js';
 import { KeyedMapBatch, KeyedMapReader } from './keyedMap.js';
 import {
   ACTIVE_FACT_INDEX,
-  NATIVE_FACTS_THROUGH,
+  nativeFactCoverage,
+  encodeNativeFactCoverage,
   NativeFactIndexWriter,
   type NativeFactIndexRegistration,
 } from './nativeFactIndex.js';
@@ -34,14 +34,9 @@ export async function warmNativeFacts(
     ctx.published.roots.metaRoot,
     ACTIVE_FACT_INDEX,
   );
-  const through = await mapReader(ctx, 'meta').get(
-    ctx.published.roots.metaRoot,
-    NATIVE_FACTS_THROUGH,
-  );
-  if (through === undefined) return undefined;
-  return decodeDecimal(through) === BigInt(ctx.published.commitSeq) &&
-    active !== undefined &&
-    new TextDecoder().decode(active) === edit.registration.scope
+  const coverage = nativeFactCoverage(active);
+  return coverage?.through === BigInt(ctx.published.commitSeq) &&
+    coverage.scope === edit.registration.scope
     ? edit.registration
     : undefined;
 }
@@ -105,10 +100,12 @@ export async function fillNativeFacts(
       ),
       built.state.metaRoot,
     );
-    meta.set(NATIVE_FACTS_THROUGH, encodeDecimal(ctx.commitSeq));
     meta.set(
       ACTIVE_FACT_INDEX,
-      new TextEncoder().encode(invalidated ? '' : registration.scope),
+      encodeNativeFactCoverage(
+        invalidated ? '' : registration.scope,
+        ctx.commitSeq,
+      ),
     );
     const metaRoot = await meta.commit(appender);
     return {
@@ -137,13 +134,12 @@ async function advanceCoverage(
   if (changed || ctx.published === undefined)
     return { built, invalidated: false };
   const reader = mapReader(ctx, 'meta');
-  const through = await reader.get(
-    ctx.published.roots.metaRoot,
-    NATIVE_FACTS_THROUGH,
+  const coverage = nativeFactCoverage(
+    await reader.get(ctx.published.roots.metaRoot, ACTIVE_FACT_INDEX),
   );
   if (
-    through === undefined ||
-    decodeDecimal(through) !== BigInt(ctx.published.commitSeq)
+    coverage === undefined ||
+    coverage.through !== BigInt(ctx.published.commitSeq)
   )
     return { built, invalidated: false };
   await appender.drain();
@@ -156,7 +152,10 @@ async function advanceCoverage(
     ),
     built.state.metaRoot,
   );
-  meta.set(NATIVE_FACTS_THROUGH, encodeDecimal(ctx.commitSeq));
+  meta.set(
+    ACTIVE_FACT_INDEX,
+    encodeNativeFactCoverage(coverage.scope, ctx.commitSeq),
+  );
   return {
     built: {
       ...built,

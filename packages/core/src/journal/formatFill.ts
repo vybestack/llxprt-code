@@ -12,7 +12,7 @@ import type { RecordAppender } from './groupAppender.js';
 import type { BuildContext, BuiltGroup } from './groupBuildShared.js';
 import type { VersionEdit } from './groupEdits.js';
 import { KeyedMapBatch, KeyedMapReader } from './keyedMap.js';
-import { decodeDecimal, encodeDecimal } from './metaFacts.js';
+import { formatLastUsed, formatSlotMetadata } from './format-slot-metadata.js';
 import { decodeMistralSlots, MISTRAL_SLOTS_KEY } from './mistralMapping.js';
 import { PinLease, PinnedRead } from './pinLease.js';
 import { RECORD_KIND } from './recordKinds.js';
@@ -26,6 +26,7 @@ import { iterateRowEntries, readRowTreeNode } from './rowTreeReader.js';
 import {
   captureRowFormat,
   rowFormatKey,
+  rowFormatAuxKey,
   type RowFormatRegistration,
 } from './rowFormat.js';
 import { encodeSlotSummary } from './slotSummary.js';
@@ -71,16 +72,15 @@ export async function warmRowFormat(
   );
   const current = await reader.get(
     version.roots.metaRoot,
-    `format:last-used:${slot}`,
+    rowFormatAuxKey(slot),
   );
   if (current === undefined) return undefined;
   for (let index = 0; index < 3; index++) {
     const other = await reader.get(
       version.roots.metaRoot,
-      `format:last-used:${index}`,
+      rowFormatAuxKey(index),
     );
-    if (other !== undefined && decodeDecimal(other) > decodeDecimal(current))
-      return undefined;
+    if (formatLastUsed(other) > formatLastUsed(current)) return undefined;
   }
   return [
     ...registry.filter(
@@ -224,6 +224,26 @@ function kindOf(
   return 'chat';
 }
 
+function assignedFormat(
+  previous: FormatSlot,
+  registration: RowFormatRegistration,
+  key: bigint,
+  same: boolean,
+): FormatSlot {
+  if (same) return previous;
+  if (previous.gen === 0xffff_ffff)
+    throw new JournalFormatError('Format generation overflow');
+  return {
+    formatKeyHash: key,
+    formatRev: registration.settings.formatRev,
+    gen: previous.gen + 1,
+    imageKeyHash: 0n,
+    imageGen: 1,
+    summaryKind: kindOf(registration),
+    filledThrough: 0,
+  };
+}
+
 async function assignedSlots(
   ctx: BuildContext,
   built: BuiltGroup,
@@ -260,9 +280,9 @@ async function assignedSlots(
         continue;
       const value = await reader.get(
         built.state.metaRoot,
-        `format:last-used:${index}`,
+        rowFormatAuxKey(index),
       );
-      const used = value === undefined ? 0n : decodeDecimal(value);
+      const used = formatLastUsed(value);
       if (oldest === undefined || used < oldest) {
         oldest = used;
         selected = index;
@@ -275,21 +295,15 @@ async function assignedSlots(
     );
   const previous = slots.formatSlots[selected];
   const same = previous.summaryKind !== null && previous.formatKeyHash === key;
-  if (!same && previous.gen === 0xffff_ffff)
-    throw new JournalFormatError('Format generation overflow');
-  const format: FormatSlot = same
-    ? previous
-    : {
-        formatKeyHash: key,
-        formatRev: registration.settings.formatRev,
-        gen: previous.gen + 1,
-        imageKeyHash: 0n,
-        imageGen: 1,
-        summaryKind: kindOf(registration),
-        filledThrough: 0,
-      };
+  const format = assignedFormat(previous, registration, key, same);
   const batch = new KeyedMapBatch(reader, built.state.metaRoot);
-  batch.set(`format:last-used:${selected}`, encodeDecimal(ctx.commitSeq));
+  const auxiliary = same
+    ? await reader.get(built.state.metaRoot, rowFormatAuxKey(selected))
+    : undefined;
+  batch.set(
+    rowFormatAuxKey(selected),
+    formatSlotMetadata(BigInt(ctx.commitSeq), auxiliary?.subarray(8)),
+  );
   return {
     slots: {
       ...slots,

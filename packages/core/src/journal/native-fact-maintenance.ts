@@ -2,11 +2,10 @@
 import { filledVersion } from './filled-version.js';
 import { mapReader, type BuildContext } from './groupBuildShared.js';
 import type { VersionEdit } from './groupEdits.js';
-import { decodeDecimal } from './metaFacts.js';
 import { nativeCatchupEdits } from './native-fact-catchup.js';
 import {
   ACTIVE_FACT_INDEX,
-  NATIVE_FACTS_THROUGH,
+  nativeFactCoverage,
   nativeFactVersion,
   type NativeFactIndexRegistration,
   type NativeFactIndexWriter,
@@ -26,15 +25,11 @@ async function catchupPlan(
 ): Promise<AppendPlan | undefined> {
   const reader = mapReader(ctx, 'meta');
   const root = ctx.published?.roots.metaRoot ?? 0;
-  const active = await reader.get(root, ACTIVE_FACT_INDEX);
-  if (new TextDecoder().decode(active) !== scope) return undefined;
-  const through = await reader.get(root, NATIVE_FACTS_THROUGH);
-  if (through === undefined) return undefined;
-  const previous = await filledVersion(
-    ctx,
-    Number(decodeDecimal(through)),
-    true,
+  const coverage = nativeFactCoverage(
+    await reader.get(root, ACTIVE_FACT_INDEX),
   );
+  if (coverage?.scope !== scope) return undefined;
+  const previous = await filledVersion(ctx, Number(coverage.through), true);
   if (previous === undefined || previous.commitSeq === ctx.published?.commitSeq)
     return undefined;
   const edits = await nativeCatchupEdits(snapshot, previous);

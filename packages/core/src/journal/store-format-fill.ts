@@ -15,6 +15,7 @@ import type { VersionEdit } from './groupEdits.js';
 import { changesNativeSource, fillNativeFacts } from './nativeFactFill.js';
 import {
   ACTIVE_FACT_INDEX,
+  nativeFactCoverage,
   type NativeFactIndexRegistration,
 } from './nativeFactIndex.js';
 import { mapReader } from './groupBuildShared.js';
@@ -42,7 +43,8 @@ export function nativeFactRegistration(
         context.published.roots.metaRoot,
         ACTIVE_FACT_INDEX,
       );
-      if (active !== undefined && active.byteLength > 0)
+      const coverage = nativeFactCoverage(active);
+      if (coverage !== undefined && coverage.scope !== '')
         throw new JournalFormatError(
           'Stored format incremental holder maintenance is not implemented; a native fact writer must be registered before history mutations',
         );

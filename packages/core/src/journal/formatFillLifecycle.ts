@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
+import { formatLastUsed, formatSlotMetadata } from './format-slot-metadata.js';
 import type { SlotTable } from './slotTable.js';
 import type { VersionEdit } from './groupEdits.js';
 import type { BuildContext, BuiltGroup } from './groupBuildShared.js';
@@ -96,7 +97,14 @@ export async function finishFormatFill(
   header.setUint32(8, format.gen, true);
   header.setUint32(12, format.formatRev, true);
   value.set(bytes, 16);
-  batch.set(rowFormatAuxKey(slot), value);
+  const previous = await reader.get(
+    built.state.metaRoot,
+    rowFormatAuxKey(slot),
+  );
+  batch.set(
+    rowFormatAuxKey(slot),
+    formatSlotMetadata(formatLastUsed(previous), value),
+  );
   return {
     ...built,
     state: { ...built.state, metaRoot: await batch.commit(appender) },

@@ -9,7 +9,7 @@ import {
 import { RecencyFacts, RECENCY_INDEX_READY } from './recencyFacts.js';
 import {
   ACTIVE_FACT_INDEX,
-  NATIVE_FACTS_THROUGH,
+  nativeFactCoverage,
   NativeFactIndexReader,
 } from './nativeFactIndex.js';
 import { rowFormatAuxKey } from './rowFormat.js';
@@ -175,15 +175,10 @@ export class VersionSnapshot {
       this.version?.roots.metaRoot ?? 0,
       ACTIVE_FACT_INDEX,
     );
-    const through = await this.kimi.meta.get(
-      this.version?.roots.metaRoot ?? 0,
-      NATIVE_FACTS_THROUGH,
-    );
+    const coverage = nativeFactCoverage(active);
     if (
-      active === undefined ||
-      new TextDecoder().decode(active) !== scope ||
-      through === undefined ||
-      new TextDecoder().decode(through) !== String(this.version?.commitSeq)
+      coverage?.scope !== scope ||
+      coverage.through !== BigInt(this.version?.commitSeq ?? 0)
     )
       throw new JournalFormatError('Native fact index settings require a fill');
     return new NativeFactIndexReader(this.facts, scope);
@@ -232,14 +227,14 @@ export class VersionSnapshot {
       this.version?.roots.metaRoot ?? 0,
       rowFormatAuxKey(slot),
     );
-    if (value === undefined) return undefined;
+    if (value === undefined || value.byteLength === 8) return undefined;
     const format = this.version?.slots.formatSlots[slot];
-    if (format === undefined || value.byteLength < 16)
+    if (format === undefined || value.byteLength < 24)
       throw new JournalFormatError('Invalid format auxiliary metadata');
     const header = new DataView(
       value.buffer,
-      value.byteOffset,
-      value.byteLength,
+      value.byteOffset + 8,
+      value.byteLength - 8,
     );
     if (
       header.getBigUint64(0, true) !== format.formatKeyHash ||
@@ -247,7 +242,7 @@ export class VersionSnapshot {
       header.getUint32(12, true) !== format.formatRev
     )
       throw new JournalFormatError('Format auxiliary measurement is stale');
-    return value.subarray(16);
+    return value.subarray(24);
   }
 
   normalizedId(family: 1 | 2, rawId: string): string {
