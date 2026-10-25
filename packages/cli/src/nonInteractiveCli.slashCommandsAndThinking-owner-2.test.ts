@@ -1,4 +1,4 @@
-import { adoptScriptedHeadlessOwner } from './__tests__/scripted-headless-owner.js';
+import { createScriptedHeadlessMcpOwner } from './__tests__/scripted-headless-mcp-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { useFakeResponsesReplay } from '../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
 import {
   beforeAll,
   afterAll,
@@ -32,9 +33,10 @@ import {
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import {
+  fromConfig,
+  type Agent,
   type AgentEvent,
   type AgentInput,
-  type TurnOptions,
 } from '@vybestack/llxprt-code-agents';
 import { PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-agents/constants.js';
 import {
@@ -50,8 +52,8 @@ import { BootstrapProfileArgs } from './config/profileBootstrap.js';
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Captures the resolved query handed to the fake Agent's stream(), and the
-// AgentEvents it should emit. Reset per-test in beforeEach.
+// Captures the resolved query handed to the Agent's stream(), and the
+// AgentEvents the scripted provider replays. Reset per-test in beforeEach.
 const realAtCommandProcessorModule = {
   ...(await import('./ui/hooks/atCommandProcessor.js')),
 };
@@ -61,9 +63,6 @@ const agentState = {
   // AgentInput | null (matching the stream() parameter type) so assertions get
   // compile-time checking instead of the looser `unknown`.
   streamInput: null as AgentInput | null,
-  // The TurnOptions (signal/promptId/maxTurns) handed to agent.stream(), so
-  // tests can assert runNonInteractive still forwards prompt_id and maxTurns.
-  streamOpts: null as TurnOptions | null,
   events: [] as AgentEvent[],
 };
 
@@ -98,8 +97,38 @@ const fixtureRoots: Array<{
   settingsOwner: SessionSettingsOwner;
 }> = [];
 
+// What the activation left on the Agent right after fromConfig returned it,
+// read through the public Agent API (the run disposes the Agent afterwards).
+interface ActivatedAgentState {
+  provider: string;
+  model: string;
+}
+
+let activated: ActivatedAgentState | undefined;
+
+// Observes the query the run hands to the Agent on the instance, the public
+// seam the headless run streams through.
+function observeStreamInput(agent: Agent): Agent {
+  const stream = agent.stream.bind(agent);
+  agent.stream = (input, options) => {
+    agentState.streamInput = input;
+    return stream(input, options);
+  };
+  return agent;
+}
+
+// The activation cases read the activated Agent and have no provider to answer
+// a request, so their stream ends without one.
+function endStreamImmediately(agent: Agent): Agent {
+  agent.stream = () =>
+    (async function* noEvents(): AsyncIterable<AgentEvent> {})();
+  return agent;
+}
+
 function runWithMcpBus(
   params: Parameters<typeof runNonInteractive>[0],
+  activation: ReturnType<typeof buildNonInteractiveActivationIntent>,
+  decorate: (agent: Agent) => Agent,
 ): Promise<void> {
   return runHeadlessPolicyFixture(
     params,
@@ -108,63 +137,38 @@ function runWithMcpBus(
     mockRuntimeSettings.store,
     mockRuntimeSettings.owner,
     mockCredentialAuthority,
-    async (policy) => {
-      const { fromConfig } = await import('@vybestack/llxprt-code-agents');
-      const acquire = fromConfigSentinel;
-      acquire.mockImplementation((config, settings, intent, authority) =>
-        adoptScriptedHeadlessOwner(
-          [
-            config,
-            settings,
-            intent,
-            mockRuntimeSettings.owner,
-            mockProviderManager,
-            undefined,
-            policy.session.messageBus,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            authority,
-            policy,
-          ],
-          policy,
-          agentState.events,
-          (input, options) => {
-            agentState.streamInput = input;
-            agentState.streamOpts = options ?? null;
-          },
-        ),
-      );
-      return fromConfig(
+    async () => {
+      const agent = await fromConfig(
         params.config,
         mockRuntimeSettings.store,
-        {
-          sessionId: params.config.getSessionId(),
-          sessionIdentityOwnership: 'config',
-          activation: buildNonInteractiveActivationIntent(
-            params.config,
-            params.settings,
-          ),
-          mcpOwnership: 'agent',
-        },
+        { sessionId: params.config.getSessionId(), activation },
         mockCredentialAuthority,
       );
+      activated = {
+        provider: agent.getProvider(),
+        model: agent.getModel(),
+      };
+      return decorate(agent);
     },
   );
 }
 
-const original = { ...(await import('@vybestack/llxprt-code-agents')) };
-const fromConfigSentinel = vi.fn<typeof original.fromConfig>();
+// Runs the scripted events through the fake provider's replay seam and the
+// production fromConfig route.
+async function runScripted(
+  params: Parameters<typeof runNonInteractive>[0],
+): Promise<void> {
+  const scripted = await createScriptedHeadlessMcpOwner(agentState.events);
+  scriptedOwners.push(scripted);
+  process.env.LLXPRT_FAKE_RESPONSES = scripted.responsesFile;
+  return runWithMcpBus(
+    params,
+    { provider: 'fake', model: 'fake-model', authMode: 'auto' },
+    observeStreamInput,
+  );
+}
 
-void vi.mock('@vybestack/llxprt-code-agents', () => ({
-  ...original,
-  fromConfig: fromConfigSentinel,
-}));
+const scriptedOwners: Array<{ close: () => Promise<void> }> = [];
 
 // Mock core modules
 void vi.mock('./ui/hooks/atCommandProcessor.js', () =>
@@ -189,7 +193,7 @@ void vi.mock('./services/CommandService.js', () => ({
   },
 }));
 
-// Direct-call streaming cases use a fake Agent; the owner command case uses a real one.
+// Every case runs a real Agent built through fromConfig.
 describe('runNonInteractive - slash commands and thinking output', () => {
   let promptDirectory: string;
 
@@ -207,7 +211,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     await rm(promptDirectory, { recursive: true, force: true });
   });
   useOwnedCredentials();
-  useOwnedCredentials();
+  useFakeResponsesReplay('plain-text.jsonl');
 
   let mockConfig: Config;
 
@@ -243,13 +247,10 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     >;
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
-    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
-    (fromConfig as Mock<typeof fromConfig>).mockReset();
-
     // Default: the Agent emits a clean stop completion. Individual tests
     // override agentState.events to stage thinking/tool/text sequences.
     agentState.streamInput = null;
-    agentState.streamOpts = null;
+    activated = undefined;
     agentState.events = [{ type: 'done', reason: 'stop' }];
 
     const builtOwner = makeConfig('test-session');
@@ -295,6 +296,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
   });
 
   afterEach(async () => {
+    for (const scripted of scriptedOwners.splice(0)) await scripted.close();
     for (const root of fixtureRoots.splice(0)) {
       await root.settingsOwner.dispose();
       root.manager.dispose();
@@ -307,7 +309,6 @@ describe('runNonInteractive - slash commands and thinking output', () => {
   });
 
   it('preserves profile model params when the CLI provider override supplies the activation provider', async () => {
-    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
     const configWithParams = mockConfig as ConfigWithActivationParams;
     (
       mockConfig.getProvider as Mock<typeof mockConfig.getProvider>
@@ -315,6 +316,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     (mockConfig.getModel as Mock<typeof mockConfig.getModel>).mockReturnValue(
       'kimi-k2.5',
     );
+    delete process.env.LLXPRT_FAKE_RESPONSES;
     configWithParams._profileModelParams = { temperature: 0.4 };
     configWithParams._cliModelParams = { top_p: 0.9 };
     configWithParams._bootstrapArgs = makeBootstrapProfileArgs({
@@ -322,48 +324,27 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     });
     agentState.events = [{ type: 'done', reason: 'stop' }];
 
-    await runWithMcpBus({
+    const params = {
       config: mockConfig,
       settings: mockSettings,
       input: 'hello',
       prompt_id: 'prompt-id-provider-override',
-    });
+    };
+    await runWithMcpBus(
+      params,
+      buildNonInteractiveActivationIntent(mockConfig, mockSettings),
+      endStreamImmediately,
+    );
 
-    expect(fromConfig as Mock<typeof fromConfig>).toHaveBeenCalledTimes(1);
-    const activation = (fromConfig as Mock<typeof fromConfig>).mock.calls[0][2]
-      .activation;
-    expect(activation).toBeDefined();
-    expect(activation).toMatchObject({
+    expect(activated).toStrictEqual({
       provider: 'anthropic',
       model: 'kimi-k2.5',
-      modelParams: { temperature: 0.4, top_p: 0.9 },
-      authMode: 'auto',
     });
-  });
-
-  it('omits the activation model when the resolved config model is the placeholder sentinel', async () => {
-    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
-    (
-      mockConfig.getProvider as Mock<typeof mockConfig.getProvider>
-    ).mockReturnValue('openai');
-    (mockConfig.getModel as Mock<typeof mockConfig.getModel>).mockReturnValue(
-      PLACEHOLDER_MODEL,
-    );
-    agentState.events = [{ type: 'done', reason: 'stop' }];
-
-    await runWithMcpBus({
-      config: mockConfig,
-      settings: mockSettings,
-      input: 'hello',
-      prompt_id: 'prompt-id-placeholder-model',
-    });
-
-    expect(fromConfig as Mock<typeof fromConfig>).toHaveBeenCalledTimes(1);
-    const activation = (fromConfig as Mock<typeof fromConfig>).mock.calls[0][2]
-      .activation;
-    expect(activation).toBeDefined();
-    expect(activation?.provider).toBe('openai');
-    expect(activation?.model).toBeUndefined();
+    // The model params land in the provider settings of the SettingsService
+    // the host handed to fromConfig.
+    expect(
+      mockRuntimeSettings.store.getProviderSettings('anthropic'),
+    ).toMatchObject({ temperature: 0.4, top_p: 0.9 });
   });
 
   it('should treat an unknown slash command as a regular prompt', async () => {
@@ -375,7 +356,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       { type: 'done', reason: 'stop' },
     ];
 
-    await runWithMcpBus({
+    await runScripted({
       config: mockConfig,
       settings: mockSettings,
       input: '/unknowncommand',
@@ -401,7 +382,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     mockGetCommands.mockReturnValue([mockCommand]);
 
     await expect(
-      runWithMcpBus({
+      runScripted({
         config: mockConfig,
         settings: mockSettings,
         input: '/noaction',
