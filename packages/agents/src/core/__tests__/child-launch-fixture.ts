@@ -10,8 +10,8 @@ import type {
   WorkspaceTrustControlPort,
   ProfileDefinitionReads,
   SubagentDefinitionReads,
-  AgentRuntimeFactoryBindings,
 } from '@vybestack/llxprt-code-core';
+import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import { afterEach } from 'bun:test';
@@ -60,7 +60,7 @@ export interface TestChildLaunchOptions {
   createChildSettings: () => SettingsService;
   readonly telemetry?: RootTelemetry;
   readRunPolicy: () => SubagentRunPolicy;
-  runtimeFactoryBindings?: AgentRuntimeFactoryBindings;
+  agentClientFactory?: AgentClientFactory;
   runtimeLoader?: ToolSelectedRuntimeLoader;
   scopeFactory?: typeof SubAgentScope.create;
   idFactory?: () => string;
@@ -113,8 +113,7 @@ export function createTestChildOrchestrator(
           scopeFactory:
             options.scopeFactory ?? SubAgentScope.create.bind(SubAgentScope),
         },
-        options.runtimeFactoryBindings?.agentClientFactory ??
-          buildAgentClientFactory(),
+        options.agentClientFactory ?? buildAgentClientFactory(),
         {
           messageBus: options.messageBus,
           requestInteractiveAuth: options.requestInteractiveAuth,

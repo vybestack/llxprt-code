@@ -1,7 +1,8 @@
 import {
   createCapturedSessionOwner,
-  capturedSessionClient,
+  ownerClients,
 } from './helpers/session-client-capture.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
   loadAgentRuntime,
   type ToolSelectedRuntimeLoaderResult,
@@ -26,7 +27,6 @@ import { Storage } from '@vybestack/llxprt-code-storage';
 import { fileURLToPath } from 'node:url';
 import type { TestChildLaunchOptions } from '../../core/__tests__/child-launch-fixture.js';
 import { createTestChildOrchestrator } from '../../core/__tests__/child-launch-fixture.js';
-import { AgentClient } from '../../core/client.js';
 import {
   cleanupAfterFailure,
   runCleanupSteps,
@@ -42,7 +42,6 @@ import {
   acquirePreferredProviderManager,
   preparePreferredProviderCompletion,
 } from '../preferred-provider-acquisition.js';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 /**
  * @license
@@ -67,12 +66,16 @@ import { SubagentOrchestrator } from '../../core/subagentOrchestrator.js';
 
 const parentSignal = new AbortController().signal;
 
-class TrackedChildClient extends AgentClient {
-  disposed = false;
-  override async dispose(): Promise<void> {
-    await super.dispose();
-    this.disposed = true;
-  }
+interface TrackedChildClient {
+  disposed: boolean;
+}
+
+/** The client the owner's factory most recently returned, which is the published one. */
+function currentClient(owner: SessionClientOwner): AgentClientContract {
+  const clients = ownerClients(owner);
+  if (clients.length === 0)
+    throw new Error('Session owner has not built a client');
+  return clients[clients.length - 1];
 }
 
 async function withChildOwner(
@@ -213,7 +216,7 @@ async function withChildOwner(
     await builtMcp.initialize();
     await builtOwner.initializeTools();
     await builtOwner.refreshAuth();
-    await capturedSessionClient(builtOwner).startChat();
+    await currentClient(builtOwner).startChat();
   } catch (primary) {
     await cleanupAfterFailure(primary, builtClose);
   }
@@ -238,42 +241,24 @@ async function withChildOwner(
       'child-profile',
       'Answer the parent question.',
     );
+    const buildChildClient = buildAgentClientFactory();
     let adoptedChildSettings: SettingsService | undefined;
     const orchestrator = createTestChildOrchestrator({
       credentialAuthority: authority,
-      runtimeFactoryBindings: {
-        ...createAgentRuntimeFactoryBindings(),
-        agentClientFactory: (
-          config,
-          state,
-          instructions,
-          store,
-          paths,
-          reads,
-        ) => {
-          if (
-            store === undefined ||
-            paths === undefined ||
-            instructions === undefined
-          )
-            throw new Error('Missing child client factory inputs');
-          const client = new TrackedChildClient(
-            config,
-            state,
-            instructions,
-            store,
-            paths,
-            undefined,
-            undefined,
-            reads,
-          );
-          clients.push(client);
-          return client;
-        },
+      agentClientFactory: (...operands) => {
+        const client = buildChildClient(...operands);
+        const tracked: TrackedChildClient = { disposed: false };
+        const dispose = client.dispose.bind(client);
+        client.dispose = async () => {
+          await dispose();
+          tracked.disposed = true;
+        };
+        clients.push(tracked);
+        return client;
       },
       workspaceTrust: builtMcp.trust,
       instructions: emptyInstructionReads,
-      toolRegistry: capturedSessionClient(builtOwner).tools,
+      toolRegistry: currentClient(builtOwner).tools,
       workspacePaths: builtMcp.workspacePaths,
       profileManager: profiles,
       subagentManager: subagents,
@@ -345,7 +330,7 @@ describe('Isolated child session client ownership', () => {
             childRuntime.runtimeContext.readToolGovernance().allowedExplicit,
           ).toBe(true);
           expect(
-            capturedSessionClient(parentOwner)
+            currentClient(parentOwner)
               .tools.getFunctionDeclarations()
               .map((tool) => tool.name),
           ).toContain('read_file');
@@ -458,12 +443,12 @@ describe('Isolated child session client ownership', () => {
         expect(clients.every((client) => client.disposed)).toBe(true);
         expect(parentSettings.listenerCount('provider-change')).toBe(baseline);
         await parentMcp.refreshContext();
-        await capturedSessionClient(parentOwner).addHistory({
+        await currentClient(parentOwner).addHistory({
           speaker: 'human',
           blocks: [{ type: 'text', text: 'parent continues' }],
         });
         expect(
-          (await capturedSessionClient(parentOwner).getHistory()).filter(
+          (await currentClient(parentOwner).getHistory()).filter(
             (item) => item.speaker === 'human',
           ),
         ).toHaveLength(1);
@@ -488,12 +473,12 @@ describe('Isolated child session client ownership', () => {
         expect(clients.every((client) => client.disposed)).toBe(true);
         expect(parentSettings.listenerCount('provider-change')).toBe(baseline);
         await parentMcp.refreshContext();
-        await capturedSessionClient(parentOwner).addHistory({
+        await currentClient(parentOwner).addHistory({
           speaker: 'human',
           blocks: [{ type: 'text', text: 'parent continues' }],
         });
         expect(
-          (await capturedSessionClient(parentOwner).getHistory()).filter(
+          (await currentClient(parentOwner).getHistory()).filter(
             (item) => item.speaker === 'human',
           ),
         ).toHaveLength(1);

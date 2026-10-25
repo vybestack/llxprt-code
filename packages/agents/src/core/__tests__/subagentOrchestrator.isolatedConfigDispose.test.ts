@@ -13,7 +13,7 @@ import { fixtureToolSelection } from './subagentOrchestrator-test-helpers.js';
 
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { createAgentRuntimeFactoryBindings } from '../../api/runtimeFactories.js';
+import { buildAgentClientFactory } from '../../api/agentBootstrap.js';
 const fixturePaths = installTestWorkspacePaths({
   targetDir: process.cwd(),
   isTrusted: () => true,
@@ -123,7 +123,7 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
     clients: readonly AgentClientContract[];
   } {
     const clients: AgentClientContract[] = [];
-    const factories = createAgentRuntimeFactoryBindings();
+    const buildClient = buildAgentClientFactory();
     const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
     const loadProfile = vi.fn().mockResolvedValue(profile);
     const foregroundConfig1 = makeForegroundConfig();
@@ -138,13 +138,10 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
 
       instructions: emptyInstructionReads,
       toolRegistry: fixtureToolSelection(),
-      runtimeFactoryBindings: {
-        ...factories,
-        agentClientFactory: (...args) => {
-          const client = factories.agentClientFactory(...args);
-          clients.push(client);
-          return client;
-        },
+      agentClientFactory: (...args) => {
+        const client = buildClient(...args);
+        clients.push(client);
+        return client;
       },
       subagentManager: { loadSubagent } as unknown as SubagentManager,
       profileManager: { loadProfile } as unknown as ProfileManager,
