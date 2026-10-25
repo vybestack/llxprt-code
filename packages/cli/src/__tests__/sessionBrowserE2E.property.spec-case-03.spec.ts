@@ -17,6 +17,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import fc from 'fast-check';
+import { disposeResumeContext } from './dispose-resume-context.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -29,33 +30,6 @@ import {
   makeResumeContext,
   SessionBrowserTestState,
 } from './sessionBrowserE2E.helpers.js';
-
-async function createPropertySession(ref: string): Promise<{
-  localTempDir: string;
-  result: Awaited<ReturnType<typeof performResume>>;
-  context: ReturnType<typeof makeResumeContext>;
-}> {
-  const localTempDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), 'prop-union-e2e-'),
-  );
-  const localChatsDir = path.join(localTempDir, 'chats');
-  await fs.mkdir(localChatsDir, { recursive: true });
-
-  await createTestSession(localChatsDir, {
-    projectHash: PROJECT_HASH,
-    messages: [{ speaker: 'user', text: 'test content' }],
-  });
-
-  const context = makeResumeContext(localChatsDir, {
-    currentSessionId: 'other-session',
-  });
-
-  return {
-    localTempDir,
-    result: await performResume(ref, context),
-    context,
-  };
-}
 
 function expectDiscriminatedResumeResult(
   result: Awaited<ReturnType<typeof performResume>>,
@@ -78,13 +52,6 @@ function expectDiscriminatedResumeResult(
   expect(result).toHaveProperty('error');
   expect(typeof result.error).toBe('string');
   expect(result.error.length).toBeGreaterThan(0);
-}
-
-async function releaseCurrentLock(
-  context: ReturnType<typeof makeResumeContext>,
-): Promise<void> {
-  const newLock = context.recordingCallbacks.getCurrentLockHandle();
-  if (newLock) await newLock.release();
 }
 
 describe('Property-based tests #3', () => {
@@ -117,14 +84,28 @@ describe('Property-based tests #3', () => {
           fc.string({ minLength: 1, maxLength: 20 }),
         ),
         async (ref) => {
-          const { context, localTempDir, result } =
-            await createPropertySession(ref);
+          const localTempDir = await fs.mkdtemp(
+            path.join(os.tmpdir(), 'prop-union-e2e-'),
+          );
+          const localChatsDir = path.join(localTempDir, 'chats');
+          const context = makeResumeContext(localChatsDir, {
+            currentSessionId: 'other-session',
+          });
 
           try {
+            await fs.mkdir(localChatsDir, { recursive: true });
+            await createTestSession(localChatsDir, {
+              projectHash: PROJECT_HASH,
+              messages: [{ speaker: 'user', text: 'test content' }],
+            });
+            const result = await performResume(ref, context);
             expectDiscriminatedResumeResult(result);
-            await releaseCurrentLock(context);
           } finally {
-            await fs.rm(localTempDir, { recursive: true, force: true });
+            try {
+              await disposeResumeContext(context);
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
+            }
           }
         },
       ),

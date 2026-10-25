@@ -19,6 +19,7 @@ import { collectResumeRows } from '../../__tests__/resumeRows.js';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import fc from 'fast-check';
+import { disposeResumeContext } from '../../__tests__/dispose-resume-context.js';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -32,7 +33,6 @@ import {
   makeResumeContext,
   performResume,
   PROJECT_HASH,
-  releaseLock,
   ResumeTestSetup,
   SessionLockManager,
   type IContent,
@@ -127,25 +127,6 @@ describe('performResume validation and property tests @plan:PLAN-20260214-SESSIO
     it('locked sessions are always rejected', testPropertyLocked);
   });
 });
-
-async function disposeResumedSession(
-  context: ReturnType<typeof makeResumeContext>,
-): Promise<void> {
-  const recording = context.recordingCallbacks.getCurrentRecording();
-  const results = await Promise.allSettled([
-    recording?.dispose() ?? Promise.resolve(),
-    releaseLock(context.recordingCallbacks.getCurrentLockHandle()),
-  ]);
-  const failures = results.flatMap((result) =>
-    result.status === 'rejected' ? [result.reason] : [],
-  );
-  if (failures.length === 1) {
-    throw failures[0];
-  }
-  if (failures.length > 1) {
-    throw new AggregateError(failures, 'Failed to dispose resumed session');
-  }
-}
 
 async function testValidationHistory(): Promise<void> {
   const targetId = 'session-with-history';
@@ -323,14 +304,14 @@ async function testPropertyDiscriminated(): Promise<void> {
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
+        const context = makeResumeContext(localChatsDir, {
+          currentSessionId: 'other-session',
+        });
+
         try {
           await createTestSession(localChatsDir, {
             projectHash: PROJECT_HASH,
             contents: [makeContent('test content')],
-          });
-
-          const context = makeResumeContext(localChatsDir, {
-            currentSessionId: 'other-session',
           });
 
           const result = await performResume(ref, context);
@@ -339,10 +320,12 @@ async function testPropertyDiscriminated(): Promise<void> {
           expect(result).toHaveProperty('ok');
 
           expectResultDiscriminated(result, expect);
-
-          await disposeResumedSession(context);
         } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
+          try {
+            await disposeResumeContext(context);
+          } finally {
+            await fs.rm(localTempDir, { recursive: true, force: true });
+          }
         }
       },
     ),
@@ -361,6 +344,10 @@ async function testPropertyError(): Promise<void> {
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
+        const context = makeResumeContext(localChatsDir, {
+          currentSessionId: 'other-session',
+        });
+
         try {
           await createTestSession(localChatsDir, {
             sessionId: 'known-session-id',
@@ -370,17 +357,17 @@ async function testPropertyError(): Promise<void> {
 
           const unmatchableRef = `unmatchable-${badRef}-${crypto.randomUUID()}`;
 
-          const context = makeResumeContext(localChatsDir, {
-            currentSessionId: 'other-session',
-          });
-
           const result = await performResume(unmatchableRef, context);
 
           assertResumeError(result);
           expect(typeof result.error).toBe('string');
           expect(result.error.length).toBeGreaterThan(0);
         } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
+          try {
+            await disposeResumeContext(context);
+          } finally {
+            await fs.rm(localTempDir, { recursive: true, force: true });
+          }
         }
       },
     ),
@@ -405,6 +392,10 @@ async function testPropertySuccess(): Promise<void> {
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
+        const context = makeResumeContext(localChatsDir, {
+          currentSessionId: 'other-session',
+        });
+
         try {
           const contents: IContent[] = items.map((item) => ({
             speaker: item.speaker,
@@ -416,10 +407,6 @@ async function testPropertySuccess(): Promise<void> {
             contents,
           });
 
-          const context = makeResumeContext(localChatsDir, {
-            currentSessionId: 'other-session',
-          });
-
           const result = await performResume(sessionId, context);
 
           assertResumeOk(result);
@@ -429,10 +416,12 @@ async function testPropertySuccess(): Promise<void> {
           expect(result.metadata).toBeDefined();
           expect(result.metadata.sessionId).toBe(sessionId);
           expect(Array.isArray(result.warnings)).toBe(true);
-
-          await disposeResumedSession(context);
         } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
+          try {
+            await disposeResumeContext(context);
+          } finally {
+            await fs.rm(localTempDir, { recursive: true, force: true });
+          }
         }
       },
     ),
@@ -453,15 +442,15 @@ async function testPropertySameSession(): Promise<void> {
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
+        const context = makeResumeContext(localChatsDir, {
+          currentSessionId: sanitizedId,
+        });
+
         try {
           await createTestSession(localChatsDir, {
             sessionId: sanitizedId,
             projectHash: PROJECT_HASH,
             contents: [makeContent('content')],
-          });
-
-          const context = makeResumeContext(localChatsDir, {
-            currentSessionId: sanitizedId,
           });
 
           const result = await performResume(sanitizedId, context);
@@ -470,7 +459,11 @@ async function testPropertySameSession(): Promise<void> {
           assertResumeError(result);
           expect(result.error).toBe('That session is already active.');
         } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
+          try {
+            await disposeResumeContext(context);
+          } finally {
+            await fs.rm(localTempDir, { recursive: true, force: true });
+          }
         }
       },
     ),
@@ -495,6 +488,10 @@ async function testPropertyRoundtrip(): Promise<void> {
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
+        const context = makeResumeContext(localChatsDir, {
+          currentSessionId: 'other-session',
+        });
+
         try {
           const contents: IContent[] = items.map((item) => ({
             speaker: item.speaker,
@@ -504,10 +501,6 @@ async function testPropertyRoundtrip(): Promise<void> {
           const { sessionId } = await createTestSession(localChatsDir, {
             projectHash: PROJECT_HASH,
             contents,
-          });
-
-          const context = makeResumeContext(localChatsDir, {
-            currentSessionId: 'other-session',
           });
 
           const result = await performResume(sessionId, context);
@@ -522,10 +515,12 @@ async function testPropertyRoundtrip(): Promise<void> {
               contents[i].blocks[0],
             );
           }
-
-          await disposeResumedSession(context);
         } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
+          try {
+            await disposeResumeContext(context);
+          } finally {
+            await fs.rm(localTempDir, { recursive: true, force: true });
+          }
         }
       },
     ),
@@ -545,6 +540,10 @@ async function testPropertyIndex(): Promise<void> {
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
+        const context = makeResumeContext(localChatsDir, {
+          currentSessionId: 'other-session',
+        });
+
         try {
           for (let i = 0; i < sessionCount; i++) {
             await createTestSession(localChatsDir, {
@@ -556,18 +555,17 @@ async function testPropertyIndex(): Promise<void> {
 
           const validIndex = (indexSeed % sessionCount) + 1;
 
-          const context = makeResumeContext(localChatsDir, {
-            currentSessionId: 'other-session',
-          });
-
           const result = await performResume(String(validIndex), context);
 
           expect(result.ok).toBe(true);
 
           assertResumeOk(result);
-          await disposeResumedSession(context);
         } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
+          try {
+            await disposeResumeContext(context);
+          } finally {
+            await fs.rm(localTempDir, { recursive: true, force: true });
+          }
         }
       },
     ),
@@ -588,6 +586,10 @@ async function testPropertyMetadata(): Promise<void> {
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
+        const context = makeResumeContext(localChatsDir, {
+          currentSessionId: 'other-session',
+        });
+
         try {
           await createTestSession(localChatsDir, {
             sessionId,
@@ -595,19 +597,17 @@ async function testPropertyMetadata(): Promise<void> {
             contents: [makeContent('content')],
           });
 
-          const context = makeResumeContext(localChatsDir, {
-            currentSessionId: 'other-session',
-          });
-
           const result = await performResume(sessionId, context);
 
           expect(result.ok).toBe(true);
           assertResumeOk(result);
           expect(result.metadata.sessionId).toBe(sessionId);
-
-          await disposeResumedSession(context);
         } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
+          try {
+            await disposeResumeContext(context);
+          } finally {
+            await fs.rm(localTempDir, { recursive: true, force: true });
+          }
         }
       },
     ),
@@ -628,6 +628,11 @@ async function testPropertyLocked(): Promise<void> {
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
+        const context = makeResumeContext(localChatsDir, {
+          currentSessionId: 'other-session',
+        });
+
+        let lock: LockHandle | undefined;
         try {
           await createTestSession(localChatsDir, {
             sessionId,
@@ -635,24 +640,23 @@ async function testPropertyLocked(): Promise<void> {
             contents: [makeContent('content')],
           });
 
-          const lock = await SessionLockManager.acquire(
-            localChatsDir,
-            sessionId,
-          );
-
-          const context = makeResumeContext(localChatsDir, {
-            currentSessionId: 'other-session',
-          });
+          lock = await SessionLockManager.acquire(localChatsDir, sessionId);
 
           const result = await performResume(sessionId, context);
 
           expect(result.ok).toBe(false);
           assertResumeError(result);
           expect(result.error.toLowerCase()).toContain('in use');
-
-          await lock.release();
         } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
+          try {
+            try {
+              await disposeResumeContext(context);
+            } finally {
+              await lock?.release();
+            }
+          } finally {
+            await fs.rm(localTempDir, { recursive: true, force: true });
+          }
         }
       },
     ),

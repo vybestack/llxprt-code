@@ -137,7 +137,11 @@ describe('integration: journal recording lifecycle properties', () => {
           expect(restored).toHaveLength(turnCount * 2);
           expect(restored).toStrictEqual(rows);
         } finally {
-          await result.recording.dispose();
+          try {
+            await result.recording.dispose();
+          } finally {
+            await result.lockHandle.release();
+          }
         }
       }),
       { numRuns: 10 },

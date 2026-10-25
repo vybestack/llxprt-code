@@ -39,6 +39,17 @@ import {
   useResumeFixture,
 } from './resumeSession.test.helpers.js';
 
+async function disposeResumeResult(
+  result: Awaited<ReturnType<typeof resumeSession>> | undefined,
+): Promise<void> {
+  if (result?.ok !== true) return;
+  try {
+    await result.recording.dispose();
+  } finally {
+    await result.lockHandle.release();
+  }
+}
+
 const propertyJournal = { journal: { flush: (): void => undefined } };
 
 describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: preserves any IContent through write-resume cycle @requirement:REQ-RSM-004', () => {
@@ -68,6 +79,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: preserves any 
             const localChatsDir = path.join(localTempDir, 'chats');
             await fs.mkdir(localChatsDir, { recursive: true });
 
+            let result: Awaited<ReturnType<typeof resumeSession>> | undefined;
             try {
               const contents: IContent[] = items.map((item) => ({
                 speaker: item.speaker,
@@ -80,7 +92,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: preserves any 
                 contents,
               });
 
-              const result = await resumeSession(
+              result = await resumeSession(
                 makeResumeRequest(localChatsDir, { journal: propertyJournal }),
               );
 
@@ -98,10 +110,12 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: preserves any 
                     .blocks[0],
                 ).toStrictEqual(contents[i].blocks[0]);
               }
-              await okResult.recording.dispose();
-              await okResult.lockHandle.release();
             } finally {
-              await fs.rm(localTempDir, { recursive: true, force: true });
+              try {
+                await disposeResumeResult(result);
+              } finally {
+                await fs.rm(localTempDir, { recursive: true, force: true });
+              }
             }
           },
         ),
@@ -133,6 +147,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: detects provid
             const localChatsDir = path.join(localTempDir, 'chats');
             await fs.mkdir(localChatsDir, { recursive: true });
 
+            let result: Awaited<ReturnType<typeof resumeSession>> | undefined;
             try {
               await createJournalTestSession(localChatsDir, {
                 journal: propertyJournal,
@@ -141,7 +156,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: detects provid
                 model: 'model-a',
               });
 
-              const result = await resumeSession(
+              result = await resumeSession(
                 makeResumeRequest(localChatsDir, {
                   journal: propertyJournal,
                   currentProvider,
@@ -158,11 +173,12 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: detects provid
               expect(facts).toBeDefined();
               expect(facts?.facts.provider).toBe(currentProvider);
               expect(facts?.facts.model).toBe('model-b');
-
-              await okResult.recording.dispose();
-              await okResult.lockHandle.release();
             } finally {
-              await fs.rm(localTempDir, { recursive: true, force: true });
+              try {
+                await disposeResumeResult(result);
+              } finally {
+                await fs.rm(localTempDir, { recursive: true, force: true });
+              }
             }
           },
         ),
@@ -192,6 +208,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: sequence is mo
             const localChatsDir = path.join(localTempDir, 'chats');
             await fs.mkdir(localChatsDir, { recursive: true });
 
+            let result: Awaited<ReturnType<typeof resumeSession>> | undefined;
             try {
               const originalContents: IContent[] = [];
               for (let i = 0; i < originalCount; i++) {
@@ -204,7 +221,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: sequence is mo
                 contents: originalContents,
               });
 
-              const result = await resumeSession(
+              result = await resumeSession(
                 makeResumeRequest(localChatsDir, { journal: propertyJournal }),
               );
 
@@ -234,11 +251,12 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: sequence is mo
                   ),
                 ].map((content) => content.blocks),
               );
-
-              await okResult.recording.dispose();
-              await okResult.lockHandle.release();
             } finally {
-              await fs.rm(localTempDir, { recursive: true, force: true });
+              try {
+                await disposeResumeResult(result);
+              } finally {
+                await fs.rm(localTempDir, { recursive: true, force: true });
+              }
             }
           },
         ),
@@ -267,6 +285,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resume always 
             const localChatsDir = path.join(localTempDir, 'chats');
             await fs.mkdir(localChatsDir, { recursive: true });
 
+            let result: Awaited<ReturnType<typeof resumeSession>> | undefined;
             try {
               const contents: IContent[] = [];
               for (let i = 0; i < contentCount; i++) {
@@ -279,7 +298,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resume always 
                 contents,
               });
 
-              const result = await resumeSession(
+              result = await resumeSession(
                 makeResumeRequest(localChatsDir, { journal: propertyJournal }),
               );
 
@@ -287,10 +306,12 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resume always 
               expect(okResult.recording).toBeDefined();
               expect(okResult.recording.getFilePath()).not.toBeNull();
               expect(okResult.recording.isActive()).toBe(true);
-              await okResult.recording.dispose();
-              await okResult.lockHandle.release();
             } finally {
-              await fs.rm(localTempDir, { recursive: true, force: true });
+              try {
+                await disposeResumeResult(result);
+              } finally {
+                await fs.rm(localTempDir, { recursive: true, force: true });
+              }
             }
           },
         ),
@@ -321,6 +342,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: compression + 
             const localChatsDir = path.join(localTempDir, 'chats');
             await fs.mkdir(localChatsDir, { recursive: true });
 
+            let result: Awaited<ReturnType<typeof resumeSession>> | undefined;
             try {
               const sessionId = crypto.randomUUID();
               const config = makeConfig(localChatsDir, {
@@ -332,40 +354,43 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: compression + 
                 journal: propertyJournal,
               });
 
-              const session = await svc.session();
+              try {
+                const session = await svc.session();
 
-              // Pre-compression content
-              for (let i = 0; i < preCompressCount; i++) {
-                await session.append([makeContent(`pre-${i}`)]);
+                // Pre-compression content
+                for (let i = 0; i < preCompressCount; i++) {
+                  await session.append([makeContent(`pre-${i}`)]);
+                }
+
+                // Compression
+                const summary: IContent = {
+                  speaker: 'ai',
+                  blocks: [{ type: 'text', text: 'Summary' }],
+                  metadata: { isSummary: true },
+                };
+                const version = session.store.published;
+                if (version === undefined)
+                  throw new Error('Missing seeded version');
+                await session.store.commit([
+                  {
+                    kind: 'compress',
+                    summary: encodeContentRow(summary, { owner: 0 }),
+                    retainFromLabel: version.nextLabel,
+                    expectedReplaced: preCompressCount,
+                  },
+                ]);
+
+                // Post-compression content
+                for (let i = 0; i < postCompressCount; i++) {
+                  await session.append([makeContent(`post-${i}`)]);
+                }
+
+                await svc.flush();
+              } finally {
+                await svc.dispose();
               }
 
-              // Compression
-              const summary: IContent = {
-                speaker: 'ai',
-                blocks: [{ type: 'text', text: 'Summary' }],
-                metadata: { isSummary: true },
-              };
-              const version = session.store.published;
-              if (version === undefined)
-                throw new Error('Missing seeded version');
-              await session.store.commit([
-                {
-                  kind: 'compress',
-                  summary: encodeContentRow(summary, { owner: 0 }),
-                  retainFromLabel: version.nextLabel,
-                  expectedReplaced: preCompressCount,
-                },
-              ]);
-
-              // Post-compression content
-              for (let i = 0; i < postCompressCount; i++) {
-                await session.append([makeContent(`post-${i}`)]);
-              }
-
-              await svc.flush();
-              await svc.dispose();
-
-              const result = await resumeSession(
+              result = await resumeSession(
                 makeResumeRequest(localChatsDir, { journal: propertyJournal }),
               );
 
@@ -374,10 +399,12 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: compression + 
               expect(
                 await collectBootRows(okResult.boot.streamRows()),
               ).toHaveLength(1 + postCompressCount);
-              await okResult.recording.dispose();
-              await okResult.lockHandle.release();
             } finally {
-              await fs.rm(localTempDir, { recursive: true, force: true });
+              try {
+                await disposeResumeResult(result);
+              } finally {
+                await fs.rm(localTempDir, { recursive: true, force: true });
+              }
             }
           },
         ),
@@ -405,6 +432,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resume succeed
             const localChatsDir = path.join(localTempDir, 'chats');
             await fs.mkdir(localChatsDir, { recursive: true });
 
+            let result: Awaited<ReturnType<typeof resumeSession>> | undefined;
             try {
               const contents: IContent[] = [];
               for (let i = 0; i < contentCount; i++) {
@@ -417,7 +445,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resume succeed
                 contents,
               });
 
-              const result = await resumeSession(
+              result = await resumeSession(
                 makeResumeRequest(localChatsDir, { journal: propertyJournal }),
               );
 
@@ -425,10 +453,12 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resume succeed
               expect(
                 await collectBootRows(okResult.boot.streamRows()),
               ).toHaveLength(contentCount);
-              await okResult.recording.dispose();
-              await okResult.lockHandle.release();
             } finally {
-              await fs.rm(localTempDir, { recursive: true, force: true });
+              try {
+                await disposeResumeResult(result);
+              } finally {
+                await fs.rm(localTempDir, { recursive: true, force: true });
+              }
             }
           },
         ),

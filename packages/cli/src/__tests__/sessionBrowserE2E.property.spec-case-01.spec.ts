@@ -18,6 +18,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { assertTruthy } from '../__tests__/assertions.js';
 import fc from 'fast-check';
+import { disposeResumeContext } from './dispose-resume-context.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -46,21 +47,6 @@ async function createIndexedSessions(
     await delay(20);
   }
   return sessionIds;
-}
-
-async function disposeResumeContext(
-  context: ReturnType<typeof makeResumeContext>,
-): Promise<void> {
-  const callbacks = context.recordingCallbacks;
-  try {
-    await callbacks.getCurrentIntegration()?.dispose();
-  } finally {
-    try {
-      await callbacks.getCurrentRecording()?.dispose();
-    } finally {
-      await callbacks.getCurrentLockHandle()?.release();
-    }
-  }
 }
 
 describe('Property-based tests #1', () => {
