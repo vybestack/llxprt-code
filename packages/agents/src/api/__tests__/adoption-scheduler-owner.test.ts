@@ -1,210 +1,48 @@
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
-import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'bun:test';
-
+import { afterEach, describe, expect, it } from 'bun:test';
+import { rm } from 'node:fs/promises';
+import { createAgent } from '../createAgent.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { drain, countType } from './helpers/agentHarness.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
+import { makeScratchDir } from './helpers/scratch-dir.js';
 
 describe('adopted Agent scheduler ownership', () => {
-  it('executes a real tool with Agent-owned scheduler defaults for a factoryless Config', async () => {
-    const builtFactorylessPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('fixtures/' + 'tool-call-then-answer.jsonl', import.meta.url),
-    );
-    const builtFactorylessDirectory = await realpath(
-      await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
-    );
-    const builtFactorylessSupplied: CallerAgentRuntimeFactories = {};
-    const builtFactorylessConfig = new Config(
-      toConfigParameters({
-        ...{
-          provider: 'fake',
-          model: 'fake-model',
-          workingDir: builtFactorylessDirectory,
-        },
-        ...{},
-      }),
-    );
-    const builtFactorylessSettings = new SettingsService();
-    for (const [key, value] of Object.entries(
-      builtFactorylessConfig.getInitialSettings(),
-    ))
-      builtFactorylessSettings.set(key, value);
-    const builtFactorylessSettingsOwner = new SessionSettingsOwner(
-      builtFactorylessSettings,
-    );
-    builtFactorylessSettingsOwner.bindTelemetry(builtFactorylessConfig);
-    builtFactorylessSettingsOwner.initializeProviderSelection(
-      builtFactorylessConfig.getProvider(),
-      builtFactorylessConfig.getModel(),
-    );
-    const builtFactorylessPolicy = new RuntimePolicyOwner(
-      builtFactorylessConfig,
-    );
-    const builtFactorylessTask = builtFactorylessSupplied.taskToolRegistration;
-    const builtFactorylessFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...(builtFactorylessSupplied.agentClientFactory
-        ? { agentClientFactory: builtFactorylessSupplied.agentClientFactory }
-        : {}),
-      ...(builtFactorylessTask
-        ? { taskToolRegistration: () => builtFactorylessTask }
-        : {}),
-    };
-    const builtFactorylessNoClient = undefined;
-    const builtFactorylessNoManager = undefined;
-    const builtFactorylessClose = settleFactorylessRelease.bind(
-      undefined,
-      [
-        () => builtFactorylessSettingsOwner.dispose(),
-        () => builtFactorylessPolicy.dispose(),
-        () => builtFactorylessConfig.dispose(),
-        () => rm(builtFactorylessDirectory, { recursive: true, force: true }),
-      ],
-      builtFactorylessPreviousReplay,
-    );
+  useFakeResponsesReplay('tool-call-then-answer.jsonl');
+  const releases: Array<() => void | Promise<void>> = [];
+  afterEach(async () => {
+    await runCleanupSteps(releases.splice(0).reverse());
+  });
 
-    const agent = await fromConfig(
-      builtFactorylessConfig,
-      builtFactorylessSettings,
-      {},
-      builtFactorylessSettingsOwner,
-      builtFactorylessNoManager,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      builtFactorylessNoClient,
-      undefined,
-      undefined,
-      undefined,
-      builtFactorylessFactories,
+  it('executes a real tool with Agent-owned scheduler defaults for a factoryless Config', async () => {
+    const built: RouteAAgent = await openRouteAAgent();
+    releases.push(() => built.close());
+    const { agent } = built;
+    const events = await drain(agent.stream('read package metadata'));
+    expect(countType(events, 'tool-result')).toBeGreaterThan(0);
+    expect(countType(events, 'done')).toBe(1);
+    expect(agent.tools.list().some((tool) => tool.name === 'read_file')).toBe(
+      true,
     );
-    try {
-      const events = await drain(agent.stream('read package metadata'));
-      expect(countType(events, 'tool-result')).toBeGreaterThan(0);
-      expect(countType(events, 'done')).toBe(1);
-      expect(agent.tools.list().some((tool) => tool.name === 'read_file')).toBe(
-        true,
-      );
-    } finally {
-      await agent.dispose();
-      await builtFactorylessClose();
-    }
   });
 
   it('retains and disposes only the injected scheduler handles created for this adopted Agent', async () => {
-    const builtFactorylessPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('fixtures/' + 'tool-call-then-answer.jsonl', import.meta.url),
-    );
-    const builtFactorylessDirectory = await realpath(
-      await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
-    );
-    const builtFactorylessSupplied: CallerAgentRuntimeFactories = {};
-    const builtFactorylessConfig = new Config(
-      toConfigParameters({
-        ...{
-          provider: 'fake',
-          model: 'fake-model',
-          workingDir: builtFactorylessDirectory,
-        },
-        ...{},
-      }),
-    );
-    const builtFactorylessSettings = new SettingsService();
-    for (const [key, value] of Object.entries(
-      builtFactorylessConfig.getInitialSettings(),
-    ))
-      builtFactorylessSettings.set(key, value);
-    const builtFactorylessSettingsOwner = new SessionSettingsOwner(
-      builtFactorylessSettings,
-    );
-    builtFactorylessSettingsOwner.bindTelemetry(builtFactorylessConfig);
-    builtFactorylessSettingsOwner.initializeProviderSelection(
-      builtFactorylessConfig.getProvider(),
-      builtFactorylessConfig.getModel(),
-    );
-    const builtFactorylessPolicy = new RuntimePolicyOwner(
-      builtFactorylessConfig,
-    );
-    const builtFactorylessTask = builtFactorylessSupplied.taskToolRegistration;
-    const builtFactorylessFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...(builtFactorylessSupplied.agentClientFactory
-        ? { agentClientFactory: builtFactorylessSupplied.agentClientFactory }
-        : {}),
-      ...(builtFactorylessTask
-        ? { taskToolRegistration: () => builtFactorylessTask }
-        : {}),
-    };
-    const builtFactorylessNoClient = undefined;
-    const builtFactorylessNoManager = undefined;
-    const builtFactorylessClose = settleFactorylessRelease.bind(
-      undefined,
-      [
-        () => builtFactorylessSettingsOwner.dispose(),
-        () => builtFactorylessPolicy.dispose(),
-        () => builtFactorylessConfig.dispose(),
-        () => rm(builtFactorylessDirectory, { recursive: true, force: true }),
-      ],
-      builtFactorylessPreviousReplay,
-    );
-
+    const directory = await makeScratchDir('scheduler-owner-');
+    releases.push(() => rm(directory, { recursive: true, force: true }));
     let activeHandles = 0;
     let createdHandles = 0;
-    const agent = await fromConfig(
-      builtFactorylessConfig,
-      builtFactorylessSettings,
-      {},
-      builtFactorylessSettingsOwner,
-      builtFactorylessNoManager,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      builtFactorylessNoClient,
-      undefined,
-      undefined,
-      undefined,
-      builtFactorylessFactories,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      () => {
+    const agent = await createAgent({
+      provider: 'fake',
+      model: 'fake-model',
+      workingDir: directory,
+      harness: { includeProcessCwd: false },
+      toolSchedulerFactory: () => {
         activeHandles += 1;
         createdHandles += 1;
         return {
@@ -213,29 +51,13 @@ describe('adopted Agent scheduler ownership', () => {
           },
         };
       },
-    );
-    try {
-      const events = await drain(agent.stream('read package metadata'));
-      expect(countType(events, 'tool-result')).toBeGreaterThan(0);
-      expect(createdHandles).toBeGreaterThan(0);
-      expect(activeHandles).toBe(createdHandles);
-      await agent.dispose();
-      expect(activeHandles).toBe(0);
-    } finally {
-      await agent.dispose();
-      await builtFactorylessClose();
-    }
+    });
+    releases.push(() => agent.dispose());
+    const events = await drain(agent.stream('read package metadata'));
+    expect(countType(events, 'tool-result')).toBeGreaterThan(0);
+    expect(createdHandles).toBeGreaterThan(0);
+    expect(activeHandles).toBe(createdHandles);
+    await agent.dispose();
+    expect(activeHandles).toBe(0);
   });
 });
-
-async function settleFactorylessRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previous: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previous;
-  }
-}

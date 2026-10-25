@@ -1,78 +1,22 @@
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import { projectCurrentSequenceModel } from '../agentStatsProjector.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import {
-  Config,
-  ConfigParameters,
-} from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../adoption-release.js';
-import { randomUUID } from 'node:crypto';
-import {
-  runCleanupSteps,
-  cleanupAfterFailure,
-} from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
-import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { fileURLToPath } from 'node:url';
-import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import {
-  createAgentRuntimeFactoryBindings,
-  AgentRuntimeFactoryBindings,
-} from '../runtimeFactories.js';
-import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
-import { executeProviderActivation } from '../providerActivationExecutor.js';
-import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
-import { assembleModelSelection } from '../model-selection.js';
-import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
-import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
-import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import { type Agent } from '@vybestack/llxprt-code-agents';
-import * as fc from 'fast-check';
-
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-async function settleEngineRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previousReplay: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
-  }
-}
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'bun:test';
+import * as fc from 'fast-check';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { projectCurrentSequenceModel } from '../agentStatsProjector.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
+
 describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P13 @requirement:REQ-003', () => {
+  useFakeResponsesReplay('plain-text.jsonl');
   let promptDirectory: string;
 
   const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
@@ -90,241 +34,16 @@ describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P1
   });
 
   const builtCredentials = useOwnedCredentials();
-
-  let builtCallerConfig: Config;
-
-  let builtCallerSettings: SettingsService;
-
-  let builtCallerSettingsOwner: SessionSettingsOwner;
-
-  let builtCallerPolicy: RuntimePolicyOwner;
-
-  let builtCallerMcp: McpRuntimeOwner;
-
-  let builtCallerManager: ReturnType<typeof acquirePreferredProviderManager>;
-
-  let builtCallerOwner: SessionClientOwner;
-
-  let builtCallerClose: () => Promise<void>;
-
-  let builtCallerFactories: AgentRuntimeFactoryBindings;
-
-  let builtCallerRelease: AcquisitionRelease;
-
-  let builtCallerFiles: ProviderFileLifecycle;
-
-  let builtCallerRuntimeId: string;
-
-  let builtCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-
-  let builtCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
-
-  let builtCallerContent: ReturnType<
-    typeof createRuntimeContentGeneratorFactory
-  >;
-
-  async function openbuiltCaller(
-    fixture: string,
-    overrides: Readonly<Partial<AgentConfig>> = {},
-    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
-    skillSettings: Pick<
-      ConfigParameters,
-      'enableExtensionReloading' | 'storageRoot'
-    > = {},
-    extensionLoader?: ExtensionLoader,
-    skillOperations?: WorkspaceSkillAssemblyOperations,
-  ): Promise<void> {
-    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('./fixtures/' + fixture, import.meta.url),
-    );
-    const directory = await realpath(
-      await mkdtemp(join(tmpdir(), 'builtCaller-adoption-')),
-    );
-    const selection: AgentConfig = {
-      provider: 'fake',
-      model: 'fake-model',
-      sessionId: randomUUID(),
-      ...overrides,
-      workingDir:
-        overrides.workingDir === undefined
-          ? directory
-          : await realpath(overrides.workingDir),
-    };
-    const parameters = { ...toConfigParameters(selection), ...skillSettings };
-    parameters.interactive = true;
-    if (overrides.hooks !== undefined) parameters.enableHooks = true;
-    if (
-      overrides.filesystemOwner === undefined &&
-      (overrides.harness?.includeProcessCwd ?? true)
-    )
-      parameters.includeDirectories = [
-        ...(parameters.includeDirectories ?? []),
-        process.cwd(),
-      ];
-    builtCallerConfig = new Config(parameters);
-    builtCallerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...suppliedFactories,
-    };
-    builtCallerSettings = new SettingsService();
-    for (const [key, value] of Object.entries(
-      builtCallerConfig.getInitialSettings(),
-    ))
-      builtCallerSettings.set(key, value);
-    builtCallerPolicy = new RuntimePolicyOwner(builtCallerConfig);
-    injectConfirmationForcingPolicy(builtCallerPolicy.session.confirmation);
-    builtCallerMcp = await buildTestMcpRuntime(
-      builtCallerConfig,
-      builtCallerPolicy.session.messageBus,
-      overrides,
-      extensionLoader,
-      builtCallerPolicy,
-      skillOperations,
-    );
-    acquirebuiltCallerProviders();
-    const media = new SessionMediaOwner(
-      builtCallerConfig.projectTempDir,
-      1024 * 1024 * 1024,
-    );
-    builtCallerOwner = await createCapturedSessionOwner(
-      builtCallerConfig,
-      assembleTaskSchemaPolicy(builtCallerSettings),
-      builtCallerManager,
-      builtCallerFactories.agentClientFactory,
-      media.store,
-      builtCallerMcp.readInstructions,
-      builtCallerMcp.workspacePaths,
-      builtCallerSettingsOwner,
-      builtCallerContent,
-      builtCallerTokenizer,
-    );
-    builtCallerOwner.bindMcpRuntime(builtCallerMcp);
-    builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
-      builtCallerOAuth.composeRetryOperations(provider),
-    );
-    builtCallerOwner.bindHooks();
-    builtCallerClose = settleEngineRelease.bind(
-      undefined,
-      [
-        () => builtCallerOwner.dispose(),
-        () => builtCallerRelease.close(),
-        () => media.dispose(),
-        () => builtCallerMcp.dispose(),
-        () => builtCallerConfig.dispose(),
-        () => rm(directory, { recursive: true, force: true }),
-      ],
-      previousReplay,
-    );
-    try {
-      await preparePreferredProviderCompletion(
-        builtCallerConfig,
-        builtCallerSettings,
-        builtCallerSettingsOwner,
-        builtCallerManager,
-        builtCallerOAuth,
-        builtCallerRuntimeId,
-        builtCallerTokenizer,
-        undefined,
-      );
-      await builtCallerMcp.initialize();
-      await activatebuiltCallerClient(selection.activation);
-    } catch (primary) {
-      await cleanupAfterFailure(primary, builtCallerClose);
-    }
-  }
-
-  function acquirebuiltCallerProviders(): void {
-    builtCallerRuntimeId = 'builtCaller-' + randomUUID();
-    builtCallerRelease = new AcquisitionRelease();
-    builtCallerSettingsOwner = new SessionSettingsOwner(builtCallerSettings);
-    builtCallerRelease.acquire('settings', () =>
-      builtCallerSettingsOwner.dispose(),
-    );
-    builtCallerSettingsOwner.initializeProviderSelection(
-      builtCallerConfig.getProvider(),
-      builtCallerConfig.getModel(),
-    );
-    builtCallerSettingsOwner.bindTelemetry(builtCallerConfig);
-    builtCallerFiles = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
-    });
-    for (const scope of [
-      builtCallerRuntimeId,
-      builtCallerConfig.getSessionId(),
-    ])
-      builtCallerRelease.acquire('files', () =>
-        releaseAdoptedFileScope(builtCallerFiles, scope),
-      );
-    builtCallerManager = acquirePreferredProviderManager(
-      builtCallerConfig,
-      builtCallerSettings,
-      builtCallerSettingsOwner,
-      builtCallerFiles,
-      builtCallerRuntimeId,
-      builtCredentials().authority,
-      builtCallerRelease,
-    );
-    const factoriesTokenizer = configureProviderTokenizer(builtCallerManager);
-    const factoriesContent = createRuntimeContentGeneratorFactory();
-    builtCallerTokenizer = factoriesTokenizer;
-    builtCallerContent = factoriesContent;
-    builtCallerOAuth = acquirePreferredOAuth(
-      undefined,
-      builtCallerPolicy.session.messageBus,
-      builtCallerConfig,
-      builtCallerSettings,
-      builtCallerManager,
-      builtCallerRuntimeId,
-      builtCallerMcp.profileDefinitions,
-      builtCredentials().authority,
-      builtCallerRelease,
-      undefined,
-    );
-  }
-
-  async function activatebuiltCallerClient(
-    intent: ProviderActivationIntent = {
-      provider: builtCallerConfig.getProvider(),
-      model: builtCallerConfig.getModel(),
-    },
-  ): Promise<void> {
-    const activation = await executeProviderActivation(
-      builtCallerConfig,
-      intent,
-      assembleProviderSwitch(
-        builtCallerConfig,
-        builtCallerSettings,
-        builtCallerManager,
-        builtCallerOAuth,
-        () => 'agent',
-        () => builtCallerOwner.refreshAuth(),
-        builtCallerSettingsOwner,
-      ),
-      builtCallerSettings,
-      builtCallerManager,
-      (method) => builtCallerOwner.refreshAuth(method),
-      assembleModelSelection(builtCallerSettingsOwner),
-    );
-    requireCallerActivation(activation);
-    await builtCallerOwner.initializeTools();
-    await capturedSessionClient(builtCallerOwner).startChat();
-  }
+  let built: RouteAAgent | undefined;
+  afterEach(async () => {
+    await built?.close();
+    built = undefined;
+  });
 
   const observeConsumerFallbacks = async () => {
-    await openbuiltCaller('plain-text.jsonl');
-    const fallbackModel = builtCallerConfig.getModel();
-    const actualAgent = await fromConfig(
-      builtCallerConfig,
-      builtCallerSettings,
-      {},
-      builtCallerSettingsOwner,
-      builtCallerManager,
-      undefined,
-      undefined,
-      builtCallerMcp,
-    );
+    built = await openRouteAAgent({ authority: builtCredentials().authority });
+    const { agent: actualAgent } = built;
+    const fallbackModel = built.config.getModel();
     const observations: Array<{
       reportedModel: string;
       presentResult: string;
@@ -358,22 +77,12 @@ describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P1
         );
       },
     );
-    return {
-      fallbackProperty,
-      observations,
-      cleanup: () =>
-        runCleanupSteps([() => actualAgent.dispose(), builtCallerClose]),
-    };
+    return { fallbackProperty, observations };
   };
 
   it('PROP consumer fallback: (agent.getCurrentSequenceModel() ?? agent.getModel()) equals the client reported sequence model when present, else equals agent.getModel() @requirement:REQ-003 @scenario:property-consumer-fallback @given:a random model string and an agent whose client reports it @when:a consumer computes seq ?? agent.getModel() @then:the result equals the reported model; and when the client reports null the result equals agent.getModel()', async () => {
-    const { fallbackProperty, observations, cleanup } =
-      await observeConsumerFallbacks();
-    try {
-      await fc.assert(fallbackProperty);
-    } finally {
-      await cleanup();
-    }
+    const { fallbackProperty, observations } = await observeConsumerFallbacks();
+    await fc.assert(fallbackProperty);
     expect(
       observations.map(({ presentResult }) => presentResult),
     ).toStrictEqual(observations.map(({ reportedModel }) => reportedModel));
@@ -391,31 +100,7 @@ describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P1
   // fromConfig-built agent surfaces that genuine null. This is NOT a reverse
   // test — null IS the real contract value here.
   it('T9b-real fromConfig-built agent over the fake seam returns null (genuine null contract, real client) @requirement:REQ-003 @scenario:null-contract-real @given:a real agent built via fromConfig over the fake-provider seam @when:agent.getCurrentSequenceModel() @then:returns null (the real fake-provider client reports no sequence model)', async () => {
-    await openbuiltCaller('plain-text.jsonl');
-    try {
-      const agent: Agent = await fromConfig(
-        builtCallerConfig,
-        builtCallerSettings,
-        {},
-        builtCallerSettingsOwner,
-        builtCallerManager,
-        undefined,
-        undefined,
-        builtCallerMcp,
-      );
-      try {
-        expect(agent.getCurrentSequenceModel()).toBeNull();
-      } finally {
-        await agent.dispose();
-      }
-    } finally {
-      await builtCallerClose();
-    }
+    built = await openRouteAAgent({ authority: builtCredentials().authority });
+    expect(built.agent.getCurrentSequenceModel()).toBeNull();
   });
 });
-
-function requireCallerActivation(
-  result: Awaited<ReturnType<typeof executeProviderActivation>>,
-): void {
-  if (result.authFailed) throw result.authError;
-}
