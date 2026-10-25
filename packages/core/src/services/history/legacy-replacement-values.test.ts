@@ -13,6 +13,7 @@ import {
 import { rejectedValue, rowsOf } from './chronology-rollback-test-helpers.js';
 import type { IContent, ChronologyMarker } from './IContent.js';
 import type { HistoryService } from './HistoryService.js';
+import { decodeStoredRow } from './journalRowCodec.js';
 
 function record(value: object): void {
   const output = process.env.LEGACY_VALUE_OUTPUT;
@@ -157,72 +158,86 @@ describe('replacement value admission', () => {
 
 describe('density replacement values', () => {
   it('releases replacement roots before failure while preserving inherited chronology and media values', async () => {
-    await withDetachedFixture(async ({ history, recorder, owners }) => {
-      await history.detachedValues.replace(detachedRows(512));
-      const baseline = await detachedDigest(detachedRows(512));
-      const input = submitted(512, 512);
-      const failure = new Error('density value publication');
-      history.once('tokensUpdated', () => {
-        throw failure;
-      });
-      let census = -1;
-      await history.registerMediaOwner({
-        adopt: () => undefined,
-        reconcile: async () => undefined,
-        releaseAll: async () => undefined,
-        prepareReplacement: ({ next }) => ({
-          publish: async () => {
-            await sweep();
-            census = input.weakRows.filter(
-              (row) => row.deref() !== undefined,
-            ).length;
-            record({
-              mode: 'density',
-              held: owners.snapshot(),
-              liveRows: census,
-            });
-            expect(census).toBe(0);
-            expect(
-              input.weakMarkers.filter((marker) => marker.deref() !== undefined)
-                .length,
-            ).toBe(0);
-            expect(owners.snapshot().liveRows).toBeLessThanOrEqual(440);
-            expect(owners.snapshot().liveSerializedBytes).toBeLessThanOrEqual(
-              8 * 1024 * 1024,
-            );
-            let ordinal = 0;
-            for (const row of next) {
-              expect(row.metadata?.chronology).toStrictEqual(
-                detachedRow(ordinal).metadata?.chronology,
+    await withDetachedFixture(
+      async ({ history, recorder, owners, session }) => {
+        await history.detachedValues.replace(detachedRows(512));
+        const baseline = await detachedDigest(detachedRows(512));
+        const input = submitted(512, 512);
+        const failure = new Error('density value publication');
+        const publication: {
+          candidate?: ReturnType<typeof session.store.snapshot>;
+        } = {};
+        history.once('tokensUpdated', () => {
+          publication.candidate = session.store.snapshot();
+          throw failure;
+        });
+        let census = -1;
+        await history.registerMediaOwner({
+          adopt: () => undefined,
+          reconcile: async () => undefined,
+          releaseAll: async () => undefined,
+          prepareReferenceReplacement: (references) => ({
+            publish: async () => {
+              for await (const reference of references) void reference;
+              await sweep();
+              census = input.weakRows.filter(
+                (row) => row.deref() !== undefined,
+              ).length;
+              record({
+                mode: 'density',
+                held: owners.snapshot(),
+                liveRows: census,
+              });
+              expect(census).toBe(0);
+              expect(
+                input.weakMarkers.filter(
+                  (marker) => marker.deref() !== undefined,
+                ).length,
+              ).toBe(0);
+              expect(owners.snapshot().liveRows).toBeLessThanOrEqual(440);
+              expect(owners.snapshot().liveSerializedBytes).toBeLessThanOrEqual(
+                8 * 1024 * 1024,
               );
-              expect(row.blocks).toStrictEqual(
-                detachedRow(ordinal + 512).blocks,
-              );
-              ordinal++;
-            }
-            expect(ordinal).toBe(512);
+            },
+            rollback: () => undefined,
+          }),
+        });
+        const operation = history.applyDensityResult({
+          removals: [],
+          replacements: new Map(input.rows.map((row, index) => [index, row])),
+          metadata: {
+            readWritePairsPruned: 0,
+            fileDeduplicationsPruned: 0,
+            recencyPruned: 0,
           },
-          rollback: () => undefined,
-        }),
-      });
-      const operation = history.applyDensityResult({
-        removals: [],
-        replacements: new Map(input.rows.map((row, index) => [index, row])),
-        metadata: {
-          readWritePairsPruned: 0,
-          fileDeduplicationsPruned: 0,
-          recencyPruned: 0,
-        },
-      });
-      input.rows = [];
-      expect(await rejectedValue(operation)).toBe(failure);
-      await sweep();
-      expectReleased(input);
-      expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
-        baseline,
-      );
-      expect(await detachedDurableDigest(recorder)).toStrictEqual(baseline);
-      expect(owners.snapshot().liveRows).toBe(0);
-    });
+        });
+        input.rows = [];
+        expect(await rejectedValue(operation)).toBe(failure);
+        if (publication.candidate === undefined)
+          throw new Error('Missing published candidate');
+        const snapshot = await publication.candidate;
+        try {
+          let ordinal = 0;
+          for await (const entry of snapshot.entries()) {
+            const row = decodeStoredRow(await snapshot.readRow(entry));
+            expect(row.metadata?.chronology).toStrictEqual(
+              detachedRow(ordinal).metadata?.chronology,
+            );
+            expect(row.blocks).toStrictEqual(detachedRow(ordinal + 512).blocks);
+            ordinal++;
+          }
+          expect(ordinal).toBe(512);
+        } finally {
+          await snapshot.close();
+        }
+        await sweep();
+        expectReleased(input);
+        expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
+          baseline,
+        );
+        expect(await detachedDurableDigest(recorder)).toStrictEqual(baseline);
+        expect(owners.snapshot().liveRows).toBe(0);
+      },
+    );
   }, 180_000);
 });
