@@ -181,6 +181,7 @@ describe('captured continuation transport failures', () => {
     let closed = 0;
     const observed: ProviderRequestSelection = {
       ...selection,
+      count: selection.count,
       native: selection.native,
       async *openReader(signal) {
         opened++;

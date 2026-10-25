@@ -28,6 +28,7 @@ import {
   responsesUnitPairs,
   responsesUnitLength,
   responsesUnitSummary,
+  reasoningDigitBytes,
 } from './responses-unit-length.js';
 import {
   responsesLengthRegistration,
@@ -349,59 +350,34 @@ async function callerOwnedByteLength(
   rows: ProviderRequestRows,
 ): Promise<number> {
   const query = await CallerOwnedToolQuery.create(rows);
-  const context = {
-    includeReasoningInContext: options.includeReasoningInContext,
-    outputLimits: options.outputLimits,
-    debug: () => undefined,
-    mediaPdfEnabled: options.pdfEnabled,
-    reasoningIdTime,
-    serverSideParentActive: selection.stateful.parentId !== undefined,
-  };
   const settings = nativeSettings(options);
   let pdfBytes = 0;
+  let bytes = 2;
+  let items = 0;
+  let generatedIds = 0;
   for (let at = selection.skipRows; at < rows.count; at++) {
     const row = await rows.readAt(at, options.invocation.signal);
     const pairs = await responsesUnitPairs(row, query, selection.skipRows);
-    pdfBytes += responsesUnitLength(
+    const measured = responsesUnitLength(
       row,
       settings,
       options.includeReasoningInContext,
       pairs,
       selection.stateful.parentId !== undefined,
-    ).pdfBytes;
+    );
+    pdfBytes += measured.pdfBytes;
+    bytes += measured.bytes + measured.count;
+    items += measured.count;
+    generatedIds += measured.generatedIds;
   }
+  bytes -= Number(items > 0);
+  bytes +=
+    generatedIds * Buffer.byteLength(`,"id":"rs_${reasoningIdTime}_"`) +
+    reasoningDigitBytes(generatedIds);
   if (pdfBytes > PDF_AGGREGATE_MAX_BYTES)
     throw new Error(
       `Native PDF input payload (${pdfBytes} bytes) exceeds the allowed ${PDF_AGGREGATE_MAX_BYTES} bytes (50 MB). Reduce the number or size of PDF files.`,
     );
-  let bytes = 2;
-  let items = 0;
-  let counter = 0;
-  const source = resolveRowsMedia(
-    (async function* () {
-      for (let at = selection.skipRows; at < rows.count; at++)
-        yield await rows.readAt(at, options.invocation.signal);
-    })(),
-    {
-      requestId: options.mediaRequestId,
-      aggregateBudgetBytes: options.mediaBudgetBytes,
-      resolver: options.mediaResolver,
-    },
-    shell.mediaRequest,
-    options.invocation.signal,
-    rows.native,
-  );
-  for await (const row of source) {
-    const pairs = await responsesUnitPairs(row, query, selection.skipRows);
-    for (const item of buildOpenAIResponsesUnit(
-      row,
-      context,
-      pairs,
-      () => `rs_${reasoningIdTime}_${counter++}`,
-    )) {
-      bytes += jsonValueByteLength(item) + Number(items++ > 0);
-    }
-  }
   return overrideByteLength(shell.request, []) - 2 + bytes;
 }
 
@@ -428,6 +404,7 @@ async function callerOwnedResponsesRows(
   );
   const missing = [...dangling.missing];
   const query = await CallerOwnedToolQuery.create(rows);
+  if (!query.hasToolBlocks) return rows;
   const allowEmpty = (await query.normalizedCount(1, 1, 'call_')) > 0;
   const originalAt = async (
     at: number,

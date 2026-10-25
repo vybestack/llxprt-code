@@ -901,13 +901,29 @@ export async function* streamOverWebSocketOrFallback(
   logger: TransportLogger | undefined,
   onSuccess: (() => void) | undefined = undefined,
 ): AsyncIterableIterator<IContent> {
+  const frame =
+    streamOptions.requestFrameBytes === undefined
+      ? undefined
+      : await assembleFrame(
+          streamOptions.requestFrameBytes(),
+          DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES,
+        );
+  const preparedOptions =
+    frame === undefined
+      ? streamOptions
+      : {
+          ...streamOptions,
+          requestFrameBytes: async function* (): AsyncGenerator<Uint8Array> {
+            yield frame;
+          },
+        };
   // The only safe recovery boundary is the point at which an IContent is
   // yielded downstream.
   let contentYielded = false;
   try {
     for await (const message of transport.streamResponse(
       request,
-      streamOptions,
+      preparedOptions,
     )) {
       contentYielded = true;
       yield message;

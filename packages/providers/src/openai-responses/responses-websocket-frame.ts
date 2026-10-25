@@ -15,6 +15,7 @@ export async function assembleFrame(
       );
     parts.push(chunk);
   }
+  if (parts.length === 1) return parts[0];
   const frame = new Uint8Array(total);
   let offset = 0;
   for (const part of parts) {
