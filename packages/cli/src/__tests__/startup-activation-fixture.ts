@@ -1,31 +1,25 @@
-import { AgentActivationBootstrap } from '../../../agents/src/api/activationPreflightState.js';
-import type { AgentProfilePreflight } from '../../../agents/src/api/profile-preflight.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type {
-  RuntimeProviderManager,
-  Config,
-} from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import { expect } from 'bun:test';
-import type * as agents from '@vybestack/llxprt-code-agents';
+import {
+  AgentProfilePreflight,
+  type ActivationPreflightToken,
+  type AgentActivationOperation,
+  type ProviderActivationIntent,
+} from '@vybestack/llxprt-code-agents';
 
-export type ObservedBootstrap = {
-  config: Config;
-  settingsService: SettingsService;
-  providerManager: RuntimeProviderManager;
-  operation: agents.AgentActivationOperation;
-  receipt?: agents.ActivationPreflight;
-  intent?: agents.ProviderActivationIntent;
+export type StartupReceipt = {
+  token: ActivationPreflightToken;
+  intent: ProviderActivationIntent;
 };
 
 export function transferActivation(
   preflight: AgentProfilePreflight,
-): agents.AgentActivationOperation {
-  let activation: agents.AgentActivationOperation | undefined;
+): AgentActivationOperation {
+  let activation: AgentActivationOperation | undefined;
   preflight.transferActivation((operation) => {
     activation = operation;
   });
@@ -33,32 +27,10 @@ export function transferActivation(
   return activation;
 }
 
-export function requireReceipt(owner: ObservedBootstrap): {
-  activation: agents.ProviderActivationIntent;
-  activationPreflight: agents.ActivationPreflight;
-} {
-  if (!owner.receipt || !owner.intent)
-    throw new Error('Missing preflight receipt');
-  return { activation: owner.intent, activationPreflight: owner.receipt };
-}
-
-export async function expectInvalidReceipt(
-  owner: ObservedBootstrap,
+export async function expectClosed(
+  operation: Pick<AgentActivationOperation, 'preflight'>,
 ): Promise<void> {
-  const operation = owner.operation;
-  if (!(operation instanceof AgentActivationBootstrap))
-    throw new Error('Missing actual activation owner');
-  const { activation, activationPreflight } = requireReceipt(owner);
-  // The production foreground route rejects a closed operation before it
-  // validates the token.
-  await expect(
-    (async () =>
-      operation.createForeground(activationPreflight.token, activation, {}))(),
-  ).rejects.toThrow('Activation bootstrap is disposed');
-}
-
-export async function expectClosed(owner: ObservedBootstrap): Promise<void> {
-  const result = await owner.operation.preflight({ authMode: 'none' });
+  const result = await operation.preflight({ authMode: 'none' });
   expect(result.authFailed).toBe(true);
   expect(result.authError).toBeInstanceOf(Error);
   if (!(result.authError instanceof Error))
@@ -67,17 +39,27 @@ export async function expectClosed(owner: ObservedBootstrap): Promise<void> {
   expect(result.token).toBeUndefined();
 }
 
+/**
+ * A disposed, untransferred preflight refuses a new activation preflight, and
+ * a receipt it issued can no longer build a foreground Agent.
+ */
+export async function expectPreflightRetired(
+  preflight: AgentProfilePreflight,
+  receipt: StartupReceipt,
+): Promise<void> {
+  expect(() => preflight.preflight({ authMode: 'none' })).toThrow('disposed');
+  await expect(
+    AgentProfilePreflight.createForegroundAgent(
+      preflight,
+      receipt.token,
+      receipt.intent,
+      {},
+    ),
+  ).rejects.toThrow('disposed');
+}
+
 export class StartupExit extends Error {
   constructor(readonly code: string | number | null | undefined) {
     super(`startup exit ${code}`);
   }
-}
-
-export function expectStartupAdmissionClosed(owner: ObservedBootstrap): void {
-  const operation = owner.operation;
-  if (!(operation instanceof AgentActivationBootstrap))
-    throw new Error('Missing actual activation owner');
-  expect(() =>
-    operation.createForeground(Object.freeze({}), { authMode: 'none' }, {}),
-  ).toThrow('disposed');
 }

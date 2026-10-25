@@ -1,9 +1,5 @@
-import { AgentResourceCapture } from '../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
-import { capturedSessionClient } from '../../agents/src/api/__tests__/helpers/session-client-capture.js';
-import {
-  captureActivationConstruction,
-  capturedActivation,
-} from '../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
+import { openRouteBPreflight } from '../../agents/src/api/__tests__/helpers/route-b-preflight.js';
+import { transferActivation } from './__tests__/startup-activation-fixture.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   parseBootstrapArgs,
@@ -72,67 +68,44 @@ describe('CLI activation operation handoff', () => {
   it('uses the config bootstrap operation for auto auth and real foreground adoption', async () => {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    const credentialAuthority = new CredentialAuthority();
-    const callerSettings = new SettingsService();
-    const parsed = parseBootstrapArgs();
-    const preflight = await prepareRuntimeForProfile(
-      {
-        ...parsed,
-        runtimeMetadata: {
-          ...parsed.runtimeMetadata,
-        },
-      },
-      credentialAuthority,
-      callerSettings,
-      undefined,
-      undefined,
-    );
-    const config = await captureActivationConstruction(() =>
-      bootstrapRuntimeAndConfig(settings, argv, directory, preflight),
-    );
-    let transferredActivation: AgentActivationOperation | undefined;
-    preflight.transferActivation((operation) => {
-      transferredActivation = operation;
+    const route = await openRouteBPreflight({
+      authority: new CredentialAuthority(),
     });
-    if (transferredActivation === undefined)
-      throw new Error('Missing activation operation');
-    const activationOperation = transferredActivation;
-    registerCleanup(() => activationOperation.dispose());
     try {
-      await writeFile(join(directory, 'discovery.txt'), 'workspace discovery');
-      await writeFile(join(directory, '.llxprtignore'), 'discovery.txt\n');
-      const root = capturedActivation(activationOperation).workspaceFilesystem;
-      expect(await root.search.search(directory, '*.txt')).toStrictEqual([]);
-      expect(preflight.getActiveProviderName()).toBe('fake');
-      const manager = preflight;
+      await route.prepare();
+      const activationOperation = transferActivation(route.preflight);
+      registerCleanup(() => activationOperation.dispose());
+      const config = route.config;
+      const root = route.directory;
+      await writeFile(join(root, 'discovery.txt'), 'workspace discovery');
+      await writeFile(join(root, '.llxprtignore'), 'discovery.txt\n');
+      const filesystem = route.filesystem;
+      expect(await filesystem.search.search(root, '*.txt')).toStrictEqual([]);
+      expect(route.preflight.getActiveProviderName()).toBe('fake');
 
       const activation = await activateConfiguredProvider(
         config,
-        manager,
+        route.preflight,
         argv,
         activationOperation,
       );
       expect(activation.authFailed).toBe(false);
-      const expectedClient = capturedSessionClient(
-        capturedActivation(activationOperation).owner,
-      );
-      const capture = new AgentResourceCapture();
-      capture.observe(expectedClient);
+      const expectedHistory = await activationOperation.readHistory();
       const contentConfig = config.getContentGeneratorConfig();
       const agent = await createForegroundAgent(
-        preflight,
+        route.preflight,
         requireForegroundReceipt(activation),
         activation.intent ?? {},
-        credentialAuthority,
+        route.authority,
         {},
       );
-      expect(capture.publishedClient(agent)).toBe(expectedClient);
-      await writeFile(join(directory, '.llxprtignore'), '');
-      expect(await agent.workspace.search(directory, '*.txt')).toStrictEqual([
+      expect(await agent.getHistory()).toStrictEqual(expectedHistory);
+      await writeFile(join(root, '.llxprtignore'), '');
+      expect(await agent.workspace.search(root, '*.txt')).toStrictEqual([
         'discovery.txt',
       ]);
-      await writeFile(join(directory, '.llxprtignore'), 'discovery.txt\n');
-      expect(await root.search.search(directory, '*.txt')).toStrictEqual([]);
+      await writeFile(join(root, '.llxprtignore'), 'discovery.txt\n');
+      expect(await filesystem.search.search(root, '*.txt')).toStrictEqual([]);
       expect(agent.getRuntimeId()).toBe(config.getSessionId());
       expect(config.getContentGeneratorConfig()).toBe(contentConfig);
       expect(
@@ -140,8 +113,7 @@ describe('CLI activation operation handoff', () => {
       ).toBe(true);
       await agent.dispose();
     } finally {
-      await activationOperation.dispose();
-      await config.dispose();
+      await route.close();
     }
   });
 
@@ -180,8 +152,11 @@ describe('CLI activation operation handoff', () => {
       undefined,
       undefined,
     );
-    const config = await captureActivationConstruction(() =>
-      bootstrapRuntimeAndConfig(settings, argv, directory, preflight),
+    const config = await bootstrapRuntimeAndConfig(
+      settings,
+      argv,
+      directory,
+      preflight,
     );
     let transferredActivation: AgentActivationOperation | undefined;
     preflight.transferActivation((operation) => {
@@ -253,8 +228,11 @@ describe('CLI activation operation handoff', () => {
       undefined,
       undefined,
     );
-    const config = await captureActivationConstruction(() =>
-      bootstrapRuntimeAndConfig(settings, argv, directory, preflight),
+    const config = await bootstrapRuntimeAndConfig(
+      settings,
+      argv,
+      directory,
+      preflight,
     );
     let transferredActivation: AgentActivationOperation | undefined;
     preflight.transferActivation((operation) => {
