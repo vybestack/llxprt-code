@@ -18,14 +18,15 @@ describe('actual request source estimation cancellation', () => {
     );
     const before = new Set(readdirSync(getScratchRoot()));
     try {
-      controller.abort(new Error('cancel finalized source count'));
-      await expect(
-        estimatePromptEnvelope(
-          setup.provider.name,
-          projection,
-          withGpt56DiskSources(setup.factory, getScratchRoot()),
-        ),
-      ).rejects.toThrow('tokenization-failed');
+      const reason = new Error('cancel finalized source count');
+      controller.abort(reason);
+      const estimate = estimatePromptEnvelope(
+        setup.provider.name,
+        projection,
+        withGpt56DiskSources(setup.factory, getScratchRoot()),
+      );
+      await expect(estimate).rejects.toThrow('cancel finalized source count');
+      await expect(estimate).rejects.toBe(reason);
       expect(
         readdirSync(getScratchRoot()).filter(
           (name) => name.startsWith('o200k-count-') && !before.has(name),

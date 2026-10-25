@@ -171,14 +171,15 @@ describe('Responses source route stored media references', () => {
     expect([...promptDirs()].filter((e) => !before.has(e))).toHaveLength(0);
   }, 60000);
 
-  it('releases reservations when a projection is dropped unsent', async () => {
+  it('does not reserve or read media when a projection is dropped unsent', async () => {
     const image = await admit(PNG_BYTES);
     const projection = await project(
       [{ speaker: 'human', blocks: [image] }],
       image.normalizedBase64Length,
     );
-    expect(resolver.accounting().reservedContentCount).toBe(1);
+    expect(resolver.accounting().reservedContentCount).toBe(0);
+    expect(resolver.accounting()).toStrictEqual({ ...idle, storeReadCount: 0 });
     await projection.releaseIfUnsent?.();
-    expect(resolver.accounting()).toStrictEqual({ ...idle, storeReadCount: 1 });
+    expect(resolver.accounting()).toStrictEqual({ ...idle, storeReadCount: 0 });
   }, 60000);
 });
