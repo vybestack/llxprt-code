@@ -1,5 +1,5 @@
 import { useConsumerPromptDirectory } from './helpers/consumer-owner-primitives.js';
-import { ApprovalMode } from '@vybestack/llxprt-code-core/config/config.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { openRouteAAgent } from './helpers/route-a-agent.js';

@@ -1,7 +1,7 @@
 import { ownerClients } from './helpers/session-client-capture.js';
 import { openRouteAAgent } from './helpers/route-a-agent.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core';
 import { bindTurnModel } from '../../session/bind-turn-model.js';
 import { TurnToolExecutionOwner } from '../../session/turn-tool-execution-owner.js';
 import { bindSchedulerOwner } from '../../session/assembleSchedulerOwner.js';

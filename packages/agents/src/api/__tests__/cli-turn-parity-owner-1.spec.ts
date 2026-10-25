@@ -57,7 +57,7 @@ import {
   drain,
   createAgent,
 } from './helpers/agentHarness.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core';
 import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import {

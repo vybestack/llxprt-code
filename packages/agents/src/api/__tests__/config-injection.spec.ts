@@ -3,7 +3,7 @@ import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { openRouteAAgent } from './helpers/route-a-agent.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { describe, expect, it } from 'bun:test';
-import { ApprovalMode } from '@vybestack/llxprt-code-core/config/config.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { type Agent, type AgentEvent } from '@vybestack/llxprt-code-agents';
 import { drain, countType, buildAgent } from './helpers/agentHarness.js';
 import { captureProbe, agentClientDisposed } from './helpers/disposalProbe.js';
