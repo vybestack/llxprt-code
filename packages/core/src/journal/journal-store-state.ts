@@ -28,6 +28,22 @@ export function unchangedGroup(
   };
 }
 
+export function committedGroup(
+  state: Omit<CommittedGroup, 'close' | 'resolvedEdits'>,
+  edits: readonly VersionEdit[],
+): CommittedGroup {
+  return {
+    ...state,
+    get resolvedEdits() {
+      return edits;
+    },
+    close: () => {
+      edits = [];
+      return state.read.close();
+    },
+  };
+}
+
 export function assertCompactionUsable(
   failure: { readonly error: unknown } | undefined,
 ): void {

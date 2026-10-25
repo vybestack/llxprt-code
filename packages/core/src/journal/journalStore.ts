@@ -129,6 +129,7 @@ import {
   noop,
   assertCompactionUsable,
   unchangedGroup,
+  committedGroup,
 } from './journal-store-state.js';
 
 export type { CommittedGroup } from './journal-store-state.js';
@@ -791,17 +792,17 @@ export class JournalStore {
     }
     await effect?.settle(true);
     // Pinned before anything else can run, so no compaction separates the ack from its reader.
-    const read = this.readOfPublished();
-    return {
-      ack,
-      before,
-      after: this.requireVersion(),
-      read,
-      writtenLabels: streamedAppend === true ? [] : writtenLabelsOf(plan),
+    return committedGroup(
+      {
+        ack,
+        before,
+        after: this.requireVersion(),
+        read: this.readOfPublished(),
+        writtenLabels: streamedAppend === true ? [] : writtenLabelsOf(plan),
+        streamedAppend,
+      },
       resolvedEdits,
-      streamedAppend,
-      close: () => read.close(),
-    };
+    );
   }
 
   private beginCommitEffect(): CommitEffect | undefined {
