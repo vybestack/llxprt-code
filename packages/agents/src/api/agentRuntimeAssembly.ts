@@ -436,9 +436,7 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
         this.tokenizerFactory,
         this.files,
         this.preferredMediaOwner,
-        undefined,
         mcpRuntime,
-        undefined,
         (this.parsed.harness?.forceConfirmations ?? true) &&
           this.config.isInteractive(),
         this.mcpOptions.imageOperation,

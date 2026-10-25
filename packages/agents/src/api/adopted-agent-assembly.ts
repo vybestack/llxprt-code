@@ -225,7 +225,6 @@ export abstract class AdoptedAgentAssembly extends AdoptedSessionAssembly {
     const definitions = this.adoptMcp.workspaceDefinitions;
     client.bindMcpRuntime(
       this.adoptMcp,
-      undefined,
       definitions.profileReads,
       projectTrustedSubagents(definitions, () =>
         this.adoptMcp.trust.isTrustedFolder(),

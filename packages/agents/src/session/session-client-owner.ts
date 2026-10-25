@@ -336,7 +336,6 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
 
   bindMcpRuntime(
     workspace: McpRuntimeOwner,
-    registration?: (bound: TaskToolRegistration) => TaskToolRegistration,
     profiles: ProfileDefinitionReads = workspace.profileDefinitions,
     subagents: SubagentDefinitionReads = workspace.subagentDefinitions,
   ): void {
@@ -370,11 +369,7 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
         {
           readMcpInstructions: workspace.readInstructions,
           bus: policy.messageBus,
-          registration: this.bindTaskRegistration(
-            profiles,
-            subagents,
-            registration,
-          ),
+          registration: this.bindTaskRegistration(profiles, subagents),
           summarize: bindToolOutputSummary(
             () => {
               this.assertConversationOpen();
@@ -403,9 +398,6 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
   private bindTaskRegistration(
     profiles: ProfileDefinitionReads,
     subagents: SubagentDefinitionReads,
-    transform:
-      | ((bound: TaskToolRegistration) => TaskToolRegistration)
-      | undefined,
   ): TaskToolRegistration {
     const workspace = this.boundWorkspace;
     if (workspace === undefined)
@@ -447,14 +439,13 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
         ).assemble();
       },
     });
-    const bound = createTaskRegistration(this.config, {
+    return createTaskRegistration(this.config, {
       launchChild: orchestrator.launch.bind(orchestrator),
       messageBus: bus,
       readTaskPolicy: () => this.settingsOwner.readTaskPolicy(),
       readGovernance: () => this.toolCatalog.readGovernance(),
       toolRegistry: this.toolCatalog.selection,
     });
-    return transform === undefined ? bound : transform(bound);
   }
 
   private bindSessionApproval(workspace: McpRuntimeOwner) {

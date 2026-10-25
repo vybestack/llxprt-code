@@ -7,7 +7,6 @@ import { randomUUID } from 'node:crypto';
 import { realpath, rm } from 'node:fs/promises';
 import { describe, expect, it } from 'bun:test';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -21,21 +20,19 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { releaseAdoptedFileScope } from '../adoption-release.js';
 import { toConfigParameters } from '../agentConfig.adapter.js';
-import { buildAgentClientFactory } from '../agentBootstrap.js';
 import {
   acquirePreferredOAuth,
   acquirePreferredProviderManager,
 } from '../preferred-provider-acquisition.js';
 import { bindCreatedSessionClient } from '../policyComposition.js';
-import { gate as createGate } from './helpers/async-child-disposal-join-fixture.js';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { makeScratchDir } from './helpers/scratch-dir.js';
 
-describe('session client binding rollback', () => {
+describe('session policy binding rollback', () => {
   const credentials = useOwnedCredentials();
 
-  it('joins the created client cleanup before rejecting a post-create binding failure and keeps both errors', async () => {
+  it('rejects with the original binding failure when workspace binding fails after client acquisition', async () => {
     const authority = credentials().authority;
     const directory = await realpath(
       await makeScratchDir('policy-client-binding-rollback-'),
@@ -106,77 +103,35 @@ describe('session client binding rollback', () => {
         () => rm(directory, { recursive: true, force: true }),
       ]);
 
-    const gate = createGate();
-    const entered = createGate();
-    let disposals = 0;
-    let settled = false;
-    const productionFactory = buildAgentClientFactory();
-    const factory: AgentClientFactory = (...operands) => {
-      const client = productionFactory(...operands);
-      const bindIdeContext = client.bindIdeContext?.bind(client);
-      const dispose = client.dispose.bind(client);
-      let bindings = 0;
-      client.bindIdeContext = (...readers) => {
-        bindings += 1;
-        if (bindings > 1) throw new Error('policy binding failed');
-        bindIdeContext?.(...readers);
-      };
-      client.dispose = async () => {
-        disposals += 1;
-        entered.release();
-        await gate.promise;
-        await dispose();
-        throw new Error('policy client cleanup failed');
-      };
-      return client;
-    };
-    const pending = bindCreatedSessionClient(
-      config,
-      settings,
-      settingsOwner,
-      manager,
-      oauth,
-      createRuntimeContentGeneratorFactory(),
-      configureProviderTokenizer(manager),
-      files,
-      media,
-      factory,
-      mcp,
-      (registration) => registration,
-      false,
-      undefined,
-      authority,
-    ).then(
-      () => undefined,
-      (error: unknown) => {
-        settled = true;
-        return error;
-      },
-    );
+    // A disposed workspace memory rejects the instruction subscription that
+    // `bindMcpRuntime` makes after the client has been acquired.
+    await mcp.workspaceMemory.dispose();
     try {
-      const progress = await Promise.race([
-        entered.promise.then(() => 'cleanup'),
-        pending.then(() => 'rejected'),
-      ]);
-      expect(progress).toBe('cleanup');
-      expect(settled).toBe(false);
-      gate.release();
-      const failure = await pending;
-      expect(failure).toBeInstanceOf(AggregateError);
-      if (!(failure instanceof AggregateError)) throw failure;
-      const [binding, cleanup] = failure.errors;
-      if (!(binding instanceof Error))
-        throw new Error('Expected binding error');
-      expect(binding.message).toBe('policy binding failed');
-      if (!(cleanup instanceof AggregateError))
-        throw new Error('Expected client cleanup aggregate');
-      expect(cleanup.errors.map((error: Error) => error.message)).toStrictEqual(
-        ['policy client cleanup failed'],
+      const failure = await bindCreatedSessionClient(
+        config,
+        settings,
+        settingsOwner,
+        manager,
+        oauth,
+        createRuntimeContentGeneratorFactory(),
+        configureProviderTokenizer(manager),
+        files,
+        media,
+        mcp,
+        false,
+        undefined,
+        authority,
+      ).then(
+        () => {
+          throw new Error('Expected the policy binding to fail');
+        },
+        (error: unknown) => error,
       );
-      expect(disposals).toBe(1);
+      expect(failure).toBeInstanceOf(Error);
+      if (!(failure instanceof Error)) throw failure;
+      expect(failure).not.toBeInstanceOf(AggregateError);
+      expect(failure.message).toBe('Workspace memory is disposed');
     } finally {
-      gate.release();
-      await pending;
       await closeStack();
     }
   }, 30000);

@@ -14,7 +14,6 @@ import type {
   RuntimeProviderManager,
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core';
-import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { RuntimeSettingsState } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
@@ -63,9 +62,7 @@ export async function bindCreatedSessionClient(
   tokenizerFactory: RuntimeTokenizerFactory,
   providerFileLifecycle: ProviderFileLifecycle,
   media: SessionMediaOwner,
-  factory: AgentClientFactory | undefined,
   mcp: McpRuntimeOwner,
-  registration: Parameters<SessionClientOwner['bindMcpRuntime']>[1],
   forceConfirmations: boolean,
   imageOperation: AgentConfig['imageOperation'],
   authority: CredentialAuthority,
@@ -80,7 +77,7 @@ export async function bindCreatedSessionClient(
     tokenizerFactory,
     providerFileLifecycle,
     media.store,
-    factory,
+    undefined,
     mcp.readInstructions,
     mcp.workspacePaths,
     authority,
@@ -88,7 +85,7 @@ export async function bindCreatedSessionClient(
     imageOperation,
   );
   try {
-    client.bindMcpRuntime(mcp, registration);
+    client.bindMcpRuntime(mcp);
     client.bindHooks();
     if (forceConfirmations)
       injectConfirmationForcingPolicy({

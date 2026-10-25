@@ -184,7 +184,6 @@ export class AgentActivationBootstrap
       client.bindHostGitHub(broker);
       client.bindMcpRuntime(
         this.foregroundMcp,
-        undefined,
         this.foregroundMcp.profileDefinitions,
         this.foregroundMcp.subagentDefinitions,
       );
