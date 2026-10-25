@@ -43,6 +43,7 @@ import {
 let chatsDir: string;
 let lockHandles: LockHandle[];
 let recordingsToDispose: SessionRecordingPort[];
+const historiesToDispose: HistoryService[] = [];
 describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
   const setup = new ResumeTestSetup();
 
@@ -53,7 +54,10 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
     recordingsToDispose = setup.recordingsToDispose;
   });
 
-  afterEach(() => setup.afterEach());
+  afterEach(async () => {
+    for (const history of historiesToDispose.splice(0)) await history.dispose();
+    await setup.afterEach();
+  });
 
   describe('Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
     /**
@@ -372,6 +376,7 @@ async function verifyRestoresExactPriorHistoryWhenAReplacementListenerThrows() {
     makeContent('previous second', 'ai'),
   ];
   const historyService = new HistoryService();
+  historiesToDispose.push(historyService);
   historyService.addAll(previousHistory);
   await historyService.waitForTokenUpdates();
   let shouldThrow = true;
@@ -417,6 +422,7 @@ async function testSwapRollbackFailures(): Promise<void> {
     contents: [makeContent('replacement history')],
   });
   const historyService = new HistoryService();
+  historiesToDispose.push(historyService);
   historyService.add(makeContent('previous history'));
   const context = makeResumeContext(chatsDir, {
     currentSessionId: 'current-before-independent-rollback',
@@ -474,6 +480,7 @@ async function verifyCleansThePreparedRecordingWhenRollbackHistoryRestorationThr
   });
 
   const historyService = new HistoryService();
+  historiesToDispose.push(historyService);
   historyService.add(makeContent('previous history'));
   const adoptJournal = JournalHistoryStore.prototype.adoptJournal;
   const rollbackFailure = vi
