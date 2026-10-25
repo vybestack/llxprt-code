@@ -13,6 +13,7 @@ import {
   getProjectHash,
   writeToStdout,
 } from '@vybestack/llxprt-code-core';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import type { BucketFailoverRuntime } from '../ui/cliUiRuntime.js';
 
 import React, { type ErrorInfo } from 'react';
@@ -375,7 +376,18 @@ function setupTerminalExitHandlers(
   process.on('exit', restoreTerminalProtocolsSync);
 }
 
+/**
+ * The key storage handle created for one interactive UI root by the credential
+ * authority. It is released by exactly one owner at a time: the pre-commit
+ * catch in {@link startInteractiveUI}, then the rollback of
+ * {@link commitInteractiveStartup}, then the published instance's teardown.
+ */
+export type InteractiveProviderKeys = ProviderKeyStorageLike & {
+  close(): void;
+};
+
 export interface OwnerInteractiveStartup {
+  readonly providerKeys: InteractiveProviderKeys;
   readonly runtimeSettings: SessionSettingsOperations;
   readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
   readonly skillOperations?: Pick<
@@ -388,6 +400,7 @@ export interface OwnerInteractiveStartup {
 }
 
 export interface RawInteractiveStartup {
+  readonly providerKeys: InteractiveProviderKeys;
   readonly recordingOwner: 'raw';
   readonly runtimeSettings: SessionSettingsOperations;
   readonly sessionPersistence: CliSessionPersistencePort | undefined;
@@ -412,16 +425,12 @@ export async function startInteractiveUI(
     throw new Error(
       'Raw interactive startup requires its own CLI session persistence',
     );
-  const version = await initializeInteractivePresentation(
-    workspaceRoot,
-    settings,
-  );
-  await replacePreviousInstanceAndOwner();
-  const perfOwner = await buildAndStartPerfOwner(
+  const { version, perfOwner } = await prepareInteractiveStartup(
     config,
     agent,
     settings,
-    version,
+    workspaceRoot,
+    startup.providerKeys,
   );
   return commitInteractiveStartup({
     config,
@@ -432,6 +441,45 @@ export async function startInteractiveUI(
     startupWarnings,
     ...startup,
   });
+}
+
+/**
+ * Runs the stages before {@link commitInteractiveStartup} takes the key handle.
+ * Until the commit starts, this function is the handle's only owner, so a
+ * failure in any stage closes it once and rethrows the stage's error; a close
+ * failure is joined behind the primary error.
+ */
+async function prepareInteractiveStartup(
+  config: Config,
+  agent: Agent,
+  settings: LoadedSettings,
+  workspaceRoot: string,
+  providerKeys: InteractiveProviderKeys,
+): Promise<{ version: string; perfOwner: InteractivePerfRuntime | null }> {
+  try {
+    const version = await initializeInteractivePresentation(
+      workspaceRoot,
+      settings,
+    );
+    await replacePreviousInstanceAndOwner();
+    const perfOwner = await buildAndStartPerfOwner(
+      config,
+      agent,
+      settings,
+      version,
+    );
+    return { version, perfOwner };
+  } catch (primaryError) {
+    try {
+      providerKeys.close();
+    } catch (closeError) {
+      throw new AggregateError(
+        [primaryError, closeError],
+        'interactive startup failed and its key handle did not close',
+      );
+    }
+    throw primaryError;
+  }
 }
 
 /**
@@ -502,7 +550,7 @@ const defaultStartupPorts: InteractiveStartupPorts = {
  * mouse. `instance` is undefined until render succeeds.
  */
 interface StartupTransactionState {
-  readonly owner: InteractiveOwnerCapability | null;
+  readonly owner: InteractiveOwnerCapability;
   mouseStaged: boolean;
   instance: InteractiveInstanceCapability | undefined;
 }
@@ -522,6 +570,7 @@ export type CommitInteractiveStartupArgs = {
   readonly agent: Agent;
   readonly settings: LoadedSettings;
   readonly perfOwner: InteractivePerfRuntime | null;
+  readonly providerKeys: InteractiveProviderKeys;
   readonly version: string;
   readonly startupWarnings: string[];
   readonly ports?: Partial<InteractiveStartupPorts>;
@@ -577,6 +626,38 @@ function composeUiBucketOperations(
     : {};
 }
 
+/**
+ * The one owner capability a published interactive instance carries: the perf
+ * owner (when perf is enabled) is disposed first, then the key handle is
+ * closed. Both steps always run; their errors surface together.
+ */
+function composeInstanceOwner(
+  perfOwner: InteractiveOwnerCapability | null,
+  providerKeys: InteractiveProviderKeys,
+): InteractiveOwnerCapability {
+  return {
+    dispose: async () => {
+      const errors: unknown[] = [];
+      if (perfOwner !== null) {
+        try {
+          await perfOwner.dispose();
+        } catch (err) {
+          errors.push(err);
+        }
+      }
+      try {
+        providerKeys.close();
+      } catch (err) {
+        errors.push(err);
+      }
+      if (errors.length === 1) throw errors[0];
+      if (errors.length > 1) {
+        throw new AggregateError(errors, 'interactive owner disposal failed');
+      }
+    },
+  };
+}
+
 function startupBucketOperations(args: CommitInteractiveStartupArgs) {
   return composeUiBucketOperations(args.config, args.agent.authentication);
 }
@@ -595,6 +676,7 @@ function startupCommandRuntimes(
   const slashCommandRuntime = ports.buildSlashRuntime(
     args.config,
     args.agent,
+    args.providerKeys,
     args.perfOwner?.snapshotCapability ?? null,
     args.recordingOwner === 'agent' ? undefined : args.sessionPersistence,
     operations,
@@ -613,7 +695,7 @@ export async function commitInteractiveStartup(
     ...args.ports,
   };
   const state: StartupTransactionState = {
-    owner: args.perfOwner,
+    owner: composeInstanceOwner(args.perfOwner, args.providerKeys),
     mouseStaged: false,
     instance: undefined,
   };
@@ -669,7 +751,7 @@ export async function commitInteractiveStartup(
         projectRoot: args.config.getProjectRoot(),
         debugMode: args.config.getDebugMode(),
       },
-      args.perfOwner,
+      state.owner,
     );
 
     return state.instance;
@@ -697,7 +779,7 @@ async function setupInstanceLifecycle(
   instance: InteractiveInstanceCapability,
   settings: LoadedSettings,
   runtimeScalars: { projectRoot: string; debugMode: boolean },
-  perfOwner: InteractivePerfRuntime | null,
+  owner: InteractiveOwnerCapability,
 ): Promise<void> {
   checkForUpdates(settings)
     .then((info) => {
@@ -715,7 +797,7 @@ async function setupInstanceLifecycle(
   // we only track the new instance and register the cleanup callback.
 
   latestInstance = instance;
-  latestPerfOwner = perfOwner;
+  latestPerfOwner = owner;
   if (!cleanupRegistered) {
     cleanupRegistered = true;
     // Registered global cleanup uses the SAME capture+clear+dispose helper as

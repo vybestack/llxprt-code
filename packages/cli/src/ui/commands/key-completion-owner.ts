@@ -39,20 +39,15 @@ export class KeyCompletionOwner {
 }
 
 export function createKeyCommandReads(
-  readStorage: (() => ProviderKeyStorageLike) | undefined,
+  readStorage: () => ProviderKeyStorageLike,
 ): {
   getProviderKeys(): ProviderKeyStorageLike;
   listKeyCompletionNames(): Promise<readonly string[]>;
   invalidateKeyCompletion(): void;
 } {
-  const requiredStorage = (): ProviderKeyStorageLike => {
-    if (!readStorage)
-      throw new Error('Key commands require an explicit credential owner');
-    return readStorage();
-  };
-  const owner = new KeyCompletionOwner(requiredStorage);
+  const owner = new KeyCompletionOwner(readStorage);
   return {
-    getProviderKeys: requiredStorage,
+    getProviderKeys: readStorage,
     listKeyCompletionNames: () => owner.list(),
     invalidateKeyCompletion: () => owner.invalidate(),
   };

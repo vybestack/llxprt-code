@@ -286,7 +286,7 @@ class ForegroundSessionHost {
     getMcpAuthProviderFactory: NonNullable<
       AgentForegroundHost['mcpHost']
     >['getAuthProviderFactory'],
-    credentialAuthority: CredentialAuthority,
+    private readonly credentialAuthority: CredentialAuthority,
   ) {
     configureUnicodeSupport(settings.merged.ui.unicode ?? 'auto');
     const receipt = providerActivation.token;
@@ -464,6 +464,7 @@ class ForegroundSessionHost {
       warnings,
       this.workspaceRoot,
       {
+        providerKeys: this.credentialAuthority.createProviderKeyStorage(),
         recordingOwner: 'agent',
         runtimeSettings: this.preflight,
         skillOperations: this.#skillOperations,

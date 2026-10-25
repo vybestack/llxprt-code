@@ -17,16 +17,32 @@ import {
   commitInteractiveStartup,
   startInteractiveUI as startOwnedInteractiveUI,
 } from '../session/interactiveUI.js';
+import { InMemoryProviderKeyHandle } from './provider-key-handle-fixture.js';
+
+type WithoutKeys<T> = T extends unknown ? Omit<T, 'providerKeys'> : never;
 
 /**
  * The one place test code starts the interactive UI. Every test that calls
  * `startInteractiveUI` goes through here, so a change to the startup contract
- * is made in this function rather than at each test.
+ * is made in this function rather than at each test. Each start gets its own
+ * in-memory key handle.
  */
 export function startInteractiveUIForTest(
-  ...args: Parameters<typeof startOwnedInteractiveUI>
+  config: Config,
+  agent: Agent,
+  settings: LoadedSettings,
+  startupWarnings: string[],
+  workspaceRoot: string,
+  startup: WithoutKeys<Parameters<typeof startOwnedInteractiveUI>[5]>,
 ): ReturnType<typeof startOwnedInteractiveUI> {
-  return startOwnedInteractiveUI(...args);
+  return startOwnedInteractiveUI(
+    config,
+    agent,
+    settings,
+    startupWarnings,
+    workspaceRoot,
+    { ...startup, providerKeys: new InMemoryProviderKeyHandle() },
+  );
 }
 
 /**
@@ -34,9 +50,12 @@ export function startInteractiveUIForTest(
  * the pre-commit stages of `startInteractiveUI`.
  */
 export function commitInteractiveStartupForTest(
-  ...args: Parameters<typeof commitInteractiveStartup>
+  args: WithoutKeys<Parameters<typeof commitInteractiveStartup>[0]>,
 ): ReturnType<typeof commitInteractiveStartup> {
-  return commitInteractiveStartup(...args);
+  return commitInteractiveStartup({
+    ...args,
+    providerKeys: new InMemoryProviderKeyHandle(),
+  });
 }
 
 type Startup = Parameters<typeof startOwnedInteractiveUI>[5];

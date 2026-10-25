@@ -9,6 +9,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { CliSessionPersistencePort } from '../cliSessionPersistence.js';
 import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFeatures.js';
+import { InMemoryProviderKeyHandle } from './provider-key-handle-fixture.js';
 import type { PerfSnapshotCapability } from '../ui/commands/perfCommand.js';
 import {
   buildSlashCommandRuntime,
@@ -34,10 +35,17 @@ type SlashCommandRuntimeTestArgs = [
 /**
  * The one place test code builds a slash-command runtime. Every test that needs
  * a `CliUiRuntime` goes through here, so a change to what the runtime needs at
- * construction is made in this function rather than at each test.
+ * construction is made in this function rather than at each test. Each runtime
+ * reads keys from its own in-memory store.
  */
 export function buildSlashCommandRuntimeForTest(
   ...args: SlashCommandRuntimeTestArgs
 ): CliUiRuntime {
-  return buildSlashCommandRuntime(...args);
+  const [source, agent, ...rest] = args;
+  return buildSlashCommandRuntime(
+    source,
+    agent,
+    new InMemoryProviderKeyHandle(),
+    ...rest,
+  );
 }

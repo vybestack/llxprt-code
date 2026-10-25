@@ -274,9 +274,9 @@ describe('/key subcommands', () => {
       // Mock non-interactive: config.isInteractive returns false
       context.services.config = composeFixtureRuntime({
         ...context.services.config,
-        getProviderKeys: () => mockStorage,
         isInteractive: () => false,
       } as unknown as Config);
+      context.services.config.getProviderKeys = () => mockStorage;
 
       const result = await runKey('save existing new-key-value');
       expect(result.type).toBe('message');
@@ -483,9 +483,9 @@ describe('/key subcommands', () => {
       await mockStorage.saveKey('mykey', 'sk-value123');
       context.services.config = composeFixtureRuntime({
         ...context.services.config,
-        getProviderKeys: () => mockStorage,
         isInteractive: () => false,
       } as unknown as Config);
+      context.services.config.getProviderKeys = () => mockStorage;
 
       const result = await runKey('delete mykey');
       expect(result.type).toBe('message');

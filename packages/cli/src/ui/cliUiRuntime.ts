@@ -427,9 +427,7 @@ export interface UiRuntimeBareSource
   extends StreamRuntimeBareSource,
     ApprovalState,
     ExtensionRuntime,
-    AppStateRuntime {
-  getProviderKeys?(): ProviderKeyStorageLike;
-}
+    AppStateRuntime {}
 
 export type StreamRuntimeDeclarationSource = Omit<
   StreamRuntimeBareSource,
@@ -815,6 +813,7 @@ export function buildSlashCommandRuntime(
     tools: Pick<Agent['tools'], 'describeConfiguration' | 'get'>;
     mcp: McpUiSelection;
   },
+  providerKeys: ProviderKeyStorageLike,
   perfSnapshotCapability?: PerfSnapshotCapability | null,
   sessionPersistence?: CliSessionPersistencePort,
   bucketFailover?: BucketFailoverRuntime,
@@ -851,7 +850,7 @@ export function buildSlashCommandRuntime(
       historyFilePath,
       userCommandsDir,
       projectCommandsDir,
-      ...createKeyCommandReads(source.getProviderKeys?.bind(source)),
+      ...createKeyCommandReads(() => providerKeys),
       describeToolConfiguration: () => agent.tools.describeConfiguration(),
     },
     restartExtension !== undefined ? { restartExtension } : {},
