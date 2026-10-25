@@ -8,6 +8,8 @@ import type {
   RepairMessage,
 } from './anthropic-repair-source.js';
 import { AnthropicViewCoordinates } from './anthropic-view-coordinates.js';
+import { convertContentToMessages } from './AnthropicMessageNormalizer.js';
+import { selectLastCacheableBlockIndex } from './AnthropicRequestBuilder.js';
 
 export interface AnthropicSpan {
   readonly start: number;
@@ -153,6 +155,17 @@ export class AnthropicSpanPlan {
       this.coordinates.forward(window[1] - 1) + 1,
     );
   }
+  private async hasCacheAnchor(at: number): Promise<boolean> {
+    const row = await this.source.row(at);
+    if (row === undefined || row.metadata?.cacheAnchor !== true) return false;
+    return convertContentToMessages([row], new Set(), this.source.options).some(
+      (message) =>
+        typeof message.content === 'string'
+          ? message.content.trim() !== ''
+          : selectLastCacheableBlockIndex(message.content) >= 0,
+    );
+  }
+
   private async firstCacheAnchor(count: number): Promise<number | undefined> {
     for (let ordinal = 0; ordinal < count; ordinal++) {
       const anchor = await this.index.facts.get(['cache-anchor', ordinal]);
@@ -170,8 +183,7 @@ export class AnthropicSpanPlan {
         this.coordinates.forward(anchor[1] - 1) + 1,
       );
       for (let at = this.coordinates.forward(anchor[0]); at < end; at++)
-        if ((await this.query.planAt(at)).header.metadata?.cacheAnchor === true)
-          return anchor[0];
+        if (await this.hasCacheAnchor(at)) return anchor[0];
     }
     return undefined;
   }
