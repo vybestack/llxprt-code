@@ -94,6 +94,7 @@ function createStubGenerator(label: string): ContentGenerator {
 
 async function withClosedHistoryHandles(
   work: () => Promise<void>,
+  startup: 'opened' | 'unopened' = 'opened',
 ): Promise<void> {
   const open = fsPromises.open;
   const handles: fsPromises.FileHandle[] = [];
@@ -106,7 +107,8 @@ async function withClosedHistoryHandles(
     });
   try {
     await work();
-    expect(handles.length).toBeGreaterThan(0);
+    if (startup === 'unopened') expect(handles.length).toBe(0);
+    else expect(handles.length).toBeGreaterThan(0);
     for (const handle of handles) {
       await expect(handle.stat()).rejects.toMatchObject({ code: 'EBADF' });
     }
@@ -693,7 +695,7 @@ describe('AgentRuntimeLoader', () => {
       ).rejects.toThrow(
         'No provider runtime is composed for this Config. Compose the providers package (see packages/providers/src/composition) before creating a content generator.',
       );
-    });
+    }, 'unopened');
   });
 
   it('throws when providerManager is present but contentGeneratorFactory is missing and Config has no factory', async () => {
