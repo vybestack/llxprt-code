@@ -24,17 +24,28 @@ describe('fan-out detach and detailed commit', () => {
 
   it('returns the versions around the group it committed, with and without mirrors', async () => {
     const rig = await rigWithMirrors(directory(), [A], { attach: false });
-    const bare = await rig.fanout.commitDetailed([rows('bare')]);
-    expect(bare.before).toBeUndefined();
-    expect(bare.after.rows).toBe(3);
+    try {
+      const bare = await rig.fanout.commitDetailed([rows('bare')]);
+      try {
+        expect(bare.before).toBeUndefined();
+        expect(bare.after.rows).toBe(3);
+      } finally {
+        await bare.close();
+      }
 
-    await rig.fanout.attach(rig.mirrors.get(A)!, A);
-    const mirrored = await rig.fanout.commitDetailed([rows('mirrored')]);
-    expect(mirrored.before?.rows).toBe(3);
-    expect(mirrored.after.rows).toBe(6);
-    await rig.fanout.flush();
-    await expectMirrorEqualsFiltered(rig.primary, rig.mirrors.get(A)!, A);
-    await rig.closeAll();
+      await rig.fanout.attach(rig.mirrors.get(A)!, A);
+      const mirrored = await rig.fanout.commitDetailed([rows('mirrored')]);
+      try {
+        expect(mirrored.before?.rows).toBe(3);
+        expect(mirrored.after.rows).toBe(6);
+      } finally {
+        await mirrored.close();
+      }
+      await rig.fanout.flush();
+      await expectMirrorEqualsFiltered(rig.primary, rig.mirrors.get(A)!, A);
+    } finally {
+      await rig.closeAll();
+    }
   });
 
   it('applies what was delivered before the unbind and nothing after it', async () => {
