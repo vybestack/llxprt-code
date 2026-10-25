@@ -45,11 +45,11 @@ import {
   isTextEvent,
   isToolCallEvent,
   isToolResultEvent,
-  internalConfig,
   ASYNC_PROPERTY_TIMEOUT_MS,
   buildPropertyAgent,
-  registerFakeProviders,
+  scratchWorkspace,
 } from './helpers/agentHarness.js';
+import { buildReplayProviderAgent } from './helpers/replay-provider-agent.js';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
@@ -71,13 +71,9 @@ describe('mutation P23 — target 1: post-auth client guard (createAgent.ts:253-
     }
   }, 30000);
 
-  it('the built agent exposes the genuine Config identity it owns (REQ-001)', async () => {
+  it('the built agent reports the provider and model it was activated with (REQ-001)', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      // The success path binds the createAgent-owned Config (an
-      // AgentBootstrapError on the throw-branch would have rejected the build).
-      const config = internalConfig(agent);
-      expect(config).toBeDefined();
       // A populated provider/model proves the post-auth client is live and
       // the runtime was activated.
       expect(agent.getProvider()).toBe('fake');
@@ -219,9 +215,18 @@ describe('mutation P23 — target 4: seedAuthState equality guards observable vi
 
 describe('mutation P23 — target 5: provider-switch model-change guard (agentImpl.ts:1128-1130) (REQ-005)', () => {
   it('a provider+model switch reflects the NEW model on getModel (model !== undefined && !== current guard) (REQ-005)', async () => {
-    const { agent, cleanup } = await buildAgent(
-      'provider-switch-two-turn.jsonl',
-    );
+    const { agent, cleanup } = await buildReplayProviderAgent({
+      initial: {
+        alias: 'fake',
+        script: { fixtureRelPath: 'provider-switch-two-turn.jsonl' },
+      },
+      targets: [
+        {
+          alias: 'other-provider',
+          script: { fixtureRelPath: 'provider-switch-two-turn.jsonl' },
+        },
+      ],
+    });
     try {
       const beforeModel = agent.getModel();
       expect(beforeModel).toBe('fake-model');
@@ -231,11 +236,6 @@ describe('mutation P23 — target 5: provider-switch model-change guard (agentIm
 
       // Switch provider + model. The model-change guard executes (model is
       // defined AND differs from current) → getModel reflects the new value.
-      registerFakeProviders(
-        agent,
-        ['other-provider'],
-        'provider-switch-two-turn.jsonl',
-      );
       await agent.setProvider('other-provider', 'switched-model');
       expect(agent.getProvider()).toBe('other-provider');
       expect(agent.getModel()).toBe('switched-model');
@@ -350,11 +350,20 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
         .string({ minLength: 1, maxLength: 40 })
         .filter((m) => m.trim() !== '' && m !== 'fake-model'),
       async (model) => {
-        const { agent, cleanup } = await buildPropertyAgent(
-          'provider-switch-two-turn.jsonl',
-        );
+        const { agent, cleanup } = await buildReplayProviderAgent({
+          initial: {
+            alias: 'fake',
+            script: { fixtureRelPath: 'provider-switch-two-turn.jsonl' },
+          },
+          targets: [
+            {
+              alias: 'p',
+              script: { fixtureRelPath: 'provider-switch-two-turn.jsonl' },
+            },
+          ],
+          configOverrides: { workingDir: scratchWorkspace() },
+        });
         try {
-          registerFakeProviders(agent, ['p'], 'provider-switch-two-turn.jsonl');
           await agent.setProvider('p', model);
           return agent.getModel() === model && agent.getProvider() === 'p';
         } finally {
@@ -440,10 +449,20 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
   it(
     'setProvider without a model adopts the new provider default model and never clobbers it with undefined (kills 1139 ConditionalExpression true) (REQ-005)',
     async () => {
-      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+      const { agent, cleanup } = await buildReplayProviderAgent({
+        initial: {
+          alias: 'fake',
+          script: { fixtureRelPath: 'plain-text.jsonl' },
+        },
+        targets: [
+          {
+            alias: 'replay-openai',
+            script: { fixtureRelPath: 'plain-text.jsonl' },
+          },
+        ],
+      });
       try {
-        registerFakeProviders(agent, ['openai'], 'plain-text.jsonl');
-        const result = await agent.setProvider('openai');
+        const result = await agent.setProvider('replay-openai');
         // A real switch selects the new provider's default model.
         expect(result.defaultModel).toBeDefined();
         expect(result.defaultModel).toBe(agent.getModel());
@@ -471,15 +490,31 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
       // Each name is registered on the agent before the switch, so every
       // value performs a real provider switch. Constrain to realistic
       // provider names rather than arbitrary strings.
-      fc.constantFrom('openai', 'anthropic', 'gemini', 'ollama', 'fake'),
+      fc.constantFrom(
+        'replay-openai',
+        'replay-anthropic',
+        'replay-gemini',
+        'replay-ollama',
+        'fake',
+      ),
       async (providerName) => {
-        const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
+        const { agent, cleanup } = await buildReplayProviderAgent({
+          initial: {
+            alias: 'fake',
+            script: { fixtureRelPath: 'plain-text.jsonl' },
+          },
+          targets: [
+            'replay-openai',
+            'replay-anthropic',
+            'replay-gemini',
+            'replay-ollama',
+          ].map((alias) => ({
+            alias,
+            script: { fixtureRelPath: 'plain-text.jsonl' },
+          })),
+          configOverrides: { workingDir: scratchWorkspace() },
+        });
         try {
-          registerFakeProviders(
-            agent,
-            ['openai', 'anthropic', 'gemini', 'ollama'],
-            'plain-text.jsonl',
-          );
           const beforeModel = agent.getModel();
           const result = await agent.setProvider(providerName);
           return (
@@ -548,16 +583,24 @@ describe('mutation P23 — target 7: rebuild propagates approvalHandler (agentIm
   it(
     'onApproval survives setProvider: tool auto-approves on turn 2 after rebuild (REQ-006)',
     async () => {
-      const { agent, cleanup } = await buildAgentFromContent(
-        twoToolFourTurnFixture(),
-        {
+      const { agent, cleanup } = await buildReplayProviderAgent({
+        initial: {
+          alias: 'fake',
+          script: { content: twoToolFourTurnFixture() },
+        },
+        targets: [
+          {
+            alias: 'replay-openai',
+            script: { fixtureRelPath: 'tool-call-then-answer.jsonl' },
+          },
+        ],
+        configOverrides: {
           onApproval: () => ToolConfirmationOutcome.ProceedOnce,
         },
-      );
+      });
       try {
-        registerFakeProviders(agent, ['openai'], 'tool-call-then-answer.jsonl');
         await drain(agent.stream('turn1'));
-        await agent.setProvider('openai');
+        await agent.setProvider('replay-openai');
         const events = await drain(agent.stream('turn2'));
         const results = events.filter(isToolResultEvent);
         const done = events.filter(isDoneEvent);

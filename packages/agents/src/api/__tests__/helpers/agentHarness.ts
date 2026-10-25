@@ -3,12 +3,6 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import {
-  AgentResourceCapture,
-  fixtureAgentResources,
-} from './agent-resource-capture.js';
-export { fixtureAgentResources } from './agent-resource-capture.js';
-
 /**
  * @plan:PLAN-20260617-COREAPI.P11
  * @requirement:REQ-001
@@ -37,13 +31,6 @@ import { resolve, join } from 'node:path';
 import { writeFileSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import {
-  FakeProvider,
-  OpenAIProvider,
-  AnthropicProvider,
-} from '@vybestack/llxprt-code-providers';
-import { vi } from 'bun:test';
 import {
   createAgent,
   type Agent,
@@ -81,9 +68,6 @@ export type {
   DoneReason,
 } from '@vybestack/llxprt-code-agents';
 export { createAgent } from '@vybestack/llxprt-code-agents';
-export function internalConfig(agent: object): Config {
-  return fixtureAgentResources(agent).config;
-}
 
 // ─── Agent construction via the production env seam ─────────────────────────
 
@@ -112,17 +96,7 @@ export async function buildAgent(
   };
   let agent: Agent;
   try {
-    const capture = new AgentResourceCapture();
-    agent = await capture.construct(() =>
-      createAgent({
-        ...baseConfig,
-        ...configOverrides,
-        runtimeFactoryBindings: capture.factories(
-          configOverrides.runtimeFactoryBindings,
-        ),
-      }),
-    );
-    capture.bindAgent(agent);
+    agent = await createAgent({ ...baseConfig, ...configOverrides });
   } catch (error) {
     // createAgent failed before a cleanup could be returned — restore the env
     // var so the mutation does not leak into later tests, then rethrow.
@@ -151,85 +125,7 @@ export {
   FIXTURES_DIR as fixturesDir,
 };
 
-/**
- * Registers one FakeProvider per name on the agent's provider manager, each
- * replaying `fixtureRelPath` from its first line. A test that switches to one
- * of these names performs a real provider switch, the way production does for
- * a registered provider.
- */
-export function registerFakeProviders(
-  agent: Agent,
-  names: readonly string[],
-  fixtureRelPath: string,
-): void {
-  const config = internalConfig(agent);
-  const manager = fixtureAgentResources(agent).manager;
-  for (const name of names) {
-    const provider = new FakeProvider(
-      resolve(FIXTURES_DIR, fixtureRelPath),
-      config.getTargetDir(),
-    );
-    provider.name = name;
-    manager.registerProvider(provider);
-  }
-}
-
-export async function buildProfileAgent(
-  fixtureRelPath: string,
-): Promise<BuiltAgent> {
-  const built = await buildAgent(fixtureRelPath);
-  registerFakeProviders(built.agent, ['openai', 'anthropic'], fixtureRelPath);
-  const keys = vi
-    .spyOn(
-      fixtureAgentResources(built.agent).manager.getProviderKeys(),
-      'getKey',
-    )
-    .mockImplementation(async (name) => {
-      if (name !== 'openai-prod' && name !== 'anthropic-prod')
-        throw new Error(`Unexpected fixture key: ${name}`);
-      return `fixture-credential-${name}`;
-    });
-  return {
-    agent: built.agent,
-    cleanup: async () => {
-      keys.mockRestore();
-      await built.cleanup();
-    },
-  };
-}
-
 export { TEMP_ROOT as tempRoot };
-
-export async function buildProfilesAgent(
-  fixtureRelPath: string,
-): Promise<BuiltAgent> {
-  const built = await buildAgent(fixtureRelPath);
-  const manager = fixtureAgentResources(built.agent).manager;
-
-  manager.registerProvider(new OpenAIProvider('local-test-key'));
-  manager.registerProvider(new AnthropicProvider('local-test-key'));
-  const keys = vi
-    .spyOn(
-      fixtureAgentResources(built.agent).manager.getProviderKeys(),
-      'getKey',
-    )
-    .mockImplementation(async (name) => {
-      if (
-        name !== 'openai-prod' &&
-        name !== 'anthropic-prod' &&
-        name !== 'saved-key-ref'
-      )
-        throw new Error(`Unexpected fixture key: ${name}`);
-      return `fixture-credential-${name}`;
-    });
-  return {
-    agent: built.agent,
-    cleanup: async () => {
-      keys.mockRestore();
-      await built.cleanup();
-    },
-  };
-}
 
 /**
  * Builds an agent backed by an inline (programmatic) JSONL content string,
@@ -258,17 +154,7 @@ export async function buildAgentFromContent(
   };
   let agent: Agent;
   try {
-    const capture = new AgentResourceCapture();
-    agent = await capture.construct(() =>
-      createAgent({
-        ...baseConfig,
-        ...configOverrides,
-        runtimeFactoryBindings: capture.factories(
-          configOverrides.runtimeFactoryBindings,
-        ),
-      }),
-    );
-    capture.bindAgent(agent);
+    agent = await createAgent({ ...baseConfig, ...configOverrides });
   } catch (error) {
     // createAgent failed before a cleanup could be returned — restore the env
     // var and remove the temp dir so neither leaks into later tests, then
@@ -303,7 +189,7 @@ let scratchWorkspaceDir: string | undefined;
  * (the test tree inside the repository) makes every generated case admit and
  * scan that tree, which dominates a property's time on slow filesystems.
  */
-function scratchWorkspace(): string {
+export function scratchWorkspace(): string {
   scratchWorkspaceDir ??= realpathSync(
     mkdtempSync(join(TEMP_ROOT, 'property-workspace-')),
   );
@@ -515,20 +401,6 @@ export const DONE_REASONS: readonly DoneReason[] = [
   'hook-stopped',
   'refusal',
 ];
-
-// ─── HistoryService identity (T4d/T4e) ──────────────────────────────────────
-//
-// The product-critical guarantee for provider/profile switching is that the
-// SAME HistoryService instance is reused across a switch — IDENTITY, not equal
-// contents. The public Agent surface has no HistoryService accessor (it is an
-// internal-only seam), so the reach happens here via documented structural
-export function captureHistoryServiceIdentity(agent: Agent): unknown {
-  const client = fixtureAgentResources(agent).publishedClient(agent);
-  const history = client.getHistoryService();
-  if (history === null)
-    throw new Error('Captured client has no initialized or retained history');
-  return history;
-}
 
 export function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;

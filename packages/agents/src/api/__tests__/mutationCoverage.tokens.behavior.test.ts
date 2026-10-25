@@ -38,8 +38,8 @@ import {
   isTextEvent,
   ASYNC_PROPERTY_TIMEOUT_MS,
   buildPropertyAgent,
-  registerFakeProviders,
 } from './helpers/agentHarness.js';
+import { buildReplayProviderAgent } from './helpers/replay-provider-agent.js';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 
 const MODEL_PARAM_KEY_ARBITRARY = fc
@@ -239,15 +239,19 @@ describe('mutation P23.b — generate side-channel (REQ-002)', () => {
 
 describe('mutation P23.b — restoreChatVisibility switch continuity (REQ-005)', () => {
   it('after a provider+model switch, a second turn produces real text + one done (carriedHistory path) (REQ-005)', async () => {
-    const { agent, cleanup } = await buildAgent(
-      'provider-switch-two-turn.jsonl',
-    );
+    const { agent, cleanup } = await buildReplayProviderAgent({
+      initial: {
+        alias: 'fake',
+        script: { fixtureRelPath: 'provider-switch-two-turn.jsonl' },
+      },
+      targets: [
+        {
+          alias: 'newprov',
+          script: { fixtureRelPath: 'provider-switch-second-turn.jsonl' },
+        },
+      ],
+    });
     try {
-      registerFakeProviders(
-        agent,
-        ['newprov'],
-        'provider-switch-second-turn.jsonl',
-      );
       const e1: AgentEvent[] = await drain(agent.stream('turn one'));
       expect(countType(e1, 'done')).toBe(1);
       await agent.setProvider('newprov', 'newmodel');

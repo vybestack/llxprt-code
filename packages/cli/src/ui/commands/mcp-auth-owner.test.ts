@@ -6,14 +6,14 @@
 
 import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { describe, expect, it, spyOn } from 'bun:test';
-import {
-  buildAgent,
-  internalConfig,
-} from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
+import { openRouteAAgent } from '../../../../agents/src/api/__tests__/helpers/route-a-agent.js';
+import { useFakeResponsesReplay } from '../../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { registerMcpCommand } from '../../__tests__/credential-command-test-owner.js';
 
 describe('CLI MCP authentication', () => {
+  useFakeResponsesReplay('multi-turn-text.jsonl');
+
   it('belongs to the public Agent disposal lifetime', async () => {
     let enter = (): void => {};
     const entered = new Promise<void>((resolve) => {
@@ -38,11 +38,13 @@ describe('CLI MCP authentication', () => {
         { preconnect: () => {} },
       ),
     );
-    const built = await buildAgent('multi-turn-text.jsonl', {
-      folderTrust: false,
-      mcpServers: { shared: { httpUrl: 'https://mcp-owner.test/mcp' } },
-      telemetry: { enabled: false },
-      recording: { enabled: false },
+    const built = await openRouteAAgent({
+      config: {
+        folderTrust: false,
+        mcpServers: { shared: { httpUrl: 'https://mcp-owner.test/mcp' } },
+        telemetry: { enabled: false },
+        recording: { enabled: false },
+      },
     });
     const base = createMockCommandContext();
     const context = {
@@ -50,10 +52,7 @@ describe('CLI MCP authentication', () => {
       services: {
         ...base.services,
         agent: built.agent,
-        config: buildSlashCommandRuntimeForTest(
-          internalConfig(built.agent),
-          built.agent,
-        ),
+        config: buildSlashCommandRuntimeForTest(built.config, built.agent),
       },
     };
     const messages: unknown[] = [];
@@ -93,7 +92,7 @@ describe('CLI MCP authentication', () => {
       release();
       await work;
       await disposal;
-      await built.cleanup();
+      await built.close();
       network.mockRestore();
     }
   }, 30000);

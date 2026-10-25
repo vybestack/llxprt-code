@@ -6,9 +6,9 @@
 import { describe, expect, it, vi } from 'bun:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { replaySession } from '@vybestack/llxprt-code-core';
-import { buildAgent, internalConfig } from './helpers/agentHarness.js';
+import { buildAgent } from './helpers/agentHarness.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 function content(text: string): IContent {
@@ -26,14 +26,17 @@ describe('adopted recording instance path', () => {
       workingDir,
       sessionId: 'recording-source-label',
     });
-    const chatsDir = internalConfig(source.agent).projectChatsDir;
-    const projectTemp = internalConfig(source.agent).projectTempDir;
+    let projectTemp: string | undefined;
     try {
       await source.agent.setHistory([content('source history')]);
       await source.agent.session.setRecording({ enabled: true });
       const originalPath = source.agent.session.getRecording().path;
       if (originalPath === undefined)
         throw new Error('Missing source recording');
+      // The recording lives in the project's chats directory, which sits
+      // directly under the project temp directory.
+      const chatsDir = dirname(originalPath);
+      projectTemp = dirname(chatsDir);
       await source.agent.session.setRecording({ enabled: false });
       const owner = await buildAgent('multi-turn-text.jsonl', {
         workingDir,
@@ -72,14 +75,17 @@ describe('adopted recording instance path', () => {
           { seq: 5, type: 'content' },
         ]);
         expect(await owner.agent.session.listSessions()).toHaveLength(1);
-        expect(chatsDir).toBe(internalConfig(owner.agent).projectChatsDir);
+        if (restartedPath === undefined)
+          throw new Error('Missing restarted recording');
+        expect(dirname(restartedPath)).toBe(chatsDir);
       } finally {
         await owner.cleanup();
       }
     } finally {
       await source.cleanup();
       vi.restoreAllMocks();
-      await rm(projectTemp, { recursive: true, force: true });
+      if (projectTemp !== undefined)
+        await rm(projectTemp, { recursive: true, force: true });
       await rm(workingDir, { recursive: true, force: true });
     }
   }, 30000);

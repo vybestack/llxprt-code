@@ -28,7 +28,6 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { EventEmitter } from 'node:events';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
@@ -37,7 +36,6 @@ import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
 import {
   buildAgent,
   drain,
-  captureHistoryServiceIdentity,
   respondToFirstConfirmation,
   ToolConfirmationOutcome,
 } from './helpers/agentHarness.js';
@@ -58,20 +56,6 @@ function textMessage(role: 'user' | 'model', text: string): AgentMessage {
 function storageTempDirFor(workingDir: string): string {
   const hash = createHash('sha256').update(workingDir).digest('hex');
   return join(homedir(), '.llxprt', 'tmp', hash);
-}
-
-/**
- * Reaches the Agent's live HistoryService as an EventEmitter via the same
- * documented internal probe the harness uses (captureHistoryServiceIdentity).
- * HistoryService extends EventEmitter, so listenerCount is a genuine public
- * observable for subscribe/unsubscribe assertions.
- */
-function historyEmitter(agent: Agent): EventEmitter {
-  const hs = captureHistoryServiceIdentity(agent);
-  if (!(hs instanceof EventEmitter)) {
-    throw new Error('HistoryService not reachable as EventEmitter');
-  }
-  return hs;
 }
 
 /**
@@ -273,22 +257,29 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
         return { path, raw, callBlock, responseBlock };
       });
 
-  it('teardown unsubscribes the RecordingIntegration from the HistoryService (no leaked listener) @requirement:REQ-010', async () => {
+  it('teardown retires the recording subscription: content added after setRecording(false) never reaches the file @requirement:REQ-010', async () => {
     await withIsolatedAgent('plain-text.jsonl', async (agent) => {
-      // Warm up so the chat + reused HistoryService are materialized and the
-      // identity probe returns a stable EventEmitter.
+      // Warm up so the chat and its history are materialized.
       await drain(agent.stream('warm up the history service'));
-      const emitter = historyEmitter(agent);
-      const baseline = emitter.listenerCount('contentAdded');
 
       await agent.session.setRecording({ enabled: true });
-      // Enabling subscribes exactly one additional 'contentAdded' listener.
-      expect(emitter.listenerCount('contentAdded')).toBe(baseline + 1);
+      const path = agent.session.getRecording().path ?? '';
+      expect(path.length).toBeGreaterThan(0);
 
+      // While enabled, new history content is delivered to the file.
+      await agent.addHistory(
+        textMessage('user', 'added-while-recording-sentinel'),
+      );
       await agent.session.setRecording({ enabled: false });
-      // Disabling disposes the integration, returning the listener count to the
-      // pre-enable baseline (no leaked subscription).
-      expect(emitter.listenerCount('contentAdded')).toBe(baseline);
+      const afterDisable = readFileSync(path, 'utf8');
+      expect(afterDisable).toContain('added-while-recording-sentinel');
+
+      // After the teardown the subscription is gone: later content is not
+      // delivered to the retired recording.
+      await agent.addHistory(
+        textMessage('user', 'added-after-teardown-sentinel'),
+      );
+      expect(readFileSync(path, 'utf8')).toBe(afterDisable);
     });
   });
 });

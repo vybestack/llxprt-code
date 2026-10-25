@@ -76,7 +76,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
       runCleanupSteps([() => referenceOwner.dispose(), () => opened.close()]);
   }
 
-  it('T3 internalConfig(agent) returns the SAME caller-supplied Config instance (identity) @requirement:REQ-002 @scenario:identity @given:a real CLI-style Config wrapped by fromConfig @when:internalConfig(agent) @then:the returned Config is the SAME instance supplied to fromConfig', async () => {
+  it('T3 the agent reads the SAME caller-supplied Config instance @requirement:REQ-002 @scenario:identity @given:a real CLI-style Config wrapped by fromConfig @when:the approval mode is set on the supplied Config @then:agent.getApprovalMode() reports it', async () => {
     await openCaller();
     try {
       const agent: Agent = built.agent;
