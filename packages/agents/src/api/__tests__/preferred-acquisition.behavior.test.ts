@@ -85,6 +85,40 @@ describe('preferred Agent acquisition release', () => {
     },
   );
 
+  it('releases the transferred image resource when createAgent validation rejects before host acquisition', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'preferred-validation-'));
+    const file = join(directory, 'transferred-image-resource');
+    await writeFile(file, 'actual transferred construction resource');
+    let releases = 0;
+    try {
+      await expect(
+        createAgent({
+          credentialAuthority: credentials().authority,
+          provider: 'openai',
+          model: 'unacquired-model',
+          workingDir: directory,
+          sessionId: '   ',
+          imageOperation: {
+            ownership: 'agent',
+            run: async () => {
+              throw new Error('Validation must not execute image generation');
+            },
+            dispose: async () => {
+              releases++;
+              await unlink(file);
+            },
+          },
+        }),
+      ).rejects.toThrow('Invalid runtimeId');
+      await expect(access(file)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(releases).toBe(1);
+      expect(credentials().keySnapshot()).toStrictEqual([]);
+      expect(credentials().snapshot()).toStrictEqual([]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it('releases acquired key transport before rejecting token acquisition', async () => {
     const primary = new Error('token transport unavailable');
     const authority = new (class extends CredentialAuthority {
