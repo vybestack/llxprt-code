@@ -16,7 +16,11 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/journalOwnedFixture.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
+import {
+  iterateRowEntries,
+  rowTreeRootOf,
+} from '@vybestack/llxprt-code-core/journal/rowTreeReader.js';
 import { OwnerDictionary } from '@vybestack/llxprt-code-core/journal/ownerDictionary.js';
 
 import { applyCompressionValuesWithAnchor } from '../cache-anchor-values.js';
@@ -42,19 +46,21 @@ async function persistedOrigins(
   owned: OwnedJournal,
 ): Promise<Array<string | undefined>> {
   await owned.store.waitForDurable();
-  const session = await JournalSession.open(owned.session.store.path);
+  const reader = await openJournalReadOnly(owned.session.store.path);
   try {
-    const dictionary = await OwnerDictionary.load(session.store);
+    const dictionary = await OwnerDictionary.load(owned.session.store);
     const origins: Array<string | undefined> = [];
-    for await (const { entry } of session.rows()) {
-      origins.push(
-        entry.owner === 0 ? undefined : dictionary.originOf(entry.owner),
-      );
-    }
+    const root = rowTreeRootOf(reader.trailer);
+    if (root !== undefined)
+      for await (const entry of iterateRowEntries(reader, root)) {
+        origins.push(
+          entry.owner === 0 ? undefined : dictionary.originOf(entry.owner),
+        );
+      }
     expect(origins).toStrictEqual(await owned.originsOfRows());
     return origins;
   } finally {
-    await session.close();
+    await reader.close();
   }
 }
 const OWNERS = ['agent-a', 'agent-b'] as const;

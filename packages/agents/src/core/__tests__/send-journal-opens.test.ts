@@ -64,10 +64,32 @@ describe('journal snapshots per send', () => {
     await grow(workload, rows);
     await workload.runTurn(1);
     await workload.runTurn(2);
-    if (ladder)
+    if (ladder) {
       workload.setContextLimit(
         Math.floor(workload.history.getTotalTokens() * 0.6),
       );
+      workload.history.add({
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: [
+              '--- snapshot.ts ---',
+              'old file contents',
+              '--- End of content ---',
+              '--- snapshot.ts ---',
+              'new file contents',
+              '--- End of content ---',
+            ].join('\n'),
+          },
+        ],
+      });
+      workload.history.add({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'ready' }],
+      });
+      await workload.history.waitForCommit();
+    }
     const counts = await countSend(workload, 3);
     await workload.dispose();
     workload = undefined;

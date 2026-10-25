@@ -45,6 +45,12 @@ async function verifyUnchangedDurableSource(size: number): Promise<number> {
         );
         expect(failure.rejectedTrailer?.position).toBeGreaterThan(0);
         expect(failure.rejectedTrailer?.path).not.toBe(source.journalPath());
+        const sourcePath = source.journalPath();
+        if (sourcePath === null)
+          throw new Error('Missing carried source journal');
+        expect(failure.rejectedTrailer?.inode).not.toBe(
+          statSync(sourcePath).ino,
+        );
       } finally {
         failure.restore();
         next.proceed.open();

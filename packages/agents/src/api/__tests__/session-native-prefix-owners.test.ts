@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { historyOriginId } from '@vybestack/llxprt-code-core/services/history/historyOriginId.js';
 import { describe, expect, it } from 'bun:test';
 import { useTempDir } from './helpers/journal-fixture-support.js';
@@ -17,6 +18,19 @@ function row(index: number): IContent {
   };
 }
 
+async function seedOwners(
+  history: HistoryService,
+  size: number,
+  a: object,
+  b: object,
+): Promise<void> {
+  for (let index = 0; index < size; index++) {
+    history.add(row(index), undefined, index % 2 === 0 ? a : b);
+    if ((index + 1) % 16 === 0) await history.waitForCommit();
+  }
+  await history.waitForCommit();
+}
+
 describe('native public prefix current source owners', () => {
   const directory = useTempDir('native-prefix-owners-');
   for (const size of [3, 64, 65, 5000]) {
@@ -31,9 +45,7 @@ describe('native public prefix current source owners', () => {
         const history = internalAgentClient(agent).getHistoryService();
         if (history === null) throw new Error('Missing native history');
         await history.clear();
-        for (let index = 0; index < size; index++)
-          history.add(row(index), undefined, index % 2 === 0 ? a : b);
-        await history.waitForCommit();
+        await seedOwners(history, size, a, b);
         await agent.session.setRecording({ enabled: true });
         const receipt = await operationFileCreates(async () => {
           const cut = size % 2 === 0 ? size - 2 : size - 1;

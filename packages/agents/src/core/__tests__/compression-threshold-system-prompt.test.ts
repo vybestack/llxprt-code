@@ -57,7 +57,7 @@ async function legacyTest1() {
   const targetTotal = 600; // 500 (system) + 100 (history)
   legacySuite0_historyService.syncTotalTokens(targetTotal);
   // Wait for the async sync to complete
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await legacySuite0_historyService.waitForTokenUpdates();
   const totalTokens = legacySuite0_historyService.getTotalTokens();
   // Total should match the synced value
   expect(totalTokens).toBe(targetTotal);
@@ -80,7 +80,7 @@ async function legacyTest2() {
     createUserMessage('Test message', { timestamp: Date.now() }),
   );
   legacySuite0_historyService.syncTotalTokens(1200); // Sync to a higher total
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await legacySuite0_historyService.waitForTokenUpdates();
   // After sync, total should match the target
   expect(legacySuite0_historyService.getTotalTokens()).toBe(1200);
   // Base offset will have been adjusted to make total = 1200
@@ -116,7 +116,7 @@ async function legacyTest6() {
   };
   legacySuite0_historyService.add(aiResponse);
   legacySuite0_historyService.syncTotalTokens(expectedTotal); // Sync to target total
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await legacySuite0_historyService.waitForTokenUpdates();
   const totalTokens = legacySuite0_historyService.getTotalTokens();
   expect(totalTokens).toBe(expectedTotal);
   expect(totalTokens).toBeGreaterThan(systemPromptTokens);
@@ -129,7 +129,7 @@ async function legacyTest7() {
     createUserMessage('Message 1', { timestamp: Date.now() }),
   );
   legacySuite0_historyService.syncTotalTokens(600);
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await legacySuite0_historyService.waitForTokenUpdates();
   const total1 = legacySuite0_historyService.getTotalTokens();
   expect(total1).toBe(600);
   const aiResponse1: IContent = {
@@ -142,14 +142,14 @@ async function legacyTest7() {
   };
   legacySuite0_historyService.add(aiResponse1);
   legacySuite0_historyService.syncTotalTokens(700);
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await legacySuite0_historyService.waitForTokenUpdates();
   const total2 = legacySuite0_historyService.getTotalTokens();
   expect(total2).toBe(700);
   legacySuite0_historyService.add(
     createUserMessage('Message 2', { timestamp: Date.now() }),
   );
   legacySuite0_historyService.syncTotalTokens(850);
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await legacySuite0_historyService.waitForTokenUpdates();
   const total3 = legacySuite0_historyService.getTotalTokens();
   expect(total3).toBe(850);
 }
@@ -164,21 +164,21 @@ async function legacyTest8() {
     createUserMessage('Small message', { timestamp: Date.now() }),
   );
   legacySuite0_historyService.syncTotalTokens(5000);
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await legacySuite0_historyService.waitForTokenUpdates();
   expect(legacySuite0_historyService.getTotalTokens()).toBe(5000);
   expect(legacySuite0_historyService.getTotalTokens()).toBeLessThan(
     thresholdTokens,
   );
   // Scenario 2: At threshold (should compress)
   legacySuite0_historyService.syncTotalTokens(6400);
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await legacySuite0_historyService.waitForTokenUpdates();
   expect(legacySuite0_historyService.getTotalTokens()).toBe(6400);
   expect(legacySuite0_historyService.getTotalTokens()).toBeGreaterThanOrEqual(
     thresholdTokens,
   );
   // Scenario 3: Above threshold (should compress)
   legacySuite0_historyService.syncTotalTokens(7000);
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await legacySuite0_historyService.waitForTokenUpdates();
   expect(legacySuite0_historyService.getTotalTokens()).toBe(7000);
   expect(legacySuite0_historyService.getTotalTokens()).toBeGreaterThan(
     thresholdTokens,
@@ -270,7 +270,7 @@ async function legacyTest13() {
     createUserMessage('Test', { timestamp: Date.now() }),
   );
   legacySuite0_historyService.syncTotalTokens(100);
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await legacySuite0_historyService.waitForTokenUpdates();
   // syncTotalTokens adjusts baseTokenOffset to reach the target (100)
   // Since getTotalTokens() = baseTokenOffset + totalTokens, and we synced to 100,
   // the baseTokenOffset will have been adjusted to make the total equal 100

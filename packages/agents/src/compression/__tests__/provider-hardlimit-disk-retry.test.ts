@@ -97,7 +97,7 @@ async function retry(size: number): Promise<number> {
       const harness = harnessFor(history, state);
       const tokens = history.getTotalTokens();
       await expect(enforceFallback(harness)).rejects.toThrow(
-        'post-truncation stage',
+        'provider rejected first installed candidate',
       );
       expect(await digestRows(history.streamRawHistory())).toBe(before);
       expect(history.getTotalTokens() - tokens).toBe(0);

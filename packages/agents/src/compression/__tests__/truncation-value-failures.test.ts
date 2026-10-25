@@ -26,61 +26,65 @@ async function fault(
   kind: 'read' | 'write' | 'cancel',
   route: 'truncation' | 'highdensity',
 ): Promise<number> {
-  return withValueTransformFixture(async ({ history, recorder, owners }) => {
-    const probes = transformProbes();
-    await history.detachedValues.replace(
-      probedTransformInput(size, truncationValueRow, owners, probes),
-    );
-    const expected = await detachedDigest(truncationValues(size));
-    const scratch = fs.readdirSync(getScratchRoot());
-    const failure =
-      kind === 'cancel'
-        ? new DOMException('cancelled checkpoint source', 'AbortError')
-        : new Error(`external checkpoint ${kind} failure`);
-    const injected = spyOn(
-      fs,
-      kind === 'write' ? 'writeSync' : 'readSync',
-    ).mockImplementationOnce(() => {
-      throw failure;
-    });
-    let result: unknown;
-    try {
-      result = await rejectedValue(
-        (route === 'truncation'
-          ? executeTruncation(history, size)
-          : highdensitySetup(history).handler.performCompression('source-fault')
-        ).then(() => {}),
+  return withValueTransformFixture(
+    async ({ history, recorder, owners, io }) => {
+      const probes = transformProbes();
+      await history.detachedValues.replace(
+        probedTransformInput(size, truncationValueRow, owners, probes),
       );
-    } finally {
-      injected.mockRestore();
-    }
-    expect(result).toBe(failure);
-    expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
-      expected,
-    );
-    expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
-    expect(history.getTotalTokens()).toBe(size);
-    await transformPhaseSampler(
-      `truncation-${kind}`,
-      size,
-      owners,
-      probes,
-    )('released');
-    expect(owners.snapshot().liveRows).toBe(0);
-    expect(owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 })).toBe(
-      true,
-    );
-    expect(
-      fs
-        .readdirSync(getScratchRoot())
-        .filter(
-          (name) =>
-            /^(history-detached-|history-density-)/.test(name) &&
-            !scratch.includes(name),
-        ),
-    ).toStrictEqual([]);
-    return expected.count;
-  });
+      const expected = await detachedDigest(truncationValues(size));
+      const scratch = fs.readdirSync(getScratchRoot());
+      const failure =
+        kind === 'cancel'
+          ? new DOMException('cancelled checkpoint source', 'AbortError')
+          : new Error(`external checkpoint ${kind} failure`);
+      const injected = spyOn(
+        io,
+        kind === 'write' ? 'write' : 'read',
+      ).mockImplementationOnce(() => {
+        throw failure;
+      });
+      let result: unknown;
+      try {
+        result = await rejectedValue(
+          (route === 'truncation'
+            ? executeTruncation(history, size)
+            : highdensitySetup(history).handler.performCompression(
+                'source-fault',
+              )
+          ).then(() => {}),
+        );
+      } finally {
+        injected.mockRestore();
+      }
+      expect(result).toBe(failure);
+      expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
+        expected,
+      );
+      expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
+      expect(history.getTotalTokens()).toBe(size);
+      await transformPhaseSampler(
+        `truncation-${kind}`,
+        size,
+        owners,
+        probes,
+      )('released');
+      expect(owners.snapshot().liveRows).toBe(0);
+      expect(
+        owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
+      ).toBe(true);
+      expect(
+        fs
+          .readdirSync(getScratchRoot())
+          .filter(
+            (name) =>
+              /^(history-detached-|history-density-)/.test(name) &&
+              !scratch.includes(name),
+          ),
+      ).toStrictEqual([]);
+      return expected.count;
+    },
+  );
 }
 
 describe('truncation/highdensity external checkpoint I/O cleanup', () => {
