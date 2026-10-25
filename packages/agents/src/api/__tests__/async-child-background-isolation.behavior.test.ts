@@ -1,13 +1,9 @@
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
-
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { describe, expect, it } from 'bun:test';
 import { createServer } from 'node:http';
 import { existsSync } from 'node:fs';
@@ -28,12 +24,17 @@ import {
   toConfigParameters,
   type Agent,
   type AgentEvent,
+  type AgentSubagentTaskInfo,
 } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
-import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  ProfileManager,
+  SettingsService,
+} from '@vybestack/llxprt-code-settings';
+import { fromConfig } from '../fromConfig.js';
 
 export function gate(): { promise: Promise<void>; release: () => void } {
   let release = (): void => {};
@@ -112,17 +113,66 @@ function responseChunk(
   );
 }
 
+interface ChildTerminal {
+  readonly status: string;
+  readonly error?: string;
+}
+
 export interface AsyncChildFixture {
   readonly agent: Agent;
-  readonly trust: ReturnType<
-    typeof createSessionSettingsFixture
-  >['workspaceTrust'];
-  readonly childStatus: Promise<{ status: string; error?: string }>;
+  readonly childStatus: Promise<ChildTerminal>;
   readonly requestedModels: readonly string[];
   readonly childEntered: ReturnType<typeof gate>;
   readonly childBody: ReturnType<typeof gate>;
   readonly childBodyFinished: ReturnType<typeof gate>;
-  readonly manager: AsyncTaskManager;
+  readonly childAborted: ReturnType<typeof gate>;
+  readonly abortedChildRequests: () => number;
+}
+
+function launchedSubagentTask(agent: Agent): AgentSubagentTaskInfo {
+  const task = agent.tasks
+    .list()
+    .find(
+      (candidate): candidate is AgentSubagentTaskInfo =>
+        candidate.kind === 'subagent',
+    );
+  if (!task) throw new Error('Launched subagent task absent from Agent tasks');
+  return task;
+}
+
+function watchChildTerminal(
+  agent: Agent,
+  stopped: AbortSignal,
+): Promise<ChildTerminal> {
+  return new Promise((resolve) => {
+    const poll = (): void => {
+      if (stopped.aborted) return;
+      for (const task of agent.tasks.list()) {
+        if (task.kind === 'subagent' && task.status !== 'running') {
+          resolve({ status: task.status, error: task.error });
+          return;
+        }
+      }
+      setTimeout(poll, 10);
+    };
+    poll();
+  });
+}
+
+async function readSubagentTask(
+  agent: Agent,
+  id: string,
+): Promise<{ readonly status?: string; readonly output?: unknown }> {
+  const query = agent.tools.get('check_async_tasks');
+  if (!query) throw new Error('Missing Agent task query');
+  const peeked = await query.buildAndExecute(
+    { task_id: id },
+    new AbortController().signal,
+  );
+  const details = z
+    .object({ output: z.unknown().optional() })
+    .parse(JSON.parse(z.string().parse(peeked.llmContent)));
+  return { ...agent.tasks.get(id), output: details.output };
 }
 
 export async function withAsyncChildFixture(
@@ -140,14 +190,16 @@ export async function withAsyncChildFixture(
   let config: Config | undefined;
   let agent: Agent | undefined;
   const errors: unknown[] = [];
+  const stopWatching = new AbortController();
   try {
     const baseUrl = await http.listen();
     config = await createChildConfig(directory, baseUrl);
-    const manager = new AsyncTaskManager(5);
-    const settings = createSessionSettingsFixture(config);
-    agent = await fromConfig(
+    const settings = new SettingsService();
+    for (const [key, value] of Object.entries(config.getInitialSettings()))
+      settings.set(key, value);
+    const built = await fromConfig(
       config,
-      settings.settingsService,
+      settings,
       {
         activation: {
           provider: 'openai',
@@ -155,49 +207,22 @@ export async function withAsyncChildFixture(
           cliOverrides: { key: 'local-test-key', baseUrl },
         },
       },
-      settings.settingsOwner,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      createAgentRuntimeFactoryBindings(),
-      undefined,
-      undefined,
-      undefined,
-      settings.workspaceTrust,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      manager,
+      new CredentialAuthority(),
     );
-    const childStatus = new Promise<{ status: string; error?: string }>(
-      (resolve) => {
-        const terminal = (task: { status: string; error?: string }): void => {
-          resolve({ status: task.status, error: task.error });
-        };
-        manager.onTaskCompleted(terminal);
-        manager.onTaskFailed(terminal);
-        manager.onTaskCancelled(terminal);
-      },
-    );
+    agent = built;
+    let childStatus: Promise<ChildTerminal> | undefined;
     await scenario({
-      agent,
-      manager,
-      trust: settings.workspaceTrust,
-      childStatus,
+      agent: built,
+      get childStatus() {
+        childStatus ??= watchChildTerminal(built, stopWatching.signal);
+        return childStatus;
+      },
       ...http,
     });
   } catch (error) {
     errors.push(error);
   } finally {
+    stopWatching.abort();
     http.childBody.release();
     http.parentBody.release();
     for (const cleanup of [
@@ -220,7 +245,7 @@ function createChildServer(
   childShellCommand?: string,
   parentShellCommand?: string,
   exerciseTrust = false,
-): Omit<AsyncChildFixture, 'agent' | 'manager' | 'trust' | 'childStatus'> & {
+): Omit<AsyncChildFixture, 'agent' | 'childStatus'> & {
   listen: () => Promise<string>;
   close: () => Promise<void>;
   parentBody: ReturnType<typeof gate>;
@@ -230,6 +255,8 @@ function createChildServer(
   const childEntered = gate();
   const childBody = gate();
   const childBodyFinished = gate();
+  const childAborted = gate();
+  let abortedChildRequests = 0;
   const handlers: Array<Promise<void>> = [];
   const errors: unknown[] = [];
   let parentRequests = 0;
@@ -244,6 +271,11 @@ function createChildServer(
       requestedModels.push(body.model);
       const child = body.model === 'child-model';
       if (child) {
+        response.once('close', () => {
+          if (response.writableFinished) return;
+          abortedChildRequests += 1;
+          childAborted.release();
+        });
         childRequests += 1;
         childEntered.release();
         parentBody.release();
@@ -286,6 +318,8 @@ function createChildServer(
     childEntered,
     childBody,
     childBodyFinished,
+    childAborted,
+    abortedChildRequests: () => abortedChildRequests,
     parentBody,
     requestedModels,
     async listen(): Promise<string> {
@@ -362,19 +396,24 @@ describe('public Agent async child background isolation', () => {
               fixture.childEntered.promise,
               'child model admission',
             );
-            await fixture.trust.setTrustedFolderLive(false);
+            await fixture.agent.ide.setTrustedFolderLive(false);
             let cancelled: boolean | undefined;
             if (abortChild) {
-              const child = fixture.manager.getAllTasks()[0];
-              if (child.abortController === undefined)
-                throw new Error('Missing child cancellation owner');
+              const child = launchedSubagentTask(fixture.agent);
               cancelled = await fixture.agent.tasks.cancel(child.id);
+              await deadline(
+                fixture.childAborted.promise,
+                'child request closure',
+              );
             }
             fixture.childBody.release();
             await deadline(fixture.childStatus, 'child denied completion');
             await foreground;
             expect(existsSync(marker)).toBe(false);
-            const task = fixture.manager.getAllTasks()[0];
+            const task = await readSubagentTask(
+              fixture.agent,
+              launchedSubagentTask(fixture.agent).id,
+            );
             expect(cancelled).toBe(abortChild ? true : undefined);
             expect(task).toMatchObject(
               abortChild
@@ -573,9 +612,8 @@ describe('public Agent async child background isolation', () => {
       const [task] = fixture.agent.tasks.list();
       expect(task.status).toBe('running');
       expect(await fixture.agent.tasks.cancel(task.id)).toBe(true);
-      expect(
-        fixture.manager.getTask(task.id)?.abortController?.signal.aborted,
-      ).toBe(true);
+      await deadline(fixture.childAborted.promise, 'child request closure');
+      expect(fixture.abortedChildRequests()).toBe(1);
       expect(await fixture.childStatus).toMatchObject({ status: 'cancelled' });
     });
   });
@@ -585,19 +623,13 @@ describe('public Agent async child background isolation', () => {
       await withAsyncChildFixture(async (second) => {
         await consumeForeground(first, false);
         await consumeForeground(second, false);
-        const [firstTask] = first.agent.tasks.list();
-        const [secondTask] = second.agent.tasks.list();
-        expect(first.manager.getTask(firstTask.id)?.subagentName).toBe(
-          second.manager.getTask(secondTask.id)?.subagentName,
-        );
+        const firstTask = launchedSubagentTask(first.agent);
+        const secondTask = launchedSubagentTask(second.agent);
+        expect(firstTask.subagentName).toBe(secondTask.subagentName);
         expect(await first.agent.tasks.cancel(firstTask.id)).toBe(true);
-        expect(
-          first.manager.getTask(firstTask.id)?.abortController?.signal.aborted,
-        ).toBe(true);
-        expect(
-          second.manager.getTask(secondTask.id)?.abortController?.signal
-            .aborted,
-        ).toBe(false);
+        await deadline(first.childAborted.promise, 'child request closure');
+        expect(first.abortedChildRequests()).toBe(1);
+        expect(second.abortedChildRequests()).toBe(0);
         expect(second.agent.tasks.get(secondTask.id)?.status).toBe('running');
         second.childBody.release();
         expect(await second.childStatus).toMatchObject({ status: 'completed' });
