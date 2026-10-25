@@ -1088,6 +1088,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T4.1 B5 attempt outcomes per manager
 - [x] T4.2 B5 dialog state per manager, singleton deleted
 - [x] T5.1 B1 agents key storage from owner
+- [x] T5.2a-prep B1 test callers through shared helpers (behavior-neutral)
 - [ ] T5.2a B1 host key storage reaches the interactive UI
 - [ ] T5.2b B1 Config key methods deleted, negative control
 - [ ] T5.3 B6 loadCliConfig input

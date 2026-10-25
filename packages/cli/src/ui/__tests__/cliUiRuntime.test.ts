@@ -9,10 +9,10 @@ import { describe, it, expect } from 'bun:test';
 import { ApprovalMode } from '@vybestack/llxprt-code-agents';
 import { Config, Logger, MessageSenderType } from '@vybestack/llxprt-code-core';
 import {
-  buildSlashCommandRuntime,
   buildUiRuntimeFromSource,
   type UiRuntimeBareSource,
 } from '../cliUiRuntime.js';
+import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AppEvent, appEvents } from '../../utils/events.js';
@@ -40,7 +40,7 @@ function createProxySource(
 describe('buildSlashCommandRuntime', () => {
   it('breaks identity: the adapter is not the same object as the source', async () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntime(
+    const adapter = buildSlashCommandRuntimeForTest(
       source,
       await createUiSessionOwner(),
     );
@@ -50,7 +50,7 @@ describe('buildSlashCommandRuntime', () => {
 
   it('produces a plain object (not a Config subclass instance)', async () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntime(
+    const adapter = buildSlashCommandRuntimeForTest(
       source,
       await createUiSessionOwner(),
     );
@@ -61,7 +61,7 @@ describe('buildSlashCommandRuntime', () => {
   it('delegates method calls through to the source across capability slices', async () => {
     const source = createProxySource();
     const owner = await createUiSessionOwner();
-    const adapter = buildSlashCommandRuntime(source, owner);
+    const adapter = buildSlashCommandRuntimeForTest(source, owner);
 
     expect((adapter.getSessionId as () => string)()).toBe(
       'delegated:getSessionId',
@@ -89,7 +89,7 @@ describe('buildSlashCommandRuntime', () => {
       model: 'test',
     });
     const owner = await createUiSessionOwner(config);
-    const adapter = buildSlashCommandRuntime(config, owner);
+    const adapter = buildSlashCommandRuntimeForTest(config, owner);
     const logger = new Logger(adapter.getSessionId(), adapter.projectTempDir);
     try {
       await logger.logMessage(MessageSenderType.USER, 'selected-ui-path');
@@ -104,7 +104,7 @@ describe('buildSlashCommandRuntime', () => {
 
   it('preserves the extensionEnablementManager property reference', async () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntime(
+    const adapter = buildSlashCommandRuntimeForTest(
       source,
       await createUiSessionOwner(),
     );
@@ -117,7 +117,7 @@ describe('buildSlashCommandRuntime', () => {
 
   it('does not expose a client factory from workspace capabilities', async () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntime(
+    const adapter = buildSlashCommandRuntimeForTest(
       source,
       await createUiSessionOwner(),
     );
@@ -129,7 +129,7 @@ describe('buildSlashCommandRuntime', () => {
 describe('buildSlashCommandRuntime image authority', () => {
   it('does not publish executable image capability on the flattened configuration runtime', async () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntime(
+    const adapter = buildSlashCommandRuntimeForTest(
       source,
       await createUiSessionOwner(),
     );

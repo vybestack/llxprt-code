@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
+import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import {
   buildAgent,
@@ -50,7 +50,7 @@ describe('CLI MCP authentication', () => {
       services: {
         ...base.services,
         agent: built.agent,
-        config: buildSlashCommandRuntime(
+        config: buildSlashCommandRuntimeForTest(
           internalConfig(built.agent),
           built.agent,
         ),

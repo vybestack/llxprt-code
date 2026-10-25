@@ -55,10 +55,8 @@ import { z } from 'zod';
 import { fetchGitHubSuggestions } from './hooks/githubAtCompletion.js';
 import { FakeProvider } from '../../../providers/src/fake/FakeProvider.js';
 
-import {
-  buildSlashCommandRuntime,
-  buildUiRuntimeFromSource,
-} from './cliUiRuntime.js';
+import { buildUiRuntimeFromSource } from './cliUiRuntime.js';
+import { buildSlashCommandRuntimeForTest } from '../__tests__/slash-command-runtime-fixture.js';
 
 describe('UI session client ownership', () => {
   let promptDirectory: string;
@@ -484,7 +482,7 @@ describe('UI session client ownership', () => {
       capturedSessionClient(fixtureOwner),
     );
     try {
-      const workspace = buildSlashCommandRuntime(fixtureConfig, agent);
+      const workspace = buildSlashCommandRuntimeForTest(fixtureConfig, agent);
       const previous = capturedSessionClient(fixtureOwner);
       await agent.setHistory([
         {

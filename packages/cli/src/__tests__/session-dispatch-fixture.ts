@@ -18,7 +18,7 @@ import { getUserStartupWarnings } from '../utils/userStartupWarnings.js';
 import { validateNonInteractiveAuth } from '../validateNonInteractiveAuth.js';
 import { runExitCleanup } from '../utils/cleanup.js';
 import { reportNonInteractiveError } from '../session/errorReporting.js';
-import { startInteractiveUI } from '../session/interactiveUI.js';
+import { startInteractiveUIForTest } from './raw-interactive-startup-fixture.js';
 
 import { captureNonInteractiveRun } from './captured-headless-run-fixture.js';
 import {
@@ -77,7 +77,7 @@ export function createSessionDispatch(
       options.recordingStartupWarnings ?? [],
       () => getUserStartupWarnings(settings.merged),
       async (warnings) => {
-        await startInteractiveUI(
+        await startInteractiveUIForTest(
           config,
           agent,
           settings,

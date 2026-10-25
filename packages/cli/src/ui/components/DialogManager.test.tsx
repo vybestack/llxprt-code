@@ -4,7 +4,7 @@ import {
 } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 import { Config, HydratedModel } from '@vybestack/llxprt-code-core';
-import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
+import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { DialogManager } from './DialogManager.js';
 import { DialogProvider } from '../stores/dialog/DialogContext.js';
 import { AppCommandsProvider } from '../contexts/AppCommandsContext.js';
@@ -383,7 +383,7 @@ function DialogManagerHarness({
       return standIn;
     },
   });
-  const config = buildSlashCommandRuntime(
+  const config = buildSlashCommandRuntimeForTest(
     new Config({
       sessionId: 'dialog-dispatch',
       targetDir: process.cwd(),

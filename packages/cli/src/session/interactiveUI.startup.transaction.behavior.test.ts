@@ -30,10 +30,10 @@ import { useCommandOwners as installCommandOwners } from '../__tests__/command-o
 const makeTransactionAgent = installCommandOwners();
 import type { LoadedSettings } from '../config/settings.js';
 import {
-  commitInteractiveStartup,
   __resetInteractiveUIStateForTesting,
   type InteractiveStartupPorts,
 } from './interactiveUI.js';
+import { commitInteractiveStartupForTest } from '../__tests__/raw-interactive-startup-fixture.js';
 import { createInteractivePerfRuntime } from '../ui/hooks/perf/interactivePerfRuntime.js';
 import type { OperationIdentitySnapshot } from '../ui/hooks/agentStream/operationLifecycle.js';
 import {
@@ -206,7 +206,7 @@ describe('Finding B — transactional interactive startup', () => {
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -238,7 +238,7 @@ describe('Finding B — transactional interactive startup', () => {
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -269,7 +269,7 @@ describe('Finding B — transactional interactive startup', () => {
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -300,7 +300,7 @@ describe('Finding B — transactional interactive startup', () => {
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -333,7 +333,7 @@ describe('Finding B — transactional interactive startup', () => {
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -364,7 +364,7 @@ describe('Finding B — transactional interactive startup', () => {
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -394,7 +394,7 @@ describe('Finding B — transactional interactive startup', () => {
     };
 
     await expect(
-      commitInteractiveStartup({
+      commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -412,7 +412,7 @@ describe('Finding B — transactional interactive startup', () => {
         registrationAttempts++;
       },
     };
-    await commitInteractiveStartup({
+    await commitInteractiveStartupForTest({
       config: testConfig,
       runtimeSettings,
       agent: testAgent,
@@ -443,7 +443,7 @@ describe('Finding B — transactional interactive startup', () => {
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -481,7 +481,7 @@ describe('Finding B — transactional interactive startup', () => {
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -525,7 +525,7 @@ describe('Finding B — transactional interactive startup', () => {
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,

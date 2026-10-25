@@ -61,8 +61,8 @@ import {
 } from '../session/signalHandlers.js';
 import { initializeOutputListenersAndFlush } from '../session/outputListeners.js';
 import { dispatchInteractiveOrNonInteractive } from '../__tests__/session-dispatch-fixture.js';
+import { startInteractiveUIForTest } from './raw-interactive-startup-fixture.js';
 import {
-  startInteractiveUI,
   __resetInteractiveUIStateForTesting,
   __setRenderForTesting,
 } from '../session/interactiveUI.js';
@@ -735,7 +735,7 @@ describe('session-dispatch characterization', () => {
 
       const exitBefore = listeners.listenerCount('exit');
 
-      await startInteractiveUI(
+      await startInteractiveUIForTest(
         config as never,
         (await createFakeAgent()) as never,
         settings as never,
@@ -765,7 +765,7 @@ describe('session-dispatch characterization', () => {
 
       const exitBefore = listeners.listenerCount('exit');
 
-      await startInteractiveUI(
+      await startInteractiveUIForTest(
         config as never,
         (await createFakeAgent()) as never,
         settings as never,
@@ -793,7 +793,7 @@ describe('session-dispatch characterization', () => {
         hideWindowTitle: true,
       });
 
-      await startInteractiveUI(
+      await startInteractiveUIForTest(
         config as never,
         (await createFakeAgent()) as never,
         settings as never,

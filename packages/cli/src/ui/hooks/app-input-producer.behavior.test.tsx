@@ -18,10 +18,8 @@ import { createMockSettings, render, waitFor } from '../../__tests__/render.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { SettingsContext } from '../contexts/SettingsContext.js';
 import { AppWrapper } from '../App.js';
-import {
-  buildUiRuntimeFromSource,
-  buildSlashCommandRuntime,
-} from '../cliUiRuntime.js';
+import { buildUiRuntimeFromSource } from '../cliUiRuntime.js';
+import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 
 describe('application input producer', () => {
   const makeOwner = useCommandOwners();
@@ -119,7 +117,7 @@ function renderApplication(
     undefined,
     selectedSettings,
   );
-  const slashCommandRuntime = buildSlashCommandRuntime(
+  const slashCommandRuntime = buildSlashCommandRuntimeForTest(
     config,
     owner,
     undefined,

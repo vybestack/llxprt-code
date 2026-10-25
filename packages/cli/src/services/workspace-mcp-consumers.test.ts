@@ -49,7 +49,7 @@ import {
   startCatalogFixture,
   waitForFixtureFile,
 } from '../../../agents/src/api/__tests__/helpers/workspace-catalog-http-fixture.js';
-import { buildSlashCommandRuntime } from '../ui/cliUiRuntime.js';
+import { buildSlashCommandRuntimeForTest } from '../__tests__/slash-command-runtime-fixture.js';
 import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 import { renderHook, waitFor } from '../__tests__/render.js';
 import { useTestHarnessForAtCompletion } from '../ui/hooks/__tests__/useAtCompletion-test-helpers.js';
@@ -77,7 +77,7 @@ describe('production CLI workspace MCP consumers', () => {
   const builtCredentials = useOwnedCredentials();
   let workspaceDirectory: string;
   let workspaceAgent: Agent;
-  let workspaceCommands: ReturnType<typeof buildSlashCommandRuntime>;
+  let workspaceCommands: ReturnType<typeof buildSlashCommandRuntimeForTest>;
   let setWorkspaceTrustedFolder: (trusted: boolean) => Promise<void>;
   let closeWorkspaceRoot: () => Promise<void>;
   let closeWorkspace: () => Promise<void>;
@@ -279,7 +279,10 @@ describe('production CLI workspace MCP consumers', () => {
     // that is not spelled like a live workspace root.
     workspaceDirectory = await realpath(directory);
     workspaceAgent = agent;
-    workspaceCommands = buildSlashCommandRuntime(builtCallerConfig, agent);
+    workspaceCommands = buildSlashCommandRuntimeForTest(
+      builtCallerConfig,
+      agent,
+    );
     setWorkspaceTrustedFolder = (trusted) =>
       builtCallerMcp.trust.setTrustedFolderLive(trusted);
     closeWorkspaceRoot = () => builtCallerMcp.dispose();

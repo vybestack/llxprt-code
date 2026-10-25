@@ -37,10 +37,10 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import { createMockAgent } from '../../__tests__/mockAgent.js';
 import { appContainerTestAgentProps } from './app-bootstrap-owner-props.js';
 import {
-  buildSlashCommandRuntime,
   buildUiRuntimeFromSource,
   type UiRuntimeBareSource,
 } from '../cliUiRuntime.js';
+import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 
 // Mock config type
 interface MockConfig {
@@ -467,7 +467,7 @@ describe('AppContainer.render-budget', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntime(
+        slashCommandRuntime: buildSlashCommandRuntimeForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
@@ -513,7 +513,7 @@ describe('AppContainer.render-budget', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntime(
+        slashCommandRuntime: buildSlashCommandRuntimeForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
@@ -553,7 +553,7 @@ describe('AppContainer.render-budget', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntime(
+        slashCommandRuntime: buildSlashCommandRuntimeForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
@@ -587,7 +587,7 @@ describe('AppContainer.render-budget', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntime(
+        slashCommandRuntime: buildSlashCommandRuntimeForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
@@ -623,7 +623,7 @@ describe('AppContainer.render-budget', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntime(
+        slashCommandRuntime: buildSlashCommandRuntimeForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
@@ -657,7 +657,7 @@ describe('AppContainer.render-budget', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntime(
+        slashCommandRuntime: buildSlashCommandRuntimeForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
@@ -702,7 +702,7 @@ describe('AppContainer.render-budget', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntime(
+        slashCommandRuntime: buildSlashCommandRuntimeForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),

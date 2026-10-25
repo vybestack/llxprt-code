@@ -25,11 +25,11 @@ import type { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/servi
 
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import {
-  buildSlashCommandRuntime,
-  type CliUiRuntime,
-  type UiRuntimeDeclarationSource,
+import type {
+  CliUiRuntime,
+  UiRuntimeDeclarationSource,
 } from '../ui/cliUiRuntime.js';
+import { buildSlashCommandRuntimeForTest } from './slash-command-runtime-fixture.js';
 
 type UiFixtureOwner = Awaited<ReturnType<typeof createUiSessionOwner>>;
 
@@ -143,7 +143,7 @@ function buildSuppliedSessionRuntime(
   owner: UiFixtureOwner | Agent,
   settingsOwner: SessionSettingsOwner | undefined,
 ): CliUiRuntime {
-  return buildSlashCommandRuntime(
+  return buildSlashCommandRuntimeForTest(
     source,
     owner,
     undefined,
@@ -290,7 +290,7 @@ function buildFixtureSessionRuntime(
   owner: UiFixtureOwner,
 ): CliUiRuntime {
   const servers = source.getMcpServers() ?? {};
-  return buildSlashCommandRuntime(
+  return buildSlashCommandRuntimeForTest(
     source,
     {
       ...owner,

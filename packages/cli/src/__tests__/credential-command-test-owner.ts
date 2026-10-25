@@ -43,7 +43,7 @@ export function registerKeyCommand(
   const api = owners.runtimeApi;
   return createKeyCommand({
     ...bindKeyCommandOperations(
-      config?.getProviderKeys.bind(config) ?? unavailableCredentialOwner,
+      readProviderKeys(config),
       config?.listKeyCompletionNames.bind(config) ?? unavailableCredentialOwner,
       config?.invalidateKeyCompletion.bind(config) ??
         unavailableCredentialOwner,
@@ -54,6 +54,12 @@ export function registerKeyCommand(
     ),
     ...overrides,
   });
+}
+
+function readProviderKeys(
+  config: Pick<CommandOwnerFixture['services'], 'config'>['config'],
+) {
+  return config?.getProviderKeys.bind(config) ?? unavailableCredentialOwner;
 }
 
 function unavailableCredentialOwner(): never {

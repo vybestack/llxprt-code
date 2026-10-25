@@ -42,10 +42,10 @@ import {
 import { createMockAgent } from '../../__tests__/mockAgent.js';
 import { appContainerTestAgentProps } from './app-bootstrap-owner-props.js';
 import {
-  buildSlashCommandRuntime,
   buildUiRuntimeFromSource,
   type UiRuntimeBareSource,
 } from '../cliUiRuntime.js';
+import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 
 const keyBindingProperties: ReadonlyArray<keyof KeyBinding> = [
   'key',
@@ -538,7 +538,7 @@ describe('AppContainer.keybindings', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntime(
+        slashCommandRuntime: buildSlashCommandRuntimeForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
@@ -570,7 +570,7 @@ describe('AppContainer.keybindings', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntime(
+        slashCommandRuntime: buildSlashCommandRuntimeForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
@@ -607,7 +607,7 @@ describe('AppContainer.keybindings', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntime(
+        slashCommandRuntime: buildSlashCommandRuntimeForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
