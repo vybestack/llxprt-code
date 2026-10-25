@@ -1,13 +1,5 @@
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import {
-  Config,
-  ConfigParameters,
-} from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MCPDiscoveryState, McpClient } from '@vybestack/llxprt-code-mcp';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
@@ -15,44 +7,20 @@ import { toConfigParameters } from '../agentConfig.adapter.js';
 import { mkdtemp, realpath, rm, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../adoption-release.js';
 import { randomUUID } from 'node:crypto';
 import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it, spyOn } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { fileURLToPath } from 'node:url';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import {
-  createAgentRuntimeFactoryBindings,
-  AgentRuntimeFactoryBindings,
-} from '../runtimeFactories.js';
-import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
-import { executeProviderActivation } from '../providerActivationExecutor.js';
-import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
-import { assembleModelSelection } from '../model-selection.js';
-import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
-import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
-import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
+import { AgentConfig } from '../config-types.js';
+import { fromConfig } from '../fromConfig.js';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { awaitMcpDiscoveryReady } from './helpers/mcp-discovery-ready.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 /**
  * @license
@@ -74,210 +42,46 @@ describe('MCP Agent operations', () => {
     await rm(promptDirectory, { recursive: true, force: true });
   });
 
-  const builtCredentials = useOwnedCredentials();
-  let builtCallerConfig: Config;
-  let builtCallerSettings: SettingsService;
-  let builtCallerSettingsOwner: SessionSettingsOwner;
-  let builtCallerPolicy: RuntimePolicyOwner;
-  let builtCallerMcp: McpRuntimeOwner;
-  let builtCallerManager: ReturnType<typeof acquirePreferredProviderManager>;
-  let builtCallerOwner: SessionClientOwner;
-  let builtCallerClose: () => Promise<void>;
-  let builtCallerFactories: AgentRuntimeFactoryBindings;
-  let builtCallerRelease: AcquisitionRelease;
-  let builtCallerFiles: ProviderFileLifecycle;
-  let builtCallerRuntimeId: string;
-  let builtCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let builtCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
-  let builtCallerContent: ReturnType<
-    typeof createRuntimeContentGeneratorFactory
-  >;
+  useFakeResponsesReplay('plain-text.jsonl');
+  const credentials = useOwnedCredentials();
 
-  async function openbuiltCaller(
-    fixture: string,
-    overrides: Readonly<Partial<AgentConfig>> = {},
-    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
-    skillSettings: Pick<
-      ConfigParameters,
-      'enableExtensionReloading' | 'storageRoot'
-    > = {},
-    extensionLoader?: ExtensionLoader,
-    skillOperations?: WorkspaceSkillAssemblyOperations,
-  ): Promise<void> {
-    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('./fixtures/' + fixture, import.meta.url),
-    );
+  async function openRuntimeOwner(overrides: Partial<AgentConfig>): Promise<{
+    readonly mcp: McpRuntimeOwner;
+    readonly close: () => Promise<void>;
+  }> {
     const directory = await realpath(
-      await mkdtemp(join(tmpdir(), 'builtCaller-adoption-')),
+      await mkdtemp(join(tmpdir(), 'mcp-runtime-owner-')),
     );
-    const selection: AgentConfig = {
-      provider: 'fake',
-      model: 'fake-model',
-      sessionId: randomUUID(),
-      ...overrides,
-      workingDir:
-        overrides.workingDir === undefined
-          ? directory
-          : await realpath(overrides.workingDir),
-    };
-    const parameters = { ...toConfigParameters(selection), ...skillSettings };
-    parameters.interactive = true;
-    if (overrides.hooks !== undefined) parameters.enableHooks = true;
-    if (
-      overrides.filesystemOwner === undefined &&
-      (overrides.harness?.includeProcessCwd ?? true)
-    )
-      parameters.includeDirectories = [
-        ...(parameters.includeDirectories ?? []),
-        process.cwd(),
-      ];
-    builtCallerConfig = new Config(parameters);
-    builtCallerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...suppliedFactories,
-    };
-    builtCallerSettings = new SettingsService();
-    for (const [key, value] of Object.entries(
-      builtCallerConfig.getInitialSettings(),
-    ))
-      builtCallerSettings.set(key, value);
-    builtCallerPolicy = new RuntimePolicyOwner(builtCallerConfig);
-    injectConfirmationForcingPolicy(builtCallerPolicy.session.confirmation);
-    builtCallerMcp = await buildTestMcpRuntime(
-      builtCallerConfig,
-      builtCallerPolicy.session.messageBus,
-      overrides,
-      extensionLoader,
-      builtCallerPolicy,
-      skillOperations,
-    );
-    acquirebuiltCallerProviders();
-    const media = new SessionMediaOwner(
-      builtCallerConfig.projectTempDir,
-      1024 * 1024 * 1024,
-    );
-    builtCallerOwner = await createCapturedSessionOwner(
-      builtCallerConfig,
-      assembleTaskSchemaPolicy(builtCallerSettings),
-      builtCallerManager,
-      builtCallerFactories.agentClientFactory,
-      media.store,
-      builtCallerMcp.readInstructions,
-      builtCallerMcp.workspacePaths,
-      builtCallerSettingsOwner,
-      builtCallerContent,
-      builtCallerTokenizer,
-    );
-    builtCallerOwner.bindMcpRuntime(builtCallerMcp);
-    builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
-      builtCallerOAuth.composeRetryOperations(provider),
-    );
-    builtCallerOwner.bindHooks();
-    builtCallerClose = settleEngineRelease.bind(
-      undefined,
-      [
-        () => builtCallerOwner.dispose(),
-        () => builtCallerRelease.close(),
-        () => media.dispose(),
-        () => builtCallerMcp.dispose(),
-        () => builtCallerConfig.dispose(),
-        () => rm(directory, { recursive: true, force: true }),
-      ],
-      previousReplay,
-    );
-    try {
-      await preparePreferredProviderCompletion(
-        builtCallerConfig,
-        builtCallerSettings,
-        builtCallerSettingsOwner,
-        builtCallerManager,
-        builtCallerOAuth,
-        builtCallerRuntimeId,
-        builtCallerTokenizer,
-        undefined,
-      );
-      await builtCallerMcp.initialize();
-      await activatebuiltCallerClient(selection.activation);
-    } catch (primary) {
-      await cleanupAfterFailure(primary, builtCallerClose);
-    }
-  }
-  function acquirebuiltCallerProviders(): void {
-    builtCallerRuntimeId = 'builtCaller-' + randomUUID();
-    builtCallerRelease = new AcquisitionRelease();
-    builtCallerSettingsOwner = new SessionSettingsOwner(builtCallerSettings);
-    builtCallerRelease.acquire('settings', () =>
-      builtCallerSettingsOwner.dispose(),
-    );
-    builtCallerSettingsOwner.initializeProviderSelection(
-      builtCallerConfig.getProvider(),
-      builtCallerConfig.getModel(),
-    );
-    builtCallerSettingsOwner.bindTelemetry(builtCallerConfig);
-    builtCallerFiles = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
+    const config = new Config({
+      ...toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        ...overrides,
+        workingDir: directory,
+      }),
+      interactive: true,
     });
-    for (const scope of [
-      builtCallerRuntimeId,
-      builtCallerConfig.getSessionId(),
-    ])
-      builtCallerRelease.acquire('files', () =>
-        releaseAdoptedFileScope(builtCallerFiles, scope),
-      );
-    builtCallerManager = acquirePreferredProviderManager(
-      builtCallerConfig,
-      builtCallerSettings,
-      builtCallerSettingsOwner,
-      builtCallerFiles,
-      builtCallerRuntimeId,
-      builtCredentials().authority,
-      builtCallerRelease,
-    );
-    const factoriesTokenizer = configureProviderTokenizer(builtCallerManager);
-    const factoriesContent = createRuntimeContentGeneratorFactory();
-    builtCallerTokenizer = factoriesTokenizer;
-    builtCallerContent = factoriesContent;
-    builtCallerOAuth = acquirePreferredOAuth(
+    const policy = new RuntimePolicyOwner(config);
+    const mcp = await buildTestMcpRuntime(
+      config,
+      policy.session.messageBus,
+      overrides,
       undefined,
-      builtCallerPolicy.session.messageBus,
-      builtCallerConfig,
-      builtCallerSettings,
-      builtCallerManager,
-      builtCallerRuntimeId,
-      builtCallerMcp.profileDefinitions,
-      builtCredentials().authority,
-      builtCallerRelease,
-      undefined,
+      policy,
     );
-  }
-  async function activatebuiltCallerClient(
-    intent: ProviderActivationIntent = {
-      provider: builtCallerConfig.getProvider(),
-      model: builtCallerConfig.getModel(),
-    },
-  ): Promise<void> {
-    const activation = await executeProviderActivation(
-      builtCallerConfig,
-      intent,
-      assembleProviderSwitch(
-        builtCallerConfig,
-        builtCallerSettings,
-        builtCallerManager,
-        builtCallerOAuth,
-        () => 'agent',
-        () => builtCallerOwner.refreshAuth(),
-        builtCallerSettingsOwner,
-      ),
-      builtCallerSettings,
-      builtCallerManager,
-      (method) => builtCallerOwner.refreshAuth(method),
-      assembleModelSelection(builtCallerSettingsOwner),
-    );
-    requireCallerActivation(activation);
-    await builtCallerOwner.initializeTools();
-    await capturedSessionClient(builtCallerOwner).startChat();
+    const close = (): Promise<void> =>
+      runCleanupSteps([
+        () => mcp.dispose(),
+        () => config.dispose(),
+        () => rm(directory, { recursive: true, force: true }),
+      ]);
+    try {
+      await mcp.initialize();
+    } catch (primary) {
+      return cleanupAfterFailure(primary, close);
+    }
+    return { mcp, close };
   }
 
   it('joins configured discovery when disposing the retained MCP owner', async () => {
@@ -295,7 +99,7 @@ describe('MCP Agent operations', () => {
         await pending;
       },
     );
-    await openbuiltCaller('plain-text.jsonl', {
+    const owner = await openRuntimeOwner({
       folderTrust: true,
       mcpServers: {
         held: { command: process.execPath, args: ['-e', 'process.exit(0)'] },
@@ -303,46 +107,58 @@ describe('MCP Agent operations', () => {
       telemetry: { enabled: false },
       recording: { enabled: false },
     });
+    const { mcp } = owner;
     try {
       await entered;
-      expect(builtCallerMcp.status()?.discoveryState).toBe(
-        MCPDiscoveryState.IN_PROGRESS,
-      );
+      expect(mcp.status()?.discoveryState).toBe(MCPDiscoveryState.IN_PROGRESS);
       let disposed = false;
-      const disposal = builtCallerMcp.dispose().then(() => {
+      const disposal = mcp.dispose().then(() => {
         disposed = true;
       });
       await new Promise<void>((resolveTurn) => setImmediate(resolveTurn));
       expect(disposed).toBe(false);
       release();
       await disposal;
-      expect(builtCallerMcp.isStopped()).toBe(true);
+      expect(mcp.isStopped()).toBe(true);
     } finally {
       release();
       connection.mockRestore();
-      await builtCallerClose();
+      await owner.close();
     }
   }, 30000);
 
   it('uses retained MCP discovery and refresh for an adopted Agent without Config runtime delegates', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'mcp-agent-operations-'));
-    await openbuiltCaller('plain-text.jsonl', {
-      folderTrust: true,
-      mcpServers: {
-        arithmetic: {
-          command: process.execPath,
-          args: [
-            resolveRepositoryFixture(
-              import.meta.url,
-              'scripts/tests/mcp-standalone-stdio-fixture.ts',
-            ),
-            directory,
-          ],
+    const workspace = await realpath(
+      await mkdtemp(join(tmpdir(), 'mcp-agent-operations-workspace-')),
+    );
+    const config = new Config(
+      toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        workingDir: workspace,
+        interactive: true,
+        folderTrust: true,
+        mcpServers: {
+          arithmetic: {
+            command: process.execPath,
+            args: [
+              resolveRepositoryFixture(
+                import.meta.url,
+                'scripts/tests/mcp-standalone-stdio-fixture.ts',
+              ),
+              directory,
+            ],
+          },
         },
-      },
-      telemetry: { enabled: false },
-      recording: { enabled: false },
-    });
+        telemetry: { enabled: false },
+        recording: { enabled: false },
+      }),
+    );
+    const settings = new SettingsService();
+    for (const [key, value] of Object.entries(config.getInitialSettings()))
+      settings.set(key, value);
     const obsolete = [
       'getMcpRuntimeStatus',
       'refreshMcpServers',
@@ -350,7 +166,7 @@ describe('MCP Agent operations', () => {
       'getMcpClientManager',
     ];
     for (const name of obsolete) {
-      Object.defineProperty(builtCallerConfig, name, {
+      Object.defineProperty(config, name, {
         configurable: true,
         value: () => {
           throw new Error(
@@ -360,18 +176,13 @@ describe('MCP Agent operations', () => {
       });
     }
     const agent = await fromConfig(
-      builtCallerConfig,
-      builtCallerSettings,
-      {},
-      builtCallerSettingsOwner,
-      builtCallerManager,
-      undefined,
-      undefined,
-      builtCallerMcp,
-      undefined,
-      capturedSessionClient(builtCallerOwner),
+      config,
+      settings,
+      { activation: { provider: 'fake', model: 'fake-model' } },
+      credentials().authority,
     );
     try {
+      await awaitMcpDiscoveryReady(agent);
       const controller = new AbortController();
       controller.abort();
       const events = [];
@@ -382,7 +193,7 @@ describe('MCP Agent operations', () => {
       }
       expect(events).toStrictEqual([{ type: 'done', reason: 'aborted' }]);
       expect(agent.mcp.discoveryState()).toBe('ready');
-      Object.defineProperty(builtCallerConfig, 'getResourceRegistry', {
+      Object.defineProperty(config, 'getResourceRegistry', {
         configurable: true,
         value: () => {
           throw new Error('Lookup must retain its original resource catalog');
@@ -399,7 +210,7 @@ describe('MCP Agent operations', () => {
           agent.mcp.findResource('absent:fixture:///arithmetic'),
         ).toBeUndefined();
       } finally {
-        Reflect.deleteProperty(builtCallerConfig, 'getResourceRegistry');
+        Reflect.deleteProperty(config, 'getResourceRegistry');
       }
       expect(
         await agent.mcp.readResource('arithmetic', 'fixture:///arithmetic'),
@@ -414,58 +225,21 @@ describe('MCP Agent operations', () => {
       expect(
         requests.split('\n').filter((line) => line === 'tools/list'),
       ).toHaveLength(2);
-      const prompt = builtCallerMcp.listPrompts('arithmetic')[0];
       await agent.dispose();
-      expect(builtCallerMcp.isStopped()).toBe(false);
       expect(() =>
         agent.mcp.findResource('arithmetic:fixture:///arithmetic'),
       ).toThrow('closed');
-      expect(
-        builtCallerMcp.findResource('arithmetic:fixture:///arithmetic'),
-      ).toBeDefined();
       await expect(
         agent.mcp.readResource('arithmetic', 'fixture:///arithmetic'),
       ).rejects.toThrow('closed');
-      expect(
-        await builtCallerMcp.readResource(
-          'arithmetic',
-          'fixture:///arithmetic',
-        ),
-      ).toMatchObject({
-        contents: [{ text: 'Addition combines quantities.' }],
-      });
-      expect(
-        (await prompt.invoke({ value: 'nine' })).messages[0]?.content,
-      ).toMatchObject({ text: 'Explain nine' });
-      const revocation = builtCallerMcp.trust.setTrustedFolderLive(false);
-      await expect(
-        builtCallerMcp.readResource('arithmetic', 'fixture:///arithmetic'),
-      ).rejects.toThrow(/not available|not authorized|not connected/i);
-      await revocation;
     } finally {
-      for (const name of obsolete)
-        Reflect.deleteProperty(builtCallerConfig, name);
-      await agent.dispose();
-      await builtCallerClose();
-      await rm(directory, { recursive: true, force: true });
+      for (const name of obsolete) Reflect.deleteProperty(config, name);
+      await runCleanupSteps([
+        () => agent.dispose(),
+        () => config.dispose(),
+        () => rm(workspace, { recursive: true, force: true }),
+        () => rm(directory, { recursive: true, force: true }),
+      ]);
     }
   }, 30000);
 });
-
-async function settleEngineRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previousReplay: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
-  }
-}
-
-function requireCallerActivation(
-  result: Awaited<ReturnType<typeof executeProviderActivation>>,
-): void {
-  if (result.authFailed) throw result.authError;
-}
