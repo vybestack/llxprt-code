@@ -16,6 +16,72 @@ async function collect(rows: ProviderRequestRows): Promise<IContent[]> {
 }
 
 describe('native backend provider normalization', () => {
+  const speakers: Array<IContent['speaker']> = ['human', 'ai', 'tool'];
+  it.each(
+    speakers.flatMap((speaker) =>
+      [false, true].flatMap((pending) =>
+        [0, 200].map((padding) => ({ speaker, pending, padding })),
+      ),
+    ),
+  )(
+    'detects call ownership without changing the selected history: %j',
+    async ({ speaker, pending, padding }) => {
+      const history = new HistoryService({});
+      const rows: IContent[] = [
+        ...Array.from(
+          { length: padding },
+          (_, index): IContent => ({
+            speaker: 'human',
+            blocks: [{ type: 'text', text: `prefix-${index}` }],
+          }),
+        ),
+        {
+          speaker,
+          blocks: [
+            { type: 'tool_call', id: 'owned', name: 'read', parameters: {} },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'owned',
+              toolName: 'read',
+              result: 5,
+            },
+          ],
+        },
+      ];
+      try {
+        await history.addBatch(pending ? [] : rows);
+        const raw: IContent[] = [];
+        for await (const row of history.streamRawHistory()) raw.push(row);
+        const expected = buildProviderContent(
+          raw,
+          pending ? rows : [],
+          new DebugLogger('call-ownership-test'),
+        );
+        const selection = await history.prepareCuratedForProviderSnapshot(
+          pending ? rows : [],
+        );
+        try {
+          const native = selection.native;
+          if (native === undefined)
+            throw new Error('Expected an indexed native selection');
+          expect(native.indexed.hasToolResponseSources()).toBe(true);
+          expect(await native.indexed.hasAssistantToolCalls()).toBe(
+            speaker !== 'human',
+          );
+          expect(await collect(selection)).toStrictEqual(expected);
+        } finally {
+          await selection.close();
+        }
+      } finally {
+        await history.dispose();
+      }
+    },
+  );
   it('uses the indexed request and overlays pending results without publishing them', async () => {
     const history = new HistoryService({});
     history.setTokenizerFactory(exactTokenizer());
