@@ -74,6 +74,29 @@ describe('Responses source deterministic lifecycle', () => {
       await owner.dispose();
     }
   });
+  it('propagates the exact abort reason between chunks of one native text row', async () => {
+    const controller = new AbortController();
+    const reason = new Error('abort inside native text');
+    const prompt = await nativePrompt(
+      nativeRows([
+        { ...row, blocks: [{ type: 'text', text: 'x'.repeat(70_000) }] },
+      ]),
+      { model: 'gpt-5.6', context, signal: controller.signal },
+    );
+    const reader = prompt.body(prompt.envelope())[Symbol.asyncIterator]();
+    try {
+      let next = await reader.next();
+      while (!next.done && !new TextDecoder().decode(next.value).endsWith('x'))
+        next = await reader.next();
+      expect(next.done).toBe(false);
+      expect(next.value?.byteLength).toBeLessThan(70_000);
+      controller.abort(reason);
+      await expect(reader.next()).rejects.toBe(reason);
+    } finally {
+      await reader.return?.();
+      await prompt.dispose();
+    }
+  });
   it('provides a native text-only estimator without a captured prompt string', async () => {
     let pulls = 0;
     const rows = {

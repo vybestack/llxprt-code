@@ -233,9 +233,18 @@ export class NativeResponsesPrompt {
     media: DiskBodyMedia = 'wire',
   ): AsyncGenerator<Uint8Array> {
     if (media === 'dump') {
-      for await (const piece of this.bodyPieces(request))
+      for await (const piece of this.bodyPieces(request)) {
+        this.requireOpen();
         yield piece.diagnostic();
-    } else yield* this.capture.stream(() => this.bodyPieces(request));
+      }
+    } else {
+      for await (const bytes of this.capture.stream(() =>
+        this.bodyPieces(request),
+      )) {
+        this.requireOpen();
+        yield bytes;
+      }
+    }
   }
 
   async *frame(request: OpenAIResponsesRequest): AsyncGenerator<Uint8Array> {
