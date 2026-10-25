@@ -4,7 +4,6 @@ import { checkpointBindings } from '../../../__tests__/recording-checkpoint-fixt
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { LocalMediaStore } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { ChatOwnerOperations } from '../../commands/chatOwnerCommand.js';
 import type { ChatRecordingOperations } from '../../commands/chatCommand.js';
@@ -28,10 +27,7 @@ export function ownerOperations(owner: Agent): ChatOwnerOperations {
   };
 }
 
-export function rawOperations(
-  owner: Agent,
-  media: LocalMediaStore,
-): ChatRecordingOperations {
+export function rawOperations(owner: Agent): ChatRecordingOperations {
   const [
     listTargets,
     saveCheckpoint,
@@ -42,7 +38,7 @@ export function rawOperations(
     () => null,
     () => null,
     () => null,
-    () => media,
+    () => undefined,
   );
   return {
     getRecording: () => null,

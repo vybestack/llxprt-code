@@ -4,10 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import {
-  useCommandOwners,
-  commandOwnerClient,
-} from '../../__tests__/command-owner-fixture.js';
+import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
@@ -49,12 +46,8 @@ describe('registered compress command owner', () => {
         blocks: [{ type: 'text', text: 'decoy history remains intact' }],
       },
     ]);
-    await commandOwnerClient(owner).startChat(
-      await commandOwnerClient(owner).getHistory(),
-    );
-    await commandOwnerClient(decoy).startChat(
-      await commandOwnerClient(decoy).getHistory(),
-    );
+    await owner.session.replaceHistory(await owner.session.getHistory());
+    await decoy.session.replaceHistory(await decoy.session.getHistory());
     const emitted: HistoryItemWithoutId[] = [];
     const invocation = createMockCommandContext({
       services: { agent: decoy },

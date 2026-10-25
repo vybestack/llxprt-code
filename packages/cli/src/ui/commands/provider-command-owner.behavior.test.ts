@@ -3,13 +3,14 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
-import { readFile } from 'node:fs/promises';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import {
-  registerCommandOwnerProvider,
-  useCommandOwners,
-} from '../../__tests__/command-owner-fixture.js';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
+import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { createRecordingProvider } from '../../../../agents/src/api/__tests__/helpers/recording-provider.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { createAgentProviderCommand } from '../../__tests__/provider-command-test-owner.js';
@@ -19,8 +20,51 @@ import type { SlashCommand } from './types.js';
 
 describe('registered provider command ownership', () => {
   const owner = useCommandOwners();
+  const credentials = useOwnedCredentials();
+  const contributed = createRecordingProvider({
+    alias: 'provider-command-contributed',
+  });
+  const contributedAgents: Agent[] = [];
+  const contributedDirectories: string[] = [];
   const saved: Array<{ alias: string; baseProvider: string }> = [];
   const refreshes: string[] = [];
+
+  afterEach(async () => {
+    try {
+      await Promise.all(
+        contributedAgents.splice(0).map((agent) => agent.dispose()),
+      );
+    } finally {
+      await Promise.all(
+        contributedDirectories
+          .splice(0)
+          .map((directory) => rm(directory, { recursive: true, force: true })),
+      );
+    }
+  });
+
+  async function contributedOwner(label: string): Promise<Agent> {
+    const workingDir = await realpath(
+      await mkdtemp(join(tmpdir(), 'provider-command-owner-')),
+    );
+    contributedDirectories.push(workingDir);
+    const agent = await createAgent({
+      credentialAuthority: credentials().authority,
+      provider: contributed.alias,
+      model: 'recording-default',
+      workingDir,
+      sessionId: `same-command-owner-label-${label}`,
+      providerContributions: contributed.contributions,
+      harness: {
+        forceInteractive: false,
+        forceConfirmations: false,
+        includeProcessCwd: false,
+      },
+      lsp: false,
+    });
+    contributedAgents.push(agent);
+    return agent;
+  }
 
   function loader(agent: Agent, label: string): BuiltinCommandLoader {
     return new BuiltinCommandLoader(
@@ -75,9 +119,8 @@ describe('registered provider command ownership', () => {
   }
 
   it('switches and records on the registered owner despite decoy invocation owners', async () => {
-    const left = await owner('left');
-    const right = await owner('right');
-    registerCommandOwnerProvider(left, 'openai');
+    const left = await contributedOwner('left');
+    const right = await contributedOwner('right');
     const leftCommand = await registered(left);
     await registered(right);
     await Promise.all([
@@ -89,15 +132,15 @@ describe('registered provider command ownership', () => {
       right.session.setRecording({ enabled: true }),
     ]);
 
-    const result = await execute(leftCommand, 'openai', right);
+    const result = await execute(leftCommand, 'fake', right);
 
     expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
-      content: 'Switched from fake to openai',
+      content: `Switched from ${contributed.alias} to fake`,
     });
-    expect(left.getProvider()).toBe('openai');
-    expect(right.getProvider()).toBe('fake');
+    expect(left.getProvider()).toBe('fake');
+    expect(right.getProvider()).toBe(contributed.alias);
     const leftPath = left.session.getRecording().path;
     const rightPath = right.session.getRecording().path;
     if (!leftPath || !rightPath)
@@ -133,9 +176,7 @@ describe('registered provider command ownership', () => {
     saved.length = 0;
     refreshes.length = 0;
     const left = await owner('alias-left');
-    const right = await owner('alias-right');
-    registerCommandOwnerProvider(right, 'openai');
-    await right.setProvider('openai');
+    const right = await contributedOwner('alias-right');
     const result = await execute(
       await registered(left, 'left'),
       'save mine',
@@ -168,21 +209,20 @@ describe('registered provider command ownership', () => {
   }, 30000);
 
   it('does not reroute a retired owner command to a surviving invocation owner', async () => {
-    const left = await owner('retired');
-    const right = await owner('surviving');
-    registerCommandOwnerProvider(right, 'openai');
+    const left = await contributedOwner('retired');
+    const right = await contributedOwner('surviving');
     const leftCommand = await registered(left);
     const rightCommand = await registered(right);
     await left.dispose();
 
-    expect(await execute(leftCommand, 'openai', right)).toMatchObject({
+    expect(await execute(leftCommand, 'fake', right)).toMatchObject({
       messageType: 'error',
     });
-    expect(right.getProvider()).toBe('fake');
-    expect(await execute(rightCommand, 'openai', right)).toMatchObject({
+    expect(right.getProvider()).toBe(contributed.alias);
+    expect(await execute(rightCommand, 'fake', right)).toMatchObject({
       messageType: 'info',
     });
-    expect(right.getProvider()).toBe('openai');
+    expect(right.getProvider()).toBe('fake');
     expect(await right.generate('continue after peer disposal')).toContain(
       'reply',
     );
