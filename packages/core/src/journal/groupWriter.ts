@@ -130,11 +130,16 @@ export class JournalGroupWriter {
     if (this.closed) throw new Error('The journal writer is closed');
     if (this.failure !== undefined)
       throw new JournalWriterPoisonedError({ cause: this.failure.error });
-    const length = encodeRowDraft(0n, draft).recordLength;
-    const start = this.reserve(length);
+    const encoded = encodeRowDraft(0n, draft);
+    const start = this.reserve(encoded.recordLength);
     this.admissionEpoch++;
     try {
-      const end = writeAdmittedRow(this.requireHandle().fd, start, draft);
+      const end = writeAdmittedRow(
+        this.requireHandle().fd,
+        start,
+        draft,
+        encoded,
+      );
       return { start, end };
     } catch (error) {
       this.poison(error);

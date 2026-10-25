@@ -130,8 +130,10 @@ async function readBody(
 export async function readStoredRow(
   access: RecordAccess,
   entry: RowEntry,
+  knownHead?: FrameHead,
 ): Promise<StoredRow> {
-  const head = await access.readRecordHead(entry.recordOffset, 'ROW');
+  const head =
+    knownHead ?? (await access.readRecordHead(entry.recordOffset, 'ROW'));
   if (head.kind !== RECORD_KIND.ROW) {
     throw new JournalFormatError(
       `Record at offset ${entry.recordOffset} is not a row (kind ${head.kind})`,

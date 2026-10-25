@@ -4,7 +4,7 @@ import { writeSync } from 'node:fs';
 import { crc32, putU32, viewOf } from './bytes.js';
 import { encodeFrameStart, readFrameStart } from './frame.js';
 import { createRecordAccess } from './recordAccess.js';
-import { encodeRowDraft, type RowDraft } from './rowDraft.js';
+import type { EncodedRow, RowDraft } from './rowDraft.js';
 import { decodeRowHeader, encodeIdPiece } from './rowRecord.js';
 import { readStoredRow } from './rowReads.js';
 import { entryForNewRow } from './rowDraft.js';
@@ -17,8 +17,8 @@ export function writeAdmittedRow(
   fd: number,
   offset: number,
   draft: RowDraft,
+  encoded: EncodedRow,
 ): number {
-  const encoded = encodeRowDraft(0n, draft);
   const bodyLength = encoded.record.body?.length;
   if (bodyLength === undefined) throw new Error('Admission row has no body');
   let position = offset;
@@ -77,6 +77,7 @@ export async function* readAdmittedRows(
             { header, recordLength: head.endOffset - offset },
             offset,
           ),
+          head,
         );
         yield {
           ...header,

@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { join } from 'node:path';
 import { stat } from 'node:fs/promises';
 import { createJournal } from './journalWriterOpen.js';
@@ -12,6 +12,7 @@ import {
   testJournalSeams,
 } from './__tests__/support/journalFixtures.js';
 import { draftRow } from './__tests__/support/storeFixtures.js';
+import * as rowDraftCodec from './rowDraft.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
 
 function gate(): { promise: Promise<void>; release(): void } {
@@ -60,6 +61,70 @@ describe('journal synchronous admission allocation', () => {
     } finally {
       seams.release();
       await committing.catch(() => undefined);
+      await writer.close();
+    }
+  });
+
+  it('encodes one admission header for allocation and writing', async () => {
+    const writer = await createJournal(
+      join(directory(), 'header-encoding.llxj'),
+      testJournalSeams().dependencies,
+    );
+    const draft = draftRow({ text: 'single encoded admission header' });
+    const encode = rowDraftCodec.encodeRowDraft;
+    let encodings = 0;
+    const encoding = spyOn(rowDraftCodec, 'encodeRowDraft').mockImplementation(
+      (label, row) => {
+        encodings++;
+        return encode(label, row);
+      },
+    );
+    try {
+      const admission = writer.admitRow(draft);
+      expect(encodings).toBe(1);
+      const rows = [];
+      for await (const row of writer.admittedRows(
+        admission.start,
+        admission.end,
+      ))
+        rows.push(row);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].blocks).toStrictEqual(draft.blocks);
+    } finally {
+      encoding.mockRestore();
+      await writer.close();
+    }
+  });
+
+  it('reads each admitted frame header once while preserving its complete values', async () => {
+    const writer = await createJournal(
+      join(directory(), 'header-reads.llxj'),
+      testJournalSeams().dependencies,
+    );
+    const draft = draftRow({ text: 'admitted body with a single header read' });
+    const admission = writer.admitRow(draft);
+    const readAt = writer.reader.readAt.bind(writer.reader);
+    let headerReads = 0;
+    const reads = spyOn(writer.reader, 'readAt').mockImplementation(
+      (position, length) => {
+        if (position === admission.start) headerReads++;
+        return readAt(position, length);
+      },
+    );
+    try {
+      const rows = [];
+      for await (const row of writer.admittedRows(
+        admission.start,
+        admission.end,
+      ))
+        rows.push(row);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].meta).toStrictEqual(draft.meta);
+      expect(rows[0].blocks).toStrictEqual(draft.blocks);
+      expect(rows[0].ids).toStrictEqual(draft.ids);
+      expect(headerReads).toBe(1);
+    } finally {
+      reads.mockRestore();
       await writer.close();
     }
   });
