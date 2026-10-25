@@ -158,8 +158,34 @@ function nextChatRowMessages(
     const mapping = rowIds?.(row, at);
     return mapping === undefined
       ? convert()
-      : mapping.then((createMapper) => convert(createMapper?.()));
+      : mapping.then((createMapper) => convert(createMapper()));
   });
+}
+
+async function* chatRowMessages(
+  rows: AsyncIterable<IContent>,
+  settings: RowFormatSettings,
+  strip: unknown,
+  lastThinking: number,
+  rowIds: NativeRowIds | undefined,
+): AsyncGenerator<ChatRowMessages> {
+  const iterator = rows[Symbol.asyncIterator]();
+  try {
+    for (let at = 0; ; at++) {
+      const item = await nextChatRowMessages(
+        iterator,
+        at,
+        settings,
+        strip,
+        lastThinking,
+        rowIds,
+      );
+      if (item === undefined) return;
+      yield item;
+    }
+  } finally {
+    await iterator.return?.();
+  }
 }
 
 export async function* nativeChatPieces(
@@ -178,56 +204,43 @@ export async function* nativeChatPieces(
   let mediaEnd = -1;
   let video = false;
   let index = 0;
-  const iterator = rows[Symbol.asyncIterator]();
-  try {
-    for (;;) {
-      const item = await nextChatRowMessages(
-        iterator,
-        index++,
-        settings,
-        strip,
-        lastThinking,
-        rowIds,
-      );
-      if (item === undefined) break;
-      if (
-        (pending.length !== 0 || mediaStart >= 0) &&
-        item.speaker !== 'tool'
-      ) {
-        if (mediaAt === undefined) yield* mediaMessage(pending, serialize);
-        else
-          yield* indexedMediaMessage(
-            mediaAt,
-            mediaStart,
-            mediaEnd,
-            video,
-            serialize,
-          );
-        pending = [];
-        mediaStart = -1;
-        video = false;
-        lastIds = [];
-      }
-      const at = index - 1;
-      pending.push(...item.media);
-      const messages = item.messages;
-      if (mediaAt !== undefined && pending.length !== 0) {
-        if (mediaStart < 0) mediaStart = at;
-        mediaEnd = at;
-        video ||= pending.some(
-          (block) => classifyMediaBlock(block) === 'video',
+  for await (const item of chatRowMessages(
+    rows,
+    settings,
+    strip,
+    lastThinking,
+    rowIds,
+  )) {
+    if ((pending.length !== 0 || mediaStart >= 0) && item.speaker !== 'tool') {
+      if (mediaAt === undefined) yield* mediaMessage(pending, serialize);
+      else
+        yield* indexedMediaMessage(
+          mediaAt,
+          mediaStart,
+          mediaEnd,
+          video,
+          serialize,
         );
-        pending = [];
-      }
-      for (const message of messages) {
-        if (!keepsMessage(message, allowOrphans, lastIds)) continue;
-        lastIds = nextCallIds(message, lastIds);
-        yield nativeDumpLiteral(',');
-        yield* serialize(message);
-      }
+      pending = [];
+      mediaStart = -1;
+      video = false;
+      lastIds = [];
     }
-  } finally {
-    await iterator.return?.();
+    const at = index++;
+    pending.push(...item.media);
+    const messages = item.messages;
+    if (mediaAt !== undefined && pending.length !== 0) {
+      if (mediaStart < 0) mediaStart = at;
+      mediaEnd = at;
+      video ||= pending.some((block) => classifyMediaBlock(block) === 'video');
+      pending = [];
+    }
+    for (const message of messages) {
+      if (!keepsMessage(message, allowOrphans, lastIds)) continue;
+      lastIds = nextCallIds(message, lastIds);
+      yield nativeDumpLiteral(',');
+      yield* serialize(message);
+    }
   }
   if (mediaAt !== undefined && mediaStart >= 0)
     yield* indexedMediaMessage(mediaAt, mediaStart, mediaEnd, video, serialize);
