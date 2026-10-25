@@ -1097,8 +1097,13 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T5.4a B6 SubAgentScope.create test callers through one helper
 - [x] T5.4b B6 SubAgentScope.create new signature
 - [x] T5.4c B6 SubAgentScope.create returns narrow ChildAgentScope (preparatory for T5.6)
-- [ ] T5.5-inv B6 McpRuntimeOwner.create caller inventory
+- [x] T5.5-inv B6 McpRuntimeOwner.create caller inventory
 - [ ] T5.5a-n B6 MCP test callers through helpers (ids added by T5.5-inv)
+  - [ ] T5.5a B6 MCP test callers through one helper: packages/agents, 12 files (file list in inventory-T5.5.md)
+  - [ ] T5.5b B6 MCP test callers through one helper: packages/agents, 12 files (file list in inventory-T5.5.md)
+  - [ ] T5.5c B6 MCP test callers through one helper: packages/agents, 12 files (file list in inventory-T5.5.md)
+  - [ ] T5.5d B6 MCP test callers through one helper: packages/agents, 12 files (file list in inventory-T5.5.md)
+  - [ ] T5.5e B6 MCP test callers through one helper: packages/cli, 4 files (file list in inventory-T5.5.md)
 - [ ] T5.5 B6 McpRuntimeOwner.create new signature
 - [ ] T5.6 B6 tool catalog and child assembly inputs
 - [ ] T5.7 E7 typed ProviderFileLifecycle
