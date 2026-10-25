@@ -3,11 +3,22 @@ import { afterAll, describe, expect, it } from 'bun:test';
 import { encoding_for_model } from '@dqbd/tiktoken';
 import { NeutralMergeQueue } from './neutral-merge-queue.js';
 import { estimateTokens } from './toolOutputLimiter.js';
+import { countLongNeutralText } from './neutral-long-piece.js';
 
 const oracle = encoding_for_model('gpt-4o');
 
 describe('neutral token counting', () => {
   afterAll(() => oracle.free());
+  it('batches short pieces into one encoder call at exact boundaries', () => {
+    const text = 'cold payload 雪 '.repeat(1800);
+    let calls = 0;
+    const count = countLongNeutralText(text, (piece) => {
+      calls++;
+      return oracle.encode(piece).length;
+    });
+    expect(count).toBe(oracle.encode(text).length);
+    expect(calls).toBe(1);
+  });
   it('matches the whole encoder on adversarial pieces and boundaries', () => {
     for (const length of [513, 1025, 2049, 4097]) {
       for (const unit of [

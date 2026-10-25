@@ -87,13 +87,19 @@ export function countLongNeutralText(
   if (pieces === undefined)
     throw new Error('Neutral tokenizer pattern is not initialized');
   let count = 0;
+  let start = 0;
   const matcher = new RegExp(pieces);
   for (
     let match = matcher.exec(text);
     match !== null;
     match = matcher.exec(text)
-  )
-    count +=
-      match[0].length > 512 ? countPiece(match[0]) : countShort(match[0]);
-  return count;
+  ) {
+    if (match[0].length > 512) {
+      if (match.index > start)
+        count += countShort(text.slice(start, match.index));
+      count += countPiece(match[0]);
+      start = match.index + match[0].length;
+    }
+  }
+  return start < text.length ? count + countShort(text.slice(start)) : count;
 }
