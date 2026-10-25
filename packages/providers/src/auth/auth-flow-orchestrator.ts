@@ -366,7 +366,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     if (this.lockReleaseFailures.length > 0) {
       throw new AggregateError(
         this.lockReleaseFailures.splice(0),
-        'Auth lock release failed',
+        'Lock release failed',
       );
     }
   }
@@ -468,8 +468,16 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     providerName: string,
     bucket: string | undefined,
   ): Promise<void> {
+    await this.retainReleaseFailure(() =>
+      this.tokenStore.releaseAuthLock(providerName, bucket),
+    );
+  }
+
+  private async retainReleaseFailure(
+    release: () => Promise<void>,
+  ): Promise<void> {
     try {
-      await this.tokenStore.releaseAuthLock(providerName, bucket);
+      await release();
     } catch (error) {
       this.lockReleaseFailures.push(error);
       throw error;
@@ -649,7 +657,9 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         signal,
       );
     } finally {
-      await this.tokenStore.releaseRefreshLock(providerName, bucket);
+      await this.retainReleaseFailure(() =>
+        this.tokenStore.releaseRefreshLock(providerName, bucket),
+      );
     }
   }
 

@@ -24,6 +24,39 @@ const logger = new DebugLogger('llxprt:oauth:token');
 
 export type RefreshErrorPolicy = 'return-null' | 'throw';
 
+/**
+ * Releases refresh locks for one owner and retains each release failure until
+ * the owner retires. The releasing caller still sees the failure; retirement
+ * reports it once, because the caller's outcome does not reach the owner.
+ */
+export class RefreshLockReleases {
+  private readonly failures: unknown[] = [];
+
+  constructor(private readonly tokenStore: TokenStore) {}
+
+  async release(
+    providerName: string,
+    bucket: string | undefined,
+  ): Promise<void> {
+    try {
+      await this.tokenStore.releaseRefreshLock(providerName, bucket);
+    } catch (error) {
+      this.failures.push(error);
+      throw error;
+    }
+  }
+
+  /** Throws the retained failures once, then forgets them. */
+  throwRetained(): void {
+    if (this.failures.length > 0) {
+      throw new AggregateError(
+        this.failures.splice(0),
+        'Refresh lock release failed',
+      );
+    }
+  }
+}
+
 // --------------------------------------------------------------------------
 // Refresh-lock-miss handler
 // --------------------------------------------------------------------------
@@ -38,6 +71,7 @@ export async function handleRefreshLockMiss(
   thirtySecondsFromNow: number,
   tokenStore: TokenStore,
   proactiveRenewalManager: ProactiveRenewalManager,
+  releases: RefreshLockReleases,
   signal?: AbortSignal,
 ): Promise<OAuthToken | null> {
   logger.debug(
@@ -77,7 +111,7 @@ export async function handleRefreshLockMiss(
       try {
         return await readFreshToken();
       } finally {
-        await tokenStore.releaseRefreshLock(providerName, bucketToUse);
+        await releases.release(providerName, bucketToUse);
       }
     }
 
@@ -278,6 +312,7 @@ export async function refreshTokenUnderLock(
   tokenStore: TokenStore,
   providerRegistry: ProviderRegistry,
   renewals: ProactiveRenewalManager,
+  releases: RefreshLockReleases,
   signal?: AbortSignal,
   errorPolicy: RefreshErrorPolicy = signal ? 'throw' : 'return-null',
 ): Promise<OAuthToken | null> {
@@ -299,6 +334,7 @@ export async function refreshTokenUnderLock(
       thirtySecondsFromNow,
       tokenStore,
       renewals,
+      releases,
       signal,
     );
   }
@@ -317,6 +353,6 @@ export async function refreshTokenUnderLock(
       errorPolicy,
     );
   } finally {
-    await tokenStore.releaseRefreshLock(providerName, bucketToUse);
+    await releases.release(providerName, bucketToUse);
   }
 }

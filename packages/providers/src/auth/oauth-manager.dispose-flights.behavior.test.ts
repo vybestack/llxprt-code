@@ -48,6 +48,7 @@ class RecordingStore extends ProxyTokenStore {
   readonly tokens = new Map<string, OAuthToken>();
   acquireGate: Promise<void> | undefined;
   failNextRelease = false;
+  failNextRefreshRelease = false;
   private readonly recordingClient = new RecordingClient(this.events);
 
   constructor(private readonly locks: Set<string> = new Set()) {
@@ -97,7 +98,13 @@ class RecordingStore extends ProxyTokenStore {
     return true;
   }
 
-  override async releaseRefreshLock(): Promise<void> {}
+  override async releaseRefreshLock(): Promise<void> {
+    if (this.failNextRefreshRelease) {
+      this.failNextRefreshRelease = false;
+      this.events.push('refresh-release-failed');
+      throw new Error('refresh lock release failed');
+    }
+  }
 
   override async acquireAuthLock(
     provider: string,
@@ -607,5 +614,134 @@ describe('OAuthManager multi-bucket authentication honors the caller signal', ()
       await authenticating.outcome;
       await manager.dispose();
     }
+  });
+});
+
+interface HeldRefresh {
+  readonly provider: OAuthProvider;
+  readonly entered: Promise<void>;
+  readonly hold: { release: () => void };
+}
+
+/** refreshToken waits on a gate and ignores its signal while waiting. */
+function heldRefreshProvider(
+  name: string,
+  outcome: 'refresh' | 'fail',
+): HeldRefresh {
+  const entered = gate();
+  const hold = gate();
+  const provider: OAuthProvider = {
+    name,
+    initiateAuth: async (): Promise<OAuthToken> => freshToken(`${name}-auth`),
+    getToken: async () => null,
+    refreshToken: async (): Promise<OAuthToken> => {
+      entered.release();
+      await hold.promise;
+      if (outcome === 'fail') throw new Error('provider refresh failed');
+      return freshToken(`${name}-refreshed`);
+    },
+  };
+  return { provider, entered: entered.promise, hold };
+}
+
+function expiredToken(access: string): OAuthToken {
+  return { ...freshToken(access), expiry: Math.floor(Date.now() / 1000) - 60 };
+}
+
+describe('OAuthManager dispose reports refresh-lock release failures', () => {
+  async function disposeDuringRefresh(
+    start: (manager: OAuthManager, store: RecordingStore) => Promise<unknown>,
+    prepare: (store: RecordingStore) => void,
+    outcome: 'refresh' | 'fail',
+  ): Promise<{
+    readonly caller: unknown;
+    readonly disposal: unknown;
+    readonly events: readonly string[];
+  }> {
+    const store = new RecordingStore();
+    const manager = new OAuthManager(store, undefined, undefined, 'owned');
+    const held = heldRefreshProvider('held', outcome);
+    manager.registerProvider(held.provider);
+    prepare(store);
+    const running = track(start(manager, store));
+    await held.entered;
+    const disposing = track(manager.dispose());
+    try {
+      await flush();
+      expect(disposing.isSettled()).toBe(false);
+      held.hold.release();
+      const disposal = await disposing.outcome;
+      return { caller: await running.outcome, disposal, events: store.events };
+    } finally {
+      held.hold.release();
+      await running.outcome;
+      await disposing.outcome;
+    }
+  }
+
+  it('reports a refresh-lock release failure once when a token read refresh is admitted at dispose', async () => {
+    const result = await disposeDuringRefresh(
+      (manager) => manager.getToken('held', 'default'),
+      (store) => {
+        store.tokens.set('held:default', expiredToken('stale'));
+        store.failNextRefreshRelease = true;
+      },
+      'refresh',
+    );
+
+    expect(result.caller).toBeInstanceOf(Error);
+    expect((result.caller as Error).message).toBe(
+      'refresh lock release failed',
+    );
+    expect(result.disposal).toBeInstanceOf(AggregateError);
+    expect(countMessages(result.disposal, 'refresh lock release failed')).toBe(
+      1,
+    );
+    expect(result.events.slice(-2)).toStrictEqual([
+      'refresh-release-failed',
+      'store-close',
+    ]);
+  });
+
+  it('reports a refresh-lock release failure once when a forced refresh is admitted at dispose', async () => {
+    const result = await disposeDuringRefresh(
+      (manager) => manager.forceRefreshToken('held', 'old-access', 'default'),
+      (store) => {
+        store.tokens.set('held:default', {
+          ...freshToken('old-access'),
+          access_token: 'old-access',
+        });
+        store.failNextRefreshRelease = true;
+      },
+      'refresh',
+    );
+
+    expect(result.caller).toBeInstanceOf(Error);
+    expect((result.caller as Error).message).toBe(
+      'refresh lock release failed',
+    );
+    expect(result.disposal).toBeInstanceOf(AggregateError);
+    expect(countMessages(result.disposal, 'refresh lock release failed')).toBe(
+      1,
+    );
+    expect(result.events.slice(-2)).toStrictEqual([
+      'refresh-release-failed',
+      'store-close',
+    ]);
+  });
+
+  it('keeps provider errors and owner aborts out of disposal when the lock releases cleanly', async () => {
+    const result = await disposeDuringRefresh(
+      (manager) => manager.getToken('held', 'default'),
+      (store) => {
+        store.tokens.set('held:default', expiredToken('stale'));
+      },
+      'fail',
+    );
+
+    expect(result.caller).toBeInstanceOf(Error);
+    expect(result.disposal).toBeUndefined();
+    expect(result.events).not.toContain('refresh-release-failed');
+    expect(result.events[result.events.length - 1]).toBe('store-close');
   });
 });

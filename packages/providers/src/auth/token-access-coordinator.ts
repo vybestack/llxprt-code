@@ -26,6 +26,7 @@ import type {
 
 import {
   refreshTokenUnderLock,
+  RefreshLockReleases,
   performDiskCheckUnderLock,
   type RefreshErrorPolicy,
 } from './token-refresh-helper.js';
@@ -95,7 +96,19 @@ export class TokenAccessCoordinator {
     private readonly readInteractiveAuthTimeout: () => unknown = () =>
       undefined,
     private readonly profiles?: OAuthProfileReads,
-  ) {}
+  ) {
+    this.refreshLockReleases = new RefreshLockReleases(tokenStore);
+  }
+
+  private readonly refreshLockReleases: RefreshLockReleases;
+
+  /**
+   * Reports refresh-lock release failures that happened while callers were
+   * refreshing. Called once, after the owner joined its accepted operations.
+   */
+  dispose(): void {
+    this.refreshLockReleases.throwRetained();
+  }
 
   // --------------------------------------------------------------------------
   // Authenticator injection (set after construction to avoid cycles)
@@ -294,6 +307,7 @@ export class TokenAccessCoordinator {
         this.tokenStore,
         this.providerRegistry,
         renewals,
+        this.refreshLockReleases,
         signal,
         errorPolicy,
       );
@@ -706,7 +720,7 @@ export class TokenAccessCoordinator {
           this.providerRegistry,
         );
       } finally {
-        await this.tokenStore.releaseRefreshLock(providerName, bucketToCheck);
+        await this.refreshLockReleases.release(providerName, bucketToCheck);
       }
     }
 
@@ -1029,7 +1043,7 @@ export class TokenAccessCoordinator {
       );
       return null;
     } finally {
-      await this.tokenStore.releaseRefreshLock(providerName, effectiveBucket);
+      await this.refreshLockReleases.release(providerName, effectiveBucket);
     }
   }
 }

@@ -456,6 +456,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       () => this.interactiveAuth.dispose(),
       () => this.foreground.join(),
       () => this.authFlowOrchestrator.dispose(),
+      async () => this.tokenAccessCoordinator.dispose(),
       () => this.proactiveRenewalManager.cancelAndJoin(),
       async () => {
         if (this.tokenStoreOwnership === 'owned')
