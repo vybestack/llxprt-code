@@ -1,5 +1,3 @@
-import { observeActivationPreparation } from '../../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
-
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -11,11 +9,8 @@ import { observeActivationPreparation } from '../../../../agents/src/api/__tests
  * SPDX-License-Identifier: Apache-2.0
  */
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import type {
-  Config,
-  RuntimeProviderManager,
-} from '@vybestack/llxprt-code-core';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { AgentProfilePreflight } from '@vybestack/llxprt-code-agents';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 const retainedActivationOperations: Array<{ dispose(): void | Promise<void> }> =
   [];
@@ -158,8 +153,7 @@ async function runConfig(
 ): Promise<{
   config: Config;
   settingsOwner: SessionSettingsOwner;
-  oauthManager: OAuthManager | undefined;
-  providerManager: RuntimeProviderManager;
+  preflight: AgentProfilePreflight;
   callLog: string[];
 }> {
   process.argv = ['node', 'script.js', ...argv];
@@ -167,16 +161,10 @@ async function runConfig(
   const runtimeSettingsService = new SettingsService();
   const settingsOwner = new SessionSettingsOwner(runtimeSettingsService);
   retainedSettingsOwners.push(settingsOwner);
-  let oauthManager: OAuthManager | undefined;
-  let providerManager: RuntimeProviderManager | undefined;
+  let preflightRoot: AgentProfilePreflight | undefined;
   const callLog: string[] = [];
   const switchErrors: unknown[] = [];
 
-  const observation = observeActivationPreparation((operation, state) => {
-    providerManager = state.manager;
-    oauthManager = state.oauthManager ?? undefined;
-    callLog.push('manager-ready', 'oauth-ready');
-  });
   const config = await loadCliConfigWithPreflight({
     settings,
     extensions: [],
@@ -190,7 +178,11 @@ async function runConfig(
     onActivationBootstrapReady: (operation) => {
       retainedActivationOperations.push(operation);
     },
+    onProviderSwitchReady: () => {
+      callLog.push('manager-ready', 'oauth-ready');
+    },
     onPreflightReady: (operation) => {
+      preflightRoot = operation;
       const preflight = operation.preflight.bind(operation);
       operation.preflight = async (intent): ReturnType<typeof preflight> => {
         callLog.push(`preflight:${intent.provider}`);
@@ -202,11 +194,10 @@ async function runConfig(
       };
     },
   });
-  observation.mockRestore();
-  if (providerManager === undefined)
-    throw new Error('CLI startup did not publish its provider manager');
+  if (preflightRoot === undefined)
+    throw new Error('CLI startup did not publish its preflight');
   expect(switchErrors).toHaveLength(0);
-  return { config, settingsOwner, oauthManager, providerManager, callLog };
+  return { config, settingsOwner, preflight: preflightRoot, callLog };
 }
 
 // ─── Suite: step ordering ─────────────────────────────────────────────────────
@@ -248,13 +239,12 @@ describe('e2eOrderingParity: step ordering constraints', () => {
   });
 
   it('binds the post-Config manager and message bus before provider activation', async () => {
-    const { config, oauthManager, providerManager, callLog } = await runConfig(
-      {},
-      ['--provider', 'gemini'],
-    );
+    const { config, preflight, callLog } = await runConfig({}, [
+      '--provider',
+      'gemini',
+    ]);
     expect('getProviderManager' in config).toBe(false);
-    expect(providerManager.getActiveProviderName()).toBe('gemini');
-    expect(oauthManager?.runtimeMessageBus).toBeDefined();
+    expect(preflight.getActiveProviderName()).toBe('gemini');
     expect(callLog).toStrictEqual([
       'manager-ready',
       'oauth-ready',

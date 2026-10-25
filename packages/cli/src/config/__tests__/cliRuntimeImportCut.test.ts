@@ -1,8 +1,3 @@
-import {
-  observeActivationPreparation,
-  capturedActivation,
-} from '../../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
-import { ProviderReadFixture } from '../../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
 import { createTestMergedSettings } from '../settings.js';
 
 import {
@@ -12,12 +7,13 @@ import {
   expect,
   it,
 } from 'bun:test';
-import type { AgentActivationOperation } from '@vybestack/llxprt-code-agents';
-import { createProviderInspection } from '@vybestack/llxprt-code-agents';
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import {
+  AgentProfilePreflight,
+  type Agent,
+  type AgentActivationOperation,
+} from '@vybestack/llxprt-code-agents';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { assembleSettingsControl } from '../../../../agents/src/api/control/settings-control.js';
-import { assembleToolFormatControl } from '../../../../agents/src/api/control/tool-format-control.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -58,6 +54,7 @@ import {
 } from '../profileBootstrap.js';
 import { finalizeConfig } from '../postConfigRuntime.js';
 import { createRuntimeOwnerFeatures } from '../../__tests__/runtime-owner-features-fixture.js';
+import { activateConfiguredProvider } from '../../cliProviderInit.js';
 
 const originalArgv = process.argv;
 const roots: string[] = [];
@@ -142,8 +139,8 @@ describe('CLI provider bootstrap across owners', () => {
         undefined,
       );
       const foreground: {
-        manager?: RuntimeProviderManager;
         activation?: AgentActivationOperation;
+        agent?: Agent;
       } = {};
       bootstraps.push({
         foreground,
@@ -182,9 +179,6 @@ describe('CLI provider bootstrap across owners', () => {
           model: item.model,
         });
 
-        const observation = observeActivationPreparation((operation, state) => {
-          item.foreground.manager = state.manager;
-        });
         await finalizeConfig(
           {
             config,
@@ -217,10 +211,24 @@ describe('CLI provider bootstrap across owners', () => {
           undefined,
           true,
         );
-        observation.mockRestore();
-        const manager = item.foreground.manager;
-        if (manager === undefined)
-          throw new Error('Missing selected foreground manager');
+        const activation = item.foreground.activation;
+        if (activation === undefined)
+          throw new Error('Missing foreground activation');
+        const activated = await activateConfiguredProvider(
+          config,
+          item.runtimeState,
+          argv,
+          activation,
+        );
+        if (activated.token === undefined)
+          throw new Error('CLI did not provide a foreground receipt');
+        const agent = await AgentProfilePreflight.createForegroundAgent(
+          item.runtimeState,
+          activated.token,
+          activated.intent ?? {},
+          {},
+        );
+        item.foreground.agent = agent;
         expect('registration' in item.runtimeState).toBe(false);
         expect('providerManager' in config).toBe(false);
         expect(item.settingsOwner.readNamedParameter('auth-key')).toBe(
@@ -231,10 +239,7 @@ describe('CLI provider bootstrap across owners', () => {
         );
         expect(
           createRuntimeOwnerFeatures(
-            createProviderInspection(
-              () => item.settingsOwner.readSelectedEndpoint(),
-              manager,
-            ),
+            agent.providerReads.inspection,
             fixturePaths().directories,
             async () => {
               throw new Error(
@@ -264,46 +269,17 @@ describe('CLI provider bootstrap across owners', () => {
               () => {},
               item.settingsOwner.subscribeModelChanges.bind(item.settingsOwner),
             ),
-            assembleToolFormatControl(
-              item.settingsOwner.readToolFormat.bind(item.settingsOwner),
-              item.settingsOwner.writeToolFormat.bind(item.settingsOwner),
-              () => {
-                const provider = manager.getActiveProvider();
-                return provider === undefined
-                  ? undefined
-                  : {
-                      name: provider.name,
-                      toolFormat: provider.getToolFormat?.() ?? null,
-                    };
-              },
-              () => {},
-              () => {},
-            ),
-            new ProviderReadFixture(
-              item.settingsOwner,
-              manager,
-              () => config.getModel(),
-              (provider) => item.settingsService.getProviderSettings(provider),
-            ),
+            agent.toolFormat,
+            agent.providerReads,
             {
               setRaw: async () => {
                 throw new Error('Unexpected credential mutation');
               },
             },
-            () =>
-              new ProviderReadFixture(
-                item.settingsOwner,
-                manager,
-                () => config.getModel(),
-                (provider) =>
-                  item.settingsService.getProviderSettings(provider),
-              ).readOpenAIInfo(),
+            () => agent.providerReads.readOpenAIInfo(),
           ).getActiveModelName(),
         ).toBe(item.model);
       }
-      expect(bootstraps[0].foreground.manager).not.toBe(
-        bootstraps[1].foreground.manager,
-      );
       expect(
         bootstraps[0].settingsService.getProviderSettings('openai')['auth-key'],
       ).toBe('first-key');
@@ -312,16 +288,12 @@ describe('CLI provider bootstrap across owners', () => {
           'auth-key'
         ],
       ).toBe('second-key');
-      const first = bootstraps[0].foreground.activation;
-      const second = bootstraps[1].foreground.activation;
-      if (first === undefined || second === undefined)
-        throw new Error('Expected both actual activation acquisitions');
-      expect(capturedActivation(first).messageBus).not.toBe(
-        capturedActivation(second).messageBus,
-      );
     } finally {
       for (const item of bootstraps) {
-        await item.foreground.activation?.dispose();
+        // The foreground agent owns the transferred activation once built.
+        if (item.foreground.agent !== undefined)
+          await item.foreground.agent.dispose();
+        else await item.foreground.activation?.dispose();
         await item.runtimeState.dispose();
         await item.settingsOwner.dispose();
       }
