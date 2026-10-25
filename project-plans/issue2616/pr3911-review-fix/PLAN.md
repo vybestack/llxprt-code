@@ -1396,6 +1396,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
   - [ ] T6.B159 B2 migration batch, 9 points, rule 6 (cross-directory by rule): session-client-child-owner.behavior.test.ts and 2 more (file list and dependencies in B2-batches.md)
 - [ ] T6.Pk B2 production fixes found by migrated scenarios (added when needed)
 - [x] T6.P5 setHistory then addHistory keeps the restored history on a fresh agent
+- [x] T6.P6 createAgent closes definition admission at dispose start and releases transferred owners on validation failure
 - [x] T6.P4 fromConfig agents report the activated provider
 - [x] T6.P3 final SessionEnd hook fires on dispose without a prior hook event
 - [x] T6.P1 createAgent accepts its typed tokenizerFactory and contentGeneratorFactory inputs

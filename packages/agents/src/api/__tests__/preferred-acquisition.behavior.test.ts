@@ -17,6 +17,9 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import { WorkspaceLspOwner } from '@vybestack/llxprt-code-core/lsp/workspace-lsp-owner.js';
+import { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 import { resolveProviderFilePolicy } from '@vybestack/llxprt-code-providers/providerFilePolicy.js';
 
 describe('preferred Agent acquisition release', () => {
@@ -117,6 +120,102 @@ describe('preferred Agent acquisition release', () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  });
+
+  async function expectTransferredOwnerReleasedOnValidation(
+    run: (directory: string) => {
+      readonly config: Parameters<typeof createAgent>[0];
+      readonly expectReleased: () => void;
+    },
+  ): Promise<void> {
+    const directory = await mkdtemp(join(tmpdir(), 'preferred-owner-'));
+    try {
+      const { config, expectReleased } = run(directory);
+      await expect(createAgent(config)).rejects.toThrow('Invalid runtimeId');
+      expectReleased();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+
+  it('disposes a transferred filesystem owner when createAgent validation rejects', async () => {
+    await expectTransferredOwnerReleasedOnValidation((directory) => {
+      const filesystem = new WorkspaceFilesystemOwner({
+        targetDir: directory,
+        isTrusted: () => true,
+      });
+      return {
+        config: {
+          credentialAuthority: credentials().authority,
+          provider: 'openai',
+          model: 'unacquired-model',
+          workingDir: directory,
+          sessionId: '   ',
+          filesystemOwner: filesystem,
+          filesystemOwnership: 'agent',
+        },
+        expectReleased: () =>
+          expect(() => filesystem.paths.directories()).toThrow('disposed'),
+      };
+    });
+  });
+
+  it('disposes a transferred LSP owner when createAgent validation rejects', async () => {
+    await expectTransferredOwnerReleasedOnValidation((directory) => {
+      const lsp = new WorkspaceLspOwner({ servers: [] }, directory, () => true);
+      return {
+        config: {
+          credentialAuthority: credentials().authority,
+          provider: 'openai',
+          model: 'unacquired-model',
+          workingDir: directory,
+          sessionId: '   ',
+          lspOwner: lsp,
+          lspOwnership: 'agent',
+        },
+        expectReleased: () =>
+          expect(() => lsp.diagnostics.getLspConfig()).toThrow('stopped'),
+      };
+    });
+  });
+
+  it('disposes a transferred memory owner when createAgent validation rejects', async () => {
+    await expectTransferredOwnerReleasedOnValidation((directory) => {
+      const filesystem = new WorkspaceFilesystemOwner({
+        targetDir: directory,
+        isTrusted: () => true,
+      });
+      const memory = new WorkspaceMemoryOwner({
+        globalMemoryDir: join(directory, 'global-memory'),
+        workingDirectory: directory,
+        jitEnabled: false,
+        debugMode: false,
+        loadIncludes: false,
+        filtering: { respectGitIgnore: true, respectLlxprtIgnore: true },
+        maxDirectories: 100,
+        filenames: ['LLXPRT.md'],
+        importFormat: 'tree',
+        paths: filesystem.paths,
+        ignore: filesystem.ignore,
+        scans: filesystem.scans,
+        isTrusted: () => true,
+        extensions: () => [],
+      });
+      return {
+        config: {
+          credentialAuthority: credentials().authority,
+          provider: 'openai',
+          model: 'unacquired-model',
+          workingDir: directory,
+          sessionId: '   ',
+          memoryOwner: { owner: memory, ownership: 'agent' },
+        },
+        expectReleased: () => {
+          expect(() => memory.operations.snapshot()).toThrow('disposed');
+          void filesystem.dispose();
+        },
+      };
+    });
   });
 
   const HOST_CREDENTIAL_ERROR =

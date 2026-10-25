@@ -125,6 +125,7 @@ import {
   bindCreatedSessionClient,
 } from './policyComposition.js';
 import { prepareImageConstruction } from './session-image-assembly.js';
+import { prepareTransferredWorkspaceOwners } from './transferred-workspace-owners.js';
 
 export async function disposeIsolatedMediaRuntime(
   closeRuntime: () => void | Promise<void>,
@@ -201,6 +202,7 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
     // Everything the caller transferred is owned from here on, so host
     // credential acquisition sits inside the same rollback as the rest.
     const images = prepareImageConstruction(this.rawConfig.imageOperation);
+    const owners = prepareTransferredWorkspaceOwners(this.rawConfig);
     try {
       this.github = assembleHostGitHubBroker(this.rawConfig);
       const authority =
@@ -220,6 +222,7 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
       for (const cleanup of [
         () => this.github?.cleanupFailedConstruction(),
         () => images.cleanupFailedConstruction(),
+        () => owners.cleanupFailedConstruction(),
       ]) {
         try {
           await cleanup();

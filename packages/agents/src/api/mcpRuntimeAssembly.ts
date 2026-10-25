@@ -727,6 +727,7 @@ export class McpRuntimeOwner implements AgentMcpOperations {
     if (this.ownsPolicy) this.policyOwner.closeAdmission();
     if (this.ownsFilesystem) this.workspaceFilesystem.closeFileAdmission();
     if (this.ownsMemory()) this.workspaceMemory.closeAdmission();
+    if (this.ownsDefinitions) this.workspaceDefinitions.closeAdmission();
   }
 
   dispose(): Promise<void> {
@@ -776,7 +777,6 @@ export class McpRuntimeOwner implements AgentMcpOperations {
       ...this.contextOperations,
     ]);
     this.workspaceCheckpoints.closeAdmission();
-    if (this.ownsDefinitions) this.workspaceDefinitions.closeAdmission();
     this.definitionContributions.closeAdmission();
     this.catalogs.closeAdmission();
     this.toolsAdmissionClosing = Promise.allSettled([
