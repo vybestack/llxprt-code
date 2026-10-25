@@ -75,9 +75,9 @@ function leased(raw: RecordAccess, lease: PinLease): RecordAccess {
       lease.require();
       return raw.recordError(head, error);
     },
-    readRecordHead(offset, what, prefetchBytes) {
+    readRecordHead(offset, what, prefetchBytes, readAhead) {
       lease.require();
-      return raw.readRecordHead(offset, what, prefetchBytes);
+      return raw.readRecordHead(offset, what, prefetchBytes, readAhead);
     },
     readRecordStart(offset, what, prefetchBytes) {
       lease.require();

@@ -33,12 +33,14 @@ export interface RecordAccess {
   recordError(head: FrameHead, error: Error): JournalCorruptionError;
   /**
    * `prefetchBytes` is how much of the record to read with its head, for a
-   * record whose size the caller knows; it saves the second read.
+   * record whose size the caller knows; it saves the second read. Sparse
+   * tree paths disable `readAhead` so unrelated neighboring bytes stay on disk.
    */
   readRecordHead(
     offset: number,
     what?: string,
     prefetchBytes?: number,
+    readAhead?: boolean,
   ): Promise<FrameHead>;
   /**
    * The head and the body bytes that arrived with it, in one read of up to
@@ -124,6 +126,21 @@ function headReader(
   return what === 'ROW' ? (window ?? reader) : reader;
 }
 
+function recordCorruption(
+  path: string,
+  trailer: AccessBounds,
+): (what: string, offset: number, error: Error) => JournalCorruptionError {
+  return (what: string, offset: number, error: Error): JournalCorruptionError =>
+    new JournalCorruptionError(
+      path,
+      what,
+      offset,
+      trailer.selfOffset,
+      error.message,
+      { cause: error },
+    );
+}
+
 export function createRecordAccess(
   path: string,
   reader: PositionalReader,
@@ -134,27 +151,16 @@ export function createRecordAccess(
     ? rowReadWindow(reader, trailer.durableEnd)
     : undefined;
   const nodeWindow = rowReadWindow(reader, trailer.durableEnd);
-  const corruption = (
-    what: string,
-    offset: number,
-    error: Error,
-  ): JournalCorruptionError =>
-    new JournalCorruptionError(
-      path,
-      what,
-      offset,
-      trailer.selfOffset,
-      error.message,
-      { cause: error },
-    );
+  const corruption = recordCorruption(path, trailer);
   const readStart = async (
     offset: number,
     what: string,
     prefetchBytes?: number,
+    readAhead = true,
   ): Promise<FrameStart> => {
     try {
       return await readFrameStart(
-        headReader(what, reader, window, nodeWindow),
+        readAhead ? headReader(what, reader, window, nodeWindow) : reader,
         offset,
         trailer.durableEnd,
         prefetchBytes,
@@ -172,8 +178,13 @@ export function createRecordAccess(
   return {
     rowWindowStats: window?.stats,
     recordError: (head, error) => corruption('ROW', head.offset, error),
-    async readRecordHead(offset, what = DEFAULT_WHAT, prefetchBytes) {
-      return (await readStart(offset, what, prefetchBytes)).head;
+    async readRecordHead(
+      offset,
+      what = DEFAULT_WHAT,
+      prefetchBytes,
+      readAhead,
+    ) {
+      return (await readStart(offset, what, prefetchBytes, readAhead)).head;
     },
     readRecordStart: (offset, what, prefetchBytes) =>
       readStart(offset, what, prefetchBytes),

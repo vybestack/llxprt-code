@@ -245,7 +245,7 @@ async function mergeNode(
       'Merging into an existing trie needs a reader',
     );
   }
-  const node = await context.reader.readNode(offset, depth);
+  const node = await context.reader.readNode(offset, depth, false);
   if (node.kind === 'internal') {
     return mergeInternal(context, offset, node, depth, source);
   }
@@ -331,7 +331,9 @@ async function mergeArrayNode(
       'Merging into an existing trie needs a reader',
     );
   const node =
-    offset === 0 ? undefined : await context.reader?.readNode(offset, depth);
+    offset === 0
+      ? undefined
+      : await context.reader?.readNode(offset, depth, false);
   const entries =
     node?.kind === 'leaf' ? unionEntries(node.entries, updates) : updates;
   if (node?.kind !== 'internal' && entries.length <= ID_TRIE_LEAF_CAPACITY) {

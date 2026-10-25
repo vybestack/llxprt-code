@@ -27,7 +27,11 @@ export class IdTrieReader {
   ) {}
 
   /** The node at `offset`: from the cache, or one `pread` (a second for a very large leaf). */
-  async readNode(offset: number, depth = 3): Promise<IdTrieNode> {
+  async readNode(
+    offset: number,
+    depth = 3,
+    readAhead = true,
+  ): Promise<IdTrieNode> {
     if (depth === 0) this.cache.selectRoot(offset);
     const cached = this.cache.get(offset);
     if (cached !== undefined) {
@@ -39,6 +43,7 @@ export class IdTrieReader {
       offset,
       'ITNODE',
       ID_TRIE_PREFETCH_BYTES,
+      readAhead,
     );
     if (head.kind !== RECORD_KIND.ITNODE || head.bodyLen !== 0) {
       throw new JournalFormatError(
@@ -68,12 +73,13 @@ export class IdTrieReader {
       throw new JournalFormatError(`An id hash is ${ID_HASH_BYTES} bytes`);
     }
     if (root === 0) return undefined;
-    let node = await this.readNode(root, 0);
+    // Point lookups follow hash paths, not adjacent file offsets.
+    let node = await this.readNode(root, 0, false);
     for (let depth = 0; node.kind === 'internal'; depth++) {
       const nibble = nibbleAt(hash, depth);
       if ((node.bitmap & (1 << nibble)) === 0) return undefined;
       const slot = popcount16(node.bitmap & ((1 << nibble) - 1));
-      node = await this.readNode(node.children[slot], depth + 1);
+      node = await this.readNode(node.children[slot], depth + 1, false);
     }
     const found = node.entries.find(
       (entry) => compareIdHashes(entry.hash, hash) === 0,
