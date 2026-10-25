@@ -70,6 +70,7 @@ import {
   registerCleanup,
   __resetCleanupStateForTesting,
 } from './utils/cleanup.js';
+import { loadCliConfigWithPreflight } from './__tests__/load-cli-config-fixture.js';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 
@@ -200,18 +201,17 @@ describe('real startup activation owner cleanup', () => {
     async (probe) => {
       const settings = loadSettings(directory);
       const argv = await parseArguments(settings.merged);
-      const config = await loadCliConfig(
-        settings.merged,
-        [],
-        new ExtensionEnablementManager(directory, { enabledOverride: [] }),
-        'standalone',
+      const config = await loadCliConfigWithPreflight({
+        settings: settings.merged,
+        extensions: [],
+        extensionEnablementManager: new ExtensionEnablementManager(directory, {
+          enabledOverride: [],
+        }),
+        sessionId: 'standalone',
         argv,
-        directory,
-        undefined,
-        undefined,
-        undefined,
-        new CredentialAuthority(),
-      );
+        cwd: directory,
+        authority: new CredentialAuthority(),
+      });
       expect(observed).toHaveLength(1);
       const owner = observed[0];
       expect(owner.config).toBe(config);
@@ -228,24 +228,20 @@ describe('real startup activation owner cleanup', () => {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
     await expect(
-      loadCliConfig(
-        settings.merged,
-        [],
-        new ExtensionEnablementManager(directory, { enabledOverride: [] }),
-        'finalization-failure',
+      loadCliConfigWithPreflight({
+        settings: settings.merged,
+        extensions: [],
+        extensionEnablementManager: new ExtensionEnablementManager(directory, {
+          enabledOverride: [],
+        }),
+        sessionId: 'finalization-failure',
         argv,
-        directory,
-        undefined,
-        undefined,
-        undefined,
-        new CredentialAuthority(),
-        undefined,
-        undefined,
-        undefined,
-        () => {
+        cwd: directory,
+        authority: new CredentialAuthority(),
+        onProviderSwitchReady: () => {
           throw new Error('finalization interrupted');
         },
-      ),
+      }),
     ).rejects.toThrow('finalization interrupted');
     expect(observed).toHaveLength(1);
     await expectClosed(observed[0]);
@@ -354,18 +350,17 @@ describe('real startup activation owner cleanup', () => {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
     await expect(
-      loadCliConfig(
-        settings.merged,
-        [],
-        new ExtensionEnablementManager(directory, { enabledOverride: [] }),
-        'keyfile-failure',
+      loadCliConfigWithPreflight({
+        settings: settings.merged,
+        extensions: [],
+        extensionEnablementManager: new ExtensionEnablementManager(directory, {
+          enabledOverride: [],
+        }),
+        sessionId: 'keyfile-failure',
         argv,
-        directory,
-        undefined,
-        undefined,
-        undefined,
-        new CredentialAuthority(),
-      ),
+        cwd: directory,
+        authority: new CredentialAuthority(),
+      }),
     ).rejects.toThrow('missing-key');
     expect(observed).toHaveLength(1);
     await expectClosed(observed[0]);
@@ -787,22 +782,20 @@ describe('real startup activation owner cleanup', () => {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
     let siblingActivation: agents.AgentActivationOperation | undefined;
-    const sibling = await loadCliConfig(
-      settings.merged,
-      [],
-      new ExtensionEnablementManager(directory, { enabledOverride: [] }),
-      'standalone-sibling',
+    const sibling = await loadCliConfigWithPreflight({
+      settings: settings.merged,
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(directory, {
+        enabledOverride: [],
+      }),
+      sessionId: 'standalone-sibling',
       argv,
-      directory,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-      undefined,
-      (operation) => {
+      cwd: directory,
+      authority: new CredentialAuthority(),
+      onActivationBootstrapReady: (operation) => {
         siblingActivation = operation;
       },
-    );
+    });
     const siblingManager = observed[observed.length - 1].providerManager;
 
     process.argv.push('--list-sessions');

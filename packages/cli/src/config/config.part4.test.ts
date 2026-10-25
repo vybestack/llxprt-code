@@ -17,22 +17,20 @@ async function loadConfigFixture(...args: Parameters<typeof loadCliConfig>) {
   const store = new SettingsService();
   const settingsOwner = new SessionSettingsOwner(store);
   try {
-    const config = await loadCliConfig(
-      args[0],
-      args[1],
-      args[2],
-      args[3],
-      args[4],
-      args[5],
-      undefined,
-      store,
+    const config = await loadCliConfigWithPreflight({
+      settings: args[0],
+      extensions: args[1],
+      extensionEnablementManager: args[2],
+      sessionId: args[3],
+      argv: args[4],
+      cwd: args[5],
+      settingsService: store,
       settingsOwner,
-      new CredentialAuthority(),
-      undefined,
-      (operation) => {
+      authority: new CredentialAuthority(),
+      onActivationBootstrapReady: (operation) => {
         retainedActivationOperations.push(operation);
       },
-    );
+    });
     const root = { config, settingsOwner };
     retainedConfigFixtures.push(root);
     return root;
@@ -63,6 +61,7 @@ import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
+import { loadCliConfigWithPreflight } from '../__tests__/load-cli-config-fixture.js';
 
 const realTrustedFoldersModule = { ...(await import('./trustedFolders.js')) };
 const realLlxprtCodeCoreModule = {

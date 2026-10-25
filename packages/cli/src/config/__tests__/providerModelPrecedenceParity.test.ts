@@ -36,12 +36,12 @@ import * as path from 'node:path';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { loadCliConfig } from '../config.js';
 import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
 import { ExtensionStorage } from '../extension.js';
 import { ExtensionEnablementManager } from '../extensions/extensionEnablement.js';
 import { loadPrecedenceProviderContributions } from './precedenceProviderContributions.js';
+import { loadCliConfigWithPreflight } from '../../__tests__/load-cli-config-fixture.js';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -159,19 +159,16 @@ async function runConfig(settings: Settings, argv?: string[]) {
   }
   const parsedArgv = await parseArguments(settings);
   const runtimeSettingsService = new SettingsService();
-  return loadCliConfig(
+  return loadCliConfigWithPreflight({
     settings,
-    [],
-    makeExtMgr(),
-    'test-session',
-    parsedArgv,
-    undefined,
-    undefined,
-    runtimeSettingsService,
-    undefined,
-    new CredentialAuthority(),
-    await loadPrecedenceProviderContributions(),
-  );
+    extensions: [],
+    extensionEnablementManager: makeExtMgr(),
+    sessionId: 'test-session',
+    argv: parsedArgv,
+    settingsService: runtimeSettingsService,
+    authority: new CredentialAuthority(),
+    contributions: await loadPrecedenceProviderContributions(),
+  });
 }
 
 // ─── Suite ────────────────────────────────────────────────────────────────────

@@ -27,13 +27,13 @@ import { activateConfiguredProvider } from './cliProviderInit.js';
 import { createForegroundAgent } from './cliAgentBootstrap.js';
 import { loadSettings } from './config/settings.js';
 import { parseArguments } from './config/cliArgParser.js';
-import { loadCliConfig } from './config/config.js';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 import {
   runExitCleanup,
   registerCleanup,
   __resetCleanupStateForTesting,
 } from './utils/cleanup.js';
+import { loadCliConfigWithPreflight } from './__tests__/load-cli-config-fixture.js';
 
 describe('CLI activation operation handoff', () => {
   let directory: string;
@@ -297,23 +297,21 @@ describe('CLI activation operation handoff', () => {
     const argv = await parseArguments(settings.merged);
     let captured: AgentActivationOperation | undefined;
     await expect(
-      loadCliConfig(
-        settings.merged,
-        [],
-        new ExtensionEnablementManager(directory, { enabledOverride: [] }),
-        'handoff-failure',
+      loadCliConfigWithPreflight({
+        settings: settings.merged,
+        extensions: [],
+        extensionEnablementManager: new ExtensionEnablementManager(directory, {
+          enabledOverride: [],
+        }),
+        sessionId: 'handoff-failure',
         argv,
-        directory,
-        undefined,
-        undefined,
-        undefined,
-        new CredentialAuthority(),
-        undefined,
-        (operation) => {
+        cwd: directory,
+        authority: new CredentialAuthority(),
+        onActivationBootstrapReady: (operation) => {
           captured = operation;
           throw new Error('handoff failed');
         },
-      ),
+      }),
     ).rejects.toThrow('handoff failed');
     if (!captured) throw new Error('Missing handoff');
     expect((await captured.preflight({ authMode: 'none' })).authFailed).toBe(

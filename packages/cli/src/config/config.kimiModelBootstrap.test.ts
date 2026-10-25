@@ -15,12 +15,12 @@ import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { Settings } from './settings.js';
-import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 import { ExtensionStorage } from './extension.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { loadCliConfigWithPreflight } from '../__tests__/load-cli-config-fixture.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
 void vi.mock('@vybestack/llxprt-code-core', () => ({
@@ -42,20 +42,19 @@ describe('loadCliConfig provider alias model bootstrap', () => {
     process.argv = ['node', 'script.js', '--provider', 'kimi'];
     const argv = await parseArguments({} as Settings);
 
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
-        enabledOverride: argv.extensions,
-      }),
-      'test-session',
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        {
+          enabledOverride: argv.extensions,
+        },
+      ),
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
 
     expect(config.getProvider()).toBe('kimi');
     expect(config.getModel()).toBe('kimi-for-coding');
@@ -85,30 +84,28 @@ describe('loadCliConfig provider alias model bootstrap', () => {
         secondFiles = state.providerFileLifecycle;
       }
     });
-    const first = await loadCliConfig(
-      {},
-      [],
-      extensions,
-      'first-session',
+    const first = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: extensions,
+      sessionId: 'first-session',
       argv,
-      process.cwd(),
-      undefined,
-      firstSettings,
-      firstOwner,
-      new CredentialAuthority(),
-    );
-    const second = await loadCliConfig(
-      {},
-      [],
-      extensions,
-      'second-session',
+      cwd: process.cwd(),
+      settingsService: firstSettings,
+      settingsOwner: firstOwner,
+      authority: new CredentialAuthority(),
+    });
+    const second = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: extensions,
+      sessionId: 'second-session',
       argv,
-      process.cwd(),
-      undefined,
-      secondSettings,
-      secondOwner,
-      new CredentialAuthority(),
-    );
+      cwd: process.cwd(),
+      settingsService: secondSettings,
+      settingsOwner: secondOwner,
+      authority: new CredentialAuthority(),
+    });
     try {
       expect(() =>
         firstOwner.assertSettingsIdentity(firstSettings),

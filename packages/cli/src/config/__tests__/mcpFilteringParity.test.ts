@@ -36,11 +36,11 @@ import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { loadCliConfig } from '../config.js';
 import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
 import { ExtensionStorage } from '../extension.js';
 import { ExtensionEnablementManager } from '../extensions/extensionEnablement.js';
+import { loadCliConfigWithPreflight } from '../../__tests__/load-cli-config-fixture.js';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -167,18 +167,16 @@ async function loadMcpConfig(
 ): Promise<ServerConfig.Config> {
   process.argv = ['node', 'script.js', ...cliArgs];
   const argv = await parseArguments(settings);
-  return loadCliConfig(
+  return loadCliConfigWithPreflight({
     settings,
-    [],
-    makeExtMgr(),
-    'test-session',
+    extensions: [],
+    extensionEnablementManager: makeExtMgr(),
+    sessionId: 'test-session',
     argv,
-    undefined,
-    undefined,
-    runtimeSettingsService,
-    sessionSettingsOwner,
-    new CredentialAuthority(),
-  );
+    settingsService: runtimeSettingsService,
+    settingsOwner: sessionSettingsOwner,
+    authority: new CredentialAuthority(),
+  });
 }
 
 async function getMcpServers(
@@ -196,18 +194,15 @@ async function getBlockedMcpServers(
   process.argv = ['node', 'script.js', ...cliArgs];
   const argv = await parseArguments(settings);
   const runtimeSettingsService = new SettingsService();
-  const config = await loadCliConfig(
+  const config = await loadCliConfigWithPreflight({
     settings,
-    [],
-    makeExtMgr(),
-    'test-session',
+    extensions: [],
+    extensionEnablementManager: makeExtMgr(),
+    sessionId: 'test-session',
     argv,
-    undefined,
-    undefined,
-    runtimeSettingsService,
-    undefined,
-    new CredentialAuthority(),
-  );
+    settingsService: runtimeSettingsService,
+    authority: new CredentialAuthority(),
+  });
   return config.getBlockedMcpServers() ?? [];
 }
 

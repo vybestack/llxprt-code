@@ -37,12 +37,12 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { loadCliConfig } from '../config.js';
 import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
 import { ExtensionStorage } from '../extension.js';
 import { ExtensionEnablementManager } from '../extensions/extensionEnablement.js';
 import { isWorkspaceTrusted } from '../trustedFolders.js';
+import { loadCliConfigWithPreflight } from '../../__tests__/load-cli-config-fixture.js';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -147,18 +147,16 @@ function makeExtMgr() {
 async function runConfig(settings: Settings, cwd: string = process.cwd()) {
   const argv = await parseArguments(settings);
   const runtimeSettingsService = new SettingsService();
-  return loadCliConfig(
+  return loadCliConfigWithPreflight({
     settings,
-    [],
-    makeExtMgr(),
-    'test-session',
+    extensions: [],
+    extensionEnablementManager: makeExtMgr(),
+    sessionId: 'test-session',
     argv,
     cwd,
-    undefined,
-    runtimeSettingsService,
-    undefined,
-    new CredentialAuthority(),
-  );
+    settingsService: runtimeSettingsService,
+    authority: new CredentialAuthority(),
+  });
 }
 
 // ─── Suite ────────────────────────────────────────────────────────────────────

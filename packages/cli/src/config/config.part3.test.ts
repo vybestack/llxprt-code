@@ -17,7 +17,6 @@ import {
 } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 import { ExtensionStorage } from './extension.js';
@@ -25,6 +24,7 @@ import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {} from './trustedFolders.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
+import { loadCliConfigWithPreflight } from '../__tests__/load-cli-config-fixture.js';
 
 const realTrustedFoldersModule = { ...(await import('./trustedFolders.js')) };
 const realLlxprtCodeCoreModule = {
@@ -168,20 +168,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
-        enabledOverride: argv.extensions,
-      }),
-      'test-session',
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        {
+          enabledOverride: argv.extensions,
+        },
+      ),
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(true);
   });
 
@@ -189,20 +188,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = false;
     process.argv = ['node', 'script.js', '--prompt-interactive', 'test'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
-        enabledOverride: argv.extensions,
-      }),
-      'test-session',
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        {
+          enabledOverride: argv.extensions,
+        },
+      ),
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(true);
   });
 
@@ -210,20 +208,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = false;
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
-        enabledOverride: argv.extensions,
-      }),
-      'test-session',
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        {
+          enabledOverride: argv.extensions,
+        },
+      ),
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(false);
   });
 
@@ -231,20 +228,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', '--prompt', 'test'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
-        enabledOverride: argv.extensions,
-      }),
-      'test-session',
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        {
+          enabledOverride: argv.extensions,
+        },
+      ),
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(false);
   });
 
@@ -252,20 +248,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', '--model', 'gemini-2.5-pro', 'Hello'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
-        enabledOverride: argv.extensions,
-      }),
-      'test-session',
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        {
+          enabledOverride: argv.extensions,
+        },
+      ),
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(false);
   });
 
@@ -280,20 +275,19 @@ describe('loadCliConfig interactive', () => {
       'Hello world',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
-        enabledOverride: argv.extensions,
-      }),
-      'test-session',
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        {
+          enabledOverride: argv.extensions,
+        },
+      ),
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(false);
   });
 
@@ -301,20 +295,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', '-e', 'none', 'hello'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
-        enabledOverride: argv.extensions,
-      }),
-      'test-session',
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        {
+          enabledOverride: argv.extensions,
+        },
+      ),
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(false);
     expect(argv.query).toBe('hello');
     expect(argv.extensions).toStrictEqual(['none']);
@@ -324,20 +317,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', 'hello world how are you'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
-        enabledOverride: argv.extensions,
-      }),
-      'test-session',
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        {
+          enabledOverride: argv.extensions,
+        },
+      ),
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(false);
     expect(argv.query).toBe('hello world how are you');
     expect(argv.prompt).toBe('hello world how are you');
@@ -358,20 +350,19 @@ describe('loadCliConfig interactive', () => {
       'array',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
-        enabledOverride: argv.extensions,
-      }),
-      'test-session',
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        {
+          enabledOverride: argv.extensions,
+        },
+      ),
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(false);
     expect(argv.query).toBe('write a function to sort array');
     expect(argv.model).toBe('gemini-2.5-pro');
@@ -381,20 +372,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', ''];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
-        enabledOverride: argv.extensions,
-      }),
-      'test-session',
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        {
+          enabledOverride: argv.extensions,
+        },
+      ),
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(true);
     expect(argv.query).toBeUndefined();
   });
@@ -413,20 +403,19 @@ describe('loadCliConfig interactive', () => {
       'you',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
-        enabledOverride: argv.extensions,
-      }),
-      'test-session',
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        {
+          enabledOverride: argv.extensions,
+        },
+      ),
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(false);
     expect(argv.query).toBe('hello world how are you');
     expect(argv.extensions).toStrictEqual(['none']);
@@ -436,20 +425,19 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', '--model', 'gemini-2.5-pro'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
-        enabledOverride: argv.extensions,
-      }),
-      'test-session',
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        {
+          enabledOverride: argv.extensions,
+        },
+      ),
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.isInteractive()).toBe(true);
   });
 });
@@ -525,21 +513,17 @@ describe('loadCliConfig fileFiltering', () => {
         fileFiltering: { [property]: value },
       };
       const argv = await parseArguments(settings);
-      const config = await loadCliConfig(
+      const config = await loadCliConfigWithPreflight({
         settings,
-        [],
-        new ExtensionEnablementManager(
+        extensions: [],
+        extensionEnablementManager: new ExtensionEnablementManager(
           ExtensionStorage.getUserExtensionsDir(),
           { enabledOverride: argv.extensions },
         ),
-        'test-session',
+        sessionId: 'test-session',
         argv,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        new CredentialAuthority(),
-      );
+        authority: new CredentialAuthority(),
+      });
       expect(getter(config)).toBe(value);
     },
   );

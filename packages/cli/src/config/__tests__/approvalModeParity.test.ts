@@ -44,6 +44,7 @@ import type { Settings } from '../settings.js';
 import { ExtensionStorage } from '../extension.js';
 import { ExtensionEnablementManager } from '../extensions/extensionEnablement.js';
 import { isWorkspaceTrusted } from '../trustedFolders.js';
+import { loadCliConfigWithPreflight } from '../../__tests__/load-cli-config-fixture.js';
 
 // ─── Mocks matching config.test.ts patterns exactly ───────────────────────────
 
@@ -157,18 +158,15 @@ async function getApprovalMode(
   const argv = await parseArguments(settings);
   Object.assign(argv, argvOverride ?? {});
   const runtimeSettingsService = new SettingsService();
-  const config = await loadCliConfig(
+  const config = await loadCliConfigWithPreflight({
     settings,
-    [],
-    makeExtMgr(argv.extensions),
-    'test-session',
+    extensions: [],
+    extensionEnablementManager: makeExtMgr(argv.extensions),
+    sessionId: 'test-session',
     argv,
-    undefined,
-    undefined,
-    runtimeSettingsService,
-    undefined,
-    new CredentialAuthority(),
-  );
+    settingsService: runtimeSettingsService,
+    authority: new CredentialAuthority(),
+  });
   return config.getApprovalMode();
 }
 

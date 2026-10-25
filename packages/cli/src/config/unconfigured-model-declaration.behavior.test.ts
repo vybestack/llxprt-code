@@ -14,6 +14,7 @@ import type { AgentActivationOperation } from '@vybestack/llxprt-code-agents';
 import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
+import { loadCliConfigWithPreflight } from '../__tests__/load-cli-config-fixture.js';
 
 describe('unconfigured CLI model declaration', () => {
   it('retains a CLI model declaration without creating a configured session provider', async () => {
@@ -31,24 +32,25 @@ describe('unconfigured CLI model declaration', () => {
       delete process.env.LLXPRT_DEFAULT_MODEL;
       process.argv = ['bun', 'cli', '--model', 'declared-only-model'];
       const argv = await parseArguments({});
-      config = await loadCliConfig(
-        {},
-        [],
-        new ExtensionEnablementManager(join(directory, 'extensions'), {
-          enabledOverride: [],
-        }),
-        'unconfigured-model',
+      config = await loadCliConfigWithPreflight({
+        settings: {},
+        extensions: [],
+        extensionEnablementManager: new ExtensionEnablementManager(
+          join(directory, 'extensions'),
+          {
+            enabledOverride: [],
+          },
+        ),
+        sessionId: 'unconfigured-model',
         argv,
-        directory,
-        undefined,
-        store,
-        owner,
-        new CredentialAuthority(),
-        undefined,
-        (value) => {
+        cwd: directory,
+        settingsService: store,
+        settingsOwner: owner,
+        authority: new CredentialAuthority(),
+        onActivationBootstrapReady: (value) => {
           operation = value;
         },
-      );
+      });
       expect(config.getModel()).toBe('declared-only-model');
       expect(owner.readSelectedProvider()).toBeUndefined();
       expect(owner.readSelectedModel()).toBeUndefined();

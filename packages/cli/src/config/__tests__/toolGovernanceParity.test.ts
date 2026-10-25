@@ -47,13 +47,13 @@ import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { loadPrecedenceProviderContributions } from './precedenceProviderContributions.js';
-import { loadCliConfig } from '../config.js';
 import { parseArguments } from '../cliArgParser.js';
 import { READ_ONLY_TOOL_NAMES } from '../toolGovernance.js';
 import type { Settings } from '../settings.js';
 import { ExtensionStorage } from '../extension.js';
 import { ExtensionEnablementManager } from '../extensions/extensionEnablement.js';
 import { isWorkspaceTrusted } from '../trustedFolders.js';
+import { loadCliConfigWithPreflight } from '../../__tests__/load-cli-config-fixture.js';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -160,22 +160,20 @@ async function runConfig(settings: Settings, argv: string[] = []) {
   const runtimeSettingsService = new SettingsService();
   const settingsOwner = new SessionSettingsOwner(runtimeSettingsService);
   retainedSettingsOwners.push(settingsOwner);
-  const config = await loadCliConfig(
+  const config = await loadCliConfigWithPreflight({
     settings,
-    [],
-    makeExtMgr(),
-    'test-session',
-    parsedArgv,
-    undefined,
-    undefined,
-    runtimeSettingsService,
+    extensions: [],
+    extensionEnablementManager: makeExtMgr(),
+    sessionId: 'test-session',
+    argv: parsedArgv,
+    settingsService: runtimeSettingsService,
     settingsOwner,
-    new CredentialAuthority(),
-    await loadPrecedenceProviderContributions(),
-    (operation) => {
+    authority: new CredentialAuthority(),
+    contributions: await loadPrecedenceProviderContributions(),
+    onActivationBootstrapReady: (operation) => {
       retainedActivationOperations.push(operation);
     },
-  );
+  });
   return { config, settingsOwner };
 }
 

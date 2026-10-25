@@ -20,10 +20,10 @@ import {
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 import type { Settings } from './settings.js';
+import { loadCliConfigWithPreflight } from '../__tests__/load-cli-config-fixture.js';
 
 function streamReply(text: string): string {
   const chunk = {
@@ -67,27 +67,26 @@ async function loadOwner(
   const credentialAuthority = new CredentialAuthority();
   const settingsService = new SettingsService();
   const settingsOwner = new SessionSettingsOwner(settingsService);
-  const config = await loadCliConfig(
-    {},
-    [],
-    new ExtensionEnablementManager(join(endpoint, 'extensions'), {
-      enabledOverride: [],
-    }),
-    'same-label-cli',
+  const config = await loadCliConfigWithPreflight({
+    settings: {},
+    extensions: [],
+    extensionEnablementManager: new ExtensionEnablementManager(
+      join(endpoint, 'extensions'),
+      {
+        enabledOverride: [],
+      },
+    ),
+    sessionId: 'same-label-cli',
     argv,
-    process.cwd(),
-    undefined,
+    cwd: process.cwd(),
     settingsService,
     settingsOwner,
-    credentialAuthority,
-    undefined,
-    () => undefined,
-    undefined,
-    undefined,
-    (owner) => {
+    authority: credentialAuthority,
+    onActivationBootstrapReady: () => undefined,
+    onPreflightReady: (owner) => {
       registration = owner;
     },
-  );
+  });
   if (!registration) throw new Error('CLI did not provide its owner handle');
   return {
     config,

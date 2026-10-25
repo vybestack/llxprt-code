@@ -19,9 +19,9 @@ import {
   DEFAULT_CONTEXT_FILENAME,
   setLlxprtMdFilename,
 } from '@vybestack/llxprt-code-core';
-import { loadCliConfig } from './config.js';
 import { type CliArgs } from './cliArgParser.js';
 import type { Settings } from './settings.js';
+import { loadCliConfigWithPreflight } from '../__tests__/load-cli-config-fixture.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
 void vi.mock('@vybestack/llxprt-code-core', () => ({
@@ -152,22 +152,20 @@ describe('loadCliConfig memory discovery', () => {
     );
     let operation: AgentActivationOperation | undefined;
     const config = await captureActivationConstruction(() =>
-      loadCliConfig(
+      loadCliConfigWithPreflight({
         settings,
-        [],
-        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
-        'test-session',
+        extensions: [],
+        extensionEnablementManager: new ExtensionEnablementManager(
+          ExtensionStorage.getUserExtensionsDir(),
+        ),
+        sessionId: 'test-session',
         argv,
-        workspaceDir,
-        undefined,
-        undefined,
-        undefined,
-        new CredentialAuthority(),
-        undefined,
-        (owner) => {
+        cwd: workspaceDir,
+        authority: new CredentialAuthority(),
+        onActivationBootstrapReady: (owner) => {
           operation = owner;
         },
-      ),
+      }),
     );
 
     if (operation === undefined)
@@ -193,22 +191,20 @@ describe('loadCliConfig memory discovery', () => {
     );
     let operation: AgentActivationOperation | undefined;
     await captureActivationConstruction(() =>
-      loadCliConfig(
-        createSettings('AGENTS.md'),
-        [],
-        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
-        'test-session',
-        createArgv(),
-        workspaceDir,
-        undefined,
-        undefined,
-        undefined,
-        new CredentialAuthority(),
-        undefined,
-        (owner) => {
+      loadCliConfigWithPreflight({
+        settings: createSettings('AGENTS.md'),
+        extensions: [],
+        extensionEnablementManager: new ExtensionEnablementManager(
+          ExtensionStorage.getUserExtensionsDir(),
+        ),
+        sessionId: 'test-session',
+        argv: createArgv(),
+        cwd: workspaceDir,
+        authority: new CredentialAuthority(),
+        onActivationBootstrapReady: (owner) => {
           operation = owner;
         },
-      ),
+      }),
     );
     if (operation === undefined)
       throw new Error('Missing retained CLI activation root');

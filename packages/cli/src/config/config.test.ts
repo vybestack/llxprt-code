@@ -17,7 +17,6 @@ import {
 } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 import { ExtensionStorage } from './extension.js';
@@ -25,6 +24,7 @@ import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
+import { loadCliConfigWithPreflight } from '../__tests__/load-cli-config-fixture.js';
 
 const realTrustedFoldersModule = { ...(await import('./trustedFolders.js')) };
 const realLlxprtCodeCoreModule = {
@@ -162,84 +162,68 @@ describe('when folder is NOT trusted', () => {
   it('should override --approval-mode=yolo to DEFAULT', async () => {
     process.argv = ['node', 'script.js', '--approval-mode', 'yolo'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
         argv.extensions,
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getApprovalMode()).toBe(ServerConfig.ApprovalMode.DEFAULT);
   });
 
   it('should override --approval-mode=auto_edit to DEFAULT', async () => {
     process.argv = ['node', 'script.js', '--approval-mode', 'auto_edit'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
         argv.extensions,
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getApprovalMode()).toBe(ServerConfig.ApprovalMode.DEFAULT);
   });
 
   it('should override --yolo flag to DEFAULT', async () => {
     process.argv = ['node', 'script.js', '--yolo'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
         argv.extensions,
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getApprovalMode()).toBe(ServerConfig.ApprovalMode.DEFAULT);
   });
 
   it('should remain DEFAULT when --approval-mode=default', async () => {
     process.argv = ['node', 'script.js', '--approval-mode', 'default'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
         argv.extensions,
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getApprovalMode()).toBe(ServerConfig.ApprovalMode.DEFAULT);
   });
 });
@@ -597,21 +581,17 @@ describe('parseArguments', () => {
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
 
-    const config = await loadCliConfig(
+    const config = await loadCliConfigWithPreflight({
       settings,
-      [],
-      new ExtensionEnablementManager(
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
         argv.extensions,
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
 
     expect(config.isContinueSession()).toBe(true);
     expect(config.getContinueSessionRef()).toBe('__CONTINUE_LATEST__');
@@ -693,21 +673,17 @@ describe('loadCliConfig', () => {
     async (settings: Settings) => {
       process.argv = ['bun', 'llxprt'];
       const argv = await parseArguments(settings);
-      const config = await loadCliConfig(
+      const config = await loadCliConfigWithPreflight({
         settings,
-        [],
-        new ExtensionEnablementManager(
+        extensions: [],
+        extensionEnablementManager: new ExtensionEnablementManager(
           ExtensionStorage.getUserExtensionsDir(),
           argv.extensions,
         ),
-        'core-tool-restriction',
+        sessionId: 'core-tool-restriction',
         argv,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        new CredentialAuthority(),
-      );
+        authority: new CredentialAuthority(),
+      });
       expect(config.getCoreTools()).toStrictEqual(
         settings.tools?.core ?? settings.coreTools,
       );
@@ -733,21 +709,17 @@ describe('loadCliConfig', () => {
         jitContext: false,
       },
     };
-    const config = await loadCliConfig(
+    const config = await loadCliConfigWithPreflight({
       settings,
-      [],
-      new ExtensionEnablementManager(
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
         argv.extensions,
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-    );
+      authority: new CredentialAuthority(),
+    });
     const expectedIncludeDirectories = [
       path.resolve(path.sep, 'settings', 'path1'),
       path.join(os.homedir(), 'settings', 'path2'),

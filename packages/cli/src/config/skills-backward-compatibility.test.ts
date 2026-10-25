@@ -14,13 +14,13 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { loadServerHierarchicalMemory } from '@vybestack/llxprt-code-core';
 import { type Settings, createTestMergedSettings } from './settings.js';
 import { ExtensionStorage } from './extension.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
+import { loadCliConfigWithPreflight } from '../__tests__/load-cli-config-fixture.js';
 
 const actual = { ...(await import('./trustedFolders.js')) };
 void vi.mock('./trustedFolders.js', () => ({
@@ -40,20 +40,19 @@ async function buildConfig(
 ) {
   process.argv = ['node', 'llxprt'];
   const argv = await parseArguments(settings);
-  return loadCliConfig(
+  return loadCliConfigWithPreflight({
     settings,
-    [],
-    new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
-      enabledOverride: argv.extensions,
-    }),
-    'test-session',
+    extensions: [],
+    extensionEnablementManager: new ExtensionEnablementManager(
+      ExtensionStorage.getUserExtensionsDir(),
+      {
+        enabledOverride: argv.extensions,
+      },
+    ),
+    sessionId: 'test-session',
     argv,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    new CredentialAuthority(),
-  );
+    authority: new CredentialAuthority(),
+  });
 }
 
 describe('Agent Skills Backward Compatibility', () => {
