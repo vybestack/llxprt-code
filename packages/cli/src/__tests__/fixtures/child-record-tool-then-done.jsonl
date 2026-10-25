@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"same-child-call","name":"mcp__recording__child_record","parameters":{}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"Done"}]}]}
