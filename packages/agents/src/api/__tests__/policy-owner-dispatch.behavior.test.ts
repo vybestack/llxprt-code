@@ -1,5 +1,3 @@
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
-import { captureAgentCreation as createAgent } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -10,14 +8,9 @@ import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { type Agent } from '@vybestack/llxprt-code-agents';
-import {
-  ApprovalMode,
-  PolicyDecision,
-  MessageBusType,
-  ConfirmationOutcome,
-  type ToolConfirmationRequest,
-} from '@vybestack/llxprt-code-policy';
+import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
+import { ApprovalMode, PolicyDecision } from '@vybestack/llxprt-code-policy';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
 async function turn(agent: Agent): Promise<void> {
   const errors: unknown[] = [];
@@ -27,8 +20,42 @@ async function turn(agent: Agent): Promise<void> {
   expect(errors).toStrictEqual([]);
 }
 
-async function fixture(directory: string, prefix: string): Promise<Agent> {
+async function fixture(
+  directory: string,
+  prefix: string,
+  grantFirst = false,
+): Promise<Agent> {
   const responses = join(directory, `${prefix}.jsonl`);
+  const grantLines = grantFirst
+    ? [
+        {
+          chunks: [
+            {
+              speaker: 'ai',
+              blocks: [
+                {
+                  type: 'tool_call',
+                  id: `${prefix}-grant`,
+                  name: 'write_file',
+                  parameters: {
+                    absolute_path: join(directory, 'granted.txt'),
+                    content: 'written grant',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        {
+          chunks: [
+            {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'Write complete.' }],
+            },
+          ],
+        },
+      ]
+    : [];
   const lines = Array.from({ length: 5 }, (_, index) => [
     {
       chunks: [
@@ -63,7 +90,7 @@ async function fixture(directory: string, prefix: string): Promise<Agent> {
   ]).flat();
   await writeFile(
     responses,
-    lines.map((line) => JSON.stringify(line)).join('\n'),
+    [...grantLines, ...lines].map((line) => JSON.stringify(line)).join('\n'),
   );
   process.env.LLXPRT_FAKE_RESPONSES = responses;
   return createAgent({
@@ -98,20 +125,25 @@ describe('Policy ownership through public tool dispatch', () => {
     const previous = process.env.LLXPRT_FAKE_RESPONSES;
     let agent: Agent | undefined;
     try {
-      agent = await fixture(directory, 'blocked');
+      const blocked = await fixture(directory, 'blocked', true);
+      agent = blocked;
       let asks = 0;
-      fixtureAgentResources(agent).messageBus.subscribe(
-        MessageBusType.TOOL_CONFIRMATION_REQUEST,
-        () => {
-          asks++;
-        },
-      );
-      fixtureAgentResources(agent).messageBus.publish({
-        type: MessageBusType.UPDATE_POLICY,
-        toolName: 'write_file',
+      blocked.tools.onConfirmationRequest((request) => {
+        asks++;
+        queueMicrotask(() =>
+          blocked.tools.respondToConfirmation(
+            request.confirmationId,
+            ToolConfirmationOutcome.ProceedAlways,
+          ),
+        );
       });
-      agent.setApprovalMode(ApprovalMode.YOLO);
-      await turn(agent);
+      await turn(blocked);
+      expect(await readFile(join(directory, 'granted.txt'), 'utf8')).toBe(
+        'written grant',
+      );
+      asks = 0;
+      blocked.setApprovalMode(ApprovalMode.YOLO);
+      await turn(blocked);
       expect(existsSync(join(directory, 'blocked-0.txt'))).toBe(false);
       expect(asks).toBe(0);
     } finally {
@@ -131,21 +163,13 @@ describe('Policy ownership through public tool dispatch', () => {
       const sibling = await fixture(directory, 'sibling');
       agents.push(sibling);
       let asks = 0;
-      let outcome = ConfirmationOutcome.Cancel;
-      fixtureAgentResources(
-        first,
-      ).messageBus.subscribe<ToolConfirmationRequest>(
-        MessageBusType.TOOL_CONFIRMATION_REQUEST,
-        (request) => {
-          asks++;
-          queueMicrotask(() =>
-            fixtureAgentResources(first).messageBus.respondToConfirmation(
-              request.correlationId,
-              outcome,
-            ),
-          );
-        },
-      );
+      let outcome = ToolConfirmationOutcome.Cancel;
+      first.tools.onConfirmationRequest((request) => {
+        asks++;
+        queueMicrotask(() =>
+          first.tools.respondToConfirmation(request.confirmationId, outcome),
+        );
+      });
       await turn(first);
       expect(existsSync(join(directory, 'first-0.txt'))).toBe(false);
       first.setApprovalMode(ApprovalMode.AUTO_EDIT);
@@ -154,24 +178,20 @@ describe('Policy ownership through public tool dispatch', () => {
         'written 1',
       );
       first.setApprovalMode(ApprovalMode.DEFAULT);
-      outcome = ConfirmationOutcome.ProceedAlways;
+      outcome = ToolConfirmationOutcome.ProceedAlways;
       await turn(first);
       await turn(first);
       expect(await readFile(join(directory, 'first-3.txt'), 'utf8')).toBe(
         'written 3',
       );
       expect(asks).toBe(2);
-      fixtureAgentResources(
-        sibling,
-      ).messageBus.subscribe<ToolConfirmationRequest>(
-        MessageBusType.TOOL_CONFIRMATION_REQUEST,
-        (request) =>
-          queueMicrotask(() =>
-            fixtureAgentResources(sibling).messageBus.respondToConfirmation(
-              request.correlationId,
-              ConfirmationOutcome.Cancel,
-            ),
+      sibling.tools.onConfirmationRequest((request) =>
+        queueMicrotask(() =>
+          sibling.tools.respondToConfirmation(
+            request.confirmationId,
+            ToolConfirmationOutcome.Cancel,
           ),
+        ),
       );
       await turn(sibling);
       expect(existsSync(join(directory, 'sibling-0.txt'))).toBe(false);

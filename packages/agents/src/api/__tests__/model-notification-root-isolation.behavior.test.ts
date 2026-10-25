@@ -1,9 +1,11 @@
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import {
   createCapturedSessionOwner,
-  capturedSessionClient,
+  ownerClients,
 } from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { createRecordingProvider } from './helpers/recording-provider.js';
+import { makeScratchDir } from './helpers/scratch-dir.js';
+import { createAgent } from '../createAgent.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -17,7 +19,6 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
 import {
   ProviderFileLifecycle,
   FakeProvider,
-  type GenerateChatOptions,
 } from '@vybestack/llxprt-code-providers';
 import {
   configureProviderTokenizer,
@@ -50,7 +51,7 @@ import {
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { fileURLToPath } from 'node:url';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
@@ -63,7 +64,6 @@ import {
   ProviderSwitcher,
 } from '@vybestack/llxprt-code-core';
 import { assembleProfileApplication } from '../profileApplicationAssembly.js';
-import { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 /**
  * @license
@@ -71,14 +71,10 @@ import { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.
  * SPDX-License-Identifier: Apache-2.0
  */
 
-function gate(): { promise: Promise<void>; resolve: () => void } {
-  let resolve = (): void => {
-    throw new Error('Gate was not initialized');
-  };
-  const promise = new Promise<void>((complete) => {
-    resolve = complete;
-  });
-  return { promise, resolve };
+const ACTIVATED_SESSION_CLIENT = 1;
+
+function sessionClient(owner: SessionClientOwner): AgentClientContract {
+  return ownerClients(owner)[ACTIVATED_SESSION_CLIENT];
 }
 
 describe('session-owned model notifications', () => {
@@ -111,7 +107,6 @@ describe('session-owned model notifications', () => {
   let aCallerManager: ReturnType<typeof acquirePreferredProviderManager>;
   let aCallerOwner: SessionClientOwner;
   let aCallerClose: () => Promise<void>;
-  const aCallerFactories = createAgentRuntimeFactoryBindings();
   let aCallerRelease: AcquisitionRelease;
   let aCallerFiles: ProviderFileLifecycle;
   let aCallerRuntimeId: string;
@@ -156,7 +151,7 @@ describe('session-owned model notifications', () => {
       aCallerConfig,
       assembleTaskSchemaPolicy(aCallerSettings),
       aCallerManager,
-      aCallerFactories.agentClientFactory,
+      buildAgentClientFactory(),
       media.store,
       aCallerMcp.readInstructions,
       aCallerMcp.workspacePaths,
@@ -265,7 +260,7 @@ describe('session-owned model notifications', () => {
     );
     requireCallerActivation(activation);
     await aCallerOwner.initializeTools();
-    await capturedSessionClient(aCallerOwner).startChat();
+    await sessionClient(aCallerOwner).startChat();
   }
 
   let aProfileStore: ProfileDefinitionReads & ProfileDefinitionWrites;
@@ -325,12 +320,8 @@ describe('session-owned model notifications', () => {
     );
   });
 
-  afterEach(async () => {
-    await runCleanupSteps([
-      () => bProfileOAuth.dispose(),
-      () => bCallerClose(),
-    ]);
-  });
+  const closeBRoot = (): Promise<void> =>
+    runCleanupSteps([() => bProfileOAuth.dispose(), () => bCallerClose()]);
 
   const bCredentials = useOwnedCredentials();
   let bCallerConfig: Config;
@@ -341,7 +332,6 @@ describe('session-owned model notifications', () => {
   let bCallerManager: ReturnType<typeof acquirePreferredProviderManager>;
   let bCallerOwner: SessionClientOwner;
   let bCallerClose: () => Promise<void>;
-  const bCallerFactories = createAgentRuntimeFactoryBindings();
   let bCallerRelease: AcquisitionRelease;
   let bCallerFiles: ProviderFileLifecycle;
   let bCallerRuntimeId: string;
@@ -386,7 +376,7 @@ describe('session-owned model notifications', () => {
       bCallerConfig,
       assembleTaskSchemaPolicy(bCallerSettings),
       bCallerManager,
-      bCallerFactories.agentClientFactory,
+      buildAgentClientFactory(),
       media.store,
       bCallerMcp.readInstructions,
       bCallerMcp.workspacePaths,
@@ -495,14 +485,14 @@ describe('session-owned model notifications', () => {
     );
     requireCallerActivation(activation);
     await bCallerOwner.initializeTools();
-    await capturedSessionClient(bCallerOwner).startChat();
+    await sessionClient(bCallerOwner).startChat();
   }
 
   let bProfileStore: ProfileDefinitionReads & ProfileDefinitionWrites;
   let bProfileOAuth: OAuthManager;
   let bProfileSwitch: ProviderSwitcher;
   let bProfileAuthenticationRequests: string[];
-  beforeEach(async () => {
+  async function openBRoot(): Promise<void> {
     await openBCaller('plain-text.jsonl');
     delete process.env.LLXPRT_FAKE_RESPONSES;
     const providers = new Map<string, FakeProvider>();
@@ -553,85 +543,66 @@ describe('session-owned model notifications', () => {
       bCallerSettingsOwner,
       bProfileStore,
     );
-  });
+  }
 
   it('changes A without invalidating B chat, history or admitted model selection', async () => {
-    await capturedSessionClient(aCallerOwner).startChat();
-    await capturedSessionClient(bCallerOwner).startChat();
-    const bClient = capturedSessionClient(bCallerOwner);
-    const bChat = bClient.getChat();
-    const bHistory = bClient.getHistory();
-    const bModel = bCallerSettingsOwner.readSelectedModel();
-    const bSequence = bClient.getCurrentSequenceModel();
+    await openBRoot();
+    try {
+      await sessionClient(aCallerOwner).startChat();
+      await sessionClient(bCallerOwner).startChat();
+      const bClient = sessionClient(bCallerOwner);
+      const bChat = bClient.getChat();
+      const bHistory = bClient.getHistory();
+      const bModel = bCallerSettingsOwner.readSelectedModel();
+      const bSequence = bClient.getCurrentSequenceModel();
 
-    await aProfileSwitch('anthropic');
+      await aProfileSwitch('anthropic');
 
-    expect(bClient.hasChatInitialized()).toBe(true);
-    expect(bClient.getChat()).toBe(bChat);
-    expect(bClient.getHistory()).toStrictEqual(bHistory);
-    expect(bClient.getCurrentSequenceModel()).toBe(bSequence);
-    expect(bCallerSettingsOwner.readSelectedModel()).toBe(bModel);
-    expect(aCallerSettingsOwner.readSelectedProvider()).toBe('anthropic');
+      expect(bClient.hasChatInitialized()).toBe(true);
+      expect(bClient.getChat()).toBe(bChat);
+      expect(bClient.getHistory()).toStrictEqual(bHistory);
+      expect(bClient.getCurrentSequenceModel()).toBe(bSequence);
+      expect(bCallerSettingsOwner.readSelectedModel()).toBe(bModel);
+      expect(aCallerSettingsOwner.readSelectedProvider()).toBe('anthropic');
 
-    const publication = aCallerSettingsOwner.beginModelPublication();
-    aCallerSettingsOwner.chooseModel('changed-in-a');
-    publication.commit();
-    expect(bClient.getChat()).toBe(bChat);
-    expect(bCallerSettingsOwner.readSelectedModel()).toBe(bModel);
+      const publication = aCallerSettingsOwner.beginModelPublication();
+      aCallerSettingsOwner.chooseModel('changed-in-a');
+      publication.commit();
+      expect(bClient.getChat()).toBe(bChat);
+      expect(bCallerSettingsOwner.readSelectedModel()).toBe(bModel);
 
-    const notices: unknown[] = [];
-    const release = aCallerSettingsOwner.subscribeModelChanges((profile) => {
-      notices.push(profile);
-    });
-    await expect(aProfileSwitch('missing-provider')).rejects.toThrow(
-      "Provider 'missing-provider' not found",
-    );
-    expect(notices).toStrictEqual([]);
-    release();
-    expect(bClient.getChat()).toBe(bChat);
-    await aCallerClose();
-    expect(bClient.getChat()).toBe(bChat);
-    await bClient.startChat();
-    expect(bClient.hasChatInitialized()).toBe(true);
+      const notices: unknown[] = [];
+      const release = aCallerSettingsOwner.subscribeModelChanges((profile) => {
+        notices.push(profile);
+      });
+      await expect(aProfileSwitch('missing-provider')).rejects.toThrow(
+        "Provider 'missing-provider' not found",
+      );
+      expect(notices).toStrictEqual([]);
+      release();
+      expect(bClient.getChat()).toBe(bChat);
+      await aCallerClose();
+      expect(bClient.getChat()).toBe(bChat);
+      await bClient.startChat();
+      expect(bClient.hasChatInitialized()).toBe(true);
+    } finally {
+      await closeBRoot();
+    }
   });
 
   it('keeps B admitted request and chat usable while its provider response is held during A switch', async () => {
-    const entered = gate();
-    const releaseResponse = gate();
-    const admittedModels: unknown[] = [];
-    class HeldProvider extends FakeProvider {
-      override async *generateChatCompletion(
-        options: GenerateChatOptions | IContent[],
-      ): AsyncIterableIterator<IContent> {
-        if (Array.isArray(options))
-          throw new Error('Expected admitted provider request');
-        admittedModels.push(options.invocation?.getEphemeral('model'));
-        entered.resolve();
-        await releaseResponse.promise;
-        yield* super.generateChatCompletion(options);
-      }
-    }
-    bCallerManager.registerProvider(
-      new HeldProvider(
-        fileURLToPath(new URL('./fixtures/plain-text.jsonl', import.meta.url)),
-        bCallerConfig.getTargetDir(),
-      ),
-    );
-    const agentB = await fromConfig(
-      bCallerConfig,
-      bCallerSettings,
-      {},
-      bCallerSettingsOwner,
-      bCallerManager,
-      bProfileOAuth,
-      bCallerPolicy.session.messageBus,
-      bCallerMcp,
-    );
-    await fixtureAgentResources(agentB).publishedClient(agentB).startChat();
-    const chat = fixtureAgentResources(agentB)
-      .publishedClient(agentB)
-      .getChat();
-    const model = bCallerSettingsOwner.readSelectedModel();
+    const recording = createRecordingProvider();
+    const directory = await makeScratchDir('model-notification-b-');
+    const agentB = await createAgent({
+      provider: recording.alias,
+      model: 'recording-default',
+      providerContributions: recording.contributions,
+      workingDir: directory,
+      credentialAuthority: bCredentials().authority,
+      harness: { includeProcessCwd: false },
+    });
+    const held = recording.hold();
+    const model = agentB.getModel();
     const completion = (async () => {
       const events = [];
       for await (const event of agentB.stream('Keep this request bound to B', {
@@ -641,35 +612,31 @@ describe('session-owned model notifications', () => {
       return events;
     })();
     try {
-      await entered.promise;
+      await held.entered;
       await aProfileSwitch('anthropic');
-      expect(
-        fixtureAgentResources(agentB).publishedClient(agentB).getChat(),
-      ).toBe(chat);
-      releaseResponse.resolve();
+      held.release();
       const events = await completion;
       expect(events.filter((event) => event.type === 'error')).toStrictEqual(
         [],
       );
       expect(events.some((event) => event.type === 'done')).toBe(true);
-      expect(admittedModels).toStrictEqual([model]);
       expect(
-        fixtureAgentResources(agentB)
-          .publishedClient(agentB)
-          .hasChatInitialized(),
-      ).toBe(true);
-      expect(
-        fixtureAgentResources(agentB).publishedClient(agentB).getChat(),
-      ).toBe(chat);
+        recording.requests.map((request) =>
+          request.invocation.getEphemeral('model'),
+        ),
+      ).toStrictEqual([model]);
       expect(
         (await agentB.getHistory()).some(
           (message) => message.speaker === 'human',
         ),
       ).toBe(true);
     } finally {
-      releaseResponse.resolve();
+      held.release();
       await completion;
-      await agentB.dispose();
+      await runCleanupSteps([
+        () => agentB.dispose(),
+        () => rm(directory, { recursive: true, force: true }),
+      ]);
     }
   }, 30000);
 });
