@@ -1,47 +1,13 @@
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
-import { AgentResourceCapture } from '../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from '../../agents/src/api/__tests__/helpers/session-client-capture.js';
-import { internalConfig } from '../../agents/src/api/__tests__/helpers/agentHarness.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import {
-  Config,
-  ConfigParameters,
-} from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   SettingsService,
   ProfileManager,
 } from '@vybestack/llxprt-code-settings';
-import { McpRuntimeOwner } from '../../agents/src/api/mcpRuntimeAssembly.js';
-import { toConfigParameters } from '../../agents/src/api/agentConfig.adapter.js';
-import { mkdtemp, realpath, rm, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
-import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../../agents/src/api/preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../../agents/src/api/adoption-release.js';
-import { randomUUID } from 'node:crypto';
-import {
-  runCleanupSteps,
-  cleanupAfterFailure,
-} from '../../agents/src/core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../agents/src/session/session-client-owner.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import {
   beforeAll,
   afterAll,
@@ -53,22 +19,12 @@ import {
   vi,
 } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { fileURLToPath } from 'node:url';
-import { buildTestMcpRuntime } from '../../agents/src/api/__tests__/helpers/mcp-owner-fixture.js';
+import { useFakeResponsesReplay } from '../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
+import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
-  createAgentRuntimeFactoryBindings,
-  AgentRuntimeFactoryBindings,
-} from '../../agents/src/api/runtimeFactories.js';
-import { injectConfirmationForcingPolicy } from '../../agents/src/api/confirmationForcing.js';
-import { executeProviderActivation } from '../../agents/src/api/providerActivationExecutor.js';
-import { assembleProviderSwitch } from '../../agents/src/api/providerSwitchAssembly.js';
-import { assembleModelSelection } from '../../agents/src/api/model-selection.js';
-import {
-  AgentConfig,
-  ProviderActivationIntent,
-} from '../../agents/src/api/config-types.js';
-import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
-import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
+  openRouteBPreflight,
+  type RouteBPreflight,
+} from '../../agents/src/api/__tests__/helpers/route-b-preflight.js';
 import { CredentialAuthority } from '../../providers/src/auth/proxy/credential-store-factory.js';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import {
@@ -260,29 +216,13 @@ describe('ZedAgent.newSession', () => {
   });
 
   it('creates independent Agent sessions with session-scoped configs', async () => {
-    const capturedConfigs: Config[] = [];
-    const capturedManagers: RuntimeProviderManager[] = [];
     const capturedAgents: Agent[] = [];
     mockCreateAgent.mockImplementation(
       async (
         ...args: Parameters<typeof actual.createAgentFromSettingsSnapshot>
       ) => {
-        const capture = new AgentResourceCapture();
-        const agent = await capture.construct(() =>
-          actual.createAgentFromSettingsSnapshot(
-            {
-              ...args[0],
-              runtimeFactoryBindings: capture.factories(
-                args[0].runtimeFactoryBindings,
-              ),
-            },
-            args[1],
-          ),
-        );
-        capture.bindAgent(agent);
+        const agent = await actual.createAgentFromSettingsSnapshot(...args);
         capturedAgents.push(agent);
-        capturedConfigs.push(internalConfig(agent));
-        capturedManagers.push(capture.manager);
         return agent;
       },
     );
@@ -327,24 +267,25 @@ describe('ZedAgent.newSession', () => {
       cwd: join(projectRoot, 'second'),
     } as never);
     expect(capturedAgents).toHaveLength(2);
-    expect(capturedConfigs[0].getSessionId()).toBe(firstSession.sessionId);
-    expect(capturedConfigs[1].getSessionId()).toBe(secondSession.sessionId);
-    expect(capturedConfigs[0].getSessionId()).not.toBe(
-      capturedConfigs[1].getSessionId(),
+    expect(capturedAgents[0].session.getSessionId()).toBe(
+      firstSession.sessionId,
     );
-    expect('providerManager' in capturedConfigs[0]).toBe(false);
-    expect('providerManager' in capturedConfigs[1]).toBe(false);
+    expect(capturedAgents[1].session.getSessionId()).toBe(
+      secondSession.sessionId,
+    );
+    expect(capturedAgents[0].session.getSessionId()).not.toBe(
+      capturedAgents[1].session.getSessionId(),
+    );
 
-    expect(capturedConfigs).toHaveLength(2);
-    expect(capturedConfigs[0]).not.toBe(capturedConfigs[1]);
-    expect(capturedConfigs[0].getTargetDir()).toBe(join(projectRoot, 'first'));
-    expect(capturedConfigs[1].getTargetDir()).toBe(join(projectRoot, 'second'));
-    expect(capturedManagers).toHaveLength(2);
-    expect(capturedManagers[0]).not.toBe(capturedManagers[1]);
+    expect(capturedAgents[0].workspace.getWorkingDirectory()).toBe(
+      join(projectRoot, 'first'),
+    );
+    expect(capturedAgents[1].workspace.getWorkingDirectory()).toBe(
+      join(projectRoot, 'second'),
+    );
     await capturedAgents[0].setProvider('anthropic', 'session-first-model');
-    expect(capturedManagers[0].getActiveProviderName()).toBe('anthropic');
-    expect(capturedManagers[1].getActiveProviderName()).not.toBe('anthropic');
-    expect(capturedConfigs[0]).not.toBe(capturedConfigs[1]);
+    expect(capturedAgents[0].getProvider()).toBe('anthropic');
+    expect(capturedAgents[1].getProvider()).not.toBe('anthropic');
     expect('providerManager' in baseConfig).toBe(false);
     expect(
       await capturedAgents[0].workspace.readTextFile(
@@ -378,228 +319,32 @@ describe('ZedAgent.authenticate credential cache', () => {
     await rm(promptDirectory, { recursive: true, force: true });
   });
 
+  useFakeResponsesReplay('plain-text.jsonl');
+
   const builtCredentials = useOwnedCredentials();
 
-  let builtCallerConfig: Config;
-  let builtCallerSettings: SettingsService;
-  let builtCallerSettingsOwner: SessionSettingsOwner;
-  let builtCallerPolicy: RuntimePolicyOwner;
-  let builtCallerMcp: McpRuntimeOwner;
-  let builtCallerManager: ReturnType<typeof acquirePreferredProviderManager>;
-  let builtCallerOwner: SessionClientOwner;
-  let builtCallerClose: () => Promise<void>;
-  let builtCallerFactories: AgentRuntimeFactoryBindings;
-  let builtCallerRelease: AcquisitionRelease;
-  let builtCallerFiles: ProviderFileLifecycle;
-  let builtCallerRuntimeId: string;
-  let builtCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let builtCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
-  let builtCallerContent: ReturnType<
-    typeof createRuntimeContentGeneratorFactory
-  >;
-
-  async function openbuiltCaller(
-    fixture: string,
-    overrides: Readonly<Partial<AgentConfig>> = {},
-    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
-    skillSettings: Pick<
-      ConfigParameters,
-      'enableExtensionReloading' | 'storageRoot'
-    > = {},
-    extensionLoader?: ExtensionLoader,
-    skillOperations?: WorkspaceSkillAssemblyOperations,
-  ): Promise<void> {
-    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL(
-        '../../agents/src/api/__tests__/fixtures/' + fixture,
-        import.meta.url,
-      ),
-    );
-    const directory = await realpath(
-      await mkdtemp(join(tmpdir(), 'builtCaller-adoption-')),
-    );
-    const selection: AgentConfig = {
-      provider: 'fake',
-      model: 'fake-model',
-      sessionId: randomUUID(),
-      ...overrides,
-      workingDir:
-        overrides.workingDir === undefined
-          ? directory
-          : await realpath(overrides.workingDir),
-    };
-    const parameters = { ...toConfigParameters(selection), ...skillSettings };
-    parameters.interactive = true;
-    if (overrides.hooks !== undefined) parameters.enableHooks = true;
-    if (
-      overrides.filesystemOwner === undefined &&
-      (overrides.harness?.includeProcessCwd ?? true)
-    )
-      parameters.includeDirectories = [
-        ...(parameters.includeDirectories ?? []),
-        process.cwd(),
-      ];
-    builtCallerConfig = new Config(parameters);
-    builtCallerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...suppliedFactories,
-    };
-    builtCallerSettings = new SettingsService();
-    for (const [key, value] of Object.entries(
-      builtCallerConfig.getInitialSettings(),
-    ))
-      builtCallerSettings.set(key, value);
-    builtCallerPolicy = new RuntimePolicyOwner(builtCallerConfig);
-    injectConfirmationForcingPolicy(builtCallerPolicy.session.confirmation);
-    builtCallerMcp = await buildTestMcpRuntime(
-      builtCallerConfig,
-      builtCallerPolicy.session.messageBus,
-      overrides,
-      extensionLoader,
-      builtCallerPolicy,
-      skillOperations,
-    );
-    acquirebuiltCallerProviders();
-    const media = new SessionMediaOwner(
-      builtCallerConfig.projectTempDir,
-      1024 * 1024 * 1024,
-    );
-    builtCallerOwner = await createCapturedSessionOwner(
-      builtCallerConfig,
-      assembleTaskSchemaPolicy(builtCallerSettings),
-      builtCallerManager,
-      builtCallerFactories.agentClientFactory,
-      media.store,
-      builtCallerMcp.readInstructions,
-      builtCallerMcp.workspacePaths,
-      builtCallerSettingsOwner,
-      builtCallerContent,
-      builtCallerTokenizer,
-    );
-    builtCallerOwner.bindMcpRuntime(builtCallerMcp);
-    builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
-      builtCallerOAuth.composeRetryOperations(provider),
-    );
-    builtCallerOwner.bindHooks();
-    builtCallerClose = settleEngineRelease.bind(
-      undefined,
-      [
-        () => builtCallerOwner.dispose(),
-        () => builtCallerRelease.close(),
-        () => media.dispose(),
-        () => builtCallerMcp.dispose(),
-        () => builtCallerConfig.dispose(),
-        () => rm(directory, { recursive: true, force: true }),
-      ],
-      previousReplay,
-    );
-    try {
-      await preparePreferredProviderCompletion(
-        builtCallerConfig,
-        builtCallerSettings,
-        builtCallerSettingsOwner,
-        builtCallerManager,
-        builtCallerOAuth,
-        builtCallerRuntimeId,
-        builtCallerTokenizer,
-        undefined,
-      );
-      await builtCallerMcp.initialize();
-      await activatebuiltCallerClient(selection.activation);
-    } catch (primary) {
-      await cleanupAfterFailure(primary, builtCallerClose);
-    }
-  }
-  function acquirebuiltCallerProviders(): void {
-    builtCallerRuntimeId = 'builtCaller-' + randomUUID();
-    builtCallerRelease = new AcquisitionRelease();
-    builtCallerSettingsOwner = new SessionSettingsOwner(builtCallerSettings);
-    builtCallerRelease.acquire('settings', () =>
-      builtCallerSettingsOwner.dispose(),
-    );
-    builtCallerSettingsOwner.initializeProviderSelection(
-      builtCallerConfig.getProvider(),
-      builtCallerConfig.getModel(),
-    );
-    builtCallerSettingsOwner.bindTelemetry(builtCallerConfig);
-    builtCallerFiles = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
-    });
-    for (const scope of [
-      builtCallerRuntimeId,
-      builtCallerConfig.getSessionId(),
-    ])
-      builtCallerRelease.acquire('files', () =>
-        releaseAdoptedFileScope(builtCallerFiles, scope),
-      );
-    builtCallerManager = acquirePreferredProviderManager(
-      builtCallerConfig,
-      builtCallerSettings,
-      builtCallerSettingsOwner,
-      builtCallerFiles,
-      builtCallerRuntimeId,
-      builtCredentials().authority,
-      builtCallerRelease,
-    );
-    const factoriesTokenizer = configureProviderTokenizer(builtCallerManager);
-    const factoriesContent = createRuntimeContentGeneratorFactory();
-    builtCallerTokenizer = factoriesTokenizer;
-    builtCallerContent = factoriesContent;
-    builtCallerOAuth = acquirePreferredOAuth(
-      undefined,
-      builtCallerPolicy.session.messageBus,
-      builtCallerConfig,
-      builtCallerSettings,
-      builtCallerManager,
-      builtCallerRuntimeId,
-      builtCallerMcp.profileDefinitions,
-      builtCredentials().authority,
-      builtCallerRelease,
-      undefined,
-    );
-  }
-  async function activatebuiltCallerClient(
-    intent: ProviderActivationIntent = {
-      provider: builtCallerConfig.getProvider(),
-      model: builtCallerConfig.getModel(),
-    },
-  ): Promise<void> {
-    const activation = await executeProviderActivation(
-      builtCallerConfig,
-      intent,
-      assembleProviderSwitch(
-        builtCallerConfig,
-        builtCallerSettings,
-        builtCallerManager,
-        builtCallerOAuth,
-        () => 'agent',
-        () => builtCallerOwner.refreshAuth(),
-        builtCallerSettingsOwner,
-      ),
-      builtCallerSettings,
-      builtCallerManager,
-      (method) => builtCallerOwner.refreshAuth(method),
-      assembleModelSelection(builtCallerSettingsOwner),
-    );
-    requireCallerActivation(activation);
-    await builtCallerOwner.initializeTools();
-    await capturedSessionClient(builtCallerOwner).startChat();
+  /** The selected model, read from the test-owned settings the preflight uses. */
+  function selectedModel(settings: SettingsService): unknown {
+    const provider = settings.get('activeProvider');
+    if (typeof provider !== 'string') return undefined;
+    return settings.getProviderSettings(provider).model;
   }
 
-  const builtReleases: Array<() => Promise<void>> = [];
+  let route: RouteBPreflight;
   let profiles: ProfileManager;
   let root: string;
   let agent: ZedAgentType;
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'llxprt-zed-profile-owner-'));
-    await openbuiltCaller('plain-text.jsonl', {
-      workingDir: root,
-      settings: { profileDirectory: join(root, 'profiles') },
+    route = await openRouteBPreflight({
+      authority: builtCredentials().authority,
+      config: {
+        workingDir: root,
+        settings: { profileDirectory: join(root, 'profiles') },
+      },
     });
-    builtReleases.push(builtCallerClose);
+    await route.prepare();
     profiles = new ProfileManager(join(root, 'profiles'));
     for (const name of ['alpha', 'beta']) {
       await profiles.saveProfile(name, {
@@ -610,38 +355,25 @@ describe('ZedAgent.authenticate credential cache', () => {
         ephemeralSettings: {},
       });
     }
-    const config = builtCallerConfig;
-    const manager = builtCallerManager;
-
-    const application = actual.assembleProfileApplication(
-      builtCallerSettings,
-      manager,
-      null,
-      actual.assembleProviderSwitch(
-        config,
-        builtCallerSettings,
-        manager,
-        null,
-        () => undefined,
-        () => builtCallerOwner.refreshAuth(),
-        builtCallerSettingsOwner,
-      ),
-      builtCallerSettingsOwner,
-      profiles,
-    );
     const { ZedAgent } = await import('./zedIntegration.js');
     agent = new ZedAgent(
-      config,
+      route.config,
       undefined as never,
-      application,
-      () => builtCallerSettingsOwner.createChildStore(),
+      route.preflight,
+      () => {
+        const session = new SettingsService();
+        session.restoreFromStateSnapshot(
+          route.preflight.captureSettingsSnapshot(),
+        );
+        return session;
+      },
       undefined,
-      builtCallerMcp.profileDefinitions,
+      { listProfiles: () => route.preflight.listProfiles() },
     );
   });
 
   afterEach(async () => {
-    await builtCallerClose();
+    await route.close();
     await rm(root, { recursive: true, force: true });
   });
 
@@ -649,8 +381,8 @@ describe('ZedAgent.authenticate credential cache', () => {
     await agent.authenticate({ methodId: 'alpha' });
     await agent.authenticate({ methodId: 'beta' });
 
-    expect(builtCallerSettings.getCurrentProfileName()).toBe('beta');
-    expect(builtCallerSettingsOwner.readSelectedModel()).toBe('beta-model');
+    expect(route.preflight.getCurrentProfileName()).toBe('beta');
+    expect(selectedModel(route.settings)).toBe('beta-model');
   });
 
   it('loads profile when re-authenticating same profile', async () => {
@@ -664,33 +396,15 @@ describe('ZedAgent.authenticate credential cache', () => {
     });
     await agent.authenticate({ methodId: 'alpha' });
 
-    expect(builtCallerSettings.getCurrentProfileName()).toBe('alpha');
-    expect(builtCallerSettingsOwner.readSelectedModel()).toBe('updated-model');
+    expect(route.preflight.getCurrentProfileName()).toBe('alpha');
+    expect(selectedModel(route.settings)).toBe('updated-model');
   });
 
   it('loads profile when no active profile exists', async () => {
-    expect(builtCallerSettings.getCurrentProfileName()).toBeNull();
+    expect(route.preflight.getCurrentProfileName()).toBeNull();
     await agent.authenticate({ methodId: 'alpha' });
 
-    expect(builtCallerSettings.getCurrentProfileName()).toBe('alpha');
-    expect(builtCallerSettingsOwner.readSelectedModel()).toBe('alpha-model');
+    expect(route.preflight.getCurrentProfileName()).toBe('alpha');
+    expect(selectedModel(route.settings)).toBe('alpha-model');
   });
 });
-
-async function settleEngineRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previousReplay: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
-  }
-}
-
-function requireCallerActivation(
-  result: Awaited<ReturnType<typeof executeProviderActivation>>,
-): void {
-  if (result.authFailed) throw result.authError;
-}
