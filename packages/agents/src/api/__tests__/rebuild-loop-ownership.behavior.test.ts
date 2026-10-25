@@ -30,10 +30,6 @@ import {
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
-  captureAgentCreation as createAgent,
-  fixtureAgentResources,
-} from './helpers/agent-resource-capture.js';
-import {
   SessionExecutionOwner,
   type SessionExecution,
 } from '../../session/session-execution-owner.js';
@@ -46,6 +42,7 @@ import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
 import { AgentEventType } from '../../core/turn.js';
 import { CoreToolScheduler } from '../../core/coreToolScheduler.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { openClientOwner } from './helpers/client-owner-session.js';
 
 class WriteModeInvocation extends BaseToolInvocation<
   Record<string, unknown>,
@@ -230,16 +227,19 @@ describe('privately owned execution rebuild @plan:PLAN-20260617-COREAPI.P15 @req
     cleanup.push(() => acquired.dispose());
   }
   async function acquireClient(): Promise<AgentClientContract> {
-    const agent = await createAgent({
-      provider: 'fake',
-      model: 'fake-model',
-      sessionId: 'same-loop-label',
-      workingDir: directory,
-      credentialAuthority: credentials().authority,
-      harness: { includeProcessCwd: false },
-    });
-    cleanup.push(() => agent.dispose());
-    return fixtureAgentResources(agent).publishedClient(agent);
+    const opened = await openClientOwner(
+      credentials().authority,
+      {
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: 'same-loop-label',
+        workingDir: directory,
+        harness: { includeProcessCwd: false },
+      },
+      { provider: 'fake', model: 'fake-model' },
+    );
+    cleanup.push(() => opened.close());
+    return opened.client;
   }
   function rebuild(): SessionExecution {
     return execution.rebuild(selectedClient);
