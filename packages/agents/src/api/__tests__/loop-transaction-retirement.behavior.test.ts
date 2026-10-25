@@ -31,12 +31,8 @@ import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Agent } from '../agent.js';
-import {
-  captureAgentCreation as createAgent,
-  fixtureAgentResources,
-} from './helpers/agent-resource-capture.js';
+import { createAgent } from '../createAgent.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { AgentResourceCapture } from './helpers/agent-resource-capture.js';
 import { AgenticLoop } from '../../core/agenticLoop/AgenticLoop.js';
 import { CoreToolScheduler } from '../../core/coreToolScheduler.js';
 import { bindSchedulerOwner } from '../../session/assembleSchedulerOwner.js';
@@ -44,6 +40,10 @@ import { SessionExecutionOwner } from '../../session/session-execution-owner.js'
 import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  openClientOwner,
+  type OpenedClientOwner,
+} from './helpers/client-owner-session.js';
 
 describe('real loop replacement transaction retirement', () => {
   const credentials = useOwnedCredentials();
@@ -97,9 +97,14 @@ describe('real loop replacement transaction retirement', () => {
     settings = new SessionSettingsOwner(new SettingsService());
     cleanup.push(() => settings.dispose());
     settings.bindTelemetry(config);
-    const capture = new AgentResourceCapture();
+    const clientOwner = await openClientOwner(
+      credentials().authority,
+      { provider: 'fake', model: 'fake-model', workingDir: directory },
+      { provider: 'fake', model: 'fake-model' },
+    );
+    cleanup.push(() => clientOwner.close());
+    client = clientOwner.client;
     agent = await createAgent({
-      runtimeFactoryBindings: capture.factories(undefined),
       provider: 'fake',
       model: 'fake-model',
       workingDir: directory,
@@ -107,10 +112,6 @@ describe('real loop replacement transaction retirement', () => {
       harness: { includeProcessCwd: false },
     });
     cleanup.push(() => agent.dispose());
-    const captured = capture.clients.slice(-1).values().next().value;
-    if (captured === undefined)
-      throw new Error('Ready loop fixture did not acquire a client');
-    client = captured;
   });
   afterEach(async () => {
     const failures: unknown[] = [];
@@ -693,29 +694,33 @@ describe('real loop replacement transaction retirement', () => {
         throw new Error('Missing HTTP address');
       const replay = process.env.LLXPRT_FAKE_RESPONSES;
       delete process.env.LLXPRT_FAKE_RESPONSES;
-      let httpAgent: Agent | undefined;
+      let clientOwner: OpenedClientOwner | undefined;
       let executing: Promise<void> | undefined;
       let closing: Promise<void> | undefined;
       try {
-        httpAgent = await createAgent({
-          provider: 'openai',
-          model: 'held-model',
-          workingDir: config.getTargetDir(),
-          credentialAuthority: credentials().authority,
-          auth: {
-            apiKey: 'local-only',
-            baseUrl: `http://127.0.0.1:${address.port}/v1`,
+        clientOwner = await openClientOwner(
+          credentials().authority,
+          {
+            provider: 'openai',
+            model: 'held-model',
+            workingDir: config.getTargetDir(),
+            recording: { enabled: false },
+            telemetry: { enabled: false },
+            mcpEnabled: false,
+            harness: { includeProcessCwd: false },
           },
-          recording: { enabled: false },
-          telemetry: { enabled: false },
-          mcpEnabled: false,
-          harness: { includeProcessCwd: false },
-        });
-        const owner = fixtureAgentResources(httpAgent)
-          .sessionOwners.values()
-          .next().value;
-        if (owner === undefined)
-          throw new Error('Missing actual session client owner');
+          {
+            provider: 'openai',
+            providerSwitchPolicy: 'best-effort',
+            model: 'held-model',
+            cliOverrides: {
+              key: 'local-only',
+              baseUrl: `http://127.0.0.1:${address.port}/v1`,
+            },
+          },
+        );
+        const owner = clientOwner.owner;
+        owner.initializeExecution(undefined, undefined, undefined);
         const selected = owner.resolveExecution();
         if (selected.loop === undefined)
           throw new Error(selected.error.message);
@@ -784,7 +789,7 @@ describe('real loop replacement transaction retirement', () => {
         const results = await Promise.allSettled([
           executing,
           closing,
-          Promise.resolve().then(() => httpAgent?.dispose()),
+          Promise.resolve().then(() => clientOwner?.close()),
         ]);
         for (const result of results)
           if (result.status === 'rejected') failures.push(result.reason);

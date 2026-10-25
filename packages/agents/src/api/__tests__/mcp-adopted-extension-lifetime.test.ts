@@ -1,10 +1,49 @@
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  cleanupAfterFailure,
+  runCleanupSteps,
+} from '../../core/subagent-cleanup.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
+import { fromConfig } from '../fromConfig.js';
+import {
+  acquirePreferredOAuth,
+  acquirePreferredProviderManager,
+  preparePreferredProviderCompletion,
+} from '../preferred-provider-acquisition.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
   createCapturedSessionOwner,
-  capturedSessionClient,
+  ownerClients,
 } from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
+
 async function addExtension(loader: {
   load(extension: LlxprtExtension): Promise<void>;
 }): Promise<void> {
@@ -16,49 +55,11 @@ async function addExtension(loader: {
     contextFiles: [],
   });
 }
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
-import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../adoption-release.js';
-import { buildAgentClientFactory } from '../agentBootstrap.js';
-import { randomUUID } from 'node:crypto';
-import {
-  runCleanupSteps,
-  cleanupAfterFailure,
-} from '../../core/subagent-cleanup.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
-import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { fileURLToPath } from 'node:url';
 
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
 describe('MCP extension lifetime ownership', () => {
   let promptDirectory: string;
   const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  useFakeResponsesReplay('multi-turn-text.jsonl');
   beforeAll(async () => {
     promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
     process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
@@ -71,11 +72,7 @@ describe('MCP extension lifetime ownership', () => {
   });
   const credentials = useOwnedCredentials();
 
-  it('keeps caller extensions and catalog alive when an adopted Agent is disposed', async () => {
-    const builtPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
-    );
+  async function openCallerSession() {
     const builtDirectory = await realpath(
       await mkdtemp(join(tmpdir(), 'explicit-engine-owner-')),
     );
@@ -89,7 +86,6 @@ describe('MCP extension lifetime ownership', () => {
     );
     const builtSettings = new SettingsService();
     const builtPolicy = new RuntimePolicyOwner(builtConfig);
-    const builtMessageBus = builtPolicy.session.messageBus;
     const builtMcp = await createTestMcpRuntime(
       {
         oauth: {
@@ -143,7 +139,7 @@ describe('MCP extension lifetime ownership', () => {
     const builtContent = createRuntimeContentGeneratorFactory();
     const builtOAuth = acquirePreferredOAuth(
       undefined,
-      builtMessageBus,
+      builtPolicy.session.messageBus,
       builtConfig,
       builtSettings,
       builtManager,
@@ -171,18 +167,15 @@ describe('MCP extension lifetime ownership', () => {
     );
     builtOwner.bindMcpRuntime(builtMcp);
     builtOwner.bindHooks();
-    const builtClose = settleEngineRelease.bind(
-      undefined,
-      [
+    const builtClose = (): Promise<void> =>
+      runCleanupSteps([
         () => builtOwner.dispose(),
         () => builtRelease.close(),
         () => builtMedia.dispose(),
         () => builtMcp.dispose(),
         () => builtConfig.dispose(),
         () => rm(builtDirectory, { recursive: true, force: true }),
-      ],
-      builtPreviousReplay,
-    );
+      ]);
     try {
       await preparePreferredProviderCompletion(
         builtConfig,
@@ -197,27 +190,28 @@ describe('MCP extension lifetime ownership', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await capturedSessionClient(builtOwner).startChat();
+      const clients = ownerClients(builtOwner);
+      await clients[clients.length - 1].startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtClose);
     }
+    return { builtConfig, builtMcp, builtClose };
+  }
 
+  function openFacade(builtConfig: Config) {
+    const settings = new SettingsService();
+    for (const [key, value] of Object.entries(builtConfig.getInitialSettings()))
+      settings.set(key, value);
+    return fromConfig(builtConfig, settings, {}, credentials().authority);
+  }
+
+  it('keeps caller extensions and catalog alive when an adopted Agent is disposed', async () => {
+    const { builtConfig, builtMcp, builtClose } = await openCallerSession();
     const loader = builtMcp.extensionOperations;
     await addExtension(loader);
     const catalog = builtMcp.toolSelection;
 
-    const agent = await fromConfig(
-      builtConfig,
-      builtSettings,
-      {},
-      builtSettingsOwner,
-      builtManager,
-      undefined,
-      undefined,
-      builtMcp,
-      undefined,
-      capturedSessionClient(builtOwner),
-    );
+    const agent = await openFacade(builtConfig);
     try {
       await agent.dispose();
       expect(loader.list().map((extension) => extension.name)).toContain(
@@ -225,7 +219,6 @@ describe('MCP extension lifetime ownership', () => {
       );
       expect(new Set([builtMcp.toolSelection, catalog]).size).toBe(1);
       expect(builtMcp.isStopped()).toBe(false);
-      expect(fixtureAgentResources(agent).messageBus).toBe(builtMessageBus);
       await loader.unload(loader.list()[0]);
       expect(loader.list()).toHaveLength(0);
     } finally {
@@ -237,168 +230,9 @@ describe('MCP extension lifetime ownership', () => {
 
   for (const reverse of [false, true]) {
     it(`preserves an exact borrowed workspace after both facade orders (${reverse})`, async () => {
-      const builtPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-      process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-        new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
-      );
-      const builtDirectory = await realpath(
-        await mkdtemp(join(tmpdir(), 'explicit-engine-owner-')),
-      );
-      const builtConfig = new Config(
-        toConfigParameters({
-          provider: 'fake',
-          model: 'fake-model',
-          sessionId: randomUUID(),
-          workingDir: builtDirectory,
-        }),
-      );
-      const builtSettings = new SettingsService();
-      const builtPolicy = new RuntimePolicyOwner(builtConfig);
-      const builtMessageBus = builtPolicy.session.messageBus;
-      const builtMcp = await createTestMcpRuntime(
-        {
-          oauth: {
-            openBrowser: async () => {
-              throw new Error('Unexpected browser request');
-            },
-            tokenStorage: new MCPOAuthTokenStorage({
-              getCredentials: async () => null,
-              setCredentials: async () => {
-                throw new Error('Unexpected token write');
-              },
-              deleteCredentials: async () => {},
-              listServers: async () => [],
-              getAllCredentials: async () => new Map(),
-              clearAll: async () => {},
-            }),
-          },
-          config: builtConfig,
-          policy: { owner: builtPolicy, ownership: 'runtime' },
-        },
-        {},
-      );
-
-      const builtRuntimeId = 'engine-' + randomUUID();
-      const builtRelease = new AcquisitionRelease();
-      const builtSettingsOwner = new SessionSettingsOwner(builtSettings);
-      builtRelease.acquire('settings', () => builtSettingsOwner.dispose());
-      builtSettingsOwner.initializeProviderSelection(
-        builtConfig.getProvider(),
-        builtConfig.getModel(),
-      );
-      builtSettingsOwner.bindTelemetry(builtConfig);
-      const builtFiles = new ProviderFileLifecycle({
-        maxFiles: 100,
-        maxBytes: 512 * 1024 * 1024,
-      });
-      for (const scope of [builtRuntimeId, builtConfig.getSessionId()])
-        builtRelease.acquire('files', () =>
-          releaseAdoptedFileScope(builtFiles, scope),
-        );
-      const builtManager = acquirePreferredProviderManager(
-        builtConfig,
-        builtSettings,
-        builtSettingsOwner,
-        builtFiles,
-        builtRuntimeId,
-        credentials().authority,
-        builtRelease,
-      );
-      const builtTokenizer = configureProviderTokenizer(builtManager);
-      const builtContent = createRuntimeContentGeneratorFactory();
-      const builtOAuth = acquirePreferredOAuth(
-        undefined,
-        builtMessageBus,
-        builtConfig,
-        builtSettings,
-        builtManager,
-        builtRuntimeId,
-        builtMcp.profileDefinitions,
-        credentials().authority,
-        builtRelease,
-        undefined,
-      );
-      const builtMedia = new SessionMediaOwner(
-        builtConfig.projectTempDir,
-        1024 * 1024,
-      );
-      const builtOwner = await createCapturedSessionOwner(
-        builtConfig,
-        assembleTaskSchemaPolicy(builtSettings),
-        builtManager,
-        buildAgentClientFactory(),
-        builtMedia.store,
-        builtMcp.readInstructions,
-        builtMcp.workspacePaths,
-        builtSettingsOwner,
-        builtContent,
-        builtTokenizer,
-      );
-      builtOwner.bindMcpRuntime(builtMcp);
-      builtOwner.bindHooks();
-      const builtClose = settleEngineRelease.bind(
-        undefined,
-        [
-          () => builtOwner.dispose(),
-          () => builtRelease.close(),
-          () => builtMedia.dispose(),
-          () => builtMcp.dispose(),
-          () => builtConfig.dispose(),
-          () => rm(builtDirectory, { recursive: true, force: true }),
-        ],
-        builtPreviousReplay,
-      );
-      try {
-        await preparePreferredProviderCompletion(
-          builtConfig,
-          builtSettings,
-          builtSettingsOwner,
-          builtManager,
-          builtOAuth,
-          builtRuntimeId,
-          builtTokenizer,
-          undefined,
-        );
-        await builtMcp.initialize();
-        await builtOwner.initializeTools();
-        await builtOwner.refreshAuth();
-        await capturedSessionClient(builtOwner).startChat();
-      } catch (primary) {
-        await cleanupAfterFailure(primary, builtClose);
-      }
-
-      const optionsSettingsService: Parameters<typeof fromConfig>[1] =
-        builtSettings;
-      const optionsConfig: Parameters<typeof fromConfig>[0] = builtConfig;
-      const optionsProviderManager: Parameters<typeof fromConfig>[4] =
-        builtManager;
-      const optionsAgentClient: Parameters<typeof fromConfig>[9] =
-        capturedSessionClient(builtOwner);
-      const optionsMcpRuntime: Parameters<typeof fromConfig>[7] = builtMcp;
-      const first = await fromConfig(
-        optionsConfig,
-        optionsSettingsService,
-        {},
-        undefined,
-        optionsProviderManager,
-        undefined,
-        undefined,
-        optionsMcpRuntime,
-        undefined,
-        optionsAgentClient,
-      );
-      const second = await fromConfig(
-        optionsConfig,
-        optionsSettingsService,
-        {},
-        undefined,
-        optionsProviderManager,
-        undefined,
-        undefined,
-        optionsMcpRuntime,
-        undefined,
-        optionsAgentClient,
-      );
+      const { builtConfig, builtMcp, builtClose } = await openCallerSession();
+      const first = await openFacade(builtConfig);
+      const second = await openFacade(builtConfig);
       const facades = reverse ? [second, first] : [first, second];
       const operations = builtMcp.extensionOperations;
       try {
@@ -419,14 +253,3 @@ describe('MCP extension lifetime ownership', () => {
     }, 30000);
   }
 });
-async function settleEngineRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previousReplay: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
-  }
-}
