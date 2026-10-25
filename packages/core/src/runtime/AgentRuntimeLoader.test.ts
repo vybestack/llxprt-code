@@ -115,6 +115,9 @@ describe('AgentRuntimeLoader', () => {
       async *generateChatCompletion() {},
     })),
     setActiveProvider: vi.fn(),
+    getProviderKeys: () => {
+      throw new Error('Test fake provider adapter has no key storage');
+    },
   };
   const toolsView: ToolRegistryView = {
     listToolNames: vi.fn(() => ['test-tool']),
@@ -676,6 +679,9 @@ describe('AgentRuntimeLoader', () => {
       getActiveProvider: vi.fn(),
       getActiveProviderName: vi.fn(),
       setActiveProvider: vi.fn(),
+      getProviderKeys: () => {
+        throw new Error('Test fake provider adapter has no key storage');
+      },
       setRuntimeContext: vi.fn(),
       getAvailableModels: vi.fn(async () => []),
       getProviderNames: () => [],

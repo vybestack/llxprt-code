@@ -448,7 +448,6 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
   }
 
   async applyArgumentOverrides(
-    config: Config,
     owner: Pick<SessionSettingsOwner, 'writeUserParameter'>,
     argv: Parameters<typeof applyCliArgumentOverrides>[0],
     bootstrap: Parameters<typeof applyCliArgumentOverrides>[1],
@@ -458,10 +457,10 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
       argv,
       bootstrap,
       {
-        getProviderKeys: () => config.getProviderKeys(),
         setEphemeralSetting: (key, value) =>
           owner.writeUserParameter(key, value),
       },
+      this.#manager.getProviderKeys(),
       this.#settings,
       this.#manager.getActiveProvider(),
     );

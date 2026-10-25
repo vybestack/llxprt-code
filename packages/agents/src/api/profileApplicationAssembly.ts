@@ -13,7 +13,6 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { Profile, SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import { applyProfileCascade } from './profileApplication.js';
 import {
   finishProfileApplication,
@@ -51,16 +50,6 @@ function assembleProfileParameterCommands(owner: SessionSettingsOwner): {
 
 type PreparedProfile = Awaited<ReturnType<typeof finishProfileApplication>>;
 
-function requireProfileKeyStorage(
-  keys: ProviderKeyStorageLike | undefined,
-): ProviderKeyStorageLike {
-  if (!keys)
-    throw new Error(
-      'Profile key resolution requires an explicit credential owner',
-    );
-  return keys;
-}
-
 export function assembleProfileApplication(
   settings: SettingsService,
   manager: RuntimeProviderManager,
@@ -74,7 +63,7 @@ export function assembleProfileApplication(
   ) => Promise<PreparedProfileFacade | void> = async () => {},
   assertAdmission: () => void = () => {},
 ): AgentProfileApplication {
-  const keys = requireProfileKeyStorage(manager.getProviderKeys?.());
+  const keys = manager.getProviderKeys();
   let installed: PreparedProfile | undefined;
   return queueProfileApplications(
     profiles,

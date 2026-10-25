@@ -64,6 +64,9 @@ describe('compression profile Config ownership', () => {
               loadProfile: async (name): Promise<Profile> =>
                 name === 'member' ? standard : profile,
             },
+            readProviderKeys: () => {
+              throw new Error('This profile names no stored key');
+            },
             resolveExplicitCompressionProvider: () => provider,
             roundRobinIndexes: new Map(),
           },

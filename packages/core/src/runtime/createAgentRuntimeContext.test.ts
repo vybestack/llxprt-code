@@ -40,6 +40,9 @@ describe('createAgentRuntimeContext', () => {
     mockProviderAdapter = {
       getActiveProvider: vi.fn().mockReturnValue(mockProvider),
       setActiveProvider: vi.fn(),
+      getProviderKeys: () => {
+        throw new Error('Test fake provider adapter has no key storage');
+      },
     };
 
     // Mock telemetry adapter
@@ -658,6 +661,9 @@ describe('createAgentRuntimeContext', () => {
       const lbProviderAdapter: AgentRuntimeProviderAdapter = {
         getActiveProvider: vi.fn().mockReturnValue(lbProvider),
         setActiveProvider: vi.fn(),
+        getProviderKeys: () => {
+          throw new Error('Test fake provider adapter has no key storage');
+        },
       };
 
       const options: AgentRuntimeContextFactoryOptions = {
@@ -686,6 +692,9 @@ describe('createAgentRuntimeContext', () => {
       const lbProviderAdapter: AgentRuntimeProviderAdapter = {
         getActiveProvider: vi.fn().mockReturnValue(lbProvider),
         setActiveProvider: vi.fn(),
+        getProviderKeys: () => {
+          throw new Error('Test fake provider adapter has no key storage');
+        },
       };
 
       const options: AgentRuntimeContextFactoryOptions = {
@@ -714,6 +723,9 @@ describe('createAgentRuntimeContext', () => {
       const lbProviderAdapter: AgentRuntimeProviderAdapter = {
         getActiveProvider: vi.fn().mockReturnValue(lbProvider),
         setActiveProvider: vi.fn(),
+        getProviderKeys: () => {
+          throw new Error('Test fake provider adapter has no key storage');
+        },
       };
 
       const options: AgentRuntimeContextFactoryOptions = {
@@ -741,6 +753,9 @@ describe('createAgentRuntimeContext', () => {
       const lbProviderAdapter: AgentRuntimeProviderAdapter = {
         getActiveProvider: vi.fn().mockReturnValue(lbProvider),
         setActiveProvider: vi.fn(),
+        getProviderKeys: () => {
+          throw new Error('Test fake provider adapter has no key storage');
+        },
       };
 
       const options: AgentRuntimeContextFactoryOptions = {
@@ -769,6 +784,9 @@ describe('createAgentRuntimeContext', () => {
           throw new Error('no active provider');
         }),
         setActiveProvider: vi.fn(),
+        getProviderKeys: () => {
+          throw new Error('Test fake provider adapter has no key storage');
+        },
       };
 
       const options: AgentRuntimeContextFactoryOptions = {

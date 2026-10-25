@@ -213,7 +213,6 @@ describe('explicit named-key credential owner', () => {
     let runtimeMod: typeof import('../../../../agents/src/api/settingsResolver.js');
     const release: Array<() => void | Promise<void>> = [];
     const keyOperations = {
-      getProviderKeys: () => runtimeConfig.getProviderKeys(),
       setEphemeralSetting: (key: string, value: unknown): void =>
         runtimeSettingsOwner.writeUserParameter(key, value),
     };
@@ -306,6 +305,7 @@ describe('explicit named-key credential owner', () => {
         {},
         { keyOverride: 'raw-cli-key', keyNameOverride: 'mykey' },
         keyOperations,
+        runtimeManager.getProviderKeys(),
         runtimeSettings,
         runtimeManager.getActiveProvider(),
       );
@@ -326,6 +326,7 @@ describe('explicit named-key credential owner', () => {
         {},
         { keyNameOverride: 'cli-named' },
         keyOperations,
+        runtimeManager.getProviderKeys(),
         runtimeSettings,
         runtimeManager.getActiveProvider(),
       );
@@ -348,6 +349,7 @@ describe('explicit named-key credential owner', () => {
         {},
         {},
         keyOperations,
+        runtimeManager.getProviderKeys(),
         runtimeSettings,
         runtimeManager.getActiveProvider(),
       );
@@ -369,6 +371,7 @@ describe('explicit named-key credential owner', () => {
         {},
         { keyOverride: 'raw-wins', keyNameOverride: 'named' },
         keyOperations,
+        runtimeManager.getProviderKeys(),
         runtimeSettings,
         runtimeManager.getActiveProvider(),
       );
@@ -388,6 +391,7 @@ describe('explicit named-key credential owner', () => {
         {},
         { keyNameOverride: 'cli-key', keyfileOverride: keyfilePath },
         keyOperations,
+        runtimeManager.getProviderKeys(),
         runtimeSettings,
         runtimeManager.getActiveProvider(),
       );
@@ -409,6 +413,7 @@ describe('explicit named-key credential owner', () => {
         {},
         { keyNameOverride: 'myanthropic' },
         keyOperations,
+        runtimeManager.getProviderKeys(),
         runtimeSettings,
         runtimeManager.getActiveProvider(),
       );
@@ -430,6 +435,7 @@ describe('explicit named-key credential owner', () => {
         {},
         {},
         keyOperations,
+        runtimeManager.getProviderKeys(),
         runtimeSettings,
         runtimeManager.getActiveProvider(),
       );
@@ -451,6 +457,7 @@ describe('explicit named-key credential owner', () => {
           {},
           { keyNameOverride: 'notexist' },
           keyOperations,
+          runtimeManager.getProviderKeys(),
           runtimeSettings,
           runtimeManager.getActiveProvider(),
         ),
@@ -466,6 +473,7 @@ describe('explicit named-key credential owner', () => {
           {},
           { keyNameOverride: 'missing' },
           keyOperations,
+          runtimeManager.getProviderKeys(),
           runtimeSettings,
           runtimeManager.getActiveProvider(),
         ),
@@ -481,6 +489,7 @@ describe('explicit named-key credential owner', () => {
           {},
           { keyNameOverride: 'missing', keyfileOverride: '/tmp/fallback.key' },
           keyOperations,
+          runtimeManager.getProviderKeys(),
           runtimeSettings,
           runtimeManager.getActiveProvider(),
         ),
@@ -498,6 +507,7 @@ describe('explicit named-key credential owner', () => {
           {},
           {},
           keyOperations,
+          runtimeManager.getProviderKeys(),
           runtimeSettings,
           runtimeManager.getActiveProvider(),
         ),
@@ -516,6 +526,7 @@ describe('explicit named-key credential owner', () => {
           {},
           {},
           keyOperations,
+          runtimeManager.getProviderKeys(),
           runtimeSettings,
           runtimeManager.getActiveProvider(),
         ),
@@ -532,6 +543,7 @@ describe('explicit named-key credential owner', () => {
         { key: 'direct-raw-key' },
         {},
         keyOperations,
+        runtimeManager.getProviderKeys(),
         runtimeSettings,
         runtimeManager.getActiveProvider(),
       );
@@ -548,6 +560,7 @@ describe('explicit named-key credential owner', () => {
         {},
         { keyOverride: 'bootstrap-key' },
         keyOperations,
+        runtimeManager.getProviderKeys(),
         runtimeSettings,
         runtimeManager.getActiveProvider(),
       );
@@ -566,6 +579,7 @@ describe('explicit named-key credential owner', () => {
         {},
         { keyfileOverride: keyfilePath },
         keyOperations,
+        runtimeManager.getProviderKeys(),
         runtimeSettings,
         runtimeManager.getActiveProvider(),
       );

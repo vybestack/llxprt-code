@@ -173,7 +173,7 @@ describe('#2946 CompressionProfileResolver proxy-aware key storage', () => {
     const result = await resolveCompressionProfileAuthToken(
       profileSettings,
       'gemini',
-      new CredentialAuthority(socketPath).createProviderKeyStorage(),
+      () => new CredentialAuthority(socketPath).createProviderKeyStorage(),
     );
 
     expect(result).toStrictEqual({ authToken: PROXY_SERVED_KEY });
@@ -197,7 +197,7 @@ describe('#2946 CompressionProfileResolver proxy-aware key storage', () => {
     const result = await resolveCompressionProfileAuthToken(
       profileSettings,
       'gemini',
-      new CredentialAuthority(socketPath).createProviderKeyStorage(),
+      () => new CredentialAuthority(socketPath).createProviderKeyStorage(),
     );
 
     expect(result).toStrictEqual({});

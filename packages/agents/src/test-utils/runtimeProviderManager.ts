@@ -12,6 +12,7 @@ import type {
   RuntimeSessionTokenUsage,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderManager.js';
 import type { RuntimeModel } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeModel.js';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 /**
@@ -100,6 +101,10 @@ export class TestRuntimeProviderManager implements RuntimeProviderManager {
 
   setRuntimeContext(runtimeContext: ProviderRuntimeContext): void {
     this.runtimeContext = runtimeContext;
+  }
+
+  getProviderKeys(): ProviderKeyStorageLike {
+    throw new Error('Test manager has no key storage');
   }
 
   fetchNetwork(): Promise<Response> {

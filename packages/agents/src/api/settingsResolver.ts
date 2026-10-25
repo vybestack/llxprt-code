@@ -13,6 +13,7 @@ import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 
 import type { EphemeralSettingTarget } from '@vybestack/llxprt-code-settings/settings/cli-ephemeral-settings.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import { applyCliSetArguments } from '@vybestack/llxprt-code-settings/settings/cli-ephemeral-settings.js';
 import { updateActiveProviderBaseUrl } from './providerMutations.js';
 import {
@@ -43,6 +44,7 @@ export { resolveNamedKey } from './keyResolution.js';
  *
  * @param argv - CLI arguments
  * @param bootstrapArgs - Bootstrap parsed arguments
+ * @param keys - Key storage of the session's credential owner, read for named keys
  */
 export async function applyCliArgumentOverrides(
   argv: {
@@ -61,6 +63,7 @@ export async function applyCliArgumentOverrides(
       }
     | undefined,
   config: EphemeralSettingTarget,
+  keys: Pick<ProviderKeyStorageLike, 'getKey'>,
   settingsService: SettingsService,
   provider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
 ): Promise<void> {
@@ -69,6 +72,7 @@ export async function applyCliArgumentOverrides(
     argv,
     bootstrapArgs,
     config,
+    keys,
     settingsService,
     provider,
   );
@@ -99,6 +103,7 @@ async function resolveAndApplyApiKey(
       }
     | undefined,
   config: EphemeralSettingTarget,
+  keys: Pick<ProviderKeyStorageLike, 'getKey'>,
   settingsService: SettingsService,
   provider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
 ): Promise<void> {
@@ -121,7 +126,13 @@ async function resolveAndApplyApiKey(
   // 2. --key-name (CLI flag, named key from keyring)
   const keyNameToUse = bootstrapArgs?.keyNameOverride ?? null;
   if (
-    await resolveFromKeyName(keyNameToUse, config, settingsService, provider)
+    await resolveFromKeyName(
+      keyNameToUse,
+      keys,
+      config,
+      settingsService,
+      provider,
+    )
   ) {
     return;
   }
@@ -133,6 +144,7 @@ async function resolveAndApplyApiKey(
   if (
     await resolveFromProfileKeyName(
       profileKeyName,
+      keys,
       config,
       settingsService,
       provider,

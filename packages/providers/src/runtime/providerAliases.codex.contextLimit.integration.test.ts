@@ -186,6 +186,9 @@ describe('Codex effective context limit runtime integration', () => {
         return activeProvider;
       },
       setActiveProvider: () => undefined,
+      getProviderKeys: () => {
+        throw new Error('This test reads no provider keys');
+      },
     };
     const context = createAgentRuntimeContext({
       state,

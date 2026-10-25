@@ -56,6 +56,11 @@ export interface CompressionProfileResolverContext {
     profileName: string,
     providerName: string,
   ): IProvider;
+  /**
+   * The key storage of the session's credential owner. Read only when a
+   * compression profile names a key.
+   */
+  readProviderKeys(): ProviderKeyStorageLike;
   /** Map of round-robin indexes, mutated in place when strategy is round-robin. */
   readonly roundRobinIndexes: Map<string, number>;
 }
@@ -263,7 +268,7 @@ export function buildCompressionProfileEphemeralsSnapshot(
 export async function resolveCompressionProfileAuthToken(
   profileSettings: SettingsService,
   provider: string,
-  storage?: Pick<ProviderKeyStorageLike, 'getKey'>,
+  readStorage: () => Pick<ProviderKeyStorageLike, 'getKey'>,
 ): Promise<{ authToken: string } | Record<string, never>> {
   const providerSettings = profileSettings.getProviderSettings(provider);
   const directAuth = getStringSettingFromValues([
@@ -279,11 +284,7 @@ export async function resolveCompressionProfileAuthToken(
     profileSettings.get('auth-key-name'),
   ]);
   if (keyName) {
-    if (!storage)
-      throw new Error(
-        'Compression key resolution requires an explicit credential owner',
-      );
-    const token = await storage.getKey(keyName);
+    const token = await readStorage().getKey(keyName);
     if (token) {
       return { authToken: token };
     }
@@ -312,7 +313,7 @@ export async function resolveCompressionProfileAuthToken(
 export async function buildCompressionProfileResolvedOptions(
   profileSettings: SettingsService,
   profile: StandardProfile,
-  storage?: Pick<ProviderKeyStorageLike, 'getKey'>,
+  readStorage: () => Pick<ProviderKeyStorageLike, 'getKey'>,
 ): Promise<RuntimeGenerateChatOptions['resolved']> {
   const providerSettings = profileSettings.getProviderSettings(
     profile.provider,
@@ -335,7 +336,7 @@ export async function buildCompressionProfileResolvedOptions(
     ...(await resolveCompressionProfileAuthToken(
       profileSettings,
       profile.provider,
-      storage,
+      readStorage,
     )),
     ...(temperature !== undefined ? { temperature } : {}),
     ...(maxTokens !== undefined ? { maxTokens } : {}),
@@ -389,7 +390,7 @@ export async function resolveStandardCompressionProvider(
   const resolved = await buildCompressionProfileResolvedOptions(
     profileSettings,
     profile,
-    config?.peekProviderKeyStorage(),
+    () => ctx.readProviderKeys(),
   );
   const invocation = createRuntimeInvocationContext({
     runtimeId: runtime.runtimeId,

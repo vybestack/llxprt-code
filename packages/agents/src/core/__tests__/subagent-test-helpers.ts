@@ -333,7 +333,10 @@ function createDefaultProviderAdapter(): AgentRuntimeProviderAdapter {
         }) as unknown as IProvider,
     ),
     setActiveProvider: vi.fn(),
-  } as AgentRuntimeProviderAdapter;
+    getProviderKeys: () => {
+      throw new Error('Test provider adapter has no key storage');
+    },
+  };
 }
 
 function createDefaultTelemetryAdapter(): AgentRuntimeTelemetryAdapter {

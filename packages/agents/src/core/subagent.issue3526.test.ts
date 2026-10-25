@@ -327,6 +327,9 @@ async function createHarness(
     getActiveProvider: () => provider,
     getProviderByName: () => provider,
     setActiveProvider: vi.fn(),
+    getProviderKeys: () => {
+      throw new Error('Test provider adapter has no key storage');
+    },
   };
   const toolsView: ToolRegistryView = {
     listToolNames: () => ['read_file', 'run_shell_command', 'todo_pause'],

@@ -16,6 +16,8 @@ import {
   InMemoryProviderKeyStorage,
 } from '../../../../../providers/src/auth/proxy/__tests__/credential-proxy-server-helpers.js';
 
+export { InMemoryProviderKeyStorage };
+
 type CredentialFixtureTrace = (
   boundary: string,
   state?: Readonly<Record<string, boolean | readonly number[]>>,
@@ -75,10 +77,11 @@ export class OwnedCredentialFixture {
 
   static async create(
     trace?: CredentialFixtureTrace,
+    providerKeyStorage: InMemoryProviderKeyStorage = new InMemoryProviderKeyStorage(),
   ): Promise<OwnedCredentialFixture> {
     const server = new CredentialProxyServer({
       tokenStore: new InMemoryTokenStore(),
-      providerKeyStorage: new InMemoryProviderKeyStorage(),
+      providerKeyStorage,
     });
     trace?.('credentials.server.start:enter');
     const socketPath = await server.start();

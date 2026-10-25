@@ -106,6 +106,9 @@ describe('compression profile conversation identity', () => {
               loadProfile: async (name): Promise<Profile> =>
                 name === 'compression-member' ? standard : profile,
             },
+            readProviderKeys: () => {
+              throw new Error('This profile names no stored key');
+            },
             resolveExplicitCompressionProvider: () => provider,
             roundRobinIndexes: new Map(),
           },

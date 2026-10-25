@@ -35,6 +35,9 @@ function runtime(settings: SettingsService) {
       setActiveProvider: () => {
         throw new Error('Policy validation must not select a provider');
       },
+      getProviderKeys: () => {
+        throw new Error('Policy validation must not read provider keys');
+      },
     },
     telemetry: {
       logApiRequest: () => {},

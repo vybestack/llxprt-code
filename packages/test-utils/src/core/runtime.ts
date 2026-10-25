@@ -209,7 +209,10 @@ interface ChatSessionRuntimeResult {
   provider: IProvider;
   providerManager: Pick<
     RuntimeProviderManager,
-    'getActiveProvider' | 'setActiveProvider' | 'getProviderByName'
+    | 'getActiveProvider'
+    | 'setActiveProvider'
+    | 'getProviderByName'
+    | 'getProviderKeys'
   >;
   settingsService: SettingsService;
   runtime: ProviderRuntimeContext;
@@ -318,5 +321,8 @@ function createSingleProviderSelection(
     },
     getProviderByName: (name: string) =>
       name === provider.name ? provider : undefined,
+    getProviderKeys: (): never => {
+      throw new Error('Test provider selection has no key storage');
+    },
   };
 }

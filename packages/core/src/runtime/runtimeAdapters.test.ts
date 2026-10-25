@@ -18,6 +18,7 @@ import {
 } from './runtimeAdapters.js';
 import type { RuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
 import type { RuntimeProvider } from './contracts/RuntimeProvider.js';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/tools.js';
 import { makeFakeConfig } from '../__tests__/config-test-helpers.js';
@@ -27,12 +28,38 @@ import * as loggers from '../telemetry/loggers.js';
  * Minimal infrastructure double implementing the RuntimeProviderManager contract.
  * This is infrastructure for the adapter under test, NOT the component under test.
  */
+class MemoryProviderKeys implements ProviderKeyStorageLike {
+  private readonly keys = new Map<string, string>();
+
+  async saveKey(name: string, apiKey: string): Promise<void> {
+    this.keys.set(name, apiKey);
+  }
+
+  async getKey(name: string): Promise<string | null> {
+    return this.keys.get(name) ?? null;
+  }
+
+  async deleteKey(name: string): Promise<boolean> {
+    return this.keys.delete(name);
+  }
+
+  async listKeys(): Promise<string[]> {
+    return [...this.keys.keys()];
+  }
+
+  async hasKey(name: string): Promise<boolean> {
+    return this.keys.has(name);
+  }
+}
+
 function createManagerDouble(
   providersByName: Record<string, RuntimeProvider>,
   activeName?: string,
+  providerKeys: ProviderKeyStorageLike = new MemoryProviderKeys(),
 ): RuntimeProviderManager {
   let active = activeName;
   return {
+    getProviderKeys: () => providerKeys,
     getActiveProvider: () =>
       active ? (providersByName[active] ?? undefined) : undefined,
     getActiveProviderName: () => active,
@@ -125,7 +152,29 @@ describe('createProviderAdapterFromManager', () => {
     });
   });
 
+  describe('getProviderKeys', () => {
+    it('returns the key storage held by the manager contract', async () => {
+      const keys = new MemoryProviderKeys();
+      await keys.saveKey('shared-name', 'manager-held-key');
+      const adapter = createProviderAdapterFromManager(
+        createManagerDouble({}, undefined, keys),
+      );
+
+      expect(adapter.getProviderKeys()).toBe(keys);
+      expect(await adapter.getProviderKeys().getKey('shared-name')).toBe(
+        'manager-held-key',
+      );
+    });
+  });
+
   describe('when no manager is provided', () => {
+    it('getProviderKeys throws a descriptive error', () => {
+      const adapter = createProviderAdapterFromManager(undefined);
+      expect(() => adapter.getProviderKeys()).toThrow(
+        'AgentRuntimeContext provider adapter requires a RuntimeProviderManager instance.',
+      );
+    });
+
     it('getProviderByName throws a descriptive error', () => {
       const adapter = createProviderAdapterFromManager(undefined);
       expect(() => adapter.getProviderByName!('openai')).toThrow(

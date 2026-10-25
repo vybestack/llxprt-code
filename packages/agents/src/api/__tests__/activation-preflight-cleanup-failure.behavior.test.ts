@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { toConfigParameters } from '../agentConfig.adapter.js';
 import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -34,6 +35,7 @@ function messagesOf(error: unknown): string[] {
 }
 
 describe('activation preflight cleanup failure reporting', () => {
+  const credentials = useOwnedCredentials();
   async function failingCleanupOperation() {
     directory = await realpath(
       await mkdtemp(join(tmpdir(), 'preflight-cleanup-failure-')),
@@ -111,6 +113,9 @@ describe('activation preflight cleanup failure reporting', () => {
       undefined,
       builtFactorylessSettings,
     );
+    const keys = credentials().authority.createProviderKeyStorage();
+    cleanups.push(async () => keys.close());
+    manager.bindProviderKeyStorage(keys);
     manager.registerProvider(
       new FakeProvider(join(import.meta.dir, 'fixtures/plain-text.jsonl')),
     );

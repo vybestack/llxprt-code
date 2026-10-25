@@ -50,7 +50,10 @@ export class NoActiveProviderError extends Error {
 export function createProviderAdapterFromManager(
   manager?: Pick<
     RuntimeProviderManager,
-    'getActiveProvider' | 'setActiveProvider' | 'getProviderByName'
+    | 'getActiveProvider'
+    | 'setActiveProvider'
+    | 'getProviderByName'
+    | 'getProviderKeys'
   >,
 ): AgentRuntimeProviderAdapter {
   if (!manager) {
@@ -66,6 +69,11 @@ export function createProviderAdapterFromManager(
         );
       },
       getProviderByName: () => {
+        throw new Error(
+          'AgentRuntimeContext provider adapter requires a RuntimeProviderManager instance.',
+        );
+      },
+      getProviderKeys: () => {
         throw new Error(
           'AgentRuntimeContext provider adapter requires a RuntimeProviderManager instance.',
         );
@@ -87,6 +95,7 @@ export function createProviderAdapterFromManager(
       void manager.setActiveProvider(name);
     },
     getProviderByName: (name: string) => manager.getProviderByName(name),
+    getProviderKeys: () => manager.getProviderKeys(),
   };
 }
 

@@ -561,6 +561,7 @@ export class ChatSession {
         prepareProviderInvocation:
           this.runtimeContext.prepareProviderInvocation,
         runtimeState: this.runtimeState,
+        readProviderKeys: () => this.runtimeContext.provider.getProviderKeys(),
         resolveExplicitCompressionProvider:
           this.resolveExplicitCompressionProvider.bind(this),
         roundRobinIndexes: this.compressionLoadBalancerRoundRobinIndexes,

@@ -323,7 +323,6 @@ async function reapplyCliOverrides(
 
   if (hasCliArgumentOverrides(bootstrapArgs)) {
     await preflight.applyArgumentOverrides(
-      input.config,
       input.sessionSettings,
       {
         key: argv.key,

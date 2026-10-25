@@ -125,6 +125,9 @@ async function createBudgetScope(
   const providerAdapter: AgentRuntimeProviderAdapter = {
     getActiveProvider: () => provider,
     setActiveProvider: () => undefined,
+    getProviderKeys: () => {
+      throw new Error('Test provider adapter has no key storage');
+    },
   };
   const runtimeBundle = createStatelessRuntimeBundle({
     providerAdapter,
