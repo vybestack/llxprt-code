@@ -290,11 +290,14 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     expect(loadProfile).toHaveBeenCalledWith(subagentConfig.profile);
     expect(factory).toHaveBeenCalledTimes(1);
 
-    const factoryCall = factory.mock.calls[0];
-    const [, passedConfig, promptConfig, modelConfig, runConfigArg] =
-      factoryCall;
+    const [launchArg, runtimeArg] = factory.mock.calls[0];
+    const {
+      prompt: promptConfig,
+      model: modelConfig,
+      run: runConfigArg,
+    } = launchArg;
 
-    expect(passedConfig).toBe(foregroundConfig);
+    expect(runtimeArg.foregroundConfig).toBe(foregroundConfig);
     expect(promptConfig.systemPrompt).toContain(subagentConfig.systemPrompt);
     expect(promptConfig.systemPrompt).toContain(extraPrompt);
 
@@ -358,7 +361,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     await orchestrator.launch({ name: subagentConfig.name });
 
-    const [, , , , runConfigArg] = factory.mock.calls[0];
+    const runConfigArg = factory.mock.calls[0][0].run;
     expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
     expect(runConfigArg.max_turns).toBe(1_000);
   });
@@ -414,7 +417,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     await orchestrator.launch({ name: subagentConfig.name });
 
-    const [, , , , runConfigArg] = factory.mock.calls[0];
+    const runConfigArg = factory.mock.calls[0][0].run;
     expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
     expect(runConfigArg.max_turns).toBeUndefined();
   });
@@ -481,7 +484,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     await orchestrator.launch({ name: subagentConfig.name });
 
-    const [, , , , runConfigArg] = factory.mock.calls[0];
+    const runConfigArg = factory.mock.calls[0][0].run;
     expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
     expect(runConfigArg.max_turns).toBe(75);
   });
@@ -543,10 +546,10 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     await orchestrator.launch({ name: subagentConfig.name });
 
-    const [, , , , firstRunConfig] = factory.mock.calls[0];
+    const firstRunConfig = factory.mock.calls[0][0].run;
     expect(firstRunConfig.max_turns).toBe(50);
 
-    const [, , , , secondRunConfig] = factory.mock.calls[1];
+    const secondRunConfig = factory.mock.calls[1][0].run;
     expect(secondRunConfig.max_turns).toBe(250);
   });
 
@@ -601,7 +604,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       runConfig: { max_turns: 10 },
     });
 
-    const [, , , , runConfigArg] = factory.mock.calls[0];
+    const runConfigArg = factory.mock.calls[0][0].run;
     expect(runConfigArg.max_turns).toBe(10);
   });
 
@@ -661,7 +664,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     await orchestrator.launch({ name: subagentConfig.name });
 
-    const [, , , , runConfigArg] = factory.mock.calls[0];
+    const runConfigArg = factory.mock.calls[0][0].run;
     expect(runConfigArg.max_turns).toBe(500);
   });
 
@@ -713,7 +716,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     await orchestrator.launch({ name: subagentConfig.name });
 
-    const [, , , , runConfigArg] = factory.mock.calls[0];
+    const runConfigArg = factory.mock.calls[0][0].run;
     expect(runConfigArg.max_turns).toBeUndefined();
   });
 
@@ -880,9 +883,8 @@ describe('SubagentOrchestrator - MessageBus threading (Issue #2312)', () => {
     await orchestrator.launch({ name: messageBusSubagentConfig.name });
 
     expect(factory).toHaveBeenCalledTimes(1);
-    const factoryCall = factory.mock.calls[0];
-    const runtimeArg = factoryCall[7];
-    expect(runtimeArg).toBeDefined();
-    expect(factoryCall[15]).toBe(sessionMessageBus);
+    const [, runtimeArg, operationsArg] = factory.mock.calls[0];
+    expect(runtimeArg.admittedRuntime).toBeDefined();
+    expect(operationsArg.messageBus).toBe(sessionMessageBus);
   });
 });

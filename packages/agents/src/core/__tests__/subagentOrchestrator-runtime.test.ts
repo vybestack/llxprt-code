@@ -135,9 +135,9 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     );
 
     expect(scopeFactory).toHaveBeenCalledTimes(1);
-    const scopeArguments = scopeFactory.mock.calls[0];
-    expect(scopeArguments[7]).toBe(runtimeBundle.runtimeContext);
-    expect(scopeArguments[8]).toBe(runtimeBundle.contentGenerator);
+    const [, scopeRuntime] = scopeFactory.mock.calls[0];
+    expect(scopeRuntime.admittedRuntime).toBe(runtimeBundle.runtimeContext);
+    expect(scopeRuntime.contentGenerator).toBe(runtimeBundle.contentGenerator);
     expect(result.identity.runtimeId).toBe(
       runtimeBundle.runtimeContext.state.runtimeId,
     );
@@ -293,8 +293,9 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       return loadAgentRuntime(options);
     };
     const scopeFactory: typeof SubAgentScope.create = async (...args) => {
+      const { messageBus } = args[2];
       expect(
-        await args[15].requestConfirmation({ name: 'write_file' }, {}),
+        await messageBus.requestConfirmation({ name: 'write_file' }, {}),
       ).toBe(true);
       return SubAgentScope.create(...args);
     };

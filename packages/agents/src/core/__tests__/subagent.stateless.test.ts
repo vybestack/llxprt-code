@@ -757,32 +757,6 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
   });
 
   describe('Config Independence', () => {
-    it('throws if runtime bundle is omitted (enforces stateless runtime)', async () => {
-      foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-
-      const promptConfig = createTestPromptConfig();
-      const modelConfig = createTestModelConfig(
-        'gemini-2.0-flash-thinking-exp',
-      );
-      const runConfig = createTestRunConfig();
-
-      await expect(
-        createSubagentScope(
-          {
-            name: 'stateless-subagent',
-            prompt: promptConfig,
-            model: modelConfig,
-            run: runConfig,
-            toolConfig: undefined,
-            outputConfig: undefined,
-          },
-          ...scopeInputs(foregroundConfig, {
-            readMcpInstructions: () => undefined,
-          }),
-        ),
-      ).rejects.toThrow('runtime bundle');
-    });
-
     it('should not read from foreground Config during runtime context construction', async () => {
       foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
 

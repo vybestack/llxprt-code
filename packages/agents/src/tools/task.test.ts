@@ -194,7 +194,7 @@ describe('TaskTool', () => {
         }),
       },
       scopeFactory: async (...args) => {
-        receivedMessageBus = args[15];
+        receivedMessageBus = args[2].messageBus;
         scope = await SubAgentScope.create(...args);
         vi.spyOn(scope, 'runInteractive').mockResolvedValue(undefined);
         vi.spyOn(scope, 'runNonInteractive');

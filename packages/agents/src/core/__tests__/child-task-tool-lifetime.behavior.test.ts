@@ -211,14 +211,15 @@ describe('child task tool lifetime', () => {
         profileManager: fixture.agent.workspace.profileDefinitions,
         messageBus: fixtureAgentResources(fixture.agent).messageBus,
         readMcpInstructions: fixture.readMcpInstructions,
-        scopeFactory: (...args) => {
-          args[17] = async () => {
-            entered.release();
-            await prepared.promise;
-            return [];
-          };
-          return SubAgentScope.create(...args);
-        },
+        scopeFactory: (launch, runtime, operations) =>
+          SubAgentScope.create(launch, runtime, {
+            ...operations,
+            loadEnvironmentContext: async () => {
+              entered.release();
+              await prepared.promise;
+              return [];
+            },
+          }),
       });
       const child = await orchestrator.launch({ name: 'disposal-child' });
       const running = child.scope.runNonInteractive(new ContextState());

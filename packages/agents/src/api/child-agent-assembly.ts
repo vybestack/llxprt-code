@@ -399,55 +399,67 @@ export class ChildAgentAssembly {
       this.loaded.runtimeContext.state.provider,
       { profileId: this.settings.getCurrentProfileName() ?? undefined },
     );
+    const { toolRegistry } = this.loaded;
+    if (toolRegistry === undefined)
+      throw new Error(
+        'SubAgentScope.create requires a ToolRegistry in the runtime bundle or overrides.',
+      );
     return this.scopeFactory(
-      this.data.subagent.name,
-      this.foregroundConfig,
-      this.data.prompt,
-      this.data.model,
-      this.data.run,
-      this.data.request.toolConfig,
-      this.data.request.outputConfig,
-      this.loaded.runtimeContext,
-      this.loaded.contentGenerator,
-      this.loaded.telemetryRoot,
-      this.loaded.toolRegistry,
-      this.loaded.runtimeContext.tools,
-      this.instructions,
-      this.workspacePaths,
-      this.readMcpInstructions,
-      this.messageBus,
-      this.loaded.settingsSnapshot,
-      async () =>
-        getEnvironmentContext(
-          this.instructions.snapshot().environmentMemory,
-          this.workspacePaths.directories(),
-        ),
-      () =>
-        this.trust?.isTrustedFolder() === true
-          ? this.foregroundConfig.getApprovalMode()
-          : ApprovalMode.DEFAULT,
-      () => {
-        const provider = this.loaded.runtimeContext.state.provider;
-        return provider === 'load-balancer'
-          ? admitLoadBalancerModelParameters(
-              this.manager.getActiveProvider(),
-              this.settings,
-            )
-          : admitModelParameters(
-              this.settings.getAllGlobalSettings(),
-              this.settings.getProviderSettings(provider),
-              provider,
-            );
+      {
+        name: this.data.subagent.name,
+        prompt: this.data.prompt,
+        model: this.data.model,
+        run: this.data.run,
+        toolConfig: this.data.request.toolConfig,
+        outputConfig: this.data.request.outputConfig,
+        parentSignal: this.data.signal,
       },
-      this.files,
-      this.client.hookOperations.execution({
-        sessionId: () => this.loaded.runtimeContext.state.sessionId,
-        transcriptPath: () => undefined,
-        signal: this.data.signal,
-      }),
-      retry.tryBucketFailover,
-      retry.readCurrentBucket,
-      this.data.signal,
+      {
+        admittedRuntime: this.loaded.runtimeContext,
+        contentGenerator: this.loaded.contentGenerator,
+        telemetry: this.loaded.telemetryRoot,
+        toolRegistry,
+        toolsView: this.loaded.runtimeContext.tools,
+        settingsSnapshot: this.loaded.settingsSnapshot,
+        foregroundConfig: this.foregroundConfig,
+      },
+      {
+        instructions: this.instructions,
+        workspacePaths: this.workspacePaths,
+        readMcpInstructions: this.readMcpInstructions,
+        messageBus: this.messageBus,
+        loadEnvironmentContext: async () =>
+          getEnvironmentContext(
+            this.instructions.snapshot().environmentMemory,
+            this.workspacePaths.directories(),
+          ),
+        readApprovalMode: () =>
+          this.trust?.isTrustedFolder() === true
+            ? this.foregroundConfig.getApprovalMode()
+            : ApprovalMode.DEFAULT,
+        admitModelParameters: () => {
+          const provider = this.loaded.runtimeContext.state.provider;
+          return provider === 'load-balancer'
+            ? admitLoadBalancerModelParameters(
+                this.manager.getActiveProvider(),
+                this.settings,
+              )
+            : admitModelParameters(
+                this.settings.getAllGlobalSettings(),
+                this.settings.getProviderSettings(provider),
+                provider,
+              );
+        },
+        providerFiles: this.files,
+        hooks: this.client.hookOperations.execution({
+          sessionId: () => this.loaded.runtimeContext.state.sessionId,
+          transcriptPath: () => undefined,
+          signal: this.data.signal,
+        }),
+        tryBucketFailover: retry.tryBucketFailover,
+        readCurrentBucket: retry.readCurrentBucket,
+        dependencies: {},
+      },
     );
   }
 

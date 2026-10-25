@@ -153,12 +153,7 @@ export function extractRunConfig(
     throw new Error(`Scope factory call ${callIndex} does not exist`);
   }
   const factoryCall = factory.mock.calls[callIndex];
-  if (factoryCall.length <= 4) {
-    throw new Error(
-      `Scope factory call ${callIndex} does not contain a runConfig argument`,
-    );
-  }
-  return factoryCall[4];
+  return factoryCall[0].run;
 }
 
 export function createRuntimeBundle(label = 'bundle') {
@@ -194,6 +189,7 @@ export function createRuntimeBundle(label = 'bundle') {
       getToolMetadata: () => undefined,
     },
     contentGenerator: {},
+    toolRegistry: fixtureToolSelection(),
   };
 }
 

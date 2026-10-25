@@ -1,5 +1,6 @@
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core';
-import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import { defaultEnvironmentContextLoader } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -9,7 +10,7 @@ import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import type {
   SubAgentOperationPorts,
   SubAgentRuntimeInput,
-} from './helpers/create-subagent-scope.js';
+} from '../subagent.js';
 import { createSessionPolicyFixture } from './session-policy-fixture.js';
 /**
  * @license
@@ -511,28 +512,41 @@ export function scopeInputs(
   inputs: SubagentTestInputs,
 ): [SubAgentRuntimeInput, SubAgentOperationPorts] {
   const runtime = inputs.runtimeBundle;
+  if (runtime === undefined)
+    throw new Error('scopeInputs requires a runtimeBundle.');
+  const toolRegistry = inputs.toolRegistry ?? runtime.toolRegistry;
+  if (toolRegistry === undefined)
+    throw new Error('scopeInputs requires a toolRegistry.');
+  const { state, tools } = runtime.runtimeContext;
   return [
     {
       foregroundConfig,
-      admittedRuntime: runtime?.runtimeContext,
-      contentGenerator: runtime?.contentGenerator,
-      telemetry: runtime?.telemetryRoot,
-      toolRegistry: inputs.toolRegistry ?? runtime?.toolRegistry,
-      toolsView: runtime?.runtimeContext.tools ?? runtime?.toolsView,
-      settingsSnapshot: inputs.settingsSnapshot ?? runtime?.settingsSnapshot,
+      admittedRuntime: runtime.runtimeContext,
+      contentGenerator: runtime.contentGenerator,
+      telemetry: runtime.telemetryRoot,
+      toolRegistry,
+      toolsView: tools,
+      settingsSnapshot: inputs.settingsSnapshot ?? runtime.settingsSnapshot,
     },
     {
       instructions: inputs.instructions,
       workspacePaths: inputs.workspacePaths,
       readMcpInstructions: inputs.readMcpInstructions,
       messageBus: inputs.messageBus ?? new MessageBus(),
-      loadEnvironmentContext: inputs.environmentContextLoader,
-      readApprovalMode: inputs.readApprovalMode,
-      admitModelParameters: inputs.admitModelParameters,
+      loadEnvironmentContext:
+        inputs.environmentContextLoader ?? defaultEnvironmentContextLoader,
+      readApprovalMode: inputs.readApprovalMode ?? (() => ApprovalMode.DEFAULT),
+      admitModelParameters:
+        inputs.admitModelParameters ??
+        (() => ({ providerName: state.provider, modelParams: {} })),
       providerFiles: undefined,
-      hooks: inputs.hookOwner,
+      hooks: inputs.hookOwner ?? {
+        sessionId: () => state.sessionId,
+        transcriptPath: () => undefined,
+      },
       tryBucketFailover: undefined,
       readCurrentBucket: undefined,
+      dependencies: {},
     },
   ];
 }

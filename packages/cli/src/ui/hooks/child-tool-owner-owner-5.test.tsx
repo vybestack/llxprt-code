@@ -415,61 +415,12 @@ describe('Mounted CLI child execution ownership', () => {
           },
         });
       },
-      scopeFactory: async (
-        childName,
-        config,
-        prompt,
-        model,
-        run,
-        tools,
-        outputs,
-        runtime,
-        generator,
-        telemetry,
-        registry,
-        view,
-        instructions,
-        paths,
-        readMcp,
-        bus,
-        settings,
-        _environment,
-        readApproval,
-        admitParameters,
-        lifecycle,
-        hooks,
-        retryFailover,
-        readBucket,
-        signal,
-      ) => {
+      scopeFactory: async (launch, runtime, operations) => {
         let turn = 0;
-        scope = await SubAgentScope.create(
-          childName,
-          config,
-          prompt,
-          model,
-          run,
-          tools,
-          outputs,
-          runtime,
-          generator,
-          telemetry,
-          registry,
-          view,
-          instructions,
-          paths,
-          readMcp,
-          bus,
-          settings,
-          async () => [],
-          readApproval,
-          admitParameters,
-          lifecycle,
-          hooks,
-          retryFailover,
-          readBucket,
-          signal,
-          {
+        scope = await SubAgentScope.create(launch, runtime, {
+          ...operations,
+          loadEnvironmentContext: async () => [],
+          dependencies: {
             createTurn: (_chat, promptId, agentId) => {
               const requests: ToolCallRequestInfo[] =
                 turn++ === 0
@@ -495,7 +446,7 @@ describe('Mounted CLI child execution ownership', () => {
               };
             },
           },
-        );
+        });
         return scope;
       },
     });

@@ -91,7 +91,6 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
 import type { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import {
   SubagentTerminateMode,
-  defaultEnvironmentContextLoader,
   type EnvironmentContextLoader,
   type ModelConfig,
   type OutputConfig,
@@ -118,6 +117,41 @@ export interface SubAgentDependencies {
     providerName: string,
     hookOwner?: HookExecutionOwner,
   ) => Pick<Turn, 'run' | 'pendingToolCalls'>;
+}
+
+export interface SubAgentLaunchInput {
+  readonly name: string;
+  readonly prompt: PromptConfig;
+  readonly model: ModelConfig;
+  readonly run: RunConfig;
+  readonly toolConfig: ToolConfig | undefined;
+  readonly outputConfig: OutputConfig | undefined;
+  readonly parentSignal: AbortSignal | undefined;
+}
+
+export interface SubAgentRuntimeInput {
+  readonly admittedRuntime: AgentRuntimeContext;
+  readonly contentGenerator: ContentGenerator;
+  readonly telemetry: RootTelemetry;
+  readonly toolRegistry: ToolSelection;
+  readonly toolsView: ToolRegistryView;
+  readonly settingsSnapshot: ReadonlySettingsSnapshot | undefined;
+  readonly foregroundConfig: Config;
+}
+
+export interface SubAgentOperationPorts {
+  readonly instructions: InstructionReadOperations;
+  readonly workspacePaths: WorkspacePathOperations;
+  readonly readMcpInstructions: () => string | undefined;
+  readonly messageBus: MessageBus;
+  readonly loadEnvironmentContext: EnvironmentContextLoader;
+  readonly readApprovalMode: () => ApprovalMode;
+  readonly admitModelParameters: () => AdmittedModelParameters;
+  readonly providerFiles: object | undefined;
+  readonly hooks: HookExecutionOwner;
+  readonly tryBucketFailover: ProviderRetryOperations['tryBucketFailover'];
+  readonly readCurrentBucket: ProviderRetryOperations['readCurrentBucket'];
+  readonly dependencies: SubAgentDependencies;
 }
 
 export class SubAgentScope {
@@ -163,13 +197,13 @@ export class SubAgentScope {
     private readonly tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
     private readonly readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],
     private readonly messageBus: MessageBus,
-    private readonly toolConfig?: ToolConfig,
-    private readonly outputConfig?: OutputConfig,
-    settingsSnapshot?: ReadonlySettingsSnapshot,
-    parentAbortSignal?: AbortSignal,
-    private readonly dependencies: SubAgentDependencies = {},
-    private readonly admitModelParameters?: () => AdmittedModelParameters,
-    private readonly hookOwner?: HookExecutionOwner,
+    private readonly toolConfig: ToolConfig | undefined,
+    private readonly outputConfig: OutputConfig | undefined,
+    settingsSnapshot: ReadonlySettingsSnapshot | undefined,
+    parentAbortSignal: AbortSignal | undefined,
+    private readonly dependencies: SubAgentDependencies,
+    private readonly admitModelParameters: () => AdmittedModelParameters,
+    private readonly hookOwner: HookExecutionOwner,
   ) {
     const randomPart = Math.random().toString(36).slice(2, 8);
     this.subagentId = `${this.name}-${randomPart}`;
@@ -195,85 +229,51 @@ export class SubAgentScope {
    * @requirement REQ-D01-001.1
    */
   static async create(
-    name: string,
-    foregroundConfig: Config,
-    promptConfig: PromptConfig,
-    modelConfig: ModelConfig,
-    runConfig: RunConfig,
-    toolConfig: ToolConfig | undefined,
-    outputConfig: OutputConfig | undefined,
-    admittedRuntime: AgentRuntimeContext | undefined,
-    contentGenerator: ContentGenerator | undefined,
-    telemetry: RootTelemetry | undefined,
-    toolRegistry: ToolSelection | undefined,
-    toolsView: ToolRegistryView | undefined,
-    instructions: InstructionReadOperations,
-    workspacePaths: WorkspacePathOperations,
-    readMcpInstructions: () => string | undefined,
-    messageBus: MessageBus,
-    settingsSnapshot: ReadonlySettingsSnapshot | undefined,
-    environmentContextLoader: EnvironmentContextLoader | undefined,
-    readApprovalMode: (() => ApprovalMode) | undefined,
-    admitModelParameters: (() => AdmittedModelParameters) | undefined,
-    providerFileLifecycle: object | undefined,
-    hookOwner: HookExecutionOwner | undefined,
-    tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
-    readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],
-    parentSignal?: AbortSignal,
-    dependencies: SubAgentDependencies = {},
+    launch: SubAgentLaunchInput,
+    runtime: SubAgentRuntimeInput,
+    operations: SubAgentOperationPorts,
   ): Promise<SubAgentScope> {
-    if (
-      admittedRuntime === undefined ||
-      contentGenerator === undefined ||
-      telemetry === undefined
-    )
-      throw new Error(
-        'SubAgentScope.create requires a runtime bundle after initialization.',
-      );
-    if (toolsView === undefined)
-      throw new Error(
-        'SubAgentScope.create requires a ToolRegistryView from the runtime bundle.',
-      );
-    if (toolRegistry === undefined)
-      throw new Error(
-        'SubAgentScope.create requires a ToolRegistry in the runtime bundle or overrides.',
-      );
-
-    if (toolConfig !== undefined)
-      toolConfig = await filterToolsAgainstRuntime({ toolConfig, toolsView });
+    const { admittedRuntime, toolsView } = runtime;
+    const toolConfig =
+      launch.toolConfig === undefined
+        ? undefined
+        : await filterToolsAgainstRuntime({
+            toolConfig: launch.toolConfig,
+            toolsView,
+          });
 
     return new SubAgentScope(
-      name,
+      launch.name,
       Object.freeze({ ...admittedRuntime, tools: toolsView }),
-      modelConfig,
-      runConfig,
-      promptConfig,
-      contentGenerator,
+      launch.model,
+      launch.run,
+      launch.prompt,
+      runtime.contentGenerator,
       createToolExecutionConfig(
-        telemetry,
+        runtime.telemetry,
         () => admittedRuntime.readToolExecutionPolicy(),
         () => admittedRuntime.state.sessionId,
-        toolRegistry,
-        settingsSnapshot,
+        runtime.toolRegistry,
+        runtime.settingsSnapshot,
         toolConfig,
-        readApprovalMode,
+        operations.readApprovalMode,
       ),
-      environmentContextLoader ?? defaultEnvironmentContextLoader,
-      foregroundConfig,
-      workspacePaths,
-      readMcpInstructions,
-      instructions,
-      providerFileLifecycle,
-      tryBucketFailover,
-      readCurrentBucket,
-      messageBus,
+      operations.loadEnvironmentContext,
+      runtime.foregroundConfig,
+      operations.workspacePaths,
+      operations.readMcpInstructions,
+      operations.instructions,
+      operations.providerFiles,
+      operations.tryBucketFailover,
+      operations.readCurrentBucket,
+      operations.messageBus,
       toolConfig,
-      outputConfig,
-      settingsSnapshot,
-      parentSignal,
-      dependencies,
-      admitModelParameters,
-      hookOwner,
+      launch.outputConfig,
+      runtime.settingsSnapshot,
+      launch.parentSignal,
+      operations.dependencies,
+      operations.admitModelParameters,
+      operations.hooks,
     );
   }
 
@@ -382,7 +382,7 @@ export class SubAgentScope {
     context: ContextState,
     options?: SubagentExecutionOptions,
   ): Promise<void> {
-    const modelParameters = this.admitModelParameters?.();
+    const modelParameters = this.admitModelParameters();
     const setup = await this.prepareRun(context);
     if (!setup) return;
     const { chat, abortController } = setup;
@@ -712,9 +712,7 @@ export class SubAgentScope {
   }
 
   private async runNonInteractiveOwned(context: ContextState): Promise<void> {
-    const admitted = this.admitModelParameters?.();
-    const modelParameters =
-      admitted === undefined ? undefined : Object.freeze({ ...admitted });
+    const modelParameters = Object.freeze({ ...this.admitModelParameters() });
     const setup = await this.prepareRun(context);
     if (!setup) return;
     const { chat, abortController, functionDeclarations } = setup;
