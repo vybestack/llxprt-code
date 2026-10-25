@@ -35,9 +35,10 @@ export async function openOwnedJournal(
   const session = await JournalSession.create(file);
   const store = new JournalHistoryStore(session);
   const stamper = new ChronologyStamper(() => 0);
-  for (const { content, origin } of seed) {
+  for (const [index, { content, origin }] of seed.entries()) {
     stamper.stamp(content);
     store.apply({ kind: 'content', content, origin });
+    if ((index + 1) % 32 === 0) await store.waitForDurable();
   }
   await store.waitForDurable();
   let tokens = 0;

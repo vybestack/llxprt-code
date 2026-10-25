@@ -1,9 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
-import { openOwnedJournal } from '@vybestack/llxprt-code-core/services/history/journalOwnedFixture.js';
+import {
+  openOwnedJournal,
+  type OwnedJournal,
+} from '@vybestack/llxprt-code-core/services/history/journalOwnedFixture.js';
 import { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
+import {
+  iterateRowEntries,
+  rowTreeRootOf,
+} from '@vybestack/llxprt-code-core/journal/rowTreeReader.js';
 import { OwnerDictionary } from '@vybestack/llxprt-code-core/journal/ownerDictionary.js';
 import { journalRoutedHistory } from './support/journal-detached-history.js';
 import { exactTokenizer } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
@@ -12,6 +19,23 @@ import {
   fallbackRow,
   nativeFallback,
 } from './native-provider-fallback-helpers.js';
+
+async function persistedOrigins(
+  owned: OwnedJournal,
+): Promise<Array<string | undefined>> {
+  const reader = await openJournalReadOnly(owned.session.path);
+  try {
+    const dictionary = await OwnerDictionary.load(owned.session.store);
+    const actual: Array<string | undefined> = [];
+    const root = rowTreeRootOf(reader.trailer);
+    if (root !== undefined)
+      for await (const entry of iterateRowEntries(reader, root))
+        actual.push(dictionary.originOf(entry.owner));
+    return actual;
+  } finally {
+    await reader.close();
+  }
+}
 
 describe('native provider fallback current owners', () => {
   const directory = useTempDir('native-provider-fallback-owners-');
@@ -50,16 +74,7 @@ describe('native provider fallback current owners', () => {
         expect((await pin.readRow(await pin.entryAt(0))).blocks).toHaveLength(
           1,
         );
-        const reopened = await JournalSession.open(owned.session.path);
-        try {
-          const dictionary = await OwnerDictionary.load(reopened.store);
-          const actual: Array<string | undefined> = [];
-          for await (const { entry } of reopened.rows())
-            actual.push(dictionary.originOf(entry.owner));
-          expect(actual).toStrictEqual(expected);
-        } finally {
-          await reopened.close();
-        }
+        expect(await persistedOrigins(owned)).toStrictEqual(expected);
       } finally {
         await pin.close();
         await history.dispose();
