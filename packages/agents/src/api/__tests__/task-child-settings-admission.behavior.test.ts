@@ -26,17 +26,6 @@ import {
 } from './helpers/child-parameter-http.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
-/** The production owner; it also keeps the child stores it hands out. */
-class RecordingSettingsOwner extends SessionSettingsOwner {
-  readonly childStores: SettingsService[] = [];
-
-  override createChildStore(): SettingsService {
-    const store = super.createChildStore();
-    this.childStores.push(store);
-    return store;
-  }
-}
-
 /** The first launch still carries the profile it admitted (0.3 / 0.4). */
 function expectInFlightChildParameters(
   child: ChildParameterEndpoint,
@@ -115,7 +104,7 @@ describe('child settings admission through the session client owner', () => {
         'Complete the goal.',
       );
       let parentSettings: SettingsService | undefined;
-      let settingsOwner: RecordingSettingsOwner | undefined;
+      const childStores: SettingsService[] = [];
       opened = await openClientOwner(
         credentials().authority,
         {
@@ -141,8 +130,16 @@ describe('child settings admission through the session client owner', () => {
         {
           createSettingsOwner: (settings) => {
             parentSettings = settings;
-            settingsOwner = new RecordingSettingsOwner(settings);
-            return settingsOwner;
+            // The production owner, with its child-store factory wrapped on the
+            // instance so the test keeps the stores it hands out.
+            const owner = new SessionSettingsOwner(settings);
+            const createChildStore = owner.createChildStore.bind(owner);
+            owner.createChildStore = () => {
+              const store = createChildStore();
+              childStores.push(store);
+              return store;
+            };
+            return owner;
           },
         },
       );
@@ -175,9 +172,8 @@ describe('child settings admission through the session client owner', () => {
         }),
       ]);
       expect(primary?.requests() ?? child.requests()).toHaveLength(1);
-      const childSettings = settingsOwner?.childStores[0];
-      if (childSettings === undefined) throw new Error('No child store');
-      expect(settingsOwner?.childStores).toHaveLength(1);
+      expect(childStores).toHaveLength(1);
+      const [childSettings] = childStores;
       expect(childSettings).not.toBe(parentSettings);
       if (primary) {
         childSettings.set('providers.openai.frequency_penalty', 0.55);
@@ -196,7 +192,7 @@ describe('child settings admission through the session client owner', () => {
       await first;
       expectInFlightChildParameters(child, primary);
       await task.buildAndExecute(taskArguments, abort.signal);
-      expect(settingsOwner?.childStores).toHaveLength(2);
+      expect(childStores).toHaveLength(2);
       expect(child.requests().slice(2)[0]).toMatchObject({
         temperature: 0.7,
         presence_penalty: 0.8,
