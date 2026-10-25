@@ -35,6 +35,9 @@ function expectReleased(before: HeapCensus, after: HeapCensus): void {
 }
 
 function expectLive(before: HeapCensus, after: HeapCensus): void {
+  expect(
+    after.classes.Uint8Array.bytes - before.classes.Uint8Array.bytes,
+  ).toBeGreaterThan(liveFloor);
   expect(after.heapSize - before.heapSize).toBeGreaterThan(liveFloor);
   expect(after.extraMemorySize - before.extraMemorySize).toBeGreaterThan(
     liveFloor,

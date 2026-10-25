@@ -130,7 +130,16 @@ async function censusAfterSettling(): Promise<HeapCensus> {
   await settleHeap();
   warmCensus();
   await collectUntilStable();
-  return heapCensus();
+  const census = heapCensus();
+  // The final snapshot also allocates workspace and collects live-heap garbage.
+  // Read both counters after its frame and cleared arrays have been swept.
+  await collectUntilStable();
+  const memory = sampleMemoryUsage();
+  return {
+    ...census,
+    heapSize: memory.heapUsed,
+    extraMemorySize: memory.external,
+  };
 }
 
 /**
