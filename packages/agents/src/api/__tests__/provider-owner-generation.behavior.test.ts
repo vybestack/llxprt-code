@@ -1,65 +1,25 @@
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import {
-  Config,
-  ConfigParameters,
-} from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../adoption-release.js';
-import { randomUUID } from 'node:crypto';
-import {
-  runCleanupSteps,
-  cleanupAfterFailure,
-} from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
-import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { fileURLToPath } from 'node:url';
-import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import {
-  createAgentRuntimeFactoryBindings,
-  AgentRuntimeFactoryBindings,
-} from '../runtimeFactories.js';
-import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
-import { executeProviderActivation } from '../providerActivationExecutor.js';
-import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
-import { assembleModelSelection } from '../model-selection.js';
-import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
-import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
-import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-
-import { buildAgent, internalConfig } from './helpers/agentHarness.js';
-import { successful, withOwners } from './turn-revision-capture.fixture.js';
-
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import { once } from 'node:events';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { json } from 'node:stream/consumers';
+import { describe, expect, it } from 'bun:test';
+import type { Agent } from '../agent.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
+import {
+  collect,
+  successful,
+  type Observation,
+} from './turn-revision-capture.fixture.js';
 
 async function textFrom(
   stream: AsyncIterable<{ type: string; text?: string }>,
@@ -84,230 +44,148 @@ function denyManagerDiscovery(config: object): () => void {
   };
 }
 
-describe('provider owner generation boundary', () => {
-  let promptDirectory: string;
-  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
-  beforeAll(async () => {
-    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
-    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
-    await initializePromptSystem();
-  });
-  afterAll(async () => {
-    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
-    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
-    await rm(promptDirectory, { recursive: true, force: true });
-  });
+interface LoopbackChat {
+  readonly url: string;
+  readonly entered: Promise<void>;
+  release(): void;
+  temperatures(): ReadonlyArray<number | undefined>;
+  stop(): Promise<void>;
+}
 
-  const builtCredentials = useOwnedCredentials();
-  let builtCallerConfig: Config;
-  let builtCallerSettings: SettingsService;
-  let builtCallerSettingsOwner: SessionSettingsOwner;
-  let builtCallerPolicy: RuntimePolicyOwner;
-  let builtCallerMcp: McpRuntimeOwner;
-  let builtCallerManager: ReturnType<typeof acquirePreferredProviderManager>;
-  let builtCallerOwner: SessionClientOwner;
-  let builtCallerClose: () => Promise<void>;
-  let builtCallerFactories: AgentRuntimeFactoryBindings;
-  let builtCallerRelease: AcquisitionRelease;
-  let builtCallerFiles: ProviderFileLifecycle;
-  let builtCallerRuntimeId: string;
-  let builtCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let builtCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
-  let builtCallerContent: ReturnType<
-    typeof createRuntimeContentGeneratorFactory
-  >;
-
-  async function openbuiltCaller(
-    fixture: string,
-    overrides: Readonly<Partial<AgentConfig>> = {},
-    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
-    skillSettings: Pick<
-      ConfigParameters,
-      'enableExtensionReloading' | 'storageRoot'
-    > = {},
-    extensionLoader?: ExtensionLoader,
-    skillOperations?: WorkspaceSkillAssemblyOperations,
-  ): Promise<void> {
-    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('./fixtures/' + fixture, import.meta.url),
-    );
-    const directory = await realpath(
-      await mkdtemp(join(tmpdir(), 'builtCaller-adoption-')),
-    );
-    const selection: AgentConfig = {
-      provider: 'fake',
-      model: 'fake-model',
-      sessionId: randomUUID(),
-      ...overrides,
-      workingDir:
-        overrides.workingDir === undefined
-          ? directory
-          : await realpath(overrides.workingDir),
-    };
-    const parameters = { ...toConfigParameters(selection), ...skillSettings };
-    parameters.interactive = true;
-    if (overrides.hooks !== undefined) parameters.enableHooks = true;
-    if (
-      overrides.filesystemOwner === undefined &&
-      (overrides.harness?.includeProcessCwd ?? true)
-    )
-      parameters.includeDirectories = [
-        ...(parameters.includeDirectories ?? []),
-        process.cwd(),
-      ];
-    builtCallerConfig = new Config(parameters);
-    builtCallerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...suppliedFactories,
-    };
-    builtCallerSettings = new SettingsService();
-    for (const [key, value] of Object.entries(
-      builtCallerConfig.getInitialSettings(),
-    ))
-      builtCallerSettings.set(key, value);
-    builtCallerPolicy = new RuntimePolicyOwner(builtCallerConfig);
-    injectConfirmationForcingPolicy(builtCallerPolicy.session.confirmation);
-    builtCallerMcp = await buildTestMcpRuntime(
-      builtCallerConfig,
-      builtCallerPolicy.session.messageBus,
-      overrides,
-      extensionLoader,
-      builtCallerPolicy,
-      skillOperations,
-    );
-    acquirebuiltCallerProviders();
-    const media = new SessionMediaOwner(
-      builtCallerConfig.projectTempDir,
-      1024 * 1024 * 1024,
-    );
-    builtCallerOwner = await createCapturedSessionOwner(
-      builtCallerConfig,
-      assembleTaskSchemaPolicy(builtCallerSettings),
-      builtCallerManager,
-      builtCallerFactories.agentClientFactory,
-      media.store,
-      builtCallerMcp.readInstructions,
-      builtCallerMcp.workspacePaths,
-      builtCallerSettingsOwner,
-      builtCallerContent,
-      builtCallerTokenizer,
-    );
-    builtCallerOwner.bindMcpRuntime(builtCallerMcp);
-    builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
-      builtCallerOAuth.composeRetryOperations(provider),
-    );
-    builtCallerOwner.bindHooks();
-    builtCallerClose = settleEngineRelease.bind(
-      undefined,
-      [
-        () => builtCallerOwner.dispose(),
-        () => builtCallerRelease.close(),
-        () => media.dispose(),
-        () => builtCallerMcp.dispose(),
-        () => builtCallerConfig.dispose(),
-        () => rm(directory, { recursive: true, force: true }),
-      ],
-      previousReplay,
-    );
-    try {
-      await preparePreferredProviderCompletion(
-        builtCallerConfig,
-        builtCallerSettings,
-        builtCallerSettingsOwner,
-        builtCallerManager,
-        builtCallerOAuth,
-        builtCallerRuntimeId,
-        builtCallerTokenizer,
-        undefined,
-      );
-      await builtCallerMcp.initialize();
-      await activatebuiltCallerClient(selection.activation);
-    } catch (primary) {
-      await cleanupAfterFailure(primary, builtCallerClose);
+/**
+ * A loopback OpenAI-compatible chat server that records each request's
+ * temperature and holds request number `holdRequest` until `release()`.
+ */
+async function openLoopbackChat(holdRequest: number): Promise<LoopbackChat> {
+  let release = (): void => {
+    throw new Error('Uninitialized barrier');
+  };
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let markEntered = (): void => {
+    throw new Error('Uninitialized barrier');
+  };
+  const entered = new Promise<void>((resolve) => {
+    markEntered = resolve;
+  });
+  let temperatures: ReadonlyArray<number | undefined> = [];
+  const server = createServer((request, reply) => {
+    if (request.url === '/v1/models') {
+      reply
+        .writeHead(200, { 'content-type': 'application/json' })
+        .end(JSON.stringify({ object: 'list', data: [] }));
+      return;
     }
-  }
-  function acquirebuiltCallerProviders(): void {
-    builtCallerRuntimeId = 'builtCaller-' + randomUUID();
-    builtCallerRelease = new AcquisitionRelease();
-    builtCallerSettingsOwner = new SessionSettingsOwner(builtCallerSettings);
-    builtCallerRelease.acquire('settings', () =>
-      builtCallerSettingsOwner.dispose(),
-    );
-    builtCallerSettingsOwner.initializeProviderSelection(
-      builtCallerConfig.getProvider(),
-      builtCallerConfig.getModel(),
-    );
-    builtCallerSettingsOwner.bindTelemetry(builtCallerConfig);
-    builtCallerFiles = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
-    });
-    for (const scope of [
-      builtCallerRuntimeId,
-      builtCallerConfig.getSessionId(),
-    ])
-      builtCallerRelease.acquire('files', () =>
-        releaseAdoptedFileScope(builtCallerFiles, scope),
-      );
-    builtCallerManager = acquirePreferredProviderManager(
-      builtCallerConfig,
-      builtCallerSettings,
-      builtCallerSettingsOwner,
-      builtCallerFiles,
-      builtCallerRuntimeId,
-      builtCredentials().authority,
-      builtCallerRelease,
-    );
-    const factoriesTokenizer = configureProviderTokenizer(builtCallerManager);
-    const factoriesContent = createRuntimeContentGeneratorFactory();
-    builtCallerTokenizer = factoriesTokenizer;
-    builtCallerContent = factoriesContent;
-    builtCallerOAuth = acquirePreferredOAuth(
-      undefined,
-      builtCallerPolicy.session.messageBus,
-      builtCallerConfig,
-      builtCallerSettings,
-      builtCallerManager,
-      builtCallerRuntimeId,
-      builtCallerMcp.profileDefinitions,
-      builtCredentials().authority,
-      builtCallerRelease,
-      undefined,
-    );
-  }
-  async function activatebuiltCallerClient(
-    intent: ProviderActivationIntent = {
-      provider: builtCallerConfig.getProvider(),
-      model: builtCallerConfig.getModel(),
+    void json(request)
+      .then(async (body: unknown): Promise<void> => {
+        if (typeof body !== 'object' || body === null || !('model' in body))
+          throw new Error(`Unexpected chat request: ${JSON.stringify(body)}`);
+        temperatures = [
+          ...temperatures,
+          'temperature' in body && typeof body.temperature === 'number'
+            ? body.temperature
+            : undefined,
+        ];
+        if (temperatures.length === holdRequest) {
+          markEntered();
+          await released;
+        }
+        const chunk = {
+          id: 'same-completion',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: body.model,
+          choices: [
+            {
+              index: 0,
+              delta: { role: 'assistant', content: 'Transport completed.' },
+              finish_reason: 'stop',
+            },
+          ],
+        };
+        reply
+          .writeHead(200, { 'content-type': 'text/event-stream' })
+          .end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+      })
+      .catch((cause: unknown) => {
+        reply.destroy(new Error('Invalid loopback chat request', { cause }));
+      });
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (address === null || typeof address === 'string')
+    throw new Error('Expected loopback TCP server address');
+  return {
+    url: `http://127.0.0.1:${address.port}/v1`,
+    entered,
+    release,
+    temperatures: () => temperatures,
+    stop: async () => {
+      release();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+        server.closeAllConnections();
+      });
     },
-  ): Promise<void> {
-    const activation = await executeProviderActivation(
-      builtCallerConfig,
-      intent,
-      assembleProviderSwitch(
-        builtCallerConfig,
-        builtCallerSettings,
-        builtCallerManager,
-        builtCallerOAuth,
-        () => 'agent',
-        () => builtCallerOwner.refreshAuth(),
-        builtCallerSettingsOwner,
-      ),
-      builtCallerSettings,
-      builtCallerManager,
-      (method) => builtCallerOwner.refreshAuth(method),
-      assembleModelSelection(builtCallerSettingsOwner),
-    );
-    requireCallerActivation(activation);
-    await builtCallerOwner.initializeTools();
-    await capturedSessionClient(builtCallerOwner).startChat();
+  };
+}
+
+function restoreEnvironment(
+  environment: Record<string, string | undefined>,
+): void {
+  for (const [key, value] of Object.entries(environment)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
   }
+}
+
+function openOwner(
+  name: string,
+  endpoint: string,
+  temperature: number,
+): Promise<RouteAAgent> {
+  const model = `capture-${name}`;
+  return openRouteAAgent({
+    config: {
+      provider: 'openai',
+      tools: ['read_file'],
+      model,
+      sessionId: 'same-turn-capture-label',
+      telemetry: { enabled: false },
+      recording: { enabled: false },
+      mcpEnabled: false,
+      skillsSupport: false,
+      continueOnFailedApiCall: false,
+      harness: {
+        forceInteractive: false,
+        forceConfirmations: false,
+        includeProcessCwd: false,
+      },
+    },
+    intent: {
+      activation: {
+        provider: 'openai',
+        model,
+        cliOverrides: { key: 'turn-capture-local-only', baseUrl: endpoint },
+      },
+    },
+  }).then((owner) => {
+    owner.agent.setModelParam('temperature', temperature);
+    return owner;
+  });
+}
+
+describe('provider owner generation boundary', () => {
+  useFakeResponsesReplay('multi-turn-text.jsonl');
 
   it('drives public generation and parameter changes without consulting Config for a manager', async () => {
-    const built = await buildAgent('multi-turn-text.jsonl');
-    const config = internalConfig(built.agent);
-    const blocked = denyManagerDiscovery(config);
+    const built = await openRouteAAgent();
+    const blocked = denyManagerDiscovery(built.config);
     try {
       built.agent.setModelParam('temperature', 0.4);
       expect(
@@ -317,98 +195,69 @@ describe('provider owner generation boundary', () => {
       expect(built.agent.getModelParams()).not.toHaveProperty('temperature');
     } finally {
       blocked();
-      await built.cleanup();
+      await built.close();
     }
   });
 
-  it('keeps an initialized borrowed client usable after facade shutdown', async () => {
-    await openbuiltCaller('multi-turn-text.jsonl');
-    const client = capturedSessionClient(builtCallerOwner);
-    await client.startChat();
-    const agent = await fromConfig(
-      builtCallerConfig,
-      builtCallerSettings,
-      {},
-      builtCallerSettingsOwner,
-      builtCallerManager,
-      undefined,
-      undefined,
-      builtCallerMcp,
-      undefined,
-      capturedSessionClient(builtCallerOwner),
-    );
-    try {
-      const blocked = denyManagerDiscovery(builtCallerConfig);
-      try {
-        expect(
-          await textFrom(agent.stream('Borrow the initialized client')),
-        ).not.toBe('');
-        await agent.dispose();
-        expect(
-          (await client.getHistory()).flatMap((turn) =>
-            turn.blocks
-              .filter((block) => block.type === 'text')
-              .map((block) => block.text),
-          ),
-        ).toContain('Borrow the initialized client');
-        expect(client.isInitialized()).toBe(true);
-        await client.startChat();
-        expect(client.hasChatInitialized()).toBe(true);
-      } finally {
-        blocked();
-      }
-    } finally {
-      await agent.dispose();
-      await builtCallerClose();
-    }
-  });
   it('retains admitted parameters through HTTP steering while a fresh admission observes the owner change', async () => {
-    await withOwners(async (a, b, left, right, start) => {
-      const denied = [a, b].map((agent) =>
-        denyManagerDiscovery(internalConfig(agent)),
+    const directory = await mkdtemp(
+      join(tmpdir(), 'provider-owner-generation-'),
+    );
+    const environment = Object.fromEntries(
+      ['LLXPRT_CONFIG_HOME', 'LLXPRT_DATA_HOME', 'LLXPRT_FAKE_RESPONSES'].map(
+        (key) => [key, process.env[key]],
+      ),
+    );
+    process.env.LLXPRT_CONFIG_HOME = join(directory, 'home');
+    process.env.LLXPRT_DATA_HOME = join(directory, 'data');
+    delete process.env.LLXPRT_FAKE_RESPONSES;
+    const left = await openLoopbackChat(1);
+    const right = await openLoopbackChat(0);
+    let owners: readonly RouteAAgent[] = [];
+    let pending: ReadonlyArray<Promise<Observation>> = [];
+    const start = (agent: Agent, text: string): Promise<Observation> => {
+      const result = collect(
+        agent.stream(text, { promptId: 'same-prompt', mcpDiscovery: 'skip' }),
       );
+      pending = [...pending, result];
+      return result;
+    };
+    let denied: ReadonlyArray<() => void> = [];
+    try {
+      const first = await openOwner('a', left.url, 0.2);
+      owners = [...owners, first];
+      const second = await openOwner('b', right.url, 0.7);
+      owners = [...owners, second];
+      const a = first.agent;
+      const b = second.agent;
+      denied = owners.map((owner) => denyManagerDiscovery(owner.config));
+      const firstTurn = start(a, 'First owner');
+      await Promise.race([
+        left.entered,
+        firstTurn.then(() => {
+          throw new Error('Generation stopped before transport');
+        }),
+      ]);
+      a.setModelParam('temperature', 0.9);
+      a.injectSteer('Same admitted route');
+      successful(await start(b, 'Sibling owner'));
+      left.release();
+      successful(await firstTurn);
+      successful(await start(a, 'Fresh owner admission'));
+      expect(left.temperatures()).toStrictEqual([0.2, 0.2, 0.9]);
+      expect(right.temperatures()).toStrictEqual([0.7]);
+    } finally {
+      left.release();
+      right.release();
+      for (const restore of denied) restore();
       try {
-        const pending = start(a, 'First owner');
-        await Promise.race([
-          left.entered,
-          pending.then(() => {
-            throw new Error('Generation stopped before transport');
-          }),
-        ]);
-        a.setModelParam('temperature', 0.9);
-        a.injectSteer('Same admitted route');
-        successful(await start(b, 'Sibling owner'));
-        left.release();
-        successful(await pending);
-        successful(await start(a, 'Fresh owner admission'));
-        expect(
-          left.requests().map((request) => request.temperature),
-        ).toStrictEqual([0.2, 0.2, 0.9]);
-        expect(
-          right.requests().map((request) => request.temperature),
-        ).toStrictEqual([0.7]);
+        await Promise.all(pending);
+        await runCleanupSteps(owners.map((owner) => () => owner.close()));
       } finally {
-        left.release();
-        for (const spy of denied) spy();
+        await Promise.all([left.stop(), right.stop()]);
+        restoreEnvironment(environment);
+        await rm(directory, { recursive: true, force: true });
       }
-    });
+    }
   });
 });
-
-async function settleEngineRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previousReplay: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
-  }
-}
-
-function requireCallerActivation(
-  result: Awaited<ReturnType<typeof executeProviderActivation>>,
-): void {
-  if (result.authFailed) throw result.authError;
-}

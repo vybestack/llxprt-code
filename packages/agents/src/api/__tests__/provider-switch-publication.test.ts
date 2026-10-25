@@ -1,6 +1,6 @@
 import {
   createCapturedSessionOwner,
-  capturedSessionClient,
+  ownerClients,
 } from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -47,7 +47,7 @@ import {
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { fileURLToPath } from 'node:url';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
@@ -60,7 +60,7 @@ import {
   ProviderSwitcher,
 } from '@vybestack/llxprt-code-core';
 import { assembleProfileApplication } from '../profileApplicationAssembly.js';
-import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
 /**
  * @license
@@ -95,7 +95,6 @@ describe('provider switch commit publication', () => {
   let callerManager: ReturnType<typeof acquirePreferredProviderManager>;
   let callerOwner: SessionClientOwner;
   let callerClose: () => Promise<void>;
-  const callerFactories = createAgentRuntimeFactoryBindings();
   let callerRelease: AcquisitionRelease;
   let callerFiles: ProviderFileLifecycle;
   let callerRuntimeId: string;
@@ -140,7 +139,7 @@ describe('provider switch commit publication', () => {
       callerConfig,
       assembleTaskSchemaPolicy(callerSettings),
       callerManager,
-      callerFactories.agentClientFactory,
+      buildAgentClientFactory(),
       media.store,
       callerMcp.readInstructions,
       callerMcp.workspacePaths,
@@ -246,7 +245,12 @@ describe('provider switch commit publication', () => {
     );
     requireCallerActivation(activation);
     await callerOwner.initializeTools();
-    await capturedSessionClient(callerOwner).startChat();
+    await currentClient().startChat();
+  }
+
+  function currentClient(): AgentClientContract {
+    const clients = ownerClients(callerOwner);
+    return clients[clients.length - 1];
   }
 
   let profileStore: ProfileDefinitionReads & ProfileDefinitionWrites;
@@ -307,32 +311,23 @@ describe('provider switch commit publication', () => {
   });
 
   it('retains the committed provider and replacement client when a publication observer fails', async () => {
-    const previous = capturedSessionClient(callerOwner);
+    const previous = currentClient();
     const failure = new Error('publication observer rejected');
-    const observe = (): never => {
-      throw failure;
-    };
-    callerSettingsOwner['modelNotifications'].on(
-      CoreEvent.ModelProfileChanged,
-      observe,
-    );
+    const unsubscribe = callerSettingsOwner.subscribeModelChanges((profile) => {
+      if (profile !== undefined) throw failure;
+    });
     try {
       await expect(profileSwitch('anthropic')).rejects.toBe(failure);
       expect(callerManager.getActiveProviderName()).toBe('anthropic');
       expect(callerSettingsOwner.readSelectedProvider()).toBe('anthropic');
-      expect(previous).not.toBe(capturedSessionClient(callerOwner));
-      await capturedSessionClient(callerOwner).startChat();
-      expect(capturedSessionClient(callerOwner).hasChatInitialized()).toBe(
-        true,
-      );
+      expect(previous).not.toBe(currentClient());
+      await currentClient().startChat();
+      expect(currentClient().hasChatInitialized()).toBe(true);
       expect(callerSettings.getProviderSettings('anthropic').model).toBe(
         callerSettingsOwner.readSelectedModel(),
       );
     } finally {
-      callerSettingsOwner['modelNotifications'].off(
-        CoreEvent.ModelProfileChanged,
-        observe,
-      );
+      unsubscribe();
     }
   });
 });

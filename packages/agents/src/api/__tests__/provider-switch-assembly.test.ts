@@ -1,4 +1,3 @@
-import { AdoptedProviderFixture } from './helpers/adopted-provider-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -23,7 +22,6 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import {
   MemoryTokenStore,
   createTestProvider,
@@ -83,26 +81,13 @@ describe('provider switch assembly', () => {
       credentials().authority,
       settingsOwner,
     );
-    const adoptedOAuth = new AdoptedProviderFixture(
-      config,
-      settings,
-      'same-label',
-    ).acquireOAuth(
-      oauth,
-      undefined,
-      policy.session.messageBus,
-      manager,
-      undefined,
-      credentials().authority,
-      new AcquisitionRelease(),
-    );
     manager.registerProvider(new SubscriptionProvider(undefined));
     manager.registerProvider(new OpenAIProvider('key'));
     const switchProvider = assembleProviderSwitch(
       config,
       settings,
       manager,
-      adoptedOAuth,
+      oauth,
       () => manager.getAuthIdentity().runtimeKind,
       async () => {},
       settingsOwner,
@@ -127,7 +112,6 @@ describe('provider switch assembly', () => {
         'authentication completed',
       );
       expect(await tokens.listBuckets('claudecode')).toStrictEqual(['default']);
-      expect(adoptedOAuth).toBe(oauth);
       expect(settingsOwner.readSelectedProvider()).toBe('claudecode');
     } finally {
       await runCleanupSteps([
