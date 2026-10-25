@@ -753,11 +753,19 @@ export class AgentClient
   async startChat(extraHistory?: readonly IContent[]): Promise<ChatSession> {
     this.ideContextTracker.resetContext();
     await this.lazyInitialize();
-    return startChatWithDeferredHistory(
+    const previous = this.chat;
+    const chat = await startChatWithDeferredHistory(
       this.deferredHistory,
       () => this.chatSessionInputs(),
       extraHistory,
     );
+    if (
+      previous !== undefined &&
+      previous.getHistoryService() !== chat.getHistoryService()
+    ) {
+      await clearClientHistoryForDisposal(previous, true);
+    }
+    return chat;
   }
 
   private chatSessionInputs(): ChatSessionInputs {
