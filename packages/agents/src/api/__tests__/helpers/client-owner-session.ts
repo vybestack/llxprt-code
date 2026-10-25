@@ -47,6 +47,17 @@ import {
   ownerClients,
 } from './session-client-capture.js';
 
+export interface ClientOwnerOptions {
+  /**
+   * Builds the session settings owner over the session settings service.
+   * Defaults to `new SessionSettingsOwner(settings)`; a subclass can record
+   * what the production owner hands out.
+   */
+  readonly createSettingsOwner?: (
+    settings: SettingsService,
+  ) => SessionSettingsOwner;
+}
+
 export interface OpenedClientOwner {
   readonly owner: SessionClientOwner;
   readonly client: AgentClientContract;
@@ -70,6 +81,7 @@ interface ProviderStack {
 async function acquireProviderStack(
   authority: CredentialAuthority,
   selection: AgentConfig,
+  options: ClientOwnerOptions,
 ): Promise<ProviderStack> {
   const config = new Config(
     toConfigParameters({ sessionId: randomUUID(), ...selection }),
@@ -88,7 +100,9 @@ async function acquireProviderStack(
   );
   const runtimeId = 'client-owner-' + randomUUID();
   const release = new AcquisitionRelease();
-  const settingsOwner = new SessionSettingsOwner(settings);
+  const settingsOwner =
+    options.createSettingsOwner?.(settings) ??
+    new SessionSettingsOwner(settings);
   release.acquire('settings', () => settingsOwner.dispose());
   settingsOwner.initializeProviderSelection(
     config.getProvider(),
@@ -188,8 +202,9 @@ export async function openClientOwner(
   authority: CredentialAuthority,
   selection: AgentConfig,
   activation: ProviderActivationIntent,
+  options: ClientOwnerOptions = {},
 ): Promise<OpenedClientOwner> {
-  const stack = await acquireProviderStack(authority, selection);
+  const stack = await acquireProviderStack(authority, selection, options);
   const { config, settings, settingsOwner, manager, oauth, mcp } = stack;
   const media = new SessionMediaOwner(config.projectTempDir, 1024 * 1024);
   const owner = await createCapturedSessionOwner(
