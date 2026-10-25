@@ -67,8 +67,8 @@ export async function fallbackRecordingFault(root: string): Promise<{
       remaining = successes;
     },
     attach: (create) => {
-      const opener = spyOn(JournalSession, 'createUnlinked').mockResolvedValue(
-        session,
+      const opener = spyOn(JournalSession, 'createUnlinked').mockImplementation(
+        async () => session,
       );
       try {
         return create();

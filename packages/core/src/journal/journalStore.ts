@@ -49,6 +49,7 @@ import { mapReader, type BuildContext, type BuiltGroup } from './groupBuild.js';
 import type { CommitEffect } from './commitEffect.js';
 import type { OccurrencePlanner, VersionEdit } from './groupEdits.js';
 import type { RecordAppender } from './groupAppender.js';
+import type { JournalFileHandle } from './positionalFile.js';
 import { prepareBuild } from './preparedGroup.js';
 import type { GroupPlan, PlanContext } from './groupPlanTypes.js';
 import type { CommitAck, JournalGroupWriter } from './groupWriter.js';
@@ -57,6 +58,7 @@ import { BoundedIdNodeCache, type IdNodeCache } from './idTrieCache.js';
 import { IdTrieReader } from './idTrieReader.js';
 import {
   createJournal,
+  createSynchronousJournal,
   openJournalForOwner,
   type JournalOpenDependencies,
 } from './journalWriterOpen.js';
@@ -120,29 +122,10 @@ export interface JournalStoreDependencies {
 /** What a store with no file name is called in its errors. */
 export const UNLINKED_JOURNAL_LABEL = '(unlinked journal)';
 
-function noop(): void {
-  // Settles the tail of the commit queue; the caller sees the commit's own outcome.
-}
+import { noop } from './journal-store-state.js';
 
-/**
- * A group that was acked, with what a reader of the group needs (design 5.2):
- * the version before and after it, reads bound to the version after, which
- * reach the version before too, and the labels of the rows whose records the
- * group wrote. The reads hold a pin from the moment the group is acked, so a
- * compaction cannot move the group's records before its reader is done;
- * `close` releases it (and `commit` closes it at once).
- */
-export interface CommittedGroup {
-  readonly ack: CommitAck;
-  readonly before: Version | undefined;
-  readonly after: Version;
-  readonly read: PinnedRead;
-  readonly writtenLabels: readonly bigint[];
-  readonly resolvedEdits?: readonly VersionEdit[];
-  readonly streamedAppend?: boolean;
-  readonly unchanged?: boolean;
-  close(): void | Promise<void>;
-}
+export type { CommittedGroup } from './journal-store-state.js';
+import type { CommittedGroup } from './journal-store-state.js';
 
 /** The labels of the rows a group writes. A replace streams its rows, so it names none. */
 
@@ -240,6 +223,18 @@ export class JournalStore {
     return new JournalStore(
       UNLINKED_JOURNAL_LABEL,
       await createJournal(UNLINKED_JOURNAL_LABEL, deps.journal),
+      deps,
+      true,
+    );
+  }
+
+  static createSynchronousUnlinked(
+    handle: JournalFileHandle,
+    deps: JournalStoreDependencies,
+  ): JournalStore {
+    return new JournalStore(
+      UNLINKED_JOURNAL_LABEL,
+      createSynchronousJournal(handle, deps.journal),
       deps,
       true,
     );

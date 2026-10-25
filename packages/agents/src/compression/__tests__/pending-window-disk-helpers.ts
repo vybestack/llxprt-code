@@ -123,8 +123,8 @@ function pendingHistory(
   owners: RowOwnership,
   reads: PendingFixture['reads'],
 ): PendingDiskHistory {
-  const opener = spyOn(JournalSession, 'createUnlinked').mockResolvedValue(
-    native.session,
+  const opener = spyOn(JournalSession, 'createUnlinked').mockImplementation(
+    async () => native.session,
   );
   try {
     return new PendingDiskHistory({

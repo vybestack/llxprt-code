@@ -143,8 +143,8 @@ function nativeGraph(
   owners: BatchOwnerCensus,
   session: JournalSession,
 ): ReturnType<typeof createCoreSuffixFixtureGraph> {
-  const opener = spyOn(JournalSession, 'createUnlinked').mockResolvedValue(
-    session,
+  const opener = spyOn(JournalSession, 'createUnlinked').mockImplementation(
+    async () => session,
   );
   try {
     return createCoreSuffixFixtureGraph(root, owners, (options) => {

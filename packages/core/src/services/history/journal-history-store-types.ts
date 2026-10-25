@@ -14,7 +14,9 @@ export interface JournalRepair {
 }
 
 /** Opens the journal a store keeps its rows in; it must yield an empty journal. */
-export type JournalSessionOpener = () => Promise<JournalSession>;
+export type JournalSessionOpener = () =>
+  | JournalSession
+  | Promise<JournalSession>;
 
 export interface JournalHistoryStoreOptions {
   /** Bound as a mirror right after the journal is open (decision D-W7-3). */

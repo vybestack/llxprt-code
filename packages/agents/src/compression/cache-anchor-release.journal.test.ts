@@ -98,8 +98,8 @@ describe('native cache-anchor publication under a compression lock (#3338)', () 
     const session = await JournalSession.create(
       join(directory, 'primary.llxj'),
     );
-    const opener = spyOn(JournalSession, 'createUnlinked').mockResolvedValue(
-      session,
+    const opener = spyOn(JournalSession, 'createUnlinked').mockImplementation(
+      async () => session,
     );
     const history = new HistoryService({});
     opener.mockRestore();

@@ -24,6 +24,9 @@ import {
 import { planSourceRowOccurrences } from './source-fact-planner.js';
 import { rowAlgebra } from '../../journal/rowAlgebra.js';
 import { openUnlinkedFile } from '../../journal/unlinkedFile.js';
+import { openSynchronousUnlinkedFile } from '../../journal/synchronous-unlinked-file.js';
+import { loadSynchronousFlushRecords } from '../../journal/flushRecords.js';
+import { randomBytes } from 'node:crypto';
 import {
   decodeStoredRow,
   encodeContentRow,
@@ -49,8 +52,18 @@ export interface JournalSessionOptions {
 async function storeDependencies(
   options: JournalSessionOptions,
 ): Promise<JournalStoreDependencies> {
+  return dependenciesWithJournal(
+    options,
+    await resolveJournalDependencies(options.journal),
+  );
+}
+
+function dependenciesWithJournal(
+  options: JournalSessionOptions,
+  journal: JournalOpenDependencies,
+): JournalStoreDependencies {
   return {
-    journal: await resolveJournalDependencies(options.journal),
+    journal,
     idDeps: {
       hasher: sha256KeyHash,
       occurrenceSpace: 'source-with-normalized',
@@ -149,8 +162,16 @@ export class JournalSession {
    * The bare store: a journal in a file with no name (design 4.12), which
    * disappears when it is closed. Nothing is left in any directory.
    */
-  static async createUnlinked(
+  static createUnlinked(
     options: JournalSessionOptions = {},
+  ): JournalSession | Promise<JournalSession> {
+    return options.journal === undefined
+      ? JournalSession.createSynchronousUnlinked(options)
+      : JournalSession.createAsynchronousUnlinked(options);
+  }
+
+  private static async createAsynchronousUnlinked(
+    options: JournalSessionOptions,
   ): Promise<JournalSession> {
     const deps = await storeDependencies({
       ...options,
@@ -165,6 +186,29 @@ export class JournalSession {
       },
     });
     return new JournalSession(await JournalStore.createUnlinked(deps), false);
+  }
+
+  private static createSynchronousUnlinked(
+    options: JournalSessionOptions,
+  ): JournalSession {
+    const deps = dependenciesWithJournal(options, {
+      open: () =>
+        openUnlinkedFile(
+          options.unlinkedDirectory === undefined
+            ? {}
+            : { directory: options.unlinkedDirectory },
+        ),
+      flush: loadSynchronousFlushRecords(),
+      nowMs: Date.now,
+      random: (length) => randomBytes(length),
+    });
+    return new JournalSession(
+      JournalStore.createSynchronousUnlinked(
+        openSynchronousUnlinkedFile(options.unlinkedDirectory),
+        deps,
+      ),
+      false,
+    );
   }
 
   /**

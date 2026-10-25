@@ -275,14 +275,15 @@ export class JournalHistoryStore
     protected readonly options: StoreTypes.JournalHistoryStoreOptions = {},
   ) {
     super();
-    if (typeof source === 'function') {
-      this.opened = source().then((session) => this.install(session));
+    const session = typeof source === 'function' ? source() : source;
+    if (session instanceof Promise) {
+      this.opened = session.then((opened) => this.install(opened));
       this.queue = this.opened.catch((error: unknown) => {
         this.failure = { error };
       });
     } else {
-      this.install(source);
-      this.tentativeRows = source.store.published?.rows ?? 0;
+      this.install(session);
+      this.tentativeRows = session.store.published?.rows ?? 0;
       this.opened = Promise.resolve();
       this.queue = Promise.resolve();
     }

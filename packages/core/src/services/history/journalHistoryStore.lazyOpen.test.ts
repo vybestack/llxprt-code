@@ -136,7 +136,7 @@ describe('JournalHistoryStore over an opener', () => {
 
   it('binds the recorder it was given once the journal is open, with the rows accepted before', async () => {
     const recorder = journalRecorder();
-    const store = lazyStore(() => JournalSession.createUnlinked(), {
+    const store = lazyStore(async () => JournalSession.createUnlinked(), {
       recording: recorder,
     });
     expect(store.isRecorder(recorder)).toBe(false);
@@ -156,7 +156,7 @@ describe('JournalHistoryStore over an opener', () => {
 
   it('names the file of the recorder it is bound to as the file the history is recorded in', async () => {
     const recorder = journalRecorder();
-    const store = lazyStore(() => JournalSession.createUnlinked(), {
+    const store = lazyStore(async () => JournalSession.createUnlinked(), {
       recording: recorder,
     });
     expect(store.journalPath()).toBeNull();
@@ -173,7 +173,7 @@ describe('JournalHistoryStore over an opener', () => {
     const recorder = journalRecorder();
     const seeded = await recorder.session();
     await seeded.append([row('human', 'already here', 1)]);
-    const store = lazyStore(() => JournalSession.createUnlinked(), {
+    const store = lazyStore(async () => JournalSession.createUnlinked(), {
       recording: recorder,
     });
 
@@ -186,7 +186,7 @@ describe('JournalHistoryStore over an opener', () => {
   it('reports decoded and released rows of a stream and of a batch to the counters, with ownership', async () => {
     const { counters, snapshot } = createRowCounters();
     const ownership = new RowOwnership();
-    const store = lazyStore(() => JournalSession.createUnlinked(), {
+    const store = lazyStore(async () => JournalSession.createUnlinked(), {
       counters: { ...counters, ownership },
     });
     for (let seq = 1; seq <= 4; seq += 1)

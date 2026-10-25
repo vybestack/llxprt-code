@@ -114,8 +114,8 @@ function recordedHistory(
   owners: RowOwnership,
   create: CreateHistory,
 ): ValueCompressionHistory {
-  const opener = spyOn(JournalSession, 'createUnlinked').mockResolvedValue(
-    session,
+  const opener = spyOn(JournalSession, 'createUnlinked').mockImplementation(
+    async () => session,
   );
   try {
     return create({

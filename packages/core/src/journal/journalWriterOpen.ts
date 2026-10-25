@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { randomBytes } from 'node:crypto';
 import * as fsp from 'node:fs/promises';
+import { writeSync, closeSync } from 'node:fs';
 import { createJournalHeader, encodeJournalHeader } from './fileHeader.js';
 import { JOURNAL_HEADER_BYTES } from './fileHeader.js';
 import { loadFlushRecords, type FlushRecords } from './flushRecords.js';
@@ -48,6 +49,39 @@ export async function createJournal(
     await createFileHandleSink(handle, 0)(encodeJournalHeader(header));
   } catch (error) {
     await handle.close();
+    throw error;
+  }
+  return new JournalGroupWriter(
+    {
+      handle,
+      syncMarker: header.syncMarker,
+      writeOffset: JOURNAL_HEADER_BYTES,
+      published: undefined,
+    },
+    dependencies,
+  );
+}
+
+export function createSynchronousJournal(
+  handle: JournalFileHandle,
+  dependencies: JournalOpenDependencies,
+): JournalGroupWriter {
+  const header = createJournalHeader(dependencies.nowMs, dependencies.random);
+  const bytes = encodeJournalHeader(header);
+  try {
+    for (let offset = 0; offset < bytes.length; ) {
+      const count = writeSync(
+        handle.fd,
+        bytes,
+        offset,
+        bytes.length - offset,
+        offset,
+      );
+      if (count === 0) throw new Error('Journal header write made no progress');
+      offset += count;
+    }
+  } catch (error) {
+    closeSync(handle.fd);
     throw error;
   }
   return new JournalGroupWriter(

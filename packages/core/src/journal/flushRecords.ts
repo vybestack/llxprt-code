@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as nodeFs from 'node:fs';
+import { createRequire } from 'node:module';
 import { isBunRuntime } from '../utils/runtime.js';
 import { JournalFlushError } from './errors.js';
 
@@ -148,4 +149,21 @@ export async function loadFlushRecords(
     fs: options.fs ?? nodeFs,
     fcntl: needsFcntl ? await load() : undefined,
   });
+}
+
+export function loadSynchronousFlushRecords(): FlushRecords {
+  const platform = process.platform;
+  const bun = isBunRuntime();
+  let fcntl: Fcntl | undefined;
+  if (selectFlushMechanism(platform, bun) === 'fcntl(F_FULLFSYNC)') {
+    const library = LIBC_BY_PLATFORM[platform];
+    if (library === undefined)
+      throw new JournalFlushError(`No libc is known for platform ${platform}`);
+    const ffi: BunFcntlFfi = createRequire(import.meta.url)(BUN_FFI_MODULE);
+    const { symbols } = ffi.dlopen(library, {
+      fcntl: { args: ['i32', 'i32', 'i32'], returns: 'i32' },
+    });
+    fcntl = (fd, command, argument) => symbols.fcntl(fd, command, argument);
+  }
+  return createFlushRecords({ platform, bun, fs: nodeFs, fcntl });
 }

@@ -70,8 +70,8 @@ export async function withNativePurgeFixture(
   const root = mkdtempSync(join(tmpdir(), 'native-purge-'));
   const primary = join(root, 'primary.llxj');
   const session = await JournalSession.create(primary);
-  const opener = spyOn(JournalSession, 'createUnlinked').mockResolvedValue(
-    session,
+  const opener = spyOn(JournalSession, 'createUnlinked').mockImplementation(
+    async () => session,
   );
   const owners = new RowOwnership();
   const history = new HistoryService({
