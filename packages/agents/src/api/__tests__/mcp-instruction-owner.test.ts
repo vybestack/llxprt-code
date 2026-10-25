@@ -36,6 +36,7 @@ import { toConfigParameters } from '../agentConfig.adapter.js';
 
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = (input, init) =>
@@ -169,9 +170,9 @@ describe('MCP instruction ownership', () => {
           },
         }),
       });
-      const mcp = await McpRuntimeOwner.create(
-        createTestOAuthBinding(),
-        config,
+      const mcp = await createTestMcpRuntime(
+        { oauth: createTestOAuthBinding(), config },
+        {},
       );
       const settingsRoot = createSessionSettingsFixture(config);
       const tokenizerFactory = createRuntimeTokenizerFactory();

@@ -12,7 +12,7 @@ import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { toConfigParameters } from '../agentConfig.adapter.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -89,29 +89,27 @@ describe('admitted instruction publication disposal', () => {
       const callerSettings = new SettingsService();
       const callerPolicy = new RuntimePolicyOwner(callerConfig);
       const callerMessageBus = callerPolicy.session.messageBus;
-      const callerMcp = await McpRuntimeOwner.create(
+      const callerMcp = await createTestMcpRuntime(
         {
-          openBrowser: async () => {
-            throw new Error('Unexpected browser request');
-          },
-          tokenStorage: new MCPOAuthTokenStorage({
-            getCredentials: async () => null,
-            setCredentials: async () => {
-              throw new Error('Unexpected token write');
+          oauth: {
+            openBrowser: async () => {
+              throw new Error('Unexpected browser request');
             },
-            deleteCredentials: async () => {},
-            listServers: async () => [],
-            getAllCredentials: async () => new Map(),
-            clearAll: async () => {},
-          }),
+            tokenStorage: new MCPOAuthTokenStorage({
+              getCredentials: async () => null,
+              setCredentials: async () => {
+                throw new Error('Unexpected token write');
+              },
+              deleteCredentials: async () => {},
+              listServers: async () => [],
+              getAllCredentials: async () => new Map(),
+              clearAll: async () => {},
+            }),
+          },
+          config: callerConfig,
+          policy: { owner: callerPolicy, ownership: 'runtime' },
         },
-        callerConfig,
-        callerMessageBus,
-        undefined,
-        undefined,
-        undefined,
-        callerPolicy,
-        'runtime',
+        {},
       );
 
       const callerRuntimeId = 'engine-' + randomUUID();

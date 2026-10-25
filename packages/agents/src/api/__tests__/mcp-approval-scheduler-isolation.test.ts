@@ -29,6 +29,7 @@ import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import { toConfigParameters } from '../agentConfig.adapter.js';
 
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
 import type { Agent, AgentToolHandle } from '../agent.js';
 import type { AgentEvent } from '../event-types.js';
@@ -199,9 +200,9 @@ describe('MCP scheduler approval isolation', () => {
         interactive: true,
       });
       configs.push(config);
-      const runtime = await McpRuntimeOwner.create(
-        createTestOAuthBinding(),
-        config,
+      const runtime = await createTestMcpRuntime(
+        { oauth: createTestOAuthBinding(), config },
+        {},
       );
       runtimes.push(runtime);
       const adoptedSettings1 = createSessionSettingsFixture(config);

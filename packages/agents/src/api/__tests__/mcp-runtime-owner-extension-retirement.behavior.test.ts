@@ -6,9 +6,9 @@
 import { describe, expect, it } from 'bun:test';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core/config/config.js';
-import { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import {
   startNoAuthMcpFixture,
   type NoAuthMcpFixture,
@@ -52,12 +52,12 @@ async function withExtensionOwner(
     enableExtensionReloading: true,
     mcpServers: { same: { httpUrl: `${fixture.base}/mcp` } },
   });
-  const owner = await McpRuntimeOwner.create(
-    createTestOAuthBinding(),
-    config,
-    undefined,
-    undefined,
-    McpClientManager,
+  const owner = await createTestMcpRuntime(
+    {
+      oauth: createTestOAuthBinding(),
+      config,
+    },
+    {},
   );
   try {
     await owner.initialize();

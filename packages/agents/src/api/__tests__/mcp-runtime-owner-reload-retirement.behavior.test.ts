@@ -10,9 +10,9 @@ import {
   SessionSettingsOwner,
   type SessionMcpSettingsReads,
 } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import {
   startNoAuthMcpFixture,
   type NoAuthMcpFixture,
@@ -76,27 +76,9 @@ async function withReloadOwner(
     mcpServers: serversFor(fixture, ['same']),
   });
   const reload = reloadBinding(config, serversFor(fixture, ['same', 'added']));
-  const owner = await McpRuntimeOwner.create(
-    createTestOAuthBinding(),
-    config,
-    undefined,
-    undefined,
-    McpClientManager,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    reload.binding,
+  const owner = await createTestMcpRuntime(
+    { oauth: createTestOAuthBinding(), config },
+    { mcpSettings: reload.binding },
   );
   try {
     await owner.initialize();

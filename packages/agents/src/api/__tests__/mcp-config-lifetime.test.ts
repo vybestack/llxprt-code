@@ -9,6 +9,7 @@ import {
 } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { toConfigParameters } from '../agentConfig.adapter.js';
 import { mkdtemp, realpath, rm, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -328,9 +329,9 @@ describe('MCP Config lifetime deletion', () => {
         },
       },
     });
-    const owner = await McpRuntimeOwner.create(
-      createTestOAuthBinding(),
-      config,
+    const owner = await createTestMcpRuntime(
+      { oauth: createTestOAuthBinding(), config },
+      {},
     );
     try {
       await owner.initialize();
@@ -395,37 +396,21 @@ describe('MCP Config lifetime deletion', () => {
             },
           },
         });
-        const owner = await McpRuntimeOwner.create(
-          createTestOAuthBinding(),
-          config,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
+        const owner = await createTestMcpRuntime(
+          { oauth: createTestOAuthBinding(), config },
           {
-            read: () => ({
-              mcpServers: config.getMcpServers() ?? {},
-              blockedMcpServers: [],
-              settingsMcpServers: {},
-            }),
-            reload: async () => ({
-              mcpServers: {},
-              blockedMcpServers: [],
-              settingsMcpServers: {},
-            }),
+            mcpSettings: {
+              read: () => ({
+                mcpServers: config.getMcpServers() ?? {},
+                blockedMcpServers: [],
+                settingsMcpServers: {},
+              }),
+              reload: async () => ({
+                mcpServers: {},
+                blockedMcpServers: [],
+                settingsMcpServers: {},
+              }),
+            },
           },
         );
         owners.push({ config, owner, directory: cwd });

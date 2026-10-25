@@ -7,6 +7,7 @@ import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { toConfigParameters } from '../agentConfig.adapter.js';
 import { mkdtemp, realpath, rm, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -121,18 +122,17 @@ describe('explicit MCP construction ownership', () => {
       debugMode: false,
       model: 'test-model',
     });
-    const first = await McpRuntimeOwner.create(
-      createTestOAuthBinding(),
-      config,
+    const first = await createTestMcpRuntime(
+      { oauth: createTestOAuthBinding(), config },
+      {},
     );
-    const second = await McpRuntimeOwner.create(
-      createTestOAuthBinding(),
-      config,
-      first.messageBus,
-      undefined,
-      undefined,
-      undefined,
-      first.policyOwner,
+    const second = await createTestMcpRuntime(
+      {
+        oauth: createTestOAuthBinding(),
+        config,
+        policy: { owner: first.policyOwner, ownership: 'caller' },
+      },
+      {},
     );
     const primary = new Error('IDE acquisition failed');
     const acquisition = vi
