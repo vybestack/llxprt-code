@@ -30,16 +30,7 @@ import {
 
 const logger = new DebugLogger('test:actual-hardlimit-body');
 const cases = [512, 8192].flatMap((size) =>
-  ['anthropic', 'openai-responses', 'gemini'].flatMap((provider) =>
-    [false, true].flatMap((caching) =>
-      [false, true].map((accepted): [number, string, boolean, boolean] => [
-        size,
-        provider,
-        caching,
-        accepted,
-      ]),
-    ),
-  ),
+  [false, true].map((accepted): [number, boolean] => [size, accepted]),
 );
 type Setup = ReturnType<typeof middleoutSetup>;
 
@@ -146,12 +137,7 @@ function enforceFor(
     },
   });
 }
-async function verify(
-  size: number,
-  provider: string,
-  caching: boolean,
-  accepted: boolean,
-): Promise<void> {
+async function verify(size: number, accepted: boolean): Promise<void> {
   await withSuffixFixture(
     size,
     async (history) => {
@@ -174,57 +160,77 @@ async function verify(
         accepted,
       );
       const actualRows = await enforceFor(history, setup, accepted, pending);
-      const actualResponse: IContent[] = [];
-      const expectedResponse: IContent[] = [];
-      const actual = await captureCuratedBody(
-        provider,
-        actualRows,
-        caching,
-        true,
-        true,
-        actualResponse,
-      );
-      const expected = await captureCuratedBody(
-        provider,
-        expectedRows,
-        caching,
-        false,
-        false,
-        expectedResponse,
-      );
-      expect(JSON.stringify(actualResponse)).toBe(
-        JSON.stringify(expectedResponse),
-      );
-      expect(
-        actualResponse
-          .flatMap((row) => row.blocks)
-          .some((block) => block.type === 'text' && block.text.length > 0),
-      ).toBe(true);
-      const output = process.env.PROVIDER_HARDLIMIT_BODY_OUTPUT;
-      if (output !== undefined) {
-        const name = `hardlimit-${provider}-${size}-${caching}-${accepted}`;
-        await writeBodyFile(join(output, name + '-actual.json'), actual);
-        await writeBodyFile(join(output, name + '-expected.json'), expected);
-        await writeBodyFile(
-          join(output, name + '-response-actual.json'),
-          JSON.stringify(actualResponse),
-        );
-        await writeBodyFile(
-          join(output, name + '-response-expected.json'),
-          JSON.stringify(expectedResponse),
-        );
-      }
-      expect(actual).toBe(expected);
-      if (provider === 'anthropic' && caching)
-        expect(actual).toContain('cache_control');
+      // Enforcement depends on size and acceptance, not the transport or cache
+      // setting. Reuse its output while checking every transport combination.
+      for (const provider of ['anthropic', 'openai-responses', 'gemini'])
+        for (const caching of [false, true])
+          await verifyTransport(
+            size,
+            provider,
+            caching,
+            accepted,
+            actualRows,
+            expectedRows,
+          );
     },
     2048,
     providerFarFixtureRow,
   );
 }
+async function verifyTransport(
+  size: number,
+  provider: string,
+  caching: boolean,
+  accepted: boolean,
+  actualRows: IContent[],
+  expectedRows: IContent[],
+): Promise<void> {
+  const actualResponse: IContent[] = [];
+  const expectedResponse: IContent[] = [];
+  const actual = await captureCuratedBody(
+    provider,
+    structuredClone(actualRows),
+    caching,
+    true,
+    true,
+    actualResponse,
+  );
+  const expected = await captureCuratedBody(
+    provider,
+    structuredClone(expectedRows),
+    caching,
+    false,
+    false,
+    expectedResponse,
+  );
+  expect(JSON.stringify(actualResponse)).toBe(JSON.stringify(expectedResponse));
+  expect(
+    actualResponse
+      .flatMap((row) => row.blocks)
+      .some((block) => block.type === 'text' && block.text.length > 0),
+  ).toBe(true);
+  const output = process.env.PROVIDER_HARDLIMIT_BODY_OUTPUT;
+  if (output !== undefined) {
+    const name = `hardlimit-${provider}-${size}-${caching}-${accepted}`;
+    await writeBodyFile(join(output, name + '-actual.json'), actual);
+    await writeBodyFile(join(output, name + '-expected.json'), expected);
+    await writeBodyFile(
+      join(output, name + '-response-actual.json'),
+      JSON.stringify(actualResponse),
+    );
+    await writeBodyFile(
+      join(output, name + '-response-expected.json'),
+      JSON.stringify(expectedResponse),
+    );
+  }
+  expect(actual).toBe(expected);
+  if (provider === 'anthropic' && caching)
+    expect(actual).toContain('cache_control');
+}
+
 describe('actual disk hard-limit transport bytes', () => {
   it.each(cases)(
-    'preserves %i rows %s caching=%s accepted=%s with identical retries',
+    'preserves %i rows accepted=%s across all transports and cache settings with identical retries',
     verify,
     600000,
   );
