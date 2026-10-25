@@ -1,7 +1,4 @@
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import { createCapturedSessionOwner } from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -42,7 +39,6 @@ import {
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { TestRuntimeProviderManager } from '../../../../agents/src/test-utils/runtimeProviderManager.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -66,7 +62,6 @@ async function owner(
   failure?: Error,
   providerName = name,
 ): Promise<{
-  client: AgentClientContract;
   config: Config;
   settings: SettingsService;
   requests: unknown[];
@@ -162,9 +157,7 @@ async function owner(
     await config.dispose();
   });
   await sessionClient.refreshAuth();
-  const client = capturedSessionClient(sessionClient);
   return {
-    client,
     config,
     settings,
     requests,

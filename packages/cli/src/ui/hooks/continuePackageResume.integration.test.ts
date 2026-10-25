@@ -2,10 +2,7 @@ import * as ownedPersistence from '../../../../agents/src/api/control/recordedHi
 import type { SessionControl } from '../../../../agents/src/api/control/sessionControl.js';
 import { spyOn, afterEach, describe, expect, it } from 'bun:test';
 
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import { createCapturedSessionOwner } from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
 import type { CommandHandlerFixture as SlashCommandHandlerDeps } from './slash-command-handler-deps-test-helpers.js';
 import { installFixtureRawResume } from '../../__tests__/command-raw-resume-fixture.js';
 import { buildSettingsRuntime } from '../../runtime/createRuntimeOwnerFeatures.js';
@@ -186,6 +183,7 @@ async function createConfig(
   continueSession?: string,
 ): Promise<{
   config: Config;
+  client: AgentClientContract;
   sessionClient: SessionClientOwner;
   settingsOwner: SessionSettingsOwner;
   session: SessionControl;
@@ -264,6 +262,7 @@ async function createConfig(
     throw new Error('No actual persistence acquisition');
   return {
     config,
+    client,
     sessionClient,
     settingsOwner,
     session,
@@ -380,7 +379,7 @@ function createRecordingCallbacks(
 
 async function createHandlerDeps(
   config: Config,
-  sessionClient: SessionClientOwner,
+  client: AgentClientContract,
   callbacks: RecordingSwapCallbacks,
   messages: Message[],
   persistence: CliSessionPersistence,
@@ -391,19 +390,17 @@ async function createHandlerDeps(
       config,
       agent: {
         session: {
-          getHistory: async () =>
-            capturedSessionClient(sessionClient).getHistory(),
+          getHistory: async () => client.getHistory(),
           replaceHistory: async (next: readonly IContent[]) =>
-            capturedSessionClient(sessionClient).setHistory(next),
+            client.setHistory(next),
           attachRecordingHistory: (recording: RecordingIntegration) => {
-            const current =
-              capturedSessionClient(sessionClient).getHistoryService();
+            const current = client.getHistoryService();
             if (!current) throw new Error('Missing fixture history');
             recording.onHistoryServiceReplaced(current);
           },
         },
         setHistory: async (next: readonly IContent[]) =>
-          capturedSessionClient(sessionClient).setHistory(next),
+          client.setHistory(next),
       },
     },
     recordingSwapCallbacks: callbacks,
@@ -486,9 +483,7 @@ describe('continue package perform_resume integration', () => {
     const persistence = new CliSessionPersistence(
       { projectRoot: config.storageRoot, chatsDir: config.projectChatsDir },
       {
-        mediaStore: requireMediaStore(
-          capturedSessionClient(built.sessionClient),
-        ),
+        mediaStore: requireMediaStore(built.client),
         maxQueueBytes: config.getSessionPersistenceQueueByteLimit(),
       },
     );
@@ -503,7 +498,7 @@ describe('continue package perform_resume integration', () => {
       const result = await processSlashCommand(
         await createHandlerDeps(
           config,
-          built.sessionClient,
+          built.client,
           createRecordingCallbacks(state, false),
           messages,
           persistence,
@@ -548,9 +543,7 @@ describe('continue package perform_resume integration', () => {
     );
     const config = built.config;
     const projectTemp = config.projectTempDir;
-    const destinationStore = requireMediaStore(
-      capturedSessionClient(built.sessionClient),
-    );
+    const destinationStore = requireMediaStore(built.client);
     const deduplicatedBytes = new Uint8Array([10, 20, 30]);
     const importedOnlyBytes = new Uint8Array([40, 50, 60, 70]);
     const preExistingReference = await destinationStore.admit({
@@ -579,9 +572,7 @@ describe('continue package perform_resume integration', () => {
     const persistence = new CliSessionPersistence(
       { projectRoot: config.storageRoot, chatsDir: config.projectChatsDir },
       {
-        mediaStore: requireMediaStore(
-          capturedSessionClient(built.sessionClient),
-        ),
+        mediaStore: requireMediaStore(built.client),
         maxQueueBytes: config.getSessionPersistenceQueueByteLimit(),
       },
     );
@@ -590,7 +581,7 @@ describe('continue package perform_resume integration', () => {
       await processSlashCommand(
         await createHandlerDeps(
           config,
-          built.sessionClient,
+          built.client,
           createRecordingCallbacks(state, true),
           messages,
           persistence,
@@ -664,7 +655,7 @@ describe('continue package perform_resume integration', () => {
         null,
       );
       const sessionId = first.session.getSessionId();
-      await capturedSessionClient(first.sessionClient).addHistory({
+      await first.client.addHistory({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'legacy early resume' }],
       });

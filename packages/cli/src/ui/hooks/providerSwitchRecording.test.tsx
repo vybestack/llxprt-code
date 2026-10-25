@@ -1,4 +1,4 @@
-import { capturedSessionClient } from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import { readCurrentOwnerHistory } from '../../__tests__/session-owner-history-read.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 /**
  * @license
@@ -198,9 +198,7 @@ describe('provider changes made in dialogs reach the session recording (issue #3
     const owner = await createUiSessionOwner(config);
     const runtime = uiFixtureResources(owner);
     runtime.sessionClient.initializeConversation();
-    const acquiredHistory = capturedSessionClient(
-      runtime.sessionClient,
-    ).getHistoryService();
+    const acquiredHistory = readCurrentOwnerHistory(runtime.sessionClient);
     if (acquiredHistory === null)
       throw new Error('Actual recording owner has no history');
     nativeHistory = acquiredHistory;

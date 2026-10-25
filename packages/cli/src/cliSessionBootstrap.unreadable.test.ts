@@ -32,7 +32,6 @@ import {
   SessionRecordingService,
   getProjectHash,
   type IContent,
-  type AgentClientContract,
   readSessionHeader,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
@@ -48,8 +47,10 @@ import {
 import { buildAgentClientFactory } from '../../agents/src/api/agentBootstrap.js';
 import {
   createCapturedSessionOwner,
-  capturedSessionClient,
+  ownerClients,
 } from '../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import type { SessionClientOwner } from '../../agents/src/session/session-client-owner.js';
+import { readCurrentOwnerHistory } from './__tests__/session-owner-history-read.js';
 import type { SessionControl } from '../../agents/src/api/control/sessionControl.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { buildTestMcpRuntime } from '../../agents/src/api/__tests__/helpers/mcp-owner-fixture.js';
@@ -278,19 +279,23 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
     manager.setActiveProvider(provider.name);
     if (config.getProvider() !== undefined) await sessionClient.refreshAuth();
     sessionClient.initializeConversation();
-    const client = capturedSessionClient(sessionClient);
+    // The production path reaches the current client; every client the
+    // owner's factory built carries the same instance spy.
+    const clients = ownerClients(sessionClient);
     const restored: unknown[][] = [];
-    const restoreHistory = client.restoreHistory;
-    const restore = spyOn(client, 'restoreHistory').mockImplementation(
-      async (history, origin) => {
-        restored.push([...history]);
-        if (restoreError) throw restoreError;
-        restoreIdentities?.push(config.getSessionId());
-        await restoreHistory.call(client, history, origin);
-        restoreIdentities?.push(config.getSessionId());
-      },
-    );
-    restores.push(() => restore.mockRestore());
+    for (const client of clients) {
+      const restoreHistory = client.restoreHistory;
+      const restore = spyOn(client, 'restoreHistory').mockImplementation(
+        async (history, origin) => {
+          restored.push([...history]);
+          if (restoreError) throw restoreError;
+          restoreIdentities?.push(config.getSessionId());
+          await restoreHistory.call(client, history, origin);
+          restoreIdentities?.push(config.getSessionId());
+        },
+      );
+      restores.push(() => restore.mockRestore());
+    }
     const session = sessionClient.createSessionControl(
       'config',
       () => config.getSessionId(),
@@ -301,7 +306,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       () => config.getModel(),
     );
     sessions.push(session);
-    return { session, restored, client };
+    return { session, restored, sessionClient, clients };
   }
 
   async function startup(
@@ -360,9 +365,9 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
 
   async function recordFirstMessage(
     session: SessionControl,
-    client: AgentClientContract,
+    sessionClient: SessionClientOwner,
   ): Promise<string> {
-    const history = client.getHistoryService();
+    const history = readCurrentOwnerHistory(sessionClient);
     if (history === null) throw new Error('Missing acquired startup history');
     history.add({
       speaker: 'human',
@@ -376,7 +381,8 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
 
   it('resumes a session recorded after a no-provider start and a profile load', async () => {
     const noProviderConfig = configFor(root);
-    const { session: first, client } = await acquireSession(noProviderConfig);
+    const { session: first, sessionClient } =
+      await acquireSession(noProviderConfig);
     await setupOwnerSessionRecording(
       noProviderConfig,
       first,
@@ -387,7 +393,9 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
     let header: Awaited<ReturnType<typeof readSessionHeader>>;
     try {
       await loadProfile(noProviderConfig, first, 'codex', 'gpt-6-luna');
-      header = await readSessionHeader(await recordFirstMessage(first, client));
+      header = await readSessionHeader(
+        await recordFirstMessage(first, sessionClient),
+      );
     } finally {
       await first.dispose();
     }
@@ -409,7 +417,8 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
 
   it('writes the live provider/model into the header when the change never reaches recordProviderSwitch', async () => {
     const liveConfig = configFor(root);
-    const { session: recording, client } = await acquireSession(liveConfig);
+    const { session: recording, sessionClient } =
+      await acquireSession(liveConfig);
     await setupOwnerSessionRecording(
       liveConfig,
       recording,
@@ -421,7 +430,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       liveConfig.setProvider('anthropic');
       liveConfig.setModel('claude-opus-5-5');
       const header = await readSessionHeader(
-        await recordFirstMessage(recording, client),
+        await recordFirstMessage(recording, sessionClient),
       );
 
       expect({
@@ -651,18 +660,22 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
     });
     const primary = new Error('native startup restore failed');
     const rollback = new Error('native prior-history rollback failed');
-    const { session, client } = await acquireSession(config, primary);
-    const resetChat = client.resetChat;
+    const { session, clients } = await acquireSession(config, primary);
     const resets: string[] = [];
-    const reset = spyOn(client, 'resetChat').mockImplementation(async () => {
-      resets.push(config.getSessionId());
-      await resetChat.call(client);
-    });
-    const setHistory = spyOn(client, 'setHistory').mockRejectedValue(rollback);
-    restores.push(
-      () => setHistory.mockRestore(),
-      () => reset.mockRestore(),
-    );
+    for (const client of clients) {
+      const resetChat = client.resetChat;
+      const reset = spyOn(client, 'resetChat').mockImplementation(async () => {
+        resets.push(config.getSessionId());
+        await resetChat.call(client);
+      });
+      const setHistory = spyOn(client, 'setHistory').mockRejectedValue(
+        rollback,
+      );
+      restores.push(
+        () => setHistory.mockRestore(),
+        () => reset.mockRestore(),
+      );
+    }
     const outcome = await setupOwnerSessionRecording(
       config,
       session,

@@ -1,9 +1,6 @@
 import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
 import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from '../../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import { createCapturedSessionOwner } from '../../../agents/src/api/__tests__/helpers/session-client-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -38,7 +35,6 @@ import {
   assembleWorkspaceMemory,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
   configureProviderTokenizer,
   createRuntimeContentGeneratorFactory,
@@ -46,7 +42,6 @@ import {
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { buildAgentClientFactory } from '../../../agents/src/api/agentBootstrap.js';
 import type { SessionClientOwner } from '../../../agents/src/session/session-client-owner.js';
-import { subscribeSessionStats } from '../../../agents/src/api/agentStatsProjector.js';
 import { resolve } from 'node:path';
 import { HookControl } from '../../../agents/src/api/control/hooks.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -290,9 +285,6 @@ async function assembleUiInfrastructure(
     config.getCheckpointingEnabled(),
   );
   return {
-    get client(): AgentClientContract {
-      return capturedSessionClient(sessionClient);
-    },
     trust,
     ide,
     manager,
@@ -386,8 +378,7 @@ function subscribeUiStats(
   subscriptions: Set<() => void>,
   listener: Parameters<Agent['onStats']>[0],
 ): () => void {
-  const unsubscribe = subscribeSessionStats(
-    () => capturedSessionClient(sessionClient).getHistoryService(),
+  const unsubscribe = sessionClient.observeStats(
     listener,
     settings.telemetry.localMetrics,
   );

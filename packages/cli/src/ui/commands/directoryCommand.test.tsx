@@ -60,8 +60,10 @@ function rejectDirectory(
 
 async function createDirectoryOwner() {
   const owner = await createUiSessionOwner();
-  const client = uiFixtureResources(owner).client;
-  return { addDirectoryContext: () => client.addDirectoryContext() };
+  const { sessionClient } = uiFixtureResources(owner);
+  return {
+    addDirectoryContext: () => sessionClient.conversation.addDirectoryContext(),
+  };
 }
 
 describe('directoryCommand', () => {
