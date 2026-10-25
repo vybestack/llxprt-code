@@ -1106,7 +1106,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T5.4b B6 SubAgentScope.create new signature
 - [x] T5.4c B6 SubAgentScope.create returns narrow ChildAgentScope (preparatory for T5.6)
 - [x] T5.5-inv B6 McpRuntimeOwner.create caller inventory
-- [ ] T5.5a-n B6 MCP test callers through one helper (ids added by T5.5-inv; input shapes decided in revision-notes.md, "Phase 5 inventory decisions")
+- [x] T5.5a-n B6 MCP test callers through one helper (ids added by T5.5-inv; input shapes decided in revision-notes.md, "Phase 5 inventory decisions")
   - [x] T5.5a B6 MCP test callers through one helper: packages/agents, 12 files plus the new helper create-mcp-runtime.ts (file list in inventory-T5.5.md)
   - [x] T5.5b B6 MCP test callers through one helper: packages/agents, 12 files (file list in inventory-T5.5.md)
   - [x] T5.5c B6 MCP test callers through one helper: packages/agents, 12 files (file list in inventory-T5.5.md)

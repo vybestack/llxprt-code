@@ -60,3 +60,61 @@ Read-only checks run for this review, one test file per Bun process with stdin c
 - `npm run build:types && npm run check:runtime-boundary` was invoked; its tool output overflowed, so its combined result is not claimed. A subsequent `npm run check:runtime-boundary` returned exit 0.
 
 No package suite was run by this reviewer. No source or plan file was edited; only this review report was created and updated. Findings are based on source inspection; no new failing reproduction test was added during the read-only review.
+
+
+## Follow-up
+
+2026-10-25, at `6509162d2`. Scope limited to findings 1-4 and fixes `8bc72bfab`, `1483b55b0` and `6509162d2`, including the requested production-caller, overload and failure-coverage judgments. **All four findings are resolved.** No source was edited and no package suite was run.
+
+### Finding 1: resolved (`8bc72bfab`, T5.F1)
+
+`packages/cli/src/session/interactiveUI.tsx:453-482` now validates raw persistence inside `prepareInteractiveStartup`'s rollback scope. Failure closes `startup.providerKeys` once; a close failure produces `[primaryError, closeError]`. `startInteractiveUI` calls commit after preparation returns (`:421-436`), outside this catch, so commit rollback does not encounter a second pre-commit close. The focused provider-key file passes all 7 tests, including both new raw-validation cases and the existing commit-failure case. These assert the original requirement error, no render, exactly one close, and aggregation when closing fails.
+
+### Finding 2: resolved (`1483b55b0`, T5.F2)
+
+`packages/agents/src/api/child-agent-assembly.ts:115-129` requires `RootTelemetry`, `WorkspaceTrustControlPort` and `SessionHookOwner`, without `undefined`. The production constructor supplies `this.settingsOwner.telemetry`, `workspace.trust` and `this.hookOperations` (`packages/agents/src/session/session-client-owner.ts:444-455`). The assembly borrows those owners for telemetry and hook/tool composition (`child-agent-assembly.ts:223-225,305-315`) and reads trust directly for approval (`:453-456`). The child-launch fixture constructs actual settings/trust/telemetry and hook owners when not supplied (`packages/agents/src/core/__tests__/child-launch-fixture.ts:74-92,118-129`); it no longer passes missing owners through this production port.
+
+Focused checks pass for live parent trust affecting child retry/write denial, live tool-governance changes, successful and failed child disposal leaving the parent usable, and cancellation/disposal leaving sibling work usable. Relevant files are `async-child-background-isolation.behavior.test.ts`, `session-client-child-owner.behavior.test.ts`, `child-acquisition.behavior.test.ts` and `child-task-tool-lifetime.behavior.test.ts` in the table below. No production ownership transfer or disposal of the borrowed telemetry/hook owners was added by this fix.
+
+### Finding 3: resolved (`6509162d2`, T5.F3)
+
+The overload guarantee follows from its inputs and the existing implementation. `packages/core/src/runtime/AgentRuntimeLoader.ts:81-89` requires `profile.toolRegistry: ToolSelection`; `profile.settings` is already required by the inherited profile contract (`:44-59`). The narrowed result requires both fields (`:103-111`), and the first overload selects it for that narrowed input (`:184-189`). The implementation directly returns `profile.toolRegistry` and `profile.settings` (`:261-270`), with no cast, non-null assertion or fabricated fallback. Retaining the general implementation signature does not invalidate this input/output relationship.
+
+The child options builder requires both supplied values and returns `ToolSelectedRuntimeLoaderOptions` (`packages/agents/src/core/subagent-runtime-loader.ts:22-35,54-66`). The assembly uses the narrowed factory/result (`packages/agents/src/api/child-agent-assembly.ts:110-112,145,386-407`) and passes both values directly to the scope (`:434-441`); the late registry check is gone. `SubAgentRuntimeInput.settingsSnapshot` and the private constructor snapshot are non-nullable (`packages/agents/src/core/subagent.ts:134-141,206`). The real loader regression asserts identity with the supplied tool selection and snapshot (`packages/agents/src/core/subagent-runtime-loader.test.ts:108-109`); the governance regression observes an actual disabled-tool response (`packages/agents/src/core/subagentNonInteractive.issue3535.test.ts:522-538`). Both pass.
+
+**Cleanup-stage judgment:** coverage is preserved. `packages/agents/src/core/__tests__/subagent-launch-cleanup.test.ts:107-159` still exercises activation failure, loader failure, scope creation failure, and scope creation failure followed by a history-release failure. The activation trigger remains a missing replay file; the loader trigger remains missing content-generator configuration. Scope/history cases now reach the injected rejecting scope factory instead of violating the tool-registry contract. The history case still creates real admitted media and obstructs its release before scope rejection. Assertions retain the primary failure, the history `MediaStoreError`/`EISDIR` when applicable, and the token-transport close failure in that order, with unchanged error counts and parent-model assertion (`:167-197`). All four cases pass. The separate history-settlement and scheduler-cleanup files also pass.
+
+### Finding 4: resolved (`1483b55b0`, T5.F2)
+
+`SubAgentLaunchInput.parentSignal`, the private constructor parameter and stored parent signal are required `AbortSignal` values (`packages/agents/src/core/subagent.ts:124-131,170,207`). Binding no longer has a missing-signal exit and relays both an already-aborted parent and subsequent abort events (`:284-298`). `ChildAgentLaunch.signal` is required (`packages/agents/src/api/child-agent-assembly.ts:101`), and the producer passes it to the scope (`:432`). Independent scope fixtures receive a fresh controller signal (`packages/agents/src/core/__tests__/helpers/create-subagent-scope.ts:23-29`).
+
+**Production-caller judgment:** requiring `SubagentOrchestrator.launch`'s signal is appropriate for every current production caller. The production orchestrator is constructed and bound into task registration at `packages/agents/src/session/session-client-owner.ts:424-461`. Repository-wide caller inspection found two execution paths: foreground task launch passes `timeoutController.signal` (`packages/agents/src/tools/task.ts:379`), whose controller relays user cancellation (`packages/agents/src/tools/taskAbortHelpers.ts:109-134`); async launch passes its independently owned `asyncAbortController.signal` (`packages/agents/src/tools/taskAsyncExecution.ts:268-323`). The async path relays foreground abort during launch, registers the same controller with the task owner, then removes the foreground relay so normal foreground completion does not cancel accepted background work. Requiring a signal preserves that distinction; it does not require passing the foreground signal to background children. No additional production launch caller without a cancellation owner was found.
+
+Focused tests pass for an already-aborted orchestrator launch, foreground cancellation during launch, async signal identity and cancellation during launch, and parent listener cleanup. The public async-child regressions also pass for aborting the controller driving an accepted live child and leaving another same-label owner's child running to completion (`packages/agents/src/api/__tests__/async-child-background-isolation.behavior.test.ts:570-604`).
+
+### Follow-up checks
+
+All commands used `exec < /dev/null;` and exactly one file per Bun process. CLI command: `cd packages/cli && bun test ./src/session/interactiveUI.providerKeys.behavior.test.tsx`. Agents command for each row: `cd packages/agents && bun test --timeout 180000 ./<path>`. Each process had a 115-second shell limit and completed in under 9 seconds. **138 tests passed across 18 files; 0 failed.** Paths below are relative to the stated package.
+
+| Package | Test file | Passed |
+| --- | --- | ---: |
+| CLI | `src/session/interactiveUI.providerKeys.behavior.test.tsx` | 7 |
+| agents | `src/core/__tests__/subagent-launch-cleanup.test.ts` | 4 |
+| agents | `src/core/subagent-runtime-loader.test.ts` | 1 |
+| agents | `src/core/subagent-runtime-loader.types.test.ts` | 1 |
+| agents | `src/core/subagentNonInteractive.issue3535.test.ts` | 18 |
+| agents | `src/api/__tests__/session-client-child-owner.behavior.test.ts` | 5 |
+| agents | `src/core/subagentOrchestrator.test.ts` | 21 |
+| agents | `src/core/__tests__/child-acquisition.behavior.test.ts` | 3 |
+| agents | `src/core/__tests__/child-task-tool-lifetime.behavior.test.ts` | 2 |
+| agents | `src/core/__tests__/subagent-history-settlement.behavior.test.ts` | 2 |
+| agents | `src/tools/task.test.ts` | 16 |
+| agents | `src/api/__tests__/async-child-background-isolation.behavior.test.ts` | 8 |
+| agents | `src/tools/task.async.test.ts` | 11 |
+| agents | `src/core/subagent.runNonInteractive-term.test.ts` | 11 |
+| agents | `src/core/__tests__/subagentOrchestrator.isolatedConfigDispose.test.ts` | 3 |
+| agents | `src/core/__tests__/subagentOrchestrator-runtime.test.ts` | 13 |
+| agents | `src/core/__tests__/subagentOrchestrator-sessionInheritance.test.ts` | 10 |
+| agents | `src/core/__tests__/subagent-scheduler-cleanup.test.ts` | 2 |
+
+Bun executes TypeScript without type-checking. The `.types.test.ts` run is therefore recorded as a passing Bun test, not a fresh compiler validation. Required-input conclusions above come from inspection of the declared types and their production producers; loader output behavior is additionally exercised by the identity and governance tests. No new typecheck, build, package suite, or broader review was performed for this follow-up. No action remains for findings 1-4.
