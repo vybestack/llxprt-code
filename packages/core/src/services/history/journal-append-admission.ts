@@ -1,9 +1,36 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { decodeStoredRow } from './journalRowCodec.js';
+import { encodeRowDraft } from '../../journal/rowDraft.js';
+import type { IContent } from './IContent.js';
 import type { JournalStore } from '../../journal/journalStore.js';
 import type { RowDraft } from '../../journal/rowDraft.js';
 import type { CommitAck } from '../../journal/groupWriter.js';
 import type { EditBuilder } from './journalPublication.js';
 import type { JournalOwners } from './journalOwners.js';
+
+export function decodeTokenDraft(draft: RowDraft): IContent {
+  return decodeStoredRow({
+    header: encodeRowDraft(1n, draft).header,
+    rawIds: draft.ids.map((id) => id.rawId),
+    meta: draft.meta,
+    blocks: draft.blocks.map((block) => block.bytes),
+  });
+}
+
+export interface TokenDraft {
+  readonly sequence: number;
+  readonly draft: RowDraft;
+  captured: boolean;
+}
+
+export function releaseUnclaimedTokenDraft(
+  draft: TokenDraft | undefined,
+  sequence: number,
+): TokenDraft | undefined {
+  return draft !== undefined && !draft.captured && draft.sequence <= sequence
+    ? undefined
+    : draft;
+}
 
 export interface AppendAdmissionRun {
   readonly store: JournalStore;
@@ -12,6 +39,7 @@ export interface AppendAdmissionRun {
   end: number;
   count: number;
   rowsAfter: number;
+  tokenSequence: number;
   readonly origin: string | undefined;
 }
 interface AdmissionHost {

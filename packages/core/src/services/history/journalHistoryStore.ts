@@ -1,11 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
   commitAdmittedAppend,
+  decodeTokenDraft,
+  releaseUnclaimedTokenDraft,
+  type TokenDraft,
   StartupAdmissions,
   type AppendAdmissionRun,
 } from './journal-append-admission.js';
-import { decodeStoredRow } from './journalRowCodec.js';
-import { encodeRowDraft, type RowDraft } from '../../journal/rowDraft.js';
+import type { RowDraft } from '../../journal/rowDraft.js';
 import type { MirrorCheckpoint } from '../../journal/mirrorCheckpoint.js';
 import type { TokenRowSource } from './history-token-tickets.js';
 import { JournalTokenRows } from './journal-token-rows.js';
@@ -144,9 +146,7 @@ export class JournalHistoryStore
 
   private tentativeRows = 0;
   private tokenDraftSequence = 0;
-  private tokenDraft:
-    | { readonly sequence: number; readonly draft: RowDraft }
-    | undefined;
+  private tokenDraft: TokenDraft | undefined;
   private appendingTokenRow = false;
   private readonly tokenRows = new JournalTokenRows({
     snapshot: () => this.exclusive(() => this.session.store.snapshot()),
@@ -185,6 +185,7 @@ export class JournalHistoryStore
       current.end = admitted.end;
       current.count++;
       current.rowsAfter = ++this.tentativeRows;
+      current.tokenSequence = this.tokenDraftSequence + 1;
       this.publication.accepted();
       return;
     }
@@ -194,6 +195,7 @@ export class JournalHistoryStore
       releaseReader: store.admissions.retainReader(),
       count: 1,
       rowsAfter: this.tentativeRows + 1,
+      tokenSequence: this.tokenDraftSequence + 1,
       origin,
     };
     this.appendRun = run;
@@ -220,6 +222,10 @@ export class JournalHistoryStore
       this.owners.invalidate();
     } finally {
       this.queuedAppendRuns--;
+      this.tokenDraft = releaseUnclaimedTokenDraft(
+        this.tokenDraft,
+        run.tokenSequence,
+      );
       store.admissions.release(run.count);
       await run.releaseReader();
     }
@@ -411,6 +417,7 @@ export class JournalHistoryStore
 
   captureTokenRow(): TokenRowSource {
     this.assertUsable();
+    if (this.tokenDraft !== undefined) this.tokenDraft.captured = true;
     return this.tokenRows.capture(
       this.tentativeRows - 1,
       this.tokenDraft?.sequence,
@@ -421,13 +428,7 @@ export class JournalHistoryStore
     const available = this.tokenDraft;
     if (available === undefined || available.sequence !== sequence) return;
     this.tokenDraft = undefined;
-    const { draft } = available;
-    return decodeStoredRow({
-      header: encodeRowDraft(1n, draft).header,
-      rawIds: draft.ids.map((id) => id.rawId),
-      meta: draft.meta,
-      blocks: draft.blocks.map((block) => block.bytes),
-    });
+    return decodeTokenDraft(available.draft);
   }
 
   apply(op: HistoryJournalOp): void {
@@ -437,7 +438,11 @@ export class JournalHistoryStore
     try {
       const draft = applyOperation(this.writes, op);
       if (draft !== undefined) {
-        this.tokenDraft = { sequence: ++this.tokenDraftSequence, draft };
+        this.tokenDraft = {
+          sequence: ++this.tokenDraftSequence,
+          draft,
+          captured: false,
+        };
       }
     } finally {
       this.appendingTokenRow = false;
