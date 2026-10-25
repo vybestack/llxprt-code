@@ -1,21 +1,17 @@
-import { openSkillsCaller } from './helpers/skills-fixture-caller.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { registerActivateSkillTool } from '../../skill-tool-registrar.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import {
-  buildAgent,
-  internalConfig,
-  type Agent,
-} from './helpers/agentHarness.js';
+import { type Agent } from './helpers/agentHarness.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import { modelVisibleSkillNames } from './helpers/skills-fixture-declarations.js';
+import { recordedModelVisibleSkillNames } from './helpers/recorded-skill-declarations.js';
+import { createRecordingProvider } from './helpers/recording-provider.js';
+import { openRouteBPreflight } from './helpers/route-b-preflight.js';
 
 /**
  * @license
@@ -54,15 +50,14 @@ function writeSkill(workspace: string, name: string): void {
 }
 
 /**
- * Drives one turn so a live chat session exists with a tool list, which is the
- * state a reload has to update. The registrar is already installed by
- * `createAgent`; nothing here supplies it.
+ * Drives one turn so the provider receives the tool list the session holds
+ * now, which is the state a reload has to update. The registrar is already
+ * installed by `createAgent`; nothing here supplies it.
  */
-async function settle(agent: Agent): Promise<Config> {
+async function settle(agent: Agent): Promise<void> {
   for await (const _event of agent.stream('hello')) {
-    // Drain the turn so the chat session and its tool list exist.
+    // Drain the turn so the provider records the request.
   }
-  return internalConfig(agent);
 }
 
 describe('skill reload reaches the model @issue:3379', () => {
@@ -85,88 +80,78 @@ describe('skill reload reaches the model @issue:3379', () => {
       agent: Agent;
       config: Config;
       workspace: string;
+      modelVisibleSkillNames: () => Promise<string[]>;
     }) => Promise<void>,
     operations?: WorkspaceSkillAssemblyOperations,
   ): Promise<void> {
-    const workspace = mkdtempSync(join(tmpdir(), 'llxprt-skill-reload-'));
-    for (const name of initialSkills) {
-      writeSkill(workspace, name);
-    }
     // The storage-isolation preload points LLXPRT_AGENTS_HOME at a temp root,
     // so discovery never reads the real ~/.agents/skills here; the strict set
     // assertions only ever see this workspace's skills.
-    let agent: Agent;
-    let cleanup: () => Promise<void>;
-    if (operations === undefined) {
-      const owned = await buildAgent('plain-text.jsonl', {
+    const recording = createRecordingProvider();
+    const route = await openRouteBPreflight({
+      authority: callerCredentials().authority,
+      contributions: recording.contributions,
+      config: {
+        provider: recording.alias,
+        model: 'recording-default',
         skillsSupport: true,
-        workingDir: workspace,
-      });
-      agent = owned.agent;
-      cleanup = owned.cleanup;
-    } else {
-      const {
-        config: callerCallerConfig,
-        settings: callerCallerSettings,
-        settingsOwner: callerCallerSettingsOwner,
-        manager: callerCallerManager,
-        mcp: callerCallerMcp,
-        close: callerCallerClose,
-        client: callerCallerClient,
-      } = await openSkillsCaller({
-        fixture: new URL('./fixtures/plain-text.jsonl', import.meta.url),
-        authority: callerCredentials().authority,
-        overrides: {
-          skillsSupport: true,
-          workingDir: workspace,
-        },
-        operations,
-      });
-
-      agent = await fromConfig(
-        callerCallerConfig,
-        callerCallerSettings,
-        {},
-        callerCallerSettingsOwner,
-        callerCallerManager,
-        undefined,
-        undefined,
-        callerCallerMcp,
-        undefined,
-        callerCallerClient,
-      );
-      cleanup = callerCallerClose;
-    }
+      },
+    });
+    let agent: Agent | undefined;
     try {
-      const config = await settle(agent);
-      await run({ agent, config, workspace });
+      for (const name of initialSkills) {
+        writeSkill(route.directory, name);
+      }
+      await route.prepare();
+      agent = await route.createAgent(
+        { provider: recording.alias, model: 'recording-default' },
+        operations === undefined
+          ? {}
+          : {
+              skillPolicy: operations.reloadPolicy,
+              registerSkillTools: operations.registerTools,
+            },
+      );
+      const live = agent;
+      await settle(live);
+      await run({
+        agent: live,
+        config: route.config,
+        workspace: route.directory,
+        modelVisibleSkillNames: async () => {
+          await settle(live);
+          return recordedModelVisibleSkillNames(recording.requests);
+        },
+      });
     } finally {
-      await agent.dispose();
-      await cleanup();
-      rmSync(workspace, { recursive: true, force: true });
+      await agent?.dispose();
+      await route.close();
     }
   }
 
   it('discovers and publishes skills without a Config skill runtime', async () => {
-    await withWorkspace(['alpha'], async ({ agent, config, workspace }) => {
-      expect('skillManager' in config).toBe(false);
-      expect('getSkillManager' in config).toBe(false);
-      expect('reloadSkills' in config).toBe(false);
-      expect('refreshSkills' in config).toBe(false);
-      writeSkill(workspace, 'beta');
-      await agent.skills.reload();
-      expect(modelVisibleSkillNames(agent).sort()).toStrictEqual([
-        'alpha',
-        'beta',
-      ]);
-    });
+    await withWorkspace(
+      ['alpha'],
+      async ({ agent, config, workspace, modelVisibleSkillNames }) => {
+        expect('skillManager' in config).toBe(false);
+        expect('getSkillManager' in config).toBe(false);
+        expect('reloadSkills' in config).toBe(false);
+        expect('refreshSkills' in config).toBe(false);
+        writeSkill(workspace, 'beta');
+        await agent.skills.reload();
+        expect((await modelVisibleSkillNames()).sort()).toStrictEqual([
+          'alpha',
+          'beta',
+        ]);
+      },
+    );
   });
 
   it('retains published skills when a reload cannot rebuild the activation tool', async () => {
     let failRegistration = false;
     await withWorkspace(
       ['alpha'],
-      async ({ agent, workspace }) => {
+      async ({ agent, workspace, modelVisibleSkillNames }) => {
         failRegistration = true;
         writeSkill(workspace, 'beta');
         await expect(agent.skills.reload()).rejects.toThrow(
@@ -175,10 +160,10 @@ describe('skill reload reaches the model @issue:3379', () => {
         expect(agent.skills.list().map((skill) => skill.name)).toStrictEqual([
           'alpha',
         ]);
-        expect(modelVisibleSkillNames(agent)).toStrictEqual(['alpha']);
+        expect(await modelVisibleSkillNames()).toStrictEqual(['alpha']);
         failRegistration = false;
         await agent.skills.reload();
-        expect(modelVisibleSkillNames(agent).sort()).toStrictEqual([
+        expect((await modelVisibleSkillNames()).sort()).toStrictEqual([
           'alpha',
           'beta',
         ]);
