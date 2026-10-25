@@ -5,10 +5,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { renderHook } from '../../__tests__/render.js';
-import {
-  useCommandOwners,
-  commandOwnerClient,
-} from '../../__tests__/command-owner-fixture.js';
+import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
@@ -22,12 +19,9 @@ describe('history registration ownership', () => {
   it('copies captured conversation output and replaces the mounted owner after retirement', async () => {
     const owner = await makeOwner('history-registration-owner');
     const peer = await makeOwner('history-registration-peer');
-    await owner.setHistory([
+    await owner.session.replaceHistory([
       { speaker: 'ai', blocks: [{ type: 'text', text: 'Owned answer' }] },
     ]);
-    await commandOwnerClient(owner).startChat(
-      await commandOwnerClient(owner).getHistory(),
-    );
     const context = createMockCommandContext();
     const clipboard: string[] = [];
     const diagnostics = bindDiagnosticsReads(
@@ -49,7 +43,6 @@ describe('history registration ownership', () => {
           Object.assign(
             { ...diagnostics },
             {
-              agentClient: commandOwnerClient(peer),
               getHistory: peer.getHistory.bind(peer),
             },
           ),
@@ -57,9 +50,7 @@ describe('history registration ownership', () => {
           undefined,
           () => null,
           bindCopyCommandHistoryRead(
-            commandOwnerClient(current).hasChatInitialized.bind(
-              commandOwnerClient(current),
-            ),
+            current.session.isHistoryInitialized.bind(current.session),
             current.getHistory.bind(current),
           ),
           async (text) => {
@@ -98,12 +89,9 @@ describe('history registration ownership', () => {
       await copy();
       expect(clipboard).toStrictEqual(['Owned answer']);
       await owner.dispose();
-      await peer.setHistory([
+      await peer.session.replaceHistory([
         { speaker: 'ai', blocks: [{ type: 'text', text: 'Surviving answer' }] },
       ]);
-      await commandOwnerClient(peer).startChat(
-        await commandOwnerClient(peer).getHistory(),
-      );
       hook.rerender({ current: peer });
       await copy();
       expect(clipboard).toStrictEqual(['Owned answer', 'Surviving answer']);

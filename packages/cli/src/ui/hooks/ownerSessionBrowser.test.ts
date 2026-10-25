@@ -1,7 +1,4 @@
-import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { useOwnerSessionAgents } from './__tests__/owner-session-agents.js';
 import { bindOwnerBrowserCatalog } from './browserCatalogHost.js';
 import { describe, expect, it } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
@@ -35,161 +32,141 @@ const human = (text: string) => ({
 });
 
 describe('owner session browser', () => {
-  useRecordingPrompts();
+  const openAgent = useOwnerSessionAgents();
   it('lists and deletes a closed source through the Agent without affecting the live owner', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        agent,
-        config,
-        _settingsOwner,
-        _settingsService,
-        _oauthManager,
-        borrow,
-        chatsDir,
-      ) => {
-        await agent.setHistory([human('browser deletion source')]);
-        await agent.session.setRecording({ enabled: true });
-        const sourceId = (await agent.session.listSessions()).at(0)?.id;
-        if (!sourceId) throw new Error('Missing source session');
-        await agent.session.setRecording({ enabled: false });
-        const next = await borrow();
-        await next.setHistory([human('live owner stays')]);
-        await next.session.setRecording({ enabled: true });
-        const path = next.session.getRecording().path;
-        if (!path) throw new Error('Missing live owner');
-        const catalog: Pick<
-          UseSessionBrowserProps,
-          'readCatalog' | 'deleteTarget'
-        > = {
-          readCatalog: bindOwnerBrowserCatalog(
-            () => next.session.listBrowserTargetsDetailed(),
-            () => next.session.getRecording().path,
-            () => config.getSessionId(),
-          ),
-          deleteTarget: async (target) => {
-            if (target.kind === 'checkpoint')
-              await next.session.deleteCheckpoint(target.checkpointId);
-            else await next.session.deleteSession(target.session.sessionId);
-          },
-        };
-        const browser = renderHook(() =>
-          useSessionBrowser({
-            chatsDir,
-            projectHash: config.projectTempDir.split('/').at(-1) ?? '',
-            currentSessionId: config.getSessionId(),
-            ...catalog,
-            onSelect: async (target) => {
-              await resumeOwnerSession(
-                next.session.resume.bind(next.session),
-                target.kind === 'session'
-                  ? target.session.sessionId
-                  : target.checkpointId,
-                'allowed',
-                next.session.listBrowserTargetsDetailed.bind(next.session),
-              );
-              return { ok: true };
-            },
-            onClose: () => {},
-          }),
-        );
-        await waitFor(() =>
-          expect(
-            browser.result.current.sessions.some(
-              (row) => row.sessionId === sourceId,
-            ),
-          ).toBe(true),
-        );
-        browser.result.current.handleKeypress('Tab', key('tab'));
-        browser.result.current.handleKeypress('Delete', key('delete'));
-        browser.result.current.handleKeypress('y', key('y'));
-        await waitFor(() =>
-          expect(
-            browser.result.current.sessions.some(
-              (row) => row.sessionId === sourceId,
-            ),
-          ).toBe(false),
-        );
-        expect(await readFile(path, 'utf8')).toContain('live owner stays');
-        expect(
-          (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
-        ).toHaveLength(1);
-        browser.unmount();
+    const { agent } = await openAgent();
+    await agent.setHistory([human('browser deletion source')]);
+    await agent.session.setRecording({ enabled: true });
+    const sourceId = (await agent.session.listSessions()).at(0)?.id;
+    if (!sourceId) throw new Error('Missing source session');
+    await agent.session.setRecording({ enabled: false });
+    const { agent: next, config } = await openAgent();
+    const chatsDir = config.projectChatsDir;
+    await next.setHistory([human('live owner stays')]);
+    await next.session.setRecording({ enabled: true });
+    const path = next.session.getRecording().path;
+    if (!path) throw new Error('Missing live owner');
+    const catalog: Pick<
+      UseSessionBrowserProps,
+      'readCatalog' | 'deleteTarget'
+    > = {
+      readCatalog: bindOwnerBrowserCatalog(
+        () => next.session.listBrowserTargetsDetailed(),
+        () => next.session.getRecording().path,
+        () => config.getSessionId(),
+      ),
+      deleteTarget: async (target) => {
+        if (target.kind === 'checkpoint')
+          await next.session.deleteCheckpoint(target.checkpointId);
+        else await next.session.deleteSession(target.session.sessionId);
       },
+    };
+    const browser = renderHook(() =>
+      useSessionBrowser({
+        chatsDir,
+        projectHash: config.projectTempDir.split('/').at(-1) ?? '',
+        currentSessionId: config.getSessionId(),
+        ...catalog,
+        onSelect: async (target) => {
+          await resumeOwnerSession(
+            next.session.resume.bind(next.session),
+            target.kind === 'session'
+              ? target.session.sessionId
+              : target.checkpointId,
+            'allowed',
+            next.session.listBrowserTargetsDetailed.bind(next.session),
+          );
+          return { ok: true };
+        },
+        onClose: () => {},
+      }),
     );
+    await waitFor(() =>
+      expect(
+        browser.result.current.sessions.some(
+          (row) => row.sessionId === sourceId,
+        ),
+      ).toBe(true),
+    );
+    browser.result.current.handleKeypress('Tab', key('tab'));
+    browser.result.current.handleKeypress('Delete', key('delete'));
+    browser.result.current.handleKeypress('y', key('y'));
+    await waitFor(() =>
+      expect(
+        browser.result.current.sessions.some(
+          (row) => row.sessionId === sourceId,
+        ),
+      ).toBe(false),
+    );
+    expect(await readFile(path, 'utf8')).toContain('live owner stays');
+    expect(
+      (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
+    ).toHaveLength(1);
+    browser.unmount();
   }, 30000);
   it('selects a real owner session and replays it without a raw recording swap', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        agent,
-        config,
-        _settingsOwner,
-        _settingsService,
-        _oauthManager,
-        borrow,
-        chatsDir,
-      ) => {
-        await agent.setHistory([human('browser resume source')]);
-        await agent.session.setRecording({ enabled: true });
-        const sourceId = (await agent.session.listSessions()).at(0)?.id;
-        if (!sourceId) throw new Error('Missing source session');
-        await agent.session.setRecording({ enabled: false });
-        const next = await borrow();
-        await next.setHistory([human('prior owner')]);
-        await next.session.setRecording({ enabled: true });
-        let shown = false;
-        const catalog: Pick<
-          UseSessionBrowserProps,
-          'readCatalog' | 'deleteTarget'
-        > = {
-          readCatalog: bindOwnerBrowserCatalog(
-            () => next.session.listBrowserTargetsDetailed(),
-            () => next.session.getRecording().path,
-            () => config.getSessionId(),
-          ),
-          deleteTarget: async (target) => {
-            if (target.kind === 'checkpoint')
-              await next.session.deleteCheckpoint(target.checkpointId);
-            else await next.session.deleteSession(target.session.sessionId);
-          },
-        };
-        const browser = renderHook(() =>
-          useSessionBrowser({
-            chatsDir,
-            projectHash: config.projectTempDir.split('/').at(-1) ?? '',
-            currentSessionId: config.getSessionId(),
-            ...catalog,
-            onSelect: async (target) => {
-              const replay = await resumeOwnerSession(
-                next.session.resume.bind(next.session),
-                target.kind === 'session'
-                  ? target.session.sessionId
-                  : target.checkpointId,
-                'allowed',
-                next.session.listBrowserTargetsDetailed.bind(next.session),
-              );
-              shown = replay.uiHistory.some(
-                (item) =>
-                  item.type === 'user' && item.text === 'browser resume source',
-              );
-              return { ok: true };
-            },
-            onClose: () => {},
-          }),
-        );
-        await waitFor(() =>
-          expect(
-            browser.result.current.sessions.some(
-              (row) => row.sessionId === sourceId,
-            ),
-          ).toBe(true),
-        );
-        browser.result.current.handleKeypress('', key('return'));
-        await waitFor(() => expect(shown).toBe(true));
-        expect(
-          (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
-        ).toHaveLength(1);
-        browser.unmount();
+    const { agent } = await openAgent();
+    await agent.setHistory([human('browser resume source')]);
+    await agent.session.setRecording({ enabled: true });
+    const sourceId = (await agent.session.listSessions()).at(0)?.id;
+    if (!sourceId) throw new Error('Missing source session');
+    await agent.session.setRecording({ enabled: false });
+    const { agent: next, config } = await openAgent();
+    const chatsDir = config.projectChatsDir;
+    await next.setHistory([human('prior owner')]);
+    await next.session.setRecording({ enabled: true });
+    let shown = false;
+    const catalog: Pick<
+      UseSessionBrowserProps,
+      'readCatalog' | 'deleteTarget'
+    > = {
+      readCatalog: bindOwnerBrowserCatalog(
+        () => next.session.listBrowserTargetsDetailed(),
+        () => next.session.getRecording().path,
+        () => config.getSessionId(),
+      ),
+      deleteTarget: async (target) => {
+        if (target.kind === 'checkpoint')
+          await next.session.deleteCheckpoint(target.checkpointId);
+        else await next.session.deleteSession(target.session.sessionId);
       },
+    };
+    const browser = renderHook(() =>
+      useSessionBrowser({
+        chatsDir,
+        projectHash: config.projectTempDir.split('/').at(-1) ?? '',
+        currentSessionId: config.getSessionId(),
+        ...catalog,
+        onSelect: async (target) => {
+          const replay = await resumeOwnerSession(
+            next.session.resume.bind(next.session),
+            target.kind === 'session'
+              ? target.session.sessionId
+              : target.checkpointId,
+            'allowed',
+            next.session.listBrowserTargetsDetailed.bind(next.session),
+          );
+          shown = replay.uiHistory.some(
+            (item) =>
+              item.type === 'user' && item.text === 'browser resume source',
+          );
+          return { ok: true };
+        },
+        onClose: () => {},
+      }),
     );
+    await waitFor(() =>
+      expect(
+        browser.result.current.sessions.some(
+          (row) => row.sessionId === sourceId,
+        ),
+      ).toBe(true),
+    );
+    browser.result.current.handleKeypress('', key('return'));
+    await waitFor(() => expect(shown).toBe(true));
+    expect(
+      (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
+    ).toHaveLength(1);
+    browser.unmount();
   }, 30000);
 });

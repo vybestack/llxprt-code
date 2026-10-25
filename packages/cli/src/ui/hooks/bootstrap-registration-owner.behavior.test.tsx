@@ -6,16 +6,8 @@
 import { describe, expect, it } from 'bun:test';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import {
-  bindHistoryTokenSubscription,
-  bindRecordingHistorySubscription,
-} from '../containers/AppContainer/hooks/historyTokenSubscriptions.js';
 import { Config, coreEvents } from '@vybestack/llxprt-code-core';
-import {
-  useCommandOwners,
-  commandOwnerClient,
-} from '../../__tests__/command-owner-fixture.js';
+import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import {
   createMockSettings,
@@ -41,7 +33,7 @@ describe('bootstrap captured operation ownership', () => {
     );
     await owner.memory.refresh();
     for (const current of [owner, peer]) {
-      await current.setHistory([
+      await current.session.replaceHistory([
         {
           speaker: 'human',
           blocks: [
@@ -54,11 +46,13 @@ describe('bootstrap captured operation ownership', () => {
       ]);
       await current.session.setRecording({ enabled: true });
     }
-    await commandOwnerClient(owner).startChat(await owner.getHistory());
-    await commandOwnerClient(peer).startChat(await peer.getHistory());
-    const ownerHistory = commandOwnerClient(owner).getHistoryService();
-    if (!ownerHistory) throw new Error('Missing bootstrap token history');
-    await ownerHistory.waitForTokenUpdates();
+    let ownerHistoryTokens = 0;
+    const stopOwnerHistoryTokens = owner.session.subscribeHistoryTokens(
+      (count) => {
+        ownerHistoryTokens = count;
+      },
+    );
+    await waitFor(() => expect(ownerHistoryTokens).toBeGreaterThan(0));
     const ownerPath = owner.session.getRecording().path;
     const peerPath = peer.session.getRecording().path;
     if (!ownerPath || !peerPath)
@@ -105,9 +99,8 @@ describe('bootstrap captured operation ownership', () => {
           {
             version: 'test',
             readIdeMode: owner.ide.getIdeMode.bind(owner.ide),
-            subscribeHistoryTokens: bindHistoryTokenSubscription(
-              () => commandOwnerClient(owner).getHistoryService(),
-              new DebugLogger('test:bootstrap:tokens'),
+            subscribeHistoryTokens: owner.session.subscribeHistoryTokens.bind(
+              owner.session,
             ),
             readLlxprtMdFileCount: owner.memory.getFileCount.bind(owner.memory),
             readCoreMemoryFileCount: owner.memory.getCoreFileCount.bind(
@@ -138,10 +131,8 @@ describe('bootstrap captured operation ownership', () => {
           uiRuntime.shell,
           () => owner.ide.readConnection().currentIde,
           uiRuntime.app,
-          bindRecordingHistorySubscription(
-            () => commandOwnerClient(owner).getHistoryService(),
-            new DebugLogger('test:bootstrap:recording'),
-          ),
+          (recording) =>
+            owner.session.connectRecordingHistory(() => recording.current),
           'agent',
           undefined,
         );
@@ -175,7 +166,7 @@ describe('bootstrap captured operation ownership', () => {
       await waitFor(() =>
         expect(
           hook.result.current.settingsStore.store.getState().historyTokenCount,
-        ).toBe(ownerHistory.getTotalTokens()),
+        ).toBe(ownerHistoryTokens),
       );
       await waitFor(() =>
         expect(
@@ -205,6 +196,7 @@ describe('bootstrap captured operation ownership', () => {
         'dialog recording operation',
       );
     } finally {
+      stopOwnerHistoryTokens();
       hook.unmount();
       await config.dispose();
     }

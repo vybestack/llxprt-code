@@ -17,10 +17,7 @@ import {
   DebugLogger,
   validateSessionMediaPackage,
 } from '@vybestack/llxprt-code-core';
-import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { useOwnerSessionAgents } from './__tests__/owner-session-agents.js';
 import { bindFixtureOwnerResume } from '../../__tests__/command-history-result-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { renderHook, waitFor } from '../../__tests__/render.js';
@@ -44,183 +41,150 @@ const human = (text: string) => ({
 });
 
 describe('owner mode with an unreadable recording present (issue #3732)', () => {
-  useRecordingPrompts();
+  const openAgent = useOwnerSessionAgents();
   it('/continue <id> restores the session and warns with the unreadable file and reason', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        agent,
-        _config,
-        _settingsOwner,
-        _settingsService,
-        _oauthManager,
-        borrow,
-        chatsDir,
-      ) => {
-        await agent.setHistory([human('owner restored conversation')]);
-        await agent.session.setRecording({ enabled: true });
-        const sourceId = (await agent.session.listSessions()).at(0)?.id;
-        if (!sourceId) throw new Error('Missing source session');
-        await agent.session.setRecording({ enabled: false });
-        const brokenPath = join(chatsDir, BROKEN_NAME);
-        await writeFile(brokenPath, '', 'utf-8');
+    const { agent, config: sourceConfig } = await openAgent();
+    const chatsDir = sourceConfig.projectChatsDir;
+    await agent.setHistory([human('owner restored conversation')]);
+    await agent.session.setRecording({ enabled: true });
+    const sourceId = (await agent.session.listSessions()).at(0)?.id;
+    if (!sourceId) throw new Error('Missing source session');
+    await agent.session.setRecording({ enabled: false });
+    const brokenPath = join(chatsDir, BROKEN_NAME);
+    await writeFile(brokenPath, '', 'utf-8');
 
-        const next = await borrow();
-        const turnStore = createTurnStore();
-        const { commands } = turnStore;
-        const addItem: SlashCommandHandlerDeps['addItem'] = (item, timestamp) =>
-          commands.addItem(item, timestamp);
-        const continueCommand = createContinueCommand(
-          bindContinueCommandOperations(
-            next.session.exportSession.bind(next.session),
-            () => false,
-            async () => [...(await next.session.listBrowserTargets())],
-            validateSessionMediaPackage,
-          ),
-        );
-        const deps: SlashCommandHandlerDeps = {
-          commands: [continueCommand],
-          config: {
-            getEphemeralSetting: () => 'auto',
-            logSlashCommand: () => {},
-          } as never,
-          commandContext: createMockCommandContext({
-            recordingOwner: 'agent',
-            ui: {
-              addItem: commands.addItem,
-              clear: commands.clearItems,
-              loadHistory: commands.loadHistory,
-            },
-            services: { agent: next },
-          }),
-          actions: {} as never,
-          addItem,
-          addMessage: (message) => {
-            addItem(
-              convertMessageToHistoryItem(message),
-              message.timestamp.getTime(),
-            );
-          },
-          setIsProcessing: () => {},
-          setLocalIsProcessing: () => {},
-          setPendingItem: () => {},
-          setSessionShellAllowlist: () => {},
-          setConfirmationRequest: () => {},
-          confirmationLogger: new DebugLogger('test-confirmation'),
-          slashCommandLogger: new DebugLogger('test-slash'),
-          beginSlashCommandAction: () => new AbortController(),
-          endSlashCommandAction: () => {},
-          resumeOwnedSession: null,
-          isMcpDiscoveryPending: () => false,
-          resumeRawSession: null,
-          replayResumedHistory: () => {},
-          recordCommandError: async () => {},
-          loadCommandHistory: async () => {},
-        };
-
-        deps.resumeOwnedSession = bindFixtureOwnerResume(
-          deps.commandContext,
-          deps.config,
-        );
-        await processSlashCommand(deps, `/continue ${sourceId}`);
-
-        const visible = turnStore.store
-          .getState()
-          .history.map((item) => ('text' in item ? item.text : item.type));
-        expect(visible).toStrictEqual([
-          'owner restored conversation',
-          `Warning: Skipped unreadable session recording ${brokenPath}: ${EMPTY_FILE_REASON}`,
-        ]);
-      },
+    const { agent: next } = await openAgent();
+    const turnStore = createTurnStore();
+    const { commands } = turnStore;
+    const addItem: SlashCommandHandlerDeps['addItem'] = (item, timestamp) =>
+      commands.addItem(item, timestamp);
+    const continueCommand = createContinueCommand(
+      bindContinueCommandOperations(
+        next.session.exportSession.bind(next.session),
+        () => false,
+        async () => [...(await next.session.listBrowserTargets())],
+        validateSessionMediaPackage,
+      ),
     );
+    const deps: SlashCommandHandlerDeps = {
+      commands: [continueCommand],
+      config: {
+        getEphemeralSetting: () => 'auto',
+        logSlashCommand: () => {},
+      } as never,
+      commandContext: createMockCommandContext({
+        recordingOwner: 'agent',
+        ui: {
+          addItem: commands.addItem,
+          clear: commands.clearItems,
+          loadHistory: commands.loadHistory,
+        },
+        services: { agent: next },
+      }),
+      actions: {} as never,
+      addItem,
+      addMessage: (message) => {
+        addItem(
+          convertMessageToHistoryItem(message),
+          message.timestamp.getTime(),
+        );
+      },
+      setIsProcessing: () => {},
+      setLocalIsProcessing: () => {},
+      setPendingItem: () => {},
+      setSessionShellAllowlist: () => {},
+      setConfirmationRequest: () => {},
+      confirmationLogger: new DebugLogger('test-confirmation'),
+      slashCommandLogger: new DebugLogger('test-slash'),
+      beginSlashCommandAction: () => new AbortController(),
+      endSlashCommandAction: () => {},
+      resumeOwnedSession: null,
+      isMcpDiscoveryPending: () => false,
+      resumeRawSession: null,
+      replayResumedHistory: () => {},
+      recordCommandError: async () => {},
+      loadCommandHistory: async () => {},
+    };
+
+    deps.resumeOwnedSession = bindFixtureOwnerResume(
+      deps.commandContext,
+      deps.config,
+    );
+    await processSlashCommand(deps, `/continue ${sourceId}`);
+
+    const visible = turnStore.store
+      .getState()
+      .history.map((item) => ('text' in item ? item.text : item.type));
+    expect(visible).toStrictEqual([
+      'owner restored conversation',
+      `Warning: Skipped unreadable session recording ${brokenPath}: ${EMPTY_FILE_REASON}`,
+    ]);
   });
 
   it('names the unreadable file when /continue references it directly', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        _agent,
-        _config,
-        _settingsOwner,
-        _settingsService,
-        _oauthManager,
-        borrow,
-        chatsDir,
-      ) => {
-        await mkdir(chatsDir, { recursive: true });
-        const brokenPath = join(chatsDir, BROKEN_NAME);
-        await writeFile(brokenPath, '', 'utf-8');
-        const next = await borrow();
-        const failure = await resumeOwnerSession(
-          next.session.resume.bind(next.session),
-          BROKEN_NAME,
-          'allowed',
-          next.session.listBrowserTargetsDetailed.bind(next.session),
-        ).then(
-          () => null,
-          (error: unknown) => error,
-        );
+    const { agent: next, config } = await openAgent();
+    const chatsDir = config.projectChatsDir;
+    await mkdir(chatsDir, { recursive: true });
+    const brokenPath = join(chatsDir, BROKEN_NAME);
+    await writeFile(brokenPath, '', 'utf-8');
+    const failure = await resumeOwnerSession(
+      next.session.resume.bind(next.session),
+      BROKEN_NAME,
+      'allowed',
+      next.session.listBrowserTargetsDetailed.bind(next.session),
+    ).then(
+      () => null,
+      (error: unknown) => error,
+    );
 
-        expect(failure).toBeInstanceOf(Error);
-        expect((failure as Error).message).toContain(
-          `unreadable recording skipped: ${brokenPath}: ${EMPTY_FILE_REASON}`,
-        );
-      },
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain(
+      `unreadable recording skipped: ${brokenPath}: ${EMPTY_FILE_REASON}`,
     );
   });
 
   it('the session browser counts the skipped unreadable recording', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        agent,
-        config,
-        _settingsOwner,
-        _settingsService,
-        _oauthManager,
-        borrow,
-        chatsDir,
-      ) => {
-        await agent.setHistory([human('browser healthy session')]);
-        await agent.session.setRecording({ enabled: true });
-        const sourceId = (await agent.session.listSessions()).at(0)?.id;
-        if (!sourceId) throw new Error('Missing source session');
-        await agent.session.setRecording({ enabled: false });
-        await writeFile(join(chatsDir, BROKEN_NAME), '', 'utf-8');
-        const next = await borrow();
+    const { agent, config: sourceConfig } = await openAgent();
+    const chatsDir = sourceConfig.projectChatsDir;
+    await agent.setHistory([human('browser healthy session')]);
+    await agent.session.setRecording({ enabled: true });
+    const sourceId = (await agent.session.listSessions()).at(0)?.id;
+    if (!sourceId) throw new Error('Missing source session');
+    await agent.session.setRecording({ enabled: false });
+    await writeFile(join(chatsDir, BROKEN_NAME), '', 'utf-8');
+    const { agent: next, config } = await openAgent();
 
-        const catalog: Pick<
-          UseSessionBrowserProps,
-          'readCatalog' | 'deleteTarget'
-        > = {
-          readCatalog: bindOwnerBrowserCatalog(
-            () => next.session.listBrowserTargetsDetailed(),
-            () => next.session.getRecording().path,
-            () => config.getSessionId(),
-          ),
-          deleteTarget: async (target) => {
-            if (target.kind === 'checkpoint')
-              await next.session.deleteCheckpoint(target.checkpointId);
-            else await next.session.deleteSession(target.session.sessionId);
-          },
-        };
-        const browser = renderHook(() =>
-          useSessionBrowser({
-            chatsDir,
-            projectHash: config.projectTempDir.split('/').at(-1) ?? '',
-            currentSessionId: config.getSessionId(),
-            ...catalog,
-            onSelect: async () => ({ ok: false, error: 'not selected' }),
-            onClose: () => {},
-          }),
-        );
-        await waitFor(() =>
-          expect(browser.result.current.isLoading).toBe(false),
-        );
-
-        expect({
-          listed: browser.result.current.sessions.map((row) => row.sessionId),
-          skippedCount: browser.result.current.skippedCount,
-        }).toStrictEqual({ listed: [sourceId], skippedCount: 1 });
-        browser.unmount();
+    const catalog: Pick<
+      UseSessionBrowserProps,
+      'readCatalog' | 'deleteTarget'
+    > = {
+      readCatalog: bindOwnerBrowserCatalog(
+        () => next.session.listBrowserTargetsDetailed(),
+        () => next.session.getRecording().path,
+        () => config.getSessionId(),
+      ),
+      deleteTarget: async (target) => {
+        if (target.kind === 'checkpoint')
+          await next.session.deleteCheckpoint(target.checkpointId);
+        else await next.session.deleteSession(target.session.sessionId);
       },
+    };
+    const browser = renderHook(() =>
+      useSessionBrowser({
+        chatsDir,
+        projectHash: config.projectTempDir.split('/').at(-1) ?? '',
+        currentSessionId: config.getSessionId(),
+        ...catalog,
+        onSelect: async () => ({ ok: false, error: 'not selected' }),
+        onClose: () => {},
+      }),
     );
+    await waitFor(() => expect(browser.result.current.isLoading).toBe(false));
+
+    expect({
+      listed: browser.result.current.sessions.map((row) => row.sessionId),
+      skippedCount: browser.result.current.skippedCount,
+    }).toStrictEqual({ listed: [sourceId], skippedCount: 1 });
+    browser.unmount();
   });
 });

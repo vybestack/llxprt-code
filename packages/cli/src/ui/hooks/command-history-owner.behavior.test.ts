@@ -14,10 +14,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import {
-  useCommandOwners,
-  commandOwnerClient,
-} from '../../__tests__/command-owner-fixture.js';
+import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
@@ -93,16 +90,11 @@ async function restore(owner: Agent, decoy: Agent): Promise<void> {
                       ? getProjectHash(context.services.config.getProjectRoot())
                       : null,
                   () => context.services.config?.projectChatsDir ?? null,
-                  () => commandOwnerClient(owner).mediaStore,
+                  () => undefined,
                 ),
-                () => {
-                  const client = commandOwnerClient(owner);
-                  return client.hasChatInitialized() === true
-                    ? client.getChat().getHistory()
-                    : null;
-                },
+                () => owner.session.readInitializedHistory(),
                 async (history) => {
-                  await commandOwnerClient(owner).getChat().setHistory(history);
+                  await owner.session.replaceHistory(history);
                 },
                 () =>
                   context.services.config
