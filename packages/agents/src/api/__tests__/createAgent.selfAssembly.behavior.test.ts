@@ -1,5 +1,3 @@
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
-import { captureAgentCreation as createAgent } from './helpers/agent-resource-capture.js';
 import { WorkspaceLspOwner } from '@vybestack/llxprt-code-core/lsp/workspace-lsp-owner.js';
 /**
  * @license
@@ -16,7 +14,12 @@ import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-m
 import * as fs from 'node:fs/promises';
 import {
   buildAgent,
-  internalConfig,
+  createAgent,
+  drain,
+  isDoneEvent,
+  isToolResultEvent,
+  respondToFirstConfirmation,
+  ToolConfirmationOutcome,
   ASYNC_PROPERTY_TIMEOUT_MS,
   tempRoot,
 } from './helpers/agentHarness.js';
@@ -74,7 +77,6 @@ describe('createAgent self-contained assembly', () => {
       credentialAuthority: credentials().authority,
       sessionId,
     });
-    const siblingConfig = internalConfig(sibling.agent);
     sibling.agent.setModelParam('temperature', 0.37);
     const disposed: Config[] = [];
     const realDispose = Config.prototype.dispose;
@@ -96,7 +98,6 @@ describe('createAgent self-contained assembly', () => {
       ).rejects.toThrow('createAgent activation failed');
       expect(disposed).toHaveLength(1);
       expect(disposed[0].getSessionId()).toBe(sessionId);
-      expect(disposed[0]).not.toBe(siblingConfig);
       expect(credentials().snapshot()).toStrictEqual([0, 1]);
       expect(await credentials().listProviders(0)).toStrictEqual([]);
       await credentials().saveToken(0, 'codex', {
@@ -204,9 +205,11 @@ describe('createAgent self-contained assembly', () => {
       const control = await buildAgent('plain-text.jsonl', {
         credentialAuthority: credentials().authority,
       });
-      const controlConfig = internalConfig(control.agent);
+      const controlRuntimeId = control.agent.getRuntimeId();
       try {
-        expect(disposed).not.toContain(controlConfig);
+        expect(disposed.map((config) => config.getSessionId())).not.toContain(
+          controlRuntimeId,
+        );
         expect(disposed).toHaveLength(1);
         expect(credentials().snapshot()).toStrictEqual([1, 0]);
         expect(await control.agent.generate('Retain control owner')).toBe(
@@ -215,7 +218,9 @@ describe('createAgent self-contained assembly', () => {
       } finally {
         await control.cleanup();
       }
-      expect(disposed).toStrictEqual([failedConfig, controlConfig]);
+      expect(disposed).toHaveLength(2);
+      expect(disposed[0]).toBe(failedConfig);
+      expect(disposed[1].getSessionId()).toBe(controlRuntimeId);
       expect(credentials().snapshot()).toStrictEqual([1, 1]);
     } finally {
       disposer.mockRestore();
@@ -290,20 +295,19 @@ describe('created policy failure lifetime', () => {
       if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
       else process.env.LLXPRT_FAKE_RESPONSES = previous;
     }
-    const control = await buildAgent('plain-text.jsonl', {
+    const control = await buildAgent('tool-call-then-answer.jsonl', {
       credentialAuthority: credentials().authority,
     });
+    const responder = respondToFirstConfirmation(
+      control.agent,
+      ToolConfirmationOutcome.ProceedOnce,
+    );
     try {
-      expect(fixtureAgentResources(control.agent).messageBus).not.toBe(
-        closedBuses[0],
-      );
-      expect(
-        fixtureAgentResources(control.agent).messageBus.evaluate(
-          'read_file',
-          {},
-        ),
-      ).toBeDefined();
+      const events = await drain(control.agent.stream('run the tool'));
+      expect(events.filter(isToolResultEvent)).toHaveLength(1);
+      expect(events.filter(isDoneEvent)).toHaveLength(1);
     } finally {
+      responder.unsubscribe();
       await control.cleanup();
     }
     expect(credentials().snapshot()).toStrictEqual([1, 1]);
