@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { beforeAll, describe, expect, it } from 'bun:test';
 import {
   settledHeapCensus,
   settleHeap,
@@ -45,6 +45,15 @@ function expectLive(before: HeapCensus, after: HeapCensus): void {
 }
 
 describe('settled heap census in a grouped registration process', () => {
+  beforeAll(async () => {
+    await boundary();
+    // CLI preloads leave idle JSC code alive across stable GC rounds. Bun
+    // 1.4.4 drops it in wall-clock waves through 63 s, including over 1 MiB
+    // around 48 s. Wait out startup before any baseline so its release cannot
+    // cancel the live store, while still counting every snapshot node class.
+    await new Promise<void>((resolve) => setTimeout(resolve, 70_000));
+    await settleHeap();
+  });
   it('does not report retained memory when no payload was allocated', async () => {
     const before = await boundary();
     Bun.gc(false);
