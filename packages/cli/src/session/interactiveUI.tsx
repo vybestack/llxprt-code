@@ -418,19 +418,12 @@ export async function startInteractiveUI(
   workspaceRoot: string,
   startup: OwnerInteractiveStartup | RawInteractiveStartup,
 ): Promise<InteractiveInstanceCapability> {
-  if (
-    startup.recordingOwner === 'raw' &&
-    startup.sessionPersistence === undefined
-  )
-    throw new Error(
-      'Raw interactive startup requires its own CLI session persistence',
-    );
   const { version, perfOwner } = await prepareInteractiveStartup(
     config,
     agent,
     settings,
     workspaceRoot,
-    startup.providerKeys,
+    startup,
   );
   return commitInteractiveStartup({
     config,
@@ -444,7 +437,8 @@ export async function startInteractiveUI(
 }
 
 /**
- * Runs the stages before {@link commitInteractiveStartup} takes the key handle.
+ * Runs the stages before {@link commitInteractiveStartup} takes the key handle,
+ * including the raw-startup persistence requirement.
  * Until the commit starts, this function is the handle's only owner, so a
  * failure in any stage closes it once and rethrows the stage's error; a close
  * failure is joined behind the primary error.
@@ -454,9 +448,16 @@ async function prepareInteractiveStartup(
   agent: Agent,
   settings: LoadedSettings,
   workspaceRoot: string,
-  providerKeys: InteractiveProviderKeys,
+  startup: OwnerInteractiveStartup | RawInteractiveStartup,
 ): Promise<{ version: string; perfOwner: InteractivePerfRuntime | null }> {
   try {
+    if (
+      startup.recordingOwner === 'raw' &&
+      startup.sessionPersistence === undefined
+    )
+      throw new Error(
+        'Raw interactive startup requires its own CLI session persistence',
+      );
     const version = await initializeInteractivePresentation(
       workspaceRoot,
       settings,
@@ -471,7 +472,7 @@ async function prepareInteractiveStartup(
     return { version, perfOwner };
   } catch (primaryError) {
     try {
-      providerKeys.close();
+      startup.providerKeys.close();
     } catch (closeError) {
       throw new AggregateError(
         [primaryError, closeError],

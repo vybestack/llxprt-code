@@ -124,6 +124,47 @@ describe('interactive UI key handle ownership', () => {
     expect(rendered).toHaveLength(0);
   });
 
+  describe('raw startup without its own session persistence', () => {
+    const requirement =
+      'Raw interactive startup requires its own CLI session persistence';
+
+    function startRaw(providerKeys: InteractiveProviderKeys) {
+      return startInteractiveUI(config, agent, settings, [], dir, {
+        recordingOwner: 'raw',
+        runtimeSettings,
+        sessionPersistence: undefined,
+        providerKeys,
+      });
+    }
+
+    it('closes the handle once, rejects with the requirement and never renders', async () => {
+      const rendered = installRender();
+      const keys = new InMemoryProviderKeyHandle();
+
+      const failure = await startRaw(keys).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(Error);
+      expect((failure as Error).message).toBe(requirement);
+      expect(keys.closeCount).toBe(1);
+      expect(rendered).toHaveLength(0);
+    });
+
+    it('reports a close failure behind the requirement failure', async () => {
+      const rendered = installRender();
+      const closeFailure = new Error('close-failed');
+      const keys = new InMemoryProviderKeyHandle(closeFailure);
+
+      const failure = await startRaw(keys).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(AggregateError);
+      const errors = (failure as AggregateError).errors as Error[];
+      expect(errors[0].message).toBe(requirement);
+      expect(errors).toContain(closeFailure);
+      expect(keys.closeCount).toBe(1);
+      expect(rendered).toHaveLength(0);
+    });
+  });
+
   it('closes the handle once when the commit fails after it started', async () => {
     const renderFailure = new Error('render-failed');
     __setRenderForTesting((() => {
