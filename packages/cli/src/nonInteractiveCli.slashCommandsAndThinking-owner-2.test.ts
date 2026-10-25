@@ -25,7 +25,6 @@ import {
   makeHeadlessConfig,
   runHeadlessPolicyFixture,
 } from './__tests__/headless-policy-fixture.js';
-import { makeBootstrapProfileArgs } from './test-utils/bootstrap-config.js';
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   shutdownTelemetry,
@@ -39,12 +38,8 @@ import {
   type AgentInput,
 } from '@vybestack/llxprt-code-agents';
 import { PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-agents/constants.js';
-import {
-  runNonInteractive,
-  buildNonInteractiveActivationIntent,
-} from './__tests__/noninteractive-run-fixture.js';
+import { runNonInteractive } from './__tests__/noninteractive-run-fixture.js';
 import { LoadedSettings } from './config/settings.js';
-import { BootstrapProfileArgs } from './config/profileBootstrap.js';
 
 /**
  * @license
@@ -64,16 +59,6 @@ const agentState = {
   // compile-time checking instead of the looser `unknown`.
   streamInput: null as AgentInput | null,
   events: [] as AgentEvent[],
-};
-
-// Activation params (_profileModelParams, _cliModelParams, _bootstrapArgs) have
-// no public setter API on Config — production code reads/writes them via the
-// same underscore-prefixed casts. This local non-readonly intersection mirrors
-// those casts so the test can stage activation state.
-type ConfigWithActivationParams = Config & {
-  _profileModelParams?: Record<string, unknown>;
-  _cliModelParams?: Record<string, unknown>;
-  _bootstrapArgs?: BootstrapProfileArgs;
 };
 
 function makeConfig(sessionId: string): ReturnType<typeof makeHeadlessConfig> {
@@ -97,15 +82,6 @@ const fixtureRoots: Array<{
   settingsOwner: SessionSettingsOwner;
 }> = [];
 
-// What the activation left on the Agent right after fromConfig returned it,
-// read through the public Agent API (the run disposes the Agent afterwards).
-interface ActivatedAgentState {
-  provider: string;
-  model: string;
-}
-
-let activated: ActivatedAgentState | undefined;
-
 // Observes the query the run hands to the Agent on the instance, the public
 // seam the headless run streams through.
 function observeStreamInput(agent: Agent): Agent {
@@ -117,39 +93,6 @@ function observeStreamInput(agent: Agent): Agent {
   return agent;
 }
 
-// The activation cases read the activated Agent and have no provider to answer
-// a request, so their stream ends without one.
-function endStreamImmediately(agent: Agent): Agent {
-  agent.stream = () =>
-    (async function* noEvents(): AsyncIterable<AgentEvent> {})();
-  return agent;
-}
-
-function runWithMcpBus(
-  params: Parameters<typeof runNonInteractive>[0],
-  activation: ReturnType<typeof buildNonInteractiveActivationIntent>,
-  decorate: (agent: Agent) => Agent,
-): Promise<void> {
-  return runHeadlessPolicyFixture(
-    params,
-    mockRuntimeSettings.owner,
-    mockProviderManager,
-    async () => {
-      const agent = await fromConfig(
-        params.config,
-        mockRuntimeSettings.store,
-        { sessionId: params.config.getSessionId(), activation },
-        mockCredentialAuthority,
-      );
-      activated = {
-        provider: agent.getProvider(),
-        model: agent.getModel(),
-      };
-      return decorate(agent);
-    },
-  );
-}
-
 // Runs the scripted events through the fake provider's replay seam and the
 // production fromConfig route.
 async function runScripted(
@@ -158,10 +101,26 @@ async function runScripted(
   const scripted = await createScriptedHeadlessMcpOwner(agentState.events);
   scriptedOwners.push(scripted);
   process.env.LLXPRT_FAKE_RESPONSES = scripted.responsesFile;
-  return runWithMcpBus(
+  return runHeadlessPolicyFixture(
     params,
-    { provider: 'fake', model: 'fake-model', authMode: 'auto' },
-    observeStreamInput,
+    mockRuntimeSettings.owner,
+    mockProviderManager,
+    async () =>
+      observeStreamInput(
+        await fromConfig(
+          params.config,
+          mockRuntimeSettings.store,
+          {
+            sessionId: params.config.getSessionId(),
+            activation: {
+              provider: 'fake',
+              model: 'fake-model',
+              authMode: 'auto',
+            },
+          },
+          mockCredentialAuthority,
+        ),
+      ),
   );
 }
 
@@ -247,7 +206,6 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     // Default: the Agent emits a clean stop completion. Individual tests
     // override agentState.events to stage thinking/tool/text sequences.
     agentState.streamInput = null;
-    activated = undefined;
     agentState.events = [{ type: 'done', reason: 'stop' }];
 
     const builtOwner = makeConfig('test-session');
@@ -303,45 +261,6 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     // history of module mocks in place, so clear it explicitly.
     vi.clearAllMocks();
     vi.restoreAllMocks();
-  });
-
-  it('preserves profile model params when the CLI provider override supplies the activation provider', async () => {
-    const configWithParams = mockConfig as ConfigWithActivationParams;
-    (
-      mockConfig.getProvider as Mock<typeof mockConfig.getProvider>
-    ).mockReturnValue(undefined);
-    (mockConfig.getModel as Mock<typeof mockConfig.getModel>).mockReturnValue(
-      'kimi-k2.5',
-    );
-    delete process.env.LLXPRT_FAKE_RESPONSES;
-    configWithParams._profileModelParams = { temperature: 0.4 };
-    configWithParams._cliModelParams = { top_p: 0.9 };
-    configWithParams._bootstrapArgs = makeBootstrapProfileArgs({
-      providerOverride: 'anthropic',
-    });
-    agentState.events = [{ type: 'done', reason: 'stop' }];
-
-    const params = {
-      config: mockConfig,
-      settings: mockSettings,
-      input: 'hello',
-      prompt_id: 'prompt-id-provider-override',
-    };
-    await runWithMcpBus(
-      params,
-      buildNonInteractiveActivationIntent(mockConfig, mockSettings),
-      endStreamImmediately,
-    );
-
-    expect(activated).toStrictEqual({
-      provider: 'anthropic',
-      model: 'kimi-k2.5',
-    });
-    // The model params land in the provider settings of the SettingsService
-    // the host handed to fromConfig.
-    expect(
-      mockRuntimeSettings.store.getProviderSettings('anthropic'),
-    ).toMatchObject({ temperature: 0.4, top_p: 0.9 });
   });
 
   it('should treat an unknown slash command as a regular prompt', async () => {

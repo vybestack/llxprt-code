@@ -27,11 +27,12 @@ export type CliProviderManager = RuntimeProviderManager;
 
 /**
  * Compute the merged model params (profile + CLI) that should be applied
- * before the first request for the configured provider.
+ * before the first request for the configured provider. A `--provider`
+ * override replaces the profile's provider/model selection but not its model
+ * params (`prepareProfileForApplication`, config/profileResolution.ts).
  */
 export function collectProviderModelParams(
   config: Config,
-  argv: ParsedCliArgs,
 ): Record<string, unknown> {
   const configWithParams = config as Config & {
     _profileModelParams?: Record<string, unknown>;
@@ -39,7 +40,7 @@ export function collectProviderModelParams(
   };
   const mergedModelParams: Record<string, unknown> = {};
 
-  if (!argv.provider && configWithParams._profileModelParams) {
+  if (configWithParams._profileModelParams) {
     Object.assign(mergedModelParams, configWithParams._profileModelParams);
   }
   if (configWithParams._cliModelParams) {
@@ -158,7 +159,7 @@ export async function activateConfiguredProvider(
     cliModelOverride.trim().length > 0
       ? { model: cliModelOverride.trim() }
       : {}),
-    modelParams: collectProviderModelParams(config, argv),
+    modelParams: collectProviderModelParams(config),
     cliOverrides: buildActivationCliOverrides(config, argv),
     authMode: 'auto',
   };
