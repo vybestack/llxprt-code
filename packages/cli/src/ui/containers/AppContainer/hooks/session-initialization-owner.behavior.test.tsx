@@ -7,10 +7,7 @@ import { describe, expect, it } from 'bun:test';
 import { act } from 'react';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { renderHook } from '../../../../__tests__/render.js';
-import {
-  useCommandOwners,
-  commandOwnerClient,
-} from '../../../../__tests__/command-owner-fixture.js';
+import { useCommandOwners } from '../../../../__tests__/command-owner-fixture.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
 
 async function startSession(owner: Agent, decoy: Agent): Promise<void> {
@@ -27,7 +24,7 @@ async function startSession(owner: Agent, decoy: Agent): Promise<void> {
           getCoreMemoryFileCount: () => 0,
         },
         ephemeral: { getEphemeralSetting: () => undefined },
-        agentClientSource: { getAgentClient: () => commandOwnerClient(decoy) },
+        agentClientSource: { getAgentClient: () => decoy.sessionClient },
       },
     },
     triggerSessionStart: async () => ({
