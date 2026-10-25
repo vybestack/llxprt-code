@@ -9,7 +9,7 @@ import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { toConfigParameters } from '../agentConfig.adapter.js';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -80,29 +80,27 @@ describe('Explicit session client lifetime', () => {
     const leftSettings = new SettingsService();
     const leftPolicy = new RuntimePolicyOwner(leftConfig);
     const leftMessageBus = leftPolicy.session.messageBus;
-    const leftMcp = await McpRuntimeOwner.create(
+    const leftMcp = await createTestMcpRuntime(
       {
-        openBrowser: async () => {
-          throw new Error('Unexpected browser request');
-        },
-        tokenStorage: new MCPOAuthTokenStorage({
-          getCredentials: async () => null,
-          setCredentials: async () => {
-            throw new Error('Unexpected token write');
+        oauth: {
+          openBrowser: async () => {
+            throw new Error('Unexpected browser request');
           },
-          deleteCredentials: async () => {},
-          listServers: async () => [],
-          getAllCredentials: async () => new Map(),
-          clearAll: async () => {},
-        }),
+          tokenStorage: new MCPOAuthTokenStorage({
+            getCredentials: async () => null,
+            setCredentials: async () => {
+              throw new Error('Unexpected token write');
+            },
+            deleteCredentials: async () => {},
+            listServers: async () => [],
+            getAllCredentials: async () => new Map(),
+            clearAll: async () => {},
+          }),
+        },
+        config: leftConfig,
+        policy: { owner: leftPolicy, ownership: 'runtime' },
       },
-      leftConfig,
-      leftMessageBus,
-      undefined,
-      undefined,
-      undefined,
-      leftPolicy,
-      'runtime',
+      {},
     );
 
     const leftRuntimeId = 'engine-' + randomUUID();
@@ -212,29 +210,27 @@ describe('Explicit session client lifetime', () => {
     const rightSettings = new SettingsService();
     const rightPolicy = new RuntimePolicyOwner(rightConfig);
     const rightMessageBus = rightPolicy.session.messageBus;
-    const rightMcp = await McpRuntimeOwner.create(
+    const rightMcp = await createTestMcpRuntime(
       {
-        openBrowser: async () => {
-          throw new Error('Unexpected browser request');
-        },
-        tokenStorage: new MCPOAuthTokenStorage({
-          getCredentials: async () => null,
-          setCredentials: async () => {
-            throw new Error('Unexpected token write');
+        oauth: {
+          openBrowser: async () => {
+            throw new Error('Unexpected browser request');
           },
-          deleteCredentials: async () => {},
-          listServers: async () => [],
-          getAllCredentials: async () => new Map(),
-          clearAll: async () => {},
-        }),
+          tokenStorage: new MCPOAuthTokenStorage({
+            getCredentials: async () => null,
+            setCredentials: async () => {
+              throw new Error('Unexpected token write');
+            },
+            deleteCredentials: async () => {},
+            listServers: async () => [],
+            getAllCredentials: async () => new Map(),
+            clearAll: async () => {},
+          }),
+        },
+        config: rightConfig,
+        policy: { owner: rightPolicy, ownership: 'runtime' },
       },
-      rightConfig,
-      rightMessageBus,
-      undefined,
-      undefined,
-      undefined,
-      rightPolicy,
-      'runtime',
+      {},
     );
 
     const rightRuntimeId = 'engine-' + randomUUID();
@@ -365,29 +361,27 @@ describe('Explicit session client lifetime', () => {
     const builtSettings = new SettingsService();
     const builtPolicy = new RuntimePolicyOwner(builtConfig);
     const builtMessageBus = builtPolicy.session.messageBus;
-    const builtMcp = await McpRuntimeOwner.create(
+    const builtMcp = await createTestMcpRuntime(
       {
-        openBrowser: async () => {
-          throw new Error('Unexpected browser request');
-        },
-        tokenStorage: new MCPOAuthTokenStorage({
-          getCredentials: async () => null,
-          setCredentials: async () => {
-            throw new Error('Unexpected token write');
+        oauth: {
+          openBrowser: async () => {
+            throw new Error('Unexpected browser request');
           },
-          deleteCredentials: async () => {},
-          listServers: async () => [],
-          getAllCredentials: async () => new Map(),
-          clearAll: async () => {},
-        }),
+          tokenStorage: new MCPOAuthTokenStorage({
+            getCredentials: async () => null,
+            setCredentials: async () => {
+              throw new Error('Unexpected token write');
+            },
+            deleteCredentials: async () => {},
+            listServers: async () => [],
+            getAllCredentials: async () => new Map(),
+            clearAll: async () => {},
+          }),
+        },
+        config: builtConfig,
+        policy: { owner: builtPolicy, ownership: 'runtime' },
       },
-      builtConfig,
-      builtMessageBus,
-      undefined,
-      undefined,
-      undefined,
-      builtPolicy,
-      'runtime',
+      {},
     );
 
     const builtRuntimeId = 'engine-' + randomUUID();
