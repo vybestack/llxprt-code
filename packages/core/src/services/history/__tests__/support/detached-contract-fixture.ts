@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { spyOn } from 'bun:test';
+import { expect, spyOn } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -165,6 +165,7 @@ function nativeGraph(
 
 export async function withNativeDetachedFixture<T>(
   action: (fixture: NativeDetachedFixture) => Promise<T>,
+  expectedDisposalFailure?: Error,
 ): Promise<T> {
   const root = mkdtempSync(join(tmpdir(), 'native-detached-contract-'));
   const io = new DetachedIOFaults();
@@ -213,8 +214,16 @@ export async function withNativeDetachedFixture<T>(
     });
   } finally {
     writer.release();
-    await history.dispose();
-    await recording.dispose();
-    rmSync(root, { recursive: true, force: true });
+    try {
+      if (expectedDisposalFailure === undefined) await history.dispose();
+      else
+        await expect(history.dispose()).rejects.toBe(expectedDisposalFailure);
+    } finally {
+      try {
+        await recording.dispose();
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
   }
 }

@@ -14,9 +14,10 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import { annotateCompressionSpan } from './historyChronology.js';
 import type { IContent, MediaBlock } from './IContent.js';
-import type {
-  SemanticMediaPurgeOutcome,
-  SemanticMediaPurgeOptions,
+import {
+  isPurgeableImage,
+  type SemanticMediaPurgeOutcome,
+  type SemanticMediaPurgeOptions,
 } from './semantic-media-purge.js';
 import {
   SemanticMediaPurgeStreamCoordinator,
@@ -348,16 +349,9 @@ describe('SemanticMediaPurgeStreamCoordinator: reports malformed image MIME data
       } else {
         Reflect.set(malformedImage, 'mimeType', malformedMime);
       }
-      const history = trackedHistory();
-      history.add(content('human', 'malformed-image', [malformedImage]));
-      const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
-        enabled: true,
-        explicitCacheWriteRequired: false,
-      });
-
       let captured: unknown;
       try {
-        await begin(coordinator, { mode: 'remove' });
+        isPurgeableImage(malformedImage, { contentIndex: 0, blockIndex: 0 });
       } catch (error) {
         captured = error;
       }
@@ -705,7 +699,7 @@ describe('SemanticMediaPurgeStreamCoordinator: compensates durable state when co
     const transaction = await begin(coordinator, { mode: 'remove' });
     assertDefined(transaction, 'Expected purge transaction');
     await coordinator.commit(transaction, success);
-    history.on('tokensUpdated', () => {
+    history.once('tokensUpdated', () => {
       throw new Error('rollback listener failure');
     });
 

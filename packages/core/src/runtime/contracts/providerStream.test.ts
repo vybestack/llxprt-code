@@ -60,7 +60,13 @@ import {
   JournalResumeBoot,
   resumePointOf,
 } from '../../recording/journalResume.js';
-import { JournalSession } from '../../services/history/journalSession.js';
+import { openJournalReadOnly } from '../../journal/journalReader.js';
+import { readStoredRow } from '../../journal/rowReads.js';
+import {
+  iterateRowEntries,
+  rowTreeRootOf,
+} from '../../journal/rowTreeReader.js';
+import { decodeStoredRow } from '../../services/history/journalRowCodec.js';
 
 const PROJECT_HASH = 'p05b3-provider-stream-hash';
 
@@ -157,14 +163,15 @@ async function seedJournal(
 async function eagerReference(
   filePath: string,
 ): Promise<{ readonly rows: ProjectedRow[]; readonly contents: IContent[] }> {
-  const session = await JournalSession.open(filePath);
+  const reader = await openJournalReadOnly(filePath);
   const rows: IContent[] = [];
   try {
-    for await (const entry of session.rows()) {
-      rows.push(entry.content);
-    }
+    const root = rowTreeRootOf(reader.trailer);
+    if (root !== undefined)
+      for await (const entry of iterateRowEntries(reader, root))
+        rows.push(decodeStoredRow(await readStoredRow(reader, entry)));
   } finally {
-    await session.close();
+    await reader.close();
   }
   // Exactly the chain getCuratedForProvider() runs today over the array.
   const curated = buildCuratedHistory(logger, rows, false);

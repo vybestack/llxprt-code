@@ -129,6 +129,7 @@ describe('native detached failure compensation', () => {
   );
 
   it('preserves primary, compensation and participant failures in order when the restore write fails', async () => {
+    const compensation = new Error('compensation write');
     await withDetachedMedia(async (_store, owner) => {
       await withNativeDetachedFixture(
         async ({ history, io, primaryRows, owners }) => {
@@ -136,7 +137,6 @@ describe('native detached failure compensation', () => {
           await history.waitForCommit();
           await history.registerMediaOwner(owner);
           const primary = new Error('publication');
-          const compensation = new Error('compensation write');
           const participant = new Error('participant rollback');
           owner.rollbackFailure = participant;
           const candidate = detachedRow(1);
@@ -171,6 +171,7 @@ describe('native detached failure compensation', () => {
           );
           owner.rollbackFailure = undefined;
         },
+        compensation,
       );
     });
   });
