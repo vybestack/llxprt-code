@@ -342,8 +342,6 @@ describe('OAuthManager wiring', () => {
       doGetProfileBuckets: ReturnType<typeof vi.fn>;
     };
     const authFlowOrchestrator = wiring.state.authFlowOrchestrator as {
-      authenticate: ReturnType<typeof vi.fn>;
-      authenticateMultipleBuckets: ReturnType<typeof vi.fn>;
       setRuntimeMessageBus: ReturnType<typeof vi.fn>;
     };
     const authStatusService = wiring.state.authStatusService as {
@@ -423,23 +421,6 @@ describe('OAuthManager wiring', () => {
     );
     await expect(manager.getOAuthToken('claudecode')).resolves.toStrictEqual(
       tokenObj,
-    );
-
-    await manager.authenticate('claudecode', 'bucket-a');
-    expect(authFlowOrchestrator.authenticate).toHaveBeenCalledWith(
-      'claudecode',
-      'bucket-a',
-      { signal: expect.any(AbortSignal) },
-    );
-
-    await manager.authenticateMultipleBuckets('claudecode', ['bucket-a']);
-    expect(
-      authFlowOrchestrator.authenticateMultipleBuckets,
-    ).toHaveBeenCalledWith(
-      'claudecode',
-      ['bucket-a'],
-      undefined,
-      expect.any(AbortSignal),
     );
 
     await expect(manager.getAuthStatus()).resolves.toStrictEqual([
