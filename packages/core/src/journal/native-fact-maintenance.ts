@@ -42,8 +42,10 @@ export async function maintainNativeFacts(
   writer: NativeFactIndexWriter,
   registration: NativeFactIndexRegistration,
   edits: readonly VersionEdit[],
+  refillAllowed: boolean,
 ): Promise<{ readonly invalidated: boolean; readonly rebuilt: boolean }> {
   const explicit = edits.some((edit) => edit.kind === 'factIndex');
+  if (!explicit && !refillAllowed) return { invalidated: true, rebuilt: false };
   let plan: AppendPlan | undefined;
   if (explicit) plan = await catchupPlan(ctx, snapshot, registration.scope);
   else if (ctx.published !== undefined)

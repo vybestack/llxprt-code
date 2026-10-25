@@ -87,6 +87,19 @@ async function fillStoreFormats(
     appender,
     policies.facts,
     edits,
+    context.published?.slots.formatSlots.every(
+      (slot) => slot.summaryKind !== 'anthropic',
+    ) !== false ||
+      policies.formats.some(
+        ({ key, registration }) =>
+          registration.nativeFactScope === policies.facts?.scope &&
+          context.published?.slots.formatSlots.some(
+            (slot) =>
+              slot.formatKeyHash === key &&
+              slot.summaryKind === 'anthropic' &&
+              slot.filledThrough === context.published?.commitSeq,
+          ) === true,
+      ),
   );
   return fillRowFormats(
     context,

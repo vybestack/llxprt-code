@@ -65,6 +65,7 @@ export async function fillNativeFacts(
   appender: RecordAppender,
   registration: NativeFactIndexRegistration | undefined,
   edits: readonly VersionEdit[],
+  refillAllowed = true,
 ): Promise<{ built: BuiltGroup; invalidated: boolean }> {
   const explicit = edits.some((edit) => edit.kind === 'factIndex');
   const changed = edits.some(changesNativeSource);
@@ -87,6 +88,7 @@ export async function fillNativeFacts(
       writer,
       registration,
       edits,
+      refillAllowed,
     );
     await writer.set(['invalid'], [Number(invalidated)]);
     const committed = await batch.commit(appender);
