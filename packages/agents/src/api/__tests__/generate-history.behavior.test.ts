@@ -23,7 +23,7 @@ import { buildAgentFromContent } from './helpers/agentHarness.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
-import { generationGate } from './helpers/generation-owner-fixture.js';
+import { generationGate } from './helpers/generation-client-owner.js';
 import { nativeHookInputCommand } from './helpers/native-hook-command.js';
 import {
   HookEventName,

@@ -20,7 +20,11 @@ import { bindProviderAliasIdentity } from '@vybestack/llxprt-code-providers/comp
 import { buildProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition/runtimePlugins/index.js';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition/runtimePlugins/types.js';
 import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
-import { withGenerationOwner } from '../../../agents/src/api/__tests__/helpers/generation-owner-fixture.js';
+import {
+  generationRecording,
+  withGenerationClientOwner,
+} from '../../../agents/src/api/__tests__/helpers/generation-client-owner.js';
+import { createGenerationProvider } from '../../../agents/src/api/__tests__/helpers/generation-provider.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { openRouteBPreflight } from '../../../agents/src/api/__tests__/helpers/route-b-preflight.js';
 import { fetchGitHubSuggestions } from './hooks/githubAtCompletion.js';
@@ -247,12 +251,25 @@ describe('UI session client ownership', () => {
 
   it('creates detached clients from the session owner while retaining the primary client', async () => {
     const initializationChatStates: boolean[] = [];
-    const cleanup = await withGenerationOwner(
-      async (owner, clients) => {
+    const cleanup = await withGenerationClientOwner(
+      {
+        authority: credentials().authority,
+        provider: createGenerationProvider({ alias: 'gemini' }),
+        acquired: (client) => {
+          client.initializedEffect = () => {
+            initializationChatStates.push(client.hasChatInitialized());
+          };
+        },
+      },
+      async ({ owner, clients }) => {
         const primary = clients[1];
         await primary.startChat();
         expect(
-          await owner.generate('detached owner operation', undefined),
+          await owner.generateText(
+            'detached owner operation',
+            undefined,
+            generationRecording,
+          ),
         ).toBe('turn one reply');
         const detached = clients[2];
         expect(detached).toBeDefined();
@@ -265,12 +282,6 @@ describe('UI session client ownership', () => {
         expect(primary.getHistoryService()?.getRawHistory()).toHaveLength(0);
         await primary.startChat();
         expect(await primary.getHistory()).toStrictEqual([]);
-      },
-      'gemini',
-      (client) => {
-        client.initializedEffect = () => {
-          initializationChatStates.push(client.hasChatInitialized());
-        };
       },
     );
     expect(cleanup).toStrictEqual([]);

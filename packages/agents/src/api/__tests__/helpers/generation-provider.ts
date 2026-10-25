@@ -16,8 +16,11 @@ import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-provid
 export interface GenerationProviderOptions {
   /** Contributed alias hosts select as the provider name (`gemini` selects temporary-client generation). */
   readonly alias: string;
-  /** Text of each answered request, in arrival order. Defaults to two numbered replies. */
-  readonly replies?: readonly string[];
+  /**
+   * Reply of each answered request, in arrival order. An array streams its
+   * entries as separate text chunks. Defaults to two numbered replies.
+   */
+  readonly replies?: ReadonlyArray<string | readonly string[]>;
 }
 
 export type GenerationRequest = NormalizedGenerateChatOptions;
@@ -43,8 +46,9 @@ class ScriptedOpenAIProvider extends OpenAIProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    const text = await this.handle.answer(options);
-    yield { speaker: 'ai', blocks: [{ type: 'text', text }] };
+    const chunks = await this.handle.answer(options);
+    for (const text of chunks)
+      yield { speaker: 'ai', blocks: [{ type: 'text', text }] };
   }
 }
 
@@ -53,18 +57,20 @@ class ScriptedReplies {
   generating: ((request: GenerationRequest) => Promise<void>) | undefined;
   private answered = 0;
 
-  constructor(private readonly replies: readonly string[]) {}
+  constructor(
+    private readonly replies: ReadonlyArray<string | readonly string[]>,
+  ) {}
 
-  async answer(request: GenerationRequest): Promise<string> {
+  async answer(request: GenerationRequest): Promise<readonly string[]> {
     this.requests.push(request);
     await this.generating?.(request);
     if (this.answered >= this.replies.length)
       throw new Error(
         `Generation provider has no reply for request ${this.answered + 1}`,
       );
-    const text = this.replies[this.answered];
+    const reply = this.replies[this.answered];
     this.answered += 1;
-    return text;
+    return typeof reply === 'string' ? [reply] : reply;
   }
 }
 

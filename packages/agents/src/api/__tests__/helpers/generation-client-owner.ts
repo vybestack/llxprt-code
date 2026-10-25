@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { GenerateOptions } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import type {
@@ -46,6 +47,31 @@ import { assembleProviderSwitch } from '../../providerSwitchAssembly.js';
 import type { GenerationProvider } from './generation-provider.js';
 import { buildTestMcpRuntime } from './mcp-owner-fixture.js';
 import { createCapturedSessionOwner } from './session-client-capture.js';
+
+export function generationGate(): { promise: Promise<void>; release(): void } {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
+}
+
+/** The recording a detached-generation owner reports to; it records nothing. */
+export const generationRecording = {
+  transcriptPath: (): undefined => undefined,
+  persistSemanticMediaPurge: async (): Promise<void> => {},
+};
+
+/**
+ * The text generator a host binds to a session client owner:
+ * `Agent.generate` without the facade.
+ */
+export function ownerTextGenerator(
+  owner: SessionClientOwner,
+): (input: string, options?: GenerateOptions) => Promise<string> {
+  return async (input, options) =>
+    owner.generateText(input, options, generationRecording);
+}
 
 /**
  * A real client the owner's factory returned, wrapped on the instance: it

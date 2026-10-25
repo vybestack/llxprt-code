@@ -15,10 +15,10 @@ import {
   type PromptTextGenerator,
 } from './usePromptCompletion.js';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
-import {
-  withGenerationOwner,
-  generationGate,
-} from '../../../../agents/src/api/__tests__/helpers/generation-owner-fixture.js';
+import { generationGate } from '../../../../agents/src/api/__tests__/helpers/generation-client-owner.js';
+import { withGenerationAgent } from '../../../../agents/src/api/__tests__/helpers/generation-agent.js';
+import { createGenerationProvider } from '../../../../agents/src/api/__tests__/helpers/generation-provider.js';
+import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { withOwners } from '../../../../agents/src/api/__tests__/turn-revision-capture.fixture.js';
 import { useRecordingPrompts } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 
@@ -55,6 +55,7 @@ async function debounce(): Promise<void> {
 describe('usePromptCompletion utilityModel gating (issue #2627)', () => {
   useRecordingPrompts();
   useCliGenerationEnvironment();
+  const credentials = useOwnedCredentials();
   afterEach(() => vi.useRealTimers());
 
   it('constructs no request when no utilityModel is configured', async () => {
@@ -169,13 +170,16 @@ describe('usePromptCompletion utilityModel gating (issue #2627)', () => {
   });
 
   it('aborts superseded and unmounted requests at the provider boundary', async () => {
-    const cleanup = await withGenerationOwner(
-      async (owner, clients, provider) => {
+    const provider = createGenerationProvider({ alias: 'generation-local' });
+    const cleanup = await withGenerationAgent(
+      credentials().authority,
+      provider,
+      async (owner) => {
         const first = generationGate();
         const second = generationGate();
         const signals: AbortSignal[] = [];
         provider.generating = async (request) => {
-          const signal = request.invocation?.signal;
+          const signal = request.invocation.signal;
           if (signal === undefined)
             throw new Error('Missing provider cancellation');
           signals.push(signal);
@@ -191,8 +195,7 @@ describe('usePromptCompletion utilityModel gating (issue #2627)', () => {
           getEnablePromptCompletion: () => true,
           getUtilityModel: () => 'utility-model-x',
         };
-        const generate: PromptTextGenerator = (input, options) =>
-          owner.generate(input, options);
+        const generate: PromptTextGenerator = owner.generate.bind(owner);
         const { result, rerender, unmount } = renderHook(() =>
           usePromptCompletion({
             buffer,
@@ -212,13 +215,12 @@ describe('usePromptCompletion utilityModel gating (issue #2627)', () => {
         unmount();
         expect(signals[1].aborted).toBe(true);
         expect(result.current.text).toBe('');
-        expect(await clients[1].getHistory()).toStrictEqual([]);
+        expect(await owner.getHistory()).toStrictEqual([]);
         provider.generating = undefined;
         expect(await owner.generate('primary remains usable', undefined)).toBe(
           'turn one reply',
         );
       },
-      'anthropic',
     );
     expect(cleanup).toStrictEqual([]);
   });

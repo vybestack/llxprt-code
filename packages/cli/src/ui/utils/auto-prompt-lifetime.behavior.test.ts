@@ -4,23 +4,47 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { withGenerationOwner } from '../../../../agents/src/api/__tests__/helpers/generation-owner-fixture.js';
+import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import {
+  createGenerationProvider,
+  type GenerationProvider,
+} from '../../../../agents/src/api/__tests__/helpers/generation-provider.js';
+import {
+  ownerTextGenerator,
+  withGenerationClientOwner,
+  type GenerationClientOwnerOptions,
+} from '../../../../agents/src/api/__tests__/helpers/generation-client-owner.js';
 import { useRecordingPrompts } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { generateAutoPrompt } from './autoPromptGenerator.js';
 
 describe('detached auto prompt client', () => {
   useRecordingPrompts();
+  const credentials = useOwnedCredentials();
+  const geminiOptions = (
+    hooks: Pick<GenerationClientOwnerOptions, 'prepareTokenizer'> = {},
+  ): {
+    options: GenerationClientOwnerOptions;
+    provider: GenerationProvider;
+  } => {
+    const provider = createGenerationProvider({ alias: 'gemini' });
+    return {
+      provider,
+      options: { authority: credentials().authority, provider, ...hooks },
+    };
+  };
 
   it('initializes an owner-tracked client without adding to primary history', async () => {
-    const cleanup = await withGenerationOwner(
-      async (owner, clients, provider) => {
+    const { options, provider } = geminiOptions();
+    const cleanup = await withGenerationClientOwner(
+      options,
+      async ({ owner, clients }) => {
         const primary = clients[1];
         const media = primary.mediaStore;
         expect(media).toBeDefined();
         await primary.startChat();
         const text = await generateAutoPrompt(
           'detached prompt',
-          (input, options) => owner.generate(input, options),
+          ownerTextGenerator(owner),
         );
         expect(text).toBe('turn one reply');
         const client = clients[2];
@@ -48,13 +72,20 @@ describe('detached auto prompt client', () => {
   });
 
   it('rejects missing content generator configuration without constructing an implicit client', async () => {
-    const cleanup = await withGenerationOwner(
-      async (owner, clients, provider) => {
+    const { options, provider } = geminiOptions({
+      prepareTokenizer: async () => {
+        throw new Error('Content generator configuration is unavailable');
+      },
+    });
+    const cleanup = await withGenerationClientOwner(
+      options,
+      async ({ owner, clients }) => {
         const primary = clients[1];
         await primary.startChat();
         await expect(
-          generateAutoPrompt('missing configuration', (input, options) =>
-            owner.generate(input, options),
+          generateAutoPrompt(
+            'missing configuration',
+            ownerTextGenerator(owner),
           ),
         ).rejects.toThrow('Content generator configuration is unavailable');
         expect(clients).toHaveLength(2);
@@ -65,11 +96,6 @@ describe('detached auto prompt client', () => {
         });
         expect(primary.getHistoryService()?.getRawHistory()).toHaveLength(1);
         expect(primary.disposed).toBe(0);
-      },
-      'gemini',
-      undefined,
-      async () => {
-        throw new Error('Content generator configuration is unavailable');
       },
     );
     expect(cleanup).toStrictEqual([]);

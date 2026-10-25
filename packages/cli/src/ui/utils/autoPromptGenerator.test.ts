@@ -7,11 +7,18 @@
 import { describe, expect, it } from 'bun:test';
 import { withOwners } from '../../../../agents/src/api/__tests__/turn-revision-capture.fixture.js';
 import { useRecordingPrompts } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
-import { withGenerationOwner } from '../../../../agents/src/api/__tests__/helpers/generation-owner-fixture.js';
+import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
-  useCliGenerationEnvironment,
-  servePromptChunks,
-} from '../../__tests__/utility-generation-fixture.js';
+  createGenerationProvider,
+  type GenerationProvider,
+} from '../../../../agents/src/api/__tests__/helpers/generation-provider.js';
+import {
+  ownerTextGenerator,
+  withGenerationClientOwner,
+  type GenerationClientOwnerOptions,
+  type GenerationClientOwner,
+} from '../../../../agents/src/api/__tests__/helpers/generation-client-owner.js';
+import { useCliGenerationEnvironment } from '../../__tests__/utility-generation-fixture.js';
 import { generateAutoPrompt } from './autoPromptGenerator.js';
 
 const expectedInstruction = (description: string): string =>
@@ -20,6 +27,31 @@ const expectedInstruction = (description: string): string =>
 describe('generateAutoPrompt', () => {
   useRecordingPrompts();
   useCliGenerationEnvironment();
+  const credentials = useOwnedCredentials();
+  const withPromptOwner = (
+    alias: string,
+    run: (
+      opened: GenerationClientOwner,
+      provider: GenerationProvider,
+    ) => Promise<void>,
+    options: {
+      readonly chunks?: readonly string[];
+      readonly prepareTokenizer?: GenerationClientOwnerOptions['prepareTokenizer'];
+    } = {},
+  ): Promise<readonly unknown[]> => {
+    const provider = createGenerationProvider({
+      alias,
+      replies: options.chunks === undefined ? undefined : [options.chunks],
+    });
+    return withGenerationClientOwner(
+      {
+        authority: credentials().authority,
+        provider,
+        prepareTokenizer: options.prepareTokenizer,
+      },
+      (opened) => run(opened, provider),
+    );
+  };
 
   it('disables tools when generating the subagent prompt', async () => {
     await withOwners(
@@ -54,37 +86,33 @@ describe('generateAutoPrompt', () => {
   });
 
   it('uses the live client for non-Gemini providers with an initialized client', async () => {
-    const cleanup = await withGenerationOwner(
-      async (owner, clients, provider) => {
-        servePromptChunks(provider, ['anthropic ', 'prompt']);
+    const cleanup = await withPromptOwner(
+      'generation-local',
+      async ({ owner, clients }, provider) => {
         const primary = clients[1];
         expect(
-          await generateAutoPrompt('Write tests', (input, options) =>
-            owner.generate(input, options),
-          ),
+          await generateAutoPrompt('Write tests', ownerTextGenerator(owner)),
         ).toBe('anthropic prompt');
         expect(clients).toHaveLength(2);
         expect(primary.initialized).toBe(1);
         expect(primary.disposed).toBe(0);
         expect(provider.requests).toHaveLength(1);
         expect(provider.requests[0].tools).toStrictEqual([]);
-        expect(provider.requests[0].metadata?.__logicalRequestId).toBe(
+        expect(provider.requests[0].metadata.__logicalRequestId).toBe(
           'subagent-auto-prompt',
         );
       },
-      'anthropic',
+      { chunks: ['anthropic ', 'prompt'] },
     );
     expect(cleanup).toStrictEqual([]);
   });
 
   it('uses an isolated detached client for Gemini providers', async () => {
-    const cleanup = await withGenerationOwner(
-      async (owner, clients, provider) => {
-        servePromptChunks(provider, ['gemini ', 'prompt']);
+    const cleanup = await withPromptOwner(
+      'gemini',
+      async ({ owner, clients }, provider) => {
         expect(
-          await generateAutoPrompt('Plan migration', (input, options) =>
-            owner.generate(input, options),
-          ),
+          await generateAutoPrompt('Plan migration', ownerTextGenerator(owner)),
         ).toBe('gemini prompt');
         expect(clients).toHaveLength(3);
         expect(clients[2]).not.toBe(clients[1]);
@@ -96,6 +124,7 @@ describe('generateAutoPrompt', () => {
         await owner.dispose();
         expect(clients[2].disposed).toBe(1);
       },
+      { chunks: ['gemini ', 'prompt'] },
     );
     expect(cleanup).toStrictEqual([]);
   });
@@ -116,14 +145,12 @@ describe('generateAutoPrompt', () => {
   ] satisfies ReadonlyArray<
     readonly [string, string, readonly string[], string]
   >)('%s', async (_title, description, chunks, expected) => {
-    const cleanup = await withGenerationOwner(
-      async (owner, clients, provider) => {
-        servePromptChunks(provider, chunks);
+    const cleanup = await withPromptOwner(
+      'gemini',
+      async ({ owner, clients }, provider) => {
         expect(clients).toHaveLength(2);
         expect(
-          await generateAutoPrompt(description, (input, options) =>
-            owner.generate(input, options),
-          ),
+          await generateAutoPrompt(description, ownerTextGenerator(owner)),
         ).toBe(expected);
         expect(clients).toHaveLength(3);
         expect(clients[2].initialized).toBe(1);
@@ -131,6 +158,7 @@ describe('generateAutoPrompt', () => {
         expect(clients[1].disposed).toBe(0);
         expect(provider.requests).toHaveLength(1);
       },
+      { chunks },
     );
     expect(cleanup).toStrictEqual([]);
   });
@@ -155,14 +183,13 @@ describe('generateAutoPrompt', () => {
   });
 
   it('throws when no live or detached client is available', async () => {
-    const cleanup = await withGenerationOwner(
-      async (owner, clients, provider) => {
+    const cleanup = await withPromptOwner(
+      'gemini',
+      async ({ owner, clients }, provider) => {
         await owner.dispose();
         await expect(
-          generateAutoPrompt('No clients', (input, options) =>
-            owner.generate(input, options),
-          ),
-        ).rejects.toThrow('Agent is closed');
+          generateAutoPrompt('No clients', ownerTextGenerator(owner)),
+        ).rejects.toThrow('disposed');
         expect(clients).toHaveLength(2);
         expect(provider.requests).toHaveLength(0);
       },
@@ -171,35 +198,33 @@ describe('generateAutoPrompt', () => {
   });
 
   it('propagates detached client creation failures', async () => {
-    const cleanup = await withGenerationOwner(
-      async (owner, clients, provider) => {
+    const cleanup = await withPromptOwner(
+      'gemini',
+      async ({ owner, clients }, provider) => {
         await expect(
-          generateAutoPrompt('Factory failure', (input, options) =>
-            owner.generate(input, options),
-          ),
+          generateAutoPrompt('Factory failure', ownerTextGenerator(owner)),
         ).rejects.toThrow('factory exploded');
         expect(clients).toHaveLength(2);
         expect(provider.requests).toHaveLength(0);
       },
-      'gemini',
-      undefined,
-      async () => {
-        throw new Error('factory exploded');
+      {
+        prepareTokenizer: async () => {
+          throw new Error('factory exploded');
+        },
       },
     );
     expect(cleanup).toStrictEqual([]);
   });
 
   it('disposes detached clients when generation fails', async () => {
-    const cleanup = await withGenerationOwner(
-      async (owner, clients, provider) => {
+    const cleanup = await withPromptOwner(
+      'gemini',
+      async ({ owner, clients }, provider) => {
         provider.generating = async () => {
           throw new Error('network failed');
         };
         await expect(
-          generateAutoPrompt('Failure', (input, options) =>
-            owner.generate(input, options),
-          ),
+          generateAutoPrompt('Failure', ownerTextGenerator(owner)),
         ).rejects.toThrow('network failed');
         expect(clients[2].initialized).toBe(1);
         expect(clients[2].disposed).toBe(1);

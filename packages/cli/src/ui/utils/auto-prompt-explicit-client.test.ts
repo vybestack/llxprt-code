@@ -57,7 +57,7 @@ import {
 import { prepareAgentPreflight } from '@vybestack/llxprt-code-agents';
 import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { generateAutoPrompt } from './autoPromptGenerator.js';
-import { generationRecording } from '../../../../agents/src/api/__tests__/helpers/generation-owner-fixture.js';
+import { generationRecording } from '../../../../agents/src/api/__tests__/helpers/generation-client-owner.js';
 
 const cleanups: Array<() => Promise<void>> = [];
 
