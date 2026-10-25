@@ -114,7 +114,7 @@ export const DEFAULT_SEGMENT_CHUNK_TUNING: SegmentChunkTuning = Object.freeze({
  */
 export async function countAtSafeBoundaries(
   pieces: AsyncIterable<string>,
-  countChunk: (text: string) => number,
+  countChunk: (text: string) => number | Promise<number>,
   tuning: SegmentChunkTuning = DEFAULT_SEGMENT_CHUNK_TUNING,
 ): Promise<number> {
   let total = 0;
@@ -126,7 +126,7 @@ export async function countAtSafeBoundaries(
     if (pending.length < tuning.chunkChars) continue;
     const cut = lastSafeCut(pending, scanned);
     if (cut !== -1) {
-      total += countChunk(pending.slice(0, cut));
+      total += await countChunk(pending.slice(0, cut));
       pending = pending.slice(cut);
     } else if (pending.length > tuning.maxUnsplittableChars) {
       throw new RangeError(
@@ -135,5 +135,5 @@ export async function countAtSafeBoundaries(
     }
     scanned = pending.length;
   }
-  return pending === '' ? total : total + countChunk(pending);
+  return pending === '' ? total : total + (await countChunk(pending));
 }

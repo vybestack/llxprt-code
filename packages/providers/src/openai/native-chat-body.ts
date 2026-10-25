@@ -50,9 +50,15 @@ import {
   NativeChatEstimateProjection,
   chatTokenRegistration,
   type StreamedChatPlan,
+  type StreamedChatPrompt,
 } from './native-chat-estimate.js';
+import { measurableChatRow } from './chat-measure-media.js';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
-import { PROJECTION_REVISION } from '../runtime/promptEnvelopeProjections.js';
+import {
+  canonicalizePromptValue,
+  PROJECTION_REVISION,
+  type ProjectionImageEntry,
+} from '../runtime/promptEnvelopeProjections.js';
 import type { RowFormatRegistration } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import type { ChatUnitTokenMeasurer } from './journal-chat-length.js';
 import type {
@@ -471,6 +477,44 @@ async function retireNativeBodies(
     throw new AggregateError(failures, 'Native Chat retirement failed');
 }
 
+function chatPrompt(
+  rows: ProviderRequestRows,
+  settings: RowFormatSettings,
+  captured: CapturedNativeChatPlan,
+  requireOpen: () => void,
+): StreamedChatPrompt {
+  return async function* (observeImages) {
+    requireOpen();
+    const serialize: typeof nativeDumpValue = function* (value) {
+      const images: ProjectionImageEntry[] = [];
+      const projected = canonicalizePromptValue(value, 'messages', images);
+      observeImages(images);
+      yield* nativeDumpValue(projected);
+    };
+    async function* measuredRows() {
+      for await (const row of rows.openReader(captured.signal))
+        yield measurableChatRow(row).row;
+    }
+    const decoder = new TextDecoder();
+    yield '[';
+    for (const piece of serialize({ role: 'system', content: captured.system }))
+      yield decoder.decode(piece.wire, { stream: true });
+    for await (const piece of nativeChatPieces(
+      measuredRows(),
+      settings,
+      captured.strip,
+      captured.plan.lastThinking,
+      captured.rowIds,
+      captured.allowOrphans,
+      undefined,
+      serialize,
+    ))
+      yield decoder.decode(piece.wire, { stream: true });
+    yield decoder.decode();
+    yield ']';
+  };
+}
+
 async function prepareNativeChatBody(
   envelope: Readonly<Record<string, unknown>>,
   rows: ProviderRequestRows,
@@ -483,6 +527,7 @@ async function prepareNativeChatBody(
   messageCount: number;
   continuation: ChatContinuation;
   release: () => Promise<void>;
+  prompt: StreamedChatPrompt;
 }> {
   const captured = await captureChatPlan(envelope, options, settings, planner);
   const { plan, signal } = captured;
@@ -500,6 +545,10 @@ async function prepareNativeChatBody(
   return {
     spool,
     messageCount: plan.items,
+    prompt: chatPrompt(rows, settings, captured, () => {
+      signal?.throwIfAborted();
+      if (closed) throw new Error('Native Chat request was released');
+    }),
     continuation: {
       async build(toolCalls) {
         signal?.throwIfAborted();
@@ -751,6 +800,10 @@ export async function prepareNativePlainRequest(
     rowInput,
   );
   const selected = selectedVariant(reasoningStrip(options));
+  const streamedPrompt =
+    rows.callerOwned === true || settings.chat?.toolFormat === 'kimi'
+      ? body.prompt
+      : undefined;
   const projection = use.estimate
     ? new NativeChatEstimateProjection(
         native,
@@ -760,6 +813,7 @@ export async function prepareNativePlainRequest(
         envelope.tools,
         signal,
         streamedPlan,
+        streamedPrompt,
       )
     : undefined;
   return {

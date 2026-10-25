@@ -16,6 +16,7 @@
 import { describe, expect, it } from 'bun:test';
 import { readdirSync } from 'node:fs';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   estimatePromptEnvelope,
   type PromptEnvelopeProjection,
@@ -23,7 +24,7 @@ import {
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { createRuntimeTokenizerFactory } from '../../composition/runtimeTokenizerFactory.js';
 import { projectOpenAIChatPromptEnvelope } from '../../runtime/promptEnvelopeProjections.js';
-import { Gpt56SourceProjection } from '../../tokenizers/gpt56-source-projection.js';
+import { NativeChatEstimateProjection } from '../native-chat-estimate.js';
 import {
   WIRE_ROUTES,
   buildRouteCallOptions,
@@ -113,7 +114,37 @@ describe.each(routes.map((route) => [route.id, route] as const))(
   (_id, route) => {
     const startingScratch = new Set(readdirSync(getScratchRoot()));
 
-    for (const entry of estimatorCorpus()) {
+    const boundaryText = String.raw`role 雪 \ " punctuation 123456, `.repeat(
+      240,
+    );
+    const boundaryCases: HistoryCase[] = [
+      {
+        id: 'streamed-token-boundaries',
+        description:
+          'multiple tokenizer chunks across message and escaped-text boundaries',
+        rows: Array.from({ length: 12 }, (_, index) => ({
+          speaker: index % 2 === 0 ? 'human' : 'ai',
+          blocks: [{ type: 'text', text: `${index}:${boundaryText}` }],
+        })),
+      },
+      {
+        id: 'streamed-special-token',
+        description:
+          'legacy special-token fallback across a long canonical prompt',
+        rows: [
+          {
+            speaker: 'human',
+            blocks: [
+              {
+                type: 'text',
+                text: `${boundaryText.repeat(12)}<|endofprompt|>`,
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    for (const entry of [...estimatorCorpus(), ...boundaryCases]) {
       it(`${entry.id} counts the same as the body that is sent`, async () => {
         const provider = route.createProvider();
         await factory.prepareTokenizer?.(provider.name, route.model);
@@ -122,7 +153,7 @@ describe.each(routes.map((route) => [route.id, route] as const))(
           rowsOptions(route, entry),
         );
         expect(projection.finalizedProjection).toBeInstanceOf(
-          Gpt56SourceProjection,
+          NativeChatEstimateProjection,
         );
         const estimate = await estimatePromptEnvelope(
           provider.name,
@@ -146,6 +177,59 @@ describe.each(routes.map((route) => [route.id, route] as const))(
         expect(estimate).toStrictEqual(
           await wireBodyEstimate(route, provider, sent, oracleMedia),
         );
+      });
+    }
+
+    if (route.id === 'openai-chat-kimi') {
+      it('counts a pinned native media prompt exactly like its sent body', async () => {
+        const entry = estimatorCorpus().find(
+          (value) => value.id === 'media-inline-image',
+        );
+        if (entry === undefined)
+          throw new Error('Missing inline-image corpus case');
+        const history = new HistoryService({});
+        await history.addBatch(entry.rows);
+        const selection = await history.prepareCuratedForProviderSnapshot(
+          [],
+          {},
+        );
+        const captured: CapturedWireRequest[] = [];
+        const restore = installFakeTransport(route, captured);
+        const provider = route.createProvider();
+        const options = {
+          ...rowsOptions(route, entry),
+          requestRows: selection,
+          contentCount: selection.count,
+        };
+        try {
+          const projection = await projectionOf(provider, options);
+          const estimate = await estimatePromptEnvelope(
+            provider.name,
+            projection,
+            factory,
+          );
+          for await (const chunk of provider.generateChatCompletion({
+            ...options,
+            promptEnvelopeTransportToken: projection.transportToken,
+          }))
+            void chunk;
+          expect(estimate.estimatorMethod).toBe('exact');
+          expect(estimate).toStrictEqual(
+            await wireBodyEstimate(
+              route,
+              provider,
+              singleModelRequest(route, captured),
+              collectUnsupportedMedia(
+                entry.rows,
+                (_block, category) => category === 'image',
+              ),
+            ),
+          );
+        } finally {
+          restore();
+          await selection.close();
+          await history.dispose();
+        }
       });
     }
 

@@ -10,7 +10,15 @@ import type {
   RowFormatSettings,
 } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { captureRowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
-import { projectOpenAIChatPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
+import {
+  canonicalizePromptValue,
+  projectOpenAIChatPromptEnvelope,
+  type ProjectionImageEntry,
+} from '../runtime/promptEnvelopeProjections.js';
+import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
+import { countO200kBaseTokensFromChunks } from '../tokenizers/o200k-chunked-source.js';
+import { getO200kBaseEncoder } from '../tokenizers/o200kBaseCounter.js';
+import { countAtSafeBoundaries } from '../tokenizers/official/official-segment-chunking.js';
 import { O200K_BASE_ASSET_REVISION } from '../tokenizers/o200kBaseCounter.js';
 import {
   plainChatLengthRegistration,
@@ -126,6 +134,10 @@ export async function chatTokenRegistration(
   };
 }
 
+export type StreamedChatPrompt = (
+  observeImages: (images: readonly ProjectionImageEntry[]) => void,
+) => AsyncIterable<string>;
+
 export class NativeChatEstimateProjection {
   private closed = false;
   private readonly settings: RowFormatSettings;
@@ -137,6 +149,7 @@ export class NativeChatEstimateProjection {
     private readonly tools: unknown,
     readonly signal?: AbortSignal,
     private readonly streamedPlan?: StreamedChatPlan,
+    private readonly streamedPrompt?: StreamedChatPrompt,
   ) {
     this.settings = captureRowFormatSettings(settings);
   }
@@ -146,6 +159,8 @@ export class NativeChatEstimateProjection {
     factory: RuntimeTokenizerFactory,
   ): Promise<RuntimePromptEstimateResult> {
     this.requireOpen();
+    if (this.streamedPrompt !== undefined)
+      return this.estimateStream(request, factory, this.streamedPrompt);
     const identity: EstimateIdentity = {
       activeProvider: request.activeProvider,
       canonicalModel: request.canonicalModel,
@@ -162,6 +177,96 @@ export class NativeChatEstimateProjection {
     const plan = await this.plan(measure.settings, measure.count);
     this.requireOpen();
     return { ...envelope, count: envelope.count + plan.tokens };
+  }
+
+  private async estimateStream(
+    request: RuntimePromptEstimateRequest,
+    factory: RuntimeTokenizerFactory,
+    messages: StreamedChatPrompt,
+  ): Promise<RuntimePromptEstimateResult> {
+    const empty = projectOpenAIChatPromptEnvelope({
+      model: request.canonicalModel,
+      messages: [],
+    });
+    const metadata = await factory.estimatePrompt({
+      ...request,
+      finalizedProjection: empty.finalizedProjection,
+      legacyEstimate: empty.legacyEstimate,
+    });
+    let imageTokens = 0;
+    const observeImages = (images: readonly ProjectionImageEntry[]): void => {
+      for (const image of images)
+        imageTokens += estimateImageTokens({
+          provider: 'openai',
+          model: request.canonicalModel,
+          dimensions: image.dimensions,
+        });
+    };
+    const toolImages: ProjectionImageEntry[] = [];
+    const tools =
+      this.tools === undefined
+        ? undefined
+        : JSON.stringify(
+            canonicalizePromptValue(this.tools, 'tools', toolImages),
+          );
+    observeImages(toolImages);
+    let count = 0;
+    if (metadata.method === 'exact') {
+      const tokenizer = factory.getTokenizer(
+        request.activeProvider,
+        request.canonicalModel,
+      );
+      if (tokenizer === undefined)
+        throw new Error('Missing exact Chat tokenizer');
+      count = await countAtSafeBoundaries(
+        this.checkedPieces(messages(observeImages)),
+        (text) => tokenizer.countTokens(text),
+      );
+      if (tools !== undefined) count += await tokenizer.countTokens(tools);
+      count += imageTokens;
+    } else {
+      if (!metadata.family.startsWith('legacy-'))
+        throw new Error(
+          `Native Chat streamed estimator does not support ${metadata.family}`,
+        );
+      const scan = { length: 0, special: false, carry: '' };
+      count = await countO200kBaseTokensFromChunks(
+        this.legacyPieces(messages(observeImages), tools, scan),
+        await getO200kBaseEncoder(),
+      );
+      if (scan.special) count = Math.ceil(scan.length / 3);
+    }
+    this.requireOpen();
+    return { ...metadata, count };
+  }
+
+  private async *checkedPieces(
+    pieces: AsyncIterable<string>,
+  ): AsyncGenerator<string> {
+    for await (const piece of pieces) {
+      this.requireOpen();
+      yield piece;
+    }
+  }
+
+  private async *legacyPieces(
+    messages: AsyncIterable<string>,
+    tools: string | undefined,
+    scan: { length: number; special: boolean; carry: string },
+  ): AsyncGenerator<string> {
+    const observe = (piece: string): string => {
+      scan.length += piece.length;
+      const window = scan.carry + piece;
+      scan.special ||=
+        window.includes('<|endoftext|>') || window.includes('<|endofprompt|>');
+      scan.carry = window.slice(-16);
+      return piece;
+    };
+    yield observe('{"messages":');
+    for await (const piece of this.checkedPieces(messages))
+      yield observe(piece);
+    if (tools !== undefined) yield observe(`,"tools":${tools}`);
+    yield observe('}');
   }
 
   private plan(

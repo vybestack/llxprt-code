@@ -55,9 +55,10 @@ function messagesOf(
 
 function* mediaMessage(
   pending: readonly MediaBlock[],
+  serialize: typeof nativeDumpValue,
 ): Generator<NativeDumpPiece> {
   yield nativeDumpLiteral(',{"role":"user","content":[');
-  yield* nativeDumpValue({
+  yield* serialize({
     type: 'text',
     text: pending.some((block) => classifyMediaBlock(block) === 'video')
       ? '[Media from tool response]'
@@ -67,7 +68,7 @@ function* mediaMessage(
     const part = convertBlockToPart(block);
     if (part !== null) {
       yield nativeDumpLiteral(',');
-      yield* nativeDumpValue(part);
+      yield* serialize(part);
     }
   }
   yield nativeDumpLiteral(']}');
@@ -78,9 +79,10 @@ async function* indexedMediaMessage(
   from: number,
   to: number,
   video: boolean,
+  serialize: typeof nativeDumpValue,
 ): AsyncGenerator<NativeDumpPiece> {
   yield nativeDumpLiteral(',{"role":"user","content":[');
-  yield* nativeDumpValue({
+  yield* serialize({
     type: 'text',
     text: video ? '[Media from tool response]' : '[Images from tool response]',
   });
@@ -99,7 +101,7 @@ async function* indexedMediaMessage(
       const part = convertBlockToPart(block);
       if (part === null) continue;
       yield nativeDumpLiteral(',');
-      yield* nativeDumpValue(part);
+      yield* serialize(part);
     }
   }
   yield nativeDumpLiteral(']}');
@@ -114,6 +116,19 @@ function nextCallIds(
   return message.role === 'tool' ? previous : [];
 }
 
+function keepsMessage(
+  message: OpenAI.Chat.ChatCompletionMessageParam | null,
+  allowOrphans: boolean,
+  lastIds: readonly string[],
+): message is OpenAI.Chat.ChatCompletionMessageParam {
+  return (
+    message !== null &&
+    (message.role !== 'tool' ||
+      allowOrphans ||
+      lastIds.includes(message.tool_call_id))
+  );
+}
+
 export async function* nativeChatPieces(
   rows: AsyncIterable<IContent>,
   settings: RowFormatSettings,
@@ -122,6 +137,7 @@ export async function* nativeChatPieces(
   rowIds?: NativeRowIds,
   allowOrphans = settings.chat?.allowOrphans === true,
   mediaAt?: (index: number) => Promise<IContent>,
+  serialize: typeof nativeDumpValue = nativeDumpValue,
 ): AsyncGenerator<NativeDumpPiece> {
   let lastIds: readonly string[] = [];
   let pending: MediaBlock[] = [];
@@ -134,8 +150,15 @@ export async function* nativeChatPieces(
       (pending.length !== 0 || mediaStart >= 0) &&
       source.speaker !== 'tool'
     ) {
-      if (mediaAt === undefined) yield* mediaMessage(pending);
-      else yield* indexedMediaMessage(mediaAt, mediaStart, mediaEnd, video);
+      if (mediaAt === undefined) yield* mediaMessage(pending, serialize);
+      else
+        yield* indexedMediaMessage(
+          mediaAt,
+          mediaStart,
+          mediaEnd,
+          video,
+          serialize,
+        );
       pending = [];
       mediaStart = -1;
       video = false;
@@ -153,21 +176,15 @@ export async function* nativeChatPieces(
       pending = [];
     }
     for (const message of messages) {
-      if (
-        message === null ||
-        (message.role === 'tool' &&
-          !allowOrphans &&
-          !lastIds.includes(message.tool_call_id))
-      )
-        continue;
+      if (!keepsMessage(message, allowOrphans, lastIds)) continue;
       lastIds = nextCallIds(message, lastIds);
       yield nativeDumpLiteral(',');
-      yield* nativeDumpValue(message);
+      yield* serialize(message);
     }
   }
   if (mediaAt !== undefined && mediaStart >= 0)
-    yield* indexedMediaMessage(mediaAt, mediaStart, mediaEnd, video);
-  else if (pending.length !== 0) yield* mediaMessage(pending);
+    yield* indexedMediaMessage(mediaAt, mediaStart, mediaEnd, video, serialize);
+  else if (pending.length !== 0) yield* mediaMessage(pending, serialize);
 }
 
 export async function* nativeChatMessages(

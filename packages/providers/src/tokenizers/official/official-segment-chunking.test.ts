@@ -198,6 +198,21 @@ describe('official tokenizer chunking is exact (issue #854 F9)', () => {
     expect(Math.max(...sizes)).toBeLessThan(4096 + 100);
     expect(sizes.length).toBeGreaterThan(50);
   });
+  it('awaits asynchronous counters for full chunks and the final tail', async () => {
+    const text = 'word 123, 雪. '.repeat(2000);
+    let calls = 0;
+    const total = await countAtSafeBoundaries(
+      randomPieces(text, 5),
+      async (chunk) => {
+        await Promise.resolve();
+        calls++;
+        return chunk.length;
+      },
+      { chunkChars: 4096, maxUnsplittableChars: 100_000 },
+    );
+    expect(total).toBe(text.length);
+    expect(calls).toBeGreaterThan(1);
+  });
 
   it('fails fast on a run with no exact boundary beyond the limit', async () => {
     await expect(
