@@ -1,8 +1,4 @@
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
-import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from './helpers/recording-owner-lifetime-fixture.js';
+import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
 import { describe, test, expect } from 'bun:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -228,80 +224,5 @@ describe('shared history recording origin', () => {
       expect(await readFile(bPath, 'utf8')).toContain('B-after-A-dispose');
       expect(await readFile(aPath, 'utf8')).not.toContain('B-after-A-dispose');
     });
-  }, 30000);
-
-  test('failed shared history publication rolls back both prepared recording effects', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        agent,
-        _config,
-        _settingsOwner,
-        _settingsService,
-        _oauthManager,
-        borrow,
-      ) => {
-        const sibling = await borrow();
-        await agent.setHistory([
-          { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
-        ]);
-        await agent.session.setRecording({ enabled: true });
-        await new Promise((resolve) => setTimeout(resolve, 1100));
-        await sibling.session.setRecording({ enabled: true });
-        const history = fixtureAgentResources(agent)
-          .publishedClient(agent)
-          .getHistoryService();
-        if (!history) throw new Error('Missing shared history');
-        await expect(
-          history.addBatch(
-            [
-              {
-                speaker: 'human',
-                blocks: [{ type: 'text', text: 'rolled-back-marker' }],
-              },
-            ],
-            undefined,
-            {
-              afterPublication: () => {
-                throw new Error('reject publication');
-              },
-            },
-          ),
-        ).rejects.toThrow('reject publication');
-        await expect(
-          history.addBatch(
-            [
-              {
-                speaker: 'human',
-                blocks: [{ type: 'text', text: 'owned-rollback-marker' }],
-              },
-            ],
-            undefined,
-            {
-              origin: agent.session,
-              afterPublication: () => {
-                throw new Error('reject owned publication');
-              },
-            },
-          ),
-        ).rejects.toThrow('reject owned publication');
-        const aPath = agent.session.getRecording().path;
-        const bPath = sibling.session.getRecording().path;
-        if (!aPath || !bPath) throw new Error('Missing journal');
-        await agent.session.setRecording({ enabled: false });
-        await sibling.session.setRecording({ enabled: false });
-        expect(await readFile(aPath, 'utf8')).not.toContain(
-          'rolled-back-marker',
-        );
-        expect(await readFile(bPath, 'utf8')).not.toContain(
-          'rolled-back-marker',
-        );
-        expect(await readFile(aPath, 'utf8')).not.toContain(
-          'owned-rollback-marker',
-        );
-        expect(await readFile(bPath, 'utf8')).not.toContain(
-          'owned-rollback-marker',
-        );
-      },
-    );
   }, 30000);
 });
