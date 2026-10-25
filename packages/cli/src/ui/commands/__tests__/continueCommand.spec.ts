@@ -24,10 +24,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from '../../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { useOwnerSessionAgents } from '../../hooks/__tests__/owner-session-agents.js';
 import { createContinueCommandForTest } from './continue-command-test-owner.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import {
@@ -99,7 +96,7 @@ function isPerformResumeAction(
 }
 
 describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
-  useRecordingPrompts();
+  const openAgent = useOwnerSessionAgents();
   let ctx: CommandOwnerFixture;
   let media: LocalMediaStore | undefined;
   const continueCommand = createContinueCommandForTest(
@@ -113,66 +110,48 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
   });
 
   it('exports the active facade recording even when a borrowed sibling cleared the Config pointer', async () => {
-    await withRecordingLifetimeFixture(
-      async (
-        agent,
-        config,
-        _settingsOwner,
-        _settingsService,
-        _oauthManager,
-        borrow,
-        _replaceProfile,
-        _history,
-        resources,
-      ) => {
-        const sibling = await borrow();
-        await agent.setHistory([
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'owner export' }],
-          },
-        ]);
-        await agent.session.setRecording({ enabled: true });
-        await sibling.dispose();
-        const history = resources.client.getHistoryService();
-        if (history === null) throw new Error('Expected live history');
-        history.add({
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'pending export boundary' }],
-        });
-        const path = agent.session.getRecording().path;
-        if (path === undefined)
-          throw new Error('Expected active recording path');
-        const sessionInfo = (await agent.session.listSessions()).at(0);
-        if (sessionInfo === undefined)
-          throw new Error('Expected listed session');
-        const destination = join(config.projectTempDir, 'owner-export');
-        const commandContext = createMockCommandContext({
-          services: {
-            agent,
-            config: {
-              isInteractive: () => true,
-              projectChatsDir: join(config.projectTempDir, 'chats'),
-              projectTempDir: config.projectTempDir,
-            },
-          },
-        });
-        ctx = commandContext;
-        const result = await continueCommand.action!(
-          commandContext,
-          `export ${sessionInfo.id} ${destination}`,
-        );
-        assertType(result, isMessageAction);
-        expect(result.messageType).toBe('info');
-        expect(
-          await readFile(join(destination, 'session.jsonl'), 'utf8'),
-        ).toContain('pending export boundary');
+    const { agent, config } = await openAgent();
+    const sibling = await openAgent();
+    await agent.setHistory([
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'owner export' }],
       },
+    ]);
+    await agent.session.setRecording({ enabled: true });
+    await sibling.agent.dispose();
+    await agent.addHistory({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'pending export boundary' }],
+    });
+    const path = agent.session.getRecording().path;
+    if (path === undefined) throw new Error('Expected active recording path');
+    const sessionInfo = (await agent.session.listSessions()).at(0);
+    if (sessionInfo === undefined) throw new Error('Expected listed session');
+    const destination = join(config.projectTempDir, 'owner-export');
+    const commandContext = createMockCommandContext({
+      services: {
+        agent,
+        config: {
+          isInteractive: () => true,
+          projectChatsDir: join(config.projectTempDir, 'chats'),
+          projectTempDir: config.projectTempDir,
+        },
+      },
+    });
+    ctx = commandContext;
+    const result = await continueCommand.action!(
+      commandContext,
+      `export ${sessionInfo.id} ${destination}`,
     );
+    assertType(result, isMessageAction);
+    expect(result.messageType).toBe('info');
+    expect(
+      await readFile(join(destination, 'session.jsonl'), 'utf8'),
+    ).toContain('pending export boundary');
   }, 30000);
 
   describe('No-args path @requirement:REQ-EN-001', () => {
-    useRecordingPrompts();
     it('returns dialog action when interactive with no args', async () => {
       ctx = createMockCommandContext({
         services: {
@@ -206,7 +185,6 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
   });
 
   describe('Direct resume path @requirement:REQ-EN-002', () => {
-    useRecordingPrompts();
     it('/continue latest returns perform_resume', async () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
@@ -255,7 +233,6 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
   });
 
   describe('Active conversation guard @requirement:REQ-RC-010', () => {
-    useRecordingPrompts();
     it('returns perform_resume with requiresConfirmation when active conversation exists in interactive mode', async () => {
       ctx = createMockCommandContext({
         services: {
@@ -317,7 +294,6 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
   });
 
   describe('In-flight request guard @requirement:REQ-MP-004', () => {
-    useRecordingPrompts();
     it('returns error when isProcessing=true with no args', async () => {
       ctx = createMockCommandContext({
         services: {
@@ -360,7 +336,6 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
   });
 
   describe('Tab completion @requirement:REQ-RC-013', () => {
-    useRecordingPrompts();
     it('completion includes "latest"', async () => {
       ctx = createMockCommandContext({
         services: {
@@ -480,7 +455,6 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
   });
 
   describe('Tab completion with an unreadable recording (issue #3732)', () => {
-    useRecordingPrompts();
     it('still completes healthy sessions and reports the skipped recording on the debug log', async () => {
       const root = await mkdtemp(join(tmpdir(), 'continue-completion-bad-'));
       const projectTempDir = join(root, 'completion-project');
@@ -553,7 +527,6 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
   });
 
   describe('Whitespace handling', () => {
-    useRecordingPrompts();
     it('treats whitespace-only args as no-args (interactive opens dialog)', async () => {
       ctx = createMockCommandContext({
         services: {
@@ -578,7 +551,6 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
   });
 
   describe('portable session package actions', () => {
-    useRecordingPrompts();
     it('rejects an import before reading or publishing the package when a non-interactive conversation is active', async () => {
       const root = await mkdtemp(join(tmpdir(), 'continue-import-guard-'));
       const projectTemp = join(root, 'guard-project');
@@ -624,72 +596,27 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
     });
 
     it('returns the owner export error without publishing a package', async () => {
-      await withRecordingLifetimeFixture(async (agent) => {
-        await agent.setHistory([
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'failed export' }],
-          },
-        ]);
-        await agent.session.setRecording({ enabled: true });
-        const sessionInfo = (await agent.session.listSessions()).at(0);
-        if (sessionInfo === undefined)
-          throw new Error('Expected listed session');
-        const sourcePath = agent.session.getRecording().path;
-        if (sourcePath === undefined)
-          throw new Error('Expected recording path');
-        // A truncated JSON line fails the owner's replay on every platform
-        // after staging begins; the staging directory is then removed cleanly,
-        // so the owner's own error is what surfaces rather than an aggregate.
-        await appendFile(sourcePath, '{"v":1,"seq":99,"type":"truncated"\n');
-        const destinationParent = await mkdtemp(
-          join(tmpdir(), 'continue-export-failure-'),
-        );
-        try {
-          const destination = join(destinationParent, 'package');
-          ctx = createMockCommandContext({ services: { agent } });
-          const result = await continueCommand.action!(
-            ctx,
-            `export ${sessionInfo.id} ${destination}`,
-          );
-          assertType(result, isMessageAction);
-          expect(result.messageType).toBe('error');
-          expect(result.content).toMatch(/^JSON Parse error/);
-          expect(await readdir(destinationParent)).toStrictEqual([]);
-        } finally {
-          await rm(destinationParent, { recursive: true, force: true });
-        }
-      });
-    }, 30000);
-
-    it('reports the aggregate failure when the staging cleanup also fails', async () => {
-      await withRecordingLifetimeFixture(async (agent) => {
-        await agent.setHistory([
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'failed export and cleanup' }],
-          },
-        ]);
-        await agent.session.setRecording({ enabled: true });
-        const sessionInfo = (await agent.session.listSessions()).at(0);
-        if (sessionInfo === undefined)
-          throw new Error('Expected listed session');
-        const sourcePath = agent.session.getRecording().path;
-        if (sourcePath === undefined)
-          throw new Error('Expected recording path');
-        // A destination that runs through the recording file cannot be created,
-        // and removing the staging directory beneath it fails as well wherever
-        // the platform reports a path through a file as ENOTDIR. Windows reports
-        // it as absent, so there the cleanup succeeds and the owner's own error
-        // is what is returned; the probe selects the matching expectation.
-        const destination = join(sourcePath, 'not-a-directory');
-        const cleanupFails = await rm(`${destination}.probe.tmp`, {
-          recursive: true,
-          force: true,
-        }).then(
-          () => false,
-          () => true,
-        );
+      const { agent } = await openAgent();
+      await agent.setHistory([
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'failed export' }],
+        },
+      ]);
+      await agent.session.setRecording({ enabled: true });
+      const sessionInfo = (await agent.session.listSessions()).at(0);
+      if (sessionInfo === undefined) throw new Error('Expected listed session');
+      const sourcePath = agent.session.getRecording().path;
+      if (sourcePath === undefined) throw new Error('Expected recording path');
+      // A truncated JSON line fails the owner's replay on every platform
+      // after staging begins; the staging directory is then removed cleanly,
+      // so the owner's own error is what surfaces rather than an aggregate.
+      await appendFile(sourcePath, '{"v":1,"seq":99,"type":"truncated"\n');
+      const destinationParent = await mkdtemp(
+        join(tmpdir(), 'continue-export-failure-'),
+      );
+      try {
+        const destination = join(destinationParent, 'package');
         ctx = createMockCommandContext({ services: { agent } });
         const result = await continueCommand.action!(
           ctx,
@@ -697,14 +624,53 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         );
         assertType(result, isMessageAction);
         expect(result.messageType).toBe('error');
-        expect(result.content).toMatch(
-          cleanupFails
-            ? /^Session package export and cleanup failed$/
-            : /ENOTDIR/,
-        );
-        await expect(stat(destination)).rejects.toMatchObject({
-          code: process.platform === 'win32' ? 'ENOENT' : 'ENOTDIR',
-        });
+        expect(result.content).toMatch(/^JSON Parse error/);
+        expect(await readdir(destinationParent)).toStrictEqual([]);
+      } finally {
+        await rm(destinationParent, { recursive: true, force: true });
+      }
+    }, 30000);
+
+    it('reports the aggregate failure when the staging cleanup also fails', async () => {
+      const { agent } = await openAgent();
+      await agent.setHistory([
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'failed export and cleanup' }],
+        },
+      ]);
+      await agent.session.setRecording({ enabled: true });
+      const sessionInfo = (await agent.session.listSessions()).at(0);
+      if (sessionInfo === undefined) throw new Error('Expected listed session');
+      const sourcePath = agent.session.getRecording().path;
+      if (sourcePath === undefined) throw new Error('Expected recording path');
+      // A destination that runs through the recording file cannot be created,
+      // and removing the staging directory beneath it fails as well wherever
+      // the platform reports a path through a file as ENOTDIR. Windows reports
+      // it as absent, so there the cleanup succeeds and the owner's own error
+      // is what is returned; the probe selects the matching expectation.
+      const destination = join(sourcePath, 'not-a-directory');
+      const cleanupFails = await rm(`${destination}.probe.tmp`, {
+        recursive: true,
+        force: true,
+      }).then(
+        () => false,
+        () => true,
+      );
+      ctx = createMockCommandContext({ services: { agent } });
+      const result = await continueCommand.action!(
+        ctx,
+        `export ${sessionInfo.id} ${destination}`,
+      );
+      assertType(result, isMessageAction);
+      expect(result.messageType).toBe('error');
+      expect(result.content).toMatch(
+        cleanupFails
+          ? /^Session package export and cleanup failed$/
+          : /ENOTDIR/,
+      );
+      await expect(stat(destination)).rejects.toMatchObject({
+        code: process.platform === 'win32' ? 'ENOENT' : 'ENOTDIR',
       });
     }, 30000);
 
@@ -857,7 +823,6 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
     });
   });
   describe('Property-based tests @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
-    useRecordingPrompts();
     it('non-empty args never returns dialog', async () => {
       await fc.assert(
         fc.asyncProperty(
