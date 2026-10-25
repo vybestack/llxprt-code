@@ -132,13 +132,22 @@ describe('native Responses format lifecycle', () => {
       session: JournalSession,
       counter: { reads: number },
     ) => Promise<void>,
+    seed?: readonly IContent[],
   ): Promise<void> {
     const counter = { reads: 0 };
-    const session = await JournalSession.create(`${directory()}/${name}.llxj`, {
+    const path = `${directory()}/${name}.llxj`;
+    const options = {
+      tokenUsageCountTokens: (text: string): number => text.length,
       journal: testJournalSeams({ readCounter: counter }, 1, false)
         .dependencies,
-    });
+    };
+    let session = await JournalSession.create(path, options);
     try {
+      if (seed !== undefined) {
+        await session.append(seed);
+        await session.close();
+        session = await JournalSession.open(path, options);
+      }
       await consume(session, counter);
     } finally {
       await session.close();
@@ -192,47 +201,50 @@ describe('native Responses format lifecycle', () => {
 
   for (const count of [40, 4000])
     it(`fills ${count} rows once and plans warm with no physical reads`, async () => {
-      await withSession(`reads-${count}`, async (session, counter) => {
-        await session.append(
-          Array.from({ length: count }, (_, index) =>
-            textRow(`row-${index} 雪`),
-          ),
-        );
-        counter.reads = 0;
-        await session.registerRowFormat(responsesLengthRegistration(SETTINGS));
-        const cold = counter.reads;
-        expect(cold).toBeGreaterThan(count);
-        const pin = await session.store.snapshot();
-        counter.reads = 0;
-        const plan = planStoredResponsesRequest(
-          pin,
-          SETTINGS,
-          0,
-          request(),
-          123,
-        );
-        expect(plan.items).toBe(count);
-        expect(counter.reads).toBe(0);
-        await session.append([textRow('tail')]);
-        const append = counter.reads;
-        expect(append).toBeLessThan(150);
-        const current = await session.store.snapshot();
-        counter.reads = 0;
-        expect(
-          planStoredResponsesRequest(current, SETTINGS, 0, request(), 123)
-            .items,
-        ).toBe(count + 1);
-        expect(
-          planStoredResponsesRequest(pin, SETTINGS, 0, request(), 123)
-            .contentLength,
-        ).toBe(plan.contentLength);
-        expect(counter.reads).toBe(0);
-        process.stdout.write(
-          `Responses reads ${JSON.stringify({ count, cold, warm: counter.reads, append })}\n`,
-        );
-        await current.close();
-        await pin.close();
-      });
+      await withSession(
+        `reads-${count}`,
+        async (session, counter) => {
+          counter.reads = 0;
+          await session.registerRowFormat(
+            responsesLengthRegistration(SETTINGS),
+          );
+          const cold = counter.reads;
+          expect(cold).toBeGreaterThan(count);
+          const pin = await session.store.snapshot();
+          counter.reads = 0;
+          const plan = planStoredResponsesRequest(
+            pin,
+            SETTINGS,
+            0,
+            request(),
+            123,
+          );
+          expect(plan.items).toBe(count);
+          expect(counter.reads).toBe(0);
+          await session.append([textRow('tail')]);
+          const append = counter.reads;
+          expect(append).toBeLessThan(150);
+          const current = await session.store.snapshot();
+          counter.reads = 0;
+          expect(
+            planStoredResponsesRequest(current, SETTINGS, 0, request(), 123)
+              .items,
+          ).toBe(count + 1);
+          expect(
+            planStoredResponsesRequest(pin, SETTINGS, 0, request(), 123)
+              .contentLength,
+          ).toBe(plan.contentLength);
+          expect(counter.reads).toBe(0);
+          process.stdout.write(
+            `Responses reads ${JSON.stringify({ count, cold, warm: counter.reads, append })}\n`,
+          );
+          await current.close();
+          await pin.close();
+        },
+        Array.from({ length: count }, (_, index) =>
+          textRow(`row-${index} 雪 ${'cold '.repeat(4096)}`),
+        ),
+      );
     });
 
   it('preserves measured summaries through pop, ownership, density, replacement, compression, fork and compaction', async () => {
