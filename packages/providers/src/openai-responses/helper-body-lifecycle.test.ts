@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { diskAdmittedSource } from '../__tests__/support/disk-admitted-source.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
@@ -23,8 +24,8 @@ function historySource() {
   let opened = 0;
   let pulled = 0;
   let closed = false;
-  const contents: AsyncIterable<IContent> = {
-    async *[Symbol.asyncIterator]() {
+  const sourceRows: Iterable<IContent> = {
+    *[Symbol.iterator]() {
       opened += 1;
       try {
         for (let index = 0; index < 512; index += 1) {
@@ -39,7 +40,10 @@ function historySource() {
       }
     },
   };
-  return { contents, state: () => ({ opened, pulled, closed }) };
+  return {
+    ...diskAdmittedSource(sourceRows),
+    state: () => ({ opened, pulled, closed }),
+  };
 }
 
 const schema = {
@@ -69,7 +73,7 @@ async function captureBody(
   // The length is declared from the staged rows, so the whole history is read
   // and its source closed before the first BODY byte.
   expect(history.state()).toStrictEqual(FULL_HISTORY);
-  expect(requestScratchEntries()).not.toStrictEqual([]);
+  expect(requestScratchEntries()).toStrictEqual([]);
   if (!(init?.body instanceof ReadableStream))
     throw new Error('Expected streamed BODY');
   const wire: unknown = JSON.parse(await new Response(init.body).text());
@@ -107,18 +111,25 @@ async function cancelBody(
   readAbort: boolean,
 ): Promise<never> {
   expect(history.state()).toStrictEqual(FULL_HISTORY);
-  expect(requestScratchEntries()).not.toStrictEqual([]);
+  expect(requestScratchEntries()).toStrictEqual([]);
   if (!(init?.body instanceof ReadableStream))
     throw new Error('Expected streamed BODY');
   const reader = init.body.getReader();
   let bytes = 0;
   for (let pull = 0; pull < pulls; pull += 1) {
-    const next = await reader.read();
-    expect(next.done).toBe(false);
-    bytes += next.value?.byteLength ?? 0;
+    let next = await reader.read();
     if (pull === 3) {
+      while (
+        !next.done &&
+        !new TextDecoder().decode(next.value).endsWith('x')
+      ) {
+        bytes += next.value.byteLength;
+        next = await reader.read();
+      }
       expect(new TextDecoder().decode(next.value).endsWith('x')).toBe(true);
     }
+    expect(next.done).toBe(false);
+    bytes += next.value?.byteLength ?? 0;
   }
   controller.abort(new DOMException('BODY cancelled', 'AbortError'));
   if (readAbort) {
@@ -178,11 +189,12 @@ async function runProvider(
     return history.state();
   } finally {
     globalThis.fetch = originalFetch;
+    await history.close();
   }
 }
 
 describe('real Responses BODY through relocated helper', () => {
-  it('stages the whole history before the BODY and carries full flat declarations into BODY bytes', async () => {
+  it('admits the whole history before the BODY and carries full flat declarations into BODY bytes', async () => {
     expect(await runProvider(false)).toStrictEqual(FULL_HISTORY);
   });
   it('closes the producer and removes the scratch files when the upload is cancelled', async () => {

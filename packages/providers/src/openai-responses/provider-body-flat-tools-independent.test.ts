@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { diskAdmittedSource } from '../__tests__/support/disk-admitted-source.js';
 import { createHash } from 'node:crypto';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -46,8 +47,8 @@ function source(rows: number, padding: number) {
   let pulled = 0;
   let opens = 0;
   let closed = false;
-  const contents: AsyncIterable<IContent> = {
-    async *[Symbol.asyncIterator]() {
+  const sourceRows: Iterable<IContent> = {
+    *[Symbol.iterator]() {
       opens += 1;
       try {
         for (let index = 0; index < rows; index += 1) {
@@ -62,7 +63,10 @@ function source(rows: number, padding: number) {
       }
     },
   };
-  return { contents, state: () => ({ pulled, opens, closed }) };
+  return {
+    ...diskAdmittedSource(sourceRows),
+    state: () => ({ pulled, opens, closed }),
+  };
 }
 
 function expectedBody(rows: number, padding: number): string {
@@ -100,7 +104,7 @@ async function readWire(
     opens: 1,
     closed: true,
   });
-  expect(requestScratchEntries()).not.toStrictEqual([]);
+  expect(requestScratchEntries()).toStrictEqual([]);
   if (init?.body === null || init?.body === undefined)
     throw new Error('Missing request BODY');
   const body = new Response(init.body).body;
@@ -194,6 +198,7 @@ async function runBody(rows: number, padding: number): Promise<number> {
     return history.state().pulled;
   } finally {
     globalThis.fetch = originalFetch;
+    await history.close();
   }
 }
 

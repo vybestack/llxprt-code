@@ -96,7 +96,7 @@ describe('Responses source deterministic lifecycle', () => {
       controller.abort(reason);
       await expect(reader.next()).rejects.toBe(reason);
     } finally {
-      await reader.return();
+      await reader.return(undefined);
       await prompt.dispose();
     }
   });

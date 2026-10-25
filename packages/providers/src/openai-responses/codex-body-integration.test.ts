@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
+import { diskAdmittedSource } from '../__tests__/support/disk-admitted-source.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -32,8 +33,8 @@ async function transportBody(
   const { config, invocation } = makeBodyRuntime();
   let pulled = 0;
   let closed = false;
-  const contents: AsyncIterable<IContent> = {
-    async *[Symbol.asyncIterator]() {
+  const sourceRows: Iterable<IContent> = {
+    *[Symbol.iterator]() {
       try {
         pulled += 1;
         yield {
@@ -45,6 +46,7 @@ async function transportBody(
       }
     },
   };
+  const source = diskAdmittedSource(sourceRows);
   const oldFetch = globalThis.fetch;
   let wire = '';
   globalThis.fetch = Object.assign(
@@ -72,7 +74,7 @@ async function transportBody(
       'https://transport.invalid/v1',
     );
     const stream = provider.generateChatCompletion({
-      contents,
+      contents: source.contents,
       invocation,
       resolved: { model: 'o3-mini' },
       systemInstruction: 'You inspect values supplied by the user.',
@@ -104,6 +106,7 @@ async function transportBody(
     return body.tools;
   } finally {
     globalThis.fetch = oldFetch;
+    await source.close();
     await config.dispose();
   }
 }
@@ -138,7 +141,7 @@ describe('Codex identity and streamed BODY integration', () => {
     expect(ordinary.getDefaultModel()).toBe('o3-mini');
   });
 
-  it('reads history before the HTTP request, closes it, and serves the BODY from scratch files', async () => {
+  it('admits history before HTTP, closes the producer, and streams the native BODY', async () => {
     const schema = {
       type: 'object',
       properties: { value: { type: 'integer', minimum: 0 } },

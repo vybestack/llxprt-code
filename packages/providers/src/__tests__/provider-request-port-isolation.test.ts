@@ -219,7 +219,7 @@ describe('call-bound provider ports', () => {
     await expect(drain(left)).rejects.toThrow('owner cancelled');
     expect(left.resolver.accounting().activeRequestCount).toBe(0);
     expect(right.resolver.accounting().activeRequestCount).toBe(0);
-    expect(right.resolver.accounting().reservedContentCount).toBe(0);
+    expect(right.resolver.accounting().reservedContentCount).toBe(1);
     expect(left.resolver.accounting().reservedContentCount).toBe(0);
     expect(await drain(right)).toContain('delivered');
     expect(local.requests).toHaveLength(1);
@@ -245,7 +245,7 @@ describe('call-bound provider ports', () => {
     await leftProjection.releaseIfUnsent?.();
     expect(left.resolver.accounting().activeRequestCount).toBe(0);
     expect(right.resolver.accounting().activeRequestCount).toBe(0);
-    expect(right.resolver.accounting().reservedContentCount).toBe(0);
+    expect(right.resolver.accounting().reservedContentCount).toBe(1);
     expect(left.resolver.accounting().reservedContentCount).toBe(0);
     right.options = {
       ...right.options,

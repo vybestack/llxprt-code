@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { diskAdmittedSource } from '../__tests__/support/disk-admitted-source.js';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -20,8 +21,8 @@ function history(rows = 512, padding = 70_000) {
   let opened = 0;
   let pulled = 0;
   let closed = false;
-  const contents: AsyncIterable<IContent> = {
-    async *[Symbol.asyncIterator]() {
+  const sourceRows: Iterable<IContent> = {
+    *[Symbol.iterator]() {
       opened += 1;
       try {
         for (let index = 0; index < rows; index += 1) {
@@ -36,7 +37,10 @@ function history(rows = 512, padding = 70_000) {
       }
     },
   };
-  return { contents, state: () => ({ opened, pulled, closed }) };
+  return {
+    ...diskAdmittedSource(sourceRows),
+    state: () => ({ opened, pulled, closed }),
+  };
 }
 
 function completed(): Response {
@@ -84,7 +88,14 @@ async function runRetry(
           if (next.done) throw new Error('Upload ended early');
           first.push(next.value);
         }
-        // The whole history was staged before the first byte.
+        while (
+          !new TextDecoder().decode(first[first.length - 1]).endsWith('x')
+        ) {
+          const next = await reader.read();
+          if (next.done) throw new Error('Upload ended before its input part');
+          first.push(next.value);
+        }
+        // The producer is admitted before the first byte.
         expect(source.state()).toStrictEqual({
           opened: 1,
           pulled: rows,
@@ -137,6 +148,7 @@ async function runRetry(
     return { text: output.join(''), completeBodies: bodies.length };
   } finally {
     globalThis.fetch = saved;
+    await source.close();
   }
 }
 
@@ -144,8 +156,8 @@ function diskReplayHistory() {
   const references: Array<WeakRef<IContent>> = [];
   let pulled = 0;
   let closed = false;
-  const contents: AsyncIterable<IContent> = {
-    async *[Symbol.asyncIterator]() {
+  const sourceRows: Iterable<IContent> = {
+    *[Symbol.iterator]() {
       try {
         for (let index = 0; index < 512; index += 1) {
           const row: IContent = {
@@ -162,7 +174,9 @@ function diskReplayHistory() {
     },
   };
   return {
-    contents,
+    ...diskAdmittedSource(sourceRows, (row) =>
+      references.push(new WeakRef(row)),
+    ),
     references,
     state: () => ({ pulled, closed }),
   };
@@ -218,8 +232,8 @@ function retryEndpoint(
       reader.releaseLock();
       digests.push(hash.digest('hex'));
       const staged = stagedRowWorkspaces();
-      expect(staged).toHaveLength(1);
-      snapshotSizes.push(directoryBytes(join(getScratchRoot(), staged[0])));
+      expect(staged).toHaveLength(0);
+      snapshotSizes.push(directoryBytes(source.directory));
       retainedBytes.push((await settledHeap()) - baselineHeap);
       liveCounts.push(
         source.references.filter((reference) => reference.deref() !== undefined)
@@ -298,6 +312,7 @@ async function replayScenario(): Promise<number[]> {
     return endpoint.retainedBytes;
   } finally {
     await endpoint.server.stop(true);
+    await source.close();
     removeScratchRoot();
     if (previousTmpdir === undefined) delete process.env.TMPDIR;
     else process.env.TMPDIR = previousTmpdir;
@@ -306,7 +321,7 @@ async function replayScenario(): Promise<number[]> {
 }
 
 describe('bounded Responses text HTTP replay', () => {
-  it('retries byte-identical text BODY from disk without retaining uploaded rows', async () => {
+  it('retries byte-identical text BODY from the admitted source without retaining uploaded rows', async () => {
     // One unmeasured full-size replay takes the one-time state of this path;
     // each upload's 1 MiB bound applies to the median of three measured runs.
     await replayScenario();
@@ -366,6 +381,7 @@ describe('bounded Responses text HTTP cancellation', () => {
       expect(requestScratchEntries()).toStrictEqual(scratchBefore);
     } finally {
       globalThis.fetch = saved;
+      await source.close();
     }
   });
 });
