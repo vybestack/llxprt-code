@@ -64,7 +64,7 @@ export function collectJournalRowsForAssertions(
   );
 }
 
-async function* journalFileRows(path: string): AsyncGenerator<IContent> {
+export async function* journalFileRows(path: string): AsyncGenerator<IContent> {
   const reader = await openJournalReadOnly(path);
   try {
     const root = rowTreeRootOf(reader.trailer);

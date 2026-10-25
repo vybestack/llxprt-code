@@ -7,7 +7,7 @@ import {
   SessionLockManager,
   type LockHandle,
 } from '@vybestack/llxprt-code-core/recording/SessionLockManager.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { journalFileRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import {
   isMediaReferenceBlock,
   type MediaReferenceBlock,
@@ -27,17 +27,12 @@ async function archivedImage(
   path: string,
   rootDirectory: string,
 ): Promise<Uint8Array> {
-  const session = await JournalSession.open(path);
-  try {
-    for await (const row of session.rows()) {
-      const reference = row.content.blocks.find(isMediaReferenceBlock);
-      if (reference !== undefined)
-        return await readArchivedReference(rootDirectory, reference);
-    }
-    throw new Error('Missing archived image reference');
-  } finally {
-    await session.close();
+  for await (const row of journalFileRows(path)) {
+    const reference = row.blocks.find(isMediaReferenceBlock);
+    if (reference !== undefined)
+      return readArchivedReference(rootDirectory, reference);
   }
+  throw new Error('Missing archived image reference');
 }
 
 async function readArchivedReference(

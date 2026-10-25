@@ -17,7 +17,9 @@ import {
   decodeSessionFact,
   SESSION_KEYS,
 } from '@vybestack/llxprt-code-core/recording/sessionMetaKeys.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
+import { stateReaderOf } from '@vybestack/llxprt-code-core/journal/journalReaderState.js';
+import { sha256KeyHash } from '@vybestack/llxprt-code-core/journal/idKeys.js';
 import { withRecordingLifetimeFixture } from '../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import {
   buildFakeAgent,
@@ -29,13 +31,16 @@ import {
 import type { Session } from './zedIntegration.js';
 
 async function assertDurableTitle(path: string): Promise<void> {
-  const session = await JournalSession.open(path);
+  const reader = await openJournalReadOnly(path);
   try {
-    const bytes = await session.store.getState(SESSION_KEYS.title);
+    const bytes = await stateReaderOf(
+      reader,
+      sha256KeyHash,
+    )(SESSION_KEYS.title);
     if (bytes === undefined) throw new Error('Missing durable title');
     expect(decodeSessionFact(bytes)).toBe('/tools owner title');
   } finally {
-    await session.close();
+    await reader.close();
   }
 }
 

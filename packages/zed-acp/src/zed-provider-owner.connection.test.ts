@@ -11,13 +11,23 @@ import {
   assembleProviderSwitch,
 } from '@vybestack/llxprt-code-agents';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { journalFileRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
+import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildCliStyleConfig } from '../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
 import { serveZedConnection } from './runZedIntegration.js';
 
 const roots: string[] = [];
+
+async function readRecording(path: string): Promise<string> {
+  const facts = await readJournalFileFacts(path);
+  const rows: string[] = [JSON.stringify(facts)];
+  for await (const row of journalFileRows(path)) rows.push(JSON.stringify(row));
+  return rows.join('\n');
+}
 
 async function openZed(label: string) {
   const root = await mkdtemp(join(tmpdir(), 'zed-owner-'));
@@ -187,9 +197,9 @@ describe('Zed ACP provider ownership', () => {
       const journalNames = await readdir(owner.config.projectChatsDir);
       const journals = await Promise.all(
         journalNames
-          .filter((name) => name.endsWith('.jsonl'))
+          .filter((name) => name.endsWith(SESSION_FILE_EXTENSION))
           .map((name) =>
-            readFile(join(owner.config.projectChatsDir, name), 'utf8'),
+            readRecording(join(owner.config.projectChatsDir, name)),
           ),
       );
       expect(journals.join('\n')).toContain('surviving-session-marker');
@@ -227,13 +237,17 @@ describe('Zed ACP provider ownership', () => {
       expect(second.updates.length).toBeGreaterThan(1);
       const firstJournals = await readdir(first.config.projectChatsDir);
       const secondJournals = await readdir(second.config.projectChatsDir);
-      expect(firstJournals.some((name) => name.endsWith('.jsonl'))).toBe(true);
-      expect(secondJournals.some((name) => name.endsWith('.jsonl'))).toBe(true);
+      expect(
+        firstJournals.some((name) => name.endsWith(SESSION_FILE_EXTENSION)),
+      ).toBe(true);
+      expect(
+        secondJournals.some((name) => name.endsWith(SESSION_FILE_EXTENSION)),
+      ).toBe(true);
       const firstRecording = await Promise.all(
         firstJournals
-          .filter((name) => name.endsWith('.jsonl'))
+          .filter((name) => name.endsWith(SESSION_FILE_EXTENSION))
           .map((name) =>
-            readFile(join(first.config.projectChatsDir, name), 'utf8'),
+            readRecording(join(first.config.projectChatsDir, name)),
           ),
       );
       expect(firstRecording.join('\n')).toContain(sessionA.sessionId);
@@ -260,9 +274,9 @@ describe('Zed ACP provider ownership', () => {
       });
       const secondRecording = await Promise.all(
         secondJournals
-          .filter((name) => name.endsWith('.jsonl'))
+          .filter((name) => name.endsWith(SESSION_FILE_EXTENSION))
           .map((name) =>
-            readFile(join(second.config.projectChatsDir, name), 'utf8'),
+            readRecording(join(second.config.projectChatsDir, name)),
           ),
       );
       expect(secondRecording.join('\n')).toContain(sessionB.sessionId);

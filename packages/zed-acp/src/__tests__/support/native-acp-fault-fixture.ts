@@ -7,7 +7,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { journalFileRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { vi } from 'bun:test';
@@ -24,18 +24,13 @@ export async function nativeRows(
   path: string,
   limit = Infinity,
 ): Promise<{ count: number; digest: string }> {
-  const session = await JournalSession.open(path);
   const hash = createHash('sha256');
   let count = 0;
-  try {
-    for await (const row of session.rows()) {
-      hash.update(JSON.stringify(row.content));
-      if (++count === limit) break;
-    }
-    return { count, digest: hash.digest('hex') };
-  } finally {
-    await session.close();
+  for await (const row of journalFileRows(path)) {
+    hash.update(JSON.stringify(row));
+    if (++count === limit) break;
   }
+  return { count, digest: hash.digest('hex') };
 }
 
 function sessionOperations(

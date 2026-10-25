@@ -4,7 +4,7 @@ import {
   getProjectHash,
   SessionDiscovery,
 } from '@vybestack/llxprt-code-core';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { journalFileRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it } from 'bun:test';
@@ -20,23 +20,18 @@ async function transcript(
   path: string,
   limit = Number.POSITIVE_INFINITY,
 ): Promise<{ count: number; digest: string; toolResult: boolean }> {
-  const session = await JournalSession.open(path);
   const hash = createHash('sha256');
   let count = 0;
   let toolResult = false;
-  try {
-    for await (const row of session.rows()) {
-      count++;
-      hash.update(JSON.stringify(row.content));
-      toolResult ||=
-        row.content.speaker === 'tool' &&
-        JSON.stringify(row.content).includes('native ACP file evidence');
-      if (count === limit) break;
-    }
-    return { count, digest: hash.digest('hex'), toolResult };
-  } finally {
-    await session.close();
+  for await (const row of journalFileRows(path)) {
+    count++;
+    hash.update(JSON.stringify(row));
+    toolResult ||=
+      row.speaker === 'tool' &&
+      JSON.stringify(row).includes('native ACP file evidence');
+    if (count === limit) break;
   }
+  return { count, digest: hash.digest('hex'), toolResult };
 }
 
 describe('native ACP session protocol', () => {
