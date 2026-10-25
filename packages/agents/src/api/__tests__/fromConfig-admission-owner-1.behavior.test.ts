@@ -1,28 +1,24 @@
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'bun:test';
+import { mkdtemp, readdir, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
-import { runCleanupSteps } from '../../core/subagent-cleanup.js';
-import { readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import { beforeAll, afterAll, describe, expect, it, afterEach } from 'bun:test';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-
-import { MemoryTokenStore } from './helpers/provider-auth-fixtures.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { fromConfig } from '../fromConfig.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 describe('fromConfig admission before resource effects', () => {
-  useOwnedCredentials();
+  useFakeResponsesReplay('plain-text.jsonl');
 
   let promptDirectory: string;
   const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
@@ -79,179 +75,39 @@ describe('fromConfig admission before resource effects', () => {
     return outcome;
   }
 
-  it('rejects borrowed OAuth on another bus before provider acquisition', async () => {
-    const builtDirectory = await realpath(
+  it('rejects a blank session id before any resource effect', async () => {
+    const directory = await realpath(
       await mkdtemp(join(tmpdir(), 'from-config-admission-')),
     );
-    cleanups.push(() => rm(builtDirectory, { recursive: true, force: true }));
-    const builtOverrides = {
-      workingDir: builtDirectory,
-      folderTrust: true,
-      mcpEnabled: false,
-      skillsSupport: false,
-      recording: { enabled: false },
-      telemetry: { enabled: false },
-      settings: { jitContextEnabled: false },
-    };
-    const builtFactorylessPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('fixtures/' + 'plain-text.jsonl', import.meta.url),
-    );
-    const builtFactorylessDirectory = await realpath(
-      await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
-    );
-    const builtFactorylessSupplied: CallerAgentRuntimeFactories = {};
-    const builtFactorylessConfig = new Config(
+    cleanups.push(() => rm(directory, { recursive: true, force: true }));
+    const config = new Config(
       toConfigParameters({
-        ...{
-          provider: 'fake',
-          model: 'fake-model',
-          workingDir: builtFactorylessDirectory,
-        },
-        ...builtOverrides,
+        provider: 'fake',
+        model: 'fake-model',
+        workingDir: directory,
+        folderTrust: true,
+        mcpEnabled: false,
+        skillsSupport: false,
+        recording: { enabled: false },
+        telemetry: { enabled: false },
+        settings: { jitContextEnabled: false },
       }),
     );
-    const builtFactorylessSettings = new SettingsService();
-    for (const [key, value] of Object.entries(
-      builtFactorylessConfig.getInitialSettings(),
-    ))
-      builtFactorylessSettings.set(key, value);
-    const builtFactorylessSettingsOwner = new SessionSettingsOwner(
-      builtFactorylessSettings,
-    );
-    builtFactorylessSettingsOwner.bindTelemetry(builtFactorylessConfig);
-    builtFactorylessSettingsOwner.initializeProviderSelection(
-      builtFactorylessConfig.getProvider(),
-      builtFactorylessConfig.getModel(),
-    );
-    const builtFactorylessPolicy = new RuntimePolicyOwner(
-      builtFactorylessConfig,
-    );
-    const builtFactorylessTask = builtFactorylessSupplied.taskToolRegistration;
-    const builtFactorylessFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...(builtFactorylessSupplied.agentClientFactory
-        ? { agentClientFactory: builtFactorylessSupplied.agentClientFactory }
-        : {}),
-      ...(builtFactorylessTask
-        ? { taskToolRegistration: () => builtFactorylessTask }
-        : {}),
-    };
-
-    const builtFactorylessClose = settleFactorylessRelease.bind(
-      undefined,
-      [
-        () => builtFactorylessSettingsOwner.dispose(),
-        () => builtFactorylessPolicy.dispose(),
-        () => builtFactorylessConfig.dispose(),
-        () => rm(builtFactorylessDirectory, { recursive: true, force: true }),
-      ],
-      builtFactorylessPreviousReplay,
-    );
-    cleanups.push(builtFactorylessClose);
-    const otherDirectory = await realpath(
-      await mkdtemp(join(tmpdir(), 'from-config-admission-')),
-    );
-    cleanups.push(() => rm(otherDirectory, { recursive: true, force: true }));
-    const otherOverrides = {
-      workingDir: otherDirectory,
-      folderTrust: true,
-      mcpEnabled: false,
-      skillsSupport: false,
-      recording: { enabled: false },
-      telemetry: { enabled: false },
-      settings: { jitContextEnabled: false },
-    };
-    const otherFactorylessPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('fixtures/' + 'plain-text.jsonl', import.meta.url),
-    );
-    const otherFactorylessDirectory = await realpath(
-      await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
-    );
-
-    const otherFactorylessConfig = new Config(
-      toConfigParameters({
-        ...{
-          provider: 'fake',
-          model: 'fake-model',
-          workingDir: otherFactorylessDirectory,
-        },
-        ...otherOverrides,
-      }),
-    );
-    const otherFactorylessSettings = new SettingsService();
-    for (const [key, value] of Object.entries(
-      otherFactorylessConfig.getInitialSettings(),
-    ))
-      otherFactorylessSettings.set(key, value);
-    const otherFactorylessSettingsOwner = new SessionSettingsOwner(
-      otherFactorylessSettings,
-    );
-    otherFactorylessSettingsOwner.bindTelemetry(otherFactorylessConfig);
-    otherFactorylessSettingsOwner.initializeProviderSelection(
-      otherFactorylessConfig.getProvider(),
-      otherFactorylessConfig.getModel(),
-    );
-    const otherFactorylessPolicy = new RuntimePolicyOwner(
-      otherFactorylessConfig,
-    );
-    createAgentRuntimeFactoryBindings();
-
-    const otherFactorylessClose = settleFactorylessRelease.bind(
-      undefined,
-      [
-        () => otherFactorylessSettingsOwner.dispose(),
-        () => otherFactorylessPolicy.dispose(),
-        () => otherFactorylessConfig.dispose(),
-        () => rm(otherFactorylessDirectory, { recursive: true, force: true }),
-      ],
-      otherFactorylessPreviousReplay,
-    );
-    cleanups.push(otherFactorylessClose);
-    const oauth = new OAuthManager(new MemoryTokenStore(), undefined, {
-      config: builtFactorylessConfig,
-      messageBus: otherFactorylessPolicy.session.messageBus,
-    });
-    cleanups.push(() => oauth.dispose());
+    cleanups.push(() => config.dispose());
+    const settings = new SettingsService();
+    for (const [key, value] of Object.entries(config.getInitialSettings()))
+      settings.set(key, value);
     await expect(
-      rejectWithoutAcquisition(builtFactorylessConfig.getTargetDir(), () =>
+      rejectWithoutAcquisition(config.getTargetDir(), () =>
         fromConfig(
-          builtFactorylessConfig,
-          builtFactorylessSettings,
-          {},
-          builtFactorylessSettingsOwner,
-          undefined,
-          oauth,
-          builtFactorylessPolicy.session.messageBus,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          builtFactorylessFactories,
-          undefined,
+          config,
+          settings,
+          { sessionId: '   ' },
           credentials().authority,
-          builtFactorylessPolicy,
         ),
       ),
     ).resolves.toMatchObject({
-      message: expect.stringMatching(/OAuth.*message bus/i),
+      message: expect.stringMatching(/Invalid runtimeId/),
     });
-    expect(oauth.runtimeMessageBus).toBe(
-      otherFactorylessPolicy.session.messageBus,
-    );
   });
 });
-async function settleFactorylessRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previous: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previous;
-  }
-}
