@@ -5,7 +5,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
+import { readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type {
   IContent,
@@ -15,6 +15,8 @@ import { collectMediaReferences } from '../storage/media-reference-lifecycle.js'
 import {
   MAX_HISTORY_CONTENTS,
   MAX_REFERENCES,
+  MAX_PERSISTED_STATES,
+  SUPPORTED_PERSISTED_SESSION_VERSION,
   MAX_PERSISTED_STATE_AGGREGATE_BYTES,
   MAX_PERSISTED_STATE_BYTES,
   PERSISTED_SESSION_PREFIX,
@@ -32,6 +34,60 @@ import {
 export interface PinnedPersistedState {
   readonly definition: PackagedPersistedState;
   readonly pinned: PinnedPackageFile;
+}
+
+export async function stagePersistedSessionStates(
+  sourceDirectory: string,
+  destinationDirectory: string,
+  sessionId: string,
+  projectHash: string,
+  index: MediaReferenceIndex,
+): Promise<readonly string[]> {
+  const names = (await readdir(sourceDirectory))
+    .filter(
+      (name) =>
+        name.startsWith(PERSISTED_SESSION_PREFIX) && name.endsWith('.json'),
+    )
+    .sort();
+  const staged: string[] = [];
+  let aggregateBytes = 0;
+  for (const name of names) {
+    const bytes = await readBoundedFile(
+      join(sourceDirectory, name),
+      MAX_PERSISTED_STATE_BYTES,
+      'Persisted session state',
+    );
+    const parsed: unknown = JSON.parse(bytes.toString('utf8'));
+    if (!isRecord(parsed)) throw new Error('Invalid persisted session state');
+    if (
+      parsed['sessionId'] !== sessionId ||
+      parsed['projectHash'] !== projectHash
+    )
+      continue;
+    const history = parsed['history'];
+    if (
+      parsed['version'] !== SUPPORTED_PERSISTED_SESSION_VERSION ||
+      !Array.isArray(history) ||
+      !history.every(isContent) ||
+      history.length > MAX_HISTORY_CONTENTS
+    )
+      throw new Error('Invalid persisted session state');
+    aggregateBytes += bytes.byteLength;
+    if (staged.length >= MAX_PERSISTED_STATES)
+      throw new Error('Persisted session state count exceeds limit');
+    boundedAggregate(
+      [aggregateBytes],
+      MAX_PERSISTED_STATE_AGGREGATE_BYTES,
+      'Persisted session states',
+    );
+    index.add(history);
+    await writeFile(join(destinationDirectory, name), bytes, {
+      mode: 0o600,
+      flag: 'wx',
+    });
+    staged.push(name);
+  }
+  return staged;
 }
 
 export type ReferenceVerifier = (

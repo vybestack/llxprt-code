@@ -14,7 +14,10 @@ import {
   JOURNAL_RECORDING_FILE,
   requiredObjects,
 } from './session-media-package-validation.js';
-import { MediaReferenceIndex } from './session-media-package-state.js';
+import {
+  MediaReferenceIndex,
+  stagePersistedSessionStates,
+} from './session-media-package-state.js';
 import { hydrateRecordedMedia } from '../storage/recorded-media-transfer.js';
 import {
   prepareSessionMediaPackageStaging,
@@ -158,6 +161,13 @@ async function writeNativePackage(
       facts.facts.sessionId !== source.sessionId
     )
       throw new Error('Export source session/project does not match');
+    const persistedStateFiles = await stagePersistedSessionStates(
+      dirname(path),
+      directory,
+      source.sessionId,
+      projectHash,
+      index,
+    );
     const references = index.references();
     await hydrateRecordedMedia(mediaStore, references);
     const objects = requiredObjects(references);
@@ -166,7 +176,7 @@ async function writeNativePackage(
     await writeSessionMediaPackageManifest({
       temporaryDirectory: directory,
       recordingFile: JOURNAL_RECORDING_FILE,
-      persistedStateFiles: [],
+      persistedStateFiles,
       references,
       objects,
     });
