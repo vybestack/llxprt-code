@@ -1,12 +1,14 @@
-import { capturedSessionClient } from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { useConsumerPromptDirectory } from './helpers/consumer-owner-primitives.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import { openCaller } from './helpers/caller-fixture.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import {
+  openRouteBPreflight,
+  type RouteBOptions,
+} from './helpers/route-b-preflight.js';
 import { describe, expect, it } from 'bun:test';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core';
 import { type Agent } from '@vybestack/llxprt-code-agents';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import * as fc from 'fast-check';
 
 /**
@@ -42,30 +44,48 @@ import * as fc from 'fast-check';
  * the agent and read through both the agent and the Config are strictly equal.
  */
 
+interface SettingsCaller {
+  readonly agent: Agent;
+  readonly settingsOwner: SessionSettingsOwner;
+}
+
+/**
+ * The foreground preflight route a host takes, with the host's own
+ * `SessionSettingsOwner` passed to `preparePostConfiguration`: the agent
+ * reads and writes its ephemeral settings through that owner, so the parity
+ * reads below go to the object the test built.
+ */
+async function withSettingsAgent<T>(
+  authority: RouteBOptions['authority'],
+  scenario: (caller: SettingsCaller) => Promise<T>,
+): Promise<T> {
+  const route = await openRouteBPreflight({ authority });
+  const settingsOwner = new SessionSettingsOwner(route.settings);
+  let agent: Agent | undefined;
+  try {
+    await route.prepare({ settingsOwner });
+    agent = await route.createAgent();
+    return await scenario({ agent, settingsOwner });
+  } finally {
+    await runCleanupSteps([
+      () => agent?.dispose(),
+      () => route.disposePreflight(),
+      () => route.close(),
+      () => settingsOwner.dispose(),
+    ]);
+  }
+}
+
 describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirement:REQ-INT-003', () => {
   useConsumerPromptDirectory();
 
   const credentials = useOwnedCredentials();
-  const callerFactories = createAgentRuntimeFactoryBindings();
-
   useFakeResponsesReplay('plain-text.jsonl');
 
   it('T8a numeric normalize: agent.setEphemeralSetting("context-limit","1000") yields the Config-normalized number 1000 and parity with the Config (REQ-INT-003)', async () => {
-    const caller = await openCaller(credentials().authority, callerFactories);
-    try {
-      const agent: Agent = await fromConfig(
-        caller.config,
-        caller.settings,
-        {},
-        caller.settingsOwner,
-        caller.manager,
-        undefined,
-        undefined,
-        caller.mcp,
-        undefined,
-        capturedSessionClient(caller.owner),
-      );
-      try {
+    await withSettingsAgent(
+      credentials().authority,
+      async ({ agent, settingsOwner }) => {
         agent.setEphemeralSetting('context-limit', '1000');
         const viaAgent = agent.getEphemeralSetting('context-limit');
 
@@ -74,114 +94,57 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         expect(typeof viaAgent).toBe('number');
 
         // Parity: the SAME set on the Config yields the same value.
-        caller.settingsOwner.writeUserParameter('context-limit', '1000');
+        settingsOwner.writeUserParameter('context-limit', '1000');
         expect(viaAgent).toBe(
-          caller.settingsOwner.readNamedParameter('context-limit'),
+          settingsOwner.readNamedParameter('context-limit'),
         );
-      } finally {
-        await agent.dispose();
-      }
-    } finally {
-      await caller.close();
-    }
+      },
+    );
   }, 30000);
 
   it('T8b streaming enum: agent.setEphemeralSetting("streaming","enabled") yields "enabled" and parity with the Config (REQ-INT-003)', async () => {
-    const caller = await openCaller(credentials().authority, callerFactories);
-    try {
-      const agent: Agent = await fromConfig(
-        caller.config,
-        caller.settings,
-        {},
-        caller.settingsOwner,
-        caller.manager,
-        undefined,
-        undefined,
-        caller.mcp,
-        undefined,
-        capturedSessionClient(caller.owner),
-      );
-      try {
+    await withSettingsAgent(
+      credentials().authority,
+      async ({ agent, settingsOwner }) => {
         agent.setEphemeralSetting('streaming', 'enabled');
         const viaAgent = agent.getEphemeralSetting('streaming');
 
         expect(viaAgent).toBe('enabled');
 
-        caller.settingsOwner.writeUserParameter('streaming', 'enabled');
-        expect(viaAgent).toBe(
-          caller.settingsOwner.readNamedParameter('streaming'),
-        );
-      } finally {
-        await agent.dispose();
-      }
-    } finally {
-      await caller.close();
-    }
+        settingsOwner.writeUserParameter('streaming', 'enabled');
+        expect(viaAgent).toBe(settingsOwner.readNamedParameter('streaming'));
+      },
+    );
   }, 30000);
 
   it('T8c invalid streaming throws with "must resolve" — the Config rule propagates, never swallowed (REQ-INT-003)', async () => {
-    const caller = await openCaller(credentials().authority, callerFactories);
-    try {
-      const agent: Agent = await fromConfig(
-        caller.config,
-        caller.settings,
-        {},
-        caller.settingsOwner,
-        caller.manager,
-        undefined,
-        undefined,
-        caller.mcp,
-        undefined,
-        capturedSessionClient(caller.owner),
+    await withSettingsAgent(credentials().authority, async ({ agent }) => {
+      // The Config rule (configBase.ts:207) throws
+      // 'Streaming setting must resolve to "enabled" or "disabled"'; the
+      // agent MUST propagate it, never swallow.
+      expect(() => agent.setEphemeralSetting('streaming', 123)).toThrow(
+        /must resolve/,
       );
-      try {
-        // The Config rule (configBase.ts:207) throws
-        // 'Streaming setting must resolve to "enabled" or "disabled"'; the
-        // agent MUST propagate it, never swallow.
-        expect(() => agent.setEphemeralSetting('streaming', 123)).toThrow(
-          /must resolve/,
-        );
-      } finally {
-        await agent.dispose();
-      }
-    } finally {
-      await caller.close();
-    }
+    });
   }, 30000);
 
   it('T8d deep-equal: agent.getEphemeralSettings() deep-equals built.config.getEphemeralSettings() after the same mutations (REQ-INT-003)', async () => {
-    const caller = await openCaller(credentials().authority, callerFactories);
-    try {
-      const agent: Agent = await fromConfig(
-        caller.config,
-        caller.settings,
-        {},
-        caller.settingsOwner,
-        caller.manager,
-        undefined,
-        undefined,
-        caller.mcp,
-        undefined,
-        capturedSessionClient(caller.owner),
-      );
-      try {
+    await withSettingsAgent(
+      credentials().authority,
+      async ({ agent, settingsOwner }) => {
         agent.setEphemeralSetting('context-limit', 50000);
         agent.setEphemeralSetting('streaming', 'disabled');
         agent.setEphemeralSetting('parity-key', 'v');
 
-        caller.settingsOwner.writeUserParameter('context-limit', 50000);
-        caller.settingsOwner.writeUserParameter('streaming', 'disabled');
-        caller.settingsOwner.writeUserParameter('parity-key', 'v');
+        settingsOwner.writeUserParameter('context-limit', 50000);
+        settingsOwner.writeUserParameter('streaming', 'disabled');
+        settingsOwner.writeUserParameter('parity-key', 'v');
 
         expect(agent.getEphemeralSettings()).toStrictEqual(
-          caller.settingsOwner.captureNamedParameters(),
+          settingsOwner.captureNamedParameters(),
         );
-      } finally {
-        await agent.dispose();
-      }
-    } finally {
-      await caller.close();
-    }
+      },
+    );
   }, 30000);
 
   // ─── Property-based (>=30% of total) ─────────────────────────────────────
@@ -191,76 +154,37 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
       fc.asyncProperty(
         fc.constantFrom('alpha', 'beta', 'gamma', 'my-key', 'x1'),
         fc.oneof(fc.string({ maxLength: 40 }), fc.integer(), fc.boolean()),
-        async (key, value) => {
-          const caller = await openCaller(
+        async (key, value) =>
+          withSettingsAgent(
             credentials().authority,
-            callerFactories,
-          );
-          try {
-            const agent: Agent = await fromConfig(
-              caller.config,
-              caller.settings,
-              {},
-              caller.settingsOwner,
-              caller.manager,
-              undefined,
-              undefined,
-              caller.mcp,
-              undefined,
-              capturedSessionClient(caller.owner),
-            );
-            try {
+            async ({ agent, settingsOwner }) => {
               agent.setEphemeralSetting(key, value);
-              caller.settingsOwner.writeUserParameter(key, value);
+              settingsOwner.writeUserParameter(key, value);
               return (
                 agent.getEphemeralSetting(key) ===
-                caller.settingsOwner.readNamedParameter(key)
+                settingsOwner.readNamedParameter(key)
               );
-            } finally {
-              await agent.dispose();
-            }
-          } finally {
-            await caller.close();
-          }
-        },
+            },
+          ),
       ),
     );
   }, 30000);
 
   it('PROP streaming enum parity: for streaming in {enabled, disabled}, agent and Config normalize identically (REQ-INT-003)', async () => {
     await fc.assert(
-      fc.asyncProperty(fc.constantFrom('enabled', 'disabled'), async (mode) => {
-        const caller = await openCaller(
+      fc.asyncProperty(fc.constantFrom('enabled', 'disabled'), async (mode) =>
+        withSettingsAgent(
           credentials().authority,
-          callerFactories,
-        );
-        try {
-          const agent: Agent = await fromConfig(
-            caller.config,
-            caller.settings,
-            {},
-            caller.settingsOwner,
-            caller.manager,
-            undefined,
-            undefined,
-            caller.mcp,
-            undefined,
-            capturedSessionClient(caller.owner),
-          );
-          try {
+          async ({ agent, settingsOwner }) => {
             agent.setEphemeralSetting('streaming', mode);
-            caller.settingsOwner.writeUserParameter('streaming', mode);
+            settingsOwner.writeUserParameter('streaming', mode);
             return (
               agent.getEphemeralSetting('streaming') ===
-              caller.settingsOwner.readNamedParameter('streaming')
+              settingsOwner.readNamedParameter('streaming')
             );
-          } finally {
-            await agent.dispose();
-          }
-        } finally {
-          await caller.close();
-        }
-      }),
+          },
+        ),
+      ),
     );
   }, 30000);
 });
