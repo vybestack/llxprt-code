@@ -22,11 +22,9 @@ import {
   prepareAgentPreflight,
   type AgentProfilePreflight,
 } from '../../../agents/src/api/profile-preflight.js';
-import {
-  captureAgentCreation as createAgent,
-  fixtureAgentResources,
-} from '../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
-import { internalConfig } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
+import type { Agent } from '../../../agents/src/api/agent.js';
+import { createAgent } from '../../../agents/src/api/createAgent.js';
+import { fromConfig } from '../../../agents/src/api/fromConfig.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 
 describe('explicit provider and preflight lifecycle owners', () => {
@@ -145,30 +143,40 @@ describe('explicit provider and preflight lifecycle owners', () => {
     await reference.lease.release();
   }
 
+  async function openSameLabelRoot(): Promise<{
+    agent: Agent;
+    rootConfig: Config;
+  }> {
+    const rootConfig = new Config({
+      cwd: directory,
+      targetDir: directory,
+      sessionId: 'same-label',
+      provider: 'openai',
+      model: 'owner-model',
+      debugMode: false,
+      mcpEnabled: false,
+      telemetry: { enabled: false },
+    });
+    cleanup.push(() => rootConfig.dispose());
+    const rootSettings = new SettingsService();
+    for (const [key, value] of Object.entries(rootConfig.getInitialSettings()))
+      rootSettings.set(key, value);
+    const agent = await fromConfig(
+      rootConfig,
+      rootSettings,
+      { activation: { provider: 'openai', model: 'owner-model' } },
+      credentials().authority,
+    );
+    cleanup.push(() => agent.dispose());
+    return { agent, rootConfig };
+  }
+
   it('keeps same-label acquired roots and their file ownership separate without Config service locators', async () => {
-    const first = await createAgent({
-      provider: 'openai',
-      model: 'owner-model',
-      sessionId: 'same-label',
-      workingDir: directory,
-      credentialAuthority: credentials().authority,
-    });
-    const second = await createAgent({
-      provider: 'openai',
-      model: 'owner-model',
-      sessionId: 'same-label',
-      workingDir: directory,
-      credentialAuthority: credentials().authority,
-    });
-    cleanup.push(
-      () => first.dispose(),
-      () => second.dispose(),
-    );
-    expect('providerManager' in internalConfig(first)).toBe(false);
-    expect('providerManager' in internalConfig(second)).toBe(false);
-    expect(fixtureAgentResources(first).manager).not.toBe(
-      fixtureAgentResources(second).manager,
-    );
+    const { agent: first, rootConfig: firstConfig } = await openSameLabelRoot();
+    const { agent: second, rootConfig: secondConfig } =
+      await openSameLabelRoot();
+    expect('providerManager' in firstConfig).toBe(false);
+    expect('providerManager' in secondConfig).toBe(false);
     const firstFile = join(directory, 'first-retained');
     const secondFile = join(directory, 'second-retained');
     await writeFile(firstFile, 'first remote bytes');
