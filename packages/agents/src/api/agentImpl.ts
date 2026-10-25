@@ -116,6 +116,11 @@ import type { AgentAuthState, AuthWinner } from './control/authState.js';
 import { computeAuthWinner } from './control/authState.js';
 import type { AgentSchedulerHandle } from './config-types.js';
 import { toRuntimeSwitchOptions } from './providerSwitchOptionsAdapter.js';
+import type { RebuildLoopDeps } from './loop/rebuildLoop.js';
+import {
+  applyModelWithPublication,
+  type ModelTransitionSteps,
+} from './modelPublication.js';
 import {
   projectSessionStats,
   projectCurrentSequenceModel,
@@ -362,26 +367,19 @@ export class AgentImpl implements Agent {
     this.lsp = this.newControls.lsp;
   }
 
+  private readonly modelTransitionSteps: ModelTransitionSteps = {
+    setOwnerModel: (model) => this.setOwnerModel(model),
+    refreshAuth: () => this.deps.sessionClient.refreshAuth(),
+    restoreChatVisibility: () => this.restoreChatVisibility(),
+    rebuild: () => this.rebuild(),
+  };
+
   private readonly prepareReplacement = (
     changed: boolean,
     signal: AbortSignal,
   ) =>
     assembleProfileReplacement(
-      {
-        telemetry: this.deps.settingsOwner.telemetry,
-        loopHolder: this.deps.loopHolder,
-        toolSelection: this.deps.sessionClient.toolCatalog.selection,
-        readApprovalMode: () => this.getApprovalMode(),
-        readExecutionPolicy: () =>
-          this.deps.settingsOwner.readToolExecutionPolicy(),
-        getToolGovernance: () =>
-          this.deps.sessionClient.toolCatalog.readGovernance(),
-        config: this.deps.config,
-        messageBus: this.deps.messageBus,
-        resolveClient: this.deps.resolveClient,
-        approvalHandler: this.deps.approvalHandler,
-        displayCallbacks: this.deps.displayCallbacks,
-      },
+      this.loopDeps(),
       () => this.deps.sessionClient.prepareProfileClientReplacement(),
       () => this.activeRun,
     )(changed, signal);
@@ -677,7 +675,9 @@ export class AgentImpl implements Agent {
   ): Promise<AgentProviderSwitchResult> {
     this.assertProfileIdle();
     if (this.activeRun !== undefined) throw new AgentBusyError();
-    return this.applyProviderSwitch(provider, model, options);
+    return this.coordinator.withIdleBoundary(() =>
+      this.applyProviderSwitch(provider, model, options),
+    );
   }
 
   /**
@@ -720,11 +720,14 @@ export class AgentImpl implements Agent {
     if (!this.isProviderReady()) {
       throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     }
-    await this.setOwnerModel(model);
-    await this.deps.sessionClient.refreshAuth();
-    await this.restoreChatVisibility();
-    this.rebuild();
-    this.providerState.model = model;
+    await this.coordinator.withIdleBoundary(() =>
+      applyModelWithPublication(
+        this.deps.settingsOwner,
+        this.providerState,
+        model,
+        this.modelTransitionSteps,
+      ),
+    );
   }
 
   /**
@@ -1198,7 +1201,11 @@ export class AgentImpl implements Agent {
    * @pseudocode switch-rebind.md steps 10-26 (rebuildLoop call)
    */
   private rebuild(): void {
-    this.deps.rebuildLoop({
+    this.deps.rebuildLoop(this.loopDeps());
+  }
+
+  private loopDeps(): RebuildLoopDeps {
+    return {
       telemetry: this.deps.settingsOwner.telemetry,
       loopHolder: this.deps.loopHolder,
       toolSelection: this.deps.sessionClient.toolCatalog.selection,
@@ -1212,7 +1219,7 @@ export class AgentImpl implements Agent {
       messageBus: this.deps.messageBus,
       approvalHandler: this.deps.approvalHandler,
       displayCallbacks: this.deps.displayCallbacks,
-    });
+    };
   }
 
   /**
