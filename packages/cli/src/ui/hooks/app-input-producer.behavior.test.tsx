@@ -7,6 +7,7 @@ import { runtimeAppFixture } from '../../__tests__/runtime-context-fixture.js';
 import { describe, expect, it } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -40,11 +41,13 @@ describe('application input producer', () => {
       createMockCommandContext().runtimeApi,
     );
     try {
-      await waitFor(async () => {
-        expect(JSON.stringify(await owner.getHistory())).toContain(
-          'actual application captured request',
-        );
-      });
+      await historyContaining(owner, [
+        'actual application captured request',
+        'turn one reply',
+      ]);
+      expect(JSON.stringify(await owner.getHistory())).toContain(
+        'actual application captured request',
+      );
     } finally {
       app.unmount();
       await config.dispose();
@@ -98,6 +101,38 @@ describe('application input producer', () => {
     }
   });
 });
+
+/**
+ * Resolves when the agent's history contains every fragment. The startup
+ * question is added to history after file-reference expansion and chat
+ * creation, and the replayed reply marks the end of that turn, so awaiting
+ * both joins the whole startup before teardown disposes the owner. Each
+ * history-token publication is the signal to re-read the history; there is no
+ * deadline here, the test runner's own timeout bounds a startup that never
+ * finishes.
+ */
+async function historyContaining(
+  agent: Agent,
+  fragments: readonly string[],
+): Promise<void> {
+  let stop = (): void => {};
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const check = (): void => {
+        agent.getHistory().then((history) => {
+          const text = JSON.stringify(history);
+          if (fragments.every((fragment) => text.includes(fragment))) {
+            resolve();
+          }
+        }, reject);
+      };
+      stop = agent.session.subscribeHistoryTokens(check);
+      check();
+    });
+  } finally {
+    stop();
+  }
+}
 
 function renderApplication(
   owner: Awaited<ReturnType<ReturnType<typeof useCommandOwners>>>,
