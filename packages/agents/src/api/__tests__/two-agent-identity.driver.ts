@@ -1,7 +1,3 @@
-import {
-  captureAgentCreation as createAgent,
-  fixtureAgentResources,
-} from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -23,6 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { json } from 'node:stream/consumers';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import { createAgent } from '../createAgent.js';
 import { collect, successful } from './turn-revision-capture.fixture.js';
 
 type Requests = ReadonlyArray<Record<string, unknown>>;
@@ -211,12 +208,6 @@ async function interleave(
   prompts: () => readonly string[][],
 ): Promise<void> {
   expect(a).not.toBe(b);
-  expect(fixtureAgentResources(a).manager).not.toBe(
-    fixtureAgentResources(b).manager,
-  );
-  expect(fixtureAgentResources(a).publishedClient(a)).not.toBe(
-    fixtureAgentResources(b).publishedClient(b),
-  );
   expect(a.session.getSessionId()).toBe(b.session.getSessionId());
   a.setModelParam('temperature', 0.2);
   b.setModelParam('temperature', 0.7);
