@@ -9,7 +9,9 @@ import {
   RETAINED_BOUND_BYTES,
   sessionWithCheckpoints,
 } from './__tests__/support/compactionMemory.js';
-import type { JournalStore } from './journalStore.js';
+import { JournalStore } from './journalStore.js';
+import { storeDeps } from './__tests__/support/storeFixtures.js';
+import { testJournalSeams } from './__tests__/support/journalFixtures.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
 
 const COUNTS = [1, 10, 100, 1000] as const;
@@ -26,9 +28,14 @@ describe('store compaction memory with growing checkpoint counts (design 13.6)',
   });
 
   async function build(checkpoints: number, name: string) {
-    const store = await sessionWithCheckpoints(
-      path.join(directory(), `${name}.llxj`),
-      checkpoints,
+    const file = path.join(directory(), `${name}.llxj`);
+    const built = await sessionWithCheckpoints(file, checkpoints);
+    await built.close();
+    // A swap discards writer caches. Start with empty caches too, so their
+    // checkpoint-dependent construction cost cannot mask retained copy memory.
+    const store = await JournalStore.open(
+      file,
+      storeDeps({ seams: testJournalSeams({}, 1, false) }),
     );
     open.push(store);
     return store;

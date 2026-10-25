@@ -138,49 +138,60 @@ describe('HistoryService persisted replacement byte boundaries', () => {
         { recorder: rig.primary, before: primaryBefore, mark: marks[0] },
         { recorder: rig.mirror, before: mirrorBefore, mark: marks[1] },
       ];
-      const summaries = [];
-      for (const { recorder, before, mark } of cases) {
-        const after = await capture(recorder);
-        const file = join(
-          rig.directory,
-          `${recorder.config.sessionId}-cut.llxj`,
-        );
-        const writes = recorder.seams.events
-          .slice(mark)
-          .filter((event) => event.type === 'write');
-        const bytes = after.bytes.length - before.bytes.length;
-        expect(bytes).toBeGreaterThan(TRAILER_RECORD_BYTES);
-        expect(bytes).toBeLessThan(64 * 1024);
-        expect(after.bytes.subarray(0, before.bytes.length)).toStrictEqual(
-          before.bytes,
-        );
-        expect(writes[0]?.position).toBe(before.bytes.length);
-        expect(writes[writes.length - 1]).toMatchObject({
-          position: after.bytes.length - TRAILER_RECORD_BYTES,
-          length: TRAILER_RECORD_BYTES,
-        });
-        expect(writes.reduce((sum, write) => sum + write.length, 0)).toBe(
-          bytes,
-        );
-        expect(after.version).toBe(before.version + 1);
-        let checked = 0;
-        for (let cut = before.bytes.length; cut <= after.bytes.length; cut++) {
-          const image = after.bytes.subarray(0, cut);
-          const complete = cut === after.bytes.length;
-          const expected = complete ? after : before;
-          await verifyImage(file, image, recorder, expected);
-          checked++;
-        }
-        expect(checked).toBe(bytes + 1);
-        summaries.push({
-          file: recorder.config.sessionId,
-          firstCut: before.bytes.length,
-          finalCut: after.bytes.length,
-          incompleteCuts: checked - 1,
-          completeCuts: 1,
-          writes,
-        });
-      }
+      const summaries = await Promise.all(
+        cases.map(async ({ recorder, before, mark }) => {
+          const after = await capture(recorder);
+          const file = join(
+            rig.directory,
+            `${recorder.config.sessionId}-cut.llxj`,
+          );
+          const writes = recorder.seams.events
+            .slice(mark)
+            .filter((event) => event.type === 'write');
+          const bytes = after.bytes.length - before.bytes.length;
+          expect(bytes).toBeGreaterThan(TRAILER_RECORD_BYTES);
+          expect(bytes).toBeLessThan(64 * 1024);
+          expect(after.bytes.subarray(0, before.bytes.length)).toStrictEqual(
+            before.bytes,
+          );
+          expect(writes[0]?.position).toBe(before.bytes.length);
+          expect(writes[writes.length - 1]).toMatchObject({
+            position: after.bytes.length - TRAILER_RECORD_BYTES,
+            length: TRAILER_RECORD_BYTES,
+          });
+          expect(writes.reduce((sum, write) => sum + write.length, 0)).toBe(
+            bytes,
+          );
+          expect(after.version).toBe(before.version + 1);
+          const counts = await Promise.all(
+            [0, 1].map(async (lane) => {
+              let checked = 0;
+              for (
+                let cut = before.bytes.length + lane;
+                cut <= after.bytes.length;
+                cut += 2
+              ) {
+                const image = after.bytes.subarray(0, cut);
+                const complete = cut === after.bytes.length;
+                const expected = complete ? after : before;
+                await verifyImage(`${file}.${lane}`, image, recorder, expected);
+                checked++;
+              }
+              return checked;
+            }),
+          );
+          const checked = counts.reduce((sum, count) => sum + count, 0);
+          expect(checked).toBe(bytes + 1);
+          return {
+            file: recorder.config.sessionId,
+            firstCut: before.bytes.length,
+            finalCut: after.bytes.length,
+            incompleteCuts: checked - 1,
+            completeCuts: 1,
+            writes,
+          };
+        }),
+      );
       await writeFile(
         join(rig.directory, 'byte-cut-results.json'),
         JSON.stringify(summaries, null, 2),

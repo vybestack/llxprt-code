@@ -7,6 +7,48 @@ import { JournalStore } from './journalStore.js';
 import { draftRow, storeDeps } from './__tests__/support/storeFixtures.js';
 import { testJournalSeams } from './__tests__/support/journalFixtures.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
+import { crc32 } from './bytes.js';
+import { decodeJournalHeader, JOURNAL_HEADER_BYTES } from './fileHeader.js';
+import { decodeFrameStart, encodeBodylessFrame } from './frame.js';
+import { RECORD_KIND } from './recordKinds.js';
+import { decodeTrailerHeader } from './trailerRecord.js';
+
+/** Preserve the v11 frozen digest across v12's three added filledThrough words. */
+function frozenAppendBytes(bytes: Buffer): Uint8Array {
+  decodeJournalHeader(bytes.subarray(0, JOURNAL_HEADER_BYTES));
+  const header = Buffer.from(bytes.subarray(0, JOURNAL_HEADER_BYTES));
+  expect(header.readUInt32LE(8)).toBe(12);
+  header.writeUInt32LE(11, 8);
+  header.writeUInt32LE(crc32(header.subarray(0, 60)), 60);
+  let offset = JOURNAL_HEADER_BYTES;
+  while (offset < bytes.length) {
+    const frame = decodeFrameStart(bytes.subarray(offset), offset);
+    if (frame.kind === RECORD_KIND.TRAILER) {
+      expect(frame.endOffset).toBe(bytes.length);
+      const trailer = decodeTrailerHeader(frame.kindHeader);
+      expect(trailer.selfOffset).toBe(offset);
+      expect(trailer.durableEnd).toBe(bytes.length);
+      for (const slot of trailer.slots.formatSlots)
+        expect(slot.filledThrough).toBe(0);
+      const current = Buffer.from(frame.kindHeader);
+      const old = Buffer.concat([
+        current.subarray(0, 1368),
+        ...[0, 1, 2].map((slot) =>
+          current.subarray(1368 + slot * 40, 1400 + slot * 40),
+        ),
+        current.subarray(1488),
+      ]);
+      old.writeBigUInt64LE(BigInt(bytes.length - 24), 1528);
+      return Buffer.concat([
+        header,
+        bytes.subarray(JOURNAL_HEADER_BYTES, offset),
+        encodeBodylessFrame(RECORD_KIND.TRAILER, old),
+      ]);
+    }
+    offset = frame.endOffset;
+  }
+  throw new Error('Prepared append has no trailer');
+}
 
 const cases = [
   {
@@ -59,7 +101,7 @@ describe('prepared append descriptor read cost', () => {
         expect(store.published?.rows).toBe(count);
         expect(
           createHash('sha256')
-            .update(await readFile(file))
+            .update(frozenAppendBytes(await readFile(file)))
             .digest('hex'),
         ).toBe(digest);
         expect(counter.reads).toBeLessThanOrEqual(reads);
