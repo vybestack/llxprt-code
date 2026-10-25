@@ -1,16 +1,19 @@
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createAgent } from '../createAgent.js';
+import type { Agent } from '../agent.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { createRecordingProvider } from './helpers/recording-provider.js';
+import { openRouteBPreflight } from './helpers/route-b-preflight.js';
 import {
-  buildAgent,
-  internalConfig,
-  type Agent,
-} from './helpers/agentHarness.js';
-import { modelVisibleSkillNames } from './helpers/skills-fixture-declarations.js';
+  recordedSkillNames,
+  settleTurn,
+} from './helpers/skill-declaration-reads.js';
 
 /**
  * @license
@@ -48,18 +51,6 @@ function writeSkill(workspace: string, name: string): void {
   );
 }
 
-/**
- * Drives one turn so a live chat session exists with a tool list, which is the
- * state a reload has to update. The registrar is already installed by
- * `createAgent`; nothing here supplies it.
- */
-async function settle(agent: Agent): Promise<Config> {
-  for await (const _event of agent.stream('hello')) {
-    // Drain the turn so the chat session and its tool list exist.
-  }
-  return internalConfig(agent);
-}
-
 describe('workspace skill root lifetime @issue:2615', () => {
   let promptDirectory: string;
   const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
@@ -73,65 +64,93 @@ describe('workspace skill root lifetime @issue:2615', () => {
     else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
     await rm(promptDirectory, { recursive: true, force: true });
   });
+  const callerCredentials = useOwnedCredentials();
   async function withWorkspace(
     initialSkills: string[],
     run: (ctx: {
       agent: Agent;
       config: Config;
       workspace: string;
+      recording: ReturnType<typeof createRecordingProvider>;
     }) => Promise<void>,
   ): Promise<void> {
-    const workspace = mkdtempSync(join(tmpdir(), 'llxprt-skill-reload-'));
-    for (const name of initialSkills) {
-      writeSkill(workspace, name);
-    }
     // The storage-isolation preload points LLXPRT_AGENTS_HOME at a temp root,
     // so discovery never reads the real ~/.agents/skills here; the strict set
     // assertions only ever see this workspace's skills.
-    const owned = await buildAgent('plain-text.jsonl', {
-      skillsSupport: true,
-      workingDir: workspace,
+    const recording = createRecordingProvider();
+    const route = await openRouteBPreflight({
+      authority: callerCredentials().authority,
+      contributions: recording.contributions,
+      config: {
+        provider: recording.alias,
+        model: 'recording-default',
+        skillsSupport: true,
+      },
     });
-    const agent = owned.agent;
-    const cleanup = owned.cleanup;
+    let agent: Agent | undefined;
     try {
-      const config = await settle(agent);
-      await run({ agent, config, workspace });
+      for (const name of initialSkills) {
+        writeSkill(route.directory, name);
+      }
+      await route.prepare();
+      agent = await route.createAgent({
+        provider: recording.alias,
+        model: 'recording-default',
+      });
+      await settleTurn(agent);
+      await run({
+        agent,
+        config: route.config,
+        workspace: route.directory,
+        recording,
+      });
     } finally {
-      await agent.dispose();
-      await cleanup();
-      rmSync(workspace, { recursive: true, force: true });
+      await agent?.dispose();
+      await route.close();
     }
   }
 
   it('keeps same-project same-label workspace catalogues and policy independent', async () => {
     await withWorkspace(
       ['alpha'],
-      async ({ agent: first, config, workspace }) => {
-        const second = await buildAgent('plain-text.jsonl', {
+      async ({
+        agent: first,
+        config,
+        workspace,
+        recording: firstRecording,
+      }) => {
+        const secondRecording = createRecordingProvider();
+        const second = await createAgent({
+          provider: secondRecording.alias,
+          model: 'recording-default',
+          providerContributions: secondRecording.contributions,
+          credentialAuthority: callerCredentials().authority,
           skillsSupport: true,
           workingDir: workspace,
           sessionId: config.getSessionId(),
         });
         try {
-          await settle(second.agent);
+          await settleTurn(second);
           config.setDisabledSkills(['alpha']);
           expect(first.skills.list()).toStrictEqual([]);
-          expect(
-            second.agent.skills.list().map((skill) => skill.name),
-          ).toStrictEqual(['alpha']);
+          expect(second.skills.list().map((skill) => skill.name)).toStrictEqual(
+            ['alpha'],
+          );
           writeSkill(workspace, 'beta');
           await first.skills.reload();
-          expect(modelVisibleSkillNames(first)).toStrictEqual(['beta']);
-          expect(modelVisibleSkillNames(second.agent)).toStrictEqual(['alpha']);
+          await settleTurn(first);
+          await settleTurn(second);
+          expect(recordedSkillNames(firstRecording)).toStrictEqual(['beta']);
+          expect(recordedSkillNames(secondRecording)).toStrictEqual(['alpha']);
           await first.dispose();
-          await second.agent.skills.reload();
-          expect(modelVisibleSkillNames(second.agent).sort()).toStrictEqual([
+          await second.skills.reload();
+          await settleTurn(second);
+          expect(recordedSkillNames(secondRecording).sort()).toStrictEqual([
             'alpha',
             'beta',
           ]);
         } finally {
-          await second.cleanup();
+          await second.dispose();
         }
       },
     );

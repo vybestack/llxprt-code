@@ -11,7 +11,7 @@ import { registerActivateSkillTool } from '../../skill-tool-registrar.js';
 import type { SkillsControl } from '../control/skillsControl.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import { clientModelVisibleSkillNames } from './helpers/skills-fixture-declarations.js';
+import { clientSkillNames } from './helpers/skill-declaration-reads.js';
 import { openSkillsOwner } from './helpers/skills-owner-session.js';
 
 /**
@@ -102,15 +102,13 @@ describe('workspace skill publication compensation', () => {
     await withWorkspace(
       ['alpha'],
       async ({ client, skills, config, workspace }) => {
-        expect(clientModelVisibleSkillNames(client)).toStrictEqual(['alpha']);
+        expect(clientSkillNames(client)).toStrictEqual(['alpha']);
         const publish = client.setTools.bind(client);
         const fault = vi
           .spyOn(client, 'setTools')
           .mockImplementationOnce(async () => {
             await publish();
-            expect(clientModelVisibleSkillNames(client).sort()).toStrictEqual([
-              'beta',
-            ]);
+            expect(clientSkillNames(client).sort()).toStrictEqual(['beta']);
             throw new Error('publication failed after mutation');
           });
         writeSkill(workspace, 'beta');
@@ -122,7 +120,7 @@ describe('workspace skill publication compensation', () => {
           expect(skills.list().map((skill) => skill.name)).toStrictEqual([
             'alpha',
           ]);
-          expect(clientModelVisibleSkillNames(client)).toStrictEqual(['alpha']);
+          expect(clientSkillNames(client)).toStrictEqual(['alpha']);
         } finally {
           fault.mockRestore();
         }
@@ -136,7 +134,7 @@ describe('workspace skill publication compensation', () => {
 
   it('reports the publication and compensation failures after restoring the real registration', async () => {
     await withWorkspace(['alpha'], async ({ client, skills, workspace }) => {
-      expect(clientModelVisibleSkillNames(client)).toStrictEqual(['alpha']);
+      expect(clientSkillNames(client)).toStrictEqual(['alpha']);
       const publish = client.setTools.bind(client);
       const failed = new Error('candidate publication failed');
       const compensation = new Error('compensation publication failed');
@@ -163,7 +161,7 @@ describe('workspace skill publication compensation', () => {
         if (!(error.cause instanceof AggregateError))
           throw new Error('Expected aggregated publication errors');
         expect(error.cause.errors).toStrictEqual([failed, compensation]);
-        expect(clientModelVisibleSkillNames(client)).toStrictEqual(['alpha']);
+        expect(clientSkillNames(client)).toStrictEqual(['alpha']);
       } finally {
         fault.mockRestore();
       }

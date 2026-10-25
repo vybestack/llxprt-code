@@ -10,7 +10,7 @@ import { SkillsControl } from '../control/skillsControl.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { openSkillPublicationOwner } from './helpers/skill-publication-owner.js';
-import { clientModelVisibleSkillNames } from './helpers/skills-fixture-declarations.js';
+import { clientSkillNames } from './helpers/skill-declaration-reads.js';
 
 /**
  * @license
@@ -122,7 +122,7 @@ describe('workspace skill required publication ports', () => {
           )
             throw new Error('Expected aggregate control cause');
           expect(error.cause.errors).toStrictEqual([failed, restore]);
-          expect(clientModelVisibleSkillNames(client)).toStrictEqual([]);
+          expect(clientSkillNames(client)).toStrictEqual([]);
           expect(skills.list().map((skill) => skill.name)).toStrictEqual([
             'alpha',
           ]);
@@ -132,7 +132,7 @@ describe('workspace skill required publication ports', () => {
           failRestore = false;
         }
         await skills.reload();
-        expect(clientModelVisibleSkillNames(client).sort()).toStrictEqual([
+        expect(clientSkillNames(client).sort()).toStrictEqual([
           'alpha',
           'beta',
         ]);

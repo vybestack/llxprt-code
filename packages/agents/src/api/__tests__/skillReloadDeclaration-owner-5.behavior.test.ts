@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { openSkillsOwner } from './helpers/skills-owner-session.js';
-import { clientModelVisibleSkillNames } from './helpers/skills-fixture-declarations.js';
+import { clientSkillNames } from './helpers/skill-declaration-reads.js';
 
 /**
  * @license
@@ -95,17 +95,17 @@ describe('workspace skill root lifetime @issue:2615', () => {
         ],
       };
       await loader.load(extension);
-      expect(clientModelVisibleSkillNames(client).sort()).toStrictEqual([
+      expect(clientSkillNames(client).sort()).toStrictEqual([
         'extension-skill',
         'native',
       ]);
       await loader.restart(extension);
-      expect(clientModelVisibleSkillNames(client).sort()).toStrictEqual([
+      expect(clientSkillNames(client).sort()).toStrictEqual([
         'extension-skill',
         'native',
       ]);
       await loader.unload(extension);
-      expect(clientModelVisibleSkillNames(client)).toStrictEqual(['native']);
+      expect(clientSkillNames(client)).toStrictEqual(['native']);
       expect(skills.get('extension-skill')).toBeUndefined();
     } finally {
       await close();

@@ -1,16 +1,17 @@
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createAgent } from '../createAgent.js';
+import type { Agent } from '../agent.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { createRecordingProvider } from './helpers/recording-provider.js';
 import {
-  buildAgent,
-  internalConfig,
-  type Agent,
-} from './helpers/agentHarness.js';
-import { activateSkillDeclaration } from './helpers/skills-fixture-declarations.js';
+  recordedSkillDeclaration,
+  settleTurn,
+} from './helpers/skill-declaration-reads.js';
 
 /**
  * @license
@@ -55,18 +56,6 @@ function removeSkill(workspace: string, name: string): void {
   });
 }
 
-/**
- * Drives one turn so a live chat session exists with a tool list, which is the
- * state a reload has to update. The registrar is already installed by
- * `createAgent`; nothing here supplies it.
- */
-async function settle(agent: Agent): Promise<Config> {
-  for await (const _event of agent.stream('hello')) {
-    // Drain the turn so the chat session and its tool list exist.
-  }
-  return internalConfig(agent);
-}
-
 describe('skill reload reaches the model @issue:3379', () => {
   let promptDirectory: string;
   const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
@@ -80,12 +69,13 @@ describe('skill reload reaches the model @issue:3379', () => {
     else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
     await rm(promptDirectory, { recursive: true, force: true });
   });
+  const callerCredentials = useOwnedCredentials();
   async function withWorkspace(
     initialSkills: string[],
     run: (ctx: {
       agent: Agent;
-      config: Config;
       workspace: string;
+      recording: ReturnType<typeof createRecordingProvider>;
     }) => Promise<void>,
   ): Promise<void> {
     const workspace = mkdtempSync(join(tmpdir(), 'llxprt-skill-reload-'));
@@ -95,30 +85,33 @@ describe('skill reload reaches the model @issue:3379', () => {
     // The storage-isolation preload points LLXPRT_AGENTS_HOME at a temp root,
     // so discovery never reads the real ~/.agents/skills here; the strict set
     // assertions only ever see this workspace's skills.
-    const owned = await buildAgent('plain-text.jsonl', {
+    const recording = createRecordingProvider();
+    const agent = await createAgent({
+      provider: recording.alias,
+      model: 'recording-default',
+      providerContributions: recording.contributions,
+      credentialAuthority: callerCredentials().authority,
       skillsSupport: true,
       workingDir: workspace,
     });
-    const agent = owned.agent;
-    const cleanup = owned.cleanup;
     try {
-      const config = await settle(agent);
-      await run({ agent, config, workspace });
+      await settleTurn(agent);
+      await run({ agent, workspace, recording });
     } finally {
       await agent.dispose();
-      await cleanup();
       rmSync(workspace, { recursive: true, force: true });
     }
   }
 
   it('withdraws the tool once the last skill goes away', async () => {
-    await withWorkspace(['alpha'], async ({ agent, workspace }) => {
-      expect(activateSkillDeclaration(agent)).toBeDefined();
+    await withWorkspace(['alpha'], async ({ agent, workspace, recording }) => {
+      expect(recordedSkillDeclaration(recording)).toBeDefined();
 
       removeSkill(workspace, 'alpha');
       await agent.skills.reload();
+      await settleTurn(agent);
 
-      expect(activateSkillDeclaration(agent)).toBeUndefined();
+      expect(recordedSkillDeclaration(recording)).toBeUndefined();
     });
   });
 });
