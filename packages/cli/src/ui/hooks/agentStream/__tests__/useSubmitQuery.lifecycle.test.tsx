@@ -1,7 +1,5 @@
-import {
-  useRecordingPrompts,
-  withRecordingLifetimeFixture,
-} from '../../../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { openRouteAAgent } from '../../../../../../agents/src/api/__tests__/helpers/route-a-agent.js';
+import { useFakeResponsesReplay } from '../../../../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
 import { renderHook, waitFor } from '../../../../__tests__/render.js';
@@ -120,7 +118,7 @@ function drainAndRead() {
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () => {
-  useRecordingPrompts();
+  useFakeResponsesReplay('multi-turn-text.jsonl');
   beforeEach(async () => {
     await harness.setup();
     // Reset preparation rejection controls between tests.
@@ -135,7 +133,9 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
     await harness.cleanup();
   });
   it('completes a submitted turn and flushes only its Agent owner recording', async () => {
-    await withRecordingLifetimeFixture(async (agent) => {
+    const route = await openRouteAAgent({ config: { interactive: true } });
+    try {
+      const { agent } = route;
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },
       ]);
@@ -168,7 +168,9 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
       expect(agent.session.getRecording().enabled).toBe(true);
       expect(rawFlush).not.toHaveBeenCalled();
       unmount();
-    });
+    } finally {
+      await route.close();
+    }
   }, 30000);
 
   it('writes one record with status "completed" when a turn succeeds', async () => {
