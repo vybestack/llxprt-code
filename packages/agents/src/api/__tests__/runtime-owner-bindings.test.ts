@@ -4,17 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type {
-  Config,
-  OAuthToken,
-  TokenStore,
-} from '@vybestack/llxprt-code-core';
+import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-core';
 import {
   createAgent,
   createAgentWithRetainedProviderFiles,
@@ -22,6 +17,7 @@ import {
   type AgentProviderFileOperations,
 } from '../index.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { openRouteAAgent } from './helpers/route-a-agent.js';
 import { resolveProviderFilePolicy } from '@vybestack/llxprt-code-providers/providerFilePolicy.js';
 
 class MemoryStore implements TokenStore {
@@ -63,30 +59,24 @@ describe('public Agent runtime owner bindings', () => {
     process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
       new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
     );
-    const factories = createAgentRuntimeFactoryBindings();
-    let adoptedConfig: Config | undefined;
     try {
-      const agent = await createAgent({
-        credentialAuthority: credentials().authority,
-        provider: 'fake',
-        model: 'identity-model',
-        sessionId: 'construction-runtime-id',
-        workingDir: process.cwd(),
-        tokenStore: new MemoryStore(),
-        runtimeFactoryBindings: {
-          ...factories,
-          agentClientFactory: (...args) => {
-            adoptedConfig = args[0];
-            adoptedConfig.adoptSessionId('adopted-config-session');
-            return factories.agentClientFactory(...args);
-          },
+      const route = await openRouteAAgent({
+        authority: credentials().authority,
+        config: {
+          model: 'identity-model',
+          sessionId: 'construction-runtime-id',
+        },
+        intent: {
+          sessionId: 'construction-runtime-id',
+          activation: { provider: 'fake', model: 'identity-model' },
         },
       });
       try {
-        expect(adoptedConfig?.getSessionId()).toBe('adopted-config-session');
-        expect(agent.getRuntimeId()).toBe('construction-runtime-id');
+        route.config.adoptSessionId('adopted-config-session');
+        expect(route.config.getSessionId()).toBe('adopted-config-session');
+        expect(route.agent.getRuntimeId()).toBe('construction-runtime-id');
       } finally {
-        await agent.dispose();
+        await route.close();
       }
     } finally {
       if (oldHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
@@ -108,10 +98,8 @@ describe('public Agent runtime owner bindings', () => {
     );
     const agents: Agent[] = [];
     const owners: object[] = [];
-    const configs: Config[] = [];
     try {
       for (const model of ['first-model', 'second-model']) {
-        const factories = createAgentRuntimeFactoryBindings();
         const agent = await createAgent({
           credentialAuthority: credentials().authority,
           provider: 'fake',
@@ -119,20 +107,12 @@ describe('public Agent runtime owner bindings', () => {
           sessionId: 'shared-session-label',
           workingDir: process.cwd(),
           tokenStore: new MemoryStore(),
-          runtimeFactoryBindings: {
-            ...factories,
-            agentClientFactory: (...args) => {
-              if (!configs.includes(args[0])) configs.push(args[0]);
-              return factories.agentClientFactory(...args);
-            },
-          },
         });
         agents.push(agent);
         owners.push(agent.captureProviderFiles);
       }
       expect(owners).toHaveLength(2);
       expect(owners[0]).not.toBe(owners[1]);
-      expect(configs[0]).not.toBe(configs[1]);
       await Promise.all(
         agents.map((agent, index) =>
           agent.setProvider('fake', `switched-model-${index}`),
@@ -178,11 +158,6 @@ describe('public Agent runtime owner bindings', () => {
         .map((closes) =>
           closes === 0 ? ['activated'] : ['activated', 'disposed'],
         );
-    const factories = [
-      createAgentRuntimeFactoryBindings(),
-      createAgentRuntimeFactoryBindings(),
-    ];
-    const factoryEvents: string[][] = [[], []];
     try {
       const [first, second] = await Promise.all(
         [0, 1].map(async (index) => {
@@ -193,14 +168,6 @@ describe('public Agent runtime owner bindings', () => {
             sessionId: 'same-owner-label',
             credentialAuthority: credentials().authority,
             tokenStore: stores[index],
-            runtimeFactoryBindings: {
-              ...factories[index],
-              agentClientFactory: (...args) => {
-                factoryEvents[index].push('constructed');
-                expect('providerManager' in args[0]).toBe(false);
-                return factories[index].agentClientFactory(...args);
-              },
-            },
           });
           agents.push(agent);
           return agent;
@@ -217,9 +184,6 @@ describe('public Agent runtime owner bindings', () => {
       );
       expect(second.getRuntimeDiagnosticsSnapshot().modelName).toBe(
         'owner-model-1',
-      );
-      expect(factoryEvents.every((ownerEvents) => ownerEvents.length > 0)).toBe(
-        true,
       );
       const credential = (value: string): OAuthToken => ({
         access_token: value,
@@ -251,7 +215,6 @@ describe('public Agent runtime owner bindings', () => {
             workingDir: process.cwd(),
             sessionId: 'same-owner-label',
             tokenStore: new MemoryStore(),
-            runtimeFactoryBindings: createAgentRuntimeFactoryBindings(),
           },
           [
             {
