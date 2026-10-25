@@ -62,6 +62,7 @@ import {
 } from '@vybestack/llxprt-code-core/config/config.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 
 const FAILED_TRANSITION_COUNT = 101;
 
@@ -96,14 +97,13 @@ describe('Config MCP wiring on folder trust change', () => {
     trust: WorkspaceTrustLifecycle,
     policy = new RuntimePolicyOwner(config, trust),
   ): Promise<McpRuntimeOwner> {
-    const owner = await McpRuntimeOwner.create(
-      createTestOAuthBinding(),
-      config,
-      policy.session.messageBus,
-      undefined,
-      McpClientManager,
-      undefined,
-      policy,
+    const owner = await createTestMcpRuntime(
+      {
+        oauth: createTestOAuthBinding(),
+        config,
+        policy: { owner: policy, ownership: 'caller' },
+      },
+      {},
     );
     workspaceOwners.push(owner);
     await owner.initialize();

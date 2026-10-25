@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 const initializeShellParser = vi.fn(() => Promise.resolve(true));
 const parserInfrastructure = {
   initializeParser: initializeShellParser,
@@ -93,9 +93,9 @@ describe('Server Config (config.ts)', () => {
 
   async function initializeWorkspace(config: Config): Promise<void> {
     owners.push(config);
-    const workspace = await McpRuntimeOwner.create(
-      createTestOAuthBinding(),
-      config,
+    const workspace = await createTestMcpRuntime(
+      { oauth: createTestOAuthBinding(), config },
+      {},
     );
     owners.push(workspace);
     await workspace.initialize();
@@ -207,9 +207,9 @@ describe('Server Config (config.ts)', () => {
         checkpointing: false,
       });
 
-      const runtime = await McpRuntimeOwner.create(
-        createTestOAuthBinding(),
-        config,
+      const runtime = await createTestMcpRuntime(
+        { oauth: createTestOAuthBinding(), config },
+        {},
       );
       owners.push(runtime);
       await runtime.initialize();
@@ -227,9 +227,9 @@ describe('Server Config (config.ts)', () => {
         checkpointing: false,
       });
 
-      const runtime = await McpRuntimeOwner.create(
-        createTestOAuthBinding(),
-        config,
+      const runtime = await createTestMcpRuntime(
+        { oauth: createTestOAuthBinding(), config },
+        {},
       );
       owners.push(runtime);
       await runtime.initialize();
@@ -254,9 +254,9 @@ describe('Server Config (config.ts)', () => {
         skillsSupport: true,
       });
       owners.push(config);
-      const runtime = await McpRuntimeOwner.create(
-        createTestOAuthBinding(),
-        config,
+      const runtime = await createTestMcpRuntime(
+        { oauth: createTestOAuthBinding(), config },
+        {},
       );
       owners.push(runtime);
       await runtime.initialize();

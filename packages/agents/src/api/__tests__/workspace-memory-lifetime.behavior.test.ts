@@ -14,7 +14,7 @@ import { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/works
 import { Agent } from '../agent.js';
 import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 
 /**
  * @license
@@ -146,20 +146,17 @@ describe('supplied workspace memory lifetime through public adoption', () => {
           built_builtFactorylessPreviousReplay,
         );
         cleanups.push(built_builtFactorylessClose);
-        const mcp = await McpRuntimeOwner.create(
-          createTestOAuthBinding(),
-          built_builtFactorylessConfig,
-          built_builtFactorylessPolicy.session.messageBus,
-          undefined,
-          undefined,
-          undefined,
-          built_builtFactorylessPolicy,
-          'caller',
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          { owner: memory },
+        const mcp = await createTestMcpRuntime(
+          {
+            oauth: createTestOAuthBinding(),
+            config: built_builtFactorylessConfig,
+            policy: {
+              owner: built_builtFactorylessPolicy,
+              ownership: 'caller',
+            },
+            memoryOwner: { owner: memory },
+          },
+          {},
         );
         cleanups.push(() => mcp.dispose());
         const facade = await fromConfig(

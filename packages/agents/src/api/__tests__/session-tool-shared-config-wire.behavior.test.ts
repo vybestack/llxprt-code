@@ -21,7 +21,7 @@ import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
 
 import { toConfigParameters } from '../agentConfig.adapter.js';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { collect, successful } from './turn-revision-capture.fixture.js';
 
 const wireSchema = z.object({
@@ -116,29 +116,27 @@ async function startWorkspace(directory: string, jitContextEnabled = true) {
     }),
   );
   const policy = new RuntimePolicyOwner(config);
-  const workspace = await McpRuntimeOwner.create(
+  const workspace = await createTestMcpRuntime(
     {
-      openBrowser: async () => {
-        throw new Error('Unexpected browser');
-      },
-      tokenStorage: new MCPOAuthTokenStorage({
-        getCredentials: async () => null,
-        setCredentials: async () => {
-          throw new Error('Unexpected credential write');
+      oauth: {
+        openBrowser: async () => {
+          throw new Error('Unexpected browser');
         },
-        deleteCredentials: async () => {},
-        listServers: async () => [],
-        getAllCredentials: async () => new Map(),
-        clearAll: async () => {},
-      }),
+        tokenStorage: new MCPOAuthTokenStorage({
+          getCredentials: async () => null,
+          setCredentials: async () => {
+            throw new Error('Unexpected credential write');
+          },
+          deleteCredentials: async () => {},
+          listServers: async () => [],
+          getAllCredentials: async () => new Map(),
+          clearAll: async () => {},
+        }),
+      },
+      config,
+      policy: { owner: policy, ownership: 'runtime' },
     },
-    config,
-    policy.session.messageBus,
-    undefined,
-    undefined,
-    undefined,
-    policy,
-    'runtime',
+    {},
   );
   return { config, workspace };
 }

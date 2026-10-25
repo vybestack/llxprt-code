@@ -1,6 +1,6 @@
 import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { WorkspaceAuthorityComposition } from '../workspace-authority-composition.js';
 /**
  * @license
@@ -134,9 +134,9 @@ describe('Production workspace trust authority', () => {
 
   it('rejects renewed initialization at the public MCP root after its retained initialization retires', async (): Promise<void> => {
     const config = declaration();
-    const owner = await McpRuntimeOwner.create(
-      createTestOAuthBinding(),
-      config,
+    const owner = await createTestMcpRuntime(
+      { oauth: createTestOAuthBinding(), config },
+      {},
     );
     try {
       await owner.initialize();

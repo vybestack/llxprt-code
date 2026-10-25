@@ -39,8 +39,7 @@ void vi.mock('@vybestack/llxprt-code-mcp', () => ({
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { McpClientManager } from '@vybestack/llxprt-code-mcp';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 
 const testRoot = resolve(import.meta.dir, '../../../../core');
@@ -63,14 +62,13 @@ describe('Config live IDE trust', () => {
     ideOwners.push(config, trust);
     const policy = new RuntimePolicyOwner(config, trust);
     ideOwners.push(policy);
-    const runtime = await McpRuntimeOwner.create(
-      createTestOAuthBinding(),
-      config,
-      policy.session.messageBus,
-      undefined,
-      McpClientManager,
-      undefined,
-      policy,
+    const runtime = await createTestMcpRuntime(
+      {
+        oauth: createTestOAuthBinding(),
+        config,
+        policy: { owner: policy, ownership: 'caller' },
+      },
+      {},
     );
     ideOwners.push(runtime);
     try {

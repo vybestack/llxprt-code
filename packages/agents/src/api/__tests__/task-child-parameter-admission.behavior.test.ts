@@ -5,6 +5,7 @@ import { captureAgentAdoption } from './helpers/agent-resource-capture.js';
  * SPDX-License-Identifier: Apache-2.0
  */
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
 
 import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
@@ -224,7 +225,10 @@ async function exercise(
       subagentDirectory: join(directory, 'subagents'),
       sessionId: 'child-parameter-admission',
     });
-    workspace = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
+    workspace = await createTestMcpRuntime(
+      { oauth: createTestOAuthBinding(), config },
+      {},
+    );
     const settingsService = new SettingsService();
     const settingsOwner = new SessionSettingsOwner(settingsService);
     agent = await captureAgentAdoption(

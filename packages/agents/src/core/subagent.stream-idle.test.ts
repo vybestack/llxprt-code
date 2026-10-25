@@ -54,6 +54,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { McpRuntimeOwner } from '../api/mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from '../api/__tests__/helpers/create-mcp-runtime.js';
 import {
   waitForConditionInRealTime,
   waitForConditionOnEventLoop,
@@ -247,9 +248,9 @@ describe('subagent.ts', () => {
       };
       const configWithTimeout = new Config(configParams);
       settingsService.set('stream-idle-timeout-ms', customTimeoutMs);
-      const mcpRuntime = await McpRuntimeOwner.create(
-        createTestOAuthBinding(),
-        configWithTimeout,
+      const mcpRuntime = await createTestMcpRuntime(
+        { oauth: createTestOAuthBinding(), config: configWithTimeout },
+        {},
       );
       workspaceOwners.push(mcpRuntime);
       await mcpRuntime.initialize();
@@ -352,9 +353,9 @@ describe('subagent.ts', () => {
       };
       const configWithTimeout = new Config(configParams);
       settingsService.set('stream-idle-timeout-ms', 0); // Disabled
-      const mcpRuntime = await McpRuntimeOwner.create(
-        createTestOAuthBinding(),
-        configWithTimeout,
+      const mcpRuntime = await createTestMcpRuntime(
+        { oauth: createTestOAuthBinding(), config: configWithTimeout },
+        {},
       );
       workspaceOwners.push(mcpRuntime);
       await mcpRuntime.initialize();
@@ -493,9 +494,9 @@ describe('subagent.ts', () => {
       };
       const configWithTimeout = new Config(configParams);
       settingsService.set('stream-idle-timeout-ms', configTimeoutMs);
-      const mcpRuntime = await McpRuntimeOwner.create(
-        createTestOAuthBinding(),
-        configWithTimeout,
+      const mcpRuntime = await createTestMcpRuntime(
+        { oauth: createTestOAuthBinding(), config: configWithTimeout },
+        {},
       );
       workspaceOwners.push(mcpRuntime);
       await mcpRuntime.initialize();

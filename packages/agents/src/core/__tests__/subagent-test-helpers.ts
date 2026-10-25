@@ -59,7 +59,8 @@ import type {
 } from '@vybestack/llxprt-code-tools';
 import type { Mock } from 'bun:test';
 import { afterEach, vi } from 'bun:test';
-import { McpRuntimeOwner } from '../../api/mcpRuntimeAssembly.js';
+import type { McpRuntimeOwner } from '../../api/mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from '../../api/__tests__/helpers/create-mcp-runtime.js';
 import { StreamEventType } from '../chatSession.js';
 
 type RetainSubagentCleanup = (close: () => void | Promise<void>) => () => void;
@@ -187,7 +188,10 @@ export async function acquireSubagentWorkspace(
   retain: RetainSubagentCleanup,
   toolRegistryMethods: ToolSelectionMethodOverrides = {},
 ): Promise<McpRuntimeOwner> {
-  const owner = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
+  const owner = await createTestMcpRuntime(
+    { oauth: createTestOAuthBinding(), config },
+    {},
+  );
   const close = (): Promise<void> => owner.dispose();
   const remove = retain(close);
   try {

@@ -9,7 +9,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 describe('Config composition lifetimes', () => {
   const approvalRoots: Array<() => Promise<void>> = [];
   afterEach(async () => {
@@ -59,27 +59,9 @@ describe('Config composition lifetimes', () => {
           trustedFolder: true,
           mcpServers: { stale: { command: 'stale' } },
         });
-        const owner = await McpRuntimeOwner.create(
-          createTestOAuthBinding(),
-          config,
-          undefined,
-          undefined,
-          McpClientManager,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          createReloadBinding(config, readReloadSettings),
+        const owner = await createTestMcpRuntime(
+          { oauth: createTestOAuthBinding(), config },
+          { mcpSettings: createReloadBinding(config, readReloadSettings) },
         );
         approvalRoots.push(() => owner.dispose());
         await owner.initialize();
