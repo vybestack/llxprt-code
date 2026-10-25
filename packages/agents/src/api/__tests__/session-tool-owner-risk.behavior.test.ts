@@ -1,9 +1,7 @@
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import {
   createCapturedSessionOwner,
-  capturedSessionClient,
+  ownerClients,
 } from './helpers/session-client-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -33,15 +31,13 @@ import { releaseAdoptedFileScope } from '../adoption-release.js';
 import { randomUUID } from 'node:crypto';
 import { cleanupAfterFailure } from '../../core/subagent-cleanup.js';
 import { SessionClientOwner } from '../../session/session-client-owner.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it, spyOn } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { fileURLToPath } from 'node:url';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import {
-  createAgentRuntimeFactoryBindings,
-  AgentRuntimeFactoryBindings,
-} from '../runtimeFactories.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
@@ -97,8 +93,8 @@ describe('tool catalog publication and cleanup ownership', () => {
   let builtCallerManager: ReturnType<typeof acquirePreferredProviderManager>;
   let builtCallerOwner: SessionClientOwner;
   let builtCallerClose: () => Promise<void>;
-  let builtCallerFactories: AgentRuntimeFactoryBindings;
   let builtCallerRelease: AcquisitionRelease;
+  let builtCallerMedia: SessionMediaOwner;
   let builtCallerFiles: ProviderFileLifecycle;
   let builtCallerRuntimeId: string;
   let builtCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
@@ -110,7 +106,6 @@ describe('tool catalog publication and cleanup ownership', () => {
   async function openbuiltCaller(
     fixture: string,
     overrides: Readonly<Partial<AgentConfig>> = {},
-    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
     skillSettings: Pick<
       ConfigParameters,
       'enableExtensionReloading' | 'storageRoot'
@@ -147,10 +142,6 @@ describe('tool catalog publication and cleanup ownership', () => {
         process.cwd(),
       ];
     builtCallerConfig = new Config(parameters);
-    builtCallerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...suppliedFactories,
-    };
     builtCallerSettings = new SettingsService();
     for (const [key, value] of Object.entries(
       builtCallerConfig.getInitialSettings(),
@@ -167,33 +158,17 @@ describe('tool catalog publication and cleanup ownership', () => {
       skillOperations,
     );
     acquirebuiltCallerProviders();
-    const media = new SessionMediaOwner(
+    builtCallerMedia = new SessionMediaOwner(
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await createCapturedSessionOwner(
-      builtCallerConfig,
-      assembleTaskSchemaPolicy(builtCallerSettings),
-      builtCallerManager,
-      builtCallerFactories.agentClientFactory,
-      media.store,
-      builtCallerMcp.readInstructions,
-      builtCallerMcp.workspacePaths,
-      builtCallerSettingsOwner,
-      builtCallerContent,
-      builtCallerTokenizer,
-    );
-    builtCallerOwner.bindMcpRuntime(builtCallerMcp);
-    builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
-      builtCallerOAuth.composeRetryOperations(provider),
-    );
-    builtCallerOwner.bindHooks();
+    builtCallerOwner = await createCallerOwner();
     builtCallerClose = settleEngineRelease.bind(
       undefined,
       [
         () => builtCallerOwner.dispose(),
         () => builtCallerRelease.close(),
-        () => media.dispose(),
+        () => builtCallerMedia.dispose(),
         () => builtCallerMcp.dispose(),
         () => builtCallerConfig.dispose(),
         () => rm(directory, { recursive: true, force: true }),
@@ -216,6 +191,30 @@ describe('tool catalog publication and cleanup ownership', () => {
     } catch (primary) {
       await cleanupAfterFailure(primary, builtCallerClose);
     }
+  }
+  async function createCallerOwner(): Promise<SessionClientOwner> {
+    const owner = await createCapturedSessionOwner(
+      builtCallerConfig,
+      assembleTaskSchemaPolicy(builtCallerSettings),
+      builtCallerManager,
+      buildAgentClientFactory(),
+      builtCallerMedia.store,
+      builtCallerMcp.readInstructions,
+      builtCallerMcp.workspacePaths,
+      builtCallerSettingsOwner,
+      builtCallerContent,
+      builtCallerTokenizer,
+    );
+    owner.bindMcpRuntime(builtCallerMcp);
+    owner.bindProviderFiles(builtCallerFiles, (provider) =>
+      builtCallerOAuth.composeRetryOperations(provider),
+    );
+    owner.bindHooks();
+    return owner;
+  }
+  function callerClient(owner: SessionClientOwner): AgentClientContract {
+    const clients = ownerClients(owner);
+    return clients[clients.length - 1];
   }
   function acquirebuiltCallerProviders(): void {
     builtCallerRuntimeId = 'builtCaller-' + randomUUID();
@@ -291,41 +290,31 @@ describe('tool catalog publication and cleanup ownership', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await capturedSessionClient(builtCallerOwner).startChat();
+    await callerClient(builtCallerOwner).startChat();
   }
 
   async function publicationClose(): Promise<void> {
     await openbuiltCaller('plain-text.jsonl');
-    const agent = await fromConfig(
-      builtCallerConfig,
-      builtCallerSettings,
-      {},
-      builtCallerSettingsOwner,
-      builtCallerManager,
-      undefined,
-      undefined,
-      builtCallerMcp,
-    );
-    await fixtureAgentResources(agent).publishedClient(agent).startChat();
+    const client = callerClient(builtCallerOwner);
     const entered = engineGate();
     const release = engineGate();
-    const original = fixtureAgentResources(agent)
-      .publishedClient(agent)
-      .setTools.bind(fixtureAgentResources(agent).publishedClient(agent));
-    const publication = spyOn(
-      fixtureAgentResources(agent).publishedClient(agent),
-      'setTools',
-    ).mockImplementation(async (...args) => {
-      entered.release();
-      await release.promise;
-      await original(...args);
-    });
-    const pending = agent.sessionClient.publishTools();
+    const original = client.setTools.bind(client);
+    const publication = spyOn(client, 'setTools').mockImplementation(
+      async (...args) => {
+        entered.release();
+        await release.promise;
+        await original(...args);
+      },
+    );
+    const pending = builtCallerOwner.operations.publishTools();
     await entered.promise;
     let finished = false;
-    const closing = agent.dispose().then(() => {
-      finished = true;
-    });
+    const closing = builtCallerOwner
+      .dispose()
+      .then(() => builtCallerMcp.dispose())
+      .then(() => {
+        finished = true;
+      });
     const outcomes = Promise.allSettled([pending, closing]);
     try {
       await Promise.resolve();
@@ -337,7 +326,9 @@ describe('tool catalog publication and cleanup ownership', () => {
         'fulfilled',
         'fulfilled',
       ]);
-      expect(() => agent.tools.get('read_file')).toThrow('closed');
+      expect(() =>
+        builtCallerOwner.toolCatalog.getToolHandle('read_file'),
+      ).toThrow('closed');
     } finally {
       release.release();
       publication.mockRestore();
@@ -348,30 +339,17 @@ describe('tool catalog publication and cleanup ownership', () => {
 
   it('joins an admitted workspace context publication before clearing and withdrawing its physical roots', async () => {
     await openbuiltCaller('plain-text.jsonl');
-    const agent = await fromConfig(
-      builtCallerConfig,
-      builtCallerSettings,
-      {},
-      builtCallerSettingsOwner,
-      builtCallerManager,
-      undefined,
-      undefined,
-      builtCallerMcp,
-    );
-    await fixtureAgentResources(agent).publishedClient(agent).startChat();
+    const client = callerClient(builtCallerOwner);
     const entered = engineGate();
     const release = engineGate();
-    const original = fixtureAgentResources(agent)
-      .publishedClient(agent)
-      .setTools.bind(fixtureAgentResources(agent).publishedClient(agent));
-    const publication = spyOn(
-      fixtureAgentResources(agent).publishedClient(agent),
-      'setTools',
-    ).mockImplementation(async (...args) => {
-      entered.release();
-      await release.promise;
-      await original(...args);
-    });
+    const original = client.setTools.bind(client);
+    const publication = spyOn(client, 'setTools').mockImplementation(
+      async (...args) => {
+        entered.release();
+        await release.promise;
+        await original(...args);
+      },
+    );
     const pending = builtCallerMcp.refreshContext();
     await entered.promise;
     let completed = false;
@@ -394,7 +372,6 @@ describe('tool catalog publication and cleanup ownership', () => {
       release.release();
       publication.mockRestore();
       await outcomes;
-      await agent.dispose();
       await builtCallerClose();
     }
   });
@@ -410,8 +387,7 @@ describe('tool catalog publication and cleanup ownership', () => {
         builtCallerMcp.trust,
       );
       try {
-        const tool =
-          capturedSessionClient(builtCallerOwner).tools.getTool(name);
+        const tool = callerClient(builtCallerOwner).tools.getTool(name);
         if (tool === undefined)
           throw new Error(`Missing actual session tool ${name}`);
         expect(() => workspace.publication.registerTool(tool)).toThrow(
@@ -445,7 +421,7 @@ describe('tool catalog publication and cleanup ownership', () => {
             .filter((entry) => entry.name === name),
         ).toHaveLength(0);
         expect(
-          capturedSessionClient(builtCallerOwner).tools.getTool(name),
+          callerClient(builtCallerOwner).tools.getTool(name),
         ).toBeDefined();
       } finally {
         await workspace.dispose();
@@ -461,8 +437,7 @@ describe('tool catalog publication and cleanup ownership', () => {
       builtCallerPolicy.session.messageBus,
       builtCallerMcp.trust,
     );
-    const tool =
-      capturedSessionClient(builtCallerOwner).tools.getTool('read_file');
+    const tool = callerClient(builtCallerOwner).tools.getTool('read_file');
     if (tool === undefined) throw new Error('Missing physical read tool');
     const lease = workspace.acceptSkillPublication();
     try {
@@ -489,8 +464,7 @@ describe('tool catalog publication and cleanup ownership', () => {
       builtCallerPolicy.session.messageBus,
       builtCallerMcp.trust,
     );
-    const tool =
-      capturedSessionClient(builtCallerOwner).tools.getTool('read_file');
+    const tool = callerClient(builtCallerOwner).tools.getTool('read_file');
     if (tool === undefined) throw new Error('Missing actual read tool');
     workspace.publication.registerTool(tool);
     try {
@@ -522,7 +496,7 @@ describe('tool catalog publication and cleanup ownership', () => {
       Symbol('faulting read binding'),
       () => {
         if (closing) throw readError;
-        return capturedSessionClient(builtCallerOwner);
+        return callerClient(builtCallerOwner);
       },
       async () => {},
       async () => {},
@@ -530,7 +504,7 @@ describe('tool catalog publication and cleanup ownership', () => {
       () => async () => {},
     );
     const clear = spyOn(
-      capturedSessionClient(builtCallerOwner),
+      callerClient(builtCallerOwner),
       'clearTools',
     ).mockImplementation(() => {
       throw clearError;
@@ -557,41 +531,22 @@ describe('tool catalog publication and cleanup ownership', () => {
 
   it('joins admitted publication and does not read a peer that closed while the first publication awaited', async () => {
     await openbuiltCaller('plain-text.jsonl');
-    const first = await fromConfig(
-      builtCallerConfig,
-      builtCallerSettings,
-      {},
-      builtCallerSettingsOwner,
-      builtCallerManager,
-      undefined,
-      undefined,
-      builtCallerMcp,
-    );
-    const second = await fromConfig(
-      builtCallerConfig,
-      builtCallerSettings,
-      {},
-      builtCallerSettingsOwner,
-      builtCallerManager,
-      undefined,
-      undefined,
-      builtCallerMcp,
-    );
-    await fixtureAgentResources(first).publishedClient(first).startChat();
-    await fixtureAgentResources(second).publishedClient(second).startChat();
+    const first = builtCallerOwner;
+    const second = await createCallerOwner();
+    await second.refreshAuth();
+    await second.initializeTools();
+    await callerClient(second).startChat();
     const entered = engineGate();
     const release = engineGate();
-    const setTools = fixtureAgentResources(first)
-      .publishedClient(first)
-      .setTools.bind(fixtureAgentResources(first).publishedClient(first));
-    const publish = spyOn(
-      fixtureAgentResources(first).publishedClient(first),
-      'setTools',
-    ).mockImplementation(async () => {
-      entered.release();
-      await release.promise;
-      await setTools();
-    });
+    const firstClient = callerClient(first);
+    const setTools = firstClient.setTools.bind(firstClient);
+    const publish = spyOn(firstClient, 'setTools').mockImplementation(
+      async () => {
+        entered.release();
+        await release.promise;
+        await setTools();
+      },
+    );
     let publication: Promise<void> | undefined;
     try {
       publication = builtCallerMcp.refreshContext();
@@ -599,8 +554,10 @@ describe('tool catalog publication and cleanup ownership', () => {
       await second.dispose();
       release.release();
       await publication;
-      expect(first.tools.get('read_file')).toBeDefined();
-      expect(() => second.tools.get('read_file')).toThrow('closed');
+      expect(first.toolCatalog.selection.getTool('read_file')).toBeDefined();
+      expect(() => second.toolCatalog.selection.getTool('read_file')).toThrow(
+        'closed',
+      );
     } finally {
       release.release();
       publish.mockRestore();

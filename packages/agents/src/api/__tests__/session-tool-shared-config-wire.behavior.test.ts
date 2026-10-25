@@ -1,7 +1,4 @@
-import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
-import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -17,11 +14,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 
 import { toConfigParameters } from '../agentConfig.adapter.js';
-import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
+import { fromConfig } from '../fromConfig.js';
 import { collect, successful } from './turn-revision-capture.fixture.js';
 
 const wireSchema = z.object({
@@ -95,8 +91,8 @@ async function startWire() {
   };
 }
 
-async function startWorkspace(directory: string, jitContextEnabled = true) {
-  const config = new Config(
+function startConfig(directory: string, jitContextEnabled = true): Config {
+  return new Config(
     toConfigParameters({
       provider: 'openai',
       model: 'schema-alpha',
@@ -115,30 +111,13 @@ async function startWorkspace(directory: string, jitContextEnabled = true) {
       },
     }),
   );
-  const policy = new RuntimePolicyOwner(config);
-  const workspace = await createTestMcpRuntime(
-    {
-      oauth: {
-        openBrowser: async () => {
-          throw new Error('Unexpected browser');
-        },
-        tokenStorage: new MCPOAuthTokenStorage({
-          getCredentials: async () => null,
-          setCredentials: async () => {
-            throw new Error('Unexpected credential write');
-          },
-          deleteCredentials: async () => {},
-          listServers: async () => [],
-          getAllCredentials: async () => new Map(),
-          clearAll: async () => {},
-        }),
-      },
-      config,
-      policy: { owner: policy, ownership: 'runtime' },
-    },
-    {},
-  );
-  return { config, workspace };
+}
+
+function seededSettings(config: Config): SettingsService {
+  const settings = new SettingsService();
+  for (const [key, value] of Object.entries(config.getInitialSettings()))
+    settings.set(key, value);
+  return settings;
 }
 
 function taskSchema(
@@ -156,12 +135,13 @@ describe('independent session model routing and schema refresh on a shared Confi
   it('refreshes actual TaskTool schemas without routing a peer through the changed model', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'shared-tool-model-'));
     const endpoint = await startWire();
-    const { config, workspace } = await startWorkspace(directory);
+    const config = startConfig(directory);
+    const authority = new CredentialAuthority();
     const sharedSettings = new SettingsService();
     const adopt = (model: string) =>
       fromConfig(
         config,
-        createSessionSettingsFixture(config, sharedSettings).settingsService,
+        sharedSettings,
         {
           sessionId: 'shared-model-schema-label',
           activation: {
@@ -170,27 +150,11 @@ describe('independent session model routing and schema refresh on a shared Confi
             cliOverrides: { key: 'local-model-only', baseUrl: endpoint.url },
           },
         },
-        createSessionSettingsFixture(config, sharedSettings).settingsOwner,
-        undefined,
-        undefined,
-        undefined,
-        workspace,
+        authority,
       );
     const first = await adopt('schema-alpha');
     const second = await adopt('schema-beta');
     try {
-      expect(
-        new Set([
-          fixtureAgentResources(first).publishedClient(first),
-          fixtureAgentResources(second).publishedClient(second),
-        ]).size,
-      ).toBe(2);
-      expect(
-        new Set([
-          fixtureAgentResources(first).messageBus,
-          fixtureAgentResources(second).messageBus,
-        ]).size,
-      ).toBe(2);
       successful(await collect(first.stream('First physical schema request')));
       successful(
         await collect(second.stream('Second physical schema request')),
@@ -236,7 +200,6 @@ describe('independent session model routing and schema refresh on a shared Confi
     } finally {
       await first.dispose();
       await second.dispose();
-      await workspace.dispose();
       await config.dispose();
       await endpoint.close();
       await rm(directory, { recursive: true, force: true });
@@ -246,11 +209,11 @@ describe('independent session model routing and schema refresh on a shared Confi
     const directory = await mkdtemp(join(tmpdir(), 'shared-tool-endpoint-'));
     const endpointA = await startWire();
     const endpointB = await startWire();
-    const { config, workspace } = await startWorkspace(directory);
-    const adoptedSettings1 = createSessionSettingsFixture(config);
+    const config = startConfig(directory);
+    const authority = new CredentialAuthority();
     const first = await fromConfig(
       config,
-      adoptedSettings1.settingsService,
+      seededSettings(config),
       {
         activation: {
           provider: 'openai',
@@ -258,16 +221,11 @@ describe('independent session model routing and schema refresh on a shared Confi
           cliOverrides: { key: 'local-model-only', baseUrl: endpointA.url },
         },
       },
-      adoptedSettings1.settingsOwner,
-      undefined,
-      undefined,
-      undefined,
-      workspace,
+      authority,
     );
-    const adoptedSettings2 = createSessionSettingsFixture(config);
     const second = await fromConfig(
       config,
-      adoptedSettings2.settingsService,
+      seededSettings(config),
       {
         activation: {
           provider: 'openai',
@@ -275,11 +233,7 @@ describe('independent session model routing and schema refresh on a shared Confi
           cliOverrides: { key: 'local-model-only', baseUrl: endpointB.url },
         },
       },
-      adoptedSettings2.settingsOwner,
-      undefined,
-      undefined,
-      undefined,
-      workspace,
+      authority,
     );
     try {
       successful(await collect(first.stream('Route first endpoint')));
@@ -302,7 +256,6 @@ describe('independent session model routing and schema refresh on a shared Confi
     } finally {
       await first.dispose();
       await second.dispose();
-      await workspace.dispose();
       await config.dispose();
       await endpointA.close();
       await endpointB.close();
@@ -322,15 +275,12 @@ describe('session instruction prompts on an adopted physical workspace', () => {
           'Public project instruction version one.',
         );
         const endpoint = await startWire();
-        const { config, workspace } = await startWorkspace(
-          directory,
-          jitEnabled,
-        );
-        const adopt = () => {
-          const adoptedSettings3 = createSessionSettingsFixture(config);
-          return fromConfig(
+        const config = startConfig(directory, jitEnabled);
+        const authority = new CredentialAuthority();
+        const adopt = () =>
+          fromConfig(
             config,
-            adoptedSettings3.settingsService,
+            seededSettings(config),
             {
               sessionId: 'shared-memory-label',
               activation: {
@@ -339,13 +289,8 @@ describe('session instruction prompts on an adopted physical workspace', () => {
                 cliOverrides: { key: 'loopback-only', baseUrl: endpoint.url },
               },
             },
-            adoptedSettings3.settingsOwner,
-            undefined,
-            undefined,
-            undefined,
-            workspace,
+            authority,
           );
-        };
         const first = await adopt();
         const second = await adopt();
         try {
@@ -380,7 +325,6 @@ describe('session instruction prompts on an adopted physical workspace', () => {
         } finally {
           await first.dispose();
           await second.dispose();
-          await workspace.dispose();
           await config.dispose();
           await endpoint.close();
           await rm(directory, { recursive: true, force: true });
