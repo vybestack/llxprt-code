@@ -1,4 +1,4 @@
-import { internalConfig } from './helpers/agentHarness.js';
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -88,7 +88,7 @@ describe('Final LB delegate authorization after asynchronous member authenticati
         const held = barrier();
         let reads = 0;
         const storage = vi
-          .spyOn(internalConfig(a).getProviderKeys(), 'getKey')
+          .spyOn(fixtureAgentResources(a).manager.getProviderKeys(), 'getKey')
           .mockImplementation(async () => {
             reads++;
             if (reads === 2) await held.wait();
@@ -160,7 +160,7 @@ describe('Final LB delegate authorization after asynchronous member authenticati
       const held = barrier();
       let reads = 0;
       const storage = vi
-        .spyOn(internalConfig(a).getProviderKeys(), 'getKey')
+        .spyOn(fixtureAgentResources(a).manager.getProviderKeys(), 'getKey')
         .mockImplementation(async () => {
           reads++;
           if (reads === 2) await held.wait();

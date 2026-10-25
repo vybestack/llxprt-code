@@ -114,7 +114,6 @@ export class ProviderManager implements IProviderManager {
   ): void {
     this.providerKeyStorage = storage;
     this.closeProviderKeyStorage = close;
-    this.config?.bindProviderKeyStorage(storage);
   }
 
   peekProviderKeyStorage(): ProviderKeyStorageLike | undefined {
@@ -275,8 +274,6 @@ export class ProviderManager implements IProviderManager {
 
   setConfig(config: Config): void {
     this.config = config;
-    if (this.providerKeyStorage)
-      config.bindProviderKeyStorage(this.providerKeyStorage);
     this.updateProviderWrapping();
   }
 

@@ -376,7 +376,7 @@ describe('Profile cascade workflow at the owner', () => {
 
   it('resolves auth-key-name from secure storage and preserves the reference', async () => {
     const storage = vi
-      .spyOn(callerConfig.getProviderKeys(), 'getKey')
+      .spyOn(callerManager.getProviderKeys(), 'getKey')
       .mockResolvedValue(' named-credential ');
     try {
       await profileApplication.applySnapshot(
@@ -398,7 +398,7 @@ describe('Profile cascade workflow at the owner', () => {
 
   it('applies the issue 2477 Z.ai profile without Gemini fallback', async () => {
     const storage = vi
-      .spyOn(callerConfig.getProviderKeys(), 'getKey')
+      .spyOn(callerManager.getProviderKeys(), 'getKey')
       .mockResolvedValue(' zai-key ');
     try {
       const result = await profileApplication.applySnapshot({
@@ -625,7 +625,7 @@ describe('Profile cascade workflow at the owner', () => {
           applyParameter: (key, value) =>
             callerSettingsOwner.writeUserParameter(key, value),
         },
-        (name) => callerConfig.getProviderKeys().getKey(name),
+        (name) => callerManager.getProviderKeys().getKey(name),
       ),
     ).rejects.toThrow('does not specify a model');
   });

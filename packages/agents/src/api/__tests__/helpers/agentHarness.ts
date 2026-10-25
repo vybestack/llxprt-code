@@ -180,7 +180,10 @@ export async function buildProfileAgent(
   const built = await buildAgent(fixtureRelPath);
   registerFakeProviders(built.agent, ['openai', 'anthropic'], fixtureRelPath);
   const keys = vi
-    .spyOn(internalConfig(built.agent).getProviderKeys(), 'getKey')
+    .spyOn(
+      fixtureAgentResources(built.agent).manager.getProviderKeys(),
+      'getKey',
+    )
     .mockImplementation(async (name) => {
       if (name !== 'openai-prod' && name !== 'anthropic-prod')
         throw new Error(`Unexpected fixture key: ${name}`);
@@ -206,7 +209,10 @@ export async function buildProfilesAgent(
   manager.registerProvider(new OpenAIProvider('local-test-key'));
   manager.registerProvider(new AnthropicProvider('local-test-key'));
   const keys = vi
-    .spyOn(internalConfig(built.agent).getProviderKeys(), 'getKey')
+    .spyOn(
+      fixtureAgentResources(built.agent).manager.getProviderKeys(),
+      'getKey',
+    )
     .mockImplementation(async (name) => {
       if (
         name !== 'openai-prod' &&

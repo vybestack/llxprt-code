@@ -388,7 +388,7 @@ describe('Profile credential clearing at the transaction owner', () => {
     const settings = callerSettings;
     const application = profileApplication;
     const storage = vi
-      .spyOn(callerConfig.getProviderKeys(), 'getKey')
+      .spyOn(callerManager.getProviderKeys(), 'getKey')
       .mockResolvedValue(' resolved-new-key ');
     try {
       callerSettingsOwner.writeUserParameter('auth-keyfile', 'stale-file');

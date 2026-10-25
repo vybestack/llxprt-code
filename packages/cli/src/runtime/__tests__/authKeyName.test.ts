@@ -268,7 +268,6 @@ describe('explicit named-key credential owner', () => {
       if (mockStorageRef === null)
         throw new Error('Missing fixture key storage');
       runtimeManager.bindProviderKeyStorage(mockStorageRef);
-      runtimeConfig.bindProviderKeyStorage(mockStorageRef);
       const tokens = credentials().authority.createTokenStore();
       const closeTokens = createOwnedTokenStoreClose(tokens);
       let transferred = false;

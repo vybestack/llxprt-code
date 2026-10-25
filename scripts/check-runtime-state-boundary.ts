@@ -186,6 +186,8 @@ export const productionPolicy: AuditPolicy = {
       'SessionPersistenceService',
     'storage/src/services/fileDiscoveryService.ts': 'FileDiscoveryService',
     'storage/src/services/fileSystemService.ts': 'FileSystemService',
+    'storage/src/secure-store/provider-key-storage.ts':
+      'ProviderKeyStorageLike',
     'policy/src/policy-engine.ts': 'PolicyEngine',
     'tools/src/tools/github.ts': 'GitHubBrokerClient',
     'mcp/src/client/mcp-client-manager.ts': 'McpClientManager',
