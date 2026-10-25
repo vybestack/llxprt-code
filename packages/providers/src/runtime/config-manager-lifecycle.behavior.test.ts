@@ -189,7 +189,7 @@ describe('Config-independent provider owner lifecycle', () => {
       'Provider reads require an explicit session owner',
     );
   });
-  it('keeps the preflight active provider readable after the foreground runtime cleanup', async () => {
+  it('transfers the preflight provider manager to the foreground agent: settings writes reach the provider until agent disposal and never afterwards', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'borrowed-manager-'));
     const settings = new SettingsService();
     const ownerSettings = settings;
@@ -246,8 +246,14 @@ describe('Config-independent provider owner lifecycle', () => {
         intent,
         {},
       );
+      settings.set('base-url', 'http://127.0.0.1:1');
+      const attached = provider.clientRevision;
+      expect(attached).toBeGreaterThan(0);
+      settings.set('base-url', 'http://127.0.0.2:1');
+      expect(provider.clientRevision).toBe(attached + 1);
       await agent.dispose();
-      expect(preflight.getActiveProviderName()).toBe(provider.name);
+      settings.set('base-url', 'http://127.0.0.3:1');
+      expect(provider.clientRevision).toBe(attached + 1);
     } finally {
       await preflight.dispose();
       await memory.dispose();
