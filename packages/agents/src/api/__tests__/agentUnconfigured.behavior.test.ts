@@ -1,38 +1,21 @@
-import { adoptFixture } from './helpers/adoption-fixture.js';
 import { makeScratchDir } from './helpers/scratch-dir.js';
 import { rm } from 'node:fs/promises';
-import { join } from 'node:path';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
-  FakeProvider,
-  ProviderManager,
-  ProviderFileLifecycle,
-} from '@vybestack/llxprt-code-providers';
+  createRecordingProvider,
+  type RecordingProvider,
+} from './helpers/recording-provider.js';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import type { Agent } from '../agent.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
+import { createAgent } from '../createAgent.js';
 import {
   describe,
   expect,
   it,
   afterEach as disposeOwnedPolicies,
-  vi,
   beforeEach,
-  afterEach,
 } from 'bun:test';
-import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
-  type RuntimeProviderManager,
   UNCONFIGURED_PROVIDER,
   PLACEHOLDER_MODEL,
 } from '@vybestack/llxprt-code-core';
@@ -45,84 +28,13 @@ import type { AgentEvent } from '../event-types.js';
  */
 
 /**
- * Behavioral tests proving an Agent backed by a manager with no active
+ * Behavioral tests proving an Agent with no active
  * provider fails closed on every model-dependent operation (#2481).
  *
- * Uses a REAL recording client whose generation methods are vi.fn spies so we
- * can assert ZERO calls reached the client — the fail-closed guard fires
- * BEFORE any model/client/MCP interaction.
+ * The agent is built through createAgent with the unconfigured provider and
+ * a recording provider contribution, so we can assert ZERO requests reached a
+ * model — the fail-closed guard fires BEFORE any model/client/MCP interaction.
  */
-
-function makeUnconfiguredProviderManager(
-  authority: CredentialAuthority,
-): ProviderManager {
-  return new ProviderManager(
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    new SettingsService(),
-    undefined,
-    undefined,
-    authority,
-  );
-}
-
-/**
- * Builds a client with vi.fn spies on every generation entry-point.
- * The spies are returned so tests can assert they were never called.
- */
-function makeRecordingClient(): AgentClientContract & {
-  __spies: {
-    generateDirectMessage: ReturnType<typeof vi.fn>;
-    generateJson: ReturnType<typeof vi.fn>;
-    generateEmbedding: ReturnType<typeof vi.fn>;
-    startChat: ReturnType<typeof vi.fn>;
-    getChat: ReturnType<typeof vi.fn>;
-  };
-} {
-  const generateDirectMessage = vi.fn(async () => ({
-    content: { blocks: [] },
-  }));
-  const generateJson = vi.fn(async () => ({}));
-  const generateEmbedding = vi.fn(async () => []);
-  const startChat = vi.fn(async () => {});
-  const getChat = vi.fn();
-
-  const client = {
-    isInitialized: () => true,
-    bindTelemetry: () => {},
-    bindRuntimeSettings: () => {},
-    clearTools: () => {},
-    getHistory: async () => [],
-    setHistory: async () => {},
-    addHistory: async () => {},
-    restoreHistory: async () => {},
-    resetChat: async () => {},
-    updateSystemInstruction: async () => {},
-    addDirectoryContext: async () => {},
-    getChat,
-    getHistoryService: () => null,
-    getContentGeneratorConfig: () => undefined,
-    storeHistoryServiceForReuse: () => {},
-    hasChatInitialized: () => false,
-    startChat,
-    generateDirectMessage,
-    generateJson,
-    generateEmbedding,
-    getCurrentSequenceModel: () => null,
-  } as unknown as AgentClientContract;
-
-  return Object.assign(client, {
-    __spies: {
-      generateDirectMessage,
-      generateJson,
-      generateEmbedding,
-      startChat,
-      getChat,
-    },
-  });
-}
 
 describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
   const credentials = useOwnedCredentials();
@@ -131,90 +43,27 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
     await runCleanupSteps(releases.splice(0).reverse());
   });
 
-  async function makeAgent(
-    manager: ProviderManager,
-    client: AgentClientContract,
-  ): Promise<Agent> {
+  async function makeAgent(provider: RecordingProvider): Promise<Agent> {
     const directory = await makeScratchDir('agent-unconfigured-');
     releases.push(() => rm(directory, { recursive: true, force: true }));
-    const config = new Config({
-      sessionId: 'test-unconfigured-session',
-      targetDir: directory,
-      cwd: directory,
-      debugMode: false,
+    const created = await createAgent({
+      provider: UNCONFIGURED_PROVIDER,
       model: PLACEHOLDER_MODEL,
-      telemetry: { enabled: false },
+      providerContributions: provider.contributions,
+      workingDir: directory,
+      credentialAuthority: credentials().authority,
+      harness: { includeProcessCwd: false },
     });
-    releases.push(() => config.dispose());
-    releases.push(() => manager.dispose());
-    const settingsService = new SettingsService();
-    const settingsOwner = new SessionSettingsOwner(settingsService);
-    settingsOwner.bindTelemetry(config);
-    releases.push(() => settingsOwner.dispose());
-    const policy = new RuntimePolicyOwner(config);
-    releases.push(() => policy.dispose());
-    const workspace = await buildTestMcpRuntime(
-      config,
-      policy.session.messageBus,
-      {},
-      undefined,
-      policy,
-    );
-    releases.push(() => workspace.dispose());
-    await workspace.initialize();
-    const mediaStore = new LocalMediaStore({
-      rootDirectory: join(directory, 'media'),
-      quotaBytes: 1024,
-    });
-    Object.assign(client, {
-      mediaStore,
-      assertConfig: (candidate: Config) => {
-        if (candidate !== config) throw new Error('Unexpected Config');
-      },
-      assertProviderManager: (candidate: RuntimeProviderManager) => {
-        if (candidate !== manager)
-          throw new Error('Unexpected provider manager');
-      },
-    });
-    const providerFiles = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
-    });
-    const adopted = await adoptFixture(
-      config,
-      settingsService,
-      { sessionId: 'test-unconfigured-runtime' },
-      settingsOwner,
-      manager,
-      undefined,
-      policy.session.messageBus,
-      workspace,
-      undefined,
-      client,
-      providerFiles,
-      configureProviderTokenizer(manager),
-      createRuntimeContentGeneratorFactory(),
-      undefined,
-      undefined,
-      credentials().authority,
-      policy,
-    );
-    releases.push(() => adopted.dispose());
-    return adopted;
+    releases.push(() => created.dispose());
+    return created;
   }
 
-  let manager: ProviderManager;
-  let client: ReturnType<typeof makeRecordingClient>;
+  let recording: RecordingProvider;
   let agent: Agent;
 
   beforeEach(async () => {
-    manager = makeUnconfiguredProviderManager(credentials().authority);
-    client = makeRecordingClient();
-    agent = await makeAgent(manager, client);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
+    recording = createRecordingProvider();
+    agent = await makeAgent(recording);
   });
 
   it('stream yields error + done with actionable /setup message', async () => {
@@ -279,11 +128,7 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
     for await (const _event of agent.stream('hello')) {
       // drain
     }
-    expect(client.__spies.generateDirectMessage).not.toHaveBeenCalled();
-    expect(client.__spies.generateJson).not.toHaveBeenCalled();
-    expect(client.__spies.generateEmbedding).not.toHaveBeenCalled();
-    expect(client.__spies.startChat).not.toHaveBeenCalled();
-    expect(client.__spies.getChat).not.toHaveBeenCalled();
+    expect(recording.requests).toHaveLength(0);
   });
 
   it('chat returns AgentResult with error and done reason error', async () => {
@@ -295,25 +140,24 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
 
   it('chat makes ZERO generation calls to the client', async () => {
     await agent.chat('hello');
-    expect(client.__spies.generateDirectMessage).not.toHaveBeenCalled();
-    expect(client.__spies.startChat).not.toHaveBeenCalled();
+    expect(recording.requests).toHaveLength(0);
   });
 
   it('generate rejects with actionable /setup error', async () => {
     await expect(agent.generate('hello')).rejects.toThrow('/setup');
-    expect(client.__spies.generateDirectMessage).not.toHaveBeenCalled();
+    expect(recording.requests).toHaveLength(0);
   });
 
   it('generateJson rejects with actionable /setup error', async () => {
     await expect(agent.generateJson([], { type: 'object' })).rejects.toThrow(
       '/setup',
     );
-    expect(client.__spies.generateJson).not.toHaveBeenCalled();
+    expect(recording.requests).toHaveLength(0);
   });
 
   it('generateEmbedding rejects with actionable /setup error', async () => {
     await expect(agent.generateEmbedding(['hello'])).rejects.toThrow('/setup');
-    expect(client.__spies.generateEmbedding).not.toHaveBeenCalled();
+    expect(recording.requests).toHaveLength(0);
   });
 
   it('setModel rejects with actionable /setup error', async () => {
@@ -349,12 +193,7 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
     async () => {
       // The switch succeeds for real against a registered provider; the
       // unconfigured sentinel must NOT leak as previousProvider.
-      const provider = new FakeProvider(
-        join(import.meta.dir, 'fixtures/plain-text.jsonl'),
-      );
-      provider.name = 'openai';
-      manager.registerProvider(provider);
-      const result = await agent.setProvider('openai');
+      const result = await agent.setProvider(recording.alias);
 
       return { result };
     };
