@@ -110,7 +110,6 @@ export class AgentActivationBootstrap
   #publicClosing: Promise<void> | undefined;
   #foregroundHost!: AgentForegroundHost;
   protected foregroundPolicy: RuntimePolicyOwner | undefined;
-  protected foregroundAuthority!: CredentialAuthority;
 
   protected foregroundRuntimeContext!: Parameters<
     RuntimeProviderManager['setRuntimeContext']
@@ -188,7 +187,6 @@ export class AgentActivationBootstrap
         undefined,
         this.foregroundMcp.profileDefinitions,
         this.foregroundMcp.subagentDefinitions,
-        this.foregroundAuthority,
       );
       if (!client.hasHookComposition()) client.bindHooks();
       await this.foregroundMcp.initialize();

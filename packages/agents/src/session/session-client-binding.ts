@@ -10,7 +10,10 @@ import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/servic
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type {
+  CredentialAuthority,
+  OAuthManager,
+} from '@vybestack/llxprt-code-providers/auth.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { randomUUID } from 'node:crypto';
 import {
@@ -219,6 +222,7 @@ export async function acquireSessionClient(
   factory: AgentClientFactory = buildAgentClientFactory(),
   readInstructions: () => string | undefined,
   workspacePaths: WorkspacePathOperations,
+  authority: CredentialAuthority,
   messageBus?: MessageBus,
   imageOperation?: SessionImageSelection['imageOperation'],
   borrowedClient?: AgentClientContract,
@@ -234,6 +238,7 @@ export async function acquireSessionClient(
     settingsOwner,
     contentGeneratorFactory,
     tokenizerFactory,
+    authority,
     borrowedClient,
     messageBus,
   );

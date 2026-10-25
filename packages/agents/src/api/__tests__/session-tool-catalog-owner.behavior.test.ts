@@ -351,30 +351,34 @@ describe('session executable tool ownership', () => {
     );
     try {
       await catalog.initialize(
-        () => mcpRuntime.isStopped(),
-        mcpRuntime.workspacePaths,
-        mcpRuntime.workspaceFiles,
-        mcpRuntime.workspaceIgnore,
-        mcpRuntime.workspaceScans,
-        mcpRuntime.workspaceLsp.diagnostics,
-        mcpRuntime.ide,
-        mcpRuntime.trust,
-        mcpRuntime.toolSelection,
-        mcpRuntime.readInstructions,
-        policy.messageBus,
-        createTaskRegistration(config, {
-          messageBus: policy.messageBus,
-          readTaskPolicy: () => settingsOwner.readTaskPolicy(),
-          readGovernance: () => settingsOwner.readToolGovernance([]),
-          launchChild: async () => {
-            throw new Error('Reader-only scenario');
-          },
-        }),
-        undefined,
-        approval,
-        mcpRuntime.profileDefinitions,
-        mcpRuntime.subagentDefinitions,
-        settingsOwner.telemetry,
+        {
+          isWorkspaceStopped: () => mcpRuntime.isStopped(),
+          paths: mcpRuntime.workspacePaths,
+          files: mcpRuntime.workspaceFiles,
+          ignore: mcpRuntime.workspaceIgnore,
+          scans: mcpRuntime.workspaceScans,
+          diagnostics: mcpRuntime.workspaceLsp.diagnostics,
+          ide: mcpRuntime.ide,
+          trust: mcpRuntime.trust,
+          workspaceSelection: mcpRuntime.toolSelection,
+          profiles: mcpRuntime.profileDefinitions,
+          subagents: mcpRuntime.subagentDefinitions,
+        },
+        {
+          readMcpInstructions: mcpRuntime.readInstructions,
+          bus: policy.messageBus,
+          registration: createTaskRegistration(config, {
+            messageBus: policy.messageBus,
+            readTaskPolicy: () => settingsOwner.readTaskPolicy(),
+            readGovernance: () => settingsOwner.readToolGovernance([]),
+            launchChild: async () => {
+              throw new Error('Reader-only scenario');
+            },
+          }),
+          summarize: async (content) => content,
+          approval,
+          telemetry: settingsOwner.telemetry,
+        },
       );
       const read = catalog.selection.getTool('read_file');
       if (read === undefined) throw new Error('Missing published reader');

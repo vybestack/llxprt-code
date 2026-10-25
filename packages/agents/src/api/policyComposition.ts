@@ -68,7 +68,7 @@ export async function bindCreatedSessionClient(
   registration: Parameters<SessionClientOwner['bindMcpRuntime']>[1],
   forceConfirmations: boolean,
   imageOperation: AgentConfig['imageOperation'],
-  authority?: CredentialAuthority,
+  authority: CredentialAuthority,
 ): Promise<SessionClientOwner> {
   const client = await acquireSessionClient(
     config,
@@ -83,11 +83,12 @@ export async function bindCreatedSessionClient(
     factory,
     mcp.readInstructions,
     mcp.workspacePaths,
+    authority,
     mcp.messageBus,
     imageOperation,
   );
   try {
-    client.bindMcpRuntime(mcp, registration, undefined, undefined, authority);
+    client.bindMcpRuntime(mcp, registration);
     client.bindHooks();
     if (forceConfirmations)
       injectConfirmationForcingPolicy({

@@ -546,7 +546,6 @@ export abstract class AdoptedAgentAssembly extends AdoptedSessionAssembly {
       projectTrustedSubagents(definitions, () =>
         this.adoptMcp.trust.isTrustedFolder(),
       ),
-      this.adoptAuthority,
     );
     if (client.hasHookComposition()) {
       if (this.adoptHookOwner !== undefined)

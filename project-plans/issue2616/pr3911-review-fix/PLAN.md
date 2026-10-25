@@ -1113,7 +1113,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
   - [x] T5.5d B6 MCP test callers through one helper: packages/agents, 12 files (file list in inventory-T5.5.md)
   - [x] T5.5e B6 MCP test callers through one helper: packages/cli, 4 files, importing the agents helper (file list in inventory-T5.5.md)
 - [x] T5.5 B6 McpRuntimeOwner.create(acquisition, operations), four production callers
-- [ ] T5.6 B6 tool catalog and child assembly inputs
+- [x] T5.6 B6 tool catalog and child assembly inputs
 - [ ] T5.7 E7 typed ProviderFileLifecycle
 - [ ] T6.0-list B2 inventory file list and slices
 - [ ] T6.0-Sxx B2 inventory slices (ids added by T6.0-list)

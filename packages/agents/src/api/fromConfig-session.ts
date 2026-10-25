@@ -91,6 +91,7 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
   protected abstract adoptProviderManager: RuntimeProviderManager | undefined;
   protected adoptRuntimeId!: string;
   protected adoptAuthority!: CredentialAuthority;
+  protected foregroundAuthority!: CredentialAuthority;
   protected abstract adoptRelease: AcquisitionRelease;
   protected adoptOAuthProfiles:
     | ReturnType<typeof createOAuthProfileReads>
@@ -365,6 +366,7 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
       undefined,
       this.activationMcp?.readInstructions ?? (() => undefined),
       this.workspaceFilesystem.paths,
+      this.foregroundAuthority,
       this.activationBus,
       undefined,
       this.activationSuppliedClient,
@@ -455,6 +457,7 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
       this.adoptRuntimeFactoryBindings?.agentClientFactory,
       this.adoptMcp.readInstructions,
       this.adoptMcp.workspacePaths,
+      this.adoptAuthority,
       this.adoptPolicyOwner === undefined && this.adoptMcpRuntime !== undefined
         ? undefined
         : this.adoptSelectedBus,

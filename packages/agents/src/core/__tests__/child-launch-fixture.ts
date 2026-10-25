@@ -21,12 +21,13 @@ import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRunti
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { buildAgentClientFactory } from '../../api/agentBootstrap.js';
 import { ChildAgentAssembly } from '../../api/child-agent-assembly.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import { SubAgentScope } from '../subagent.js';
 
 export interface TestChildLaunchOptions {
-  readonly credentialAuthority?: CredentialAuthority;
+  readonly credentialAuthority: CredentialAuthority;
   readonly requestInteractiveAuth?: InteractiveAuthPromptOperation;
   instructions: InstructionReadOperations;
   toolRegistry?: ToolSelection;
@@ -53,6 +54,7 @@ export interface TestChildLaunchOptions {
 export function createTestChildOrchestrator(
   options: TestChildLaunchOptions,
 ): SubagentOrchestrator {
+  const tools = options.toolRegistry;
   return new SubagentOrchestrator({
     sessionId: options.foregroundConfig.getSessionId(),
     profileManager: options.profileManager,
@@ -60,30 +62,37 @@ export function createTestChildOrchestrator(
     readRunPolicy: options.readRunPolicy,
     idFactory: options.idFactory,
     assembleChild: (data) => {
-      const authority = options.credentialAuthority;
-      if (authority === undefined)
+      if (tools === undefined)
         throw new Error(
-          'Child assembly requires captured credential authority',
+          'Child launch fixture requires an explicit toolRegistry',
         );
       return new ChildAgentAssembly(
         data,
-        authority,
-        options.messageBus,
-        options.requestInteractiveAuth,
-        options.profileManager,
-        options.subagentManager,
-        options.telemetry,
-        options.createChildSettings,
-        options.foregroundConfig,
-        options.instructions,
-        options.workspacePaths,
-        options.readMcpInstructions,
-        options.workspaceTrust,
-        options.toolRegistry,
-        options.hookOwner,
-        options.runtimeFactoryBindings?.agentClientFactory,
-        options.runtimeLoader ?? loadAgentRuntime,
-        options.scopeFactory ?? SubAgentScope.create.bind(SubAgentScope),
+        {
+          authority: options.credentialAuthority,
+          createChildSettings: options.createChildSettings,
+          foregroundConfig: options.foregroundConfig,
+        },
+        {
+          runtimeLoader: options.runtimeLoader ?? loadAgentRuntime,
+          scopeFactory:
+            options.scopeFactory ?? SubAgentScope.create.bind(SubAgentScope),
+        },
+        options.runtimeFactoryBindings?.agentClientFactory ??
+          buildAgentClientFactory(),
+        {
+          messageBus: options.messageBus,
+          requestInteractiveAuth: options.requestInteractiveAuth,
+          profileReads: options.profileManager,
+          subagentReads: options.subagentManager,
+          telemetry: options.telemetry,
+          instructions: options.instructions,
+          workspacePaths: options.workspacePaths,
+          readMcpInstructions: options.readMcpInstructions,
+          trust: options.workspaceTrust,
+          tools,
+          hooks: options.hookOwner,
+        },
       ).assemble();
     },
   });

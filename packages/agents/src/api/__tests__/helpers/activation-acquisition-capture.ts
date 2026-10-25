@@ -20,9 +20,9 @@ import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/poli
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import type {
+import {
   CredentialAuthority,
-  OAuthManager,
+  type OAuthManager,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import { AgentActivationBootstrap } from '../../activationPreflightState.js';
 import type { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
@@ -33,7 +33,7 @@ import type {
 import type { ProviderActivationResult } from '../../providerActivationExecutor.js';
 import type { ActivationPreflightToken } from '../../activation-types.js';
 import { SessionClientOwner } from '../../../session/session-client-owner.js';
-import { createCapturedSessionOwner } from './session-client-capture.js';
+import { captureSessionOwnerCreation } from './session-client-capture.js';
 
 class ActivationFixture extends AgentActivationBootstrap {
   private customExecute:
@@ -104,10 +104,11 @@ class ActivationFixture extends AgentActivationBootstrap {
     tokenizerFactory?: SessionClientOwner['tokenizerFactory'],
     contentGeneratorFactory?: SessionClientOwner['contentGeneratorFactory'],
     providerFileLifecycle?: ProviderFileLifecycle,
-    messageBus?: Parameters<typeof SessionClientOwner.create>[11],
+    messageBus?: Parameters<typeof SessionClientOwner.create>[12],
     memoryOwnership: 'borrowed' | 'transferred' = 'borrowed',
   ): Promise<ActivationFixture> {
     const operation = new ActivationFixture(config);
+    operation.foregroundAuthority = new CredentialAuthority();
     operation.activationSettings = settings;
     operation.activationManager = manager;
     operation.activationOAuth = oauth;
@@ -252,7 +253,7 @@ export function observeActivationPreparation(
     },
   );
   const clients = spyOn(SessionClientOwner, 'create').mockImplementation(
-    createCapturedSessionOwner,
+    captureSessionOwnerCreation,
   );
   return {
     mockRestore: () => {

@@ -443,7 +443,7 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
         (this.parsed.harness?.forceConfirmations ?? true) &&
           this.config.isInteractive(),
         this.mcpOptions.imageOperation,
-        this.mcpOptions.credentialAuthority,
+        this.authority,
       );
       if (this.executeShellCommand !== undefined)
         this.preferredSessionClient.toolCatalog.bindShellExecution(

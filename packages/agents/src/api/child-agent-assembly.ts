@@ -99,6 +99,34 @@ export interface ChildAgentLaunch {
   readonly signal: AbortSignal | undefined;
 }
 
+export interface ChildAgentAcquisition {
+  readonly authority: CredentialAuthority;
+  readonly createChildSettings: () => SettingsService;
+  readonly foregroundConfig: Config;
+}
+
+export interface ChildAgentRuntimeFactories {
+  readonly runtimeLoader: typeof loadAgentRuntime;
+  readonly scopeFactory: SubAgentScopeFactory;
+}
+
+export interface ChildAgentOperations {
+  readonly messageBus: MessageBus;
+  readonly requestInteractiveAuth: InteractiveAuthPromptOperation | undefined;
+  readonly profileReads: Pick<ProfileDefinitionReads, 'loadProfile'>;
+  readonly subagentReads: Pick<
+    SubagentDefinitionReads,
+    'loadSubagent' | 'listSubagents'
+  >;
+  readonly telemetry: RootTelemetry | undefined;
+  readonly instructions: InstructionReadOperations;
+  readonly workspacePaths: WorkspacePathOperations;
+  readonly readMcpInstructions: () => string | undefined;
+  readonly trust: WorkspaceTrustControlPort | undefined;
+  readonly tools: ToolSelection;
+  readonly hooks: SessionHookOwner | undefined;
+}
+
 export class ChildAgentAssembly {
   private readonly providers = new AcquisitionRelease();
   private readonly acquired: Array<() => void | Promise<void>> = [];
@@ -118,28 +146,10 @@ export class ChildAgentAssembly {
 
   constructor(
     private readonly data: ChildAgentLaunch,
-    private readonly authority: CredentialAuthority,
-    private readonly messageBus: MessageBus,
-    private readonly requestInteractiveAuth:
-      | InteractiveAuthPromptOperation
-      | undefined,
-    private readonly profileReads: Pick<ProfileDefinitionReads, 'loadProfile'>,
-    private readonly subagentReads: Pick<
-      SubagentDefinitionReads,
-      'loadSubagent' | 'listSubagents'
-    >,
-    private readonly telemetry: RootTelemetry | undefined,
-    private readonly createChildSettings: () => SettingsService,
-    private readonly foregroundConfig: Config,
-    private readonly instructions: InstructionReadOperations,
-    private readonly workspacePaths: WorkspacePathOperations,
-    private readonly readMcpInstructions: () => string | undefined,
-    private readonly trust: WorkspaceTrustControlPort | undefined,
-    private readonly tools: ToolSelection | undefined,
-    private readonly hooks: SessionHookOwner | undefined,
-    private readonly clientFactory: AgentClientFactory | undefined,
-    private readonly runtimeLoader: typeof loadAgentRuntime,
-    private readonly scopeFactory: SubAgentScopeFactory,
+    private readonly acquisition: ChildAgentAcquisition,
+    private readonly factories: ChildAgentRuntimeFactories,
+    private readonly clientFactory: AgentClientFactory,
+    private readonly operations: ChildAgentOperations,
   ) {}
 
   async assemble(): Promise<SubagentLaunchResult> {
@@ -178,7 +188,7 @@ export class ChildAgentAssembly {
   }
 
   private acquireWorkspace(): void {
-    this.settings = this.createChildSettings();
+    this.settings = this.acquisition.createChildSettings();
     const profile = this.data.runtimeStateProfile;
     if (isLoadBalancerProfile(this.data.activationProfile)) {
       this.settings.setCurrentProfileName(this.data.subagent.profile);
@@ -194,10 +204,10 @@ export class ChildAgentAssembly {
     }
     this.config = new Config({
       sessionId: this.data.runtimeId,
-      targetDir: this.foregroundConfig.getTargetDir(),
+      targetDir: this.acquisition.foregroundConfig.getTargetDir(),
       debugMode: false,
-      cwd: this.foregroundConfig.getWorkingDir(),
-      proxy: this.foregroundConfig.getProxy(),
+      cwd: this.acquisition.foregroundConfig.getWorkingDir(),
+      proxy: this.acquisition.foregroundConfig.getProxy(),
       model: this.data.activationProfile.model,
       initialSettings: this.settings.getAllGlobalSettings(),
     });
@@ -210,7 +220,7 @@ export class ChildAgentAssembly {
     this.acquired.push(() => this.providers.rollback());
     this.settingsOwner = new SessionSettingsOwner(this.settings);
     this.providers.acquire('settings', () => this.settingsOwner.dispose());
-    this.settingsOwner.bindTelemetry(this.config, this.telemetry);
+    this.settingsOwner.bindTelemetry(this.config, this.operations.telemetry);
   }
 
   private acquireProviders(): void {
@@ -245,21 +255,21 @@ export class ChildAgentAssembly {
     );
     this.manager.bindNetworkFetch(network.fetch);
     this.providers.acquire('manager', () => this.manager.dispose());
-    const keys = this.authority.createProviderKeyStorage();
+    const keys = this.acquisition.authority.createProviderKeyStorage();
     this.providers.acquire('manager', () => keys.close());
     this.manager.bindProviderKeyStorage(keys);
     this.tokenizer = configureProviderTokenizer(this.manager);
     this.content = createRuntimeContentGeneratorFactory();
-    const tokens = this.authority.createTokenStore();
+    const tokens = this.acquisition.authority.createTokenStore();
     this.providers.acquire('tokens', createOwnedTokenStoreClose(tokens));
     this.oauth = createOwnerOAuthManager(
       tokens,
       createFileOAuthSettingsProvider(),
-      this.messageBus,
-      this.profileReads,
+      this.operations.messageBus,
+      this.operations.profileReads,
       createSessionAuthPolicyReader(this.settings),
       () => ({ runtimeId: this.data.runtimeId, runtimeKind: 'agent' }),
-      this.requestInteractiveAuth,
+      this.operations.requestInteractiveAuth,
       createOwnerAuthCacheInvalidator((name) =>
         this.manager.getProviderByName(name),
       ),
@@ -280,17 +290,27 @@ export class ChildAgentAssembly {
       this.files,
       this.media.store,
       this.clientFactory,
-      this.readMcpInstructions,
-      this.workspacePaths,
-      this.messageBus,
+      this.operations.readMcpInstructions,
+      this.operations.workspacePaths,
+      this.acquisition.authority,
+      this.operations.messageBus,
     );
     this.acquired.push(() => this.client.dispose());
-    this.client.bindDefinitionReads(this.profileReads, this.subagentReads);
-    this.client.bindInheritedInstructions(this.instructions);
-    this.client.bindHooks(this.hooks, this.messageBus, this.trust);
-    if (this.tools === undefined)
-      throw new Error('Missing explicit child tool selection');
-    this.client.bindInheritedTools(this.tools, this.messageBus, this.trust);
+    this.client.bindDefinitionReads(
+      this.operations.profileReads,
+      this.operations.subagentReads,
+    );
+    this.client.bindInheritedInstructions(this.operations.instructions);
+    this.client.bindHooks(
+      this.operations.hooks,
+      this.operations.messageBus,
+      this.operations.trust,
+    );
+    this.client.bindInheritedTools(
+      this.operations.tools,
+      this.operations.messageBus,
+      this.operations.trust,
+    );
   }
 
   private async activate(): Promise<void> {
@@ -331,7 +351,7 @@ export class ChildAgentAssembly {
       this.settingsOwner,
       () => 'agent',
       (method) => this.client.refreshAuth(method),
-      this.profileReads,
+      this.operations.profileReads,
       this.data.activationProfile,
       this.data.subagent.profile,
       isLoadBalancerProfile(this.data.activationProfile),
@@ -368,7 +388,7 @@ export class ChildAgentAssembly {
       this.manager,
       this.tokenizer,
       this.content,
-      this.tools,
+      this.operations.tools,
       this.data.state,
       settingsSnapshot,
       createSubagentProviderRuntime(
@@ -382,7 +402,7 @@ export class ChildAgentAssembly {
       this.data.state.provider,
       this.data.state.model,
     );
-    this.loaded = await this.runtimeLoader(options);
+    this.loaded = await this.factories.runtimeLoader(options);
     this.acquired.push(() => disposeHistoryLike(this.loaded.history));
     this.loaded.history.setTokenizerFactory({
       getTokenizer: (provider, model) =>
@@ -404,7 +424,7 @@ export class ChildAgentAssembly {
       throw new Error(
         'SubAgentScope.create requires a ToolRegistry in the runtime bundle or overrides.',
       );
-    return this.scopeFactory(
+    return this.factories.scopeFactory(
       {
         name: this.data.subagent.name,
         prompt: this.data.prompt,
@@ -421,21 +441,21 @@ export class ChildAgentAssembly {
         toolRegistry,
         toolsView: this.loaded.runtimeContext.tools,
         settingsSnapshot: this.loaded.settingsSnapshot,
-        foregroundConfig: this.foregroundConfig,
+        foregroundConfig: this.acquisition.foregroundConfig,
       },
       {
-        instructions: this.instructions,
-        workspacePaths: this.workspacePaths,
-        readMcpInstructions: this.readMcpInstructions,
-        messageBus: this.messageBus,
+        instructions: this.operations.instructions,
+        workspacePaths: this.operations.workspacePaths,
+        readMcpInstructions: this.operations.readMcpInstructions,
+        messageBus: this.operations.messageBus,
         loadEnvironmentContext: async () =>
           getEnvironmentContext(
-            this.instructions.snapshot().environmentMemory,
-            this.workspacePaths.directories(),
+            this.operations.instructions.snapshot().environmentMemory,
+            this.operations.workspacePaths.directories(),
           ),
         readApprovalMode: () =>
-          this.trust?.isTrustedFolder() === true
-            ? this.foregroundConfig.getApprovalMode()
+          this.operations.trust?.isTrustedFolder() === true
+            ? this.acquisition.foregroundConfig.getApprovalMode()
             : ApprovalMode.DEFAULT,
         admitModelParameters: () => {
           const provider = this.loaded.runtimeContext.state.provider;

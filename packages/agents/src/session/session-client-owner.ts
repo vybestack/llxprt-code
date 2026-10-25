@@ -12,7 +12,10 @@ import type {
   BucketAuthConsentRequest,
   Unsubscribe,
 } from '../api/agent.js';
-import type { StableDisplayCallbacksHolder } from '../api/agentBootstrap.js';
+import {
+  buildAgentClientFactory,
+  type StableDisplayCallbacksHolder,
+} from '../api/agentBootstrap.js';
 import { ChildAgentAssembly } from '../api/child-agent-assembly.js';
 import type { EditorCallbacks } from '../api/config-types.js';
 import { createAgentHookControl } from '../api/control/hooks.js';
@@ -255,6 +258,7 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     protected readonly settingsOwner: SessionSettingsOwner,
     readonly contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
     readonly tokenizerFactory: RuntimeTokenizerFactory,
+    private readonly authority: CredentialAuthority,
     protected readonly borrowedClient?: AgentClientContract,
     protected readonly borrowedBus?: MessageBus,
   ) {
@@ -305,6 +309,7 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     settingsOwner: SessionSettingsOwner,
     contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
     tokenizerFactory: RuntimeTokenizerFactory,
+    authority: CredentialAuthority,
     borrowedClient?: AgentClientContract,
     borrowedBus?: MessageBus,
   ): Promise<SessionClientOwner> {
@@ -319,6 +324,7 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
       settingsOwner,
       contentGeneratorFactory,
       tokenizerFactory,
+      authority,
       borrowedClient,
       borrowedBus,
     );
@@ -343,7 +349,6 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     registration?: (bound: TaskToolRegistration) => TaskToolRegistration,
     profiles: ProfileDefinitionReads = workspace.profileDefinitions,
     subagents: SubagentDefinitionReads = workspace.subagentDefinitions,
-    authority?: CredentialAuthority,
   ): void {
     if (this.boundWorkspace === workspace) return;
     if (this.boundWorkspace !== undefined)
@@ -359,29 +364,37 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     const policy = requireSessionPolicy(this.sessionPolicy);
     this.prepareTools = () =>
       this.toolCatalog.initialize(
-        () => workspace.isStopped(),
-        workspace.workspacePaths,
-        workspace.workspaceFiles,
-        workspace.workspaceIgnore,
-        workspace.workspaceScans,
-        workspace.workspaceLsp.diagnostics,
-        workspace.ide,
-        workspace.trust,
-        workspace.toolSelection,
-        workspace.readInstructions,
-        policy.messageBus,
-        this.bindTaskRegistration(authority, profiles, subagents, registration),
-        bindToolOutputSummary(
-          () => {
-            this.assertConversationOpen();
-            return this.client;
-          },
-          () => this.config.getUtilityModel(),
-        ),
-        sessionApproval,
-        profiles,
-        subagents,
-        this.settingsOwner.telemetry,
+        {
+          isWorkspaceStopped: () => workspace.isStopped(),
+          paths: workspace.workspacePaths,
+          files: workspace.workspaceFiles,
+          ignore: workspace.workspaceIgnore,
+          scans: workspace.workspaceScans,
+          diagnostics: workspace.workspaceLsp.diagnostics,
+          ide: workspace.ide,
+          trust: workspace.trust,
+          workspaceSelection: workspace.toolSelection,
+          profiles,
+          subagents,
+        },
+        {
+          readMcpInstructions: workspace.readInstructions,
+          bus: policy.messageBus,
+          registration: this.bindTaskRegistration(
+            profiles,
+            subagents,
+            registration,
+          ),
+          summarize: bindToolOutputSummary(
+            () => {
+              this.assertConversationOpen();
+              return this.client;
+            },
+            () => this.config.getUtilityModel(),
+          ),
+          approval: sessionApproval,
+          telemetry: this.settingsOwner.telemetry,
+        },
       );
     workspace.bindSessionClient(
       this.config,
@@ -398,7 +411,6 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
   }
 
   private bindTaskRegistration(
-    authority: CredentialAuthority | undefined,
     profiles: ProfileDefinitionReads,
     subagents: SubagentDefinitionReads,
     transform:
@@ -415,31 +427,33 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
       subagentManager: subagents,
       readRunPolicy: () => this.settingsOwner.readSubagentRunPolicy(),
       assembleChild: (data) => {
-        if (authority === undefined)
-          throw new Error(
-            'Child assembly requires captured credential authority',
-          );
         if (this.admissionClosed)
           throw new Error('Session client admission is closed');
         return new ChildAgentAssembly(
           data,
-          authority,
-          bus,
-          this.requestInteractiveAuth,
-          profiles,
-          subagents,
-          this.settingsOwner.telemetry,
-          () => this.settingsOwner.createChildStore(),
-          this.config,
-          this.instructionReads,
-          workspace.workspacePaths,
-          workspace.readInstructions,
-          workspace.trust,
-          this.toolCatalog.acquireChildTools(),
-          this.hookOperations,
-          undefined,
-          loadAgentRuntime,
-          SubAgentScope.create.bind(SubAgentScope),
+          {
+            authority: this.authority,
+            createChildSettings: () => this.settingsOwner.createChildStore(),
+            foregroundConfig: this.config,
+          },
+          {
+            runtimeLoader: loadAgentRuntime,
+            scopeFactory: SubAgentScope.create.bind(SubAgentScope),
+          },
+          buildAgentClientFactory(),
+          {
+            messageBus: bus,
+            requestInteractiveAuth: this.requestInteractiveAuth,
+            profileReads: profiles,
+            subagentReads: subagents,
+            telemetry: this.settingsOwner.telemetry,
+            instructions: this.instructionReads,
+            workspacePaths: workspace.workspacePaths,
+            readMcpInstructions: workspace.readInstructions,
+            trust: workspace.trust,
+            tools: this.toolCatalog.acquireChildTools(),
+            hooks: this.hookOperations,
+          },
         ).assemble();
       },
     });

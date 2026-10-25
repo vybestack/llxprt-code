@@ -17,7 +17,7 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import type { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   configureProviderTokenizer,
   createRuntimeContentGeneratorFactory,
@@ -264,6 +264,7 @@ async function acquireCallerSession(
     providers.settingsOwner,
     providers.content,
     providers.tokenizer,
+    new CredentialAuthority(),
   );
   owner.bindMcpRuntime(mcp);
   owner.bindProviderFiles(providers.files, (provider) =>

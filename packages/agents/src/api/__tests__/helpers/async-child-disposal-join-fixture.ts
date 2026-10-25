@@ -32,6 +32,7 @@ import {
   type AgentSchedulerFactory,
 } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 
@@ -361,6 +362,7 @@ export async function withDisposalJoinFixture(
   scenario: (fixture: DisposalJoinFixture) => Promise<void>,
   toolSchedulerFactory?: AgentSchedulerFactory,
   extraTools: readonly string[] = [],
+  credentialAuthority?: CredentialAuthority,
 ): Promise<void> {
   const directory = await createFixtureDirectory();
   const timeline: string[] = [];
@@ -389,6 +391,7 @@ export async function withDisposalJoinFixture(
       settingsRoot,
       server.baseUrl,
       toolSchedulerFactory,
+      credentialAuthority,
     );
     childStatus = observeTerminalTask(manager, timeline);
     await scenario({
@@ -567,6 +570,7 @@ async function adoptParent(
   settingsRoot: ReturnType<typeof createSessionSettingsFixture>,
   baseUrl: string,
   toolSchedulerFactory?: AgentSchedulerFactory,
+  credentialAuthority?: CredentialAuthority,
 ): Promise<Agent> {
   return captureAgentAdoption(
     config,
@@ -591,7 +595,7 @@ async function adoptParent(
     undefined,
     undefined,
     undefined,
-    undefined,
+    credentialAuthority,
     undefined,
     undefined,
     undefined,

@@ -540,7 +540,7 @@ function registerAgentTools(
  * Applies coreTools allow-list and excludeTools deny-list governance.
  * Returns the registry and the list of all potential tools (for settings UI).
  */
-type ToolOutputSummarizer = (
+export type ToolOutputSummarizer = (
   content: string,
   signal: AbortSignal,
   tokenBudget?: number,
