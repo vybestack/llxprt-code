@@ -47,6 +47,32 @@ describe('row tree positional read cost', () => {
     expect(readBytes).toBe(firstReadBytes * 3);
   });
 
+  it('does not prefetch neighboring payloads from a published metadata read', async () => {
+    const entries = [syntheticEntry(new SeededRandom(1), 0, NO_KINDS)];
+    const record = encodeRowTreeNode({ kind: 'leaf', entries });
+    const frame = encodeBodylessFrame(record.kind, record.kindHeader);
+    const bytes = new Uint8Array(64 * 1024);
+    bytes.set(frame);
+    let furthestRead = 0;
+    const access = createRecordAccess(
+      'published-metadata',
+      {
+        async readAt(position, length): Promise<Uint8Array> {
+          furthestRead = Math.max(furthestRead, position + length);
+          return bytes.slice(position, position + length);
+        },
+      },
+      { selfOffset: 0, durableEnd: bytes.length },
+      true,
+      true,
+    );
+    expect(await readRowTreeNode(access, 0)).toStrictEqual({
+      kind: 'leaf',
+      entries,
+    });
+    expect(furthestRead).toBeLessThanOrEqual(frame.length);
+  });
+
   it.each([1, 8])(
     'reads a %i-entry node with one descriptor read',
     async (count) => {

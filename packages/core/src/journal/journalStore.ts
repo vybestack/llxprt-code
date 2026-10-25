@@ -859,6 +859,7 @@ export class JournalStore {
       this.writer.reader,
       trailer,
       true,
+      true,
     );
   }
 
