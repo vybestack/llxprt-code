@@ -1,8 +1,6 @@
 import { spyOn } from 'bun:test';
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from './helpers/session-client-capture.js';
+import { createCapturedSessionOwner } from './helpers/session-client-capture.js';
+import { currentOwnerClient } from './helpers/owner-current-client.js';
 import { gate as createGate } from './helpers/async-child-disposal-join-fixture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -45,24 +43,36 @@ import { FakeProvider } from '@vybestack/llxprt-code-providers';
 import { AgentClient } from '../../core/client.js';
 import { SessionClientOwner } from '../../session/session-client-owner.js';
 
-class BindingFailureClient extends AgentClient {
-  failBinding = false;
-  disposals = 0;
-  cleanupGate: Promise<void> = Promise.resolve();
-  cleanupEntered: () => void = () => {};
-  override bindIdeContext(
-    ...args: Parameters<AgentClient['bindIdeContext']>
-  ): void {
-    if (this.failBinding) throw new Error('candidate binding failed');
-    super.bindIdeContext(...args);
-  }
-  override async dispose(): Promise<void> {
-    this.disposals += 1;
-    this.cleanupEntered();
-    await this.cleanupGate;
-    await super.dispose();
-    if (this.failBinding) throw new Error('candidate cleanup failed');
-  }
+interface CandidateFault {
+  readonly cleanupGate: Promise<void>;
+  readonly cleanupEntered: () => void;
+}
+
+type CountedClient = AgentClient & { disposals: number };
+
+/**
+ * A real client whose methods are wrapped on the instance: with a fault, its
+ * IDE-context binding throws and its disposal waits on the gate, then fails.
+ */
+function createCountedClient(
+  fault: CandidateFault | undefined,
+  ...args: ConstructorParameters<typeof AgentClient>
+): CountedClient {
+  const client = Object.assign(new AgentClient(...args), { disposals: 0 });
+  const bindIdeContext = client.bindIdeContext;
+  const dispose = client.dispose;
+  client.bindIdeContext = (...readers) => {
+    if (fault !== undefined) throw new Error('candidate binding failed');
+    bindIdeContext.call(client, ...readers);
+  };
+  client.dispose = async () => {
+    client.disposals += 1;
+    fault?.cleanupEntered();
+    await fault?.cleanupGate;
+    await dispose.call(client);
+    if (fault !== undefined) throw new Error('candidate cleanup failed');
+  };
+  return client;
 }
 
 async function bindingOwner(
@@ -74,7 +84,7 @@ async function bindingOwner(
   builtSettingsOwner: SessionSettingsOwner,
   builtContent: NonNullable<Parameters<typeof SessionClientOwner.create>[8]>,
   builtTokenizer: NonNullable<Parameters<typeof SessionClientOwner.create>[9]>,
-  clients: BindingFailureClient[],
+  clients: CountedClient[],
   gate: ReturnType<typeof createGate>,
   entered: ReturnType<typeof createGate>,
 ): Promise<SessionClientOwner> {
@@ -84,18 +94,16 @@ async function bindingOwner(
     builtManager,
     (config, state, instructions, store) => {
       if (store === undefined) throw new Error('Missing media store');
-      const client = new BindingFailureClient(
+      const client = createCountedClient(
+        clients.length > 0
+          ? { cleanupGate: gate.promise, cleanupEntered: entered.release }
+          : undefined,
         config,
         state,
         instructions ?? (() => undefined),
         store,
         builtMcp.workspacePaths,
       );
-      client.failBinding = clients.length > 0;
-      if (client.failBinding) {
-        client.cleanupGate = gate.promise;
-        client.cleanupEntered = entered.release;
-      }
       clients.push(client);
       return client;
     },
@@ -252,7 +260,7 @@ async function checkRollback(
     await builtMcp.initialize();
     await builtOwner.initializeTools();
     await builtOwner.refreshAuth();
-    await capturedSessionClient(builtOwner).startChat();
+    await (await currentOwnerClient(builtOwner)).startChat();
   } catch (primary) {
     await cleanupAfterFailure(primary, closeEngine);
   } finally {
@@ -273,7 +281,7 @@ async function checkRollback(
   }
   const gate = createGate();
   const entered = createGate();
-  const clients: BindingFailureClient[] = [];
+  const clients: CountedClient[] = [];
   const owner = await bindingOwner(
     builtConfig,
     builtSettings,
@@ -287,7 +295,7 @@ async function checkRollback(
     gate,
     entered,
   );
-  const previous = capturedSessionClient(owner);
+  const previous = await currentOwnerClient(owner);
   let settled = false;
   const pending = operation(owner).then(
     () => undefined,
@@ -301,7 +309,7 @@ async function checkRollback(
     await Promise.resolve();
     await Promise.resolve();
     expect(settled).toBe(false);
-    expect(capturedSessionClient(owner)).toBe(previous);
+    expect(await currentOwnerClient(owner)).toBe(previous);
     gate.release();
     const failure = await pending;
     expect(failure).toBeInstanceOf(AggregateError);

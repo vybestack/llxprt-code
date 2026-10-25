@@ -1,7 +1,5 @@
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from './helpers/session-client-capture.js';
+import { createCapturedSessionOwner } from './helpers/session-client-capture.js';
+import { currentOwnerClient } from './helpers/owner-current-client.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -47,19 +45,25 @@ import { Storage } from '@vybestack/llxprt-code-storage';
 import { AgentClient } from '../../core/client.js';
 import { SessionClientOwner } from '../../session/session-client-owner.js';
 
-class CountingClient extends AgentClient {
-  disposals = 0;
-  failInitialize = false;
-  override async initialize(
-    ...args: Parameters<AgentClient['initialize']>
-  ): Promise<void> {
-    if (this.failInitialize) throw new Error('refresh boom');
-    await super.initialize(...args);
-  }
-  override async dispose(): Promise<void> {
-    this.disposals += 1;
-    await super.dispose();
-  }
+type CountingClient = AgentClient & { disposals: number };
+
+/** A real client with its `initialize` and `dispose` wrapped on the instance. */
+function createCountingClient(
+  failInitialize: boolean,
+  ...args: ConstructorParameters<typeof AgentClient>
+): CountingClient {
+  const client = Object.assign(new AgentClient(...args), { disposals: 0 });
+  const initialize = client.initialize;
+  const dispose = client.dispose;
+  client.initialize = async (...initializeArgs) => {
+    if (failInitialize) throw new Error('refresh boom');
+    await initialize.call(client, ...initializeArgs);
+  };
+  client.dispose = async () => {
+    client.disposals += 1;
+    await dispose.call(client);
+  };
+  return client;
 }
 
 async function createReplacementOwner(
@@ -83,14 +87,14 @@ async function createReplacementOwner(
     builtManager,
     (config, state, instructions, store) => {
       if (store === undefined) throw new Error('Missing factory store');
-      const client = new CountingClient(
+      const client = createCountingClient(
+        clients.length >= failFromClient,
         config,
         state,
         instructions ?? (() => undefined),
         store,
         builtMcp.workspacePaths,
       );
-      client.failInitialize = clients.length >= failFromClient;
       clients.push(client);
       return client;
     },
@@ -239,7 +243,7 @@ describe('Session client replacement failure', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await capturedSessionClient(builtOwner).startChat();
+      await (await currentOwnerClient(builtOwner)).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
     }
@@ -263,7 +267,7 @@ describe('Session client replacement failure', () => {
     );
     try {
       await owner.refreshAuth();
-      const previous = capturedSessionClient(owner);
+      const previous = await currentOwnerClient(owner);
       expect(clients).toHaveLength(2);
 
       await expect(owner.refreshAuth()).rejects.toThrow('refresh boom');
@@ -271,7 +275,7 @@ describe('Session client replacement failure', () => {
       const abandoned = clients[2];
       expect(clients).toHaveLength(3);
       expect(abandoned.disposals).toBe(1);
-      expect(capturedSessionClient(owner)).toBe(previous);
+      expect(await currentOwnerClient(owner)).toBe(previous);
       expect(clients[1].disposals).toBe(0);
       await expect(owner.refreshAuth()).rejects.toThrow('refresh boom');
       expect(clients[3].disposals).toBe(1);
@@ -408,7 +412,7 @@ describe('Session client replacement failure', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await capturedSessionClient(builtOwner).startChat();
+      await (await currentOwnerClient(builtOwner)).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
     }
@@ -432,14 +436,14 @@ describe('Session client replacement failure', () => {
     );
     try {
       await owner.refreshAuth();
-      const previous = capturedSessionClient(owner);
+      const previous = await currentOwnerClient(owner);
 
       await expect(
         owner.prepareProfileActivation(new AbortController().signal),
       ).rejects.toThrow('refresh boom');
 
       expect(clients[2].disposals).toBe(1);
-      expect(capturedSessionClient(owner)).toBe(previous);
+      expect(await currentOwnerClient(owner)).toBe(previous);
       expect(clients[1].disposals).toBe(0);
       expect(scopeCleanups).toStrictEqual([]);
       await owner.dispose();
@@ -595,7 +599,7 @@ describe('Session client owner policy persistence at disposal', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await capturedSessionClient(builtOwner).startChat();
+      await (await currentOwnerClient(builtOwner)).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
     }

@@ -1,7 +1,5 @@
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from './helpers/session-client-capture.js';
+import { createCapturedSessionOwner } from './helpers/session-client-capture.js';
+import { currentOwnerClient } from './helpers/owner-current-client.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -200,7 +198,7 @@ describe('production filesystem roots', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await capturedSessionClient(builtOwner).startChat();
+      await (await currentOwnerClient(builtOwner)).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtClose);
     }
@@ -208,13 +206,13 @@ describe('production filesystem roots', () => {
     const directory = await realpath(
       await mkdtemp(join(tmpdir(), 'replacement-roots-')),
     );
-    const before = capturedSessionClient(builtOwner);
+    const before = await currentOwnerClient(builtOwner);
     try {
       builtMcp.workspaceFilesystem.addDirectory(directory);
       await builtOwner.refreshAuth();
-      expect(before).not.toBe(capturedSessionClient(builtOwner));
+      expect(before).not.toBe(await currentOwnerClient(builtOwner));
       expect(builtOwner.workspaceDirectories()).toContain(directory);
-      await capturedSessionClient(builtOwner).startChat();
+      await (await currentOwnerClient(builtOwner)).startChat();
       const generate = FakeProvider.prototype.generateChatCompletion;
       const instructions: string[] = [];
       const observation = spyOn(
@@ -226,8 +224,8 @@ describe('production filesystem roots', () => {
         instructions.push(input.systemInstruction ?? '');
         yield* generate.call(this, input);
       });
-      for await (const event of capturedSessionClient(
-        builtOwner,
+      for await (const event of (
+        await currentOwnerClient(builtOwner)
       ).sendMessageStream(
         'Observe current workspace',
         new AbortController().signal,
@@ -240,9 +238,9 @@ describe('production filesystem roots', () => {
       builtMcp.workspaceFilesystem.setDirectories([builtConfig.getTargetDir()]);
       await builtOwner.refreshAuth();
       expect(builtOwner.workspaceDirectories()).not.toContain(directory);
-      await capturedSessionClient(builtOwner).startChat();
-      for await (const event of capturedSessionClient(
-        builtOwner,
+      await (await currentOwnerClient(builtOwner)).startChat();
+      for await (const event of (
+        await currentOwnerClient(builtOwner)
       ).sendMessageStream(
         'Observe removed workspace',
         new AbortController().signal,

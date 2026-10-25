@@ -1,8 +1,8 @@
 import {
   createCapturedSessionOwner,
   acquireCapturedSessionClient,
-  capturedSessionClient,
 } from './helpers/session-client-capture.js';
+import { currentOwnerClient } from './helpers/owner-current-client.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
@@ -176,7 +176,7 @@ describe('Isolated session client collaborators', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await capturedSessionClient(builtOwner).startChat();
+      await (await currentOwnerClient(builtOwner)).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
     }
@@ -241,7 +241,7 @@ describe('Isolated session client collaborators', () => {
         owner.bindHooks();
         await owner.initializeTools();
         await owner.refreshAuth();
-        const client = capturedSessionClient(owner);
+        const client = await currentOwnerClient(owner);
         await client.startChat();
         await client.addHistory({
           speaker: 'human',
@@ -253,13 +253,13 @@ describe('Isolated session client collaborators', () => {
           ),
         ).toHaveLength(1);
         expect(
-          (await capturedSessionClient(builtOwner).getHistory()).filter(
+          (await (await currentOwnerClient(builtOwner)).getHistory()).filter(
             (item) => item.speaker === 'human',
           ),
         ).toHaveLength(0);
         await owner.dispose();
         await builtOwner.refreshAuth();
-        await capturedSessionClient(builtOwner).startChat();
+        await (await currentOwnerClient(builtOwner)).startChat();
         expect(builtManager.getActiveProviderName()).toBe('fake');
         expect(await builtMedia.store.getStoredByteLength()).toBe(0);
       } finally {

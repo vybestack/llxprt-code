@@ -1,7 +1,5 @@
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from './helpers/session-client-capture.js';
+import { createCapturedSessionOwner } from './helpers/session-client-capture.js';
+import { currentOwnerClient } from './helpers/owner-current-client.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -191,7 +189,7 @@ describe('Profile finalization', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await capturedSessionClient(builtOwner).startChat();
+      await (await currentOwnerClient(builtOwner)).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtClose);
     }

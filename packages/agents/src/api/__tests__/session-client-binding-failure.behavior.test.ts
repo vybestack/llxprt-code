@@ -1,7 +1,5 @@
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from './helpers/session-client-capture.js';
+import { createCapturedSessionOwner } from './helpers/session-client-capture.js';
+import { currentOwnerClient } from './helpers/owner-current-client.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -221,7 +219,7 @@ describe('Factory-created session client acquisition', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await capturedSessionClient(builtOwner).startChat();
+      await (await currentOwnerClient(builtOwner)).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
     }
@@ -230,18 +228,23 @@ describe('Factory-created session client acquisition', () => {
     const disposalStarted = createGate();
     const events: string[] = [];
     const bindingError = new Error('binding boom');
-    class BindingFailureClient extends AgentClient {
-      override bindProviderInvocation(): void {
+    const createBindingFailureClient = (
+      ...args: ConstructorParameters<typeof AgentClient>
+    ): AgentClient => {
+      const client = new AgentClient(...args);
+      const dispose = client.dispose;
+      client.bindProviderInvocation = () => {
         throw bindingError;
-      }
-      override async dispose(): Promise<void> {
+      };
+      client.dispose = async () => {
         events.push('dispose-started');
         disposalStarted.open();
         await releaseDisposal.opened;
-        await super.dispose();
+        await dispose.call(client);
         events.push('dispose-finished');
-      }
-    }
+      };
+      return client;
+    };
     try {
       const construction = createOwnerWithClient(
         builtConfig,
@@ -252,7 +255,7 @@ describe('Factory-created session client acquisition', () => {
         builtSettingsOwner,
         builtContent,
         builtTokenizer,
-        (...args) => new BindingFailureClient(...args),
+        createBindingFailureClient,
       ).then(
         () => events.push('constructed'),
         (error: unknown) => {
@@ -404,7 +407,7 @@ describe('Factory-created session client acquisition', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await capturedSessionClient(builtOwner).startChat();
+      await (await currentOwnerClient(builtOwner)).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
     }
@@ -414,19 +417,24 @@ describe('Factory-created session client acquisition', () => {
     const events: string[] = [];
     const bindingError = new Error('binding boom');
     const disposalError = new Error('dispose boom');
-    class BindingFailureClient extends AgentClient {
-      override bindProviderInvocation(): void {
+    const createBindingFailureClient = (
+      ...args: ConstructorParameters<typeof AgentClient>
+    ): AgentClient => {
+      const client = new AgentClient(...args);
+      const dispose = client.dispose;
+      client.bindProviderInvocation = () => {
         throw bindingError;
-      }
-      override async dispose(): Promise<void> {
+      };
+      client.dispose = async () => {
         events.push('dispose-started');
         disposalStarted.open();
         await releaseDisposal.opened;
-        await super.dispose();
+        await dispose.call(client);
         events.push('dispose-finished');
         throw disposalError;
-      }
-    }
+      };
+      return client;
+    };
     try {
       const construction = createOwnerWithClient(
         builtConfig,
@@ -437,7 +445,7 @@ describe('Factory-created session client acquisition', () => {
         builtSettingsOwner,
         builtContent,
         builtTokenizer,
-        (...args) => new BindingFailureClient(...args),
+        createBindingFailureClient,
       ).then(
         () => events.push('constructed'),
         (error: unknown) => {
