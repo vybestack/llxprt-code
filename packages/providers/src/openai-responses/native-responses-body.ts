@@ -167,15 +167,28 @@ export class NativeResponsesPrompt {
           this.options.invocation.signal,
           this.rows.native,
         );
-    for await (const row of source) {
-      this.requireOpen();
-      const pairs = await responsesUnitPairs(row, indexed, skipRows);
-      yield* buildOpenAIResponsesUnit(
-        row,
-        this.context,
-        pairs,
-        () => `rs_${this.context.reasoningIdTime}_${counter++}`,
-      );
+    let current: IteratorResult<IContent> | undefined;
+    try {
+      for (;;) {
+        current = await source.next();
+        if (current.done === true) return;
+        this.requireOpen();
+        const pairs = await responsesUnitPairs(
+          current.value,
+          indexed,
+          skipRows,
+        );
+        yield* buildOpenAIResponsesUnit(
+          current.value,
+          this.context,
+          pairs,
+          () => `rs_${this.context.reasoningIdTime}_${counter++}`,
+        );
+        current = undefined;
+      }
+    } finally {
+      current = undefined;
+      await source.return(undefined);
     }
   }
 
