@@ -6,6 +6,7 @@ import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
  */
 
 import { encoding_for_model } from '@dqbd/tiktoken';
+import { countLongNeutralText } from './neutral-long-piece.js';
 import { TextDecoder } from 'node:util';
 
 import {
@@ -75,6 +76,14 @@ function encodeText(text: string): Uint32Array | null {
 
 // Token estimation using tiktoken for better accuracy
 export function estimateTokens(text: string): number {
+  if (text.length > 512 && !text.includes('<|endof')) {
+    const encoder = getEncoder();
+    if (encoder !== null)
+      return countLongNeutralText(
+        text,
+        (piece) => encoder.encode(piece).length,
+      );
+  }
   const encoded = encodeText(text);
 
   if (encoded) {
