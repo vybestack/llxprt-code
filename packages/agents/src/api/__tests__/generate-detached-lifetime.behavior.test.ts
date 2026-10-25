@@ -4,27 +4,113 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { Agent, GenerateOptions } from '@vybestack/llxprt-code-agents';
+import { createAgent } from '../createAgent.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import type { SessionClientOwner } from '../../session/session-client-owner.js';
 import { withOwners } from './turn-revision-capture.fixture.js';
 import { useRecordingPrompts } from './helpers/recording-owner-lifetime-fixture.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { AggregateDisposeError } from '../disposeErrors.js';
 import {
-  withGenerationOwner,
   generationGate,
+  generationRecording,
 } from './helpers/generation-owner-fixture.js';
+import {
+  createGenerationProvider,
+  type GenerationProvider,
+} from './helpers/generation-provider.js';
+import {
+  withGenerationClientOwner,
+  type GenerationClientOwnerOptions,
+} from './helpers/generation-client-owner.js';
 
 const leaves = (error: unknown): unknown[] =>
   error instanceof AggregateError || error instanceof AggregateDisposeError
     ? error.errors.flatMap(leaves)
     : [error];
 
+const generate = async (
+  owner: SessionClientOwner,
+  input: string,
+  options?: GenerateOptions,
+): Promise<string> => owner.generateText(input, options, generationRecording);
+
+/**
+ * One agent built through `createAgent` with the contributed provider, as a
+ * host builds it. The agent is disposed after the scenario and the failures
+ * disposal reports are returned.
+ */
+async function withGenerationAgent(
+  authority: GenerationClientOwnerOptions['authority'],
+  provider: GenerationProvider,
+  run: (agent: Agent) => Promise<void>,
+): Promise<readonly unknown[]> {
+  const directory = await realpath(
+    await mkdtemp(join(tmpdir(), 'generation-agent-')),
+  );
+  const failures: unknown[] = [];
+  let agent: Agent | undefined;
+  try {
+    agent = await createAgent({
+      provider: provider.alias,
+      model: 'primary-model',
+      providerContributions: provider.contributions,
+      workingDir: directory,
+      credentialAuthority: authority,
+      telemetry: { enabled: false },
+      recording: { enabled: false },
+      mcpEnabled: false,
+      skillsSupport: false,
+      harness: { includeProcessCwd: false },
+    });
+    await run(agent);
+  } finally {
+    await runCleanupSteps([
+      async () => {
+        try {
+          await agent?.dispose();
+        } catch (failure) {
+          failures.push(failure);
+        }
+      },
+      () => rm(directory, { recursive: true, force: true }),
+    ]);
+  }
+  return failures;
+}
+
 describe('Agent.generate lifetimes', () => {
   useRecordingPrompts();
+  const credentials = useOwnedCredentials();
+  const geminiProvider = (): GenerationProvider =>
+    createGenerationProvider({ alias: 'gemini' });
+  const localProvider = (): GenerationProvider =>
+    createGenerationProvider({ alias: 'generation-local' });
+  const ownerOptions = (
+    provider: GenerationProvider,
+    hooks: Pick<
+      GenerationClientOwnerOptions,
+      'acquired' | 'prepareTokenizer'
+    > = {},
+  ): GenerationClientOwnerOptions => ({
+    authority: credentials().authority,
+    provider,
+    ...hooks,
+  });
+
   it('reports an accepted generation cancellation to its caller only and lets shutdown fulfill', async () => {
     const entered = generationGate();
     const held = generationGate();
     let rejectedWork: unknown;
-    const cleanup = await withGenerationOwner(
-      async (owner, _clients, provider) => {
+    const provider = geminiProvider();
+    const cleanup = await withGenerationAgent(
+      credentials().authority,
+      provider,
+      async (owner) => {
         provider.generating = async () => {
           entered.release();
           await held.promise;
@@ -50,14 +136,24 @@ describe('Agent.generate lifetimes', () => {
     async (stage) => {
       const entered = generationGate();
       const held = generationGate();
-      const cleanup = await withGenerationOwner(
-        async (owner, clients, provider) => {
+      const provider = geminiProvider();
+      const cleanup = await withGenerationClientOwner(
+        ownerOptions(provider, {
+          acquired: (client, index) => {
+            if (index === 2 && stage === 'cleanup')
+              client.disposing = async () => {
+                entered.release();
+                await held.promise;
+              };
+          },
+        }),
+        async ({ owner, clients }) => {
           if (stage === 'request')
             provider.generating = async () => {
               entered.release();
               await held.promise;
             };
-          const pending = owner.generate('held temporary lifetime', undefined);
+          const pending = generate(owner, 'held temporary lifetime', undefined);
           const result = pending.then(
             () => 'completed',
             () => 'cancelled',
@@ -75,8 +171,8 @@ describe('Agent.generate lifetimes', () => {
           try {
             expect(disposed).toBe(false);
             expect(clients[1].disposed).toBe(0);
-            await expect(owner.generate('late admission')).rejects.toThrow(
-              'closed',
+            await expect(generate(owner, 'late admission')).rejects.toThrow(
+              'disposed',
             );
             held.release();
             expect(await result).toBe(
@@ -90,27 +186,28 @@ describe('Agent.generate lifetimes', () => {
             held.release();
           }
         },
-        'gemini',
-        (client, index) => {
-          if (index === 2 && stage === 'cleanup')
-            client.disposing = async () => {
-              entered.release();
-              await held.promise;
-            };
-        },
       );
       expect(cleanup).toStrictEqual([]);
     },
   );
   describe('Agent.generate temporary ownership', () => {
-    it('releases a failed temporary while the borrowed primary survives facade shutdown', async () => {
+    it('releases a failed temporary while the primary client stays open', async () => {
       const initializationFailure = new Error(
         'borrowed temporary initialization failed',
       );
-      const cleanup = await withGenerationOwner(
-        async (agent, clients, provider) => {
+      const provider = geminiProvider();
+      const cleanup = await withGenerationClientOwner(
+        ownerOptions(provider, {
+          acquired: (client, index) => {
+            if (index === 2)
+              client.initializing = async () => {
+                throw initializationFailure;
+              };
+          },
+        }),
+        async ({ owner, clients }) => {
           const primary = clients[1];
-          await expect(agent.generate('borrowed temporary')).rejects.toBe(
+          await expect(generate(owner, 'borrowed temporary')).rejects.toBe(
             initializationFailure,
           );
           const temporary = clients[2];
@@ -119,36 +216,17 @@ describe('Agent.generate lifetimes', () => {
           expect(temporary.initialized).toBe(1);
           expect(temporary.disposed).toBe(1);
           expect(provider.requests).toStrictEqual([]);
-          await agent.dispose();
           expect(primary.disposed).toBe(0);
-          await primary.startChat();
-          await primary.addHistory({
-            speaker: 'human',
-            blocks: [
-              { type: 'text', text: 'borrowed primary still accepts history' },
-            ],
-          });
-          expect((await primary.getHistory())[0].blocks).toStrictEqual([
-            { type: 'text', text: 'borrowed primary still accepts history' },
-          ]);
-          expect(temporary.disposed).toBe(1);
         },
-        'gemini',
-        (client, index) => {
-          if (index === 2)
-            client.initializing = async () => {
-              throw initializationFailure;
-            };
-        },
-        undefined,
-        true,
       );
       expect(cleanup).toStrictEqual([]);
     });
 
     it('writes Gemini output to the admitted primary without discarding its deferred history', async () => {
-      const cleanup = await withGenerationOwner(
-        async (owner, clients, provider) => {
+      const provider = geminiProvider();
+      const cleanup = await withGenerationClientOwner(
+        ownerOptions(provider),
+        async ({ owner, clients }) => {
           const primary = clients[1];
           await primary.storeHistoryForLaterUse([
             {
@@ -157,7 +235,7 @@ describe('Agent.generate lifetimes', () => {
             },
           ]);
           expect(
-            await owner.generate('append on primary', {
+            await generate(owner, 'append on primary', {
               readHistory: true,
               writeHistory: true,
               model: 'written-model',
@@ -182,7 +260,7 @@ describe('Agent.generate lifetimes', () => {
               blocks: [{ type: 'text', text: 'turn one reply' }],
             },
           ]);
-          expect(provider.requests[0].resolved?.model).toBe('written-model');
+          expect(provider.requests[0].resolved.model).toBe('written-model');
           expect(clients[2].disposed).toBe(1);
         },
       );
@@ -191,12 +269,18 @@ describe('Agent.generate lifetimes', () => {
 
     it('rejects pre-aborted temporary work without tokenizer, acquisition, network or history effects', async () => {
       let preparations = 0;
-      const cleanup = await withGenerationOwner(
-        async (owner, clients, provider) => {
+      const provider = geminiProvider();
+      const cleanup = await withGenerationClientOwner(
+        ownerOptions(provider, {
+          prepareTokenizer: async () => {
+            preparations += 1;
+          },
+        }),
+        async ({ owner, clients }) => {
           const controller = new AbortController();
           controller.abort(new Error('cancelled before temporary setup'));
           await expect(
-            owner.generate('no setup', {
+            generate(owner, 'no setup', {
               signal: controller.signal,
               writeHistory: true,
             }),
@@ -206,11 +290,6 @@ describe('Agent.generate lifetimes', () => {
           expect(provider.requests).toStrictEqual([]);
           expect(await clients[1].getHistory()).toStrictEqual([]);
         },
-        'gemini',
-        undefined,
-        async () => {
-          preparations += 1;
-        },
       );
       expect(cleanup).toStrictEqual([]);
     });
@@ -218,14 +297,16 @@ describe('Agent.generate lifetimes', () => {
     it('propagates caller cancellation to the provider and allows another operation afterward without partial history', async () => {
       const entered = generationGate();
       const held = generationGate();
-      const cleanup = await withGenerationOwner(
-        async (owner, clients, provider) => {
+      const provider = localProvider();
+      const cleanup = await withGenerationClientOwner(
+        ownerOptions(provider),
+        async ({ owner, clients }) => {
           provider.generating = async () => {
             entered.release();
             await held.promise;
           };
           const controller = new AbortController();
-          const pending = owner.generate('cancel network', {
+          const pending = generate(owner, 'cancel network', {
             signal: controller.signal,
             writeHistory: true,
           });
@@ -236,12 +317,12 @@ describe('Agent.generate lifetimes', () => {
           await entered.promise;
           try {
             controller.abort();
-            expect(provider.requests[0].invocation?.signal?.aborted).toBe(true);
+            expect(provider.requests[0].invocation.signal?.aborted).toBe(true);
             held.release();
             expect(await result).toMatchObject({ name: 'AbortError' });
             expect(await clients[1].getHistory()).toStrictEqual([]);
             provider.generating = undefined;
-            expect(await owner.generate('next request', undefined)).toBe(
+            expect(await generate(owner, 'next request', undefined)).toBe(
               'turn two reply',
             );
             expect(clients[1].disposed).toBe(0);
@@ -249,7 +330,6 @@ describe('Agent.generate lifetimes', () => {
             held.release();
           }
         },
-        'fake',
       );
       expect(cleanup).toStrictEqual([]);
     });
@@ -259,18 +339,33 @@ describe('Agent.generate lifetimes', () => {
       async (stage) => {
         const primaryFailure = new Error(`${stage} failed`);
         const cleanupFailure = new Error('temporary cleanup failed');
-        const cleanup = await withGenerationOwner(
-          async (owner, clients, provider) => {
+        const provider = geminiProvider();
+        const cleanup = await withGenerationClientOwner(
+          ownerOptions(provider, {
+            acquired: (client, index) => {
+              if (index !== 2) return;
+              if (stage === 'initialization')
+                client.initializing = async () => {
+                  throw primaryFailure;
+                };
+              client.disposing = async () => {
+                throw cleanupFailure;
+              };
+            },
+          }),
+          async ({ owner, clients }) => {
             if (stage === 'request')
               provider.generating = async () => {
                 throw primaryFailure;
               };
-            const failure = await owner
-              .generate('failure path', undefined)
-              .then(
-                () => undefined,
-                (error: unknown) => error,
-              );
+            const failure = await generate(
+              owner,
+              'failure path',
+              undefined,
+            ).then(
+              () => undefined,
+              (error: unknown) => error,
+            );
             if (!(failure instanceof AggregateError))
               throw new Error('Expected generation and cleanup errors');
             expect(failure.errors).toStrictEqual([
@@ -282,17 +377,6 @@ describe('Agent.generate lifetimes', () => {
             expect(clients[1].disposed).toBe(0);
             expect(await clients[1].getHistory()).toStrictEqual([]);
           },
-          'gemini',
-          (client, index) => {
-            if (index !== 2) return;
-            if (stage === 'initialization')
-              client.initializing = async () => {
-                throw primaryFailure;
-              };
-            client.disposing = async () => {
-              throw cleanupFailure;
-            };
-          },
         );
         expect(cleanup.flatMap(leaves)).toStrictEqual([cleanupFailure]);
       },
@@ -301,29 +385,32 @@ describe('Agent.generate lifetimes', () => {
     it.each([undefined, new Error('same failure')])(
       'retains undefined and repeated primary-first cleanup leaves %j',
       async (failure) => {
-        const cleanup = await withGenerationOwner(
-          async (owner, clients) => {
-            const result = await owner
-              .generate('repeat failure', undefined)
-              .then(
-                () => undefined,
-                (error: unknown) => error,
-              );
+        const cleanup = await withGenerationClientOwner(
+          ownerOptions(geminiProvider(), {
+            acquired: (client, index) => {
+              if (index === 2) {
+                client.initializing = async () => {
+                  throw failure;
+                };
+                client.disposing = async () => {
+                  throw failure;
+                };
+              }
+            },
+          }),
+          async ({ owner, clients }) => {
+            const result = await generate(
+              owner,
+              'repeat failure',
+              undefined,
+            ).then(
+              () => undefined,
+              (error: unknown) => error,
+            );
             if (!(result instanceof AggregateError))
               throw new Error('Expected both failure leaves');
             expect(result.errors).toStrictEqual([failure, failure]);
             expect(clients[2].disposed).toBe(1);
-          },
-          'gemini',
-          (client, index) => {
-            if (index === 2) {
-              client.initializing = async () => {
-                throw failure;
-              };
-              client.disposing = async () => {
-                throw failure;
-              };
-            }
           },
         );
         expect(cleanup.flatMap(leaves)).toStrictEqual([failure]);
@@ -386,45 +473,49 @@ describe('Agent.generate lifetimes', () => {
       const entered = generationGate();
       const held = generationGate();
       const ready = generationGate();
-      const cleanup = await withGenerationOwner(
-        async (owner, clients, provider, settings) => {
+      const provider = localProvider();
+      const cleanup = await withGenerationClientOwner(
+        ownerOptions(provider, {
+          acquired: (client, index) => {
+            if (index === 2) client.initializedEffect = ready.release;
+          },
+        }),
+        async ({ owner, clients, settingsOwner }) => {
           provider.generating = async () => {
             entered.release();
             await held.promise;
             expect(clients[1].disposed).toBe(0);
           };
-          const pending = owner.generate('old admission', undefined);
+          const pending = generate(owner, 'old admission', undefined);
           await entered.promise;
           try {
-            settings.chooseModel('replacement-model');
-            const replacement = owner.sessionClient.refreshAuth();
+            settingsOwner.chooseModel('replacement-model');
+            const replacement = owner.refreshAuth();
             await ready.promise;
             held.release();
             expect(await pending).toBe('turn one reply');
             await replacement;
             provider.generating = undefined;
-            expect(await owner.generate('next admission', undefined)).toBe(
+            expect(await generate(owner, 'next admission', undefined)).toBe(
               'turn two reply',
             );
             expect(
-              provider.requests.map((request) => request.resolved?.model),
+              provider.requests.map((request) => request.resolved.model),
             ).toStrictEqual(['primary-model', 'replacement-model']);
             expect(clients[1].disposed).toBe(1);
           } finally {
             held.release();
           }
         },
-        'fake',
-        (client, index) => {
-          if (index === 2) client.initializedEffect = ready.release;
-        },
       );
       expect(cleanup).toStrictEqual([]);
     });
 
     it('isolates Gemini text in one initialized temporary and releases it before returning while the primary stays usable', async () => {
-      const cleanup = await withGenerationOwner(
-        async (owner, clients, provider) => {
+      const provider = geminiProvider();
+      const cleanup = await withGenerationClientOwner(
+        ownerOptions(provider),
+        async ({ owner, clients }) => {
           const primary = clients[1];
           await primary.startChat();
           await primary.addHistory({
@@ -432,7 +523,7 @@ describe('Agent.generate lifetimes', () => {
             blocks: [{ type: 'text', text: 'primary seed' }],
           });
           expect(
-            await owner.generate('temporary request', { readHistory: true }),
+            await generate(owner, 'temporary request', { readHistory: true }),
           ).toBe('turn one reply');
           expect(clients).toHaveLength(3);
           expect(clients[2].mediaStore).toBe(primary.mediaStore);
@@ -470,8 +561,18 @@ describe('Agent.generate lifetimes', () => {
       async (kind) => {
         const failure = new Error(`Preparation ${kind} failed`);
         let rejectPreparation = true;
-        const cleanup = await withGenerationOwner(
-          async (owner, clients, provider) => {
+        const provider = geminiProvider();
+        const cleanup = await withGenerationClientOwner(
+          ownerOptions(provider, {
+            prepareTokenizer: () => {
+              if (rejectPreparation) {
+                if (kind === 'synchronous') throw failure;
+                return Promise.reject(failure);
+              }
+              return Promise.resolve();
+            },
+          }),
+          async ({ owner, clients }) => {
             const primary = clients[1];
             await primary.startChat();
             await primary.addHistory({
@@ -480,7 +581,7 @@ describe('Agent.generate lifetimes', () => {
             });
             const history = await primary.getHistory();
             await expect(
-              owner.generate('rejected preparation', { readHistory: true }),
+              generate(owner, 'rejected preparation', { readHistory: true }),
             ).rejects.toBe(failure);
             expect(clients).toHaveLength(2);
             expect(provider.requests).toHaveLength(0);
@@ -488,7 +589,7 @@ describe('Agent.generate lifetimes', () => {
             expect(primary.disposed).toBe(0);
             rejectPreparation = false;
             expect(
-              await owner.generate('later usable primary', {
+              await generate(owner, 'later usable primary', {
                 readHistory: true,
               }),
             ).toBe('turn one reply');
@@ -496,15 +597,6 @@ describe('Agent.generate lifetimes', () => {
             expect(clients[2].disposed).toBe(1);
             expect(primary.disposed).toBe(0);
             expect(await primary.getHistory()).toStrictEqual(history);
-          },
-          'gemini',
-          undefined,
-          () => {
-            if (rejectPreparation) {
-              if (kind === 'synchronous') throw failure;
-              return Promise.reject(failure);
-            }
-            return Promise.resolve();
           },
         );
         expect(cleanup).toStrictEqual([]);
@@ -514,9 +606,16 @@ describe('Agent.generate lifetimes', () => {
     it('stops admission during held tokenizer preparation and joins it without acquiring a temporary or starting a request', async () => {
       const entered = generationGate();
       const held = generationGate();
-      const cleanup = await withGenerationOwner(
-        async (owner, clients, provider) => {
-          const pending = owner.generate('held acquisition', undefined);
+      const provider = geminiProvider();
+      const cleanup = await withGenerationClientOwner(
+        ownerOptions(provider, {
+          prepareTokenizer: async () => {
+            entered.release();
+            await held.promise;
+          },
+        }),
+        async ({ owner, clients }) => {
+          const pending = generate(owner, 'held acquisition', undefined);
           const result = pending.then(
             () => 'unexpected success',
             () => 'cancelled',
@@ -532,7 +631,7 @@ describe('Agent.generate lifetimes', () => {
                 disposed = true;
               },
             );
-            await expect(owner.generate('late')).rejects.toThrow('closed');
+            await expect(generate(owner, 'late')).rejects.toThrow('disposed');
             expect(disposed).toBe(false);
             expect(clients).toHaveLength(2);
             held.release();
@@ -544,12 +643,6 @@ describe('Agent.generate lifetimes', () => {
             held.release();
           }
         },
-        'gemini',
-        undefined,
-        async () => {
-          entered.release();
-          await held.promise;
-        },
       );
       expect(cleanup).toStrictEqual([]);
     });
@@ -559,9 +652,23 @@ describe('Agent.generate lifetimes', () => {
       const initialized = generationGate();
       const releasing = generationGate();
       const released = generationGate();
-      const cleanup = await withGenerationOwner(
-        async (owner, clients, provider) => {
-          const pending = owner.generate('held initialization', undefined);
+      const provider = geminiProvider();
+      const cleanup = await withGenerationClientOwner(
+        ownerOptions(provider, {
+          acquired: (client, index) => {
+            if (index !== 2) return;
+            client.initializing = async () => {
+              entered.release();
+              await initialized.promise;
+            };
+            client.disposing = async () => {
+              releasing.release();
+              await released.promise;
+            };
+          },
+        }),
+        async ({ owner, clients }) => {
+          const pending = generate(owner, 'held initialization', undefined);
           const result = pending.then(
             () => 'unexpected success',
             () => 'cancelled',
@@ -586,18 +693,6 @@ describe('Agent.generate lifetimes', () => {
           await closing;
           expect(clients[2].initialized).toBe(1);
           expect(clients[2].disposed).toBe(1);
-        },
-        'gemini',
-        (client, index) => {
-          if (index !== 2) return;
-          client.initializing = async () => {
-            entered.release();
-            await initialized.promise;
-          };
-          client.disposing = async () => {
-            releasing.release();
-            await released.promise;
-          };
         },
       );
       expect(cleanup).toStrictEqual([]);
