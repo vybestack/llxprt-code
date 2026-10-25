@@ -17,6 +17,8 @@ import { useOwnedCredentials } from '../../api/__tests__/helpers/owned-credentia
 import { AggregateDisposeError } from '../../api/disposeErrors.js';
 import { SubAgentScope } from '../subagent.js';
 
+const parentSignal = new AbortController().signal;
+
 function flatten(error: unknown): unknown[] {
   return error instanceof AggregateDisposeError ||
     error instanceof AggregateError
@@ -99,7 +101,10 @@ describe('subagent history ownership settlement', () => {
           });
           let failure: unknown;
           try {
-            const child = await orchestrator.launch({ name: 'disposal-child' });
+            const child = await orchestrator.launch(
+              { name: 'disposal-child' },
+              parentSignal,
+            );
             await child.dispose();
           } catch (error) {
             failure = error;

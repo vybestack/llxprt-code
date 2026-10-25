@@ -45,6 +45,8 @@ import {
   makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
 
+const parentSignal = new AbortController().signal;
+
 describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
   const loadBalancerSubagent: SubagentConfig = {
     name: 'lb-helper',
@@ -185,9 +187,12 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     });
 
     // Before the fix this rejected with RuntimeStateError: provider.missing.
-    const result = await orchestrator.launch({
-      name: loadBalancerSubagent.name,
-    });
+    const result = await orchestrator.launch(
+      {
+        name: loadBalancerSubagent.name,
+      },
+      parentSignal,
+    );
 
     expect(runtimeLoader).toHaveBeenCalledTimes(1);
     const loaderArgs = runtimeLoader.mock.calls[0][0];
@@ -233,9 +238,12 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       messageBus: new MessageBus(),
     });
 
-    const result = await orchestrator.launch({
-      name: loadBalancerSubagent.name,
-    });
+    const result = await orchestrator.launch(
+      {
+        name: loadBalancerSubagent.name,
+      },
+      parentSignal,
+    );
 
     // The load-balancer profile is preserved so its failover routing survives.
     expect(result.profile).toBe(loadBalancerProfile);
@@ -290,7 +298,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     });
 
     await expect(
-      orchestrator.launch({ name: emptySubagent.name }),
+      orchestrator.launch({ name: emptySubagent.name }, parentSignal),
     ).rejects.toThrow(/must reference at least one profile/);
     expect(runtimeLoader).not.toHaveBeenCalled();
   });
@@ -299,7 +307,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const { orchestrator, nestedSubagent, runtimeLoader } =
       await observeStillRejectsALoadBalancerProfileThatReferencesANestedLoadBalancer();
     await expect(
-      orchestrator.launch({ name: nestedSubagent.name }),
+      orchestrator.launch({ name: nestedSubagent.name }, parentSignal),
     ).rejects.toThrow(/cannot use nested load balancer profile 'inner-lb'/);
     expect(runtimeLoader).not.toHaveBeenCalled();
   });
@@ -352,7 +360,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const { orchestrator, invalidSubagent, runtimeLoader } =
       await observeRejectsALoadBalancerMemberWithAnEmptyProvider();
     await expect(
-      orchestrator.launch({ name: invalidSubagent.name }),
+      orchestrator.launch({ name: invalidSubagent.name }, parentSignal),
     ).rejects.toThrow(/must define a non-empty provider/);
     expect(runtimeLoader).not.toHaveBeenCalled();
   });
@@ -395,7 +403,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const { orchestrator, invalidSubagent, runtimeLoader } =
       await observeRejectsALoadBalancerMemberWithAnEmptyModel();
     await expect(
-      orchestrator.launch({ name: invalidSubagent.name }),
+      orchestrator.launch({ name: invalidSubagent.name }, parentSignal),
     ).rejects.toThrow(/must define a non-empty model/);
     expect(runtimeLoader).not.toHaveBeenCalled();
   });
@@ -486,7 +494,10 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
         }),
       });
 
-      await orchestrator.launch({ name: 'lb-default-turns-helper' });
+      await orchestrator.launch(
+        { name: 'lb-default-turns-helper' },
+        parentSignal,
+      );
 
       const runConfigArg = extractRunConfig(factory);
 
@@ -546,7 +557,10 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
         }),
       });
 
-      await orchestrator.launch({ name: 'lb-profile-turns-helper' });
+      await orchestrator.launch(
+        { name: 'lb-profile-turns-helper' },
+        parentSignal,
+      );
 
       const runConfigArg = extractRunConfig(factory);
       // 400 from the LB profile wins — not 7 from the member, not 55 from the

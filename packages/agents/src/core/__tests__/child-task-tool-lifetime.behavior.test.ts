@@ -26,6 +26,8 @@ import {
 import { useOwnedCredentials } from '../../api/__tests__/helpers/owned-credential-fixture.js';
 import { createTestChildOrchestrator } from './child-launch-fixture.js';
 
+const parentSignal = new AbortController().signal;
+
 class HeldChildTool extends BaseDeclarativeTool<{ text: string }, ToolResult> {
   constructor(
     private readonly run: (
@@ -150,8 +152,14 @@ describe('child task tool lifetime', () => {
         if (requests === 2) return modelResponse('sibling', 'sibling');
         return modelResponse('sibling completed');
       });
-      const first = await orchestrator.launch({ name: 'disposal-child' });
-      const sibling = await orchestrator.launch({ name: 'disposal-child' });
+      const first = await orchestrator.launch(
+        { name: 'disposal-child' },
+        parentSignal,
+      );
+      const sibling = await orchestrator.launch(
+        { name: 'disposal-child' },
+        parentSignal,
+      );
       const running = first.scope.runNonInteractive(new ContextState());
       const settled = running.catch(() => undefined);
       try {
@@ -221,7 +229,10 @@ describe('child task tool lifetime', () => {
             },
           }),
       });
-      const child = await orchestrator.launch({ name: 'disposal-child' });
+      const child = await orchestrator.launch(
+        { name: 'disposal-child' },
+        parentSignal,
+      );
       const running = child.scope.runNonInteractive(new ContextState());
       const settled = running.catch(() => undefined);
       let closed = false;

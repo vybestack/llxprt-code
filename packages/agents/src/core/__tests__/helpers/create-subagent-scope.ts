@@ -23,7 +23,7 @@ export function createSubagentScope(
   operations: SubAgentOperationPorts,
 ): Promise<ChildAgentScope> {
   return SubAgentScope.create(
-    { parentSignal: undefined, ...launch },
+    { parentSignal: new AbortController().signal, ...launch },
     runtime,
     operations,
   );

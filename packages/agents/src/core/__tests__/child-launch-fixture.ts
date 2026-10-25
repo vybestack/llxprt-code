@@ -14,7 +14,12 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import { afterEach } from 'bun:test';
+import { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import {
+  hookSessionRuntime,
+  readHookDefinitions,
+} from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentRunPolicy } from '@vybestack/llxprt-code-core/session/session-settings-policies.js';
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
@@ -25,6 +30,14 @@ import { buildAgentClientFactory } from '../../api/agentBootstrap.js';
 import { ChildAgentAssembly } from '../../api/child-agent-assembly.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import { SubAgentScope } from '../subagent.js';
+import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
+
+let hookRoots: readonly SessionHookOwner[] = [];
+afterEach(async () => {
+  const retiring = hookRoots;
+  hookRoots = [];
+  await Promise.all(retiring.map((root) => root.dispose()));
+});
 
 export interface TestChildLaunchOptions {
   readonly credentialAuthority: CredentialAuthority;
@@ -55,6 +68,25 @@ export function createTestChildOrchestrator(
   options: TestChildLaunchOptions,
 ): SubagentOrchestrator {
   const tools = options.toolRegistry;
+  const suppliedOwners =
+    options.telemetry !== undefined && options.workspaceTrust !== undefined;
+  const sessionSettings = suppliedOwners
+    ? undefined
+    : createSessionSettingsFixture(options.foregroundConfig);
+  const trust = options.workspaceTrust ?? sessionSettings?.workspaceTrust;
+  const telemetry =
+    options.telemetry ?? sessionSettings?.settingsOwner.telemetry;
+  if (trust === undefined || telemetry === undefined)
+    throw new Error('Child launch fixture could not construct its owners');
+  const hooks =
+    options.hookOwner ??
+    new SessionHookOwner(
+      readHookDefinitions(options.foregroundConfig),
+      hookSessionRuntime(options.foregroundConfig, trust, telemetry),
+      options.foregroundConfig.getEnableHooks(),
+      options.messageBus,
+    );
+  if (options.hookOwner === undefined) hookRoots = [...hookRoots, hooks];
   return new SubagentOrchestrator({
     sessionId: options.foregroundConfig.getSessionId(),
     profileManager: options.profileManager,
@@ -85,13 +117,13 @@ export function createTestChildOrchestrator(
           requestInteractiveAuth: options.requestInteractiveAuth,
           profileReads: options.profileManager,
           subagentReads: options.subagentManager,
-          telemetry: options.telemetry,
+          telemetry,
           instructions: options.instructions,
           workspacePaths: options.workspacePaths,
           readMcpInstructions: options.readMcpInstructions,
-          trust: options.workspaceTrust,
+          trust,
           tools,
-          hooks: options.hookOwner,
+          hooks,
         },
       ).assemble();
     },

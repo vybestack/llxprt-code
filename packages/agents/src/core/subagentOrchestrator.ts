@@ -132,7 +132,7 @@ export class SubagentOrchestrator {
 
   async launch(
     request: SubagentLaunchRequest,
-    signal?: AbortSignal,
+    signal: AbortSignal,
   ): Promise<SubagentLaunchResult> {
     this.throwIfAborted(signal, 'Subagent launch aborted before start.');
     const subagent = await this.loadSubagentConfig(request.name);
@@ -191,7 +191,7 @@ export class SubagentOrchestrator {
     promptConfig: PromptConfig,
     runConfig: RunConfig,
     request: SubagentLaunchRequest,
-    signal: AbortSignal | undefined,
+    signal: AbortSignal,
   ): ChildAgentLaunch {
     const agentRuntimeId = this.createRuntimeId(subagent.name);
     const activationProfile =

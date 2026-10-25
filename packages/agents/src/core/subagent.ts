@@ -128,7 +128,7 @@ export interface SubAgentLaunchInput {
   readonly run: RunConfig;
   readonly toolConfig: ToolConfig | undefined;
   readonly outputConfig: OutputConfig | undefined;
-  readonly parentSignal: AbortSignal | undefined;
+  readonly parentSignal: AbortSignal;
 }
 
 export interface SubAgentRuntimeInput {
@@ -167,7 +167,7 @@ export class SubAgentScope implements ChildAgentScope {
   private readonly logger = new DebugLogger('llxprt:subagent');
   private readonly textToolParser = new GemmaToolCallParser();
   private activeAbortController: AbortController | null = null;
-  private readonly parentAbortSignal?: AbortSignal;
+  private readonly parentAbortSignal: AbortSignal;
   private parentAbortCleanup?: () => void;
 
   /** Emoji filter instance for subagent output */
@@ -204,7 +204,7 @@ export class SubAgentScope implements ChildAgentScope {
     private readonly toolConfig: ToolConfig | undefined,
     private readonly outputConfig: OutputConfig | undefined,
     settingsSnapshot: ReadonlySettingsSnapshot | undefined,
-    parentAbortSignal: AbortSignal | undefined,
+    parentAbortSignal: AbortSignal,
     private readonly dependencies: SubAgentDependencies,
     private readonly admitModelParameters: () => AdmittedModelParameters,
     private readonly hookOwner: HookExecutionOwner,
@@ -282,9 +282,6 @@ export class SubAgentScope implements ChildAgentScope {
   }
 
   private bindParentSignal(abortController: AbortController): void {
-    if (!this.parentAbortSignal) {
-      return;
-    }
     if (this.parentAbortCleanup) {
       this.parentAbortCleanup();
     }
@@ -297,7 +294,7 @@ export class SubAgentScope implements ChildAgentScope {
       once: true,
     });
     this.parentAbortCleanup = () => {
-      this.parentAbortSignal?.removeEventListener('abort', relayAbort);
+      this.parentAbortSignal.removeEventListener('abort', relayAbort);
     };
   }
 

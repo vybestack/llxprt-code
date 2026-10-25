@@ -34,6 +34,8 @@ import {
   makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
 
+const parentSignal = new AbortController().signal;
+
 describe('SubagentOrchestrator - Runtime Assembly (load balancer profiles)', () => {
   it('preserves load balancer profile as effective profile for failover (Issue #2410)', async () => {
     const loadBalancerSubagent: SubagentConfig = {
@@ -126,9 +128,12 @@ describe('SubagentOrchestrator - Runtime Assembly (load balancer profiles)', () 
       messageBus: new MessageBus(),
     });
 
-    const result = await orchestrator.launch({
-      name: loadBalancerSubagent.name,
-    });
+    const result = await orchestrator.launch(
+      {
+        name: loadBalancerSubagent.name,
+      },
+      parentSignal,
+    );
 
     const loaderArgs = runtimeLoader.mock.calls[0][0];
 
@@ -218,7 +223,10 @@ describe('SubagentOrchestrator - Runtime Assembly (load balancer profiles)', () 
     });
 
     await expect(
-      orchestrator.launch({ name: emptyLoadBalancerSubagent.name }),
+      orchestrator.launch(
+        { name: emptyLoadBalancerSubagent.name },
+        parentSignal,
+      ),
     ).rejects.toThrow(/must reference at least one profile/);
     expect(runtimeLoader).not.toHaveBeenCalled();
     expect(scopeFactory).not.toHaveBeenCalled();
@@ -289,7 +297,10 @@ describe('SubagentOrchestrator - Runtime Assembly (load balancer profiles)', () 
     });
 
     await expect(
-      orchestrator.launch({ name: nestedLoadBalancerSubagent.name }),
+      orchestrator.launch(
+        { name: nestedLoadBalancerSubagent.name },
+        parentSignal,
+      ),
     ).rejects.toThrow(/cannot use nested load balancer profile 'inner-lb'/);
     expect(runtimeLoader).not.toHaveBeenCalled();
     expect(scopeFactory).not.toHaveBeenCalled();

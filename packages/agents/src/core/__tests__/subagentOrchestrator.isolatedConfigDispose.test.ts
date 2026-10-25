@@ -44,6 +44,8 @@ import {
   makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
 
+const parentSignal = new AbortController().signal;
+
 async function expectClientsClosed(
   clients: readonly AgentClientContract[],
 ): Promise<void> {
@@ -172,10 +174,13 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
         runtimeLoader,
         scopeFactory,
       });
-      const result = await orchestrator.launch({
-        name: subagentConfig.name,
-        runConfig: { max_time_minutes: 8, max_turns: 12 },
-      });
+      const result = await orchestrator.launch(
+        {
+          name: subagentConfig.name,
+          runConfig: { max_time_minutes: 8, max_turns: 12 },
+        },
+        parentSignal,
+      );
 
       const isolatedConfig = isolatedConfigFromLoaderCalls(
         runtimeLoader.mock.calls,
@@ -213,10 +218,13 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
         scopeFactory,
       });
       await expect(
-        orchestrator.launch({
-          name: subagentConfig.name,
-          runConfig: { max_time_minutes: 8, max_turns: 12 },
-        }),
+        orchestrator.launch(
+          {
+            name: subagentConfig.name,
+            runConfig: { max_time_minutes: 8, max_turns: 12 },
+          },
+          parentSignal,
+        ),
       ).rejects.toThrow('scope creation failed');
 
       // The original error surfaced; the isolated Config was still disposed.
@@ -244,10 +252,13 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
         scopeFactory,
       });
       await expect(
-        orchestrator.launch({
-          name: subagentConfig.name,
-          runConfig: { max_time_minutes: 8, max_turns: 12 },
-        }),
+        orchestrator.launch(
+          {
+            name: subagentConfig.name,
+            runConfig: { max_time_minutes: 8, max_turns: 12 },
+          },
+          parentSignal,
+        ),
       ).rejects.toThrow('runtime loader failed');
 
       // The original error surfaced; the isolated Config was still disposed.

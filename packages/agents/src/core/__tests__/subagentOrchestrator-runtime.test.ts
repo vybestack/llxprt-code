@@ -5,6 +5,7 @@ import {
 } from '../../api/__tests__/helpers/session-settings-fixture.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { createTestChildOrchestrator } from './child-launch-fixture.js';
+import type { SubagentOrchestrator } from '../subagentOrchestrator.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -51,6 +52,13 @@ import {
   fixtureToolSelection,
   makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
+
+const parentSignal = new AbortController().signal;
+
+const launchChild = (
+  orchestrator: SubagentOrchestrator,
+  request: Parameters<SubagentOrchestrator['launch']>[0],
+) => orchestrator.launch(request, parentSignal);
 
 describe('SubagentOrchestrator - Runtime Assembly', () => {
   const credentials = useOwnedCredentials();
@@ -116,7 +124,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    const result = await orchestrator.launch({
+    const result = await launchChild(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
@@ -174,7 +182,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({
+    await launchChild(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
@@ -236,7 +244,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     });
 
     await expect(
-      orchestrator.launch({
+      launchChild(orchestrator, {
         name: subagentConfig.name,
         runConfig,
       }),
@@ -316,7 +324,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
         messageBus: orchestratorBus,
       });
 
-      const result = await orchestrator.launch({
+      const result = await launchChild(orchestrator, {
         name: subagentConfig.name,
         runConfig,
       });
@@ -384,7 +392,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({
+    await launchChild(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
@@ -435,7 +443,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({
+    await launchChild(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
@@ -498,7 +506,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({
+    await launchChild(orchestrator, {
       name: qwenSubagent.name,
     });
 
@@ -570,7 +578,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
         messageBus: new MessageBus(),
       });
 
-      await orchestrator.launch({ name: vertexSubagent.name });
+      await launchChild(orchestrator, { name: vertexSubagent.name });
 
       // This mocked runtime-loader boundary verifies settings population itself:
       // GCP ephemerals are scoped to SettingsService and never written globally.
@@ -643,7 +651,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({
+    await launchChild(orchestrator, {
       name: qwenSubagent.name,
     });
 
@@ -705,7 +713,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({
+    await launchChild(orchestrator, {
       name: kimiSubagent.name,
     });
 
@@ -764,7 +772,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({
+    await launchChild(orchestrator, {
       name: keyNameSubagent.name,
     });
 
@@ -820,11 +828,11 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    const firstRun = await orchestrator.launch({
+    const firstRun = await launchChild(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
-    const secondRun = await orchestrator.launch({
+    const secondRun = await launchChild(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
@@ -884,7 +892,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    const run = await orchestrator.launch({
+    const run = await launchChild(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });

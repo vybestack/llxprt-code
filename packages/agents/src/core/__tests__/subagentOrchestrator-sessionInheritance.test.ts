@@ -40,6 +40,8 @@ import {
   fakeChildScope,
 } from './subagentOrchestrator-test-helpers.js';
 
+const parentSignal = new AbortController().signal;
+
 const subagentConfig: SubagentConfig = {
   name: 'helper',
   profile: 'helper-profile',
@@ -108,7 +110,10 @@ async function launchSubagent(
     messageBus: new MessageBus(),
   });
 
-  const result = await orchestrator.launch({ name: subagentConfig.name });
+  const result = await orchestrator.launch(
+    { name: subagentConfig.name },
+    parentSignal,
+  );
 
   return {
     isolatedSettings,
@@ -343,9 +348,12 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
         messageBus: new MessageBus(),
       });
 
-      const result = await orchestrator.launch({
-        name: subagentConfig.name,
-      });
+      const result = await orchestrator.launch(
+        {
+          name: subagentConfig.name,
+        },
+        parentSignal,
+      );
 
       try {
         const loaderProfile = runtimeLoader.mock.calls[0][0].profile;

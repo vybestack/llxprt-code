@@ -65,6 +65,8 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { SubagentOrchestrator } from '../../core/subagentOrchestrator.js';
 
+const parentSignal = new AbortController().signal;
+
 class TrackedChildClient extends AgentClient {
   disposed = false;
   override async dispose(): Promise<void> {
@@ -326,7 +328,10 @@ describe('Isolated child session client ownership', () => {
         parentMcp,
         childSettings,
       ) => {
-        const child = await orchestrator.launch({ name: 'child' });
+        const child = await orchestrator.launch(
+          { name: 'child' },
+          parentSignal,
+        );
         if (childRuntime === undefined)
           throw new Error('Child runtime was not acquired');
         try {
@@ -359,7 +364,10 @@ describe('Isolated child session client ownership', () => {
   it('enforces live caller-store output limits in each child launch', async () => {
     await withChildOwner(async (orchestrator, parentSettings) => {
       parentSettings.set('subagent-max-output-tokens-total', 0);
-      const limited = await orchestrator.launch({ name: 'child' });
+      const limited = await orchestrator.launch(
+        { name: 'child' },
+        parentSignal,
+      );
       try {
         await limited.scope.runNonInteractive(new ContextState());
         expect(limited.scope.output.terminate_reason).toBe(
@@ -370,7 +378,10 @@ describe('Isolated child session client ownership', () => {
         await limited.dispose();
       }
       parentSettings.set('subagent-max-output-tokens-total', -1);
-      const continuing = await orchestrator.launch({ name: 'child' });
+      const continuing = await orchestrator.launch(
+        { name: 'child' },
+        parentSignal,
+      );
       try {
         await continuing.scope.runNonInteractive(new ContextState());
         expect(continuing.scope.output.terminate_reason).toBe(
@@ -400,7 +411,10 @@ describe('Isolated child session client ownership', () => {
         expect(parentProjectDirectory).not.toBe(
           launchDirectoryProjectDirectory,
         );
-        const child = await orchestrator.launch({ name: 'child' });
+        const child = await orchestrator.launch(
+          { name: 'child' },
+          parentSignal,
+        );
         try {
           const mediaRoot =
             childRuntime?.runtimeContext.mediaStore?.rootDirectory;
@@ -434,7 +448,10 @@ describe('Isolated child session client ownership', () => {
         clients,
       ) => {
         const baseline = parentSettings.listenerCount('provider-change');
-        const child = await orchestrator.launch({ name: 'child' });
+        const child = await orchestrator.launch(
+          { name: 'child' },
+          parentSignal,
+        );
         expect(clients.length).toBeGreaterThan(0);
         expect(clients.some((client) => !client.disposed)).toBe(true);
         await child.dispose();
@@ -465,9 +482,9 @@ describe('Isolated child session client ownership', () => {
         clients,
       ) => {
         const baseline = parentSettings.listenerCount('provider-change');
-        await expect(orchestrator.launch({ name: 'child' })).rejects.toThrow(
-          'Child loader failure',
-        );
+        await expect(
+          orchestrator.launch({ name: 'child' }, parentSignal),
+        ).rejects.toThrow('Child loader failure');
         expect(clients.every((client) => client.disposed)).toBe(true);
         expect(parentSettings.listenerCount('provider-change')).toBe(baseline);
         await parentMcp.refreshContext();

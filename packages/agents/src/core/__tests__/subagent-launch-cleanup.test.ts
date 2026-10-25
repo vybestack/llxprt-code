@@ -18,6 +18,8 @@ import { withDisposalJoinFixture } from '../../api/__tests__/helpers/async-child
 import { useOwnedCredentials } from '../../api/__tests__/helpers/owned-credential-fixture.js';
 import { AggregateDisposeError } from '../../api/disposeErrors.js';
 
+const parentSignal = new AbortController().signal;
+
 function flatten(error: unknown): unknown[] {
   return error instanceof AggregateDisposeError ||
     error instanceof AggregateError
@@ -153,7 +155,7 @@ describe('subagent cleanup error retention', () => {
           });
           let failure: unknown;
           try {
-            await orchestrator.launch({ name: 'disposal-child' });
+            await orchestrator.launch({ name: 'disposal-child' }, parentSignal);
           } catch (error) {
             failure = error;
           }

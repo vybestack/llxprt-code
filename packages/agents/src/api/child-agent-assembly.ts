@@ -96,7 +96,7 @@ export interface ChildAgentLaunch {
   readonly state: AgentRuntimeState;
   readonly runtimeId: string;
   readonly disabledTools: ReadonlySet<string>;
-  readonly signal: AbortSignal | undefined;
+  readonly signal: AbortSignal;
 }
 
 export interface ChildAgentAcquisition {
@@ -118,13 +118,13 @@ export interface ChildAgentOperations {
     SubagentDefinitionReads,
     'loadSubagent' | 'listSubagents'
   >;
-  readonly telemetry: RootTelemetry | undefined;
+  readonly telemetry: RootTelemetry;
   readonly instructions: InstructionReadOperations;
   readonly workspacePaths: WorkspacePathOperations;
   readonly readMcpInstructions: () => string | undefined;
-  readonly trust: WorkspaceTrustControlPort | undefined;
+  readonly trust: WorkspaceTrustControlPort;
   readonly tools: ToolSelection;
-  readonly hooks: SessionHookOwner | undefined;
+  readonly hooks: SessionHookOwner;
 }
 
 export class ChildAgentAssembly {
@@ -454,7 +454,7 @@ export class ChildAgentAssembly {
             this.operations.workspacePaths.directories(),
           ),
         readApprovalMode: () =>
-          this.operations.trust?.isTrustedFolder() === true
+          this.operations.trust.isTrustedFolder()
             ? this.acquisition.foregroundConfig.getApprovalMode()
             : ApprovalMode.DEFAULT,
         admitModelParameters: () => {
@@ -484,7 +484,7 @@ export class ChildAgentAssembly {
   }
 
   private assertAdmission(message: string): void {
-    if (this.data.signal?.aborted === true) {
+    if (this.data.signal.aborted) {
       const error = new Error(message);
       error.name = 'AbortError';
       throw error;

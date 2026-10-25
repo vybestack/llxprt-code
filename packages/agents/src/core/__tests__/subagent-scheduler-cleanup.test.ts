@@ -13,6 +13,8 @@ import { withDisposalJoinFixture } from '../../api/__tests__/helpers/async-child
 import { AggregateDisposeError } from '../../api/disposeErrors.js';
 import { ChatSession } from '../chatSession.js';
 
+const parentSignal = new AbortController().signal;
+
 describe('subagent cleanup error retention', () => {
   it.each([false, true])(
     'retains scheduler cleanup errors with execution failure=%s',
@@ -54,10 +56,13 @@ describe('subagent cleanup error retention', () => {
             messageBus: new MessageBus(),
             readMcpInstructions,
           });
-          const run = await orchestrator.launch({
-            name: 'disposal-child',
-            runConfig: { max_turns: 1, max_time_minutes: 1 },
-          });
+          const run = await orchestrator.launch(
+            {
+              name: 'disposal-child',
+              runConfig: { max_turns: 1, max_time_minutes: 1 },
+            },
+            parentSignal,
+          );
           const context = new ContextState();
           context.set('task_goal', 'Complete.');
           try {

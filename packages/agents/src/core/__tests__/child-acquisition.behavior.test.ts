@@ -17,6 +17,8 @@ import { realpath } from 'node:fs/promises';
 import { withDisposalJoinFixture } from '../../api/__tests__/helpers/async-child-disposal-join-fixture.js';
 import { useOwnedCredentials } from '../../api/__tests__/helpers/owned-credential-fixture.js';
 
+const parentSignal = new AbortController().signal;
+
 describe('child acquired resource lifetime', () => {
   const credentials = useOwnedCredentials();
 
@@ -36,8 +38,14 @@ describe('child acquired resource lifetime', () => {
         messageBus: new MessageBus(),
         readMcpInstructions: fixture.readMcpInstructions,
       });
-      const first = await orchestrator.launch({ name: 'disposal-child' });
-      const sibling = await orchestrator.launch({ name: 'disposal-child' });
+      const first = await orchestrator.launch(
+        { name: 'disposal-child' },
+        parentSignal,
+      );
+      const sibling = await orchestrator.launch(
+        { name: 'disposal-child' },
+        parentSignal,
+      );
       fixture.manager.registerTask({
         id: first.agentId,
         subagentName: 'disposal-child',
@@ -110,7 +118,7 @@ describe('child acquired resource lifetime', () => {
         readMcpInstructions: fixture.readMcpInstructions,
       });
       await expect(
-        orchestrator.launch({ name: 'disposal-child' }),
+        orchestrator.launch({ name: 'disposal-child' }, parentSignal),
       ).rejects.toBe(primary);
       expect(credentials().keySnapshot()).toStrictEqual([1]);
       expect(credentials().snapshot()).toStrictEqual([]);
@@ -153,7 +161,10 @@ describe('child acquired resource lifetime', () => {
         messageBus: new MessageBus(),
         readMcpInstructions: fixture.readMcpInstructions,
       });
-      const child = await orchestrator.launch({ name: 'disposal-child' });
+      const child = await orchestrator.launch(
+        { name: 'disposal-child' },
+        parentSignal,
+      );
       expect(child.identity.model).toBe('child-model');
       expect(credentials().keySnapshot()).toStrictEqual([0]);
       expect(credentials().snapshot()).toStrictEqual([0]);
