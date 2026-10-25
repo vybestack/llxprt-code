@@ -107,8 +107,9 @@ export class VersionSnapshot {
     this.kimiFacts = new KimiFactQueries(this, idDeps, this.kimi.meta);
   }
 
-  async rowMeasurementStamp(label: bigint): Promise<string> {
-    const entry = await this.entryByLabel(label);
+  async rowMeasurementStamp(source: bigint | RowEntry): Promise<string> {
+    const entry =
+      typeof source === 'bigint' ? await this.entryByLabel(source) : source;
     if (entry === undefined)
       throw new JournalFormatError('Measurement source row is absent');
     const ids = await this.readIds(entry);

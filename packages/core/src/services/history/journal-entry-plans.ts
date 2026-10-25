@@ -13,6 +13,7 @@ export async function* journalEntryPlans(
 ): AsyncGenerator<JournalResponsePlan> {
   async function* entries(): AsyncGenerator<RowEntry> {
     yield entry;
+    if (entry.toolCallBlocks === 0) return;
     const next =
       nextEntry === undefined
         ? await source.nextCuratedAfter(entry.label)

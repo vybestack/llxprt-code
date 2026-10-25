@@ -1,10 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { JournalSession } from './journalSession.js';
 import { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
 import type { IContent } from './IContent.js';
 import { call, response } from './__tests__/support/normalization-cases.js';
 import { measureRequestRow } from './token-usage-measurement.js';
+import {
+  decodeTokenUsageFacts,
+  tokenUsageFactRegistration,
+} from './token-usage-facts.js';
 
 const row: IContent = {
   speaker: 'human',
@@ -26,6 +30,34 @@ async function assertStoredRow(
 }
 
 describe('neutral token usage row facts', () => {
+  it('measures the known source entry without looking up its label again', async () => {
+    const session = await JournalSession.createUnlinked();
+    try {
+      await session.append([row]);
+      const snapshot = await session.store.snapshot();
+      try {
+        const entry = await snapshot.entryAt(0);
+        const lookups = spyOn(snapshot, 'entryByLabel');
+        try {
+          const registration = tokenUsageFactRegistration(
+            (text) => text.length,
+          );
+          const bytes = await registration.measure(snapshot, entry, undefined);
+          expect(
+            decodeTokenUsageFacts(bytes).map((unit) => unit.measurement),
+          ).toStrictEqual([measureRequestRow(row, (text) => text.length)]);
+          expect(lookups.mock.calls).toHaveLength(0);
+        } finally {
+          lookups.mockRestore();
+        }
+      } finally {
+        await snapshot.close();
+      }
+    } finally {
+      await session.close();
+    }
+  });
+
   it('measures a carried row once and streams its stored measurement across sends', async () => {
     let calls = 0;
     const session = await JournalSession.createUnlinked({

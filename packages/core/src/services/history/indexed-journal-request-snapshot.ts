@@ -437,11 +437,12 @@ export class IndexedJournalRequestSnapshot {
   ): Promise<TokenUsageRowFact> {
     const selected = await this.locate(index);
     const plan = await this.planAt(index, signal);
-    const signature = await tokenUsagePlanSignature(plan, async (label) =>
-      this.source.measurementChanged(label)
-        ? 'overlay'
-        : this.snapshot.rowMeasurementStamp(label),
-    );
+    const signature = await tokenUsagePlanSignature(plan, async (label) => {
+      if (this.source.measurementChanged(label)) return 'overlay';
+      return this.snapshot.rowMeasurementStamp(
+        label === selected.entry.label ? selected.entry : label,
+      );
+    });
     const overlay =
       this.rows.some((row) => row.entry.label === selected.entry.label) ||
       plan.blocks.some((ref) => this.source.measurementChanged(ref.at.label));
