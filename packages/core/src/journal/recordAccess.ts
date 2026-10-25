@@ -114,6 +114,16 @@ function readWindowedBody(
   );
 }
 
+function headReader(
+  what: string,
+  reader: PositionalReader,
+  window: PositionalReader | undefined,
+  nodeWindow: PositionalReader,
+): PositionalReader {
+  if (what === 'ITNODE') return nodeWindow;
+  return what === 'ROW' ? (window ?? reader) : reader;
+}
+
 export function createRecordAccess(
   path: string,
   reader: PositionalReader,
@@ -123,6 +133,7 @@ export function createRecordAccess(
   const window = windowRows
     ? rowReadWindow(reader, trailer.durableEnd)
     : undefined;
+  const nodeWindow = rowReadWindow(reader, trailer.durableEnd);
   const corruption = (
     what: string,
     offset: number,
@@ -143,7 +154,7 @@ export function createRecordAccess(
   ): Promise<FrameStart> => {
     try {
       return await readFrameStart(
-        what === 'ROW' ? (window ?? reader) : reader,
+        headReader(what, reader, window, nodeWindow),
         offset,
         trailer.durableEnd,
         prefetchBytes,
