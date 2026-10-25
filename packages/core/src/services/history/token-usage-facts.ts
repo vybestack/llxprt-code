@@ -67,12 +67,18 @@ export async function tokenUsagePlanSignature(
       synthetic: plan.header.metadata?.synthetic,
     }),
   );
+  let previousLabel: bigint | undefined;
+  let previousStamp = '';
   for (const ref of plan.blocks) {
+    if (ref.at.label !== previousLabel) {
+      previousStamp = await entryStamp(ref.at.label);
+      previousLabel = ref.at.label;
+    }
     hash.update(
       stableStringify({
         ...ref,
         at: { ...ref.at, label: ref.at.label.toString() },
-        stamp: await entryStamp(ref.at.label),
+        stamp: previousStamp,
       }),
     );
   }
