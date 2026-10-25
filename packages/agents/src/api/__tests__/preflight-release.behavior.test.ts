@@ -1,26 +1,9 @@
-import { capturedSessionClient } from './helpers/session-client-capture.js';
-import { observeActivationPreparation } from './helpers/activation-acquisition-capture.js';
-import { capturedActivation } from './helpers/activation-acquisition-capture.js';
-import {
-  fixtureAgentResources,
-  AgentResourceCapture,
-} from './helpers/agent-resource-capture.js';
-
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { spyOn } from 'bun:test';
-import type { MessageBus } from '@vybestack/llxprt-code-core';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm, writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -28,41 +11,50 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import {
   Config,
+  MessageBus,
   WorkspaceTrustLifecycle,
   WorkspaceFilesystemOwner,
   assembleWorkspaceMemory,
-  type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import {
-  MessageBusType,
-  type ToolConfirmationRequest,
-} from '@vybestack/llxprt-code-policy/confirmation-bus/types.js';
+import { MessageBusType } from '@vybestack/llxprt-code-policy/confirmation-bus/types.js';
+import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import {
   ProfileManager,
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { PolicyDecision } from '@vybestack/llxprt-code-core';
+import {
+  createOwnedTokenStoreClose,
+  createOwnerOAuthManager,
+  createPreflightOAuthProfileReads,
+  createSessionAuthPolicyReader,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   prepareAgentPreflight,
   AgentProfilePreflight,
 } from '../profile-preflight.js';
-import type { AgentActivationOperation } from '../activationPreflightState.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  countType,
+  drain,
+  ToolConfirmationOutcome,
+  type Agent,
+  type ToolConfirmation,
+} from './helpers/agentHarness.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openRouteBPreflight } from './helpers/route-b-preflight.js';
 
 import { cleanupFailedCreatedAgent } from '../createAgent.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 
-function transferred(
-  operation: AgentProfilePreflight,
-): AgentActivationOperation {
-  let activation: AgentActivationOperation | undefined;
-  operation.transferActivation((value) => {
-    activation = value;
-  });
-  if (activation === undefined) throw new Error('Missing activation');
-  return activation;
-}
+const oauthSettings: IOAuthSettingsProvider = {
+  isOAuthEnabled: () => true,
+  getProviderApiKey: () => undefined,
+  getProviderKeyfile: () => undefined,
+  getProviderBaseUrl: () => undefined,
+  getOAuthEnabledProviders: () => ({ codex: true }),
+  setOAuthEnabled: () => {},
+};
 
 describe('preflight acquired lifetime', () => {
   const credentials = useOwnedCredentials();
@@ -107,41 +99,14 @@ describe('preflight acquired lifetime', () => {
       await trust.dispose();
       await config.dispose();
     });
-    const attach = async (
-      policy?: (value: MessageBus) => void,
-      manager?: (value: RuntimeProviderManager) => void,
-      oauth?: (value: OAuthManager | undefined) => void,
-    ): Promise<void> => {
-      const configure = ProviderManager.prototype.setConfig;
-      const managerObservation = spyOn(
-        ProviderManager.prototype,
-        'setConfig',
-      ).mockImplementation(function (this: ProviderManager, config) {
-        configure.call(this, config);
-        manager?.(this);
-      });
-
-      const activationObservation = observeActivationPreparation(
-        (activation, _state) => {
-          const bus = capturedActivation(activation).messageBus;
-          if (bus === undefined) throw new Error('Missing policy bus');
-          policy?.(bus);
-          oauth?.(capturedActivation(activation).oauthManager);
-        },
+    const attach = (): Promise<void> =>
+      operation.preparePostConfiguration(
+        config,
+        filesystem,
+        memory,
+        trust,
+        () => trust.dispose(),
       );
-      try {
-        await operation.preparePostConfiguration(
-          config,
-          filesystem,
-          memory,
-          trust,
-          () => trust.dispose(),
-        );
-      } finally {
-        managerObservation.mockRestore();
-        activationObservation.mockRestore();
-      }
-    };
     return { root, settings, operation, config, attach };
   }
 
@@ -318,102 +283,100 @@ describe('preflight acquired lifetime', () => {
     expect(credentials().keySnapshot()).toStrictEqual([1]);
   });
 
-  it('preserves configured policy and OAuth for the receiving Agent after preflight disposal', async () => {
-    const { operation, config, attach } = await fixture();
-    let policy: MessageBus | undefined;
-    let manager: RuntimeProviderManager | undefined;
-    let oauth: OAuthManager | undefined;
-    await attach(
-      (value) => {
-        policy = value;
-      },
-      (value) => {
-        manager = value;
-      },
-      (value) => {
-        oauth = value;
-      },
-    );
-    if (policy === undefined || manager === undefined || oauth === undefined)
-      throw new Error('Missing published owners');
-    const intent = { provider: 'openai', authMode: 'none' } as const;
-    const receipt = await operation.preflight(intent);
-    if (receipt.token === undefined) throw new Error('Activation failed');
-    const activation = transferred(operation);
-    cleanups.push(async () => {
-      await activation.dispose();
+  describe('with the fake provider replay', () => {
+    useFakeResponsesReplay('read-write-confirmations-across-preflight.jsonl');
+
+    it('preserves configured policy and transport for the receiving Agent after preflight disposal', async () => {
+      const confirmedOutput = join(
+        process.cwd(),
+        'preflight-release-confirmed.txt',
+      );
+      const pendingOutput = join(
+        process.cwd(),
+        'preflight-release-pending.txt',
+      );
+      cleanups.push(async () => {
+        await rm(confirmedOutput, { force: true });
+        await rm(pendingOutput, { force: true });
+      });
+      const route = await openRouteBPreflight({
+        authority: credentials().authority,
+        config: { workingDir: process.cwd(), interactive: true },
+      });
+      let agent: Agent | undefined;
+      const requests: ToolConfirmation[] = [];
+      let wake: (() => void) | undefined;
+      const unsubscribe: Array<() => void> = [];
+      const confirmationNumber = async (count: number) => {
+        while (requests.length < count)
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+          });
+        return requests[count - 1];
+      };
+      try {
+        await route.prepare();
+        agent = await route.createAgent({ provider: 'fake', authMode: 'auto' });
+        unsubscribe.push(
+          agent.tools.onConfirmationRequest((request) => {
+            requests.push(request);
+            wake?.();
+          }),
+        );
+        const before = await drain(agent.stream('read package metadata'));
+        expect(countType(before, 'tool-result')).toBeGreaterThan(0);
+        expect(requests).toHaveLength(0);
+
+        const confirmedTurn = drain(agent.stream('write the confirmed file'));
+        const confirmed = await confirmationNumber(1);
+        expect(confirmed.name).toBe('write_file');
+        await route.disposePreflight();
+        agent.tools.respondToConfirmation(
+          confirmed.confirmationId,
+          ToolConfirmationOutcome.ProceedOnce,
+        );
+        await confirmedTurn;
+        expect(readFileSync(confirmedOutput, 'utf8')).toBe(
+          'confirmed after preflight disposal',
+        );
+
+        const after = await drain(agent.stream('read package metadata again'));
+        expect(countType(after, 'tool-result')).toBeGreaterThan(0);
+        expect(requests).toHaveLength(1);
+
+        expect(credentials().snapshot()).toStrictEqual([0]);
+        await credentials().saveToken(0, 'retained', {
+          access_token: 'after-transfer',
+          token_type: 'Bearer',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+        });
+        expect(await credentials().listProviders(0)).toContain('retained');
+
+        const pendingTurn = drain(agent.stream('write the pending file')).catch(
+          (error: unknown) => error,
+        );
+        const pending = await confirmationNumber(2);
+        expect(pending.name).toBe('write_file');
+        await agent.dispose();
+        await pendingTurn;
+        expect(existsSync(pendingOutput)).toBe(false);
+        expect(credentials().snapshot()).toStrictEqual([1]);
+        expect(credentials().keySnapshot()).toStrictEqual([1]);
+      } finally {
+        for (const stop of unsubscribe) stop();
+        await agent?.dispose();
+        await route.close();
+      }
     });
-    const resources = new AgentResourceCapture();
-    const retained = capturedSessionClient(
-      capturedActivation(activation).owner,
-    );
-    resources.observe(retained);
-    resources.clients.push(retained);
-    const token = receipt.token;
-    const agent = await resources.construct(() =>
-      AgentProfilePreflight.createForegroundAgent(operation, token, intent, {}),
-    );
-    resources.bindAgent(agent);
-    fixtureAgentResources(agent)
-      .publishedClient(agent)
-      .assertProviderManager(manager);
-    cleanups.push(() => agent.dispose());
-    const before = policy.evaluate('read_file', {
-      path: config.getTargetDir(),
-    });
-    const bus = capturedActivation(activation).messageBus;
-    if (bus === undefined) throw new Error('Missing retained bus');
-    let correlation: string | undefined;
-    const unsubscribe = bus.subscribe<ToolConfirmationRequest>(
-      MessageBusType.TOOL_CONFIRMATION_REQUEST,
-      (request) => {
-        correlation = request.correlationId;
-      },
-    );
-    const pending = bus.requestConfirmation(
-      { name: 'preflight_unknown_tool', args: {} },
-      {},
-    );
-    if (correlation === undefined)
-      throw new Error('Confirmation did not enter');
-    await operation.dispose();
-    bus.publish({
-      type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-      correlationId: correlation,
-      confirmed: true,
-    });
-    expect(await pending).toBe(true);
-    unsubscribe();
-    expect(
-      policy.evaluate('read_file', {
-        path: config.getTargetDir(),
-      }),
-    ).toBe(before);
-    expect(before).not.toBe(PolicyDecision.DENY);
-    expect(credentials().snapshot()).toStrictEqual([0]);
-    await credentials().saveToken(0, 'retained', {
-      access_token: 'after-transfer',
-      token_type: 'Bearer',
-      expiry: Math.floor(Date.now() / 1000) + 3600,
-    });
-    expect(await oauth.getTokenStore().listProviders()).toContain('retained');
-    await agent.dispose();
-    expect(credentials().snapshot()).toStrictEqual([1]);
-    expect(credentials().keySnapshot()).toStrictEqual([1]);
-    const configuredPolicy = policy;
-    expect(() => configuredPolicy.evaluate('read_file', {})).toThrow(
-      'disposed',
-    );
   });
 
   it('closes failed attachment and permits a fresh independent owner', async () => {
-    const { operation, root, attach } = await fixture();
+    const { operation, root, settings, attach } = await fixture();
     await (await retain(operation, root, 'failure-file')).lease.release();
-    await expect(
-      attach(undefined, () => {
-        throw new Error('Host publication failed');
-      }),
-    ).rejects.toThrow('Host publication failed');
+    settings.set('activeProvider', 'no-such-provider');
+    await expect(attach()).rejects.toThrow(
+      "Could not activate explicitly-configured provider 'no-such-provider'",
+    );
     expect(await readdir(root)).not.toContain('failure-file');
     expect(credentials().snapshot()).toStrictEqual([1]);
     expect(credentials().keySnapshot()).toStrictEqual([1]);
@@ -425,8 +388,11 @@ describe('preflight acquired lifetime', () => {
     ).toBe(false);
   });
   it('attaches the retained OAuth reader to the configured repository and reads later edits', async () => {
-    const { root, operation, settings, attach } = await fixture();
-    const profiles = new ProfileManager(join(root, 'profiles'));
+    const root = await mkdtemp(join(tmpdir(), 'preflight-oauth-reads-'));
+    cleanups.push(() => rm(root, { recursive: true, force: true }));
+    const settings = new SettingsService();
+    const profileDirectory = join(root, 'profiles');
+    const profiles = new ProfileManager(profileDirectory);
     await profiles.saveProfile('selected', {
       version: 1,
       provider: 'codex',
@@ -435,49 +401,65 @@ describe('preflight acquired lifetime', () => {
       ephemeralSettings: {},
     });
     settings.setCurrentProfileName('selected');
-    let oauth: OAuthManager | undefined;
-    await attach(undefined, undefined, (value) => {
-      oauth = value;
-    });
-    if (oauth === undefined) throw new Error('Missing retained OAuth');
-    await oauth.activateNamedLoginBucket('codex', 'first-login');
-    expect(
-      oauth.getSessionBucket('codex', {
-        providerId: 'codex',
-        profileId: 'selected',
-      }),
-    ).toBe('first-login');
-    await profiles.saveProfile('selected', {
-      version: 1,
-      provider: 'anthropic',
-      model: 'changed',
-      modelParams: {},
-      ephemeralSettings: {},
-    });
-    await oauth.activateNamedLoginBucket('codex', 'second-login');
-    expect(
-      oauth.getSessionBucket('codex', {
-        providerId: 'codex',
-        profileId: 'selected',
-      }),
-    ).toBe('first-login');
-    await operation.dispose();
+    const tokens = credentials().authority.createTokenStore();
+    const closeTokens = createOwnedTokenStoreClose(tokens);
+    const profileReads = createPreflightOAuthProfileReads();
+    const oauth = createOwnerOAuthManager(
+      tokens,
+      oauthSettings,
+      new MessageBus(),
+      profileReads,
+      createSessionAuthPolicyReader(settings),
+      () => ({ runtimeId: 'retained-root', runtimeKind: 'agent' }),
+      undefined,
+      () => {},
+      async () => {
+        throw new Error('Unexpected network request');
+      },
+    );
+    try {
+      profileReads.attachProfileDirectory(profileDirectory);
+      await oauth.activateNamedLoginBucket('codex', 'first-login');
+      expect(
+        oauth.getSessionBucket('codex', {
+          providerId: 'codex',
+          profileId: 'selected',
+        }),
+      ).toBe('first-login');
+      await profiles.saveProfile('selected', {
+        version: 1,
+        provider: 'anthropic',
+        model: 'changed',
+        modelParams: {},
+        ephemeralSettings: {},
+      });
+      await oauth.activateNamedLoginBucket('codex', 'second-login');
+      expect(
+        oauth.getSessionBucket('codex', {
+          providerId: 'codex',
+          profileId: 'selected',
+        }),
+      ).toBe('first-login');
+    } finally {
+      await oauth.dispose();
+      closeTokens();
+    }
     expect(credentials().snapshot()).toStrictEqual([1]);
-    expect(credentials().keySnapshot()).toStrictEqual([1]);
   });
 
   it('keeps a host failure first while joining file failure and credential release, then permits file remediation', async () => {
-    const { root, operation, attach } = await fixture();
+    const { root, operation, settings, attach } = await fixture();
     const retained = await retain(operation, root, 'failed-deletion');
     await retained.lease.release();
     await rm(join(root, 'failed-deletion'));
-    const primary = new Error('Host refused manager publication');
-    const failure: unknown = await attach(undefined, () => {
-      throw primary;
-    }).catch((error: unknown) => error);
+    settings.set('activeProvider', 'no-such-provider');
+    const failure: unknown = await attach().catch((error: unknown) => error);
     if (!(failure instanceof AggregateError))
       throw new Error('Missing joined startup error');
-    expect(failure.errors[0]).toBe(primary);
+    expect(failure.errors[0]).toBeInstanceOf(Error);
+    expect((failure.errors[0] as Error).message).toContain(
+      "Could not activate explicitly-configured provider 'no-such-provider'",
+    );
     expect(failure.errors[1]).toBeInstanceOf(Error);
     expect(
       operation
