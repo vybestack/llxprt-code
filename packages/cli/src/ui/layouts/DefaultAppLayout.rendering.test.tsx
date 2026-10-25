@@ -113,8 +113,9 @@ import type { HistoryItem } from '../types.js';
 import { SettingsProfileProvider } from '../stores/settings/SettingsContext.js';
 import { createSettingsProfileStore } from '../stores/settings/settingsStore.js';
 import { VimModeProvider } from '../contexts/VimModeContext.js';
-const { buildSlashCommandRuntime, buildUiRuntimeFromSource } = await import(
-  '../cliUiRuntime.js'
+const { buildUiRuntimeFromSource } = await import('../cliUiRuntime.js');
+const { buildSlashCommandRuntimeForTest } = await import(
+  '../../__tests__/slash-command-runtime-fixture.js'
 );
 
 const TERMINAL_HEIGHT = 24;
@@ -230,7 +231,7 @@ async function renderLayout({
                 uiRuntime.app.getAccessibility().disableLoadingPhrases === true
               }
               debugMode={uiRuntime.app.getDebugMode()}
-              slashCommandRuntime={buildSlashCommandRuntime(
+              slashCommandRuntime={buildSlashCommandRuntimeForTest(
                 configSource as never,
                 await createUiSessionOwner(),
               )}

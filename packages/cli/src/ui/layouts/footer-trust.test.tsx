@@ -36,8 +36,9 @@ const { renderWithProviders, createMockSettings } = await import(
 const { FooterRegion } = await import('./DefaultAppLayoutRegions.js');
 const { useFolderTrust } = await import('../hooks/useFolderTrust.js');
 const { Config, coreEvents } = await import('@vybestack/llxprt-code-core');
-const { buildSlashCommandRuntime, buildUiRuntimeFromSource } = await import(
-  '../cliUiRuntime.js'
+const { buildUiRuntimeFromSource } = await import('../cliUiRuntime.js');
+const { buildSlashCommandRuntimeForTest } = await import(
+  '../../__tests__/slash-command-runtime-fixture.js'
 );
 const { createSettingsProfileStore } = await import(
   '../stores/settings/settingsStore.js'
@@ -65,7 +66,7 @@ async function mountFooter(trustedFolder = true) {
   const dialogs = createDialogOpeners(store);
   const owner = await createUiSessionOwner(config);
   const uiRuntime = buildUiRuntimeFromSource(config, owner);
-  const slashCommandRuntime = buildSlashCommandRuntime(config, owner);
+  const slashCommandRuntime = buildSlashCommandRuntimeForTest(config, owner);
   const trustRuntime = {
     getWorkingDir: () => config.getWorkingDir(),
     isTrustedFolder: () => owner.ide.isTrustedFolder(),

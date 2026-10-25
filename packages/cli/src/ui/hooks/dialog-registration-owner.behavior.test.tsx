@@ -13,7 +13,7 @@ import { createMockSettings, renderHook } from '../../__tests__/render.js';
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
 import { RuntimeContextProvider } from '../../__tests__/runtime-context-fixture.js';
 import { OAuthControlProvider } from '../contexts/OAuthControlContext.js';
-import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
+import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { useAppStores } from '../AppContainerRuntime.js';
 import { useAppDialogs } from '../containers/AppContainer/hooks/useAppDialogs.js';
 
@@ -48,7 +48,7 @@ describe('application dialog operation ownership', () => {
       debugMode: false,
       model: 'fake-model',
     });
-    const runtime = buildSlashCommandRuntime(config, peer);
+    const runtime = buildSlashCommandRuntimeForTest(config, peer);
     const hook = renderHook(
       ({ current }) => {
         const stores = useAppStores(runtime);

@@ -14,7 +14,7 @@ import { render } from 'ink-testing-library';
 import { LoadedSettings } from '../../config/settings.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { renderWithProviders } from '../../__tests__/render.js';
-import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
+import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { StreamingState } from '../types.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 import { AppCommandsProvider } from '../contexts/AppCommandsContext.js';
@@ -97,7 +97,7 @@ async function createProps(): Promise<InlineContentProps> {
     llxprtMdFileCount: 0,
     coreMemoryFileCount: 0,
     contextFileNames: [],
-    config: buildSlashCommandRuntime(
+    config: buildSlashCommandRuntimeForTest(
       new Config({
         sessionId: 'inline-content-test',
         targetDir: tmpdir(),

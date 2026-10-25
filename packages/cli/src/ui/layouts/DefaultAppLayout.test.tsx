@@ -32,10 +32,8 @@ import {
   type DialogKind,
   type DialogStore,
 } from '../stores/dialog/dialogStore.js';
-import {
-  buildSlashCommandRuntime,
-  buildUiRuntimeFromSource,
-} from '../cliUiRuntime.js';
+import { buildUiRuntimeFromSource } from '../cliUiRuntime.js';
+import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 
 const DIALOG_MANAGER_SENTINEL = 'DIALOG_MANAGER_RENDERED';
 const STANDARD_BUFFER_SENTINEL = 'STANDARD_BUFFER_HISTORY';
@@ -241,7 +239,7 @@ async function renderDefaultAppLayout({
         uiRuntime.app.getAccessibility().disableLoadingPhrases === true
       }
       debugMode={uiRuntime.app.getDebugMode()}
-      slashCommandRuntime={buildSlashCommandRuntime(
+      slashCommandRuntime={buildSlashCommandRuntimeForTest(
         config,
         await createUiSessionOwner(),
       )}

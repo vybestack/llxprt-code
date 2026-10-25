@@ -22,7 +22,7 @@ import type React from 'react';
 import { Config } from '@vybestack/llxprt-code-core';
 import { renderHook } from '../../__tests__/render.js';
 import { LoadedSettings } from '../../config/settings.js';
-import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
+import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { useStaticItems } from './DefaultAppLayoutHelpers.js';
 import { AppHeader } from '../components/AppHeader.js';
 import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
@@ -30,7 +30,7 @@ import type { HistoryItem } from '../types.js';
 
 const SUPPRESS_STATIC_HEADER = 'LLXPRT_CODE_SUPPRESS_STATIC_HEADER';
 
-const config = buildSlashCommandRuntime(
+const config = buildSlashCommandRuntimeForTest(
   new Config({
     sessionId: 'default-app-layout-helpers-test',
     targetDir: tmpdir(),

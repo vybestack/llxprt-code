@@ -29,7 +29,7 @@ import {
   bindDirectoryChangeRecording,
 } from '../commands/directoryCommandHost.js';
 import { mkdtemp, readFile, rm, realpath } from 'node:fs/promises';
-import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
+import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CliSessionPersistence } from '../../cliSessionPersistence.js';
@@ -211,7 +211,7 @@ describe('slashCommandHandlers', () => {
         await mkdtemp(join(tmpdir(), 'recorded-workspace-admission-')),
       );
       const runtime = {
-        ...buildSlashCommandRuntime(
+        ...buildSlashCommandRuntimeForTest(
           config,
           agent,
           undefined,

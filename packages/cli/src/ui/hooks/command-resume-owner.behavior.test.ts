@@ -9,7 +9,7 @@ import { bindCommandOwnerResume } from './commandOwnerResumeHost.js';
 import { describe, expect, it } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
-import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
+import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
@@ -84,7 +84,7 @@ describe('registered command resume owner', () => {
         await owner.session.setRecording({ enabled: true });
         const decoy = await borrow();
         await decoy.dispose();
-        const runtime = buildSlashCommandRuntime(config, owner);
+        const runtime = buildSlashCommandRuntimeForTest(config, owner);
         const context = createMockCommandContext({
           recordingOwner: 'agent',
           services: { agent: decoy },

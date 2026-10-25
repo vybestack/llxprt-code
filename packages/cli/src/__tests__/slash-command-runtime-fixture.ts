@@ -3,10 +3,33 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type {
+  LlxprtExtension,
+  WorkspaceSkillOperations,
+} from '@vybestack/llxprt-code-core';
+import type { CliSessionPersistencePort } from '../cliSessionPersistence.js';
+import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFeatures.js';
+import type { PerfSnapshotCapability } from '../ui/commands/perfCommand.js';
 import {
   buildSlashCommandRuntime,
+  type BucketFailoverRuntime,
   type CliUiRuntime,
+  type UiRuntimeDeclarationSource,
 } from '../ui/cliUiRuntime.js';
+
+type SlashCommandRuntimeTestArgs = [
+  source: UiRuntimeDeclarationSource,
+  agent: Parameters<typeof buildSlashCommandRuntime>[1],
+  perfSnapshotCapability?: PerfSnapshotCapability | null,
+  sessionPersistence?: CliSessionPersistencePort,
+  bucketFailover?: BucketFailoverRuntime,
+  skillOperations?: Pick<
+    WorkspaceSkillOperations,
+    'list' | 'find' | 'reload' | 'isAdminEnabled'
+  >,
+  restartExtension?: (extension: LlxprtExtension) => Promise<void>,
+  telemetrySettings?: SessionSettingsOperations,
+];
 
 /**
  * The one place test code builds a slash-command runtime. Every test that needs
@@ -14,7 +37,7 @@ import {
  * construction is made in this function rather than at each test.
  */
 export function buildSlashCommandRuntimeForTest(
-  ...args: Parameters<typeof buildSlashCommandRuntime>
+  ...args: SlashCommandRuntimeTestArgs
 ): CliUiRuntime {
   return buildSlashCommandRuntime(...args);
 }

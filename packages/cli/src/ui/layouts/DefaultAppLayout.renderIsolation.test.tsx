@@ -58,8 +58,9 @@ const { renderWithProviders, createMockSettings } = await import(
   '../../__tests__/render.js'
 );
 const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
-const { buildSlashCommandRuntime, buildUiRuntimeFromSource } = await import(
-  '../cliUiRuntime.js'
+const { buildUiRuntimeFromSource } = await import('../cliUiRuntime.js');
+const { buildSlashCommandRuntimeForTest } = await import(
+  '../../__tests__/slash-command-runtime-fixture.js'
 );
 const { Config, MessageBus, MessageBusType, PolicyEngine } = await import(
   '@vybestack/llxprt-code-core'
@@ -124,7 +125,7 @@ async function mountLayout(borrowedBus?: InstanceType<typeof MessageBus>) {
         uiRuntime.app.getAccessibility().disableLoadingPhrases === true
       }
       debugMode={uiRuntime.app.getDebugMode()}
-      slashCommandRuntime={buildSlashCommandRuntime(
+      slashCommandRuntime={buildSlashCommandRuntimeForTest(
         config,
         await createUiSessionOwner(),
       )}

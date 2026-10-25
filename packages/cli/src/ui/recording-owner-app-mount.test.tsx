@@ -14,10 +14,8 @@ import {
   renderWithProviders,
   waitFor,
 } from '../__tests__/render.js';
-import {
-  buildSlashCommandRuntime,
-  buildUiRuntimeFromSource,
-} from './cliUiRuntime.js';
+import { buildUiRuntimeFromSource } from './cliUiRuntime.js';
+import { buildSlashCommandRuntimeForTest } from '../__tests__/slash-command-runtime-fixture.js';
 import { AppWrapper } from './App.js';
 import { AppContainer } from './AppContainer.js';
 import { appContainerBoundAgentProps } from './__tests__/app-bootstrap-owner-props.js';
@@ -116,7 +114,7 @@ describe('interactive Agent owner AppWrapper', () => {
                               undefined,
                               settingsOwner,
                             )}
-                            slashCommandRuntime={buildSlashCommandRuntime(
+                            slashCommandRuntime={buildSlashCommandRuntimeForTest(
                               config,
                               agent,
                               undefined,
@@ -224,7 +222,7 @@ describe('interactive Agent owner AppWrapper', () => {
               undefined,
               settingsOwner,
             )}
-            slashCommandRuntime={buildSlashCommandRuntime(
+            slashCommandRuntime={buildSlashCommandRuntimeForTest(
               config,
               agent,
               undefined,
