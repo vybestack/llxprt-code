@@ -21,7 +21,7 @@ import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/cont
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { createRuntimeTokenizerFactory } from '../../composition/runtimeTokenizerFactory.js';
 import { OpenAIProvider } from '../OpenAIProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../../__tests__/streamCallOptions.js';
 import { PROJECTION_REVISION } from '../../runtime/promptEnvelopeProjections.js';
 
 void vi.mock('openai', () => {
