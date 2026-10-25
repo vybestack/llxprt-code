@@ -11,6 +11,7 @@ import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { Config } from '@vybestack/llxprt-code-core';
+import type { Agent } from '../agent.js';
 import type { AgentActivationOperation } from '../activationPreflightState.js';
 import type { ProviderActivationIntent } from '../config-types.js';
 import { AgentProfilePreflight } from '../profile-preflight.js';
@@ -34,8 +35,9 @@ const intent = {
 
 /**
  * The live media store directories under the project temp dir. A store creates
- * its directory on first use, so a session that never admitted media leaves
- * none open or closed; this reads only that a closed session leaked none.
+ * its directory when it first admits media and removes it when it closes, so
+ * the listing is only informative after the test admitted media into the
+ * session under test.
  */
 async function liveMediaStores(config: Config): Promise<readonly string[]> {
   try {
@@ -44,6 +46,23 @@ async function liveMediaStores(config: Config): Promise<readonly string[]> {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;
   }
+}
+
+/** Admits real media into the agent's store through the public history API. */
+async function admitMedia(agent: Agent): Promise<void> {
+  await agent.setHistory([
+    {
+      speaker: 'human',
+      blocks: [
+        {
+          type: 'media',
+          encoding: 'base64',
+          mimeType: 'image/png',
+          data: PNG_BASE64,
+        },
+      ],
+    },
+  ]);
 }
 
 describe('adoption publication barrier', () => {
@@ -129,18 +148,17 @@ describe('adoption publication barrier', () => {
       await acquireBarrier(false);
     const operation = transfer();
     let settled = false;
-    const adopting = adopt();
-    const outcome = adopting.then(
-      async (agent) => {
+    const adopting = adopt().then(
+      (agent) => {
         settled = true;
-        await agent.dispose();
-        return undefined;
+        return agent;
       },
       (error: unknown) => {
         settled = true;
-        return error;
+        throw error;
       },
     );
+    let published: Agent | undefined;
     try {
       await expect(operation.sessionClient.refreshAuth()).rejects.toThrow(
         /disposed/,
@@ -149,7 +167,13 @@ describe('adoption publication barrier', () => {
       expect(settled).toBe(false);
       release.release();
       expect(await image).toBeInstanceOf(Error);
-      expect(await outcome).toBeUndefined();
+      published = await adopting;
+      // The transferred media store is still open after the join: it admits
+      // media and shows its live directory.
+      await admitMedia(published);
+      expect(await liveMediaStores(route.config)).toHaveLength(1);
+      await published.dispose();
+      published = undefined;
       expect(await liveMediaStores(route.config)).toHaveLength(0);
       expect(() => route.filesystem.paths.directories()).toThrow(/disposed/);
       selected.writeUserParameter('survived-adoption', true);
@@ -157,7 +181,8 @@ describe('adoption publication barrier', () => {
     } finally {
       release.release();
       await image;
-      await outcome;
+      await published?.dispose();
+      await adopting.catch(() => undefined);
     }
   });
   it('publishes a ready agent only after accepted image work has settled', async () => {
@@ -183,6 +208,8 @@ describe('adoption publication barrier', () => {
       );
       expect(await agent.getHistory()).toStrictEqual([]);
       expect(agent.listTools().length).toBeGreaterThan(0);
+      await admitMedia(agent);
+      expect(await liveMediaStores(built.route.config)).toHaveLength(1);
     } finally {
       await agent.dispose();
     }
@@ -217,7 +244,6 @@ describe('adoption publication barrier', () => {
     await closing;
     expect(published).toBe(false);
     expect(closed).toBe(true);
-    expect(await liveMediaStores(built.route.config)).toHaveLength(0);
     expect(() => built.route.filesystem.paths.directories()).toThrow(
       /disposed/,
     );
@@ -250,7 +276,6 @@ describe('adoption publication barrier', () => {
     expect(() => built.route.filesystem.paths.directories()).toThrow(
       /disposed/,
     );
-    expect(await liveMediaStores(built.route.config)).toHaveLength(0);
     built.selected.writeUserParameter('borrowed-after-identity-rejection', 3);
     expect(
       built.selected.readNamedParameter('borrowed-after-identity-rejection'),
