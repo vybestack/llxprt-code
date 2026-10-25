@@ -57,6 +57,7 @@ export async function transferReinitializedHistory(
     throw failure;
   }
   publication.publish(candidate);
+  await chat.getHistoryService().dispose();
   await publication.priorSource?.();
   await releaseDeferredArray(
     publication.admissions,
