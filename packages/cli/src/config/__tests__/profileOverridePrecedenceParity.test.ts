@@ -1,5 +1,3 @@
-import { observeActivationPreparation } from '../../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
-
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -61,10 +59,8 @@ import {
 } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type {
-  Config,
-  RuntimeProviderManager,
-} from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { AgentProfilePreflight } from '@vybestack/llxprt-code-agents';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
@@ -166,7 +162,7 @@ async function runConfig(
 ): Promise<{
   config: Config;
   settingsOwner: SessionSettingsOwner;
-  providerManager: RuntimeProviderManager;
+  preflight: AgentProfilePreflight;
   profileNames: string[];
   providerSelections: string[];
 }> {
@@ -174,7 +170,7 @@ async function runConfig(
   const parsedArgv = await parseArguments(settings);
   const settingsOwner = new SessionSettingsOwner(runtimeSettingsService);
   retainedSettingsOwners.push(settingsOwner);
-  let providerManager: RuntimeProviderManager | undefined;
+  let preflight: AgentProfilePreflight | undefined;
   const profileNames: string[] = [];
   const providerSelections: string[] = [];
   runtimeSettingsService.on('change', ({ key, oldValue, newValue }) => {
@@ -188,9 +184,6 @@ async function runConfig(
       providerSelections.push(newValue);
   });
 
-  const observation = observeActivationPreparation((operation, state) => {
-    providerManager = state.manager;
-  });
   const config = await loadCliConfigWithPreflight({
     settings,
     extensions: [],
@@ -204,14 +197,16 @@ async function runConfig(
     onActivationBootstrapReady: (operation) => {
       retainedActivationOperations.push(operation);
     },
+    onPreflightReady: (root) => {
+      preflight = root;
+    },
   });
-  observation.mockRestore();
-  if (providerManager === undefined)
-    throw new Error('CLI startup did not publish its provider manager');
+  if (preflight === undefined)
+    throw new Error('CLI startup did not publish its preflight');
   return {
     config,
     settingsOwner,
-    providerManager,
+    preflight,
     profileNames,
     providerSelections,
   };
@@ -471,18 +466,21 @@ describe('profileOverridePrecedenceParity: CLI model override after provider swi
   });
 
   it('selects the specified --provider in the real manager and settings owner', async () => {
-    const { providerManager, settingsOwner, providerSelections } =
-      await runConfig({}, ['--provider', 'openai']);
+    const { preflight, settingsOwner, providerSelections } = await runConfig(
+      {},
+      ['--provider', 'openai'],
+    );
     expect(providerSelections).toContain('openai');
-    expect(providerManager.getActiveProviderName()).toBe('openai');
+    expect(preflight.getActiveProviderName()).toBe('openai');
     expect(settingsOwner.readSelectedProvider()).toBe('openai');
   });
 
   it('does not select a provider when none is configured', async () => {
-    const { providerManager, settingsOwner, providerSelections } =
-      await runConfig({});
+    const { preflight, settingsOwner, providerSelections } = await runConfig(
+      {},
+    );
     expect(providerSelections).toHaveLength(0);
-    expect(providerManager.getActiveProviderName()).toBeUndefined();
+    expect(preflight.getActiveProviderName()).toBeUndefined();
     expect(settingsOwner.readSelectedProvider()).toBeUndefined();
   });
 });
