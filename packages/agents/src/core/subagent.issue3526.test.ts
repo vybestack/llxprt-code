@@ -34,7 +34,7 @@ import {
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
-import { SubAgentScope } from './subagent.js';
+import type { ChildAgentScope } from './subagentOrchestrator.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
 import {
   createCompletedToolCallResponse,
@@ -100,7 +100,7 @@ type HookMode =
 
 interface RuntimeHarness {
   readonly requests: GenerateChatOptions[];
-  readonly scope: SubAgentScope;
+  readonly scope: ChildAgentScope;
 }
 
 type CompletedToolCallFixture = Omit<

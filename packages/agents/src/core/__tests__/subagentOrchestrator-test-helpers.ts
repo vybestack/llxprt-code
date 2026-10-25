@@ -26,7 +26,11 @@ import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import {
+  SubagentTerminateMode,
+  type RunConfig,
+} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
 import {
@@ -36,7 +40,8 @@ import {
 } from '@vybestack/llxprt-code-settings';
 import { ToolRegistry, type ToolSelection } from '@vybestack/llxprt-code-tools';
 import { afterEach, vi } from 'bun:test';
-import { type SubAgentScope as SubAgentScopeInstance } from '../subagent.js';
+import type { SubAgentScopeFactory } from '../subagent.js';
+import type { ChildAgentScope } from '../subagentOrchestrator.js';
 
 const foregroundConfigs: Config[] = [];
 afterEach(async () => {
@@ -59,23 +64,29 @@ export function makeForegroundConfig(
   return config;
 }
 
+export function fakeChildScope(
+  overrides: Partial<ChildAgentScope> = {},
+): ChildAgentScope {
+  return {
+    output: { terminate_reason: SubagentTerminateMode.GOAL, emitted_vars: {} },
+    runInteractive: async () => {},
+    runNonInteractive: async () => {},
+    cancel: () => {},
+    getAgentId: () => 'fake-agent',
+    dispose: async () => {},
+    ...overrides,
+  };
+}
+
 /**
  * Creates a stub scope factory and fake scope, returning both so callers can
  * inspect the `runConfig` (5th positional arg — index 4) passed to
  * `SubAgentScope.create`.
  */
 export function createScopeFactory() {
-  const fakeScope = {
-    runtimeContext: {
-      state: { runtimeId: 'runtime#1' },
-      history: { clear: vi.fn() },
-    },
-    getAgentId: () => 'agent-helper-123',
-  } as unknown as SubAgentScopeInstance;
+  const fakeScope = fakeChildScope({ getAgentId: () => 'agent-helper-123' });
 
-  const factory = vi.fn<typeof SubAgentScopeInstance.create>(
-    async () => fakeScope,
-  );
+  const factory = vi.fn<SubAgentScopeFactory>(async () => fakeScope);
   return { factory, fakeScope };
 }
 
@@ -177,7 +188,7 @@ export function createRuntimeBundle(label = 'bundle') {
     provider: {},
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
     providerRuntime: {},
-  } as unknown as SubAgentScopeInstance['runtimeContext'];
+  } as unknown as AgentRuntimeContext;
 
   return {
     runtimeContext,

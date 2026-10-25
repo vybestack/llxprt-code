@@ -36,10 +36,11 @@ import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it, vi } from 'bun:test';
-import type { SubAgentScope } from '../subagent.js';
+import type { SubAgentScopeFactory } from '../subagent.js';
 import {
   createOrchestratorForTurns,
   createRuntimeBundle,
+  fakeChildScope,
   extractRunConfig,
   makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
@@ -125,7 +126,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
   ) {
     const loadSubagent = vi.fn().mockResolvedValue(subagent);
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
-    const scopeFactory = vi.fn<typeof SubAgentScope.create>();
+    const scopeFactory = vi.fn<SubAgentScopeFactory>();
     const foregroundConfig1 = makeForegroundConfig();
     const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
     const orchestrator = createTestChildOrchestrator({
@@ -156,13 +157,10 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
 
     const runtimeBundle = createRuntimeBundle('load-balancer');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'lb-helper-1',
-    } as unknown as SubAgentScope;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig2 = makeForegroundConfig();
     const foregroundSettings2 = createSessionSettingsFixture(foregroundConfig2);
@@ -208,13 +206,10 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
 
     const runtimeBundle = createRuntimeBundle('load-balancer');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'lb-helper-2',
-    } as unknown as SubAgentScope;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig3 = makeForegroundConfig();
     const foregroundSettings3 = createSessionSettingsFixture(foregroundConfig3);
@@ -270,7 +265,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const loadSubagent = vi.fn().mockResolvedValue(emptySubagent);
     const loadProfile = vi.fn().mockResolvedValue(emptyProfile);
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
-    const scopeFactory = vi.fn<typeof SubAgentScope.create>();
+    const scopeFactory = vi.fn<SubAgentScopeFactory>();
 
     const foregroundConfig4 = makeForegroundConfig();
     const foregroundSettings4 = createSessionSettingsFixture(foregroundConfig4);

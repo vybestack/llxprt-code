@@ -34,8 +34,11 @@ import type { AgentRuntimeLoaderOptions } from '@vybestack/llxprt-code-core/runt
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it, vi } from 'bun:test';
-import type { SubAgentScope } from '../subagent.js';
-import { createRuntimeBundle } from './subagentOrchestrator-test-helpers.js';
+import type { SubAgentScopeFactory } from '../subagent.js';
+import {
+  createRuntimeBundle,
+  fakeChildScope,
+} from './subagentOrchestrator-test-helpers.js';
 
 const subagentConfig: SubagentConfig = {
   name: 'helper',
@@ -75,14 +78,11 @@ async function launchSubagent(
   const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
   const loadProfile = vi.fn().mockResolvedValue(profile);
   const runtimeLoader = vi.fn(async () => createRuntimeBundle('sess'));
-  const scope = {
-    runtimeContext: createRuntimeBundle('sess').runtimeContext,
+  const scope = fakeChildScope({
     getAgentId: () => 'helper-1',
     dispose: async () => {},
-  } as unknown as SubAgentScope;
-  const scopeFactory = vi
-    .fn<typeof SubAgentScope.create>()
-    .mockResolvedValue(scope);
+  });
+  const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
   const foregroundRoot1 = makeForegroundConfig();
   const foregroundSettings1 = createSessionSettingsFixture(
@@ -309,13 +309,12 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
     const runtimeLoader = vi.fn(async (_options: AgentRuntimeLoaderOptions) =>
       createRuntimeBundle('lb'),
     );
-    const lbScope = {
-      runtimeContext: createRuntimeBundle('lb').runtimeContext,
+    const lbScope = fakeChildScope({
       getAgentId: () => 'lb-helper-1',
       dispose: async () => {},
-    } as unknown as SubAgentScope;
+    });
     const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
+      .fn<SubAgentScopeFactory>()
       .mockResolvedValue(lbScope);
 
     const foregroundRoot2 = makeForegroundConfig();

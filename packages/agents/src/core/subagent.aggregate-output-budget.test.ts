@@ -24,7 +24,7 @@ import {
   type OutputConfig,
   type RunConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { SubAgentScope } from './subagent.js';
+import type { ChildAgentScope } from './subagentOrchestrator.js';
 import {
   checkOutputBudget,
   checkTerminationConditions,
@@ -122,7 +122,7 @@ async function createBudgetScope(
   workspacePaths: WorkspacePathOperations,
   provider: ControlledUsageProvider,
   runConfig: RunConfig,
-): Promise<SubAgentScope> {
+): Promise<ChildAgentScope> {
   const providerAdapter: AgentRuntimeProviderAdapter = {
     getActiveProvider: () => provider,
     setActiveProvider: () => undefined,

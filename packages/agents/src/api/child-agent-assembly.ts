@@ -60,13 +60,13 @@ import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import {
   cleanupAfterFailure,
   disposeHistoryLike,
-  firstDefinedHistory,
   runCleanupSteps,
 } from '../core/subagent-cleanup.js';
 import { activateChildProvider } from '../core/subagent-provider-activation.js';
 import { buildSubagentRuntimeLoaderOptions } from '../core/subagent-runtime-loader.js';
-import type { SubAgentScope } from '../core/subagent.js';
+import type { SubAgentScopeFactory } from '../core/subagent.js';
 import type {
+  ChildAgentScope,
   SubagentLaunchRequest,
   SubagentLaunchResult,
 } from '../core/subagentOrchestrator.js';
@@ -113,7 +113,7 @@ export class ChildAgentAssembly {
   private content!: RuntimeContentGeneratorFactory<ContentGenerator>;
   private client!: SessionClientOwner;
   private loaded!: AgentRuntimeLoaderResult;
-  private scope!: SubAgentScope;
+  private scope!: ChildAgentScope;
   private closing: Promise<void> | undefined;
 
   constructor(
@@ -139,7 +139,7 @@ export class ChildAgentAssembly {
     private readonly hooks: SessionHookOwner | undefined,
     private readonly clientFactory: AgentClientFactory | undefined,
     private readonly runtimeLoader: typeof loadAgentRuntime,
-    private readonly scopeFactory: typeof SubAgentScope.create,
+    private readonly scopeFactory: SubAgentScopeFactory,
   ) {}
 
   async assemble(): Promise<SubagentLaunchResult> {
@@ -394,7 +394,7 @@ export class ChildAgentAssembly {
     );
   }
 
-  private createScope(): Promise<SubAgentScope> {
+  private createScope(): Promise<ChildAgentScope> {
     const retry = this.oauth.composeRetryOperations(
       this.loaded.runtimeContext.state.provider,
       { profileId: this.settings.getCurrentProfileName() ?? undefined },
@@ -479,13 +479,7 @@ export class ChildAgentAssembly {
   private close(): Promise<void> {
     this.closing ??= runCleanupSteps([
       () => this.scope.dispose(),
-      () =>
-        disposeHistoryLike(
-          firstDefinedHistory(
-            this.loaded.history,
-            this.scope.runtimeContext.history,
-          ),
-        ),
+      () => disposeHistoryLike(this.loaded.history),
       () =>
         disposeIsolatedMediaRuntime(
           () => this.providers.close(),

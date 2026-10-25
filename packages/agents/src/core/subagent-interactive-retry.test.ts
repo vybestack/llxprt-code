@@ -7,7 +7,7 @@
 import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { describe, expect, it } from 'bun:test';
 import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { SubAgentScope } from './subagent.js';
+import type { ChildAgentScope } from './subagentOrchestrator.js';
 import {
   acquireSubagentWorkspace,
   createRuntimeOverrides,
@@ -60,7 +60,7 @@ async function createScope(
   maxTurns = 1,
 ): Promise<{
   fixture: ReturnType<typeof createFixture>;
-  scope: SubAgentScope;
+  scope: ChildAgentScope;
   rendered: string[];
   resetSnapshots: string[];
 }> {

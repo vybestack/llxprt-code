@@ -1,7 +1,11 @@
 import { createSubagentScope } from './helpers/create-subagent-scope.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-import { scopeInputs } from './subagent-test-helpers.js';
+import {
+  createStatelessRuntimeBundle as createRunnableRuntimeBundle,
+  scopeInputs,
+} from './subagent-test-helpers.js';
 import type { SubagentTestInputs } from './subagent-test-helpers.js';
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -40,11 +44,13 @@ import type {
   AgentRuntimeTelemetryAdapter,
   ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { PromptConfig, ModelConfig, RunConfig } from '../subagentTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ContentGenerator } from '../contentGenerator.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 
 /**
  * Test helper: Create minimal Config for testing
@@ -413,302 +419,6 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
 
   /**
    * @plan PLAN-20251028-STATELESS6.P07
-   * @requirement REQ-STAT6-001.3
-   * @pseudocode agent-runtime-context.md line 80
-   *
-   * Test: AgentRuntimeContext passed to SubAgentScope is frozen
-   * This test SHOULD FAIL because SubAgentScope doesn't use AgentRuntimeContext yet
-   */
-  describe('Runtime View Immutability', () => {
-    it('should receive frozen AgentRuntimeContext', async () => {
-      // @plan PLAN-20251028-STATELESS6.P07
-      // @requirement REQ-STAT6-001.3
-
-      foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-
-      const promptConfig = createTestPromptConfig();
-      const modelConfig = createTestModelConfig(
-        'gemini-2.0-flash-thinking-exp',
-      );
-      const runConfig = createTestRunConfig();
-
-      const { overrides } = createRuntimeOverrides();
-
-      const scope = await createSubagentScope(
-        {
-          name: 'test-subagent',
-          prompt: promptConfig,
-          model: modelConfig,
-          run: runConfig,
-          toolConfig: undefined,
-          outputConfig: undefined,
-        },
-        ...scopeInputs(foregroundConfig, overrides),
-      );
-
-      // WHEN SubAgentScope is created
-      // THEN it should have a frozen AgentRuntimeContext
-      // Note: This will fail because current implementation uses Config, not AgentRuntimeContext
-      const runtimeContext = (
-        scope as unknown as { runtimeContext: AgentRuntimeContext }
-      ).runtimeContext;
-
-      expect(runtimeContext).toBeDefined();
-      expect(Object.isFrozen(runtimeContext)).toBe(true);
-    });
-
-    it('should have frozen runtime state within context', async () => {
-      // @plan PLAN-20251028-STATELESS6.P07
-      // @requirement REQ-STAT6-001.3
-
-      foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-
-      const promptConfig = createTestPromptConfig();
-      const modelConfig = createTestModelConfig(
-        'gemini-2.0-flash-thinking-exp',
-      );
-      const runConfig = createTestRunConfig();
-
-      const { overrides: frozenOverrides } = createRuntimeOverrides();
-
-      const scope = await createSubagentScope(
-        {
-          name: 'test-subagent',
-          prompt: promptConfig,
-          model: modelConfig,
-          run: runConfig,
-          toolConfig: undefined,
-          outputConfig: undefined,
-        },
-        ...scopeInputs(foregroundConfig, frozenOverrides),
-      );
-
-      // Access internal runtimeContext (will fail with current Config-based implementation)
-      const runtimeContext = (
-        scope as unknown as { runtimeContext: AgentRuntimeContext }
-      ).runtimeContext;
-
-      expect(runtimeContext.state).toBeDefined();
-      expect(Object.isFrozen(runtimeContext.state)).toBe(true);
-    });
-  });
-
-  /**
-   * @plan PLAN-20251028-STATELESS6.P07
-   * @requirement REQ-STAT6-003.2
-   * @pseudocode agent-runtime-context.md line 96
-   *
-   * Test: Each SubAgentScope gets unique HistoryService instance
-   * This test SHOULD FAIL because current implementation may share history
-   */
-  describe('History Service Isolation', () => {
-    it('should allocate isolated history services for each subagent', async () => {
-      // @plan PLAN-20251028-STATELESS6.P07
-      // @requirement REQ-STAT6-003.2
-
-      foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-
-      const promptConfig = createTestPromptConfig();
-      const modelConfig1 = createTestModelConfig(
-        'gemini-2.0-flash-thinking-exp',
-      );
-      const modelConfig2 = createTestModelConfig('gemini-2.0-flash-exp');
-      const runConfig = createTestRunConfig();
-
-      // Create two subagent scopes
-      const { overrides: overridesA } = createRuntimeOverrides();
-      const scopeA = await createSubagentScope(
-        {
-          name: 'subagent-a',
-          prompt: promptConfig,
-          model: modelConfig1,
-          run: runConfig,
-          toolConfig: undefined,
-          outputConfig: undefined,
-        },
-        ...scopeInputs(foregroundConfig, overridesA),
-      );
-
-      const { overrides: overridesB } = createRuntimeOverrides();
-      const scopeB = await createSubagentScope(
-        {
-          name: 'subagent-b',
-          prompt: promptConfig,
-          model: modelConfig2,
-          run: runConfig,
-          toolConfig: undefined,
-          outputConfig: undefined,
-        },
-        ...scopeInputs(foregroundConfig, overridesB),
-      );
-
-      // Access runtime contexts (will fail with current Config-based implementation)
-      const contextA = (
-        scopeA as unknown as { runtimeContext: AgentRuntimeContext }
-      ).runtimeContext;
-      const contextB = (
-        scopeB as unknown as { runtimeContext: AgentRuntimeContext }
-      ).runtimeContext;
-
-      // History instances must be different references
-      expect(contextA.history).toBeDefined();
-      expect(contextB.history).toBeDefined();
-      expect(contextA.history).not.toBe(contextB.history);
-    });
-
-    it('should maintain isolated history between subagents', async () => {
-      // @plan PLAN-20251028-STATELESS6.P07
-      // @requirement REQ-STAT6-003.2
-
-      foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-
-      const promptConfig = createTestPromptConfig();
-      const modelConfig = createTestModelConfig(
-        'gemini-2.0-flash-thinking-exp',
-      );
-      const runConfig = createTestRunConfig();
-
-      // Create two subagent scopes
-      const { overrides: histOverridesA } = createRuntimeOverrides();
-      const scopeA = await createSubagentScope(
-        {
-          name: 'subagent-a',
-          prompt: promptConfig,
-          model: modelConfig,
-          run: runConfig,
-          toolConfig: undefined,
-          outputConfig: undefined,
-        },
-        ...scopeInputs(foregroundConfig, histOverridesA),
-      );
-
-      const { overrides: histOverridesB } = createRuntimeOverrides();
-      const scopeB = await createSubagentScope(
-        {
-          name: 'subagent-b',
-          prompt: promptConfig,
-          model: modelConfig,
-          run: runConfig,
-          toolConfig: undefined,
-          outputConfig: undefined,
-        },
-        ...scopeInputs(foregroundConfig, histOverridesB),
-      );
-
-      // Access runtime contexts
-      const contextA = (
-        scopeA as unknown as { runtimeContext: AgentRuntimeContext }
-      ).runtimeContext;
-      const contextB = (
-        scopeB as unknown as { runtimeContext: AgentRuntimeContext }
-      ).runtimeContext;
-
-      // Verify histories are isolated (mutations don't cross boundaries)
-      // Note: This test structure assumes HistoryService has methods we can verify
-      // The actual implementation will depend on HistoryService interface
-      expect(contextA.history).not.toBe(contextB.history);
-    });
-  });
-
-  /**
-   * @plan PLAN-20251028-STATELESS6.P07
-   * @requirement REQ-STAT6-001.1
-   * @pseudocode agent-runtime-context.md lines 92-98
-   *
-   * Test: SubAgentScope constructs isolated runtime state
-   * This test SHOULD FAIL because current implementation mutates Config instead
-   */
-  describe('Runtime State Construction', () => {
-    it('should construct isolated runtime context with subagent model', async () => {
-      // @plan PLAN-20251028-STATELESS6.P07
-      // @requirement REQ-STAT6-001.1
-
-      foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-
-      const promptConfig = createTestPromptConfig();
-      const modelConfig = createTestModelConfig(
-        'gemini-2.0-flash-thinking-exp',
-      );
-      const runConfig = createTestRunConfig();
-
-      const { overrides } = createRuntimeOverrides({
-        runtimeBundle: createStatelessRuntimeBundle({
-          model: modelConfig.model,
-        }),
-      });
-
-      const scope = await createSubagentScope(
-        {
-          name: 'test-subagent',
-          prompt: promptConfig,
-          model: modelConfig,
-          run: runConfig,
-          toolConfig: undefined,
-          outputConfig: undefined,
-        },
-        ...scopeInputs(foregroundConfig, overrides),
-      );
-
-      // Access runtime context (will fail with current Config-based implementation)
-      const runtimeContext = (
-        scope as unknown as { runtimeContext: AgentRuntimeContext }
-      ).runtimeContext;
-
-      // Runtime context should have subagent model, NOT foreground model
-      expect(runtimeContext.state.model).toBe('gemini-2.0-flash-thinking-exp');
-
-      // Foreground config should be unchanged
-      expect(foregroundConfig.getModel()).toBe('gemini-2.0-flash-exp');
-    });
-
-    it('should build runtime context directly without mutating foreground config', async () => {
-      // @plan PLAN-20251028-STATELESS6.P07
-      // @requirement REQ-STAT6-001.1
-
-      foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
-      const originalModel = foregroundConfig.getModel();
-
-      // Create spy to detect any config access during runtime context creation
-      const setModelSpy = vi.spyOn(foregroundConfig, 'setModel');
-
-      const promptConfig = createTestPromptConfig();
-      const modelConfig = createTestModelConfig(
-        'gemini-2.0-flash-thinking-exp',
-      );
-      const runConfig = createTestRunConfig();
-
-      const { overrides: runtimeOverrides } = createRuntimeOverrides({
-        runtimeBundle: createStatelessRuntimeBundle({
-          model: modelConfig.model,
-        }),
-      });
-
-      const scope = await createSubagentScope(
-        {
-          name: 'test-subagent',
-          prompt: promptConfig,
-          model: modelConfig,
-          run: runConfig,
-          toolConfig: undefined,
-          outputConfig: undefined,
-        },
-        ...scopeInputs(foregroundConfig, runtimeOverrides),
-      );
-
-      // Access runtime context
-      const runtimeContext = (
-        scope as unknown as { runtimeContext: AgentRuntimeContext }
-      ).runtimeContext;
-
-      // Verify runtime context was built directly (not via Config mutation)
-      expect(setModelSpy).not.toHaveBeenCalled();
-      expect(foregroundConfig.getModel()).toBe(originalModel);
-      expect(runtimeContext.state.model).toBe('gemini-2.0-flash-thinking-exp');
-    });
-  });
-
-  /**
-   * @plan PLAN-20251028-STATELESS6.P07
    * @requirement REQ-STAT6-003.1
    *
    * Regression guard: Throw if legacy setModel path is invoked
@@ -851,6 +561,260 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
           ...scopeInputs(foregroundConfig, overrides),
         ),
       ).resolves.toBeInstanceOf(SubAgentScope);
+    });
+  });
+  describe('behavior through ChildAgentScope execution', () => {
+    interface RecordedRun {
+      readonly scope: Awaited<ReturnType<typeof createSubagentScope>>;
+      readonly history: HistoryService;
+      readonly requests: RuntimeGenerateChatOptions[];
+      readonly runtimeContext: AgentRuntimeContext;
+      readonly run: () => Promise<void>;
+    }
+
+    const WORKSPACE_PATHS = {
+      resolve: (filePath: string) => filePath,
+      directories: () => [],
+      contains: () => true,
+      validate: () => null,
+    };
+
+    function systemInstructionOf(request: RuntimeGenerateChatOptions): string {
+      const instruction = request.systemInstruction;
+      if (typeof instruction !== 'string')
+        throw new Error('Expected a string system instruction');
+      return instruction;
+    }
+
+    async function createRecordedRun(options: {
+      readonly name: string;
+      readonly foreground: Config;
+      readonly provider: string;
+      readonly runtimeModel: string;
+      readonly sessionId: string;
+      readonly reply: string;
+      readonly prompt: string;
+      readonly environmentText: string;
+      readonly generationParameters?: { temperature: number; topP: number };
+    }): Promise<RecordedRun> {
+      const requests: RuntimeGenerateChatOptions[] = [];
+      const providerAdapter: AgentRuntimeProviderAdapter = {
+        getActiveProvider: () =>
+          ({
+            name: options.provider,
+            getDefaultModel: () => options.runtimeModel,
+            getModels: async () => [],
+            generateChatCompletion(request: RuntimeGenerateChatOptions) {
+              requests.push(request);
+              return (async function* () {
+                yield {
+                  speaker: 'ai' as const,
+                  blocks: [{ type: 'text' as const, text: options.reply }],
+                };
+              })();
+            },
+          }) as unknown as IProvider,
+        setActiveProvider: vi.fn(),
+        getProviderKeys: () => {
+          throw new Error('Test provider adapter has no key storage');
+        },
+      };
+      const history = new HistoryService();
+      const fixture = createRunnableRuntimeBundle({ history, providerAdapter });
+      const runtimeContext: AgentRuntimeContext = Object.freeze({
+        ...fixture.runtimeContext,
+        state: Object.freeze({
+          ...fixture.runtimeContext.state,
+          provider: options.provider,
+          model: options.runtimeModel,
+          sessionId: options.sessionId,
+        }),
+      });
+      const runtimeBundle: AgentRuntimeLoaderResult = {
+        ...fixture,
+        runtimeContext,
+      };
+      const [runtime, operations] = scopeInputs(options.foreground, {
+        instructions: emptyInstructionReads,
+        workspacePaths: WORKSPACE_PATHS,
+        readMcpInstructions: () => undefined,
+        runtimeBundle,
+        environmentContextLoader: async () => [
+          { text: options.environmentText },
+        ],
+        admitModelParameters: () => ({
+          providerName: options.provider,
+          modelParams: options.generationParameters ?? {},
+        }),
+      });
+      const scope = await createSubagentScope(
+        {
+          name: options.name,
+          prompt: createTestPromptConfig(),
+          model: createTestModelConfig(options.runtimeModel),
+          run: createTestRunConfig(),
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        runtime,
+        operations,
+      );
+      const context = new ContextState();
+      context.set('task_behaviour_prompts', [options.prompt]);
+      return {
+        scope,
+        history,
+        requests,
+        runtimeContext,
+        run: () => scope.runNonInteractive(context),
+      };
+    }
+
+    function textOf(content: { blocks: readonly unknown[] }): string {
+      return content.blocks
+        .map((block) => (block as { text?: string }).text ?? '')
+        .join('');
+    }
+
+    function historyTexts(history: HistoryService): string[] {
+      return history.getAll().map((entry) => textOf(entry));
+    }
+
+    it('uses the supplied runtime model at the content-generation boundary', async () => {
+      foregroundConfig = createTestConfig({ model: 'foreground-model' });
+      const setModelSpy = vi.spyOn(foregroundConfig, 'setModel');
+
+      const recorded = await createRecordedRun({
+        name: 'model-subagent',
+        foreground: foregroundConfig,
+        provider: 'recording-provider',
+        runtimeModel: 'subagent-runtime-model',
+        sessionId: 'model-session',
+        reply: 'MODEL-REPLY',
+        prompt: 'MODEL-PROMPT',
+        environmentText: 'MODEL-ENV',
+      });
+      await recorded.run();
+
+      expect(recorded.requests).toHaveLength(1);
+      expect(systemInstructionOf(recorded.requests[0])).toContain(
+        'with subagent-runtime-model via recording-provider',
+      );
+      expect(systemInstructionOf(recorded.requests[0])).not.toContain(
+        'foreground-model',
+      );
+      const reply = recorded.history
+        .getAll()
+        .find((entry) => entry.speaker === 'ai');
+      expect(reply?.metadata?.model).toBe('subagent-runtime-model');
+      expect(foregroundConfig.getModel()).toBe('foreground-model');
+      expect(setModelSpy).not.toHaveBeenCalled();
+    });
+
+    it('sends the supplied runtime state, not the foreground config, to the provider', async () => {
+      foregroundConfig = createTestConfig({
+        model: 'foreground-model',
+        provider: 'foreground-provider',
+      });
+      const setModelSpy = vi.spyOn(foregroundConfig, 'setModel');
+      const setProviderSpy = vi.spyOn(foregroundConfig, 'setProvider');
+
+      const recorded = await createRecordedRun({
+        name: 'state-subagent',
+        foreground: foregroundConfig,
+        provider: 'runtime-provider',
+        runtimeModel: 'runtime-model',
+        sessionId: 'runtime-state-session',
+        reply: 'STATE-REPLY',
+        prompt: 'STATE-PROMPT',
+        environmentText: 'STATE-ENV-FROM-LOADER',
+        generationParameters: { temperature: 0.31, topP: 0.41 },
+      });
+      await recorded.run();
+
+      expect(recorded.requests).toHaveLength(1);
+      const [request] = recorded.requests;
+      expect(request.metadata?.__logicalRequestId).toMatch(
+        /^runtime-state-session#state-subagent-/,
+      );
+      expect(request.modelParameters?.providerName).toBe('runtime-provider');
+      expect(request.modelParameters?.modelParams).toStrictEqual({
+        temperature: 0.31,
+        topP: 0.41,
+      });
+      expect(
+        systemInstructionOf(request).startsWith('STATE-ENV-FROM-LOADER'),
+      ).toBe(true);
+      expect(systemInstructionOf(request)).toContain(
+        'with runtime-model via runtime-provider',
+      );
+      expect(systemInstructionOf(request)).not.toContain('foreground-');
+      expect(historyTexts(recorded.history)).toContain('STATE-PROMPT');
+      expect(setModelSpy).not.toHaveBeenCalled();
+      expect(setProviderSpy).not.toHaveBeenCalled();
+      expect(foregroundConfig.getModel()).toBe('foreground-model');
+      expect(foregroundConfig.getProvider()).toBe('foreground-provider');
+    });
+
+    it('writes each run only to its own supplied history while a second scope is live', async () => {
+      foregroundConfig = createTestConfig({ model: 'foreground-model' });
+
+      const first = await createRecordedRun({
+        name: 'subagent-a',
+        foreground: foregroundConfig,
+        provider: 'recording-provider',
+        runtimeModel: 'model-a',
+        sessionId: 'session-a',
+        reply: 'REPLY-FROM-A',
+        prompt: 'PROMPT-FOR-A',
+        environmentText: 'ENV-A',
+      });
+      const second = await createRecordedRun({
+        name: 'subagent-b',
+        foreground: foregroundConfig,
+        provider: 'recording-provider',
+        runtimeModel: 'model-b',
+        sessionId: 'session-b',
+        reply: 'REPLY-FROM-B',
+        prompt: 'PROMPT-FOR-B',
+        environmentText: 'ENV-B',
+      });
+      expect(first.history).not.toBe(second.history);
+
+      await first.run();
+      const afterFirst = historyTexts(first.history);
+      expect(afterFirst).toStrictEqual(['PROMPT-FOR-A', 'REPLY-FROM-A']);
+      expect(historyTexts(second.history)).toStrictEqual([]);
+
+      await second.run();
+      expect(historyTexts(second.history)).toStrictEqual([
+        'PROMPT-FOR-B',
+        'REPLY-FROM-B',
+      ]);
+      expect(historyTexts(first.history)).toStrictEqual(afterFirst);
+    });
+
+    it('leaves the supplied runtime context and state frozen and unchanged after a run', async () => {
+      foregroundConfig = createTestConfig({ model: 'foreground-model' });
+      const recorded = await createRecordedRun({
+        name: 'frozen-subagent',
+        foreground: foregroundConfig,
+        provider: 'recording-provider',
+        runtimeModel: 'frozen-model',
+        sessionId: 'frozen-session',
+        reply: 'FROZEN-REPLY',
+        prompt: 'FROZEN-PROMPT',
+        environmentText: 'FROZEN-ENV',
+      });
+      const stateBefore = { ...recorded.runtimeContext.state };
+
+      await recorded.run();
+
+      expect(Object.isFrozen(recorded.runtimeContext)).toBe(true);
+      expect(Object.isFrozen(recorded.runtimeContext.state)).toBe(true);
+      expect({ ...recorded.runtimeContext.state }).toStrictEqual(stateBefore);
+      expect(recorded.runtimeContext.state.model).toBe('frozen-model');
+      expect(recorded.runtimeContext.state.provider).toBe('recording-provider');
     });
   });
 });

@@ -4,6 +4,7 @@ import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/in
 import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { createTestChildOrchestrator } from '../core/__tests__/child-launch-fixture.js';
 import { SubAgentScope } from '../core/subagent.js';
+import type { ChildAgentScope } from '../core/subagentOrchestrator.js';
 const fixturePaths = installTestWorkspacePaths({
   targetDir: process.cwd(),
   isTrusted: () => true,
@@ -162,7 +163,7 @@ describe('TaskTool', () => {
 
   it('passes the exact runtime MessageBus into injected orchestrator factories', async () => {
     let receivedMessageBus: MessageBus | undefined;
-    let scope: SubAgentScope | undefined;
+    let scope: ChildAgentScope | undefined;
     const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       workspaceTrust: createSessionSettingsFixture(config).workspaceTrust,

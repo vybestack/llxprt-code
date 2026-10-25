@@ -17,6 +17,7 @@ import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/serv
 
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import { AggregateDisposeError } from '../api/disposeErrors.js';
+import type { ChildAgentScope } from './subagentOrchestrator.js';
 import { consumeInteractiveTurnOutput } from './subagent-interactive-output.js';
 
 /**
@@ -154,7 +155,9 @@ export interface SubAgentOperationPorts {
   readonly dependencies: SubAgentDependencies;
 }
 
-export class SubAgentScope {
+export type SubAgentScopeFactory = typeof SubAgentScope.create;
+
+export class SubAgentScope implements ChildAgentScope {
   output: OutputObject = {
     terminate_reason: SubagentTerminateMode.ERROR,
     emitted_vars: {},
@@ -182,7 +185,7 @@ export class SubAgentScope {
   /** @plan PLAN-20251028-STATELESS6.P08, PLAN-20260303-MESSAGEBUS.P01 */
   private constructor(
     readonly name: string,
-    readonly runtimeContext: AgentRuntimeContext,
+    private readonly runtimeContext: AgentRuntimeContext,
     private readonly modelConfig: ModelConfig,
     private readonly runConfig: RunConfig,
     private readonly promptConfig: PromptConfig,
@@ -232,7 +235,7 @@ export class SubAgentScope {
     launch: SubAgentLaunchInput,
     runtime: SubAgentRuntimeInput,
     operations: SubAgentOperationPorts,
-  ): Promise<SubAgentScope> {
+  ): Promise<ChildAgentScope> {
     const { admittedRuntime, toolsView } = runtime;
     const toolConfig =
       launch.toolConfig === undefined

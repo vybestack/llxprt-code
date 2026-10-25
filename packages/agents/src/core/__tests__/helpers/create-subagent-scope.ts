@@ -10,6 +10,7 @@ import {
   type SubAgentOperationPorts,
   type SubAgentRuntimeInput,
 } from '../../subagent.js';
+import type { ChildAgentScope } from '../../subagentOrchestrator.js';
 
 export type SubAgentLaunchTestInput = Omit<
   SubAgentLaunchInput,
@@ -20,7 +21,7 @@ export function createSubagentScope(
   launch: SubAgentLaunchTestInput,
   runtime: SubAgentRuntimeInput,
   operations: SubAgentOperationPorts,
-): Promise<SubAgentScope> {
+): Promise<ChildAgentScope> {
   return SubAgentScope.create(
     { parentSignal: undefined, ...launch },
     runtime,

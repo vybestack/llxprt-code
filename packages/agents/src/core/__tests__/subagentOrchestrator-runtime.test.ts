@@ -43,13 +43,11 @@ import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js
 
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import {
-  SubAgentScope,
-  type SubAgentScope as SubAgentScopeInstance,
-} from '../subagent.js';
+import { SubAgentScope, type SubAgentScopeFactory } from '../subagent.js';
 
 import {
   createRuntimeBundle,
+  fakeChildScope,
   fixtureToolSelection,
   makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
@@ -91,17 +89,14 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const runtimeBundle = createRuntimeBundle('plan');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       output: {
         emitted_vars: {},
         terminate_reason: SubagentTerminateMode.GOAL,
       },
       getAgentId: () => 'planner-1',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig1 = makeForegroundConfig();
     const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
@@ -156,13 +151,10 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
     const runtimeBundle = createRuntimeBundle('provider-backed');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'planner-provider-backed',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig2 = config;
     const foregroundSettings2 = createSessionSettingsFixture(foregroundConfig2);
@@ -222,7 +214,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       return loadAgentRuntime(options);
     };
     const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
+      .fn<SubAgentScopeFactory>()
       .mockRejectedValue(new Error('scope creation failed'));
 
     const foregroundConfig3 = makeForegroundConfig();
@@ -292,7 +284,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       childConfig = options.profile.config;
       return loadAgentRuntime(options);
     };
-    const scopeFactory: typeof SubAgentScope.create = async (...args) => {
+    const scopeFactory: SubAgentScopeFactory = async (...args) => {
       const { messageBus } = args[2];
       expect(
         await messageBus.requestConfirmation({ name: 'write_file' }, {}),
@@ -369,13 +361,10 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const runtimeBundle = createRuntimeBundle('plan');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'planner-2',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig5 = makeForegroundConfig();
     const foregroundSettings5 = createSessionSettingsFixture(foregroundConfig5);
@@ -423,13 +412,10 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const runtimeBundle = createRuntimeBundle('plan-overlap');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'planner-overlap',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig6 = makeForegroundConfig();
     const foregroundSettings6 = createSessionSettingsFixture(foregroundConfig6);
@@ -486,13 +472,10 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const runtimeBundle = createRuntimeBundle('qwen');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'qwencoder-1',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig7 = makeForegroundConfig();
     const foregroundSettings7 = createSessionSettingsFixture(foregroundConfig7);
@@ -556,12 +539,11 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       const loadProfile = vi.fn().mockResolvedValue(vertexProfile);
       const runtimeBundle = createRuntimeBundle('vertex');
       const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-      const scope = {
-        runtimeContext: runtimeBundle.runtimeContext,
+      const scope = fakeChildScope({
         getAgentId: () => 'vertex-helper-1',
-      } as unknown as SubAgentScopeInstance;
+      });
       const scopeFactory = vi
-        .fn<typeof SubAgentScope.create>()
+        .fn<SubAgentScopeFactory>()
         .mockResolvedValue(scope);
 
       const foregroundConfig8 = makeForegroundConfig();
@@ -638,13 +620,10 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const runtimeBundle = createRuntimeBundle('qwen');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'qwencoder-1',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig9 = makeForegroundConfig();
     const foregroundSettings9 = createSessionSettingsFixture(foregroundConfig9);
@@ -699,13 +678,10 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const runtimeBundle = createRuntimeBundle('kimi');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'kimicoder-1',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig10 = makeForegroundConfig();
     const foregroundSettings10 =
@@ -761,13 +737,10 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const runtimeBundle = createRuntimeBundle('key-name');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'codeanalyzer-1',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig11 = makeForegroundConfig();
     const foregroundSettings11 =
@@ -819,17 +792,13 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
     let sequence = 0;
     const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
+      .fn<SubAgentScopeFactory>()
       .mockImplementation(async () => {
         sequence += 1;
-        return {
+        return fakeChildScope({
           dispose: async () => {},
-          runtimeContext:
-            sequence === 1
-              ? firstBundle.runtimeContext
-              : secondBundle.runtimeContext,
           getAgentId: () => `planner-${sequence}`,
-        } as unknown as SubAgentScopeInstance;
+        });
       });
 
     const foregroundConfig12 = makeForegroundConfig();
@@ -905,11 +874,12 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       profileManager: { loadProfile } as unknown as ProfileManager,
       foregroundConfig: foregroundConfig13,
       toolRegistry: fixtureToolSelection(),
-      scopeFactory: vi.fn<typeof SubAgentScope.create>().mockResolvedValue({
-        dispose: async () => {},
-        runtimeContext: bundle.runtimeContext,
-        getAgentId: () => 'planner-dispose',
-      } as unknown as SubAgentScopeInstance),
+      scopeFactory: vi.fn<SubAgentScopeFactory>().mockResolvedValue(
+        fakeChildScope({
+          dispose: async () => {},
+          getAgentId: () => 'planner-dispose',
+        }),
+      ),
       runtimeLoader,
       messageBus: new MessageBus(),
     });

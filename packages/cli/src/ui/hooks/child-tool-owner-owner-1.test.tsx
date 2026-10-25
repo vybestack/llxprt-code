@@ -53,6 +53,7 @@ import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { type Agent } from '@vybestack/llxprt-code-agents';
 import { TaskTool } from '../../../../agents/src/tools/task.js';
 import { SubAgentScope } from '../../../../agents/src/core/subagent.js';
+import type { ChildAgentScope } from '../../../../agents/src/core/subagentOrchestrator.js';
 import { createTestChildOrchestrator } from '../../../../agents/src/core/__tests__/child-launch-fixture.js';
 import { createStatelessRuntimeBundle } from '../../../../agents/src/core/__tests__/subagent-test-helpers.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
@@ -374,7 +375,7 @@ describe('Mounted CLI child execution ownership', () => {
         },
       }),
     );
-    let scope: SubAgentScope | undefined;
+    let scope: ChildAgentScope | undefined;
     const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       workspaceTrust: builtCallerMcp.trust,

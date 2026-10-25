@@ -36,10 +36,11 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { SubAgentScope } from '../subagent.js';
+import type { SubAgentScopeFactory } from '../subagent.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import {
   createRuntimeBundle,
+  fakeChildScope,
   makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
 
@@ -159,13 +160,12 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
     await withIsolatedConfigHome(async () => {
       const runtimeBundle = createRuntimeBundle('dispose-success');
       const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-      const scope = {
+      const scope = fakeChildScope({
         dispose: async () => {},
-        runtimeContext: runtimeBundle.runtimeContext,
         getAgentId: () => 'planner-dispose-success',
-      } as unknown as SubAgentScope;
+      });
       const scopeFactory = vi
-        .fn<typeof SubAgentScope.create>()
+        .fn<SubAgentScopeFactory>()
         .mockResolvedValue(scope);
 
       const { orchestrator, clients } = buildOrchestrator({
@@ -205,7 +205,7 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
       const runtimeBundle = createRuntimeBundle('dispose-scope-failure');
       const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
       const scopeFactory = vi
-        .fn<typeof SubAgentScope.create>()
+        .fn<SubAgentScopeFactory>()
         .mockRejectedValue(new Error('scope creation failed'));
 
       const { orchestrator, clients } = buildOrchestrator({
@@ -236,8 +236,8 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
         .fn()
         .mockRejectedValue(new Error('runtime loader failed'));
       const scopeFactory = vi
-        .fn<typeof SubAgentScope.create>()
-        .mockResolvedValue({} as unknown as SubAgentScope);
+        .fn<SubAgentScopeFactory>()
+        .mockResolvedValue(fakeChildScope());
 
       const { orchestrator, clients } = buildOrchestrator({
         runtimeLoader,

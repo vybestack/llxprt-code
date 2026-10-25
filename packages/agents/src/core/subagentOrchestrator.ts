@@ -71,6 +71,11 @@ export interface ChildTaskRun {
   cancel(reason?: string): void;
 }
 
+export interface ChildAgentScope extends ChildTaskRun {
+  getAgentId(): string;
+  dispose(): Promise<void>;
+}
+
 export interface SubagentLaunchResult {
   agentId: string;
   scope: ChildTaskRun;
