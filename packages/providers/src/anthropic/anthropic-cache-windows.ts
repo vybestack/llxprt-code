@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { NativeFactIndexWriter } from '@vybestack/llxprt-code-core/journal/nativeFactIndex.js';
+import { ROW_BLOCK_TYPE } from '@vybestack/llxprt-code-core/journal/rowRecord.js';
 import type {
   AnthropicStreamRepair,
   LazyRepairAtom,
@@ -11,8 +12,23 @@ async function purgeWindow(
 ): Promise<boolean> {
   if (atom.repair) return false;
   const at = atom.end ?? Math.floor(atom.key / 4);
-  const header = (await engine.source.query.planAt(at)).header;
-  if (header.metadata?.semanticMediaPurgeBoundary !== undefined) return true;
+  const tail = await engine.source.query.planAt(at);
+  if (tail.header.metadata?.semanticMediaPurgeBoundary !== undefined)
+    return true;
+  let media = false;
+  for (let unit = Math.floor(atom.key / 4); unit <= at && !media; unit++) {
+    const plan = unit === at ? tail : await engine.source.query.planAt(unit);
+    media = plan.blocks.some((ref) => {
+      if (ref.kind !== 'source') return false;
+      const ids = plan.sourceIds?.(ref.at.label);
+      // A plan only exposes directories already held for its own source row.
+      return (
+        ids === undefined ||
+        ids.header.blocks[ref.at.block].type === ROW_BLOCK_TYPE.media
+      );
+    });
+  }
+  if (!media) return false;
   for await (const piece of atom.openPieces())
     if (
       typeof piece !== 'string' &&
