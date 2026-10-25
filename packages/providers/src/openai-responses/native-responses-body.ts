@@ -25,7 +25,6 @@ import type {
   ResponsesInputItem,
 } from './OpenAIResponsesTypes.js';
 import {
-  emittedPdfBytes,
   responsesUnitPairs,
   responsesUnitLength,
   responsesUnitSummary,
@@ -358,8 +357,24 @@ async function callerOwnedByteLength(
     reasoningIdTime,
     serverSideParentActive: selection.stateful.parentId !== undefined,
   };
-  let bytes = 2;
+  const settings = nativeSettings(options);
   let pdfBytes = 0;
+  for (let at = selection.skipRows; at < rows.count; at++) {
+    const row = await rows.readAt(at, options.invocation.signal);
+    const pairs = await responsesUnitPairs(row, query, selection.skipRows);
+    pdfBytes += responsesUnitLength(
+      row,
+      settings,
+      options.includeReasoningInContext,
+      pairs,
+      selection.stateful.parentId !== undefined,
+    ).pdfBytes;
+  }
+  if (pdfBytes > PDF_AGGREGATE_MAX_BYTES)
+    throw new Error(
+      `Native PDF input payload (${pdfBytes} bytes) exceeds the allowed ${PDF_AGGREGATE_MAX_BYTES} bytes (50 MB). Reduce the number or size of PDF files.`,
+    );
+  let bytes = 2;
   let items = 0;
   let counter = 0;
   const source = resolveRowsMedia(
@@ -385,13 +400,8 @@ async function callerOwnedByteLength(
       () => `rs_${reasoningIdTime}_${counter++}`,
     )) {
       bytes += jsonValueByteLength(item) + Number(items++ > 0);
-      pdfBytes += emittedPdfBytes(item);
     }
   }
-  if (pdfBytes > PDF_AGGREGATE_MAX_BYTES)
-    throw new Error(
-      `Native PDF input payload (${pdfBytes} bytes) exceeds the allowed ${PDF_AGGREGATE_MAX_BYTES} bytes (50 MB). Reduce the number or size of PDF files.`,
-    );
   return overrideByteLength(shell.request, []) - 2 + bytes;
 }
 
