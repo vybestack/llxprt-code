@@ -165,7 +165,9 @@ export class TranscriptTreeWriter {
     const bytes = this.committedCache?.get(ref);
     if (bytes !== undefined) return decodeTranscriptNode(bytes, this.mode);
     await this.appender.drain();
-    return readTranscriptNode(this.access(), ref, this.mode);
+    const node = await readTranscriptNode(this.access(), ref, this.mode);
+    this.cache.put(ref, encodeTranscriptNode(node));
+    return node;
   }
 
   private async write(node: TranscriptNode): Promise<TranscriptChild> {

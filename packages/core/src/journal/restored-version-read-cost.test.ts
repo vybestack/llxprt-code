@@ -11,6 +11,12 @@ import {
   type NeutralRowFactRegistration,
 } from './neutralRowFacts.js';
 import { readNeutralRowFact } from './neutral-row-fact-storage.js';
+import {
+  decodeTranscriptHead,
+  TRANSCRIPT_HEAD_KEY,
+} from './transcript-head.js';
+import { transcriptEntries } from './transcript-tree.js';
+import { MUTATION } from './recordKinds.js';
 
 describe('stored version restoration', () => {
   const directory = useTempDir('restored-version-cost-');
@@ -199,10 +205,41 @@ describe('stored version restoration', () => {
           `RESTORED_VERSION_COST ${JSON.stringify({ size, reads })}\n`,
         );
         expect(reads).toBeLessThanOrEqual(32);
-        expect(store.published?.roots).toStrictEqual({
+        const restored = store.published;
+        if (restored === undefined) throw new Error('Missing restored version');
+        expect(restored.roots).toStrictEqual({
           ...saved.roots,
-          stateRoot: currentStateRoot,
+          stateRoot: restored.roots.stateRoot,
         });
+        expect(store.published?.roots.stateRoot).not.toBe(currentStateRoot);
+        const head = decodeTranscriptHead(
+          await store.getState(TRANSCRIPT_HEAD_KEY),
+        );
+        expect(head.count).toBe(size + 1);
+        const read = await store.openRead();
+        try {
+          const marker = await transcriptEntries(
+            read.access,
+            head.root,
+            'transcript',
+            head.nextId - 1n,
+            true,
+          ).next();
+          expect(marker.value).toMatchObject({ rowRef: 0, audience: 2 });
+          if (marker.value === undefined)
+            throw new Error('Missing restore marker');
+          const record = await read.access.readRecordHead(
+            marker.value.presentationRef,
+          );
+          let text = '';
+          for await (const chunk of read.access.readRecordBody(record))
+            text += new TextDecoder().decode(chunk);
+          expect(JSON.parse(text)).toMatchObject({
+            mutation: MUTATION.restore,
+          });
+        } finally {
+          await read.close();
+        }
         expect(store.published?.aggregate).toStrictEqual(saved.aggregate);
         expect(await store.getMeta(RECENCY_INDEX_READY)).toBeUndefined();
         expect(await store.getState('title')).toStrictEqual(Uint8Array.of(7));

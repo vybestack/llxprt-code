@@ -8,6 +8,7 @@ import {
   ID_TRIE_LEAF_CAPACITY,
   ID_TRIE_MAX_DEPTH,
   compareIdHashes,
+  decodeIdTrieNode,
   encodeIdTrieNode,
   nibbleAt,
   type IdEntry,
@@ -409,12 +410,28 @@ export async function mergeIdTrie(
         throw new JournalFormatError(
           'Id trie updates must have unique hashes in ascending order',
         );
-    return mergeArrayNode(context, root, 0, updates);
+    const merged = await mergeArrayNode(context, root, 0, updates);
+    if (written !== undefined) {
+      written.selectRoot(merged);
+      retainWrittenPaths(written, merged);
+    }
+    return merged;
   }
   const source = new StreamSource(updates);
   if ((await source.peek()) === undefined) return root;
   if (root === 0) return buildNode(context, 0, source, undefined);
   return mergeNode(context, root, 0, source);
+}
+
+function retainWrittenPaths(cache: IdNodeCache, root: number, depth = 0): void {
+  if (depth >= 3) return;
+  const bytes = cache.get(root);
+  if (bytes === undefined) return;
+  const node = decodeIdTrieNode(bytes);
+  if (node.kind !== 'internal') return;
+  cache.put(root, bytes, true);
+  for (const child of node.children)
+    retainWrittenPaths(cache, child, depth + 1);
 }
 
 /**

@@ -289,6 +289,36 @@ async function treeFor(
   };
 }
 
+async function refreshContributions(
+  ctx: BuildContext,
+  plan: GroupPlan,
+  segments: readonly Segment[],
+  changes: TreeChanges,
+  collected: { facts: GroupFacts | undefined; affected: ReadonlySet<bigint> },
+  appender: RecordAppender,
+): Promise<void> {
+  if (
+    changes.replace.length === 0 &&
+    changes.insert.length === 0 &&
+    collected.affected.size === 0
+  )
+    return;
+  const facts = collected.facts;
+  const queries =
+    facts?.ids.queries ??
+    (await startFacts(ctx.access, plan.base.roots, ctx, mapReader(ctx, 'meta')))
+      .ids.queries;
+  await updateContributions(
+    ctx,
+    plan,
+    segments,
+    collected.affected,
+    changes,
+    queries,
+    facts === undefined ? undefined : { facts, appender },
+  );
+}
+
 /**
  * A group whose rows are a path copy of its base (design 4.6): entries of
  * the base replaced in place (an owner change, a fill, a purge that keeps its
@@ -313,21 +343,7 @@ export async function buildIncremental(
   if (collected === undefined) return undefined;
   const chainBase = await ctx.chainFor(plan.parent);
   const changes = await writeChanges(appender, segments);
-  const queries =
-    collected.facts?.ids.queries ??
-    (await startFacts(ctx.access, plan.base.roots, ctx, mapReader(ctx, 'meta')))
-      .ids.queries;
-  await updateContributions(
-    ctx,
-    plan,
-    segments,
-    collected.affected,
-    changes,
-    queries,
-    collected.facts === undefined
-      ? undefined
-      : { facts: collected.facts, appender },
-  );
+  await refreshContributions(ctx, plan, segments, changes, collected, appender);
   const tree = await updateKimiPrefixes(
     ctx,
     plan,
