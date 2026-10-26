@@ -66,8 +66,8 @@ export function ensureSegments(plan: GroupPlan): Segment[] {
     // Rows of another version follow the base, so the tree is not a path copy of the base.
     plan.rebuilt = true;
   }
-  for (const { label, draft } of plan.newRows) {
-    segments.push({ kind: 'fresh', label, draft, role: 'append' });
+  for (const { label, draft, admitted } of plan.newRows) {
+    segments.push({ kind: 'fresh', label, draft, admitted, role: 'append' });
   }
   plan.segments = segments;
   plan.range = undefined;
@@ -315,7 +315,7 @@ export async function insertSegment(
   ctx: PlanContext,
   plan: GroupPlan,
   afterLabel: bigint,
-  make: (label: bigint) => FreshSegment,
+  make: (label: bigint) => FreshSegment | Promise<FreshSegment>,
 ): Promise<void> {
   const segments = ensureSegments(plan);
   rejectAfterStream(segments);
@@ -331,7 +331,7 @@ export async function insertSegment(
       `No label lies between ${afterLabel} and ${slot.upper}; relabelling the run is not supported`,
     );
   }
-  segments.splice(slot.at, 0, make(label));
+  segments.splice(slot.at, 0, await make(label));
 }
 
 /** What one step of trimming the sequence removed, and whether the next segment is to be looked at. */

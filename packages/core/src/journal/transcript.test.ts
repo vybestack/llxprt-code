@@ -144,6 +144,94 @@ describe('complete transcript', () => {
     ]);
   });
 
+  it('records coalesced admissions in caller order even when context inserts before them', async () => {
+    const path = join(dir(), 'admission-order.llxj');
+    const store = await JournalStore.create(path, storeDeps());
+    try {
+      await store.commit([
+        { kind: 'append', rows: [draftRow({ text: 'seed' })] },
+      ]);
+      const [label] = await labelsOf(store);
+      await store.commit([
+        { kind: 'append', rows: [draftRow({ text: 'tail-first' })] },
+        {
+          kind: 'insert',
+          afterLabel: label,
+          draft: draftRow({ text: 'middle-second' }),
+        },
+      ]);
+      expect((await page(path)).rows).toStrictEqual([
+        'seed',
+        'tail-first',
+        'middle-second',
+      ]);
+      expect((await page(path)).counts).toStrictEqual([1, 1, 1]);
+    } finally {
+      await store.close();
+    }
+  });
+
+  it('records replacement arrays in caller order rather than context label order', async () => {
+    const path = join(dir(), 'replacement-order.llxj');
+    const store = await JournalStore.create(path, storeDeps());
+    try {
+      await store.commit([
+        {
+          kind: 'append',
+          rows: ['first', 'second'].map((text) => draftRow({ text })),
+        },
+      ]);
+      const labels = await labelsOf(store);
+      await store.commit([
+        {
+          kind: 'density',
+          removed: [],
+          replacements: [
+            {
+              label: labels[1],
+              draft: draftRow({ text: 'second-replacement' }),
+            },
+            {
+              label: labels[0],
+              draft: draftRow({ text: 'first-replacement' }),
+            },
+          ],
+        },
+      ]);
+      expect((await page(path)).rows).toStrictEqual([
+        'first',
+        'second',
+        'second-replacement',
+        'first-replacement',
+      ]);
+      expect((await page(path)).counts).toStrictEqual([0, 0, 1, 1]);
+    } finally {
+      await store.close();
+    }
+  });
+
+  it('records a pending admission removed before its group publishes context', async () => {
+    const path = join(dir(), 'dropped-admission.llxj');
+    const store = await JournalStore.create(path, storeDeps());
+    try {
+      await store.commit([
+        { kind: 'append', rows: [draftRow({ text: 'seed' })] },
+      ]);
+      const cutLabel = store.published?.nextLabel;
+      if (cutLabel === undefined) throw new Error('Missing admission label');
+      await store.commit([
+        { kind: 'append', rows: [draftRow({ text: 'dropped' })] },
+        { kind: 'pop', cutLabel, expectedRemoved: 1 },
+        { kind: 'append', rows: [draftRow({ text: 'kept' })] },
+      ]);
+      const transcript = await page(path);
+      expect(transcript.rows).toStrictEqual(['seed', 'dropped', 'kept']);
+      expect(transcript.counts.slice(0, 3)).toStrictEqual([1, 0, 1]);
+    } finally {
+      await store.close();
+    }
+  });
+
   it('resumes at the newest page with bounded positional reads', async () => {
     const path = join(dir(), 'resume.llxj');
     const store = await JournalStore.create(path, storeDeps());

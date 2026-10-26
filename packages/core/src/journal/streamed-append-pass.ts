@@ -27,7 +27,11 @@ import {
 } from './kimiFactCodec.js';
 
 export type AppendInput =
-  | { readonly draft: RowDraft; readonly label?: bigint }
+  | {
+      readonly draft: RowDraft;
+      readonly label?: bigint;
+      readonly admitted?: RowEntry;
+    }
   | { readonly foreign: SourceRow }
   | { readonly existing: SourceRow };
 
@@ -122,11 +126,14 @@ export class StreamedAppendPass {
         const encoded = encodeRowDraft(label, input.draft);
         await this.observe(input.draft.ids.map((id) => id.rawId));
         await applyDraftRow(this.facts, this.ctx, label, input.draft);
-        const offset = await this.appender.append(encoded.record);
+        const offset =
+          input.admitted?.recordOffset ??
+          (await this.appender.append(encoded.record));
         entry = entryForNewRow(
           encoded,
           offset,
-          this.appender.transcriptIdentity?.(offset),
+          input.admitted?.transcriptId ??
+            this.appender.transcriptIdentity?.(offset),
         );
       } else {
         const row = 'foreign' in input ? input.foreign : input.existing;

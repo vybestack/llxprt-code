@@ -14,7 +14,7 @@ import { mutationOf, planGroup } from './groupPlan.js';
 import type { GroupPlan, PlanContext } from './groupPlanTypes.js';
 import type { ReadGroup } from './idFactBatch.js';
 import type { NativeFactIndexRegistration } from './nativeFactIndex.js';
-import type { RowDraft } from './rowDraft.js';
+import { encodeRowDraft, entryForNewRow, type RowDraft } from './rowDraft.js';
 import type { RecordAccess } from './recordAccess.js';
 import type { MapKind } from './keyedMap.js';
 import { buildStreamedAppend } from './streamed-append-build.js';
@@ -123,7 +123,21 @@ class PreparedBuilder {
     this.start(actual);
     try {
       const facts = await this.register(actual);
-      const plan = await planGroup(this.planning, actual);
+      const plan = await planGroup(
+        {
+          ...this.planning,
+          admitRow: async (label, draft) => {
+            const encoded = encodeRowDraft(label, draft);
+            const offset = await this.rowAppender.append(encoded.record);
+            return entryForNewRow(
+              encoded,
+              offset,
+              this.rowAppender.transcriptIdentity?.(offset),
+            );
+          },
+        },
+        actual,
+      );
       this.result = {
         plan,
         facts,

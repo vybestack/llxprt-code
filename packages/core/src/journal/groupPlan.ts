@@ -56,14 +56,23 @@ function startNewLineage(plan: GroupPlan): void {
   plan.bookkeepingMetaRoot = undefined;
 }
 
-function applyAppend(plan: GroupPlan, rows: readonly RowDraft[]): void {
+async function applyAppend(
+  ctx: PlanContext,
+  plan: GroupPlan,
+  rows: readonly RowDraft[],
+): Promise<void> {
   const { labels, nextLabel } = allocateAppendLabels(
     plan.nextLabel,
     rows.length,
   );
-  rows.forEach((draft, index) =>
-    plan.newRows.push({ label: labels[index], draft }),
-  );
+  for (const [index, draft] of rows.entries()) {
+    const label = labels[index];
+    plan.newRows.push({
+      label,
+      draft,
+      admitted: await ctx.admitRow?.(label, draft),
+    });
+  }
   plan.nextLabel = nextLabel;
 }
 
@@ -261,8 +270,8 @@ async function applyEdit(
       plan.rebuilt = true;
       break;
     case 'append':
-      if (plan.segments === undefined) applyAppend(plan, edit.rows);
-      else appendSegments(plan, edit.rows);
+      if (plan.segments === undefined) await applyAppend(ctx, plan, edit.rows);
+      else await appendSegments(ctx, plan, edit.rows);
       break;
     case 'pop':
       if (plan.segments === undefined) {

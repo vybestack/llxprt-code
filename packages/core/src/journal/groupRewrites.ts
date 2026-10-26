@@ -95,24 +95,27 @@ function requireRows(count: number, what: string): void {
 }
 
 /** The plan after an edit that adds the rows of `drafts` at the end, with labels from `nextLabel`. */
-export function appendSegments(
+export async function appendSegments(
+  ctx: PlanContext,
   plan: GroupPlan,
   rows: readonly RowDraft[],
-): void {
+): Promise<void> {
   const segments = ensureSegments(plan);
   rejectAfterStream(segments);
   const { labels, nextLabel } = allocateAppendLabels(
     plan.nextLabel,
     rows.length,
   );
-  rows.forEach((draft, index) =>
+  for (const [index, draft] of rows.entries()) {
+    const label = labels[index];
     segments.push({
       kind: 'fresh',
-      label: labels[index],
+      label,
       draft,
       role: 'append',
-    }),
-  );
+      admitted: await ctx.admitRow?.(label, draft),
+    });
+  }
   plan.nextLabel = nextLabel;
 }
 
@@ -251,14 +254,46 @@ function rewriteTransform(
   return async (ref) => {
     if (!('entry' in ref)) {
       const draft = withOwner(inheriting, ref.fresh.draft.owner);
-      return { ...ref.fresh, draft };
+      return {
+        ...ref.fresh,
+        draft,
+        admitted: undefined,
+      };
     }
     const draft = withOwner(inheriting, ref.entry.owner);
     const kept =
       role === 'purge' && (await keepsIndexFacts(ctx, ref.entry, draft));
     const chosen: FreshRole = kept ? 'purge' : 'replacement';
-    return { kind: 'fresh', label, draft, role: chosen, replaces: ref.entry };
+    return {
+      kind: 'fresh',
+      label,
+      draft,
+      role: chosen,
+      replaces: ref.entry,
+    };
   };
+}
+
+async function admitReplacements(
+  ctx: PlanContext,
+  plan: GroupPlan,
+  rows: readonly LabeledDraft[],
+): Promise<void> {
+  if (ctx.admitRow === undefined) return;
+  const segments = ensureSegments(plan);
+  const positions = new Map<bigint, number>();
+  for (const [index, segment] of segments.entries())
+    if (segment.kind === 'fresh') positions.set(segment.label, index);
+  for (const { label } of rows) {
+    const index = positions.get(label);
+    const segment = index === undefined ? undefined : segments[index];
+    if (index === undefined || segment?.kind !== 'fresh')
+      throw new JournalFormatError(`Replacement ${label} has no fresh segment`);
+    segments[index] = {
+      ...segment,
+      admitted: await ctx.admitRow(label, segment.draft),
+    };
+  }
 }
 
 async function applyPurge(
@@ -279,6 +314,7 @@ async function applyPurge(
       ]),
     ),
   );
+  await admitReplacements(ctx, plan, rows);
 }
 
 async function applyDensity(
@@ -302,6 +338,7 @@ async function applyDensity(
     ]),
   ]);
   await transformRows(ctx, plan, transforms);
+  await admitReplacements(ctx, plan, replacements);
 }
 
 async function applyInsert(
@@ -316,11 +353,12 @@ async function applyInsert(
       ? await ownerAt(ctx, plan, afterLabel)
       : 0;
   const draft = withOwner(inheriting, anchorOwner);
-  await insertSegment(ctx, plan, afterLabel, (label) => ({
+  await insertSegment(ctx, plan, afterLabel, async (label) => ({
     kind: 'fresh',
     label,
     draft,
     role: 'insert',
+    admitted: await ctx.admitRow?.(label, draft),
   }));
 }
 
@@ -354,6 +392,7 @@ async function applyCompress(
     label,
     draft: edit.summary,
     role: 'summary',
+    admitted: await ctx.admitRow?.(label, edit.summary),
   };
   segments.unshift(summary);
   plan.args = { cut: edit.retainFromLabel, removed: replaced };

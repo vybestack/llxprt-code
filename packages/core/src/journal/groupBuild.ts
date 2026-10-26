@@ -29,7 +29,8 @@ export async function buildGroup(
     const inputs = (async function* (): AsyncGenerator<AppendInput> {
       for await (const entry of rangeEntries(access, range))
         yield { existing: { entry, source: access } };
-      for (const { label, draft } of plan.newRows) yield { label, draft };
+      for (const { label, draft, admitted } of plan.newRows)
+        yield { label, draft, admitted };
     })();
     const built = await buildStreamedAppend(
       ctx,
@@ -57,10 +58,11 @@ export async function buildGroup(
       ? []
       : [{ kind: 'existing', ...plan.range } satisfies Segment]),
   ];
-  const fresh: Segment[] = plan.newRows.map(({ label, draft }) => ({
+  const fresh: Segment[] = plan.newRows.map(({ label, draft, admitted }) => ({
     kind: 'fresh',
     label,
     draft,
+    admitted,
     role: 'append',
   }));
   return buildFromSegments(ctx, plan, [...kept, ...fresh], mutation, appender);

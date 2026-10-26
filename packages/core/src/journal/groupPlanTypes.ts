@@ -17,6 +17,7 @@ export interface ExistingRange {
 export interface NewRow {
   readonly label: bigint;
   readonly draft: RowDraft;
+  readonly admitted?: RowEntry;
 }
 
 /** The two trailer arguments of a pop or a compression: the cut label and how many rows it took. */
@@ -52,6 +53,7 @@ export interface EntrySegment {
 
 /** A row whose record is written in this group. */
 export interface FreshSegment {
+  readonly admitted?: RowEntry;
   readonly kind: 'fresh';
   readonly label: bigint;
   readonly draft: RowDraft;
@@ -126,6 +128,7 @@ export interface GroupPlan {
 }
 
 export interface PlanContext {
+  readonly admitRow?: (label: bigint, draft: RowDraft) => Promise<RowEntry>;
   /** Undefined until the first group commits. */
   readonly access: RecordAccess | undefined;
   readonly published: Version | undefined;

@@ -58,15 +58,13 @@ export async function writeFresh(
   segment: FreshSegment,
   encoded: EncodedRow,
 ): Promise<RowEntry> {
-  const offset = await appender.append(encoded.record);
+  const offset =
+    segment.admitted?.recordOffset ?? (await appender.append(encoded.record));
+  const identity =
+    segment.admitted?.transcriptId ?? appender.transcriptIdentity?.(offset);
   return segment.replaces === undefined
-    ? entryForNewRow(encoded, offset, appender.transcriptIdentity?.(offset))
-    : entryForRewrittenRow(
-        encoded,
-        offset,
-        segment.replaces,
-        appender.transcriptIdentity?.(offset),
-      );
+    ? entryForNewRow(encoded, offset, identity)
+    : entryForRewrittenRow(encoded, offset, segment.replaces, identity);
 }
 
 /**
