@@ -649,7 +649,9 @@ async function handleSandboxHop(
   settings: LoadedSettings,
   argv: ParsedCliArgs,
   workspaceRoot: string,
-  preflight: AgentProfilePreflight,
+  prepareSandboxPreflight: Parameters<
+    typeof maybeHopIntoSandbox
+  >[0]['prepareSandboxPreflight'],
   authFailed: boolean,
   readStdinOnce: () => Promise<string>,
   hasPipedInput: boolean,
@@ -662,7 +664,7 @@ async function handleSandboxHop(
     settings,
     argv,
     workspaceRoot,
-    prepareSandboxPreflight: () => preflight.forkSandboxPreflight(),
+    prepareSandboxPreflight,
     initialAuthFailed: authFailed,
     readStdin: readStdinOnce,
     hasPipedInput,
@@ -770,7 +772,7 @@ export async function main() {
       settings,
       argv,
       workspaceRoot,
-      preflight,
+      () => preflight.forkSandboxPreflight(),
       providerActivation.authFailed,
       readStdinOnce,
       hasPipedInput,
