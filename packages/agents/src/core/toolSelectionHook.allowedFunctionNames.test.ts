@@ -67,9 +67,9 @@ function createTools(): ToolDeclaration[] {
 }
 
 /**
- * Real `_applyToolSelectionHook` on a prototype-only processor stub. The
- * runtime field is the one the processor reads its model from: the direct
- * processor's ports, or the other two processors' runtime context.
+ * Real `_applyToolSelectionHook` on a prototype-only processor stub. Every
+ * processor reads its model from its own runtime port, so the stub injects the
+ * one member the hook path touches.
  */
 function makeVariant(
   name: string,
@@ -77,20 +77,18 @@ function makeVariant(
     | typeof DirectMessageProcessor
     | typeof StreamProcessor
     | typeof TurnProcessor,
-  runtimeField: 'ports' | 'runtimeContext' = 'runtimeContext',
 ): ProcessorVariant {
   return {
     name,
     applyToolSelectionHook: async (toolChoice, toolsFromConfig) => {
       const processor = Object.create(ProcessorClass.prototype) as unknown as {
         ports: { state: { model: string } };
-        runtimeContext: { state: { model: string } };
         _applyToolSelectionHook: (
           tools: ToolDeclaration[],
           owner: HookExecutionOwner,
         ) => Promise<{ tools: ToolDeclaration[] }>;
       };
-      processor[runtimeField] = { state: { model: STUB_MODEL } };
+      processor.ports = { state: { model: STUB_MODEL } };
       const firedRequest: { request?: V2ToolSelectionRequest } = {};
       const result = await processor._applyToolSelectionHook(
         toolsFromConfig,
@@ -104,7 +102,6 @@ function makeVariant(
 const directVariant = makeVariant(
   'DirectMessageProcessor',
   DirectMessageProcessor,
-  'ports',
 );
 
 const turnVariant = makeVariant('TurnProcessor', TurnProcessor);

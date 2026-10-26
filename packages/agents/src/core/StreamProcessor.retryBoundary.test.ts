@@ -138,7 +138,7 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
     });
 
     Object.assign(processor, {
-      runtimeContext: mockRuntimeContext,
+      ports: mockRuntimeContext,
       compressionHandler: mockCompressionHandler,
       conversationManager: mockConversationManager,
       historyService: mockHistoryService,
@@ -570,7 +570,7 @@ describe('StreamProcessor.makeApiCallAndProcessStream — cancellation before fi
       StreamProcessor.prototype,
     ) as StreamProcessor;
     Object.assign(processor, {
-      runtimeContext: {
+      ports: {
         ...createSessionPolicyFixture(),
         state: {
           model: 'test-model',

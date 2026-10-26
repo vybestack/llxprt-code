@@ -56,7 +56,7 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
   beforeEach(() => {
     processor = Object.create(StreamProcessor.prototype);
     Object.assign(processor, {
-      runtimeContext: {
+      ports: {
         ephemerals: { reasoning: { includeInContext: () => false } },
       },
       compressionHandler: { lastPromptTokenCount: 0 },
@@ -192,7 +192,7 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
 
   it('threads each concurrent stream immutable turn identity through media admission', async () => {
     const admittedTurnByText = new Map<string, string>();
-    Reflect.set(processor, 'runtimeContext', {
+    Reflect.set(processor, 'ports', {
       ephemerals: { reasoning: { includeInContext: () => false } },
       mediaAdmission: {
         admitContent: (

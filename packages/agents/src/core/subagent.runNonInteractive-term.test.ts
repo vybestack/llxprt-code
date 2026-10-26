@@ -22,7 +22,7 @@ import {
   type PromptConfig,
   type RunConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { ChatSessionPorts } from './chatSessionPorts.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import {
@@ -145,10 +145,10 @@ describe('subagent.ts', () => {
     (
       ChatSession as unknown as Mock<(...args: never[]) => unknown>
     ).mockImplementation(
-      (runtime: AgentRuntimeContext) =>
+      (ports: ChatSessionPorts) =>
         ({
-          getStreamTimeoutPolicy: () => runtime.readStreamTimeoutPolicy(),
-          shouldShowCitations: () => runtime.showCitations(),
+          getStreamTimeoutPolicy: () => ports.runtime.readStreamTimeoutPolicy(),
+          shouldShowCitations: () => ports.runtime.showCitations(),
           getResolvedBaseUrl: () => undefined,
           sendMessageStream: mockSendMessageStream,
           recordCompletedToolCalls: vi.fn(),
@@ -572,10 +572,10 @@ describe('subagent.ts', () => {
     (
       ChatSession as unknown as Mock<(...args: never[]) => unknown>
     ).mockImplementationOnce(
-      (runtime: AgentRuntimeContext) =>
+      (ports: ChatSessionPorts) =>
         ({
-          getStreamTimeoutPolicy: () => runtime.readStreamTimeoutPolicy(),
-          shouldShowCitations: () => runtime.showCitations(),
+          getStreamTimeoutPolicy: () => ports.runtime.readStreamTimeoutPolicy(),
+          shouldShowCitations: () => ports.runtime.showCitations(),
           getResolvedBaseUrl: () => undefined,
           sendMessageStream: mockSendMessageStream,
           recordCompletedToolCalls,
