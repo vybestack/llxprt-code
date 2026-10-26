@@ -66,3 +66,37 @@ The inline production-route probe for finding 3 reproduced duplicate aggregate l
 Additional dead declaration covered by finding 2: `packages/agents/src/api/fromConfig.ts:9-18` retains `PrepareSessionTools` and its tool-type imports after D1a removed its only consumer, `adoptPrepareSessionTools`. A repository-wide reference search finds only the declaration. Delete it with the orphaned adoption helpers.
 
 **Counts:** Critical 0; High 0; Medium 3; Low 1. **Total: 4 findings.**
+
+## Follow-up
+
+Verified the four findings only, against `7ea7848f918460465ea7c6480a007f1e00bc7ff8` and fixes in `1aa0c6ac6..HEAD`. **Resolved: 4. Not resolved: 0.** No source files were edited. The recorded limits below distinguish direct route coverage from owner-level coverage.
+
+### 1. T6.F5: resolved
+
+`ea00acb3b` deletes the factory/registration inputs from `bindCreatedSessionClient` (`packages/agents/src/api/policyComposition.ts:58-105`), the registration input from `SessionClientOwner.bindMcpRuntime` (`packages/agents/src/session/session-client-owner.ts:337`), and the task-registration transform (`:398-451`). The production-filled lower-level factory remains, including the child-assembly factory at `:425`. Updated callers no longer pass the deleted operands.
+
+`policy-client-binding-rollback.behavior.test.ts:35-133` now uses real disposed workspace memory to fail after acquisition and retains the original binding error. The policy-binding scenario no longer directly observes created-client disposal; that property is covered at the owner boundary. `session-client-binding-rollback.behavior.test.ts:299-374` holds real candidate-client cleanup, checks both errors in order, and asserts one disposal per client. `src/session/session-client-cleanup.test.ts` separately checks the cleanup helper used by the policy binding, including its held join and exact cleanup count. This is the owner-level coverage allocation specified for this follow-up, not a claim of direct observation through `createAgent`.
+
+Focused results: policy binding **1 pass**, cleanup helper **2 pass**, owner binding rollback **3 pass**, owner failure **3 pass**, owner join **2 pass**. No failures.
+
+### 2. T6.F6: resolved
+
+`765cdd5cb` deletes `adopted-definition-assembly.ts`, `cleanupFailedFromConfig`, and the unused `PrepareSessionTools` declaration/imports. A reference search over agents source finds none of the three removed declarations. The retained cleanup tests use live `cleanupFailedAdoption` or `cleanupFailedForegroundWorkspace` paths. The latter retains ordered resource release, synchronous failure handling, primary error ordering, and repeated/undefined causes without preserving removed adoption inputs.
+
+Focused results: `fromConfig-cleanup.behavior.test.ts` **3 pass**, `fromConfig-bootstrap-failure.behavior.test.ts` **2 pass**, `from-config-release-failures.behavior.test.ts` **3 pass**. No failures.
+
+### 3. T6.F7: resolved
+
+`e67d9e99d` gives transferred workspace owners an explicit handoff. `transferred-workspace-owners.ts` stops outer rollback after `handOffToMcp`; `mcpOAuthAssembly.ts` signals that handoff after `McpRuntimeOwner.create` has synchronously retained supplied runtime-owned owners. `mcp-runtime-construction.ts` retains those owners before MCP construction, so constructor failure also has a cleanup authority. Individual assembly sites retain only newly created owners, avoiding duplicate responsibility. No arbitrary error deduplication was added.
+
+The public regression at `preferred-acquisition.behavior.test.ts:228-264` transfers a real filesystem owner whose release throws, then rejects strict activation. It asserts one physical release, the activation error first, and exactly one filesystem cleanup failure. Focused result: **14 pass, 0 fail**.
+
+### 4. T6.F8: resolved, with the recorded observation limit
+
+`13faa981f` adds the post-native disposed-memory failure at `preflight-acquisition-closure.behavior.test.ts:171-218`. Production acquires the client before `bindActivationClient` subscribes to that memory (`fromConfig-session.ts:189-207,284-309`). The test retains the original error, closed preflight admission, usable borrowed settings, and exactly-once credential closure after repeated disposal.
+
+The settings-owner instance boundary at `preflight-acquisition-closure.behavior.test.ts:220-276` queues repeated disposal during native binding, observes credentials still open at that point, and checks final closure/settings survival. It does **not** distinguish removal of the preparation join in this microtask-only window. The commit records that limitation; it is not being counted as a discriminating ordering test. Production `profile-preflight.ts:797-822` explicitly joins accepted preparation before cleanup, and the existing host-held memory-refresh scenario covers an observable acquisition join. Held client-cleanup coverage remains at the owner boundary described under finding 1. Focused result: preflight closure **5 pass, 0 fail**.
+
+### Follow-up verification record
+
+Across all three follow-up reports, **236 tests passed, 0 failed, 0 skipped in 45 focused files**. Each Bun invocation ran one file from its package directory with `exec < /dev/null; bun test --timeout 180000 ./<path>` and an external 119-second process limit. Every file completed below two minutes. Per-file results and raw output are under `tmp/phase6-followup-20261025/` (`results.json`, `extra-results.json`, numbered logs). No package suite, full gate, or OCR review was run. The separate T6.F30 drift check, `bun scripts/check-affected-test-shards.ts`, passed.

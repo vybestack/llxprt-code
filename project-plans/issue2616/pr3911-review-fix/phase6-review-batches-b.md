@@ -93,3 +93,55 @@ Focused read-only verification, one file per Bun process, stdin redirected from 
 | cli `app-input-producer.behavior.test.tsx` | 2 pass, 0 fail, 3 assertions | `tmp/phase6-review-b-app-input.log` |
 
 Passing compression mapping tests do not disprove findings 3 or 8: those findings concern production/command paths that the replacement tests no longer exercise. No package suite, full gate, OCR run, source edit or plan edit was performed for this review.
+
+## Follow-up
+
+Verified these nine findings only, against `7ea7848f918460465ea7c6480a007f1e00bc7ff8`, the fix commits in `1aa0c6ac6..HEAD`, and the protocol's overriding corrections. **Resolved: 9. Not resolved: 0.** Finding 6 shares T6.F18 with batches-a finding 10, so the three reports contain 26 finding verdicts for 25 distinct fix-task identifiers.
+
+### 1. T6.F22: resolved
+
+`ff4219a70` changes `packages/providers/src/runtime/config-manager-lifecycle.behavior.test.ts:192-259` from a cached active-name read to an ownership-transfer test. A settings write changes the contributed provider's `clientRevision` while the receiving Agent lives, and a later write does not change it after disposal. T6.B128/B132 now classify the old supplied-manager survival assertion as Removed with its deleted `adoptProviderManager` proof, and name the actual transfer behavior rather than claiming borrowed lifetime coverage. Focused result: **7 pass, 0 fail**.
+
+### 2. T6.F23: resolved
+
+`d0dc9f434` fixes `packages/cli/src/cliProviderInit.ts:34-49`: profile model parameters are merged even when `--provider` selects the provider, and CLI parameters are applied afterwards. This matches `packages/cli/src/config/profileResolution.ts:77-88`, which preserves model parameters while dropping the profile's provider/model selection under an override. `cliProviderInit.profileModelParams.behavior.test.ts:53-101` parses actual provider/model arguments, invokes production `activateConfiguredProvider` on the Route B activation, and reads temperature/top-p/model from provider settings. The obsolete builder-only B138 scenario is replaced, not represented as production proof. Results: new regression **1 pass**, owner-2 **2 pass**, `cliBootstrap.providerActivation.test.ts` **9 pass**, handoff **4 pass**.
+
+### 3. T6.F24: resolved
+
+`9261f9a03` adds `packages/agents/src/api/__tests__/session-compression-missing-history.behavior.test.ts:31-117`. A real owner/client/chat, with an absent history-service read on the instance, reaches the production unavailable-chat guard and records zero compression calls. A separate `executeCompression` preparation rejection asserts zero compression, token, and recency reads. T6.B148 distinguishes the CLI mapping test from these agent-domain replacements. Results: missing-history **2 pass**, compression execution **8 pass**, CLI compression mapping **15 pass**.
+
+### 4. T6.F25: resolved by the documented non-behavioral identity decision
+
+`7ea7848f9` deletes empty-history and unset-content-config equality checks from `packages/cli/src/activation-bootstrap-handoff.test.ts` and `cliAgentBootstrap.test.ts`, and updates T6.B94/B96/B97/B100. Current production builds the activation client once into `ownedSessionClient` (`packages/agents/src/api/fromConfig-session.ts:284-309`), and foreground construction reads that field into `facadeSessionOwner` (`foreground-agent-assembly.ts:259-264`). No allowed pre-Agent operation seeds distinctive history. The records now remove the identity as non-behavioral and true by construction, rather than presenting comparisons of empty state as reuse coverage. Observable workspace, session identity, readiness, and retirement checks remain. Results: handoff **4 pass**, CLI bootstrap **9 pass**.
+
+### 5. T6.F26: resolved
+
+`b4f4c1c1f` removes the 5,000/15,000 ms recovery polls and mutating admission retry from `packages/cli/src/ui/hooks/agentStream/__tests__/useSubmitQuery.background-clear.test.tsx`. `helpers/notice-gates.ts:24-47` delegates the actual public notification subscription while exposing arrival, delivery-settled, and busy-evaluation events. Tests await those events, assert history once, and invoke session admission once (`background-clear.test.tsx:219-222`), with one event-loop turn for acknowledgment. Remaining `waitFor` calls use the original default, and the existing quiet-period delay remains unchanged. Result: **18 pass, 0 fail**, completed in 17.36 seconds.
+
+### 6. T6.F18: resolved
+
+The protocol's `Corrections after the phase 6 review` withdraw the blanket count-drop rule. Exact-count/no-call assertions require an equivalent named public/domain test or a specific deleted-input proof. Checked applications:
+
+- `633d555d1`: `adoption-binding-failure.behavior.test.ts:89` restores one owner retirement, paired with the existing retired-operation rejection (**1 pass**).
+- `3f9c9e25d`: CLI `client-tool-owner-owner-7.test.tsx:91` uses a contributed scripted provider and asserts exactly two model requests (**1 pass**).
+- `36069bda4`: `session-restore-history-failure.behavior.test.ts:86-108` checks that real-client `setHistory` is never called by restore, while retaining actual restored history (**2 pass** in the file). `compression-execution.test.ts:86` asserts one recency read per outcome (**8 pass**).
+- `f99f862c9`: `generate-empty-input.behavior.test.ts:25-52` asserts no detached client or provider request for empty input, then exactly one of each for real input (**1 pass**).
+- `86870ac10`: T6.B10 lists the residual `startChat`/`getChat` lines by scenario and cites the deleted injected `adoptAgentClient` object. I checked the production unconfigured guard in `foregroundRunLifecycle.ts:97-102` and the foreground generation guards: they reject before client work. The removed hand-made-client calls are no longer described as covered by a zero provider-request count; that count covers model effects only. Results: `agentUnconfigured.behavior.test.ts` **12 pass**, recorder control **2 pass**.
+
+These resolve the cited applications without equating an at-least-once effect with an exact count.
+
+### 7. T6.F27: resolved
+
+`cf42d4a80` adds `packages/agents/src/api/__tests__/message-bus-subscriber-disposal.behavior.test.ts:53,97,119,174`. Production-constructed scheduler/confirmation coordinator, turn execution owner, hook control, and session hook owner each return a real test-owned bus's listener count to its baseline. The existing policy-owner test supplies the policy updater. I checked the corresponding production subscription/release sites and T6.B87's replacement inventory, including its distinction between persistent owner subscriptions and host-held/per-call subscriptions. The client uses settings-model notifications rather than another persistent MessageBus subscription; its existing owner-disposal test remains in the set. Agent-level teardown effects remain in `disposal.spec.ts`. Results: new subscriber tests **4 pass**, policy owner **1 pass**, client owner disposal **2 pass**, Agent disposal **6 pass**.
+
+### 8. T6.F28: resolved
+
+`52061d4b6` adds `packages/cli/src/ui/commands/chatOwnerCommand.test.ts:211-237`. It invokes the production owner-command binding with a rejecting restore collaborator, asserts the exact error result, no UI load/clear/add-item calls, and retained live/durable history. The agent-domain restoration failure test remains responsible for the actual session rollback. T6.B148 names both targets, so failure reporting and rollback are no longer conflated. Results: command boundary **7 pass**, session restoration **2 pass**.
+
+### 9. T6.F29: resolved
+
+`eca4aa2d4` consolidates the duplicated construction in `packages/agents/src/api/__tests__/helpers/production-client-owner.ts:105-268`: Config/settings/policy/MCP/provider files/manager/OAuth/tokenizer acquisition, client-owner construction/binding, provider activation, and resource cleanup have one implementation with explicit constructor inputs. `client-owner-session.ts:62` delegates there and starts the chat; `generation-client-owner.ts:172` delegates there and retains generation-specific instance hooks, tokenizer admission, and scratch-directory cleanup. Neither adapter duplicates the provider/MCP acquisition sequence. No removed public factory seam is restored. Both adapters were exercised by this follow-up's focused tests, including owner rollback, recording identity, instructions, child settings, compression, restore, and empty-input generation; all passed.
+
+### Follow-up verification record
+
+Across all three reports, **236 tests passed, 0 failed, 0 skipped across 45 focused files**. Each ran one file per Bun process from the relevant package directory with `exec < /dev/null; bun test --timeout 180000 ./<path>`, with an external 119-second process limit. Every process finished below two minutes. Raw output and per-file counts are in `tmp/phase6-followup-20261025/` (`results.json`, `extra-results.json`, numbered logs). The T6.F30 affected-test-shards drift check also passed. No package suite, full gate, source edit, or OCR review was performed.

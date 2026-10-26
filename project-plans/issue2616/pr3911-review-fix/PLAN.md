@@ -1423,6 +1423,32 @@ Coders tick their own line in the commit that completes the task. Inventory task
   - [x] T6.F2 sandbox release probe waits for zombie-only process groups on darwin
   - [x] T6.F3 telemetry export cleanup scopes the fake replay to the scenario that uses it
   - [x] T6.F4 app input producer waits for the submitted question instead of a polling deadline
+  - [x] T6.F5 test-only client binding and task registration inputs deleted (phase 6 review)
+  - [x] T6.F6 adoption cleanup code that only tests called deleted (phase 6 review)
+  - [x] T6.F7 transferred workspace owners have one rollback authority (phase 6 review)
+  - [x] T6.F8 native-acquisition rollback and join coverage restored (phase 6 review)
+  - [x] T6.F9 media lifetime observed through real admission; scenarios 3-4 covered by the retirement unit (phase 6 review)
+  - [x] T6.F10 late foreground-acquisition cancellation restored (phase 6 review)
+  - [x] T6.F11 session-recording-identity prior-history failure restored (phase 6 review)
+  - [x] T6.F12 activation, OAuth and agent bus identity covered through bucket consent (phase 6 review)
+  - [x] T6.F13 lightweight generateContent MCP-instruction coverage restored (phase 6 review)
+  - [x] T6.F14 transferred OAuth token read through the receiving agent (phase 6 review)
+  - [x] T6.F15 profile replacement across two contributed providers (phase 6 review)
+  - [x] T6.F16 production subclasses removed from domain replacements (phase 6 review)
+  - [x] T6.F17 pre-Agent client identity ruled non-behavioral; non-discriminating covers removed (phase 6 review)
+  - [x] T6.F18 exact-count coverage restored where the withdrawn ruling dropped it (phase 6 review)
+  - [x] T6.F19 contributed OAuth registration precedes policy and manager publication (phase 6 review)
+  - [x] T6.F20 instruction-publication-drain tautology removed; settings survival covered separately (phase 6 review)
+  - [x] T6.F21 session client existence observed through a history round trip (phase 6 review)
+  - [x] T6.F22 Route B manager ownership transfer asserted (phase 6 review)
+  - [x] T6.F23 profile model params kept when --provider overrides the profile (production fix) (phase 6 review)
+  - [x] T6.F24 missing-history compression guard covered at the session owner (phase 6 review)
+  - [x] T6.F25 cli client-identity covers removed (see F17) (phase 6 review)
+  - [x] T6.F26 background-clear recovery gated on notification events (phase 6 review)
+  - [x] T6.F27 every agent message bus subscriber covered for disposal (phase 6 review)
+  - [x] T6.F28 /chat restore failure covered at the command boundary (phase 6 review)
+  - [x] T6.F29 production client-owner assembly shared between session and generation helpers (phase 6 review)
+  - [x] T6.F30 affected-test-shards import graph regenerated (phase 6 review)
 - [x] T6.D2a B2 conservation check, delete fixtures and capture helpers, E9a
 - [x] T6.D1a B2 delete unreachable adopt inputs, adoption-with-preflight route, AgentAdoptionIntent options
 - [x] T6.D1b B2 delete unset activation inputs and the borrowed-client parameter

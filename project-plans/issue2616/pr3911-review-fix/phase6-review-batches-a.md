@@ -111,3 +111,63 @@ Read-only focused verification, one file per Bun process from `packages/core` wi
 - `bun test ./src/services/history/HistoryService.replaceAll.test.ts`: 5 pass, 0 fail.
 
 No package suite, full gate, source change, plan change, commit or push was performed by this reviewer. Passing replacement tests establish that the checked targets execute, not that the missing invariants in the findings are covered. Review endpoint: `f7c79e4f9`.
+
+## Follow-up
+
+Verified these thirteen findings only, at `7ea7848f918460465ea7c6480a007f1e00bc7ff8`, using the fix diffs in `1aa0c6ac6..HEAD`, current code, batch decisions, and the protocol's overriding corrections. **Resolved: 13. Not resolved: 0.** References below are relative to `packages/agents/src/api/__tests__/` unless a different path is given.
+
+### 1. T6.F9: resolved
+
+`7b0ae74b3` changes `adoption-publication-barrier.behavior.test.ts:52,173,211` to admit actual media through the published Agent. Scenarios 1 and 2 now observe one live store after handoff and no store after Agent disposal. Scenarios 3 and 4 no longer claim that an always-absent directory proves closure. The decision in `7d7c11710` / T6.B07 names `activationOwnerRetirement.test.ts` and `activation-media-owner-lifetime.behavior.test.ts` as the replacement set. I checked the production composition at `packages/agents/src/api/activationPreflightState.ts:408-429`: media disposal is explicitly in `afterClient`, following the joined public work/memory/client. The retirement tests hold both successful and failing client cleanup before allowing the media step; the real media-owner test admits bytes and observes its closed store. Together these cover ordering and real closure without pretending a pre-Agent media admission route exists. Results: publication barrier **4 pass**, retirement **7 pass**, media lifetime **3 pass**.
+
+### 2. T6.F10: resolved
+
+`c2375d4e1` adds `post-config-preflight.test.ts:278-349` for both settings-ownership cases. A real `toolDiscoveryCommand` blocks on a FIFO after token consumption and foreground MCP acquisition. Disposal remains pending until discovery is released; publication then rejects with `AbortError`, cleanup completes, retired reads reject, and borrowed settings remain writable. The earlier public-work scenario remains separate and is no longer presented as late acquisition. No new prototype spy implements the new hold. Result: **22 pass** in the file.
+
+### 3. T6.F11: resolved
+
+`1091a2bf6` restores `session-recording-identity.behavior.test.ts:310-365`. A real `SessionClientOwner` supplies the client and a `SessionControl` with config-owned identity; a one-shot instance `getHistory` failure leaves the Config identity unchanged, recording disabled, and no lock, then a retry restores distinctive history and adopts the source identity. Production still selects config ownership on Routes B/C. The protocol correction explicitly distinguishes that production mode from the deleted override. Result: **6 pass**.
+
+### 4. T6.F12: resolved
+
+`7708259f0` adds the named domain/public-route replacement at `post-config-preflight.test.ts:612-666`. The contributed provider exposes the preflight's real OAuth manager. Its multi-bucket consent request reaches `agent.auth.subscribeBucketConsent`, and the Agent's response cancels the manager's authentication with the expected error. This discriminates manager-to-Agent bus wiring. I also checked that production passes the activation bus into the foreground handoff; the test does not claim to read that private bus directly. T6.B35 U2 names this replacement for both dropped relationships. Result: **22 pass** in the file.
+
+### 5. T6.F13: resolved
+
+`5b0abbcd7` adds `mcp-instruction-owner.test.ts:398-478`. Two production-built owner clients call the real lightweight `generateContent` path against a local endpoint. Each request contains its owner's MCP instruction and excludes the peer's. The original public Agent checks remain. This covers the distinct lightweight prompt builder rather than substituting another JSON call. Result: **2 pass**.
+
+### 6. T6.F14: resolved
+
+`555e857f7` changes `preflight-release.behavior.test.ts:348-362` to read authentication through the receiving Agent after preflight disposal. `detailedStatus('codex')` is initially unauthenticated, then reports authentication and the saved expiry after the authority's token-store write. Unlike the earlier fixture-only list read, the result depends on the receiving OAuth manager's store binding. Transport lifetime assertions remain. Result: **10 pass**.
+
+### 7. T6.F15: resolved
+
+`83cfa8c5e` changes `session-client-profile-engine.behavior.test.ts:35-77` to use two contributed providers without the replay seam. It asserts the first provider before the snapshot, the second provider and selected model afterwards, and retained human history. A same-provider-only implementation no longer satisfies the provider assertion. Result: **3 pass**.
+
+### 8. T6.F16: resolved
+
+`12c897092` removes both production subclasses. `packages/core/src/recording/RecordingIntegration.finalizerJoin.test.ts:79,122` constructs the real persistence service and holds/rejects its actual publishing rename; persisted-file, journal, listener, late-write, and cleanup-failure assertions remain. `task-child-settings-admission.behavior.test.ts:135-144` constructs a plain settings owner and records products through a delegating instance wrapper. A search finds neither prohibited subclass in these replacements. Results: finalizer **2 pass**, child settings **3 pass**.
+
+### 9. T6.F17: resolved by the documented non-behavioral identity decision
+
+`7ea7848f9` corrects T6.B64's claim that retirement rejections prove client identity. I checked the construction: `packages/agents/src/api/fromConfig-session.ts:284-309` installs the pre-Agent owner in `ownedSessionClient`; `foreground-agent-assembly.ts:259-264` uses that same field for the Agent and constructs no replacement there. No allowed pre-Agent input writes distinctive client history. The removed identity is therefore documented as non-behavioral and true by construction, rather than falsely covered by empty state. The post-transfer and post-disposal rejections remain as retirement assertions only. Result: profile-engine **3 pass**.
+
+### 10. T6.F18: resolved
+
+`633d555d1` restores the exact retirement count in `adoption-binding-failure.behavior.test.ts:27-37,89`: a delegating wrapper on the activation's production-built owner counts one disposal after failure. The existing disposed-operation rejection remains. The protocol's corrections withdraw the blanket count-drop permission and require an equivalent count/no-call assertion or a specific deleted-input proof. Result: **1 pass**. The additional cross-batch applications of this same ruling are assessed in batches-b finding 6.
+
+### 11. T6.F19: resolved by correcting the ordering contract
+
+`6790a9fcb` / `post-config-preflight.test.ts:761-787` now observes contributed OAuth registration before preparation, then policy/manager publication during preparation. Production `packages/agents/src/api/profile-preflight.ts:121-133,175-227` constructs the provider-file lifecycle and OAuth manager before post-config preparation. The old four-stage observer list did not describe that production order. T6.B35 U4 records the file-lifecycle handoff position as unobservable under the stop rule, rather than claiming the shortened stage list covers it. This resolves the finding's false conservation claim without inventing a public observation. Result: **22 pass** in the file.
+
+### 12. T6.F20: resolved through the named replacement set
+
+`f46741637` removes the peer-first `undefined === undefined` assertion from `instruction-publication-drain.behavior.test.ts:107-159`. The file retains the held-publication join and a usable surviving peer when applicable. `borrowed-settings-disposal.behavior.test.ts:82-128` independently constructs two Route A agents over the caller's real settings service, checks closed-facade rejection, and checks a peer write/turn plus caller-service read in both retirement orders. T6.B29 decision 7 correctly describes this split: caller settings and the tokenizer hold are not jointly supplied by one production construction route. Neither test is represented as covering the other's property. Results: publication drain **2 pass**, borrowed settings **2 pass**.
+
+### 13. T6.F21: resolved
+
+`94ebdf54a` adds a client-backed history round trip to the affected construction modes: `createAgent.activation.behavior.test.ts:23-29,47,236` and `providerActivation.scopePersistence.behavior.test.ts:63-72`. The distinct `client-probe` must survive `setHistory`/`getHistory`, including unconfigured/no-replay modes, so provider/model metadata alone cannot satisfy readiness. Results: preferred activation **10 pass**, provider-scope persistence **8 pass**.
+
+### Follow-up verification record
+
+All results above are from this follow-up, not copied from commit messages. Across the three reports: **236 pass, 0 fail, 0 skip, 45 focused files**. Each file ran in its own Bun process from the appropriate package directory with `exec < /dev/null; bun test --timeout 180000 ./<path>`, externally limited to 119 seconds. All completed below two minutes. Logs and per-file counts: `tmp/phase6-followup-20261025/` (`results.json`, `extra-results.json`, numbered logs). No package suites, full gate, source edits, or OCR review were performed.
