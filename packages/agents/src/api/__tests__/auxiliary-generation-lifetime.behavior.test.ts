@@ -109,16 +109,17 @@ describe('auxiliary generation lifetime', () => {
   const peerCredentials = useOwnedCredentials();
 
   for (const kind of ['json', 'embedding'] as const) {
-    it(`joins accepted ${kind} work after facade closure`, async () => {
+    it(`resolves disposal during a held ${kind} call and hands the caller the abort once`, async () => {
       const entered = gate();
       const release = gate();
-      const failure = new Error('Held transport failed');
       let cancellation: AbortSignal | undefined;
+      // A transport that obeys cancellation: it rejects with the reason the
+      // session's admission gave, exactly as a real provider request does.
       const heldTransport = async (signal: AbortSignal | undefined) => {
         cancellation = signal;
         entered.release();
         await release.promise;
-        throw signal?.aborted === true ? new Error(OBSERVED_ABORT) : failure;
+        throw signal?.reason;
       };
       const built = await openAgent(builtCredentials().authority, {
         generate: (request) => heldTransport(request.abortSignal),
@@ -130,6 +131,11 @@ describe('auxiliary generation lifetime', () => {
         }),
       });
       const agent = built.agent;
+      const unhandled: unknown[] = [];
+      const record = (reason: unknown): void => {
+        unhandled.push(reason);
+      };
+      process.on('unhandledRejection', record);
       const pending =
         kind === 'json'
           ? agent.generateJson(contents(), { type: 'object' })
@@ -138,17 +144,17 @@ describe('auxiliary generation lifetime', () => {
         () => undefined,
         (error: unknown) => error,
       );
-      await entered.promise;
-      const closing = agent.dispose();
-      const outcome = closing.then(
-        () => undefined,
-        (error: unknown) => error,
-      );
-      let finished = false;
-      void outcome.then(() => {
-        finished = true;
-      });
       try {
+        await entered.promise;
+        const closing = agent.dispose();
+        const outcome = closing.then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        let finished = false;
+        void outcome.then(() => {
+          finished = true;
+        });
         await expect(agent.generateJson(contents(), {})).rejects.toThrow(
           /closed|disposed/,
         );
@@ -162,14 +168,24 @@ describe('auxiliary generation lifetime', () => {
           1,
         );
         release.release();
-        expect(await result).toMatchObject({
-          message: expect.stringContaining(OBSERVED_ABORT),
-        });
+        const failure = await result;
+        expect(failure).toBeInstanceOf(Error);
+        if (!(failure instanceof Error)) throw new Error('Missing rejection');
+        // One rejection, not an aggregate of the abort and itself.
+        expect(failure).not.toBeInstanceOf(AggregateError);
+        // The JSON path hands the transport's cancellation straight back; the
+        // embedding utility wraps what the transport threw, so its message
+        // carries the abort instead (unchanged behavior).
+        expect(failure === cancellation?.reason).toBe(kind === 'json');
+        expect(failure.name).toBe(kind === 'json' ? 'AbortError' : 'Error');
+        expect(failure.message).toMatch(/abort/i);
+        // Disposal waits for settlement and does not report that abort again.
         expect(await outcome).toBeUndefined();
+        expect(unhandled).toStrictEqual([]);
       } finally {
+        process.off('unhandledRejection', record);
         release.release();
         await result;
-        await outcome;
         await peer.close();
         await built.close();
       }

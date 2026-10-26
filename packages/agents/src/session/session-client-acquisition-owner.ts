@@ -252,11 +252,10 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
   }
 
   /**
-   * Session-scoped leases for the work this facade admits: standalone text
-   * generation and JSON/embedding calls on a possibly borrowed client. The
-   * session aborts and joins them without disposing the client, so unrelated
-   * work on a borrowed client is untouched. Leases only join; the caller
-   * receives each outcome, and the join does not report it again.
+   * Session-scoped leases for the standalone text generation this facade
+   * admits. Text generation runs on clients this owner creates, so nothing
+   * else aborts or joins it. The lease only joins; the caller receives each
+   * outcome, and the join does not report it again.
    */
   private readonly auxiliary = new AuxiliaryWork();
 
@@ -283,20 +282,19 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     model: string,
     signal: AbortSignal | undefined,
   ): Promise<Record<string, unknown>> {
-    const client = this.getAgentClient();
-    const input = [...contents];
-    return this.auxiliary.run(
-      (acceptedSignal) =>
-        client.generateJson(input, { ...schema }, acceptedSignal, model),
-      signal,
+    // The client owns JSON and embedding work: its own auxiliary admission
+    // aborts and joins both, so this facade passes the caller's signal through
+    // instead of wrapping the call a second time.
+    return this.getAgentClient().generateJson(
+      [...contents],
+      { ...schema },
+      signal ?? new AbortController().signal,
+      model,
     );
   }
 
   generateEmbedding(texts: readonly string[]): Promise<number[][]> {
-    const client = this.getAgentClient();
-    return this.auxiliary.run((signal) =>
-      client.generateEmbedding([...texts], signal),
-    );
+    return this.getAgentClient().generateEmbedding([...texts]);
   }
 
   readonly closeAuxiliaryAdmission = this.auxiliary.close.bind(this.auxiliary);
