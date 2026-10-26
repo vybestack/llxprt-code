@@ -1,5 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { readdirSync, readSync, writeSync } from 'node:fs';
+import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProviderCore.js';
+import { RejectedParentSet } from '../openai-responses/rejected-parent-set.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   WIRE_ROUTES,
@@ -25,6 +30,7 @@ async function sequence(
   native: boolean,
   singleParent = false,
   clearBeforeSecond = false,
+  nonJournalSecond = false,
 ): Promise<CapturedWireRequest[][]> {
   const provider = route.createProvider();
   const rows = rejectedParentRows();
@@ -33,6 +39,7 @@ async function sequence(
     : [rows.first, rows.second];
   const captured: CapturedWireRequest[][] = [];
   for (const [index, source] of sources.entries()) {
+    const useNative = native && !(index === 1 && nonJournalSecond);
     if (index === 1 && clearBeforeSecond) {
       if (
         !('clearState' in provider) ||
@@ -70,7 +77,7 @@ async function sequence(
     ): Promise<void> => {
       const options = buildHistoryCallOptions(
         route,
-        native ? input : eagerProviderOracle(input),
+        useNative ? input : eagerProviderOracle(input),
         'rows',
         new SettingsService(),
         selection,
@@ -85,7 +92,7 @@ async function sequence(
         void item;
     };
     try {
-      if (native) {
+      if (useNative) {
         await withJournalProviderSelection(
           input,
           async (selection, history) => {
@@ -113,6 +120,21 @@ function bodies(requests: CapturedWireRequest[][]): string[][] {
   );
 }
 
+class RefusingRejectionProvider extends OpenAIResponsesProvider {
+  protected override createRejectedParentSet(): RejectedParentSet {
+    let writes = 0;
+    return new RejectedParentSet({
+      io: {
+        read: readSync,
+        write: (...args) => {
+          if (++writes > 1) throw new Error('slot write refused');
+          return writeSync(...args);
+        },
+      },
+    });
+  }
+}
+
 describe('native Responses rejected-parent replay', () => {
   for (const route of WIRE_ROUTES.filter(
     (candidate) => candidate.endpoint === '/responses',
@@ -130,6 +152,11 @@ describe('native Responses rejected-parent replay', () => {
         expect(sent[0][1]).toContain('"previous_response_id":"resp_ok"');
         expect(sent[1][0]).toContain('"previous_response_id":"resp_ok"');
         expect(sent[1][0]).not.toContain('resp_dead');
+      });
+      it('shares rejection with a non-journal call', async () => {
+        const actual = bodies(await sequence(route, true, false, false, true));
+        expect(actual[1][0]).toContain('"previous_response_id":"resp_ok"');
+        expect(actual[1][0]).not.toContain('resp_dead');
       });
       it('clears rejected parent identities when provider state is cleared', async () => {
         const actual = bodies(await sequence(route, true, false, true));
@@ -151,6 +178,157 @@ describe('native Responses rejected-parent replay', () => {
       });
     });
   }
+
+  it('keeps rejection after a pop, forgets on clear and disposal, and starts a second instance empty', async () => {
+    const route = WIRE_ROUTES.find(
+      (candidate) => candidate.id === 'openai-responses',
+    );
+    if (route === undefined) throw new Error('Missing Responses route');
+    const provider = new OpenAIResponsesProvider('test-api-key');
+    const other = new OpenAIResponsesProvider('test-api-key');
+    const input: HistoryCase = {
+      id: 'rejection-pop',
+      description: 'rejection survives pop',
+      rows: rejectedParentRows().first,
+      ephemerals: { 'responses-stateful': true },
+    };
+    const requests: CapturedWireRequest[] = [];
+    let rejectNext = true;
+    const before = new Set(readdirSync(getScratchRoot()));
+    const restore = installFakeTransport(
+      {
+        ...route,
+        respond: () => {
+          if (!rejectNext) return route.respond();
+          rejectNext = false;
+          return Response.json(
+            {
+              error: {
+                message: "Previous response with id 'resp_dead' not found.",
+              },
+            },
+            { status: 400 },
+          );
+        },
+      },
+      requests,
+    );
+    try {
+      await withCoreSuffixFixture(
+        input.rows.length,
+        async (history, ownership) => {
+          const send = async (
+            active: OpenAIResponsesProvider,
+          ): Promise<void> => {
+            const selection = await history.prepareCuratedForProviderSnapshot(
+              [],
+              { ownership },
+            );
+            try {
+              const options = buildHistoryCallOptions(
+                route,
+                input,
+                'rows',
+                new SettingsService(),
+                {
+                  callerOwned: true,
+                  count: selection.count,
+                  readAt: (index, signal) => selection.readAt(index, signal),
+                  openReader: (signal) => selection.openReader(signal),
+                  close: async () => {},
+                },
+              );
+              const projection = await active.projectPromptEnvelope(options);
+              for await (const item of active.generateChatCompletion({
+                ...options,
+                promptEnvelopeTransportToken: projection.transportToken,
+              }))
+                void item;
+            } finally {
+              await selection.close();
+            }
+          };
+          await send(provider);
+          expect(new TextDecoder().decode(requests[1].bytes)).toContain(
+            '"previous_response_id":"resp_ok"',
+          );
+          await history.pop();
+          history.add({
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'replacement question' }],
+          });
+          await history.waitForCommit();
+          await send(provider);
+          expect(new TextDecoder().decode(requests[2].bytes)).toContain(
+            '"previous_response_id":"resp_ok"',
+          );
+          await send(other);
+          expect(new TextDecoder().decode(requests[3].bytes)).toContain(
+            '"previous_response_id":"resp_dead"',
+          );
+          expect(
+            readdirSync(getScratchRoot()).filter(
+              (name) =>
+                !before.has(name) && name.startsWith('responses-rejections-'),
+            ),
+          ).toHaveLength(1);
+          provider.clearState();
+          expect(
+            readdirSync(getScratchRoot()).filter(
+              (name) =>
+                !before.has(name) && name.startsWith('responses-rejections-'),
+            ),
+          ).toHaveLength(0);
+          await send(provider);
+          expect(new TextDecoder().decode(requests[4].bytes)).toContain(
+            '"previous_response_id":"resp_dead"',
+          );
+          rejectNext = true;
+          await send(provider);
+          expect(new TextDecoder().decode(requests[6].bytes)).toContain(
+            '"previous_response_id":"resp_ok"',
+          );
+          provider.dispose();
+          expect(
+            readdirSync(getScratchRoot()).filter(
+              (name) =>
+                !before.has(name) && name.startsWith('responses-rejections-'),
+            ),
+          ).toHaveLength(0);
+          await send(provider);
+          expect(new TextDecoder().decode(requests[7].bytes)).toContain(
+            '"previous_response_id":"resp_dead"',
+          );
+        },
+        0,
+        (index) => input.rows[index],
+      );
+    } finally {
+      restore();
+      provider.dispose();
+      other.dispose();
+    }
+    expect(
+      readdirSync(getScratchRoot()).filter(
+        (name) => !before.has(name) && name.startsWith('responses-rejections-'),
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('fails the turn when recording a rejected parent fails', async () => {
+    const route = WIRE_ROUTES.find(
+      (candidate) => candidate.id === 'openai-responses',
+    );
+    if (route === undefined) throw new Error('Missing Responses route');
+    const provider = new RefusingRejectionProvider('test-api-key');
+    try {
+      await expect(
+        sequence({ ...route, createProvider: () => provider }, true),
+      ).rejects.toThrow('slot write refused');
+    } finally {
+      provider.clearState();
+    }
+  });
 
   it('matches the untouched rejected-parent frozen body oracle for both sources', async () => {
     const route = WIRE_ROUTES.find(

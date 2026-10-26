@@ -124,7 +124,9 @@ export interface ResponsesExecutorDeps {
    * session replay full history forever instead of starting a new chain
    * (#3134 Fix 1).
    */
-  readonly markStatefulParentRejected?: (responseId: string) => void;
+  readonly markStatefulParentRejected?: (
+    responseId: string,
+  ) => void | Promise<void>;
   /**
    * Whether this request will go over the Codex Responses WebSocket.
    *
@@ -330,7 +332,7 @@ async function* retryWithoutStatefulness(
   // This matters most on `--continue`: resumed history carries parents scoped
   // to a WebSocket connection that no longer exists, so the first turn of a
   // resumed session always spends one rejected request here.
-  deps.markStatefulParentRejected?.(rejectedParentId);
+  await deps.markStatefulParentRejected?.(rejectedParentId);
   const recoveryPrepared = await rebuildFromRows({
     forceStateless: false,
     forceParentless: recoverParentless,
