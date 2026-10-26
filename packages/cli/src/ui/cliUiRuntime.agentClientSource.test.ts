@@ -29,7 +29,7 @@ import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/o
 import { openRouteBPreflight } from '../../../agents/src/api/__tests__/helpers/route-b-preflight.js';
 import { fetchGitHubSuggestions } from './hooks/githubAtCompletion.js';
 import { buildUiRuntimeFromSource } from './cliUiRuntime.js';
-import { buildSlashCommandRuntimeForTest } from '../__tests__/slash-command-runtime-fixture.js';
+import { buildUiPortsForTest } from '../__tests__/slash-command-runtime-fixture.js';
 
 const MULTI_TURN_REPLAY = fileURLToPath(
   new URL(
@@ -222,7 +222,7 @@ describe('UI session client ownership', () => {
         provider: INITIAL_ALIAS,
         model: 'fake-model',
       });
-      const workspace = buildSlashCommandRuntimeForTest(route.config, agent);
+      const workspace = buildUiPortsForTest(route.config, agent);
       await agent.setHistory([
         {
           speaker: 'human',

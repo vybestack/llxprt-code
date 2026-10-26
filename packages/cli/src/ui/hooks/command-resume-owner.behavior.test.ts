@@ -9,7 +9,7 @@ import { bindCommandOwnerResume } from './commandOwnerResumeHost.js';
 import { describe, expect, it } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { useOwnerSessionAgents } from './__tests__/owner-session-agents.js';
-import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
+import { buildUiPortsForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
@@ -77,7 +77,7 @@ describe('registered command resume owner', () => {
     await owner.session.setRecording({ enabled: true });
     const { agent: decoy } = await openAgent();
     await decoy.dispose();
-    const runtime = buildSlashCommandRuntimeForTest(config, owner);
+    const { chatCommands } = buildUiPortsForTest(config, owner);
     const context = createMockCommandContext({
       recordingOwner: 'agent',
       services: { agent: decoy },
@@ -90,7 +90,7 @@ describe('registered command resume owner', () => {
             continueCommand: createContinueCommand(
               bindContinueCommandOperations(
                 owner.session.exportSession.bind(owner.session),
-                () => runtime.isInteractive(),
+                () => chatCommands.isInteractive(),
                 async () => [...(await owner.session.listBrowserTargets())],
                 validateSessionMediaPackage,
               ),

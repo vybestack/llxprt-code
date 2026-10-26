@@ -88,7 +88,7 @@ const { wrapWithProviders, createMockSettings } = await import(
 );
 const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
 const { buildUiRuntimeFromSource } = await import('../cliUiRuntime.js');
-const { buildSlashCommandRuntimeForTest } = await import(
+const { buildLayoutRuntimeForTest } = await import(
   '../../__tests__/slash-command-runtime-fixture.js'
 );
 const { TerminalProvider } = await import(
@@ -243,7 +243,7 @@ async function withLayout(
                 uiRuntime.app.getAccessibility().disableLoadingPhrases === true
               }
               debugMode={uiRuntime.app.getDebugMode()}
-              layoutRuntime={buildSlashCommandRuntimeForTest(config, owner)}
+              layoutRuntime={buildLayoutRuntimeForTest(config, owner)}
               settings={settings}
               startupWarnings={[]}
               version={HEADER}

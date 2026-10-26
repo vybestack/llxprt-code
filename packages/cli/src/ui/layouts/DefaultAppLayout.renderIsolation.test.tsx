@@ -59,7 +59,7 @@ const { renderWithProviders, createMockSettings } = await import(
 );
 const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
 const { buildUiRuntimeFromSource } = await import('../cliUiRuntime.js');
-const { buildSlashCommandRuntimeForTest } = await import(
+const { buildLayoutRuntimeForTest } = await import(
   '../../__tests__/slash-command-runtime-fixture.js'
 );
 const { Config, MessageBus, MessageBusType, PolicyEngine } = await import(
@@ -125,7 +125,7 @@ async function mountLayout(borrowedBus?: InstanceType<typeof MessageBus>) {
         uiRuntime.app.getAccessibility().disableLoadingPhrases === true
       }
       debugMode={uiRuntime.app.getDebugMode()}
-      layoutRuntime={buildSlashCommandRuntimeForTest(
+      layoutRuntime={buildLayoutRuntimeForTest(
         config,
         await createUiSessionOwner(),
       )}

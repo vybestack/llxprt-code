@@ -16,7 +16,7 @@ import {
 } from '../../__tests__/render.js';
 import { useAppStores } from '../AppContainerRuntime.js';
 import { buildUiRuntimeFromSource } from '../cliUiRuntime.js';
-import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
+import { buildUiPortsForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { RuntimeContextProvider } from '../../__tests__/runtime-context-fixture.js';
 import { OAuthControlProvider } from '../contexts/OAuthControlContext.js';
 import { SessionStatsProvider } from '../contexts/SessionContext.js';
@@ -64,7 +64,7 @@ describe('bootstrap captured operation ownership', () => {
       debugMode: false,
       model: 'fake-model',
     });
-    const runtime = buildSlashCommandRuntimeForTest(config, peer);
+    const { containerRuntime } = buildUiPortsForTest(config, peer);
     const uiRuntime = buildUiRuntimeFromSource(config, peer);
     const context = createMockCommandContext();
     const oauthControl = {
@@ -94,7 +94,7 @@ describe('bootstrap captured operation ownership', () => {
     }
     const hook = renderHook(
       () => {
-        const stores = useAppStores(runtime);
+        const stores = useAppStores(containerRuntime);
         const bootstrap = useBootstrapRuntime(
           {
             version: 'test',

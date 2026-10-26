@@ -29,6 +29,9 @@ import {
   type InteractiveCommandPorts,
 } from '../ui/cliCommandPorts.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { LayoutRuntime } from '../ui/layouts/DefaultAppLayoutHelpers.js';
+import type { AppDialogsRuntime } from '../ui/containers/AppContainer/hooks/useAppDialogs.js';
+import type { SlashCommandProcessorPorts } from '../ui/hooks/useSlashCommandProcessorCore.js';
 
 /**
  * The flat surface the UI fixtures hand to components and to the command bind
@@ -192,4 +195,25 @@ export function buildAppContainerPortsForTest(
     dialogsRuntime: ports.dialogsRuntime,
     browserSession: ports.browserSession,
   };
+}
+
+/** The layout reads alone, for layout, region and inline-content tests. */
+export function buildLayoutRuntimeForTest(
+  ...args: FixtureRuntimeArgs
+): LayoutRuntime {
+  return buildUiPortsForTest(...args).layoutRuntime;
+}
+
+/** The slash-processor ports alone, for command-family tests. */
+export function buildSlashCommandPortsForTest(
+  ...args: FixtureRuntimeArgs
+): SlashCommandProcessorPorts {
+  return buildUiPortsForTest(...args).slashCommandPorts;
+}
+
+/** The dialog-layer reads alone, for useAppDialogs tests. */
+export function buildDialogsRuntimeForTest(
+  ...args: FixtureRuntimeArgs
+): AppDialogsRuntime {
+  return buildUiPortsForTest(...args).dialogsRuntime;
 }

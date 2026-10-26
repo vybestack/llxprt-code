@@ -1,7 +1,7 @@
 import { useOwnerSessionAgents } from '../hooks/__tests__/owner-session-agents.js';
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 import { Config, HydratedModel } from '@vybestack/llxprt-code-core';
-import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
+import { buildLayoutRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { DialogManager } from './DialogManager.js';
 import { DialogProvider } from '../stores/dialog/DialogContext.js';
 import { AppCommandsProvider } from '../contexts/AppCommandsContext.js';
@@ -379,7 +379,7 @@ function DialogManagerHarness({
       return standIn;
     },
   });
-  const config = buildSlashCommandRuntimeForTest(
+  const config = buildLayoutRuntimeForTest(
     new Config({
       sessionId: 'dialog-dispatch',
       targetDir: process.cwd(),

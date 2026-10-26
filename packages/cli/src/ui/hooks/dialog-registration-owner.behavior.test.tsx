@@ -13,7 +13,7 @@ import { createMockSettings, renderHook } from '../../__tests__/render.js';
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
 import { RuntimeContextProvider } from '../../__tests__/runtime-context-fixture.js';
 import { OAuthControlProvider } from '../contexts/OAuthControlContext.js';
-import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
+import { buildUiPortsForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { useAppStores } from '../AppContainerRuntime.js';
 import { useAppDialogs } from '../containers/AppContainer/hooks/useAppDialogs.js';
 
@@ -48,14 +48,17 @@ describe('application dialog operation ownership', () => {
       debugMode: false,
       model: 'fake-model',
     });
-    const runtime = buildSlashCommandRuntimeForTest(config, peer);
+    const { containerRuntime, dialogsRuntime, approval } = buildUiPortsForTest(
+      config,
+      peer,
+    );
     const hook = renderHook(
       ({ current }) => {
-        const stores = useAppStores(runtime);
+        const stores = useAppStores(containerRuntime);
         return useAppDialogs(
           Object.assign(
             {
-              config: runtime,
+              config: dialogsRuntime,
               agent: peer,
               settings,
               store: stores.dialogStore,
@@ -83,7 +86,7 @@ describe('application dialog operation ownership', () => {
               listTools: current.tools.list.bind(current.tools),
               readProvider: current.getProvider.bind(current),
               readPolicyRules: bindPolicyRulesReader(current.policy, () =>
-                runtime.getApprovalMode(),
+                approval.getApprovalMode(),
               ),
               subagentDefinitions: current.workspace.subagentDefinitions,
               subagentWrites: current.workspace.subagentWrites,

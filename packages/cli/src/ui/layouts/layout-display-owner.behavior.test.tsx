@@ -13,7 +13,7 @@ import {
   createMockSettings,
 } from '../../__tests__/render.js';
 import { buildUiRuntimeFromSource } from '../cliUiRuntime.js';
-import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
+import { buildLayoutRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { StreamingState } from '../types.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 
@@ -31,7 +31,7 @@ describe('layout display inputs', () => {
     });
     const owner = await createUiSessionOwner(config);
     const uiRuntime = buildUiRuntimeFromSource(config, owner);
-    const layoutRuntime = buildSlashCommandRuntimeForTest(config, owner);
+    const layoutRuntime = buildLayoutRuntimeForTest(config, owner);
     const settings = createMockSettings({ ui: { hideContextSummary: true } });
     const tree = (disabled: boolean) =>
       wrapWithProviders(

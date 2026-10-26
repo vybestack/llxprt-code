@@ -33,7 +33,7 @@ import {
   type DialogStore,
 } from '../stores/dialog/dialogStore.js';
 import { buildUiRuntimeFromSource } from '../cliUiRuntime.js';
-import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
+import { buildLayoutRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 
 const DIALOG_MANAGER_SENTINEL = 'DIALOG_MANAGER_RENDERED';
 const STANDARD_BUFFER_SENTINEL = 'STANDARD_BUFFER_HISTORY';
@@ -120,6 +120,7 @@ function createConfigStub() {
     getMcpServers: () => [],
     getBlockedMcpServers: () => [],
     getTargetDir: () => '/tmp',
+    getProjectTempDir: () => '/tmp',
     getDebugMode: () => false,
     getEphemeralSetting: () => undefined,
     isTrustedFolder: () => true,
@@ -239,7 +240,7 @@ async function renderDefaultAppLayout({
         uiRuntime.app.getAccessibility().disableLoadingPhrases === true
       }
       debugMode={uiRuntime.app.getDebugMode()}
-      layoutRuntime={buildSlashCommandRuntimeForTest(
+      layoutRuntime={buildLayoutRuntimeForTest(
         config,
         await createUiSessionOwner(),
       )}

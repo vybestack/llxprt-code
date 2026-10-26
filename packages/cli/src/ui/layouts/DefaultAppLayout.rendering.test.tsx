@@ -114,7 +114,7 @@ import { SettingsProfileProvider } from '../stores/settings/SettingsContext.js';
 import { createSettingsProfileStore } from '../stores/settings/settingsStore.js';
 import { VimModeProvider } from '../contexts/VimModeContext.js';
 const { buildUiRuntimeFromSource } = await import('../cliUiRuntime.js');
-const { buildSlashCommandRuntimeForTest } = await import(
+const { buildLayoutRuntimeForTest } = await import(
   '../../__tests__/slash-command-runtime-fixture.js'
 );
 
@@ -149,6 +149,7 @@ function createConfigSource(screenReader: boolean) {
     getMcpServers: () => [],
     getBlockedMcpServers: () => [],
     getTargetDir: () => '/tmp',
+    getProjectTempDir: () => '/tmp',
     getDebugMode: () => false,
     getEphemeralSetting: () => undefined,
     isTrustedFolder: () => true,
@@ -231,7 +232,7 @@ async function renderLayout({
                 uiRuntime.app.getAccessibility().disableLoadingPhrases === true
               }
               debugMode={uiRuntime.app.getDebugMode()}
-              layoutRuntime={buildSlashCommandRuntimeForTest(
+              layoutRuntime={buildLayoutRuntimeForTest(
                 configSource as never,
                 await createUiSessionOwner(),
               )}
