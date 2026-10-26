@@ -47,15 +47,13 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { convertToolsToOpenAIVercel } from './schemaConverter.js';
 import { type IModel } from '../IModel.js';
 import { type IProvider } from '../IProvider.js';
-import { convertToVercelMessages } from './messageConversion.js';
-import { getToolIdStrategy } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
 import { isAbortSignal } from '../utils/abortSignal.js';
 import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
 import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
 import { openTransportRowsMedia, transportMessages } from './transportRows.js';
 import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
-import { filterThinkingForContext } from '../reasoning/reasoningUtils.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 
 import {
@@ -68,7 +66,6 @@ import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacemen
 import {
   finishMediaRequest,
   type MediaRequestOutcome,
-  resolveRequestMedia,
   captureRequestMediaInput,
 } from '../utils/request-media-resolution.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
@@ -174,30 +171,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     return true;
   }
 
-  private convertToModelMessages(
-    contents: IContent[],
-    options?: { includeReasoningInContext?: boolean; resolvedModel?: string },
-  ): ModelMessage[] {
-    const settings = readInvocationPolicyRecord(
-      this.captureOwnerPolicy()[this.name],
-    );
-    const modelName =
-      options?.resolvedModel ?? (this.getModel() || this.getDefaultModel());
-    const toolFormat = resolveToolFormat(
-      modelName,
-      this.name,
-      settings.toolFormat,
-      this.getLogger(),
-    );
-
-    const toolIdMapper =
-      toolFormat === 'kimi' || toolFormat === 'mistral'
-        ? getToolIdStrategy(toolFormat).createMapper(contents)
-        : undefined;
-
-    return convertToVercelMessages(contents, toolIdMapper, options);
-  }
-
   private async resolveMediaPreparation(
     options: NormalizedGenerateChatOptions,
   ): Promise<VercelMediaPreparation> {
@@ -208,20 +181,16 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       this.requestMediaBudgetBytes,
       this.requestMediaResolver,
     );
-    const mediaRequest = readsRequestRowsAtTransport(options)
-      ? await openTransportRowsMedia(options, media)
-      : await resolveRequestMedia(
-          media,
-          options.contents,
-          options.invocation.signal,
-        );
+    const requestRows = options.requestRows ?? {
+      ...inMemoryRequestSelection(options.contents),
+      callerOwned: true,
+    };
+    const effectiveOptions = { ...options, contents: [], requestRows };
+    const mediaRequest = await openTransportRowsMedia(effectiveOptions, media);
     try {
       return {
         mediaRequest,
-        effectiveOptions: {
-          ...options,
-          contents: mediaRequest.withContents((contents) => contents),
-        },
+        effectiveOptions,
       };
     } catch (error) {
       return finishMediaRequest(mediaRequest, { status: 'failed', error });
@@ -239,25 +208,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       >(this.name)?.['requires-auth'] as boolean | undefined,
       customHeaders: this.getCustomHeaders(),
     };
-  }
-
-  private convertRequestContents(
-    options: NormalizedGenerateChatOptions,
-    modelId: string,
-    reasoning: ReturnType<typeof resolveReasoningSettings>,
-  ): ModelMessage[] {
-    if (readsRequestRowsAtTransport(options)) {
-      // The SDK validates nonempty messages before fetch replaces this sentinel.
-      return [{ role: 'user', content: '' }];
-    }
-    const stripPolicy = reasoning.enabled ? reasoning.stripFromContext : 'all';
-    return this.convertToModelMessages(
-      filterThinkingForContext(options.contents, stripPolicy),
-      {
-        includeReasoningInContext: reasoning.includeInContext,
-        resolvedModel: modelId,
-      },
-    );
   }
 
   private streamedMessages(
@@ -306,9 +256,8 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       const rs = resolveReasoningSettings(effectiveOptions);
       const streamingEnabled = resolveStreamingEnabled(effectiveOptions);
       const systemPrompt = resolveSystemPrompt(effectiveOptions);
-      materializedMessages.push(
-        ...this.convertRequestContents(effectiveOptions, modelId, rs),
-      );
+      // The SDK validates nonempty messages before fetch replaces this sentinel.
+      materializedMessages.push({ role: 'user', content: '' });
 
       const formattedTools = convertToolsToOpenAIVercel(tools);
       logChatPayload(logger, materializedMessages, formattedTools ?? undefined);

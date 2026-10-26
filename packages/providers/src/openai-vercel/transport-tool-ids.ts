@@ -10,17 +10,32 @@ import {
 } from '../openai/journal-chat-length.js';
 import { requestFormatSlot } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import {
+  createInMemoryToolIdStore,
+  getToolIdStrategy,
+} from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
 
 export async function transportToolIds(
   options: NormalizedGenerateChatOptions,
   format: ToolFormat,
 ): Promise<{ rowIds?: NativeRowIds; release: () => void | Promise<void> }> {
   if (format !== 'kimi' && format !== 'mistral') return { release() {} };
-  const native = options.requestRows?.native;
-  if (native === undefined)
-    throw new Error(
-      'Vercel tool-id mapping requires an indexed request selection',
+  const rows = options.requestRows;
+  const native = rows?.native;
+  if (native === undefined) {
+    if (rows?.callerOwned !== true)
+      throw new Error(
+        'Vercel tool-id mapping requires an indexed or caller-owned request selection',
+      );
+    const mapper = getToolIdStrategy(format).createStreamingMapper(
+      createInMemoryToolIdStore(),
     );
+    const signal = getRequestSignal(options);
+    for (let index = 0; index < rows.count; index++)
+      mapper.observe(await rows.readAt(index, signal));
+    return { rowIds: async () => () => mapper, release() {} };
+  }
   if (format === 'kimi')
     return native.withKimi(async (snapshot) => {
       const rowIds = nativeKimiRowIds(

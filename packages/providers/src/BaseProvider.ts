@@ -29,6 +29,7 @@ import { type IModel } from './IModel.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { firstTruthyString } from './utils/falsyFallback.js';
 import { isAsyncIterableContents } from './utils/collectContents.js';
+import { isProviderRequestSource } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import {
   admitProviderContents,
   type RequestRowsScope,
@@ -849,7 +850,13 @@ export abstract class BaseProvider implements IProvider {
       !isAsyncIterableContents(contentsOrOptions) &&
       readsRequestRowsAtTransport(contentsOrOptions) &&
       this.ownsRequestRowsTransport();
-    const stagesRows = !readsRowsAtTransport && this.takesRowsRoute();
+    const source = isAsyncIterableContents(contentsOrOptions)
+      ? contentsOrOptions
+      : contentsOrOptions.contents;
+    const stagesRows =
+      !readsRowsAtTransport &&
+      (this.takesRowsRoute() ||
+        (this.ownsRequestRowsTransport() && isProviderRequestSource(source)));
     const normalized = await this.normalizeProvidedOptions(
       await materializeCallOptions(
         contentsOrOptions,
