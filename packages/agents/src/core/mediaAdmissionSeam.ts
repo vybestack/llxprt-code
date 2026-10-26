@@ -58,6 +58,33 @@ export function turnMediaAdmissionContext(
   };
 }
 
+export function streamMediaAdmissions(
+  chunk: ModelStreamChunk,
+  turnId: string,
+): MediaAdmissionRelease[] {
+  const mediaOnly = (contents: readonly IContent[]): IContent[] =>
+    contents.flatMap((content) => {
+      const blocks = content.blocks.filter((block) => block.type === 'media');
+      return blocks.length === 0 ? [] : [{ ...content, blocks }];
+    });
+  const output = mediaOnly([chunk.content]);
+  const afc = mediaOnly(chunk.afcHistory ?? []);
+  const admissions: MediaAdmissionRelease[] = [];
+  if (output.length > 0)
+    admissions.push({
+      contents: output,
+      context: turnMediaAdmissionContext(turnId, 'provider-stream-output'),
+      mode: 'content',
+    });
+  if (afc.length > 0)
+    admissions.push({
+      contents: afc,
+      context: turnMediaAdmissionContext(turnId, 'provider-stream-afc-history'),
+      mode: 'contents',
+    });
+  return admissions;
+}
+
 export async function admitContentAtMediaSeam(
   runtimeContext: MediaAdmissionRuntime,
   content: IContent,

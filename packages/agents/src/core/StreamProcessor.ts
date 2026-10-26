@@ -65,7 +65,7 @@ import { buildStreamChatOptions } from './streamChatOptions.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import {
   admitStreamChunkForHistory,
-  turnMediaAdmissionContext,
+  streamMediaAdmissions,
   type PreparedUserTurn,
 } from './mediaAdmissionSeam.js';
 import {
@@ -729,21 +729,7 @@ export class StreamProcessor {
           filteredContent,
           turnId,
         );
-        admissions.push({
-          contents: [historyChunk.content],
-          context: turnMediaAdmissionContext(turnId, 'provider-stream-output'),
-          mode: 'content',
-        });
-        if (historyChunk.afcHistory !== undefined) {
-          admissions.push({
-            contents: historyChunk.afcHistory,
-            context: turnMediaAdmissionContext(
-              turnId,
-              'provider-stream-afc-history',
-            ),
-            mode: 'contents',
-          });
-        }
+        admissions.push(...streamMediaAdmissions(historyChunk, turnId));
         accumulator.add(historyChunk);
         yield { ...chunk, content: filteredContent };
       }
