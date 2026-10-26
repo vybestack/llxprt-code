@@ -64,6 +64,17 @@ describe('runtime service shape guard stored and aggregate shapes', () => {
     );
   });
 
+  it('rejects a bundle stored in an optional field', () => {
+    expect(
+      scan(
+        imports +
+          `class Owner { private readonly ports?: { clock: Scheduler; context: Context }; }`,
+      ),
+    ).toEqual([
+      expect.objectContaining({ rule: 'runtime-service-bundle', line: 2 }),
+    ]);
+  });
+
   it('rejects an intersection of capability services as the CliUiRuntime shape', () => {
     expect(
       scan(
@@ -175,6 +186,7 @@ describe('runtime service shape guard stored and aggregate shapes', () => {
     `type ClockReader = Pick<Scheduler, 'schedule'>;
      interface Port { schedule(reader: ClockReader): void }
      class Owner { private port!: Port; }`,
+    `class Owner { private readonly either!: Scheduler | Context; }`,
   ])('allows a narrow port: %s', (declaration) => {
     expect(scan(imports + declaration)).toEqual([]);
   });

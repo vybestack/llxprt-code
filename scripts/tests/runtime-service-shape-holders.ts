@@ -72,12 +72,14 @@ export function classStoredDeclarations(
  * An interface, type alias, object-literal type or mapped type is a bundle when
  * the exposure analysis over the services finds two or more of them, which is
  * the definition the guard already uses for its declarations. An intersection
- * groups every part at once, so it is judged as a product by the same analysis,
- * which is how a flat aggregate like `A & B` or `{ ...a, ...b }` reads. A union
- * stores one alternative at a time, so it is not a bundle. A class type is an
- * owner rather than a grouping: it is a bundle only through the type arguments
- * it was given, because an owner holding several single-service collaborators
- * is the shape the boundary wants.
+ * groups every part at once, so the same analysis reads it as a product; that
+ * is how a flat aggregate such as `A & B`, an `Object.assign` result or a spread
+ * of several services reads. A union is an alternative, so it stores a bundle
+ * only when one of its branches does, which covers an optional bag such as
+ * `Ports | undefined` without calling `Scheduler | Context` a bundle. A class
+ * type is an owner rather than a grouping: it is a bundle only through the type
+ * arguments it was given, because an owner holding several single-service
+ * collaborators is the shape the boundary wants.
  */
 export function storedServiceBundle(
   type: ts.Type,
@@ -88,7 +90,10 @@ export function storedServiceBundle(
 ): boolean {
   if (visited.has(type)) return false;
   const path = new Set([...visited, type]);
-  if (type.isUnion()) return false;
+  if (type.isUnion())
+    return type.types.some((branch) =>
+      storedServiceBundle(branch, checker, analyze, location, path),
+    );
   if (type.isIntersection()) return analyze(type, location).bundle;
   return isClassType(type)
     ? !!isTypeReference(type) &&
