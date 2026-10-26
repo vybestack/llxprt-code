@@ -55,6 +55,13 @@ import {
   type ProviderActivationIntent,
 } from './config-types.js';
 import { retireActivationOwners } from './activationOwnerRetirement.js';
+import {
+  acquireActivationSession,
+  executeActivationSession,
+  type ActivationSessionAuth,
+  type ActivationSessionReceiver,
+  type ActivationSessionResources,
+} from './fromConfig-session.js';
 import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
 
 import { assembleHostGitHubBroker } from './host-github-broker-owner.js';
@@ -124,6 +131,13 @@ export class AgentActivationBootstrap
     | undefined;
 
   sessionClient!: AgentActivationOperation['sessionClient'];
+  #activation!: PreflightActivationInput;
+  #settings!: PreflightSettingsInput;
+  #providers!: PreflightProviderInput;
+  #auth!: PreflightAuthInput;
+  #switcher!: ProviderSwitcher;
+  #sessionResources!: ActivationSessionResources;
+  #sessionAuth!: ActivationSessionAuth;
   protected constructor(config?: Config) {
     super(config);
   }
@@ -135,24 +149,14 @@ export class AgentActivationBootstrap
     auth: PreflightAuthInput,
   ): AgentActivationBootstrap {
     const bootstrap = new AgentActivationBootstrap(config);
-    bootstrap.activationSettings = providers.settings;
-    bootstrap.activationManager = providers.manager;
-    bootstrap.activationOAuth = auth.oauth;
-    bootstrap.activationReadKind = activation.readKind;
-    bootstrap.activationProviderLifetime = activation.providerLifetime;
-    bootstrap.activationFilesystem = activation.filesystem;
-    bootstrap.activationMemory = activation.memory;
-    bootstrap.activationSettingsOwner = settings.settingsOwner;
-    bootstrap.activationSettingsOwnership = settings.settingsOwnership;
-    bootstrap.activationTrust = activation.trust;
-    bootstrap.activationTrustCleanup = activation.trustCleanup;
-    bootstrap.activationFiles = activation.files;
-    bootstrap.activationBus = activation.bus;
+    bootstrap.#activation = activation;
+    bootstrap.#settings = settings;
+    bootstrap.#providers = providers;
+    bootstrap.#auth = auth;
     bootstrap.#policy = activation.policy;
     bootstrap.foregroundSettings = providers.settings;
     bootstrap.foregroundManager = providers.manager;
     bootstrap.foregroundOAuth = auth.oauth;
-    bootstrap.foregroundAuthority = activation.authority;
     bootstrap.#runtimeContext = activation.runtimeContext;
     bootstrap.releaseForegroundProviders =
       activation.releaseForegroundProviders;
@@ -160,34 +164,69 @@ export class AgentActivationBootstrap
   }
 
   async preparePreflight(): Promise<ProviderSwitcher> {
-    await this.acquireActivation();
+    const receiver: ActivationSessionReceiver = {
+      resources: (acquired) => this.#acceptSessionResources(acquired),
+      auth: (acquired) => {
+        this.#sessionAuth = acquired;
+      },
+    };
+    const switcher = await acquireActivationSession(
+      this.config,
+      this.#activation,
+      this.#settings,
+      this.#providers,
+      this.#auth,
+      receiver,
+    );
     try {
+      this.#switcher = switcher;
       this.initializePreparedActivation();
     } catch (error) {
       return cleanupAfterFailure(error, () => this.dispose());
     }
-    return this.activationSwitch;
+    return switcher;
+  }
+
+  #acceptSessionResources(acquired: ActivationSessionResources): void {
+    this.#sessionResources = acquired;
+    this.ownedSessionClient = acquired.sessionClient;
+    this.settingsOwner = acquired.settingsOwner;
+    this.mediaOwner = acquired.media;
+    this.ownsFilesystem = true;
+    this.ownsMemory = true;
+    this.ownsDefinitions = true;
   }
 
   protected initializePreparedActivation(): void {
+    const resources = this.#sessionResources;
     this.sessionClient = {
-      workspaceDirectories: () => this.workspaceFilesystem.paths.directories(),
+      workspaceDirectories: () =>
+        resources.workspaceFilesystem.paths.directories(),
       refreshAuth: (method) =>
-        this.#admitPublic(() => this.ownedSessionClient.refreshAuth(method)),
+        this.#admitPublic(() => resources.sessionClient.refreshAuth(method)),
       runImageOperation: (input) =>
         this.#admitPublic(() =>
-          this.ownedSessionClient.runImageOperation(input),
+          resources.sessionClient.runImageOperation(input),
         ),
     };
-    this.#manager = this.activationManager;
-    this.#execute = (intent) => this.executeActivation(intent);
+    this.#manager = this.#providers.manager;
+    this.#execute = (intent) =>
+      executeActivationSession(
+        this.config,
+        intent,
+        this.#switcher,
+        this.#providers,
+        resources,
+      );
   }
 
   listProfiles() {
-    return this.workspaceDefinitions.profileReads.listProfiles();
+    return this.#sessionResources.workspaceDefinitions.profileReads.listProfiles();
   }
   loadProfile(name: string) {
-    return this.workspaceDefinitions.profileReads.loadProfile(name);
+    return this.#sessionResources.workspaceDefinitions.profileReads.loadProfile(
+      name,
+    );
   }
   readHistory(): ReturnType<SessionClientOwner['readHistory']> {
     return this.#admitPublic(() => this.ownedSessionClient.readHistory());
@@ -221,7 +260,7 @@ export class AgentActivationBootstrap
       this.foregroundManager,
       this.foregroundSettings,
     );
-    if (this.oauthManager !== this.foregroundOAuth)
+    if (this.#sessionAuth.oauth !== this.foregroundOAuth)
       throw new AgentBootstrapError(
         'Foreground OAuth differs from the acquired owner',
       );
@@ -343,14 +382,17 @@ export class AgentActivationBootstrap
         policy: { owner: policyOwner, ownership: 'caller' },
         lspOwner: undefined,
         lspOwnership: 'runtime',
-        filesystemOwner: this.workspaceFilesystem,
+        filesystemOwner: this.#sessionResources.workspaceFilesystem,
         filesystemOwnership: 'runtime',
         filesystemService: undefined,
-        memoryOwner: { owner: this.workspaceMemory, ownership: 'runtime' },
-        definitionOwner: this.workspaceDefinitions,
+        memoryOwner: {
+          owner: this.#sessionResources.workspaceMemory,
+          ownership: 'runtime',
+        },
+        definitionOwner: this.#sessionResources.workspaceDefinitions,
         definitionOwnership: 'runtime',
-        trustPort: this.workspaceTrust,
-        trustCleanup: this.trustCleanup,
+        trustPort: this.#sessionResources.workspaceTrust,
+        trustCleanup: this.#sessionResources.trustCleanup,
         idePort: undefined,
       },
       {
@@ -478,29 +520,32 @@ export class AgentActivationBootstrap
     this.#disposed = true;
     ++this.#attempt;
     this.#receipt = undefined;
-    if (this.ownsDefinitions) this.workspaceDefinitions.closeAdmission();
+    const resources = this.#sessionResources;
+    if (this.ownsDefinitions) resources.workspaceDefinitions.closeAdmission();
     const memoryClosing = this.ownsMemory
-      ? this.workspaceMemory.dispose()
+      ? resources.workspaceMemory.dispose()
       : undefined;
     void memoryClosing?.catch(() => undefined);
     this.#closing = retireActivationOwners({
       publicWork: Promise.allSettled([this.#tail, ...this.#publicWork]),
       memory: memoryClosing,
       sessionClient: () =>
-        this.ownsSessionClient ? this.ownedSessionClient.dispose() : undefined,
+        this.ownsSessionClient ? resources.sessionClient.dispose() : undefined,
       afterClient: [
         () =>
           this.ownsDefinitions
-            ? this.workspaceDefinitions.dispose()
+            ? resources.workspaceDefinitions.dispose()
             : undefined,
         () => this.mediaOwner?.dispose(),
-        () => (this.ownsFilesystem ? this.trustCleanup?.() : undefined),
+        () => (this.ownsFilesystem ? resources.trustCleanup?.() : undefined),
         () =>
-          this.ownsFilesystem ? this.workspaceFilesystem.dispose() : undefined,
+          this.ownsFilesystem
+            ? resources.workspaceFilesystem.dispose()
+            : undefined,
       ],
       settings: () =>
-        this.ownsSettings && this.settingsOwnerOwnership === 'transferred'
-          ? this.settingsOwner.dispose()
+        this.ownsSettings && resources.settingsOwnership === 'transferred'
+          ? resources.settingsOwner.dispose()
           : undefined,
     });
     return this.#closing;

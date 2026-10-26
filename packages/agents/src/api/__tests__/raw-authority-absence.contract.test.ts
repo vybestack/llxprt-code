@@ -69,12 +69,12 @@ describe('raw authority producer removal', () => {
   });
   it('does not publish resource-tuple provider acquisition helpers', () => {
     const source = readFileSync(
-      new URL('../fromConfig-session.ts', import.meta.url),
+      new URL('../adopted-agent-assembly.ts', import.meta.url),
       'utf8',
     );
-    expect(
-      sourceMembers('../fromConfig-session.ts', 'AdoptedSessionAssembly'),
-    ).toContain('acquireAdoptedProviderManager');
+    expect(source).toMatch(
+      /^(?:async\s+)?function\s+acquireAdoptedProviderManager\b/m,
+    );
     expect(source).not.toMatch(
       /export\s+(?:async\s+)?function\s+(?:acquireAdoptedProviderManager|acquireAdoptedOAuth|activateAdoptedProviders)\b/,
     );

@@ -1479,7 +1479,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T7.3 E1 one workspace and facade builder
 - [x] T7.4 B3 publishAgentFacade outside the assembly, reachability tests
 - [x] T7.5 B3 edge to PreferredAgentAssembly
-- [ ] T7.6 B3 edge AdoptedSessionAssembly removed
+- [x] T7.6 B3 edge AdoptedSessionAssembly removed
 - [ ] T7.7a B3 preflight transfer record
 - [ ] T7.7b B3 edge to AgentActivationBootstrap, preflight drops bootstrap references
 - [ ] T7.8 B3 last edge, foreground base concrete and private, all reachability cases green
