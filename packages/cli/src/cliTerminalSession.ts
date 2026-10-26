@@ -17,7 +17,6 @@ import {
 } from '@vybestack/llxprt-code-telemetry';
 import type {
   Agent,
-  AgentProfilePreflight,
   AgentForegroundHost,
   ActivationPreflight,
   ProviderActivationIntent,
@@ -33,7 +32,10 @@ import type { LoadedSettings } from './config/settings.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
 import { registerDynamicToolSettings } from './cliBootstrap.js';
 import { createForegroundAgent } from './cliAgentBootstrap.js';
+import type { ForegroundAdmission } from './cliAgentBootstrap.js';
 import { cliSkillOperations } from './config/configBuilder.js';
+
+export type { ForegroundAdmission };
 
 /**
  * Initialize Config, showing an MCP initialization spinner when interactive and
@@ -122,7 +124,7 @@ async function renderInitializingSpinner(initialTotal: number): Promise<
  */
 export async function constructAgentWithSpinner(
   config: Config,
-  preflight: AgentProfilePreflight,
+  admission: ForegroundAdmission,
   token: ActivationPreflight['token'],
   activationPreflightIntent: ProviderActivationIntent,
   credentialAuthority: CredentialAuthority,
@@ -147,7 +149,7 @@ export async function constructAgentWithSpinner(
   try {
     const skills = cliSkillOperations(config);
     const agent = await createForegroundAgent(
-      preflight,
+      admission,
       token,
       activationPreflightIntent,
       credentialAuthority,

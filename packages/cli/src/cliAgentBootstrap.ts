@@ -5,7 +5,6 @@
  */
 import {
   type Agent,
-  AgentProfilePreflight,
   type AgentForegroundHost,
   type ActivationPreflightToken,
   type ProviderActivationIntent,
@@ -14,8 +13,21 @@ import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.
 import { createGitHubBrokerClient } from './config/githubBrokerClient.js';
 import { registerCleanup } from './utils/cleanup.js';
 
+/**
+ * The only preflight operation Agent construction performs. Callers that build
+ * the foreground Agent take this instead of the preflight, whose remaining
+ * surface belongs to the code that creates and finishes it.
+ */
+export interface ForegroundAdmission {
+  admitForegroundAgent(
+    token: ActivationPreflightToken,
+    intent: ProviderActivationIntent,
+    host: AgentForegroundHost,
+  ): Promise<Agent>;
+}
+
 export async function createForegroundAgent(
-  preflight: AgentProfilePreflight,
+  admission: ForegroundAdmission,
   token: ActivationPreflightToken,
   intent: ProviderActivationIntent,
   authority: CredentialAuthority,
@@ -31,17 +43,12 @@ export async function createForegroundAgent(
     return closing;
   };
   try {
-    const agent = await AgentProfilePreflight.createForegroundAgent(
-      preflight,
-      token,
-      intent,
-      {
-        ...host,
-        githubBrokerClient: host.githubBrokerClient ?? broker,
-        disposeGitHubBroker:
-          broker === undefined ? host.disposeGitHubBroker : closeBroker,
-      },
-    );
+    const agent = await admission.admitForegroundAgent(token, intent, {
+      ...host,
+      githubBrokerClient: host.githubBrokerClient ?? broker,
+      disposeGitHubBroker:
+        broker === undefined ? host.disposeGitHubBroker : closeBroker,
+    });
     registerCleanup(() => agent.dispose());
     return agent;
   } catch (primary) {

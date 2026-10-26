@@ -124,6 +124,8 @@ import {
   constructAgentWithSpinner,
   prepareTerminalSession,
 } from './cliTerminalSession.js';
+import type { ForegroundAdmission } from './cliAgentBootstrap.js';
+import type { SessionSettingsOperations } from './runtime/createRuntimeOwnerFeatures.js';
 import { maybeHopIntoSandbox } from './cliSandbox.js';
 import {
   exitAfterSessionListOrDelete,
@@ -259,6 +261,53 @@ function hasExplicitProviderProfileSelector(argv: ParsedCliArgs): boolean {
 }
 
 /**
+ * What the foreground session owner needs from the preflight that created it:
+ * Agent admission, the session settings the interactive runtime logs through,
+ * and the telemetry flush and disposal the host itself performs. The rest of
+ * the preflight stays with the code that creates and finishes it.
+ */
+interface ForegroundOwnerOperations {
+  readonly admission: ForegroundAdmission;
+  readonly runtimeSettings: SessionSettingsOperations;
+  flushTelemetry(): Promise<void>;
+  dispose(): Promise<void>;
+}
+
+/**
+ * Projects the preflight onto the operations the foreground session owner
+ * calls, so the session host and the terminal session never receive the
+ * preflight itself.
+ */
+function createForegroundOwner(
+  preflight: AgentProfilePreflight,
+): ForegroundOwnerOperations {
+  return {
+    admission: {
+      admitForegroundAgent: (token, intent, host) =>
+        preflight.admitForegroundAgent(token, intent, host),
+    },
+    runtimeSettings: {
+      logUserPrompt: (config, event) => preflight.logUserPrompt(config, event),
+      logSlashCommand: (config, event) =>
+        preflight.logSlashCommand(config, event),
+      isTelemetryEnabled: () => preflight.isTelemetryEnabled(),
+      flushTelemetry: () => preflight.flushTelemetry(),
+      readNamedParameter: (key) => preflight.readNamedParameter(key),
+      readDefaultProfileName: () => preflight.readDefaultProfileName(),
+      readTelemetrySettings: () => preflight.readTelemetrySettings(),
+      updateTelemetrySettings: (settings) =>
+        preflight.updateTelemetrySettings(settings),
+      readConversationLoggingEnabled: () =>
+        preflight.readConversationLoggingEnabled(),
+      subscribeModelChanges: (listener) =>
+        preflight.subscribeModelChanges(listener),
+    },
+    flushTelemetry: () => preflight.flushTelemetry(),
+    dispose: () => preflight.dispose(),
+  };
+}
+
+/**
  * Construct the SINGLE foreground Agent (#2378) and dispatch the interactive or
  * non-interactive session. The spinner wraps agent construction, which (via
  * fromConfig) owns Config.initialize() and the one session MessageBus. IDE
@@ -282,7 +331,7 @@ class ForegroundSessionHost {
     private readonly argv: ParsedCliArgs,
     private readonly workspaceRoot: string,
     providerActivation: ConfiguredProviderActivationResult,
-    private readonly preflight: AgentProfilePreflight,
+    private readonly owner: ForegroundOwnerOperations,
     private readonly hasPipedInput: boolean,
     private readonly readStdinData: () => Promise<string>,
     private readonly bootstrapSelection: BootstrapSelection | null,
@@ -297,7 +346,7 @@ class ForegroundSessionHost {
       throw new Error('Missing foreground activation receipt');
     this.#foreground = constructAgentWithSpinner(
       config,
-      preflight,
+      owner.admission,
       receipt,
       providerActivation.intent ?? {},
       credentialAuthority,
@@ -348,10 +397,10 @@ class ForegroundSessionHost {
           () => agent.hooks.triggerSessionStart(),
           (reason) => agent.hooks.triggerSessionEnd(reason),
           (error) => reportNonInteractiveError(this.config, error),
-          () => this.preflight.flushTelemetry(),
+          () => this.owner.flushTelemetry(),
         ),
     );
-    registerCleanup(() => this.preflight.dispose());
+    registerCleanup(() => this.owner.dispose());
   }
   private async validateRun(): Promise<ValidatedNonInteractiveRun> {
     const agent = await this.#foreground;
@@ -407,7 +456,7 @@ class ForegroundSessionHost {
           () => getActiveProviderNameForApiError(validated),
           (provider) => getErrorFallbackModel(validated, provider),
         ),
-        () => this.preflight.flushTelemetry(),
+        () => this.owner.flushTelemetry(),
       ),
       report: (error) => reportNonInteractiveError(validated, error),
     };
@@ -469,7 +518,7 @@ class ForegroundSessionHost {
       {
         providerKeys: this.credentialAuthority.createProviderKeyStorage(),
         recordingOwner: 'agent',
-        runtimeSettings: this.preflight,
+        runtimeSettings: this.owner.runtimeSettings,
         skillOperations: this.#skillOperations,
         restartExtension: this.#restartExtension,
         resumedHistory: history ?? undefined,
@@ -790,7 +839,7 @@ export async function main() {
       argv,
       workspaceRoot,
       providerActivation,
-      preflight,
+      createForegroundOwner(preflight),
       hasPipedInput,
       readStdinOnce,
       bootstrapSelection,

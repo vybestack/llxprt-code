@@ -735,33 +735,37 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     intent: ProviderActivationIntent,
     host: AgentForegroundHost,
   ): Promise<Agent> {
-    preflight.#assertOpen();
-    if (preflight.#foregroundPending !== undefined)
+    return preflight.admitForegroundAgent(token, intent, host);
+  }
+
+  async admitForegroundAgent(
+    token: ActivationPreflightToken,
+    intent: ProviderActivationIntent,
+    host: AgentForegroundHost,
+  ): Promise<Agent> {
+    this.#assertOpen();
+    if (this.#foregroundPending !== undefined)
       throw new Error('Foreground construction was already accepted');
-    const operation = preflight.#activation;
-    const config = preflight.#configuredData;
+    const operation = this.#activation;
+    const config = this.#configuredData;
     if (operation === undefined || config === undefined)
       throw new Error('Foreground construction requires configured preflight');
-    if (preflight.#sessionSettings === undefined)
+    if (this.#sessionSettings === undefined)
       throw new Error('Missing configured settings owner');
-    preflight.#foregroundPending = operation.createForeground(
-      token,
-      intent,
-      host,
-    );
-    preflight.#activationTransferred = true;
-    await preflight.#foregroundPending;
-    if (preflight.#phase !== 'closed') {
-      preflight.#foregroundTransferred = true;
+    this.#foregroundPending = operation.createForeground(token, intent, host);
+    this.#activationTransferred = true;
+    await this.#foregroundPending;
+    if (this.#phase !== 'closed') {
+      this.#foregroundTransferred = true;
       // Drop every reference the preflight built from the transferred bootstrap.
-      preflight.#activation = undefined;
-      preflight.#provisionalActivation = undefined;
-      preflight.#profiles = undefined;
-      preflight.#readProfiles = retiredRead;
-      preflight.#runImage = retiredRead;
-      preflight.#readHistory = retiredRead;
+      this.#activation = undefined;
+      this.#provisionalActivation = undefined;
+      this.#profiles = undefined;
+      this.#readProfiles = retiredRead;
+      this.#runImage = retiredRead;
+      this.#readHistory = retiredRead;
     }
-    return preflight.#foregroundPending;
+    return this.#foregroundPending;
   }
 
   dispose(): Promise<void> {
