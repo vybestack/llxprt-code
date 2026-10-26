@@ -43,7 +43,6 @@ import type {
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
 import type { AppAction, AppState } from '../reducers/appReducer.js';
 import { appReducer, initialAppState } from '../reducers/appReducer.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useStoreSelector } from '../stores/useStoreSelector.js';
 import { createTurnStore, type TurnStore } from '../stores/turn/turnStore.js';
 
@@ -74,9 +73,21 @@ export const SessionContext = createContext<SessionContextType | undefined>(
   undefined,
 );
 
+/**
+ * Session reads the controller needs: the model label, a memory refresh on
+ * demand, the debug flag that gates the refresh log line, and the model
+ * selection subscription that drives change detection.
+ */
+export interface SessionControllerRuntime {
+  getModel(): string;
+  refreshMemory(): Promise<{ memoryContent: string; fileCount: number }>;
+  getDebugMode(): boolean;
+  subscribeModelSelection(listener: () => void): () => void;
+}
+
 interface SessionControllerProps {
   children: React.ReactNode;
-  config: CliUiRuntime;
+  config: SessionControllerRuntime;
   /**
    * Turn store owning the history state. Created per instance when not
    * supplied (the composition root owns the app-wide instance).
@@ -183,7 +194,7 @@ function useCheckPaymentModeChange(
 }
 
 function usePerformMemoryRefresh(
-  config: CliUiRuntime,
+  config: SessionControllerRuntime,
   addItem: (
     itemData: Omit<HistoryItem, 'id'>,
     baseTimestamp?: number,
@@ -234,7 +245,7 @@ function useModelChangeWatcher(
   runtimeGetActiveProfileName: GetActiveProfileNameOperation,
   runtimeGetLoadBalancerStats: GetLoadBalancerStatsOperation,
   runtimeProviderStatus: ProviderStatusOperation,
-  config: CliUiRuntime,
+  config: SessionControllerRuntime,
   sessionState: SessionState,
   historyLength: number,
   dispatch: React.Dispatch<SessionAction>,

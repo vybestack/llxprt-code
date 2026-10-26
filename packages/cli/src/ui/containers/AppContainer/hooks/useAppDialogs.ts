@@ -20,8 +20,8 @@ import {
   type UpdateActiveProviderApiKeyOperation,
 } from '../../../contexts/RuntimeContext.js';
 
+import type { ModelTrackingRuntime } from './useModelTracking.js';
 import { selectDialogOpen } from '../../../stores/dialog/dialogStore.js';
-import type { CliUiRuntime } from '../../../cliUiRuntime.js';
 import type React from 'react';
 import type { AppAction } from '../../../reducers/appReducer.js';
 import { useCallback, useEffect, useMemo } from 'react';
@@ -29,7 +29,10 @@ import type { bindPolicyRulesReader } from '../../../hooks/policyRulesReaderHost
 import { useSubagentDialogCommands } from '../../../hooks/useSubagentDialogCommands.js';
 import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
 import { useAuthCommand } from '../../../hooks/useAuthCommand.js';
-import { useFolderTrust } from '../../../hooks/useFolderTrust.js';
+import {
+  useFolderTrust,
+  type FolderTrustRuntime,
+} from '../../../hooks/useFolderTrust.js';
 import { useOAuthControl } from '../../../contexts/OAuthControlContext.js';
 import { useWelcomeOnboarding } from '../../../hooks/useWelcomeOnboarding.js';
 import type { UseWelcomeOnboardingReturn } from '../../../hooks/useWelcomeOnboarding.js';
@@ -72,12 +75,28 @@ import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 
 const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
 
+/**
+ * Runtime reads the dialog layer makes: the context-limit override, the
+ * disabled-tools ephemeral setting, the screen-reader flag, the model identity
+ * the footer mirrors, and folder trust for the trust dialog.
+ */
+export type AppDialogsRuntime = FolderTrustRuntime &
+  ModelTrackingRuntime & {
+    getModel(): string;
+
+    getEphemeralSetting(key: string): unknown;
+    getEphemeralSettings(): Readonly<Record<string, unknown>>;
+    setEphemeralSetting(key: string, value: unknown): void;
+    getScreenReader(): boolean;
+    subscribeModelSelection(listener: () => void): () => void;
+  };
+
 export interface AppDialogsParams {
   readIdeContext: Parameters<typeof useIdeContextBridge>[0]['readIdeContext'];
   subscribeIdeContext: Parameters<
     typeof useIdeContextBridge
   >[0]['subscribeIdeContext'];
-  config: CliUiRuntime;
+  config: AppDialogsRuntime;
   recordRecordingEvent: NonNullable<
     Parameters<typeof bindModelSwitchRecording>[1]
   >;
