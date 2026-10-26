@@ -18,13 +18,26 @@ export class CallerOwnedToolQuery {
   static async create(
     rows: ProviderRequestRows,
     project: (row: IContent) => IContent | undefined = (row) => row,
+    useReader = false,
   ): Promise<CallerOwnedToolQuery> {
     if (rows.callerOwned !== true)
       throw new Error('Caller-owned tool facts require caller-owned rows');
     const query = new CallerOwnedToolQuery(rows.count);
     let leading = true;
-    for (let at = 0; at < rows.count; at++)
-      leading = await query.observeAt(rows, at, leading, project);
+    if (useReader) {
+      let at = 0;
+      for await (const row of rows.openReader()) {
+        const projected = project(row);
+        if (projected !== undefined) {
+          leading &&= projected.speaker === 'tool';
+          query.observe(projected, at, leading);
+        }
+        at++;
+      }
+    } else {
+      for (let at = 0; at < rows.count; at++)
+        leading = await query.observeAt(rows, at, leading, project);
+    }
     return query;
   }
 
