@@ -23,8 +23,8 @@ import {
 import { NativeChatBody } from '../openai/native-chat-body.js';
 
 class RowCensus {
-  private readonly rows: Array<WeakRef<IContent>> = [];
-  private readonly text: Array<WeakRef<object>> = [];
+  private rows: Array<WeakRef<IContent>> = [];
+  private text: Array<WeakRef<object>> = [];
   peakRows = 0;
   peakText = 0;
   acquired = 0;
@@ -46,6 +46,8 @@ class RowCensus {
   private countLive(): { rows: number; text: number; textBytes: number } {
     let rows = 0;
     let textBytes = 0;
+    this.rows = this.rows.filter((ref) => ref.deref() !== undefined);
+    this.text = this.text.filter((ref) => ref.deref() !== undefined);
     for (const ref of this.rows) {
       const row = ref.deref();
       if (row === undefined) continue;
@@ -53,12 +55,36 @@ class RowCensus {
       for (const block of row.blocks)
         if (block.type === 'text') textBytes += Buffer.byteLength(block.text);
     }
-    const text = this.text.filter((ref) => ref.deref() !== undefined).length;
+    const text = this.text.length;
     this.peakRows = Math.max(this.peakRows, rows);
     this.peakText = Math.max(this.peakText, text);
     return { rows, text, textBytes };
   }
 }
+
+describe('row census retained controls', () => {
+  it('keeps reachable rows and separately retained text blocks visible', async () => {
+    const census = new RowCensus();
+    const retained: IContent[] = Array.from({ length: 3 }, (_, index) => ({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: `held-${index}` }],
+    }));
+    const detached = {
+      type: 'text',
+      text: 'detached',
+    } satisfies IContent['blocks'][number];
+    census.track({ speaker: 'human', blocks: [detached] });
+    for (const row of retained) census.track(row);
+    for (let round = 0; round < 3; round++)
+      expect(await census.sample()).toStrictEqual({
+        rows: 3,
+        text: 4,
+        textBytes: 18,
+      });
+    expect(retained.flatMap((row) => row.blocks)).toHaveLength(3);
+    expect(detached.text).toBe('detached');
+  });
+});
 
 class ObservedResolver extends RequestMediaResolver {
   readonly census = new RowCensus();
