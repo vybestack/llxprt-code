@@ -9,6 +9,7 @@ import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { replaySession } from '@vybestack/llxprt-code-core';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { openClientOwner } from './helpers/client-owner-session.js';
@@ -24,23 +25,31 @@ const ai = (text: string) => ({
   blocks: [{ type: 'text' as const, text }],
 });
 
+type RestoreSession = ReturnType<
+  Awaited<ReturnType<typeof openClientOwner>>['owner']['createSessionControl']
+>;
+
 /**
  * The `/chat restore` command asks the session to drop the last human-led
- * turn. When the client publishes the shortened history and then fails, the
- * session must put the live history and the durable recording back. The
- * client's restoration has no Agent form and no public input makes it fail
- * after publication, so the subject is the SessionControl a
- * SessionClientOwner builds over its real client, with a one-shot fault
- * wrapped around that client's `restoreHistory` (the same form as the
- * restoreTurns fault in session-owner-restore-checkpoint.behavior.test.ts).
+ * turn. The client's restoration has no Agent form and no public input makes
+ * it fail after publication or exposes its history writes, so the subject is
+ * the SessionControl a SessionClientOwner builds over its real client, with
+ * instance wrappers on that client (the same form as the restoreTurns fault in
+ * session-owner-restore-checkpoint.behavior.test.ts).
  */
-describe('SessionControl restoreTurns when client restoration fails after publishing history', () => {
+describe('SessionControl restoreTurns over its real client', () => {
   useFakeResponsesReplay('multi-turn-text.jsonl');
   const credentials = useOwnedCredentials();
 
-  it('keeps the live and durable history of a trailing unanswered turn', async () => {
+  async function withRestoreSession(
+    scenario: (route: {
+      readonly session: RestoreSession;
+      readonly client: AgentClientContract;
+      readonly projectTempDir: string;
+    }) => Promise<void>,
+  ): Promise<void> {
     const directory = await realpath(
-      await mkdtemp(join(tmpdir(), 'restore-history-failure-')),
+      await mkdtemp(join(tmpdir(), 'restore-history-')),
     );
     const projectTempDir = new Storage(directory).getProjectTempDir();
     const opened = await openClientOwner(
@@ -56,7 +65,7 @@ describe('SessionControl restoreTurns when client restoration fails after publis
     );
     const session = opened.owner.createSessionControl(
       'facade',
-      () => 'restore-history-failure-runtime',
+      () => 'restore-history-runtime',
       (operation) => operation(),
       () => {},
       () => {},
@@ -64,7 +73,40 @@ describe('SessionControl restoreTurns when client restoration fails after publis
       () => 'fake-model',
     );
     try {
-      const client = opened.client;
+      await scenario({ session, client: opened.client, projectTempDir });
+    } finally {
+      await runCleanupSteps([
+        () => session.dispose(),
+        () => opened.close(),
+        () => rm(directory, { recursive: true, force: true }),
+      ]);
+    }
+  }
+
+  it('restores through the client restoration and never writes the client history', async () => {
+    await withRestoreSession(async ({ session, client }) => {
+      await client.restoreHistory([
+        human('first'),
+        ai('one'),
+        human('second'),
+        ai('two'),
+      ]);
+      await session.setRecording({ enabled: true });
+      const setHistory = spyOn(client, 'setHistory');
+      try {
+        await session.restoreTurns(1);
+        expect(setHistory).not.toHaveBeenCalled();
+      } finally {
+        setHistory.mockRestore();
+      }
+      const restored = JSON.stringify(await session.getHistory());
+      expect(restored).toContain('first');
+      expect(restored).not.toContain('second');
+    });
+  }, 30000);
+
+  it('keeps the live and durable history of a trailing unanswered turn when client restoration fails after publishing history', async () => {
+    await withRestoreSession(async ({ session, client, projectTempDir }) => {
       await client.restoreHistory([human('first'), ai('one'), human('second')]);
       await session.setRecording({ enabled: true });
       const path = session.getRecording().path;
@@ -90,12 +132,6 @@ describe('SessionControl restoreTurns when client restoration fails after publis
       if (!replay.ok) throw new Error(replay.error);
       expect(JSON.stringify(replay.history)).toContain('second');
       expect(JSON.stringify(await session.getHistory())).toContain('second');
-    } finally {
-      await runCleanupSteps([
-        () => session.dispose(),
-        () => opened.close(),
-        () => rm(directory, { recursive: true, force: true }),
-      ]);
-    }
+    });
   }, 30000);
 });

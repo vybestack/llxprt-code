@@ -66,6 +66,7 @@ describe('compression result token accounting', () => {
   ]) {
     it(`does not inspect retired history after ${outcome}`, async () => {
       let retired = false;
+      let recencyReads = 0;
       const result = await executeCompression(
         'compression',
         async () => {},
@@ -77,8 +78,12 @@ describe('compression result token accounting', () => {
           if (retired) throw new Error('History retired without a replacement');
           return 41;
         },
-        () => true,
+        () => {
+          recencyReads += 1;
+          return true;
+        },
       );
+      expect(recencyReads).toBe(1);
       expect(result.detail).toStrictEqual({
         result: outcome,
         originalTokenCount: 41,
