@@ -132,9 +132,13 @@ function entries(
         conditionTarget(target, 'import') ?? '',
       );
     if (source === undefined) continue;
-    const suffix = subpath === '.' ? '' : subpath.slice(2);
+    // The `.` key is the package root, which a consumer imports as the bare
+    // package name. Appending the empty suffix would key it `name/`, a
+    // specifier nobody writes, so the mutator behind the root entry stayed
+    // unreachable.
+    const specifier = subpath === '.' ? name : `${name}/${subpath.slice(2)}`;
     resolved.push({
-      specifier: `${name}/${suffix}`,
+      specifier,
       source: resolve(packageDirectory, source),
     });
   }

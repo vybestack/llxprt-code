@@ -89,6 +89,42 @@ function library({ name, subpath, source, declaration }: LibraryCase): void {
   );
 }
 
+/**
+ * A library whose only export entry is the package root. The specifier a
+ * consumer writes is the bare package name, with no subpath after it, which is
+ * how a package that re-exports its whole public surface is imported.
+ */
+function rootLibrary({
+  name,
+  source,
+  declaration,
+}: Omit<LibraryCase, 'subpath'>): void {
+  const directory = `packages/${name}`;
+  put(
+    `${directory}/package.json`,
+    JSON.stringify({
+      name: `@fixture/${name}`,
+      type: 'module',
+      exports: {
+        '.': {
+          types: './types/index.d.ts',
+          bun: './src/index.ts',
+          import: './dist/index.js',
+        },
+      },
+    }),
+  );
+  put(`${directory}/src/index.ts`, source);
+  put(`${directory}/types/index.d.ts`, declaration);
+  const link = `node_modules/@fixture/${name}`;
+  mkdirSync(dirname(resolve(workspace, link)), { recursive: true });
+  symlinkSync(
+    resolve(workspace, directory),
+    resolve(workspace, link),
+    'junction',
+  );
+}
+
 const mutateSource =
   'export function mutate(target: Record<string, number>): void { target.current = 1; }';
 const mutateDeclaration =
@@ -139,7 +175,7 @@ function expectMutation(importLine: string, call: string): void {
 }
 
 describe('cross-package imported mutators', () => {
-  it('follows a mutator imported through its package root export', () => {
+  it('follows a mutator imported through the package index entry', () => {
     library({
       name: 'lib',
       subpath: 'index',
@@ -147,6 +183,44 @@ describe('cross-package imported mutators', () => {
       declaration: mutateDeclaration,
     });
     expectMutation("import { mutate } from '@fixture/lib/index.js';", 'mutate');
+  });
+
+  it('follows a mutator imported through the bare package root', () => {
+    rootLibrary({
+      name: 'lib',
+      source: mutateSource,
+      declaration: mutateDeclaration,
+    });
+    expectMutation("import { mutate } from '@fixture/lib';", 'mutate');
+  });
+
+  it('follows a bare-root mutator the package re-exports', () => {
+    rootLibrary({
+      name: 'lib',
+      source: "export { mutate } from './mutate.js';",
+      declaration: 'export { mutate } from "./mutate.js";\n',
+    });
+    put('packages/lib/src/mutate.ts', mutateSource);
+    put('packages/lib/types/mutate.d.ts', mutateDeclaration);
+    expectMutation("import { mutate } from '@fixture/lib';", 'mutate');
+  });
+
+  it('permits a bare-root imported function that only reads', () => {
+    rootLibrary({
+      name: 'lib',
+      source:
+        'export function read(target: Record<string, number>): number { return target.current ?? 0; }',
+      declaration:
+        'export declare function read(target: Record<string, number>): number;\n',
+    });
+    put(
+      'packages/demo/src/runtime/state.ts',
+      "import { read } from '@fixture/lib'; const sessions: Record<string, number> = Object.freeze({ current: 0 }); export function run(): number { return read(sessions); }",
+    );
+    const result = audit();
+    expect(result.compilerDiagnostics).toEqual([]);
+    expect(result.findings).toEqual([]);
+    expect(result.exitCode).toBe(0);
   });
 
   it('follows a mutator exported from a package subpath', () => {
