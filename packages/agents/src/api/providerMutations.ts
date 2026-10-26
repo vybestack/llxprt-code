@@ -207,17 +207,13 @@ export async function applyFacadeAuthBaseUrl(
   settings: SettingsService,
   provider: string,
 ): Promise<void> {
+  await updateActiveProviderBaseUrl(
+    baseUrl ?? '',
+    { setEphemeralSetting: writeSetting },
+    settings,
+    provider,
+  );
   state.baseUrl = baseUrl ?? undefined;
-  try {
-    await updateActiveProviderBaseUrl(
-      baseUrl ?? '',
-      { setEphemeralSetting: writeSetting },
-      settings,
-      provider,
-    );
-  } catch {
-    // No-op under the fake seam.
-  }
 }
 
 export function selectOwnerModel(

@@ -210,8 +210,9 @@ export class AuthControl implements AgentAuthControl {
 
   /**
    * Sets/clears the baseUrl on the auth state + mirrors onto providerState and
-   * the live provider via the real mutator (try/catch — safe no-op under the
-   * fake seam).
+   * the live provider via the real mutator. State is published only once the
+   * settings write succeeds, so a rejected write leaves the previous endpoint
+   * in force instead of half-adopting the new one.
    * @plan:PLAN-20260617-COREAPI.P18
    * @requirement:REQ-008
    */
@@ -229,8 +230,8 @@ export class AuthControl implements AgentAuthControl {
         );
       }
     }
-    this.authState.baseUrl = baseUrl ?? undefined;
     await this.writeBaseUrl(baseUrl);
+    this.authState.baseUrl = baseUrl ?? undefined;
   }
 
   /**
