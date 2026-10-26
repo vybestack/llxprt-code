@@ -22,9 +22,11 @@ import type { SandboxConfig } from '@vybestack/llxprt-code-core';
 import { psExecutableSource } from '../../test-utils/ps-executable-fixture.js';
 import {
   FIXTURE_TIMEOUT_MS,
+  fixtureExecutablePath,
   removeFixtureDirectory,
   removeNewRootBunBuildIntermediates,
   rootBunBuildIntermediatePaths,
+  warmCompiledFixture,
   writePortableExecutable,
 } from '../../test-utils/sandbox-fixture-compiler.js';
 import { assignContainerName } from './sandbox-containers.js';
@@ -199,36 +201,39 @@ process.exit(45);
 }
 
 function warmProcessStartExecutable(fixtureDir: string): void {
-  const executableName = process.platform === 'win32' ? 'ps.exe' : 'ps';
-  const executablePath = path.join(fixtureDir, executableName);
   const startsPath = path.join(fixtureDir, 'ps-warmup.state');
   fs.writeFileSync(startsPath, `${process.pid}\t${Date.now()}\n`);
   try {
-    const warmup = spawnSync(
-      executablePath,
+    warmCompiledFixture(
+      fixtureExecutablePath(fixtureDir, 'ps'),
       ['-o', 'lstart=', '-p', String(process.pid)],
-      {
-        encoding: 'utf8',
-        env: { ...process.env, LLXPRT_TEST_PROCESS_STARTS: startsPath },
-        timeout: FIXTURE_TIMEOUT_MS,
-        windowsHide: true,
-      },
+      { LLXPRT_TEST_PROCESS_STARTS: startsPath },
     );
-    if (warmup.error !== undefined) throw warmup.error;
-    if (warmup.status !== 0) {
-      throw new Error(
-        `Failed to warm ${executableName}: ${warmup.stderr.trim()}`,
-      );
-    }
   } finally {
     fs.rmSync(startsPath, { force: true });
   }
+}
+
+// Warmed before each recovery run rather than in beforeAll so that only engines
+// a test uses are launched (the timezone child process never starts one). A
+// launch after the first is cheap.
+function warmEngineExecutable(command: SandboxConfig['command']): void {
+  const fixtureDir = path.dirname(engineLogPath());
+  const scratch = path.join(fixtureDir, 'warmup.scratch');
+  // The first three keys are the state and log paths every engine requires.
+  const scratchEnv = ENGINE_ENV_KEYS.slice(0, 3).map((key) => [key, scratch]);
+  warmCompiledFixture(
+    fixtureExecutablePath(fixtureDir, command),
+    ['images', '-q'],
+    Object.fromEntries(scratchEnv),
+  );
 }
 
 async function runRecoveryStartup(
   command: SandboxConfig['command'],
 ): Promise<string> {
   const config: SandboxConfig = { command, image: TEST_IMAGE };
+  warmEngineExecutable(command);
   try {
     await runContainerSandbox(config, []);
     return 'startup unexpectedly completed';

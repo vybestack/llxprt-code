@@ -35,14 +35,23 @@ export function removeNewRootBunBuildIntermediates(
   }
 }
 
+export function fixtureExecutablePath(
+  fixtureDir: string,
+  commandName: string,
+): string {
+  return path.join(
+    fixtureDir,
+    process.platform === 'win32' ? `${commandName}.exe` : commandName,
+  );
+}
+
 export function writePortableExecutable(
   commandName: string,
   source: string,
   fixtureDir: string,
 ): void {
-  const executableName =
-    process.platform === 'win32' ? `${commandName}.exe` : commandName;
-  const executablePath = path.join(fixtureDir, executableName);
+  const executablePath = fixtureExecutablePath(fixtureDir, commandName);
+  const executableName = path.basename(executablePath);
   const sourcePath = path.join(fixtureDir, `${commandName}.fixture.ts`);
   const existingBuildIntermediates = rootBunBuildIntermediatePaths();
   fs.writeFileSync(sourcePath, source);
@@ -74,6 +83,27 @@ export function writePortableExecutable(
   } finally {
     fs.rmSync(sourcePath, { force: true });
     removeNewRootBunBuildIntermediates(existingBuildIntermediates);
+  }
+}
+
+// The first launch of a freshly compiled executable is slow on macOS (about 1 s
+// unloaded, tens of seconds under load) because the OS assesses it once. Run it
+// once here so that cost cannot land inside a production deadline in a test.
+export function warmCompiledFixture(
+  executablePath: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+): void {
+  const name = path.basename(executablePath);
+  const warmup = spawnSync(executablePath, args, {
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+    timeout: FIXTURE_TIMEOUT_MS,
+    windowsHide: true,
+  });
+  if (warmup.error !== undefined) throw warmup.error;
+  if (warmup.status !== 0) {
+    throw new Error(`Failed to warm ${name}: ${warmup.stderr.trim()}`);
   }
 }
 
