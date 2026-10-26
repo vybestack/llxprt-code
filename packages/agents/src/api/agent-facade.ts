@@ -60,7 +60,10 @@ import type { ToolControl } from './control/toolControl.js';
 import { assembleToolKeys } from './control/toolKeysControl.js';
 import { WorkspaceControl } from './control/workspaceControl.js';
 import type { AgentMcpOperations } from './mcpRuntimeAssembly.js';
-import type { AgentFacadeMcpPort } from './mcpRuntimePorts.js';
+import type {
+  PublishedMcpPort,
+  WorkspaceFacadeMcpPort,
+} from './mcpRuntimePorts.js';
 import { createNewSessionAdmission } from './new-session-admission.js';
 import { assembleProfilePersistence } from './profilePersistenceAssembly.js';
 import { idleClient } from './session-control-assembly.js';
@@ -83,7 +86,7 @@ export interface WorkspaceFacadeControls {
  * extension subagents by workspace trust.
  */
 export function assembleWorkspaceFacade(
-  runtime: AgentFacadeMcpPort,
+  runtime: WorkspaceFacadeMcpPort,
   config: Config,
   session: SessionClientOwner,
   auth: AgentAuthState,
@@ -472,7 +475,7 @@ export function assembleShellOwner(settings: SettingsService): ShellJobOwner {
  * ownership record and the closures that differ.
  */
 export function publishLeafFacade(
-  runtime: AgentFacadeMcpPort,
+  runtime: PublishedMcpPort,
   config: Config,
   session: SessionClientOwner,
   settingsOwner: SessionSettingsOwner,

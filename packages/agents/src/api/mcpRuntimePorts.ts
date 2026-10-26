@@ -8,7 +8,12 @@
  * The MCP operations each collaborator reads, declared apart from the owner
  * that implements them. `McpRuntimeOwner` is held whole only by the code that
  * constructs it and the code that disposes it; every other consumer is typed
- * by one of the ports below.
+ * by the ports below.
+ *
+ * Each port names the calls of one collaborator. The composed ports at the end
+ * exist for the construction paths that really acquire, bind, activate, publish
+ * and tear down in one operation; they are intersections of the narrow ports,
+ * not inheritance chains that hand a whole runtime to an ordinary consumer.
  */
 import type {
   Config,
@@ -45,8 +50,9 @@ import type {
 import type { SessionClientHookBinding } from './session-hook-binding.js';
 
 /**
- * The workspace authority a bound session keeps reading: IDE context, folder
- * trust, and whether the runtime behind it is still accepting work.
+ * What the session client's acquisition keeps reading for the whole session:
+ * IDE context, folder trust, whether the runtime behind it still accepts work,
+ * and the hook reload registration.
  */
 export interface SessionWorkspaceAuthorityPort {
   readonly ide: WorkspaceIdePort;
@@ -67,10 +73,25 @@ export interface ChildTaskWorkspacePort {
   readonly readInstructions: () => string | undefined;
 }
 
-/** The session tool composition a bound MCP runtime supplies. */
-export interface SessionMcpBindingPort
-  extends SessionWorkspaceAuthorityPort,
-    ChildTaskWorkspacePort {
+/**
+ * What one bound session client reads from the MCP runtime. `bindMcpRuntime`
+ * reads every member here: it binds the IDE context and instructions, keeps the
+ * workspace authority for its lifetime, composes the tool catalog, registers
+ * child launches from the inherited readers, and hands the runtime back the
+ * publication callbacks.
+ */
+export interface SessionMcpBindingPort {
+  readonly ide: WorkspaceIdePort;
+  readonly trust: WorkspaceTrustControlPort;
+  isStopped(): boolean;
+  /** Registers a session hook reload for this binding token. */
+  bindSessionHookReload(
+    token: symbol,
+    reloadHooks: () => Promise<void>,
+  ): () => void;
+  readonly workspacePaths: WorkspaceFilesystemOwner['paths'];
+  readonly policyOwner: Pick<RuntimePolicyOwner, 'workspace' | 'session'>;
+  readonly readInstructions: () => string | undefined;
   readonly workspaceFiles: WorkspaceFilesystemOwner['files'];
   readonly workspaceIgnore: WorkspaceFilesystemOwner['ignore'];
   readonly workspaceScans: WorkspaceFilesystemOwner['scans'];
@@ -93,16 +114,36 @@ export interface SessionMcpBindingPort
   ): void;
 }
 
-/** The binding a freshly acquired session client reads from MCP. */
-export interface CreatedSessionMcpPort extends SessionMcpBindingPort {
+/**
+ * The binding a freshly acquired session client reads from MCP: the binding
+ * port plus the one bus it hands the client it constructs.
+ */
+export type CreatedSessionMcpPort = SessionMcpBindingPort & {
   readonly messageBus: MessageBus;
+};
+
+/** The one activation step a session binding performs on its runtime. */
+export interface McpInitializationPort {
+  initialize(): Promise<void>;
+}
+
+/**
+ * The runtime a foreground construction binds then initializes, before it
+ * hands the facade controls over: `bindMcpRuntime` plus `initialize`.
+ */
+export type SessionBindingActivationPort = SessionMcpBindingPort &
+  McpInitializationPort;
+
+/** The two workspace reads an adopted session client is constructed with. */
+export interface SessionWorkspaceReadsPort {
+  readonly workspacePaths: WorkspaceFilesystemOwner['paths'];
+  readonly readInstructions: () => string | undefined;
 }
 
 /** Activation steps the MCP runtime performs for the agent that owns it. */
-export interface AgentActivationPort {
+export type AgentActivationPort = McpInitializationPort & {
   assertConfig(config: Config, messageBus: MessageBus): void;
-  initialize(): Promise<void>;
-}
+};
 
 /** Teardown and discovery settling, the MCP work a construction path records. */
 export interface McpTeardownPort {
@@ -112,24 +153,10 @@ export interface McpTeardownPort {
 }
 
 /**
- * The runtime a created agent holds for its whole life: it binds the session,
- * publishes the facade, activates, settles discovery and disposes at teardown.
+ * The workspace and MCP controls the published facade exposes.
+ * `assembleWorkspaceFacade` reads every member of this port.
  */
-export interface AgentRuntimeMcpPort
-  extends CreatedSessionMcpPort,
-    AgentFacadeMcpPort,
-    AgentActivationPort,
-    McpTeardownPort {}
-
-/**
- * The runtime a publishing foreground is handed: it reads the facade controls
- * and settles at teardown. Publication binds no session and activates nothing,
- * because the construction path that acquired the runtime already did both.
- */
-export interface PublishedMcpPort extends AgentFacadeMcpPort, McpTeardownPort {}
-
-/** The MCP operations the published agent facade exposes. */
-export interface AgentFacadeMcpPort {
+export interface WorkspaceFacadeMcpPort {
   readonly profileDefinitions: ProfileDefinitionReads;
   readonly profileWrites: ProfileDefinitionWrites;
   readonly subagentDefinitions: SubagentDefinitionReads;
@@ -143,8 +170,6 @@ export interface AgentFacadeMcpPort {
   readonly trust: WorkspaceTrustControlPort;
   readonly ide: WorkspaceIdePort;
   readonly lspInspection: WorkspaceLspInspection;
-  readonly workspaceSkills: Pick<WorkspaceSkillOwner, 'operations'>;
-  readonly extensionOperations: WorkspaceExtensionOperations;
   readonly readOAuthCredentials: TokenStorage['getCredentials'];
   readonly performOAuth: NonNullable<McpControlDeps['performOAuth']>;
   listPrompts(server: string): DiscoveredMCPPrompt[];
@@ -158,13 +183,55 @@ export interface AgentFacadeMcpPort {
   readServerSettings(): WorkspaceMcpSettings;
 }
 
+/** The skill operations the published facade's `SkillsControl` reads. */
+export interface AgentSkillsPort {
+  readonly workspaceSkills: Pick<WorkspaceSkillOwner, 'operations'>;
+}
+
+/** The extension restart hook the foreground host registers. */
+export interface AgentExtensionOperationsPort {
+  readonly extensionOperations: WorkspaceExtensionOperations;
+}
+
 /**
- * The runtime an acquiring foreground path holds until it hands it over: it
- * binds and activates the session client, publishes the facade controls,
- * settles discovery, closes admission and disposes.
+ * The runtime a publishing foreground is handed: it reads the facade controls,
+ * publishes the skills, and settles at teardown. Publication binds no session
+ * and activates nothing, because the construction path that acquired the
+ * runtime already did both.
  */
-export interface ForegroundMcpPort
-  extends AgentFacadeMcpPort,
-    SessionMcpBindingPort,
-    AgentActivationPort,
-    McpTeardownPort {}
+export type PublishedMcpPort = WorkspaceFacadeMcpPort &
+  AgentSkillsPort &
+  McpTeardownPort;
+
+/**
+ * The runtime a foreground construction holds while it binds and activates the
+ * session client, registers the host's skill and extension hooks, and hands the
+ * facade controls to the publication. Every part is read on that path.
+ */
+export type ForegroundMcpPort = PublishedMcpPort &
+  SessionMcpBindingPort &
+  McpInitializationPort &
+  AgentExtensionOperationsPort;
+
+/**
+ * The runtime a created agent holds for its whole life: it binds the session,
+ * publishes the facade, activates, settles discovery and disposes at teardown.
+ * The created-agent assembly performs all of those steps.
+ */
+export type AgentRuntimeMcpPort = CreatedSessionMcpPort &
+  WorkspaceFacadeMcpPort &
+  AgentSkillsPort &
+  AgentActivationPort &
+  McpTeardownPort;
+
+/**
+ * The runtime the adopted (`fromConfig`) construction builds for itself: it
+ * binds the session client it acquires, initializes the workspace, publishes
+ * the facade controls, and tears the runtime down when the adopted prefix rolls
+ * back. The adopted path registers no extension hook, so that member is absent.
+ */
+export type AdoptedMcpPort = CreatedSessionMcpPort &
+  WorkspaceFacadeMcpPort &
+  AgentSkillsPort &
+  McpInitializationPort &
+  McpTeardownPort;

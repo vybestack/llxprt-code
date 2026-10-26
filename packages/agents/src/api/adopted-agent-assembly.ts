@@ -26,7 +26,6 @@ import { defaultFeedbackSink } from '@vybestack/llxprt-code-mcp/host/hostService
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {
   createFileOAuthSettingsProvider,
-  HostCredentialOwner,
   type CredentialAuthority,
   type OAuthManager,
 } from '@vybestack/llxprt-code-providers/auth.js';
@@ -77,9 +76,9 @@ import type {
 } from './activationPreflightState.js';
 import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import type {
-  ChildTaskWorkspacePort,
-  ForegroundMcpPort,
+  AdoptedMcpPort,
   McpTeardownPort,
+  SessionWorkspaceReadsPort,
 } from './mcpRuntimePorts.js';
 import { assembleModelSelection } from './model-selection.js';
 import { executeProviderActivation } from './providerActivationExecutor.js';
@@ -103,7 +102,7 @@ export interface AdoptionSessionInput {
   config: Config;
   settingsService: SettingsService;
   intent: AgentAdoptionIntent;
-  credentialAuthority: CredentialAuthority | undefined;
+  credentialAuthority: CredentialAuthority;
 }
 
 /**
@@ -132,7 +131,7 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
   #lifecycle: AdoptionLifecyclePort | undefined;
   #settingsService!: SettingsService;
   #intent!: AgentAdoptionIntent;
-  #mcp!: ForegroundMcpPort & { readonly messageBus: MessageBus };
+  #mcp!: AdoptedMcpPort;
   #media: SessionMediaOwner | undefined;
   #selectedSettings!: SessionSettingsOwner;
   #files!: ProviderFileLifecycle;
@@ -206,10 +205,7 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
     try {
       lifecycle.validateIdentity();
       const runtimeId = this.#adoptValidateIntent();
-      const credentialAuthority =
-        adoption.credentialAuthority ??
-        new HostCredentialOwner(process.env).authority;
-      await this.#adoptAdoptConfig(runtimeId, credentialAuthority);
+      await this.#adoptAdoptConfig(runtimeId, adoption.credentialAuthority);
       return await lifecycle.publish(this.#agent);
     } finally {
       this.#adoption = undefined;
@@ -234,9 +230,7 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
     return runtimeId;
   }
 
-  #adoptConstructMcp(): Promise<
-    ForegroundMcpPort & { readonly messageBus: MessageBus }
-  > {
+  #adoptConstructMcp(): Promise<AdoptedMcpPort> {
     const feedback = defaultFeedbackSink;
     return McpRuntimeOwner.create(
       {
@@ -613,7 +607,7 @@ async function acquireAdoptedSession(
   content: RuntimeContentGeneratorFactory<ContentGenerator>,
   tokenizer: RuntimeTokenizerFactory,
   files: ProviderFileLifecycle,
-  mcp: ChildTaskWorkspacePort,
+  mcp: SessionWorkspaceReadsPort,
   authority: CredentialAuthority,
 ): Promise<SessionClientOwner> {
   selectedSettings.initializeProviderSelection(
