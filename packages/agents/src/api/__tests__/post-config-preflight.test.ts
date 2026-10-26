@@ -1,5 +1,6 @@
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition/runtimePlugins/types.js';
 import { createRecordingProvider } from './helpers/recording-provider.js';
+import { createRefreshableOAuthContribution } from './helpers/refreshable-oauth-provider.js';
 import { AgentClient } from '../../core/client.js';
 import { gate } from './helpers/async-child-disposal-join-fixture.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
@@ -36,6 +37,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import type { BucketAuthConsentRequest } from '../agent.js';
 import { prepareAgentPreflight } from '../profile-preflight.js';
 import { AgentProfilePreflight } from '../profile-preflight.js';
 import {
@@ -135,6 +137,7 @@ describe('post-config preflight ownership', () => {
     ) => Promise<void>,
     contributions?: ProviderContributionRegistry,
     toolDiscoveryCommand?: string,
+    provider = 'openai',
   ): Promise<void> {
     const root = await mkdtemp(join(tmpdir(), 'post-config-preflight-'));
     const settings = new SettingsService();
@@ -152,7 +155,7 @@ describe('post-config preflight ownership', () => {
       cwd: root,
       targetDir: root,
       model: 'test-model',
-      provider: 'openai',
+      provider,
       mcpEnabled: false,
       skillsSupport: false,
       toolDiscoveryCommand,
@@ -605,6 +608,61 @@ describe('post-config preflight ownership', () => {
       });
     });
   }
+
+  it('delivers OAuth bucket consent from the activation OAuth manager to the foreground agent', async () => {
+    const alias = 'consent-oauth';
+    const oauth = createRefreshableOAuthContribution([
+      { alias, refresh: async () => null },
+    ]);
+    await withPreflight(
+      false,
+      async (operation, prepare) => {
+        operation.writeSetting('auth-bucket-prompt', true);
+        await prepare();
+        const intent = { provider: alias, authMode: 'none' } as const;
+        const result = await operation.preflight(intent);
+        if (result.token === undefined)
+          throw new Error('Missing activation receipt');
+        const agent = await AgentProfilePreflight.createForegroundAgent(
+          operation,
+          result.token,
+          intent,
+          {},
+        );
+        try {
+          expect(oauth.managers).toHaveLength(1);
+          const consent = new Promise<BucketAuthConsentRequest>((resolve) => {
+            agent.auth.subscribeBucketConsent(resolve);
+          });
+          const authentication = oauth.managers[0].authenticateMultipleBuckets(
+            alias,
+            ['work', 'personal'],
+          );
+          const outcome = authentication.then(
+            () => undefined,
+            (error: unknown) => error,
+          );
+          const request = await consent;
+          expect(request).toMatchObject({
+            provider: alias,
+            bucket: 'work',
+            bucketIndex: 1,
+            totalBuckets: 2,
+          });
+          agent.auth.respondToBucketConsent(request.correlationId, false);
+          expect(await outcome).toMatchObject({
+            message:
+              'Multi-bucket authentication cancelled after 0 of 2 buckets',
+          });
+        } finally {
+          await agent.dispose();
+        }
+      },
+      oauth.contributions,
+      undefined,
+      alias,
+    );
+  });
 
   it('initializes the transferred client from the applied profile without an extra activation', async () => {
     const recording = createRecordingProvider({ alias: 'profile-recording' });
