@@ -14,11 +14,15 @@ import type { Agent } from '../agent.js';
 import { drain } from './helpers/agentHarness.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { openRouteAAgent } from './helpers/route-a-agent.js';
+import { openRouteBPreflight } from './helpers/route-b-preflight.js';
 
 /**
  * Construction-time assemblies must not stay reachable from the live agent.
- * The preferred path is observed through a `WeakRef` to the assembly it built
- * and by counting assembly class instances in a heap snapshot.
+ * The preferred path is observed through a `WeakRef` to the assembly it built;
+ * the adopted and preflight paths create their assemblies inside production
+ * code, so they are observed by counting assembly class instances in a heap
+ * snapshot.
  */
 const ASSEMBLY_CLASS_NAMES = [
   'ForegroundAssembly',
@@ -152,6 +156,38 @@ describe('assembly reachability from the live agent', () => {
     } finally {
       await agent.dispose();
       await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('does not keep the adopted-path assemblies reachable from the agent', async () => {
+    const built = await openRouteAAgent({
+      authority: credentials().authority,
+      intent: {},
+    });
+    try {
+      await runTurn(built.agent);
+      await settleGarbage();
+      expect(countHeapInstances(ASSEMBLY_CLASS_NAMES)).toBe(0);
+      await runTurn(built.agent);
+    } finally {
+      await built.close();
+    }
+  });
+
+  it('does not keep the preflight-path assemblies reachable from the agent', async () => {
+    const route = await openRouteBPreflight({
+      authority: credentials().authority,
+    });
+    try {
+      await route.prepare();
+      const agent = await route.createAgent();
+      await runTurn(agent);
+      await settleGarbage();
+      expect(countHeapInstances(ASSEMBLY_CLASS_NAMES)).toBe(0);
+      await runTurn(agent);
+      await agent.dispose();
+    } finally {
+      await route.close();
     }
   });
 });

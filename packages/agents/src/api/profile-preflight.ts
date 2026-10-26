@@ -331,16 +331,12 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     return this.#settings.exportForStateSnapshot();
   }
   load(name: string): ReturnType<AgentProfileApplication['load']> {
-    if (this.#profiles === undefined)
-      throw new Error('Post-config preflight is not prepared');
-    return this.#profiles.load(name);
+    return (this.#profiles ?? notPrepared()).load(name);
   }
   applySnapshot(
     ...args: Parameters<AgentProfileApplication['applySnapshot']>
   ): ReturnType<AgentProfileApplication['applySnapshot']> {
-    if (this.#profiles === undefined)
-      throw new Error('Post-config preflight is not prepared');
-    return this.#profiles.applySnapshot(...args);
+    return (this.#profiles ?? notPrepared()).applySnapshot(...args);
   }
   isApplying(): boolean {
     return this.#profiles?.isApplying() ?? false;
@@ -350,26 +346,17 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
   }
   listProfiles(): ReturnType<ProfileDefinitionReads['listProfiles']> {
     this.#assertOpen();
-    const read = this.#readProfiles;
-    if (read === undefined)
-      throw new Error('Post-config preflight is not prepared');
-    return read();
+    return (this.#readProfiles ?? notPrepared)();
   }
   runImageOperation(
     ...args: Parameters<SessionClientOwner['runImageOperation']>
   ): ReturnType<SessionClientOwner['runImageOperation']> {
     this.#assertOpen();
-    const run = this.#runImage;
-    if (run === undefined)
-      throw new Error('Post-config preflight is not prepared');
-    return run(...args);
+    return (this.#runImage ?? notPrepared)(...args);
   }
   captureHistory(): ReturnType<AgentClientContract['getHistory']> {
     this.#assertOpen();
-    const read = this.#readHistory;
-    if (read === undefined)
-      throw new Error('Post-config preflight is not prepared');
-    return read();
+    return (this.#readHistory ?? notPrepared)();
   }
   isTrustedFolder(): boolean {
     return this.#requireTrust().isTrustedFolder();
@@ -412,10 +399,7 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
   }
   #requireTrust(): WorkspaceTrustControlPort {
     this.#assertOpen();
-    const trust = this.#workspaceTrust;
-    if (trust === undefined)
-      throw new Error('Post-config preflight is not prepared');
-    return trust;
+    return this.#workspaceTrust ?? notPrepared();
   }
 
   captureSettings(): Record<string, unknown> {
@@ -646,16 +630,12 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
 
   captureSwitchOperation(): ProviderSwitcher {
     this.#assertOpen();
-    if (this.#switch === undefined)
-      throw new Error('Post-config preflight is not prepared');
-    return this.#switch;
+    return this.#switch ?? notPrepared();
   }
 
   captureProfileOperation(): AgentProfileApplication {
     this.#assertOpen();
-    if (this.#profiles === undefined)
-      throw new Error('Post-config preflight is not prepared');
-    return this.#profiles;
+    return this.#profiles ?? notPrepared();
   }
 
   transferActivation(
@@ -771,7 +751,16 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     );
     preflight.#activationTransferred = true;
     await preflight.#foregroundPending;
-    if (preflight.#phase !== 'closed') preflight.#foregroundTransferred = true;
+    if (preflight.#phase !== 'closed') {
+      preflight.#foregroundTransferred = true;
+      // Drop every reference the preflight built from the transferred bootstrap.
+      preflight.#activation = undefined;
+      preflight.#provisionalActivation = undefined;
+      preflight.#profiles = undefined;
+      preflight.#readProfiles = retiredRead;
+      preflight.#runImage = retiredRead;
+      preflight.#readHistory = retiredRead;
+    }
     return preflight.#foregroundPending;
   }
 
@@ -803,6 +792,14 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     });
     return this.#closing;
   }
+}
+
+function notPrepared(): never {
+  throw new Error('Post-config preflight is not prepared');
+}
+
+function retiredRead(): Promise<never> {
+  return Promise.reject(new Error('Preflight activation is disposed'));
 }
 
 function preflightActivationCapabilities(
