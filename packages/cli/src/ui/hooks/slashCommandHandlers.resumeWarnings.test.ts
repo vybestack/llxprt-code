@@ -117,24 +117,26 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
         throw new Error('Package validation is not used by this test');
       },
     });
+    const runtime = {
+      getEphemeralSetting: () => 'auto',
+      projectTempDir: root,
+      getSessionRecordingQueueByteLimit: () => Number.MAX_SAFE_INTEGER,
+      logSlashCommand: () => {},
+      getProjectRoot: () => projectRoot,
+      getSessionId: () => 'current-session',
+      getProvider: () => 'test-provider',
+      getModel: () => 'test-model',
+      directories: () => [root],
+      adoptSessionId: () => {},
+    } as never;
     const deps: SlashCommandHandlerDeps = {
       commands: [continueCommand],
-      config: {
-        getEphemeralSetting: () => 'auto',
-        projectTempDir: root,
-        getSessionRecordingQueueByteLimit: () => Number.MAX_SAFE_INTEGER,
-        logSlashCommand: () => {},
-        getProjectRoot: () => projectRoot,
-        getSessionId: () => 'current-session',
-        getProvider: () => 'test-provider',
-        getModel: () => 'test-model',
-        directories: () => [root],
-        adoptSessionId: () => {},
-      } as never,
+      config: runtime,
       commandContext: createMockCommandContext({
         ui: { addItem: commands.addItem, clear: commands.clearItems },
         services: {
           agent: owner,
+          config: runtime,
         },
       }),
       actions: {} as never,
@@ -181,7 +183,7 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
       },
     };
 
-    installFixtureRawResume(deps, persistence, callbacks);
+    installFixtureRawResume(deps, runtime, persistence, callbacks);
     return deps;
   }
 

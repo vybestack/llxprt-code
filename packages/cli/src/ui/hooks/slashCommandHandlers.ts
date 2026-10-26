@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type {
   RecordingIntegration,
   ToolCallConfirmationDetails,
@@ -36,9 +35,17 @@ import { addResumeWarnings } from '../utils/resumeWarnings.js';
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
 import type { DialogRequest } from '../stores/dialog/dialogStore.js';
 
+/**
+ * Slash-command telemetry sink. The handlers only ever log a command event and
+ * use the port's presence to decide whether logging is available.
+ */
+export interface CommandLoggingPort {
+  logSlashCommand(event: SlashCommandEvent): void;
+}
+
 export interface SlashCommandHandlerDeps {
   commands: readonly SlashCommand[] | undefined;
-  config: CliUiRuntime | null;
+  config: CommandLoggingPort | null;
   commandContext: CommandContext;
   resumeOwnedSession:
     | ((action: PerformResumeActionReturn) => Promise<readonly string[]>)

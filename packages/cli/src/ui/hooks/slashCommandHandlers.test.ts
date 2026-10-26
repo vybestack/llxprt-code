@@ -477,7 +477,7 @@ describe('slashCommandHandlers', () => {
           ? null
           : ({
               getEphemeralSetting: vi.fn().mockReturnValue(emojiMode),
-            } as unknown as SlashCommandHandlerDeps['config']);
+            } as unknown as typeof deps.commandContext.services.config);
       deps.loadCommandHistory = bindFixtureHistoryLoader(deps.commandContext);
       deps.commands = [
         {
@@ -645,7 +645,7 @@ describe('slashCommandHandlers', () => {
     it('filters resumed session model text on perform_resume (#2888)', async () => {
       const addItem = vi.fn();
       const deps = createDeps(addItem);
-      deps.config = {
+      const resumeRuntime = {
         getEphemeralSetting: vi.fn().mockReturnValue('auto'),
         projectTempDir: '/tmp/chats',
         getSessionRecordingQueueByteLimit: () => 0,
@@ -659,6 +659,8 @@ describe('slashCommandHandlers', () => {
         directories: () => ['/tmp/project'],
         adoptSessionId: vi.fn(),
       } as never;
+      deps.config = resumeRuntime;
+      deps.commandContext.services.config = resumeRuntime;
       const owner = await createUiSessionOwner();
       deps.commandContext.services.agent = createFakeAgent([], {
         workspace: owner.workspace,
@@ -675,7 +677,13 @@ describe('slashCommandHandlers', () => {
         },
       );
       // Injected instead of vi.mock: bun module mocks leak across test files.
-      installFixtureRawResume(deps, persistence, callbacks, performResumeMock);
+      installFixtureRawResume(
+        deps,
+        resumeRuntime,
+        persistence,
+        callbacks,
+        performResumeMock,
+      );
       deps.commands = [
         {
           name: 'resumecmd',
@@ -775,7 +783,13 @@ describe('slashCommandHandlers', () => {
             ],
           };
         };
-        installFixtureRawResume(deps, persistence, callbacks, resume);
+        installFixtureRawResume(
+          deps,
+          deps.commandContext.services.config as never,
+          persistence,
+          callbacks,
+          resume,
+        );
         deps.commands = [
           {
             name: 'continue',
@@ -849,7 +863,7 @@ describe('slashCommandHandlers', () => {
       ];
       deps.resumeOwnedSession = bindFixtureOwnerResume(
         deps.commandContext,
-        deps.config,
+        deps.commandContext.services.config,
       );
       await processSlashCommand(deps, `/continue ${sourceId}`);
       expect(

@@ -77,7 +77,7 @@ describe('recording owner slash command construction', () => {
       ];
       deps.resumeOwnedSession = bindFixtureOwnerResume(
         deps.commandContext,
-        deps.config,
+        deps.commandContext.services.config,
       );
       await processSlashCommand(deps, `/continue ${sourceId}`);
       expect(

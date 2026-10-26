@@ -409,16 +409,17 @@ async function createHandlerDeps(
     () => commandContext,
     () => persistence.mediaStore,
   );
+  const resumeRuntime = {
+    ...composeFixtureRuntime(config),
+    ...buildSettingsRuntime(
+      config,
+      await createUiSessionOwner(),
+      settingsOwner,
+    ),
+  };
   const deps: SlashCommandHandlerDeps = {
     commands: [continueCommand],
-    config: {
-      ...composeFixtureRuntime(config),
-      ...buildSettingsRuntime(
-        config,
-        await createUiSessionOwner(),
-        settingsOwner,
-      ),
-    },
+    config: resumeRuntime,
     commandContext,
     actions: createActions(),
     addItem: commandContext.ui.addItem,
@@ -439,7 +440,7 @@ async function createHandlerDeps(
     recordCommandError: async () => {},
     loadCommandHistory: async () => {},
   };
-  installFixtureRawResume(deps, persistence, callbacks);
+  installFixtureRawResume(deps, resumeRuntime as never, persistence, callbacks);
   return deps;
 }
 

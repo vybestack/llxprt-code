@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 import {
   useCallback,
   useEffect,
@@ -18,6 +17,9 @@ import type {
   FileSearch,
   SearchOptions,
   MCPResource,
+  WorkspaceIgnoreOperations,
+  WorkspaceResourceSelection,
+  WorkspaceSearchOperations,
 } from '@vybestack/llxprt-code-core';
 import {
   WorkspaceFilesystemOwner,
@@ -27,12 +29,31 @@ import {
   DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
 } from '@vybestack/llxprt-code-core';
 import type { Suggestion } from '../components/SuggestionsDisplay.js';
+import type { UiSubagentManager } from '../cliUiRuntime.js';
+import type { GitHubCompletionReads } from './githubAtCompletion.js';
 import { MAX_SUGGESTIONS_TO_SHOW } from '../components/SuggestionsDisplay.js';
 import { CommandKind } from '../commands/types.js';
 import {
   fetchGitHubSuggestions,
   parseGitHubAtPattern,
 } from './githubAtCompletion.js';
+
+/**
+ * Filesystem search, filtering and non-file suggestion sources the `@`
+ * completion path reads. Sizing this by what the hook calls keeps the whole
+ * runtime out of completion.
+ */
+export interface AtCompletionRuntime {
+  readonly search: WorkspaceSearchOperations['search'];
+  readonly initializeSearch: WorkspaceSearchOperations['initializeSearch'];
+  readonly ignore: Pick<WorkspaceIgnoreOperations, 'shouldIgnoreFile'>;
+  getFileFilteringOptions(): FileFilteringOptions;
+  getEnableRecursiveFileSearch(): boolean;
+  getFileFilteringDisableFuzzySearch(): boolean;
+  getSubagentManager(): UiSubagentManager | undefined;
+  readonly githubCompletion?: GitHubCompletionReads;
+  listResources(): ReturnType<WorkspaceResourceSelection['listResources']>;
+}
 
 const DEFAULT_SEARCH_TIMEOUT_MS = 5000;
 const SEARCH_DEBOUNCE_MS = 150;
@@ -145,12 +166,12 @@ interface SubagentSuggestionCandidate {
 type PatternInput = string | null;
 
 function fileFilteringOptions(
-  config: CliUiRuntime | undefined,
+  config: AtCompletionRuntime | undefined,
 ): FileFilteringOptions | undefined {
   return config?.getFileFilteringOptions();
 }
 
-function getSubagentManager(config: CliUiRuntime | undefined) {
+function getSubagentManager(config: AtCompletionRuntime | undefined) {
   if (config === undefined) {
     return undefined;
   }
@@ -163,7 +184,7 @@ function hasResourceIdentity(resource: MCPResource): boolean {
 }
 
 function buildResourceCandidates(
-  config: CliUiRuntime | undefined,
+  config: AtCompletionRuntime | undefined,
 ): ResourceSuggestionCandidate[] {
   if (config === undefined) {
     return [];
@@ -185,7 +206,7 @@ function buildResourceCandidates(
 }
 
 async function buildSubagentCandidates(
-  config: CliUiRuntime | undefined,
+  config: AtCompletionRuntime | undefined,
 ): Promise<SubagentSuggestionCandidate[]> {
   const subagentManager = getSubagentManager(config);
   if (!subagentManager) {
@@ -221,7 +242,7 @@ async function buildSubagentCandidates(
  */
 async function buildGitHubSuggestions(
   pattern: string,
-  config: CliUiRuntime | undefined,
+  config: AtCompletionRuntime | undefined,
   signal: AbortSignal,
 ): Promise<Suggestion[]> {
   const parsed = parseGitHubAtPattern(pattern);
@@ -241,7 +262,7 @@ async function buildGitHubSuggestions(
  */
 async function buildNonFileSuggestions(
   pattern: string,
-  config: CliUiRuntime | undefined,
+  config: AtCompletionRuntime | undefined,
   signal: AbortSignal,
 ): Promise<NonFileSuggestions> {
   // Run concurrently: these sources are independent, and the GitHub one may
@@ -315,7 +336,7 @@ async function searchNonFileCandidates(
 }
 
 async function createFileSearcher(
-  config: CliUiRuntime | undefined,
+  config: AtCompletionRuntime | undefined,
   cwd: string,
 ): Promise<FileSearch> {
   const search = async (
@@ -406,7 +427,7 @@ async function settle<T>(
 async function performSearch(
   fileSearch: FileSearch,
   pattern: string,
-  config: CliUiRuntime | undefined,
+  config: AtCompletionRuntime | undefined,
   controller: AbortController,
   clearSlowSearchTimer: () => void,
   shouldDispatchResult: (pattern: string) => boolean,
@@ -473,7 +494,7 @@ async function performSearch(
 export interface UseAtCompletionProps {
   enabled: boolean;
   pattern: PatternInput;
-  config: CliUiRuntime | undefined;
+  config: AtCompletionRuntime | undefined;
   cwd: string;
   setSuggestions: (suggestions: Suggestion[]) => void;
   setIsLoadingSuggestions: (isLoading: boolean) => void;
@@ -499,7 +520,7 @@ function useSyncLoadingState(
 
 function useResetOnCwdChange(
   cwd: string,
-  config: CliUiRuntime | undefined,
+  config: AtCompletionRuntime | undefined,
   fileSearch: React.MutableRefObject<FileSearch | null>,
 
   latestRequestedPattern: React.MutableRefObject<PatternInput>,
@@ -671,7 +692,7 @@ function usePatternChangeHandler(
 
 function useInitializationHandler(
   state: AtCompletionState,
-  config: CliUiRuntime | undefined,
+  config: AtCompletionRuntime | undefined,
   cwd: string,
   fileSearch: React.MutableRefObject<FileSearch | null>,
   latestRequestedPattern: React.MutableRefObject<PatternInput>,
@@ -749,7 +770,7 @@ function useInitializationHandler(
 
 function useSearchHandler(
   state: AtCompletionState,
-  config: CliUiRuntime | undefined,
+  config: AtCompletionRuntime | undefined,
   fileSearch: React.MutableRefObject<FileSearch | null>,
   latestRequestedPattern: React.MutableRefObject<PatternInput>,
   lifecycleGeneration: React.MutableRefObject<number>,

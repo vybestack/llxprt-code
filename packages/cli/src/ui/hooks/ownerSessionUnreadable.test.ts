@@ -108,7 +108,7 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
 
     deps.resumeOwnedSession = bindFixtureOwnerResume(
       deps.commandContext,
-      deps.config,
+      deps.commandContext.services.config,
     );
     await processSlashCommand(deps, `/continue ${sourceId}`);
 
