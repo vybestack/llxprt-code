@@ -116,13 +116,17 @@ export interface McpTeardownPort {
  * publishes the facade, activates, settles discovery and disposes at teardown.
  */
 export interface AgentRuntimeMcpPort
-  extends ForegroundMcpPort,
-    CreatedSessionMcpPort {}
-
-/** The runtime a created or adopted agent keeps for its whole life. */
-export interface OwnedAgentMcpPort
-  extends AgentActivationPort,
+  extends CreatedSessionMcpPort,
+    AgentFacadeMcpPort,
+    AgentActivationPort,
     McpTeardownPort {}
+
+/**
+ * The runtime a publishing foreground is handed: it reads the facade controls
+ * and settles at teardown. Publication binds no session and activates nothing,
+ * because the construction path that acquired the runtime already did both.
+ */
+export interface PublishedMcpPort extends AgentFacadeMcpPort, McpTeardownPort {}
 
 /** The MCP operations the published agent facade exposes. */
 export interface AgentFacadeMcpPort {
@@ -155,8 +159,9 @@ export interface AgentFacadeMcpPort {
 }
 
 /**
- * The foreground hands the runtime over once and tears it down: it publishes
- * the facade controls, settles discovery, closes admission and disposes.
+ * The runtime an acquiring foreground path holds until it hands it over: it
+ * binds and activates the session client, publishes the facade controls,
+ * settles discovery, closes admission and disposes.
  */
 export interface ForegroundMcpPort
   extends AgentFacadeMcpPort,

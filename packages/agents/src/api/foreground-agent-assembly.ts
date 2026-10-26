@@ -35,7 +35,7 @@ import type { Agent } from './agent.js';
 import { type AgentSchedulerHandle } from './config-types.js';
 
 import { resolveSchedulerFactory } from '../session/assembleSchedulerOwner.js';
-import type { ForegroundMcpPort, McpTeardownPort } from './mcpRuntimePorts.js';
+import type { McpTeardownPort, PublishedMcpPort } from './mcpRuntimePorts.js';
 import type {
   PreflightAuthInput,
   PreflightProviderInput,
@@ -43,7 +43,7 @@ import type {
 
 /** The runtime owners the foreground is handed once, exactly. */
 export interface ForegroundPreflightTransfer {
-  mcp: ForegroundMcpPort;
+  mcp: PublishedMcpPort;
   mediaOwner: SessionMediaOwner | undefined;
   sessionClient: SessionClientOwner;
   release(): Promise<void>;
