@@ -97,6 +97,7 @@ async function buildCompressionHandler(
   if (rows.length > 0) {
     historyService.addAll(rows);
     await historyService.waitForCommit();
+    await historyService.waitForTokenUpdates();
   }
   const { handler, transport } = middleoutSetup(historyService);
   const logger = new TokenUsageLogger(true, logFile);
