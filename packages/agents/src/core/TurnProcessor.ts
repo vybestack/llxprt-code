@@ -69,6 +69,7 @@ import {
   type ProviderSendTiming,
 } from './turnLogging.js';
 import { throwTurnSendError } from './turnSendError.js';
+import { reasoningInclusionPolicy } from './runtimePorts.js';
 
 import type {
   ModelOutput,
@@ -905,7 +906,8 @@ export class TurnProcessor {
     this.stampingBaseUrl = this.resolveProviderBaseUrl(provider);
     return commitTurnHistory({
       origin,
-      runtimeContext: this.runtimeContext,
+      mediaRuntime: { mediaAdmission: this.runtimeContext.mediaAdmission },
+      reasoningInclusion: reasoningInclusionPolicy(this.runtimeContext),
       historyService: this.historyService,
       compressionHandler: this.compressionHandler,
       response,

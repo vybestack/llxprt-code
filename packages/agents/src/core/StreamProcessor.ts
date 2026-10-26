@@ -85,6 +85,10 @@ import {
   failStreamProcessing,
   finalizeStreamResponse,
 } from './streamResponseFinalizer.js';
+import {
+  mediaAdmissionPort,
+  reasoningInclusionPolicy,
+} from './runtimePorts.js';
 import { stampTurnIdentityOnInput } from './turnIdentity.js';
 
 function isPreparedUserTurn(
@@ -895,7 +899,11 @@ export class StreamProcessor {
       finalized = true;
     } catch (error: unknown) {
       failureCleanupStarted = true;
-      await failStreamProcessing(error, admissions, this.runtimeContext);
+      await failStreamProcessing(
+        error,
+        admissions,
+        mediaAdmissionPort(this.runtimeContext),
+      );
     } finally {
       if (!finalized && !failureCleanupStarted) {
         await this.runtimeContext.mediaAdmission?.releaseAdmissions(admissions);
@@ -918,7 +926,8 @@ export class StreamProcessor {
       conversationManager: this.conversationManager,
       historyService: this.historyService,
       compressionHandler: this.compressionHandler,
-      runtimeContext: this.runtimeContext,
+      mediaAdmission: mediaAdmissionPort(this.runtimeContext),
+      reasoningInclusion: reasoningInclusionPolicy(this.runtimeContext),
       accumulated: acc,
       userInput,
       includeThoughts,
