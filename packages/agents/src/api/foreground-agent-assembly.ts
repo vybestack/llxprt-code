@@ -9,11 +9,14 @@ import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
 
 import {
   ApprovalMode,
+  type Config,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { WorkspaceControl } from './control/workspaceControl.js';
 import type {
   Agent,
   AgentInput,
@@ -24,7 +27,10 @@ import type {
   ProviderInfo,
   TurnOptions,
 } from './agent.js';
-import type { StableDisplayCallbacksHolder } from './agentBootstrap.js';
+import type {
+  OwnershipRecord,
+  StableDisplayCallbacksHolder,
+} from './agentBootstrap.js';
 import { buildProviderInfos } from './agentBootstrap.js';
 import {
   assembleAgentShutdown,
@@ -38,7 +44,6 @@ import {
   joinCapturedRun,
 } from './agentDisposeHelpers.js';
 import type { AgentAuth, EditorCallbacks } from './config-types.js';
-import type { AuthControl } from './control/authControl.js';
 import { type AgentAuthState } from './control/authState.js';
 import { type HookControl } from './control/hooks.js';
 import type { IdeControl } from './control/ideControl.js';
@@ -58,12 +63,11 @@ import type { AgentMcpOperations } from './mcpRuntimeAssembly.js';
 import { createNewSessionAdmission } from './new-session-admission.js';
 import { assembleProfilePersistence } from './profilePersistenceAssembly.js';
 import { createRecordingExecution } from './recordingExecution.js';
+import { idleClient, resetIdleChat } from './session-control-assembly.js';
 import {
-  idleClient,
-  initializeProviderState,
-  resetIdleChat,
-} from './session-control-assembly.js';
-import { SessionProviderOwner } from './session-provider-reads.js';
+  createSessionProviderControl,
+  type SessionProviderControl,
+} from './session-provider-reads.js';
 import type {
   SessionCleanupAction,
   SessionLifecycle,
@@ -114,12 +118,23 @@ import {
 } from './control/session-authentication.js';
 import { assembleForegroundWorkspace } from './foreground-workspace-control.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
-import { assembleModelSelection } from './model-selection.js';
-import { setActiveModel } from './providerMutations.js';
 const UNCONFIGURED_AGENT_MESSAGE =
   'No provider is configured. Run /setup to choose a hosted provider, configure a local model, set up a custom compatible endpoint, or select an existing profile before using the agent.';
 
-export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
+export abstract class ForegroundAgentAssembly {
+  protected workspace!: WorkspaceControl;
+  protected providerControl!: SessionProviderControl;
+  protected facadeSettingsOwner!: SessionSettingsOwner;
+  protected facadeSessionOwner!: SessionClientOwner;
+  protected facadeAuthState!: AgentAuthState;
+  protected config!: Config;
+  protected facadeProviderManager!: RuntimeProviderManager;
+  protected facadeOAuth!: OAuthManager;
+  protected facadeSettingsService!: SettingsService;
+  protected facadeRuntimeState!: AgentRuntimeState;
+  protected facadeOwnership!: OwnershipRecord;
+  protected onOAuthPrompt!: unknown | undefined;
+  protected initialAuth!: AgentAuth | undefined;
   readonly #constructionCancellation = new AbortController();
 
   protected closeConstructionAdmission(): void {
@@ -216,14 +231,6 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
       return cleanupFailedShellBootstrap(primary, tasks, shell);
     }
   }
-  async #selectModel(model: string): Promise<void> {
-    await setActiveModel(
-      model,
-      assembleModelSelection(this.settingsOwner),
-      this.foregroundSettings,
-      this.foregroundManager.getActiveProvider(),
-    );
-  }
   #authentication(): Agent['authentication'] {
     return assembleSessionAuthentication(this.foregroundOAuth, (provider) =>
       clearProviderAuthenticationCache(
@@ -304,7 +311,6 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
     this.onOAuthPrompt = undefined;
     this.initialAuth = parsed.auth;
     this.childDisplay = child;
-    this.selectOwnerModel = (model) => this.#selectModel(model);
     this.authentication = this.#authentication();
     return this.initializeFacade();
   }
@@ -331,10 +337,6 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
 
   protected metrics!: Agent['metrics'];
 
-  readonly listAvailableModels: Agent['listAvailableModels'] = (provider) =>
-    this.facadeProviderManager.getAvailableModels(
-      provider ?? this.getProviderStatus().provider,
-    );
   protected facadeSessionOperations!: Agent['sessionClient'];
   private profilePersistence!: ReturnType<typeof assembleProfilePersistence>;
   protected captureProfile!: Agent['captureProfile'];
@@ -344,7 +346,6 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
   protected setDefaultProfileName!: Agent['setDefaultProfileName'];
   protected getRuntimeDiagnosticsSnapshot!: Agent['getRuntimeDiagnosticsSnapshot'];
   protected tools!: ToolControl;
-  protected auth!: AuthControl;
   protected session!: SessionControl;
   protected hooks!: HookControl;
   protected policy!: PolicyControl;
@@ -354,7 +355,7 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
   private constructSessionClient(): Agent['sessionClient'] {
     return idleClient(
       this.facadeSessionOwner.operations,
-      this.coordinator,
+      this.providerControl.coordinator,
       () => this.rebuild(),
     );
   }
@@ -372,7 +373,7 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
   }
   private constructTools(): ToolControl {
     const assertSessionAdmission = (): void =>
-      this.coordinator.assertNoCommit();
+      this.providerControl.coordinator.assertNoCommit();
     this.facadeTaskOwner.bindSessionAdmission(assertSessionAdmission);
     this.facadeShellOwner.bindSessionAdmission(assertSessionAdmission);
     return this.facadeSessionOwner.createToolControl(
@@ -391,14 +392,14 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
       createNewSessionAdmission(
         this.facadeTaskOwner,
         this.facadeShellOwner,
-        this.coordinator,
+        this.providerControl.coordinator,
         this.tools,
-        () => this.assertProfileIdle(),
+        () => this.providerControl.assertProfileIdle(),
       ),
-      () => this.coordinator.closeAdmission(),
+      () => this.providerControl.coordinator.closeAdmission(),
       () => this.rebuild(),
-      () => this.providerState.provider,
-      () => this.getModel(),
+      () => this.providerControl.getProvider(),
+      () => this.providerControl.getModel(),
     );
   }
 
@@ -446,7 +447,7 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
    * the current loop's injectSteer. No-op when no loop is running.
    */
   injectSteer(text: string): void {
-    this.activeRun?.loop?.injectSteer(text);
+    this.providerControl.activeRun?.loop?.injectSteer(text);
   }
 
   /**
@@ -459,7 +460,7 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
     const admission = assembleDirectProviderAdmission(
       this.facadeSettingsService,
       this.facadeProviderManager,
-      () => this.getModel(),
+      () => this.providerControl.getModel(),
     );
     return new ForegroundRunLifecycle(
       createRecordingExecution(
@@ -467,10 +468,10 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
         this.readHookSessionId,
         this.facadeSessionOwner.hookOperations,
       ),
-      () => this.profiles.isApplying(),
-      () => this.isProviderReady(),
-      (run) => this.coordinator.admit(run),
-      (run) => this.coordinator.release(run),
+      () => this.providerControl.profiles.isApplying(),
+      () => this.providerControl.isProviderReady(),
+      (run) => this.providerControl.coordinator.admit(run),
+      (run) => this.providerControl.coordinator.release(run),
       () => this.facadeSessionOwner.resolveExecution(),
       () => admission.admit(),
       () => this.awaitMcpDiscovery(),
@@ -511,8 +512,8 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
    * @requirement:REQ-010
    */
   async resetChat(): Promise<void> {
-    this.assertProfileIdle();
-    await resetIdleChat(this.coordinator, this.session, () =>
+    this.providerControl.assertProfileIdle();
+    await resetIdleChat(this.providerControl.coordinator, this.session, () =>
       this.facadeSessionOwner.conversation.resetChat(),
     );
   }
@@ -530,7 +531,8 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
   async compress(opts?: {
     readonly promptId?: string;
   }): Promise<CompressionResult> {
-    if (!this.isProviderReady()) throw new Error(UNCONFIGURED_AGENT_MESSAGE);
+    if (!this.providerControl.isProviderReady())
+      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     // Ensure the chat is initialized before accessing it: setHistory can run
     // before the first turn (startChat is otherwise lazy on first turn).
     return this.facadeSessionOwner.compressHistory(
@@ -549,7 +551,8 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
    * @requirement:REQ-012
    */
   async generate(input: AgentInput, opts?: GenerateOptions): Promise<string> {
-    if (!this.isProviderReady()) throw new Error(UNCONFIGURED_AGENT_MESSAGE);
+    if (!this.providerControl.isProviderReady())
+      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     return this.facadeSessionOwner.generateText(
       input,
       opts,
@@ -561,7 +564,7 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
       assembleDirectProviderAdmission(
         this.facadeSettingsService,
         this.facadeProviderManager,
-        this.getModel,
+        this.providerControl.getModel,
       ).admit(),
     );
   }
@@ -578,11 +581,12 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
     schema: Readonly<Record<string, unknown>>,
     opts?: GenerateOptions,
   ): Promise<Record<string, unknown>> {
-    if (!this.isProviderReady()) throw new Error(UNCONFIGURED_AGENT_MESSAGE);
+    if (!this.providerControl.isProviderReady())
+      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     return this.facadeSessionOwner.generateJson(
       contents,
       schema,
-      opts?.model ?? this.getModel(),
+      opts?.model ?? this.providerControl.getModel(),
       opts?.signal,
     );
   }
@@ -595,7 +599,8 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
    * @requirement:REQ-012
    */
   async generateEmbedding(texts: readonly string[]): Promise<number[][]> {
-    if (!this.isProviderReady()) throw new Error(UNCONFIGURED_AGENT_MESSAGE);
+    if (!this.providerControl.isProviderReady())
+      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     return this.facadeSessionOwner.generateEmbedding(texts);
   }
 
@@ -679,7 +684,7 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
   }
 
   private createShutdownLifecycle(): SessionLifecycle {
-    const run = this.activeRun;
+    const run = this.providerControl.activeRun;
     return assembleAgentShutdown(
       this.stopShutdownAdmissions(),
       [
@@ -692,10 +697,13 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
         () => run?.controller.abort(),
         () => this.facadeSessionOwner.abortExecution(),
       ],
-      [() => this.coordinator.dispose(), () => this.facadeShellOwner.dispose()],
+      [
+        () => this.providerControl.coordinator.dispose(),
+        () => this.facadeShellOwner.dispose(),
+      ],
       (errors) =>
         joinAgentWork(
-          () => this.profiles.cancelAndJoin(),
+          () => this.providerControl.profiles.cancelAndJoin(),
           () => this.mcp.cancelAndJoin(),
           () => this.facadeTaskOwner.hasPendingWork(),
           () => this.facadeTaskOwner.join(),
@@ -745,9 +753,26 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
     );
   }
   protected initializeFacade(): Agent {
-    this.switchProvider = this.constructProviderSwitch(this.facadeRuntimeKind);
+    this.providerControl = createSessionProviderControl(
+      {
+        settingsOwner: this.facadeSettingsOwner,
+        settingsService: this.facadeSettingsService,
+      },
+      this.facadeProviderManager,
+      this.facadeOAuth,
+      this.facadeSessionOwner,
+      {
+        config: this.config,
+        authState: this.facadeAuthState,
+        ownership: this.facadeOwnership,
+        runtimeState: this.facadeRuntimeState,
+        initialAuth: this.initialAuth,
+        onOAuthPrompt: this.onOAuthPrompt,
+        workspace: this.workspace,
+        readRuntimeKind: this.facadeRuntimeKind,
+      },
+    );
     this.metrics = this.facadeSettingsOwner.telemetry.localMetrics;
-    this.initializeProviderReads();
     this.facadeSessionOperations = this.constructSessionClient();
     this.profilePersistence = this.constructProfilePersistence();
     this.captureProfile = this.profilePersistence.captureProfile;
@@ -757,14 +782,7 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
     this.setDefaultProfileName = this.profilePersistence.setDefaultProfileName;
     this.getRuntimeDiagnosticsSnapshot =
       this.profilePersistence.getRuntimeDiagnosticsSnapshot;
-    this.providerState = initializeProviderState(
-      this.facadeRuntimeState,
-      this.initialAuth,
-      this.facadeAuthState,
-    );
     this.tools = this.constructTools();
-    this.profiles = this.constructProfiles();
-    this.auth = this.buildAuthControl();
     this.session = this.buildSessionControl();
     this.hooks = this.buildHookControl();
     this.policy = new PolicyControl(this.facadeSessionOwner.policyInspection);
@@ -780,7 +798,7 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
   private publishFacade(): Agent {
     return new AgentImpl(
       this.facadeSessionOwner.createProviderFileOperations(() =>
-        this.coordinator.assertSettingsAdmission(),
+        this.providerControl.coordinator.assertSettingsAdmission(),
       ),
       {
         workspace: this.workspace,
@@ -789,18 +807,18 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
         mcp: this.mcp,
         runtimeId: this.facadeRuntimeId,
         authentication: this.authentication,
-        execution: this.execution,
-        modelParameters: this.modelParameters,
-        settings: this.settings,
+        execution: this.providerControl.execution,
+        modelParameters: this.providerControl.modelParameters,
+        settings: this.providerControl.settings,
         conversation: this.facadeSessionOwner.conversation,
         getStats: () => this.facadeSessionOwner.readStats(this.metrics),
         onStats: (cb) => this.facadeSessionOwner.observeStats(cb, this.metrics),
-        toolFormat: this.toolFormat,
+        toolFormat: this.providerControl.toolFormat,
         metrics: this.metrics,
-        providerReads: this.providerReads,
-        hasActiveProvider: this.hasActiveProvider,
-        getProviderContextLimit: this.getProviderContextLimit,
-        listAvailableModels: this.listAvailableModels,
+        providerReads: this.providerControl.providerReads,
+        hasActiveProvider: this.providerControl.hasActiveProvider,
+        getProviderContextLimit: this.providerControl.getProviderContextLimit,
+        listAvailableModels: this.providerControl.listAvailableModels,
         sessionClient: this.facadeSessionOperations,
         captureProfile: this.captureProfile,
         saveProfileSnapshot: this.saveProfileSnapshot,
@@ -809,8 +827,8 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
         setDefaultProfileName: this.setDefaultProfileName,
         getRuntimeDiagnosticsSnapshot: this.getRuntimeDiagnosticsSnapshot,
         tools: this.tools,
-        profiles: this.profiles,
-        auth: this.auth,
+        profiles: this.providerControl.profiles,
+        auth: this.providerControl.auth,
         session: this.session,
         hooks: this.hooks,
         policy: this.policy,
@@ -819,14 +837,14 @@ export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
         skills: this.skills,
         injectSteer: this.injectSteer.bind(this),
         stream: this.stream.bind(this),
-        getProvider: this.getProvider,
-        setProvider: this.setProvider.bind(this),
-        getProviderStatus: this.getProviderStatus,
-        getModel: this.getModel,
-        setModel: this.setModel.bind(this),
+        getProvider: this.providerControl.getProvider,
+        setProvider: this.providerControl.setProvider,
+        getProviderStatus: this.providerControl.getProviderStatus,
+        getModel: this.providerControl.getModel,
+        setModel: this.providerControl.setModel,
         getApprovalMode: this.getApprovalMode.bind(this),
         setApprovalMode: this.setApprovalMode.bind(this),
-        getModelParams: this.getModelParams,
+        getModelParams: this.providerControl.getModelParams,
         resetChat: this.resetChat.bind(this),
         compress: this.compress.bind(this),
         generate: this.generate.bind(this),

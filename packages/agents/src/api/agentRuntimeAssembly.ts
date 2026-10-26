@@ -36,8 +36,6 @@ import {
   clearProviderAuthenticationCache,
 } from './control/session-authentication.js';
 import { WorkspaceControl } from './control/workspaceControl.js';
-import { assembleModelSelection } from './model-selection.js';
-import { setActiveModel } from './providerMutations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -574,14 +572,6 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
       throw new Error('Preferred Agent client was not acquired');
     return this.preferredSessionClient.refreshToolDefinitions();
   }
-  async #selectModel(model: string): Promise<void> {
-    await setActiveModel(
-      model,
-      assembleModelSelection(this.settingsOwner),
-      this.preferredSettings,
-      this.manager.getActiveProvider(),
-    );
-  }
   #authentication(): Agent['authentication'] {
     return assembleSessionAuthentication(this.oauth, (provider) =>
       clearProviderAuthenticationCache(
@@ -664,7 +654,6 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
     this.onOAuthPrompt = this.preferredOAuthPrompt;
     this.initialAuth = parsed.auth;
     this.childDisplay = child;
-    this.selectOwnerModel = (model) => this.#selectModel(model);
     this.authentication = this.#authentication();
     return this.initializeFacade();
   }

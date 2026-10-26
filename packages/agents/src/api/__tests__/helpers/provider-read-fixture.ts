@@ -5,38 +5,85 @@
  */
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { SessionProviderOwner } from '../../session-provider-reads.js';
+import {
+  createSessionProviderReads,
+  type AgentOpenAIProviderInfo,
+  type SessionProviderReads,
+  type SessionProviderStatus,
+} from '../../session-provider-reads.js';
 
-export class ProviderReadFixture extends SessionProviderOwner {
+export class ProviderReadFixture implements SessionProviderReads {
+  readonly #reads: SessionProviderReads;
+
   constructor(
     selection: SessionSettingsOwner,
     manager: RuntimeProviderManager,
     readConfiguredModel: () => string,
     readProviderSettings: (provider: string) => Record<string, unknown>,
   ) {
-    super();
-    this.facadeSettingsOwner = selection;
-    this.facadeProviderManager = manager;
-    this.readConfiguredModel = readConfiguredModel;
-    this.readProviderSettings = readProviderSettings;
-    this.initializeProviderReads();
+    this.#reads = createSessionProviderReads(
+      selection,
+      manager,
+      readConfiguredModel,
+      readProviderSettings,
+    );
+  }
+
+  get inspection(): SessionProviderReads['inspection'] {
+    return this.#reads.inspection;
+  }
+
+  refreshAliases(): Promise<void> {
+    return this.#reads.refreshAliases();
+  }
+
+  readOpenAIInfo(): AgentOpenAIProviderInfo {
+    return this.#reads.readOpenAIInfo();
+  }
+
+  readActiveProviderName(): string | null {
+    return this.#reads.readActiveProviderName();
   }
 
   getActiveProviderName(): string {
-    return this.readProviderName();
+    return this.#reads.getActiveProviderName();
+  }
+
+  getActiveModelName(): string {
+    return this.#reads.getActiveModelName();
+  }
+
+  getActiveModelParams(): Record<string, unknown> {
+    return this.#reads.getActiveModelParams();
   }
 
   listProviders(): string[] {
-    return this.readProviderNames();
+    return this.#reads.listProviders();
   }
 
   listAvailableModels(
     provider?: string,
   ): ReturnType<RuntimeProviderManager['getAvailableModels']> {
-    return this.readAvailableModels(provider);
+    return this.#reads.listAvailableModels(provider);
   }
 
-  protected rebuild(): never {
-    throw new Error('Provider read fixture does not compose model execution');
+  getActiveProviderMetrics(): ReturnType<
+    RuntimeProviderManager['getProviderMetrics']
+  > {
+    return this.#reads.getActiveProviderMetrics();
+  }
+
+  getSessionTokenUsage(): ReturnType<
+    RuntimeProviderManager['getSessionTokenUsage']
+  > {
+    return this.#reads.getSessionTokenUsage();
+  }
+
+  getUnallowedParametersForActiveModel(): string[] {
+    return this.#reads.getUnallowedParametersForActiveModel();
+  }
+
+  providerStatus(): SessionProviderStatus {
+    return this.#reads.providerStatus();
   }
 }

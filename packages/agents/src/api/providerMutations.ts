@@ -30,7 +30,11 @@ function logger(): DebugLogger {
   return new DebugLogger('llxprt:runtime:providerMutations');
 }
 
-import type { ModelSelectionOperations } from './model-selection.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import {
+  assembleModelSelection,
+  type ModelSelectionOperations,
+} from './model-selection.js';
 
 export async function updateActiveProviderApiKey(
   apiKey: string | null,
@@ -214,4 +218,19 @@ export async function applyFacadeAuthBaseUrl(
   } catch {
     // No-op under the fake seam.
   }
+}
+
+export function selectOwnerModel(
+  settingsOwner: SessionSettingsOwner,
+  settingsService: SettingsService,
+  providers: RuntimeProviderManager,
+): (model: string) => Promise<void> {
+  return async (model) => {
+    await setActiveModel(
+      model,
+      assembleModelSelection(settingsOwner),
+      settingsService,
+      providers.getActiveProvider(),
+    );
+  };
 }

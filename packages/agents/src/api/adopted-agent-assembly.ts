@@ -67,8 +67,6 @@ import { assembleForegroundWorkspace } from './foreground-workspace-control.js';
 import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
 import { AdoptedSessionAssembly } from './fromConfig-session.js';
 import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
-import { assembleModelSelection } from './model-selection.js';
-import { setActiveModel } from './providerMutations.js';
 import { acquireAdoptedMedia } from './session-image-assembly.js';
 import { projectTrustedSubagents } from './workspace-definition-assembly.js';
 import { DEFAULT_SKILL_OPERATIONS } from './workspace-skill-assembly.js';
@@ -369,14 +367,6 @@ export abstract class AdoptedAgentAssembly extends AdoptedSessionAssembly {
     this.facadeDisplay = display;
     this.initialAuth = initialAuth;
     this.childDisplay = child;
-    this.selectOwnerModel = async (model) => {
-      await setActiveModel(
-        model,
-        assembleModelSelection(this.adoptSelectedSettings),
-        this.adoptSettingsService,
-        this.adoptManager.getActiveProvider(),
-      );
-    };
     this.authentication = assembleSessionAuthentication(
       this.adoptOauth,
       (provider) =>
