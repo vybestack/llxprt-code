@@ -124,6 +124,7 @@ import {
   retainWorkspaceAuthority,
   retainMcpPolicyProjection,
   retainWorkspaceCheckpoints,
+  resolveTrustHandoff,
   type AgentMcpOperations,
   type McpOwnerHandoff,
   type McpRuntimeAcquisition,
@@ -287,7 +288,7 @@ export class McpRuntimeOwner implements AgentMcpOperations {
     this.authority = retainWorkspaceAuthority(
       resources,
       inputs.config,
-      inputs.trust,
+      resolveTrustHandoff(inputs.trust, inputs.policy),
       inputs.ide,
     );
     this.trust = this.authority.trust;
