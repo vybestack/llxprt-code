@@ -420,9 +420,10 @@ export async function startNoAuthMcpFixture(): Promise<NoAuthMcpFixture> {
     },
     release: (method) => {
       const request = held.get(method);
+      if (request === undefined) return;
       held.delete(method);
       events.push(`released:${method}`);
-      request?.respond();
+      request.respond();
     },
     close: async () => {
       for (const method of [...held.keys()]) {

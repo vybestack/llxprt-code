@@ -45,7 +45,6 @@ async function withConnectedAgent(
   }
 }
 
-const BARRIER_MS = 20;
 const MCP_CLOSE_DEADLINE_MS = 10_000;
 
 function describeFailure(failure: unknown): string {
@@ -87,8 +86,12 @@ interface HeldDisposal {
 }
 
 /**
- * Starts `operation`, waits until the fixture holds `method`, disposes, waits
- * across a timer barrier with the hold still armed, then releases it.
+ * Starts `operation`, waits until the fixture holds `method`, disposes with the
+ * hold still armed, and releases only after `dispose` fulfills. Releasing on a
+ * timer instead would race retirement: when the timer won, the fixture answered
+ * a request production had already given up on, so the abandonment the test
+ * asserts was overwritten by `released:<method>`. Retirement alone must end the
+ * held request.
  */
 async function disposeWhileHeld(
   fixture: NoAuthMcpFixture,
@@ -101,9 +104,8 @@ async function disposeWhileHeld(
   await fixture.waitUntilHeld(method);
   const first = fixture.events.length;
   const disposing = dispose().then(() => fixture.events.push('disposed'));
-  await delay(BARRIER_MS);
-  fixture.release(method);
   await disposing;
+  fixture.release(method);
   const outcome = await settlement;
   await socketsClosed(fixture);
   return {
