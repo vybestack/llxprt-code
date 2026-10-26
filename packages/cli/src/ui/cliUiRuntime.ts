@@ -210,7 +210,7 @@ export interface UiToolRegistryInfo {
  * Tool-registry SOURCE capability. This is a bare-source read-model (part of
  * {@link StreamRuntimeBareSource}) consumed by the auto-prompt runtime and the
  * settings dialog's dynamic tool-settings derivation. It is intentionally NOT
- * re-exposed as a projected `tools` slice on {@link StreamRuntime}: the
+ * re-exposed as a projected `tools` slice on the stream capabilities: the
  * streaming/UI path lists tools through the public `agent.tools` surface
  * (#2376), so no UI hook reads the registry off the runtime.
  */
@@ -337,9 +337,10 @@ export interface AppStateRuntime {
 }
 
 /**
- * Nested runtime boundary for the streaming path. Each field is a focused
- * capability interface so downstream hooks depend on the smallest suitable
- * surface rather than a flat god-object.
+ * Nested boundary for the streaming path. Each field is a focused capability
+ * interface so downstream hooks depend on the smallest suitable surface rather
+ * than a flat god-object. This is the streaming composition's own shape, built
+ * at the composition edge; it is never a component prop.
  */
 export interface StreamRuntime {
   session: SessionIdentity;
@@ -365,12 +366,11 @@ export interface StreamRuntime {
 }
 
 /**
- * Nested runtime boundary for the full UI layer. Composed at the composition
- * edge from focused capability objects sourced from bootstrap runtime state.
- * Below AppContainer, code accesses `runtime.session.getSessionId()` etc.,
- * never a flat aggregate.
+ * The interactive UI composition: the streaming composition plus the approval,
+ * extension and app capability slices. Built once at the CLI composition root,
+ * which projects it onto narrow ports; it never reaches a component.
  */
-export interface UiRuntime extends StreamRuntime {
+export interface UiComposition extends StreamRuntime {
   approval: ApprovalState;
   extensions: ExtensionRuntime;
   app: AppStateRuntime;
@@ -379,7 +379,7 @@ export interface UiRuntime extends StreamRuntime {
 /**
  * Bare structural source satisfying all focused capability interfaces
  * simultaneously. The CLI bootstrap runtime satisfies this at runtime; the
- * nested UiRuntime is built from it once at the composition edge.
+ * nested capabilities are built from it once at the composition edge.
  */
 export interface StreamRuntimeBareSource
   extends SessionIdentity,
@@ -632,9 +632,9 @@ function buildAppEventRuntime(
 }
 
 /**
- * Helper to build a {@link StreamRuntime} from a runtime source at the
- * composition edge. Each field is a concrete focused adapter so the nested
- * runtime does not expose the flat source object below the composition edge.
+ * Builds the streaming composition from a runtime source at the composition
+ * edge. Each field is a concrete focused adapter so the nested composition
+ * does not expose the flat source object below the composition edge.
  */
 function buildStreamWorkspaceRuntime(
   source: StreamRuntimeDeclarationSource,
@@ -702,7 +702,7 @@ function buildUiWorkspaceRuntime(
     },
   bucketFailover?: BucketFailoverRuntime,
   telemetrySettings?: SessionSettingsOperations,
-): UiRuntime {
+): UiComposition {
   return {
     ...buildStreamWorkspaceRuntime(source, workspace, telemetrySettings),
     ...(bucketFailover ? { bucketFailover } : {}),
@@ -776,13 +776,11 @@ export function buildUiRuntimeFromSource(
   },
   bucketFailover?: BucketFailoverRuntime,
   telemetrySettings?: SessionSettingsOperations,
-): UiRuntime {
-  return {
-    ...buildUiWorkspaceRuntime(
-      source,
-      agent,
-      bucketFailover,
-      telemetrySettings,
-    ),
-  };
+): UiComposition {
+  return buildUiWorkspaceRuntime(
+    source,
+    agent,
+    bucketFailover,
+    telemetrySettings,
+  );
 }

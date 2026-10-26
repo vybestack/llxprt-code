@@ -60,11 +60,17 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SessionMetricUpdates } from '@vybestack/llxprt-code-telemetry';
-import type { UiRuntime } from './cliUiRuntime.js';
 import type {
   BrowserResumeRuntime,
+  ContainerAppReads,
+  ContainerInputReads,
+  ContainerMemoryReads,
   ContainerRuntimeReads,
+  ContainerSessionReads,
+  ContainerTerminalReads,
 } from './cliCommandPorts.js';
+import type { UiSubagentManager } from './cliUiRuntime.js';
+import type { EmojiFilterSettingsSource } from './utils/iContentToHistoryItems.js';
 import type { LayoutRuntime } from './layouts/DefaultAppLayoutHelpers.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
@@ -125,6 +131,7 @@ import {
   useInputReadOperations,
   useInputStreamPolicy,
   type InputAgentOperations,
+  type StreamPolicyReads,
 } from './inputOwnerBindings.js';
 import { getInteractiveTranscriptPath } from './transcriptPath.js';
 
@@ -174,7 +181,13 @@ export interface AppContainerRuntimeProps
   readBuiltinCommands: ReadBuiltinCommands;
   loadRegisteredCommands: LoadRegisteredCommands;
   subscribeCommandChanges: SubscribeCommandChanges;
-  uiRuntime: UiRuntime;
+  containerApp: ContainerAppReads;
+  containerSession: ContainerSessionReads;
+  containerTerminal: ContainerTerminalReads;
+  containerMemory: ContainerMemoryReads;
+  containerInput: ContainerInputReads;
+  inputPolicy: StreamPolicyReads;
+  emojiFilter: EmojiFilterSettingsSource;
   containerRuntime: ContainerRuntimeReads;
   slashCommandPorts: SlashCommandProcessorPorts;
   layoutRuntime: LayoutRuntime;
@@ -326,7 +339,7 @@ function useInputBindings(
   recordingSwapCallbacks: UseRecordingInfrastructureResult['recordingSwapCallbacks'],
 ): AppInputResult {
   const { dialogStore, turnStore } = inputView;
-  const { uiRuntime: runtime, browserSession: config } = props;
+  const { browserSession: config } = props;
   const browser = useInputBrowserCommands(
     props.session,
     config,
@@ -340,20 +353,7 @@ function useInputBindings(
     commands.commandContext.ui.clear,
   );
   const stream = useInputStreamOperations(props);
-  const policy = useInputStreamPolicy({
-    session: runtime.session,
-    events: runtime.events,
-    model: runtime.model,
-    ephemeral: runtime.ephemeral,
-    shell: runtime.shell,
-    checkpoint: runtime.checkpoint,
-    files: runtime.files,
-    settings: runtime.settings,
-    bucketFailover: runtime.bucketFailover,
-    sessionLimits: runtime.sessionLimits,
-    projectTempDir: runtime.projectTempDir,
-    projectCheckpointsDir: runtime.projectCheckpointsDir,
-  });
+  const policy = useInputStreamPolicy(props.inputPolicy);
   return useAppInput({
     ...stream,
     ...policy,
@@ -366,12 +366,9 @@ function useInputBindings(
     generatePromptContent: props.generatePromptContent,
     injectInputSteer: props.injectSteer,
     ...useInputReadOperations({
-      hooks: runtime.hooks,
-      app: runtime.app,
+      ...props.containerInput,
       isAgentClientPresent: props.isAgentClientPresent,
       readIdeMode: props.readIdeMode,
-      shell: runtime.shell,
-      mcp: runtime.mcp,
       refreshMemory: useBound(
         props.containerRuntime,
         props.containerRuntime.refreshMemory,
@@ -433,7 +430,7 @@ function useAppInputRuntime(
     props.appState,
     props.appDispatch,
     props.operationLifecycle,
-    props.uiRuntime.app.getSubagentManager(),
+    props.containerApp.getSubagentManager(),
     bootstrap.setIdePromptAnswered,
     bootstrap.setLlxprtMdFileCount,
   );
@@ -446,7 +443,7 @@ function useAppInputRuntime(
   );
 }
 
-function useBootstrapMemoryReads(memory: UiRuntime['memory']) {
+function useBootstrapMemoryReads(memory: ContainerMemoryReads) {
   return {
     readLlxprtMdFileCount: useBound(memory, memory.getLlxprtMdFileCount),
     readCoreMemoryFileCount: useBound(memory, memory.getCoreMemoryFileCount),
@@ -455,7 +452,7 @@ function useBootstrapMemoryReads(memory: UiRuntime['memory']) {
 
 export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   debug.debug('AppContainer architecture active (v2)');
-  const { uiRuntime, containerRuntime, settings } = props;
+  const { containerApp, containerRuntime, settings } = props;
   const stores = useAppStores(containerRuntime);
   const { recordingIntegrationRef, recordingSwapCallbacks } =
     useRecordingInfrastructure(
@@ -500,11 +497,11 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
       subscribeIdeWorkspaceTrust={props.subscribeIdeWorkspaceTrust}
       layoutRuntime={props.layoutRuntime}
       version={props.version}
-      screenReaderEnabled={uiRuntime.app.getScreenReader()}
+      screenReaderEnabled={containerApp.getScreenReader()}
       disableLoadingPhrases={
-        uiRuntime.app.getAccessibility().disableLoadingPhrases === true
+        containerApp.getAccessibility().disableLoadingPhrases === true
       }
-      debugMode={uiRuntime.app.getDebugMode()}
+      debugMode={containerApp.getDebugMode()}
       settings={settings}
       startupWarnings={props.startupWarnings ?? []}
       nightly={bootstrap.nightly}
@@ -565,15 +562,20 @@ function AppRuntimeView({
 }
 
 function useApplicationLayout(
-  { uiRuntime, settings }: AppContainerRuntimeProps,
+  {
+    containerApp,
+    containerSession,
+    containerTerminal,
+    settings,
+  }: AppContainerRuntimeProps,
   clearConsoleMessagesState: AppBootstrapResult['clearConsoleMessagesState'],
   stores: AppStores,
 ): ReturnType<typeof useAppLayout> {
   return useAppLayout({
     uiRuntime: {
-      getDebugMode: uiRuntime.app.getDebugMode,
-      getTargetDir: uiRuntime.session.getTargetDir,
-      setPtyTerminalSize: uiRuntime.shell.setPtyTerminalSize,
+      getDebugMode: containerApp.getDebugMode,
+      getTargetDir: containerSession.getTargetDir,
+      setPtyTerminalSize: containerTerminal.setPtyTerminalSize,
     },
     settings,
     clearConsoleMessagesState,
@@ -607,10 +609,12 @@ function useApplicationBootstrap(
   stores: AppStores,
   recordingIntegrationRef: UseRecordingInfrastructureResult['recordingIntegrationRef'],
 ): AppBootstrapResult {
-  const { uiRuntime, metrics, settings } = props;
+  const { containerApp, containerMemory, containerTerminal, emojiFilter } =
+    props;
+  const { metrics, settings } = props;
   return useBootstrapRuntime(
     {
-      ...useBootstrapMemoryReads(uiRuntime.memory),
+      ...useBootstrapMemoryReads(containerMemory),
       readIdeMode: props.readIdeMode,
       triggerSessionStart: props.triggerSessionStart,
       appendHistory: props.appendHistory,
@@ -629,9 +633,9 @@ function useApplicationBootstrap(
     settings.merged,
     stores,
     {
-      emojiFilter: uiRuntime.ephemeral,
-      getTerminalBackground: uiRuntime.shell.getTerminalBackground,
-      getDebugMode: uiRuntime.app.getDebugMode,
+      emojiFilter,
+      getTerminalBackground: containerTerminal.getTerminalBackground,
+      getDebugMode: containerApp.getDebugMode,
       readCurrentIde: props.readCurrentIde,
     },
     props.connectRecordingHistory,
@@ -779,7 +783,7 @@ function buildInputView(
   appState: AppState,
   appDispatch: React.Dispatch<AppAction>,
   operationLifecycle: OperationLifecycleRegistry | undefined,
-  subagentManager: ReturnType<UiRuntime['app']['getSubagentManager']>,
+  subagentManager: UiSubagentManager | undefined,
   setIdePromptAnswered: AppBootstrapResult['setIdePromptAnswered'],
   setLlxprtMdFileCount: (count: number) => void,
 ) {

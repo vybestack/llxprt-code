@@ -176,24 +176,54 @@ export function buildUiPortsForTest(
   });
 }
 
-/** The five ports `AppContainer` requires, spread into its props by tests. */
+/**
+ * The ports `AppContainer` requires, spread into its props by tests. Each is
+ * built here from one composed runtime so a mount test names only the ports.
+ */
 export function buildAppContainerPortsForTest(
   ...args: FixtureRuntimeArgs
 ): Pick<
   InteractiveCommandPorts,
+  | 'containerApp'
+  | 'containerSession'
+  | 'containerTerminal'
+  | 'containerMemory'
+  | 'containerInput'
+  | 'inputPolicy'
+  | 'emojiFilter'
   | 'containerRuntime'
   | 'slashCommandPorts'
   | 'layoutRuntime'
   | 'dialogsRuntime'
   | 'browserSession'
 > {
-  const ports = buildUiPortsForTest(...args);
+  const {
+    containerApp,
+    containerSession,
+    containerTerminal,
+    containerMemory,
+    containerInput,
+    inputPolicy,
+    emojiFilter,
+    containerRuntime,
+    slashCommandPorts,
+    layoutRuntime,
+    dialogsRuntime,
+    browserSession,
+  } = buildUiPortsForTest(...args);
   return {
-    containerRuntime: ports.containerRuntime,
-    slashCommandPorts: ports.slashCommandPorts,
-    layoutRuntime: ports.layoutRuntime,
-    dialogsRuntime: ports.dialogsRuntime,
-    browserSession: ports.browserSession,
+    containerApp,
+    containerSession,
+    containerTerminal,
+    containerMemory,
+    containerInput,
+    inputPolicy,
+    emojiFilter,
+    containerRuntime,
+    slashCommandPorts,
+    layoutRuntime,
+    dialogsRuntime,
+    browserSession,
   };
 }
 

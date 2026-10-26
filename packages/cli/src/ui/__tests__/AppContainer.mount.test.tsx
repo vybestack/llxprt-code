@@ -406,10 +406,7 @@ import { initialAppState } from '../reducers/appReducer.js';
 import type { Config, IContent } from '@vybestack/llxprt-code-core';
 import { createMockAgent } from '../../__tests__/mockAgent.js';
 import { appContainerTestAgentProps } from './app-bootstrap-owner-props.js';
-import {
-  buildUiRuntimeFromSource,
-  type UiRuntimeBareSource,
-} from '../cliUiRuntime.js';
+import { type UiRuntimeBareSource } from '../cliUiRuntime.js';
 import { buildAppContainerPortsForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 
 // Type for the mock config
@@ -492,10 +489,6 @@ describe('AppContainer.mount', () => {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
         ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
-        uiRuntime: buildUiRuntimeFromSource(
-          mockConfig as unknown as UiRuntimeBareSource,
-          await createUiSessionOwner(),
-        ),
         ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -523,10 +516,6 @@ describe('AppContainer.mount', () => {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
         ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
-        uiRuntime: buildUiRuntimeFromSource(
-          mockConfig as unknown as UiRuntimeBareSource,
-          await createUiSessionOwner(),
-        ),
         ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -559,10 +548,6 @@ describe('AppContainer.mount', () => {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
         ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
-        uiRuntime: buildUiRuntimeFromSource(
-          mockConfig as unknown as UiRuntimeBareSource,
-          await createUiSessionOwner(),
-        ),
         ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -598,10 +583,6 @@ describe('AppContainer.mount', () => {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
         ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
-        uiRuntime: buildUiRuntimeFromSource(
-          mockConfig as unknown as UiRuntimeBareSource,
-          await createUiSessionOwner(),
-        ),
         ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -633,10 +614,6 @@ describe('AppContainer.mount', () => {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
         ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
-        uiRuntime: buildUiRuntimeFromSource(
-          mockConfig as unknown as UiRuntimeBareSource,
-          await createUiSessionOwner(),
-        ),
         ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -667,10 +644,6 @@ describe('AppContainer.mount', () => {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
         ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
-        uiRuntime: buildUiRuntimeFromSource(
-          mockConfig as unknown as UiRuntimeBareSource,
-          await createUiSessionOwner(),
-        ),
         ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),

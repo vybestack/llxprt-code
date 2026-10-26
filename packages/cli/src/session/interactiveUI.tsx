@@ -293,7 +293,6 @@ function extractTerminalRows(stream: { rows?: number }): number {
  * max-lines-per-function limit.
  */
 function buildRenderElement(
-  uiRuntime: ReturnType<typeof buildUiRuntimeFromSource>,
   commandPorts: InteractiveCommandPorts,
   agent: Agent,
   runtimeSettings: SessionSettingsOperations,
@@ -313,7 +312,12 @@ function buildRenderElement(
   );
   return renderInteractiveShell(
     <AppWrapper
-      uiRuntime={uiRuntime}
+      containerApp={commandPorts.containerApp}
+      containerSession={commandPorts.containerSession}
+      containerTerminal={commandPorts.containerTerminal}
+      containerMemory={commandPorts.containerMemory}
+      containerInput={commandPorts.containerInput}
+      inputPolicy={commandPorts.inputPolicy}
       commandRegistry={commandPorts.commandRegistry}
       fileCommands={commandPorts.fileCommands}
       workspaceCommands={commandPorts.workspaceCommands}
@@ -348,7 +352,7 @@ function buildRenderElement(
       settings={settings}
       startupWarnings={startupWarnings}
       version={version}
-      terminalBackgroundColor={uiRuntime.shell.getTerminalBackground()}
+      terminalBackgroundColor={commandPorts.containerTerminal.getTerminalBackground()}
       {...(recordingOwner === 'agent'
         ? { recordingOwner, resumedHistory, suppressStartupWelcome }
         : {
@@ -696,7 +700,7 @@ function startupCommandRuntimes(
       args.recordingOwner === 'agent' ? undefined : args.sessionPersistence,
     perfSnapshotCapability: args.perfOwner?.snapshotCapability ?? null,
   });
-  return { uiRuntime, commandPorts };
+  return { commandPorts };
 }
 
 export async function commitInteractiveStartup(
@@ -715,11 +719,7 @@ export async function commitInteractiveStartup(
   try {
     const renderOptions = ports.renderOptions(args.config, args.settings);
     const operations = startupBucketOperations(args);
-    const { uiRuntime, commandPorts } = startupCommandRuntimes(
-      args,
-      ports,
-      operations,
-    );
+    const { commandPorts } = startupCommandRuntimes(args, ports, operations);
     ports.debugAppend(
       `renderOptions alternateBuffer=${String(renderOptions.alternateBuffer)} incrementalRendering=${String(renderOptions.incrementalRendering)} stdoutColumns=${String(renderOptions.stdout?.columns)} stdoutRows=${String(renderOptions.stdout?.rows)}`,
     );
@@ -732,7 +732,6 @@ export async function commitInteractiveStartup(
 
     state.instance = ports.render(
       buildRenderElement(
-        uiRuntime,
         commandPorts,
         args.agent,
         args.runtimeSettings,

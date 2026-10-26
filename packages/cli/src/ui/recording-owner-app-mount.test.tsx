@@ -24,7 +24,6 @@ import {
   renderWithProviders,
   waitFor,
 } from '../__tests__/render.js';
-import { buildUiRuntimeFromSource } from './cliUiRuntime.js';
 import {
   buildAppContainerPortsForTest,
   buildUiPortsForTest,
@@ -149,12 +148,6 @@ describe('interactive Agent owner AppWrapper', () => {
                           createUnconfiguredCredentialRegistry()
                         }
                         historyReads={createUnconfiguredHistoryReaders()}
-                        uiRuntime={buildUiRuntimeFromSource(
-                          config,
-                          agent,
-                          undefined,
-                          settingsOwner,
-                        )}
                         {...buildAppContainerPortsForTest(
                           config,
                           agent,
@@ -239,12 +232,6 @@ describe('interactive Agent owner AppWrapper', () => {
     const settings = createMockSettings({ ui: { theme: 'Default' } });
     const view = renderWithProviders(
       <AppWrapper
-        uiRuntime={buildUiRuntimeFromSource(
-          config,
-          agent,
-          undefined,
-          settingsOwner,
-        )}
         {...buildUiPortsForTest(
           config,
           agent,

@@ -16,7 +16,6 @@ import { createMockSettings, render, waitFor } from '../../__tests__/render.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { SettingsContext } from '../contexts/SettingsContext.js';
 import { AppWrapper } from '../App.js';
-import { buildUiRuntimeFromSource } from '../cliUiRuntime.js';
 import { buildUiPortsForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 
 describe('application input producer', () => {
@@ -142,12 +141,6 @@ function renderApplication(
   const oauthControl = owner.authentication;
   const selectedSettings = new SessionSettingsOwner(new SettingsService());
   selectedSettings.bindTelemetry(config);
-  const uiRuntime = buildUiRuntimeFromSource(
-    config,
-    owner,
-    undefined,
-    selectedSettings,
-  );
   const ports = buildUiPortsForTest(
     config,
     owner,
@@ -166,7 +159,6 @@ function renderApplication(
     <SettingsContext.Provider value={settings}>
       <AppWrapper
         agent={owner}
-        uiRuntime={uiRuntime}
         {...ports}
         settings={createMockSettings({
           folderTrust: false,

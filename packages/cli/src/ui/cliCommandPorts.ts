@@ -5,6 +5,7 @@
  */
 
 import type {
+  AccessibilitySettings,
   ApprovalMode,
   LlxprtExtension,
   MCPServerConfig,
@@ -15,12 +16,18 @@ import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import type { CliSessionPersistencePort } from '../cliSessionPersistence.js';
 import type { PerfSnapshotCapability } from './commands/perfCommand.js';
 import type {
+  AppStateRuntime,
   ExtensionEnablementSource,
+  HookSkillState,
+  McpState,
   RefreshMemoryResult,
-  UiRuntime,
+  ShellState,
+  UiComposition,
+  UiSubagentManager,
   UiToolRegistryInfo,
 } from './cliUiRuntime.js';
 import type { WorkspaceCommandRuntime } from './hooks/workspaceCommandOwners.js';
+import type { StreamPolicyReads } from './inputOwnerBindings.js';
 import type { BrowserSessionReads } from './components/browserResumeHost.js';
 import type { SlashCommandProcessorPorts } from './hooks/useSlashCommandProcessorCore.js';
 import type { SkillsCommandRuntime } from './hooks/useResourceCommands.js';
@@ -41,7 +48,9 @@ export interface CommandRegistryReads {
   isAdminSkillsEnabled(): boolean;
   readonly extensionEnablementManager?: ExtensionEnablementSource;
   getMcpServers(): Record<string, MCPServerConfig> | undefined;
-  listPrompts(serverName: string): ReturnType<UiRuntime['mcp']['listPrompts']>;
+  listPrompts(
+    serverName: string,
+  ): ReturnType<UiComposition['mcp']['listPrompts']>;
 }
 
 /**
@@ -110,12 +119,55 @@ export interface ContainerRuntimeReads {
 }
 
 /**
+ * The app-level flags the container renders with: screen reader, accessibility,
+ * debug mode, and the subagent manager the dialogs list.
+ */
+export interface ContainerAppReads {
+  getScreenReader(): boolean;
+  getAccessibility(): AccessibilitySettings;
+  getDebugMode(): boolean;
+  getSubagentManager(): UiSubagentManager | undefined;
+}
+
+/**
+ * Session identity the container and app providers read: the id the task-list
+ * provider scopes to and the directory the layout shows branch state for.
+ */
+export interface ContainerSessionReads {
+  getSessionId(): string;
+  getTargetDir(): string;
+}
+
+/** Terminal reads: the pty size the layout writes and the background colour. */
+export interface ContainerTerminalReads {
+  setPtyTerminalSize(width: number, height: number): void;
+  getTerminalBackground(): string | undefined;
+}
+
+/** Memory counters the bootstrap seeds before the first render. */
+export interface ContainerMemoryReads {
+  getLlxprtMdFileCount(): number;
+  getCoreMemoryFileCount(): number;
+}
+
+/**
+ * The runtime slices the input read bindings take, narrowed to the four
+ * capability objects `useInputReadOperations` reads.
+ */
+export interface ContainerInputReads {
+  readonly hooks: Pick<HookSkillState, 'endHookSession'>;
+  readonly app: Pick<AppStateRuntime, 'getQuestion'>;
+  readonly shell: Pick<ShellState, 'getEnableInteractiveShell'>;
+  readonly mcp: Pick<McpState, 'getMcpServers'>;
+}
+
+/**
  * The inputs only the CLI composition root holds: the runtime it just
  * composed, the provider-key handle, the agent tool registry, and the optional
  * perf/skill/extension/persistence owners.
  */
 export interface CliPortSources {
-  readonly runtime: UiRuntime;
+  readonly runtime: UiComposition;
   readonly providerKeys: ProviderKeyStorageLike;
   readonly describeToolConfiguration: () => UiToolRegistryInfo;
   readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
@@ -134,6 +186,12 @@ export interface CliPortSources {
  */
 export interface InteractiveCommandPorts {
   readonly commandRegistry: CommandRegistryReads;
+  readonly containerApp: ContainerAppReads;
+  readonly containerSession: ContainerSessionReads;
+  readonly containerTerminal: ContainerTerminalReads;
+  readonly containerMemory: ContainerMemoryReads;
+  readonly containerInput: ContainerInputReads;
+  readonly inputPolicy: StreamPolicyReads;
   readonly fileCommands: FileCommandReads;
   readonly workspaceCommands: WorkspaceCommandRuntime;
   readonly chatCommands: ChatCommandReads;
@@ -158,6 +216,12 @@ export function buildInteractiveCommandPorts(
   const { runtime, providerKeys, describeToolConfiguration } = sources;
   return {
     commandRegistry: buildCommandRegistryReads(runtime),
+    containerApp: buildContainerAppReads(runtime),
+    containerSession: buildContainerSessionReads(runtime),
+    containerTerminal: buildContainerTerminalReads(runtime),
+    containerMemory: buildContainerMemoryReads(runtime),
+    containerInput: buildContainerInputReads(runtime),
+    inputPolicy: buildInputStreamPolicyReads(runtime),
     fileCommands: buildFileCommandReads(runtime),
     workspaceCommands: buildWorkspaceCommandPorts(runtime),
     chatCommands: buildChatCommandReads(runtime, sources.sessionPersistence),
@@ -175,8 +239,104 @@ export function buildInteractiveCommandPorts(
   };
 }
 
+export function buildContainerAppReads(
+  runtime: UiComposition,
+): ContainerAppReads {
+  const { app } = runtime;
+  return {
+    getScreenReader: app.getScreenReader,
+    getAccessibility: app.getAccessibility,
+    getDebugMode: app.getDebugMode,
+    getSubagentManager: app.getSubagentManager,
+  };
+}
+
+export function buildContainerSessionReads(
+  runtime: UiComposition,
+): ContainerSessionReads {
+  const { session } = runtime;
+  return {
+    getSessionId: session.getSessionId,
+    getTargetDir: session.getTargetDir,
+  };
+}
+
+export function buildContainerTerminalReads(
+  runtime: UiComposition,
+): ContainerTerminalReads {
+  const { shell } = runtime;
+  return {
+    setPtyTerminalSize: shell.setPtyTerminalSize,
+    getTerminalBackground: shell.getTerminalBackground,
+  };
+}
+
+export function buildContainerMemoryReads(
+  runtime: UiComposition,
+): ContainerMemoryReads {
+  const { memory } = runtime;
+  return {
+    getLlxprtMdFileCount: memory.getLlxprtMdFileCount,
+    getCoreMemoryFileCount: memory.getCoreMemoryFileCount,
+  };
+}
+
+export function buildContainerInputReads(
+  runtime: UiComposition,
+): ContainerInputReads {
+  return {
+    hooks: { endHookSession: runtime.hooks.endHookSession },
+    app: { getQuestion: runtime.app.getQuestion },
+    shell: {
+      getEnableInteractiveShell: runtime.shell.getEnableInteractiveShell,
+    },
+    mcp: { getMcpServers: runtime.mcp.getMcpServers },
+  };
+}
+
+export function buildInputStreamPolicyReads(
+  runtime: UiComposition,
+): StreamPolicyReads {
+  const { session, events, model, ephemeral, shell, checkpoint } = runtime;
+  const { files, settings, bucketFailover, sessionLimits } = runtime;
+  return {
+    session: {
+      getSessionId: session.getSessionId,
+      getTargetDir: session.getTargetDir,
+    },
+    events,
+    model,
+    ephemeral,
+    shell: {
+      getShouldUseNodePtyShell: shell.getShouldUseNodePtyShell,
+      getShellExecutionConfig: shell.getShellExecutionConfig,
+      getPtyTerminalWidth: shell.getPtyTerminalWidth,
+      getPtyTerminalHeight: shell.getPtyTerminalHeight,
+      getEnableInteractiveShell: shell.getEnableInteractiveShell,
+    },
+    checkpoint,
+    files: {
+      getFileFilteringOptions: files.getFileFilteringOptions,
+      directories: files.directories,
+      contains: files.contains,
+      ignore: files.ignore,
+      getEnableRecursiveFileSearch: files.getEnableRecursiveFileSearch,
+    },
+    settings: {
+      logUserPrompt: settings.logUserPrompt,
+      readSelectedProvider: settings.readSelectedProvider,
+      readCitations: settings.readCitations,
+      readProfileName: settings.readProfileName,
+    },
+    bucketFailover,
+    sessionLimits,
+    projectTempDir: runtime.projectTempDir,
+    projectCheckpointsDir: runtime.projectCheckpointsDir,
+  };
+}
+
 export function buildCommandRegistryReads(
-  runtime: UiRuntime,
+  runtime: UiComposition,
 ): CommandRegistryReads {
   return {
     getEnableHooksUI: runtime.hooks.getEnableHooksUI,
@@ -188,7 +348,9 @@ export function buildCommandRegistryReads(
   };
 }
 
-export function buildFileCommandReads(runtime: UiRuntime): FileCommandReads {
+export function buildFileCommandReads(
+  runtime: UiComposition,
+): FileCommandReads {
   const { session, approval, app, extensions, shell } = runtime;
   return {
     userCommandsDir: runtime.userCommandsDir,
@@ -208,7 +370,7 @@ export function buildFileCommandReads(runtime: UiRuntime): FileCommandReads {
 }
 
 export function buildWorkspaceCommandPorts(
-  runtime: UiRuntime,
+  runtime: UiComposition,
 ): WorkspaceCommandRuntime {
   const { session, memory, model, app, files, settings } = runtime;
   return {
@@ -239,7 +401,7 @@ export function buildWorkspaceCommandPorts(
 }
 
 export function buildChatCommandReads(
-  runtime: UiRuntime,
+  runtime: UiComposition,
   sessionPersistence?: CliSessionPersistencePort,
 ): ChatCommandReads {
   return {
@@ -253,7 +415,7 @@ export function buildChatCommandReads(
 }
 
 export function buildKeyCommandReads(
-  runtime: UiRuntime,
+  runtime: UiComposition,
   providerKeys: ProviderKeyStorageLike,
 ): KeyCommandReads {
   return {
@@ -264,7 +426,7 @@ export function buildKeyCommandReads(
 }
 
 export function buildContainerRuntimeReads(
-  runtime: UiRuntime,
+  runtime: UiComposition,
 ): ContainerRuntimeReads {
   return {
     getModel: runtime.model.getModel,
@@ -276,7 +438,7 @@ export function buildContainerRuntimeReads(
 }
 
 export function buildBrowserResumeRuntime(
-  runtime: UiRuntime,
+  runtime: UiComposition,
   sessionPersistence?: CliSessionPersistencePort,
 ): BrowserResumeRuntime {
   return {
@@ -287,7 +449,7 @@ export function buildBrowserResumeRuntime(
 }
 
 function buildBrowserSessionReads(
-  runtime: UiRuntime,
+  runtime: UiComposition,
   sessionPersistence?: CliSessionPersistencePort,
 ): BrowserSessionReads {
   const { session, model, files } = runtime;
@@ -372,7 +534,7 @@ export function buildSlashCommandPorts(
 }
 
 export function buildLayoutRuntime(
-  runtime: UiRuntime,
+  runtime: UiComposition,
   describeToolConfiguration: () => UiToolRegistryInfo,
 ): LayoutRuntime {
   const { session, shell, files, memory, mcp, app, extensions } = runtime;
@@ -410,7 +572,7 @@ export function buildLayoutRuntime(
   };
 }
 
-export function buildDialogsRuntime(runtime: UiRuntime): AppDialogsRuntime {
+export function buildDialogsRuntime(runtime: UiComposition): AppDialogsRuntime {
   const { session, model, app, settings, ephemeral } = runtime;
   return {
     getWorkingDir: session.getWorkingDir,

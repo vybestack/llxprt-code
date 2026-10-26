@@ -145,16 +145,11 @@ describe('#2373 config boundary guard', () => {
     expect(text).not.toMatch(/buildUiRuntimeFromConfig/);
   });
 
-  it('exposes focused capability read-models instead of only a monolithic runtime', () => {
+  it('keeps the UI runtime free of the removed Config-shaped catch-all', () => {
     const text = readFileSync(join(UI_ROOT, 'cliUiRuntime.ts'), 'utf8');
 
-    // The narrow boundaries that decompose the former Config-shaped catch-all.
     expect(text).not.toMatch(/\bAgentClientSource\b|\bagentClientSource\b/);
     expect(text).not.toMatch(/\bgetAgentClient\b|\bagentClient\b/);
-    expect(text).toMatch(/export\s+interface\s+SessionIdentity\s*\{/);
-    expect(text).toMatch(/export\s+interface\s+ModelState\s*\{/);
-    expect(text).toMatch(/export\s+interface\s+StreamRuntime\s*\{/);
-    expect(text).toMatch(/export\s+interface\s+UiRuntime\s+extends/);
   });
 
   it('threads nested runtimes through bootstrap and the streaming input path', () => {

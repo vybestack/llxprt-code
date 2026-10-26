@@ -41,10 +41,7 @@ import {
 } from '../../config/keyBindings.js';
 import { createMockAgent } from '../../__tests__/mockAgent.js';
 import { appContainerTestAgentProps } from './app-bootstrap-owner-props.js';
-import {
-  buildUiRuntimeFromSource,
-  type UiRuntimeBareSource,
-} from '../cliUiRuntime.js';
+import { type UiRuntimeBareSource } from '../cliUiRuntime.js';
 import { buildAppContainerPortsForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 
 const keyBindingProperties: ReadonlyArray<keyof KeyBinding> = [
@@ -536,10 +533,6 @@ describe('AppContainer.keybindings', () => {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
         ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
-        uiRuntime: buildUiRuntimeFromSource(
-          mockConfig as unknown as UiRuntimeBareSource,
-          await createUiSessionOwner(),
-        ),
         ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -568,10 +561,6 @@ describe('AppContainer.keybindings', () => {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
         ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
-        uiRuntime: buildUiRuntimeFromSource(
-          mockConfig as unknown as UiRuntimeBareSource,
-          await createUiSessionOwner(),
-        ),
         ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -605,10 +594,6 @@ describe('AppContainer.keybindings', () => {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
         ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
-        uiRuntime: buildUiRuntimeFromSource(
-          mockConfig as unknown as UiRuntimeBareSource,
-          await createUiSessionOwner(),
-        ),
         ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),

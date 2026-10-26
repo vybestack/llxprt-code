@@ -68,15 +68,20 @@ import {
   type RecordingIntegration,
   type SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
-import type { UiRuntime } from './cliUiRuntime.js';
 import type {
   BrowserResumeRuntime,
   ChatCommandReads,
   CommandRegistryReads,
+  ContainerAppReads,
+  ContainerInputReads,
+  ContainerMemoryReads,
   ContainerRuntimeReads,
+  ContainerSessionReads,
+  ContainerTerminalReads,
   FileCommandReads,
   KeyCommandReads,
 } from './cliCommandPorts.js';
+import type { StreamPolicyReads } from './inputOwnerBindings.js';
 import type { SlashCommandProcessorPorts } from './hooks/useSlashCommandProcessorCore.js';
 import type { LayoutRuntime } from './layouts/DefaultAppLayoutHelpers.js';
 import type { AppDialogsRuntime } from './containers/AppContainer/hooks/useAppDialogs.js';
@@ -116,7 +121,12 @@ import {
 } from './appCommandRegistrationKeys.js';
 
 interface AppProps {
-  uiRuntime: UiRuntime;
+  containerApp: ContainerAppReads;
+  containerSession: ContainerSessionReads;
+  containerTerminal: ContainerTerminalReads;
+  containerMemory: ContainerMemoryReads;
+  containerInput: ContainerInputReads;
+  inputPolicy: StreamPolicyReads;
   commandRegistry: CommandRegistryReads;
   fileCommands: FileCommandReads;
   workspaceCommands: WorkspaceCommandRuntime;
@@ -186,8 +196,6 @@ interface AppProps {
  */
 export class AppWrapper extends Component<AppProps> {
   #captured: AppProps | undefined;
-  #uiSource: UiRuntime | undefined;
-  #uiView: AppContainerProps['uiRuntime'] | undefined;
   private readonly isAgentClientPresent = (): boolean => true;
   private readonly subscribeHistoryTokens: AppContainerProps['subscribeHistoryTokens'] =
     (publish) => this.props.agent.session.subscribeHistoryTokens(publish);
@@ -715,22 +723,12 @@ export class AppWrapper extends Component<AppProps> {
   private renderAppWithState(
     registerCredentials: CredentialCommandRegistration,
   ): ReactNode {
-    const { agent, uiRuntime, ...props } = this.props;
-    if (this.#uiSource !== uiRuntime) {
-      this.#uiSource = uiRuntime;
-      this.#uiView = uiRuntime;
-    }
-    if (
-      !this.#uiView ||
-      !this.#registry ||
-      !this.#history ||
-      !this.#sessionCommands
-    )
+    const { agent, ...props } = this.props;
+    if (!this.#registry || !this.#history || !this.#sessionCommands)
       throw new Error('Application operations were not initialized');
     return (
       <AppWithState
         {...props}
-        uiRuntime={this.#uiView}
         readCurrentIde={this.readCurrentIde}
         readIdeContext={this.readIdeContext}
         subscribeIdeContext={this.subscribeIdeContext}
@@ -789,9 +787,9 @@ export class AppWrapper extends Component<AppProps> {
     return (
       <AppProviders
         metrics={props.agent.metrics}
-        screenReaderEnabled={props.uiRuntime.app.getScreenReader()}
+        screenReaderEnabled={props.containerApp.getScreenReader()}
         settings={props.settings}
-        sessionId={props.uiRuntime.session.getSessionId()}
+        sessionId={props.containerSession.getSessionId()}
         renderRuntime={props.renderRuntime}
         oauthControl={props.oauthControl}
         providerAliasRefresh={props.providerAliasRefresh}
