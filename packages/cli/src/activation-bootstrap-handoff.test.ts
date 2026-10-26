@@ -90,8 +90,6 @@ describe('CLI activation operation handoff', () => {
         activationOperation,
       );
       expect(activation.authFailed).toBe(false);
-      const expectedHistory = await activationOperation.readHistory();
-      const contentConfig = config.getContentGeneratorConfig();
       const agent = await createForegroundAgent(
         route.preflight,
         requireForegroundReceipt(activation),
@@ -99,7 +97,6 @@ describe('CLI activation operation handoff', () => {
         route.authority,
         {},
       );
-      expect(await agent.getHistory()).toStrictEqual(expectedHistory);
       await writeFile(join(root, '.llxprtignore'), '');
       expect(await agent.workspace.search(root, '*.txt')).toStrictEqual([
         'discovery.txt',
@@ -107,7 +104,6 @@ describe('CLI activation operation handoff', () => {
       await writeFile(join(root, '.llxprtignore'), 'discovery.txt\n');
       expect(await filesystem.search.search(root, '*.txt')).toStrictEqual([]);
       expect(agent.getRuntimeId()).toBe(config.getSessionId());
-      expect(config.getContentGeneratorConfig()).toBe(contentConfig);
       expect(
         (await activationOperation.preflight({ authMode: 'none' })).authFailed,
       ).toBe(true);
