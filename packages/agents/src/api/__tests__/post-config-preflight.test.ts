@@ -759,12 +759,20 @@ describe('post-config preflight ownership', () => {
   }
 
   it('publishes infrastructure in startup order and rejects duplicate preparation', async () => {
+    const oauth = createRefreshableOAuthContribution([
+      { alias: 'order-oauth', refresh: async () => null },
+    ]);
     await withPreflight(
       false,
       async (operation, prepare, _supplied, stages) => {
         expect(() => operation.captureSwitchOperation()).toThrow(
           'not prepared',
         );
+        // The contributed OAuth provider registers on the preflight's OAuth
+        // manager while the preflight is created, before preparation binds
+        // policy and publishes the manager.
+        expect(oauth.managers).toHaveLength(1);
+        expect(stages).toStrictEqual([]);
         await prepare();
         expect(stages).toStrictEqual(['policy', 'manager']);
         expect(typeof operation.captureSwitchOperation()).toBe('function');
@@ -773,6 +781,9 @@ describe('post-config preflight ownership', () => {
         const result = await operation.preflight({ authMode: 'none' });
         expect(result.authFailed).toBe(false);
       },
+      oauth.contributions,
+      undefined,
+      'order-oauth',
     );
   });
 
