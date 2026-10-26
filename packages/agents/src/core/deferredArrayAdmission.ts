@@ -72,6 +72,19 @@ function createDeferredArrayAdmission(
   };
 }
 
+function eligibleAdmittedRow(
+  content: IContent | undefined,
+  references: HistoryMediaIndex,
+): content is IContent {
+  if (content === undefined) return false;
+  for (const reference of collectMediaReferences([content]))
+    references.set(reference);
+  return (
+    ['human', 'ai', 'tool'].includes(content.speaker) &&
+    content.blocks.length > 0
+  );
+}
+
 async function* admittedArrayRows(
   input: { rows: readonly IContent[] | undefined },
   admission: MediaAdmissionService,
@@ -80,36 +93,39 @@ async function* admittedArrayRows(
   options: DeferredHistorySourceOptions,
   discardInput: () => void,
 ): AsyncGenerator<IContent, void, unknown> {
+  let admitted: readonly IContent[] = [];
+  let content: IContent | undefined;
+  let inputIndex = 0;
+  let admittedIndex = 0;
   try {
     if (input.rows === undefined)
       throw new Error('Deferred array already consumed');
-    for (const row of input.rows) {
+    while (inputIndex < input.rows.length || admittedIndex < admitted.length) {
       options.signal?.throwIfAborted();
-      const admitted = await admission.admitContents([row], context);
-      yield* admittedRowValues(admitted, references, options);
+      if (admittedIndex === admitted.length) {
+        admitted = await admission.admitContents(
+          [input.rows[inputIndex++]],
+          context,
+        );
+        admittedIndex = 0;
+      }
+      content = admitted[admittedIndex];
+      admittedIndex = Math.min(admittedIndex + 1, admitted.length);
+      if (!eligibleAdmittedRow(content, references)) {
+        content = undefined;
+        continue;
+      }
+      options.ownership?.retain(content);
+      try {
+        yield content;
+      } finally {
+        options.ownership?.release(content);
+        content = undefined;
+      }
     }
   } finally {
+    admitted = [];
+    content = undefined;
     discardInput();
-  }
-}
-
-async function* admittedRowValues(
-  admitted: readonly IContent[],
-  references: HistoryMediaIndex,
-  options: DeferredHistorySourceOptions,
-): AsyncGenerator<IContent, void, unknown> {
-  for (const content of admitted) {
-    options.ownership?.retain(content);
-    try {
-      for (const reference of collectMediaReferences([content]))
-        references.set(reference);
-      if (
-        ['human', 'ai', 'tool'].includes(content.speaker) &&
-        content.blocks.length > 0
-      )
-        yield content;
-    } finally {
-      options.ownership?.release(content);
-    }
   }
 }
