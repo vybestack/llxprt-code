@@ -16,6 +16,7 @@
 
 import type { ArrivalAttempt } from '../../journal/arrival-group.js';
 import type { HistoryBatchRowSource } from './history-batch-values.js';
+import type { observeSealedRow } from './sealed-history-row.js';
 
 export interface ArrivalPublicationRollback {
   rollback(error: unknown): Promise<void>;
@@ -273,6 +274,9 @@ export interface HistoryCompensationMark {
  * the only implementation until the journal-backed store lands (#854 phase 4).
  */
 export interface HistoryStorePort {
+  observeSealedRow(
+    observe: Parameters<typeof observeSealedRow>[1],
+  ): ReturnType<typeof observeSealedRow>;
   captureArrivalRollback(): ArrivalPublicationRollback;
   committedBatch(count?: number): Promise<HistoryBatchRowSource>;
   appendDisplay(

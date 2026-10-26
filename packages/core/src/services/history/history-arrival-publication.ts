@@ -1,7 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { ResponseArrival } from './history-response-arrival.js';
 import type { HistoryStorePort } from './historyStorePort.js';
-import type { IContent } from './IContent.js';
+import type { IContent, MediaReferenceBlock } from './IContent.js';
+import type { SealedHistoryRow } from './sealed-history-row.js';
 
 export function withArrivalPublication<T>(
   arrival: ResponseArrival,
@@ -13,7 +14,10 @@ export function withArrivalPublication<T>(
     prepareAfc(content: IContent): IContent;
     publish(token: T): void;
     cancel(token: T): void;
-    added(content: IContent): void | Promise<void>;
+    added(
+      row: SealedHistoryRow,
+      media: AsyncIterable<MediaReferenceBlock>,
+    ): Promise<void>;
     batch(start: number): Promise<void>;
     reconcileMedia(): Promise<void>;
     first(content: IContent): void;
@@ -41,10 +45,7 @@ export function withArrivalPublication<T>(
         let published = false;
         let first: IContent | undefined;
         const observe = async (): Promise<void> => {
-          const sealed = await host.journal.lastContent();
-          if (sealed === undefined)
-            throw new Error('Sealed response is missing');
-          await host.added(sealed);
+          const sealed = await host.journal.observeSealedRow(host.added);
           if (before === 0 && first === undefined)
             first = {
               speaker: sealed.speaker,

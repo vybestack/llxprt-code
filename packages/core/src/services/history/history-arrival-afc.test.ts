@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+import type { SealedHistoryRow } from './sealed-history-row.js';
 
 async function* auxiliary(label: string): AsyncGenerator<IContent> {
   yield {
@@ -32,7 +33,9 @@ describe('AFC journal row staging', () => {
     const history = new HistoryService();
     const ordinary = new HistoryService();
     const observed: string[] = [];
-    history.on('contentAdded', (row: IContent) => observed.push(row.speaker));
+    history.on('contentSealed', (row: SealedHistoryRow) =>
+      observed.push(row.speaker),
+    );
     try {
       const arrival = await history.openResponseArrival(
         { id: 'afc', submissionId: 'prompt' },
@@ -74,7 +77,7 @@ describe('AFC journal row staging', () => {
     try {
       await arrival.replaceAfcHistory(auxiliary('rejected'));
       await arrival.append({ type: 'text', text: 'done' });
-      history.on('contentAdded', () => {
+      history.on('contentSealed', () => {
         throw new Error('rejected auxiliary');
       });
       await expect(arrival.seal({})).rejects.toThrow('rejected auxiliary');

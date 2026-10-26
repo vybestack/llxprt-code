@@ -129,9 +129,9 @@ export class HistoryService extends HistoryServiceReads {
       },
       publish: (ticket) => this.tokenTickets.publish(ticket),
       cancel: (ticket) => this.tokenTickets.cancel(ticket),
-      added: (sealed) =>
-        publishArrivalMedia(this.mediaOwner, sealed, () => {
-          this.emit('contentAdded', sealed, origin);
+      added: (sealed, references) =>
+        publishArrivalMedia(this.mediaOwner, references, () => {
+          this.emit('contentSealed', sealed, origin);
         }),
       batch: async (start) =>
         notifyDetachedRows(

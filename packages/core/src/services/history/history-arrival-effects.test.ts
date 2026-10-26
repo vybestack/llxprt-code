@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { FanoutHarness } from './__tests__/support/fanout-harness.js';
 import type { IContent, ContentMetadata } from './IContent.js';
+import type { SealedHistoryRow } from './sealed-history-row.js';
 
 const harness = new FanoutHarness();
 const metadata: ContentMetadata = {
@@ -14,8 +15,8 @@ describe('response arrival publication effects', () => {
   it('matches ordinary exported bytes, observers, counts and token publication', async () => {
     const arrivalHistory = harness.history();
     const ordinary = harness.history();
-    const observed: IContent[] = [];
-    arrivalHistory.on('contentAdded', (content) => {
+    const observed: SealedHistoryRow[] = [];
+    arrivalHistory.on('contentSealed', (content: SealedHistoryRow) => {
       observed.push(content);
     });
     const arrival = await arrivalHistory.openResponseArrival(
@@ -36,9 +37,10 @@ describe('response arrival publication effects', () => {
       (await Array.fromAsync(ordinary.streamJSON())).join(''),
     );
     expect(observed).toHaveLength(1);
-    expect(observed[0].blocks).toStrictEqual(
-      (await harness.shared(ordinary))[0].blocks,
+    expect(observed[0].metadata).toStrictEqual(
+      (await harness.shared(ordinary))[0].metadata,
     );
+    expect('blocks' in observed[0]).toBe(false);
     expect(arrivalHistory.getTotalTokens()).toBe(ordinary.getTotalTokens());
     expect(arrivalHistory.length()).toBe(1);
   });
@@ -81,7 +83,7 @@ describe('response arrival publication effects', () => {
   });
   it('compensates a sealed row when an observer rejects publication', async () => {
     const service = harness.history();
-    service.on('contentAdded', () => {
+    service.on('contentSealed', () => {
       throw new Error('observer rejected');
     });
     const arrival = await service.openResponseArrival({

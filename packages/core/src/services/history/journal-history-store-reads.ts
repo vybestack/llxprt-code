@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import { observeSealedRow } from './sealed-history-row.js';
 import type { JournalDisplayHandle } from './journal-display-commands.js';
 import type { JournalDisplayDescriptor } from '../../journal/display-recording.js';
 import type { JournalDisplayCommands } from './journal-display-commands.js';
@@ -166,6 +167,14 @@ export abstract class JournalHistoryStoreReads {
   currentTurnMarker(): Promise<CurrentTurnMarker | null> {
     return this.withDurableSnapshot((snapshot) =>
       lastTurnMarkerOf(snapshot, this.resumeBoundary, this.options.counters),
+    );
+  }
+
+  observeSealedRow(
+    observe: Parameters<typeof observeSealedRow>[1],
+  ): ReturnType<typeof observeSealedRow> {
+    return this.withDurableSnapshot((snapshot) =>
+      observeSealedRow(snapshot, observe),
     );
   }
 

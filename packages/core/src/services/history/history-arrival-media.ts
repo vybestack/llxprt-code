@@ -1,20 +1,19 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryMediaOwner } from './historyBatchContracts.js';
-import { isMediaReferenceBlock, type IContent } from './IContent.js';
+import type { MediaReferenceBlock } from './IContent.js';
 
 export async function publishArrivalMedia(
   owner: HistoryMediaOwner | undefined,
-  content: IContent,
+  references: AsyncIterable<MediaReferenceBlock>,
   observe: () => void,
 ): Promise<void> {
-  const effect = await owner?.prepareReferenceAddition?.(
-    content.blocks.filter(isMediaReferenceBlock),
-  );
+  if (owner !== undefined && owner.prepareReferenceAddition === undefined)
+    throw new Error('History media owner does not support journal addition');
+  const effect = await owner?.prepareReferenceAddition?.(references);
   try {
     await effect?.publish();
     observe();
     await effect?.finalize?.();
-    owner?.adopt([content]);
   } catch (error) {
     try {
       await effect?.rollback();

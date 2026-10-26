@@ -16,6 +16,7 @@
 
 import type { EventEmitter } from 'events';
 import type { IContent } from './IContent.js';
+import type { SealedHistoryRow } from './sealed-history-row.js';
 import type { HistoryBatchEvent } from './history-batch-values.js';
 import type { TokensUpdatedEvent } from './HistoryEvents.js';
 
@@ -111,20 +112,33 @@ export type HistoryEventRegistration<Host> = <Event extends string | symbol>(
   event: Event,
   listener: Event extends 'contentBatchAdded'
     ? (contents: HistoryBatchEvent) => void
-    : Parameters<EventEmitter['on']>[1],
+    : Event extends 'contentSealed'
+      ? (row: SealedHistoryRow, origin?: object) => void
+      : Parameters<EventEmitter['on']>[1],
 ) => Host;
 
 export type HistoryEventEmission = <Event extends string | symbol>(
   event: Event,
   ...args: Event extends 'contentBatchAdded'
     ? [contents: HistoryBatchEvent]
-    : NativeEventArguments
+    : Event extends 'contentSealed'
+      ? [row: SealedHistoryRow, origin?: object]
+      : NativeEventArguments
 ) => boolean;
 
 /**
  * Typed EventEmitter interface for HistoryService events.
  */
 export interface HistoryServiceEventEmitter {
+  on(
+    event: 'contentSealed',
+    listener: (row: SealedHistoryRow, origin?: object) => void,
+  ): this;
+  off(
+    event: 'contentSealed',
+    listener: (row: SealedHistoryRow, origin?: object) => void,
+  ): this;
+  emit(event: 'contentSealed', row: SealedHistoryRow, origin?: object): boolean;
   on(
     event: 'tokensUpdated',
     listener: (eventData: TokensUpdatedEvent) => void,
