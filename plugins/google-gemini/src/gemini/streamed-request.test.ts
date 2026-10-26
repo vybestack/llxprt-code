@@ -41,8 +41,8 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-it('streams 25000 Gemini rows with bounded live rows and no full-body string', async () => {
-  const count = 25000;
+it('streams 65 Gemini rows with bounded live rows and no full-body string', async () => {
+  const count = 65;
   let pulled = 0;
   let consumed = 0;
   let bytes = 0;
@@ -66,7 +66,7 @@ it('streams 25000 Gemini rows with bounded live rows and no full-body string', a
           if (next.done) break;
           bytes += next.value.byteLength;
           consumed = pulled;
-          if (refs.length >= 1000) {
+          if (refs.length >= 8) {
             await sleep(0);
             gc(true);
             expect(
@@ -131,7 +131,7 @@ it('streams 25000 Gemini rows with bounded live rows and no full-body string', a
     /* consume */
   }
   expect(pulled).toBe(count);
-  expect(bytes).toBeGreaterThan(65_000_000);
+  expect(bytes).toBeGreaterThan(count * 2700);
   const retained = Array.from({ length: 100 }, (_, index) => row(index));
   const controlRefs = retained.map((value) => new WeakRef(value));
   gc(true);

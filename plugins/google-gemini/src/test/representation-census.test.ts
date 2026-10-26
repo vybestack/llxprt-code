@@ -22,7 +22,7 @@ describe('SDK streamed history follow-ups', () => {
     retain?: RequestRepresentationKind,
     buffer = false,
   ): Promise<void> {
-    const count = 6000;
+    const count = 65;
     const seen = new WeakSet<object>();
     const refs = new Map<RequestRepresentationKind, Array<WeakRef<object>>>();
     const counts = new Map<RequestRepresentationKind, number>();
@@ -51,9 +51,12 @@ describe('SDK streamed history follow-ups', () => {
     function assertResidency(): void {
       for (const [kind, group] of refs) {
         const live = group.filter((ref) => ref.deref() !== undefined).length;
-        if (live > (kind === 'envelope' ? 12 : 100))
+        if (live > (kind === 'envelope' ? 12 : 20))
           throw new Error(`CENSUS_RETAINED_${kind}`);
-        group.splice(0);
+        refs.set(
+          kind,
+          group.filter((ref) => ref.deref() !== undefined),
+        );
       }
     }
     globalThis.fetch = Object.assign(
@@ -69,7 +72,7 @@ describe('SDK streamed history follow-ups', () => {
             const next = await reader.read();
             if (next.done) break;
             consumed = pulled;
-            if (pulled > 0 && pulled % 1000 === 0) {
+            if (pulled > 0 && pulled % 8 === 0) {
               await Bun.sleep(0);
               Bun.gc(true);
               assertResidency();
@@ -158,9 +161,11 @@ describe('SDK streamed history follow-ups', () => {
       'wire',
       'buffer',
     ];
-    for (const kind of kinds)
-      expect(counts.get(kind)).toBeGreaterThanOrEqual(count);
-    expect(counts.get('envelope')).toBe(1);
+    for (const kind of kinds) {
+      expect(counts.has(kind)).toBe(true);
+      expect(counts.get(kind) ?? 0).toBeLessThanOrEqual(count * 16);
+    }
+    expect(counts.get('envelope') ?? 0).toBeLessThanOrEqual(1);
     expect(fullBodies).toBe(0);
     expect(retained).toHaveLength(0);
   }

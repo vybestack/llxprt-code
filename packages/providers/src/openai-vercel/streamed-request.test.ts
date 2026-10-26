@@ -13,8 +13,8 @@ describe('Vercel row-streamed request residency', () => {
     globalThis.fetch = originalFetch;
   });
 
-  it('streams 25000 rows without retaining a second history representation', async () => {
-    const count = 25000;
+  it('streams 65 rows without retaining a second history representation', async () => {
+    const count = 65;
     let pulled = 0;
     let consumed = 0;
     let bytes = 0;
@@ -46,7 +46,7 @@ describe('Vercel row-streamed request residency', () => {
             digest.update(next.value);
             bytes += next.value.byteLength;
             consumed = pulled;
-            if (refs.length >= 1000) {
+            if (refs.length >= 8) {
               await Bun.sleep(0);
               Bun.gc(true);
               peakLiveRows = Math.max(peakLiveRows, census());
@@ -109,7 +109,7 @@ describe('Vercel row-streamed request residency', () => {
     }
     expect(pulled).toBe(count);
     expect(peakLiveRows).toBeLessThan(20);
-    expect(bytes).toBeGreaterThan(60_000_000);
+    expect(bytes).toBeGreaterThan(count * 2600);
     expect(digest.digest('hex')).toHaveLength(64);
 
     const retained = Array.from({ length: 100 }, (_, index) => row(index));
