@@ -362,9 +362,6 @@ export class HistoryService extends HistoryServiceReads {
       this.runSynchronousHistoryMutation(() => {
         this.disposeInternal().then(resolve, reject);
       });
-    }).catch((error: unknown) => {
-      this.disposal = undefined;
-      throw error;
     }));
   }
 

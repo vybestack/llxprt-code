@@ -795,12 +795,7 @@ export class JournalHistoryStore
 
   /** Settles the queue, then closes the journal. */
   dispose(beforeClose?: () => Promise<void>): Promise<void> {
-    return (this.disposal ??= this.disposeInternal(beforeClose).catch(
-      (error: unknown) => {
-        this.disposal = Promise.resolve();
-        throw error;
-      },
-    ));
+    return (this.disposal ??= this.disposeInternal(beforeClose));
   }
 
   private async disposeInternal(
