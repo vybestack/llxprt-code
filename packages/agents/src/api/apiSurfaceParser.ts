@@ -74,9 +74,21 @@ export const API_SURFACE_REPORT_PATH = join(
   'report.json',
 );
 
-export const DENIED_INTERNAL_NAMES = Object.freeze(
-  new Set(['AgentClient', 'CoreToolScheduler', 'AgenticLoop']),
-);
+/**
+ * Historical internal symbols that must never appear on the package root
+ * surface. A frozen list plus a membership check, so a consumer cannot add an
+ * entry that would silently widen the deny list for the whole process.
+ */
+export const DENIED_INTERNAL_NAMES: readonly string[] = Object.freeze([
+  'AgentClient',
+  'CoreToolScheduler',
+  'AgenticLoop',
+]);
+
+/** Reports whether `name` is one of the denied internal symbols. */
+export function isDeniedInternalName(name: string): boolean {
+  return DENIED_INTERNAL_NAMES.includes(name);
+}
 
 function createSourceFile(filePath: string): ts.SourceFile {
   let text: string;

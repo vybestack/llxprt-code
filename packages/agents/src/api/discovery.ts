@@ -42,6 +42,7 @@ import { TodoPause } from '@vybestack/llxprt-code-tools/tools/todo-pause.js';
 import { CodeSearchTool } from '@vybestack/llxprt-code-tools/tools/codesearch.js';
 import { DirectWebFetchTool } from '@vybestack/llxprt-code-tools/tools/direct-web-fetch.js';
 import type { ProviderInfo, ToolInfo } from './agent.js';
+import { deepFreezeTable } from './immutableTable.js';
 
 /**
  * Minimal carrier for a tool class' canonical static name. Every built-in tool
@@ -63,7 +64,9 @@ interface ToolNameCarrier {
  * subagent/async tools gated on live Config) are intentionally excluded from the
  * runtime-free static projection.
  */
-const BUILTIN_TOOL_CLASSES: readonly ToolNameCarrier[] = [
+const BUILTIN_TOOL_CLASSES: readonly ToolNameCarrier[] = deepFreezeTable<
+  readonly ToolNameCarrier[]
+>([
   LSTool,
   ReadFileTool,
   GrepTool,
@@ -87,7 +90,7 @@ const BUILTIN_TOOL_CLASSES: readonly ToolNameCarrier[] = [
   TodoPause,
   CodeSearchTool,
   DirectWebFetchTool,
-];
+]);
 
 /**
  * Projects provider names to the public ProviderInfo shape. Inlined (rather than

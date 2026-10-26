@@ -15,6 +15,7 @@ import {
 } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { AgentConfig } from './config-types.js';
 import { CONFIG_FIELD_CLASSIFICATION } from './config-classification.js';
+import { deepFreezeTable } from './immutableTable.js';
 
 /**
  * Raised when a typed AgentConfig field is shadowed via the unstable
@@ -33,11 +34,16 @@ type ConfigParamsMut = {
   -readonly [K in keyof ConfigParameters]: ConfigParameters[K];
 };
 
-const TYPED_FIELD_SET: ReadonlySet<string> = new Set(
+const TYPED_FIELD_NAMES: readonly string[] = Object.freeze(
   CONFIG_FIELD_CLASSIFICATION.filter(
     (entry) => entry.classification === 'typed',
   ).map((entry) => entry.field),
 );
+
+/** Reports whether `field` is a first-class typed AgentConfig field. */
+function isTypedField(field: string): boolean {
+  return TYPED_FIELD_NAMES.includes(field);
+}
 
 /** Deep-clones a JSON-serializable value (records/arrays/scalars). */
 function clone<T>(value: T): T {
@@ -68,7 +74,9 @@ interface SimpleMapping {
  * via Config ephemerals (not ConfigParameters fields); see
  * {@link applyRuntimeEphemerals}.
  */
-const SIMPLE_MAPPINGS: readonly SimpleMapping[] = [
+const SIMPLE_MAPPINGS: readonly SimpleMapping[] = deepFreezeTable<
+  readonly SimpleMapping[]
+>([
   { configField: 'fileFiltering', paramField: 'fileFiltering', kind: 'clone' },
   { configField: 'proxy', paramField: 'proxy', kind: 'copy' },
   {
@@ -123,7 +131,7 @@ const SIMPLE_MAPPINGS: readonly SimpleMapping[] = [
     kind: 'copy',
   },
   { configField: 'interactive', paramField: 'interactive', kind: 'copy' },
-];
+]);
 
 /** Copies simple 1:1 typed fields onto params when defined on config. */
 function applySimpleMappings(
@@ -289,7 +297,7 @@ function applySettings(config: AgentConfig, params: ConfigParamsMut): void {
   }
   const sink = params as Record<string, unknown>;
   for (const [k, v] of Object.entries(config.settings)) {
-    if (TYPED_FIELD_SET.has(k)) {
+    if (isTypedField(k)) {
       throw new AdapterError(
         'field ' + k + ' must be a typed AgentConfig field, not settings',
       );

@@ -33,6 +33,7 @@ import { fileURLToPath } from 'node:url';
 import {
   parseExportedNames,
   DENIED_INTERNAL_NAMES,
+  isDeniedInternalName,
   loadExpectedSurface,
   API_SURFACE_REPORT_PATH,
 } from '../apiSurfaceParser.ts';
@@ -119,9 +120,9 @@ describe('Agent public surface guard', () => {
         // Sanity: the deny list must include the three internal symbols this
         // guard enforces. If the constant is accidentally narrowed (e.g. one
         // name dropped), the iterate loop below would pass vacuously.
-        expect(DENIED_INTERNAL_NAMES.has('AgentClient')).toBe(true);
-        expect(DENIED_INTERNAL_NAMES.has('CoreToolScheduler')).toBe(true);
-        expect(DENIED_INTERNAL_NAMES.has('AgenticLoop')).toBe(true);
+        expect(isDeniedInternalName('AgentClient')).toBe(true);
+        expect(isDeniedInternalName('CoreToolScheduler')).toBe(true);
+        expect(isDeniedInternalName('AgenticLoop')).toBe(true);
         for (const denied of DENIED_INTERNAL_NAMES) {
           expect(exported.has(denied)).toBe(false);
         }

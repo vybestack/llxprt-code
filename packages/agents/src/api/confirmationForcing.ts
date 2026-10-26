@@ -91,10 +91,10 @@ export function injectConfirmationForcingPolicy(
  * @requirement:REQ-006
  * @pseudocode tool-confirmation-merge.md steps 10-31
  */
-const ARG_ALIASES: Readonly<Record<string, string>> = {
+const ARG_ALIASES: Readonly<Record<string, string>> = Object.freeze({
   path: 'absolute_path',
   dir: 'absolute_path',
-};
+});
 
 /**
  * Returns a shallow copy of `args` with any alias keys remapped to their

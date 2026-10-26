@@ -16,13 +16,14 @@ export interface SessionLifecyclePlan {
   readonly releaseResources: readonly SessionCleanupAction[];
 }
 
-const SHUTDOWN_STAGES: ReadonlyArray<keyof SessionLifecyclePlan> = [
-  'stopAdmissions',
-  'abortActiveAndPending',
-  'cancelAndJoinOwnedWork',
-  'flushRecording',
-  'releaseResources',
-];
+const SHUTDOWN_STAGES: ReadonlyArray<keyof SessionLifecyclePlan> =
+  Object.freeze([
+    'stopAdmissions',
+    'abortActiveAndPending',
+    'cancelAndJoinOwnedWork',
+    'flushRecording',
+    'releaseResources',
+  ] as const);
 
 function appendFailure(failures: unknown[], failure: unknown): void {
   if (
