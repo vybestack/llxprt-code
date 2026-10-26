@@ -274,11 +274,18 @@ export class AnthropicStreamRepair<
         merged: count > 1,
       };
   }
-  private async *runPieces(run: Run): AsyncGenerator<RepairPiece> {
+  private async *runAtoms(run: Run): AsyncGenerator<LazyRepairAtom> {
+    if (!run.merged) {
+      yield run.atom;
+      return;
+    }
     for await (const atom of this.atoms(run.start)) {
       if (atom.key > run.end) break;
-      yield* atom.openPieces();
+      yield atom;
     }
+  }
+  private async *runPieces(run: Run): AsyncGenerator<RepairPiece> {
+    for await (const atom of this.runAtoms(run)) yield* atom.openPieces();
   }
   private async shape(
     run: Run,
@@ -317,8 +324,7 @@ export class AnthropicStreamRepair<
   private async *taggedRunBlocks(
     run: Run,
   ): AsyncGenerator<AnthropicMessageBlock> {
-    for await (const atom of this.atoms(run.start)) {
-      if (atom.key > run.end) break;
+    for await (const atom of this.runAtoms(run)) {
       for await (const piece of atom.openPieces())
         yield* typeof piece === 'string'
           ? [await this.taggedText(atom, piece)]
