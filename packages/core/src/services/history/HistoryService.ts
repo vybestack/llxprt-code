@@ -15,6 +15,7 @@
  */
 
 import { withArrivalPublication } from './history-arrival-publication.js';
+import { publishArrivalMedia } from './history-arrival-media.js';
 import { stampAiTurnModel } from './IContent.js';
 import { historyOriginId } from './historyOriginId.js';
 import { firstEntryContextRange } from './contextRange.js';
@@ -128,9 +129,13 @@ export class HistoryService extends HistoryServiceReads {
       },
       publish: (ticket) => this.tokenTickets.publish(ticket),
       cancel: (ticket) => this.tokenTickets.cancel(ticket),
-      added: (sealed) => {
-        this.emit('contentAdded', sealed, origin);
-        this.mediaOwner?.adopt([sealed]);
+      added: (sealed) =>
+        publishArrivalMedia(this.mediaOwner, sealed, () => {
+          this.emit('contentAdded', sealed, origin);
+        }),
+      reconcileMedia: async () => {
+        if (this.mediaOwner !== undefined)
+          await this.journal.reconcileMedia(this.mediaOwner);
       },
       first: (sealed) => {
         this.spanWindow.set([]);

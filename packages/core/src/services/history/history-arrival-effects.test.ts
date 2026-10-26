@@ -94,4 +94,46 @@ describe('response arrival publication effects', () => {
     expect(service.length()).toBe(0);
     expect(service.getTotalTokens()).toBe(0);
   });
+  it('returns the sealed main row without returning auxiliary rows to the result consumer', async () => {
+    const service = harness.history();
+    const arrival = await service.openResponseArrival({
+      id: 'receipt',
+      submissionId: 'prompt',
+    });
+    await arrival.replaceAfcHistory(
+      (async function* () {
+        yield {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'auxiliary' }],
+        };
+      })(),
+    );
+    await arrival.append({ type: 'text', text: 'main ' });
+    await arrival.append({ type: 'text', text: 'answer' });
+    const published: IContent[] = [];
+    await arrival.seal({}, undefined, async (content) => {
+      await Promise.resolve();
+      published.push(content);
+    });
+    expect(published.map((content) => content.blocks)).toStrictEqual([
+      [{ type: 'text', text: 'main answer' }],
+    ]);
+    expect(service.length()).toBe(2);
+  });
+  it('compensates the row and token ticket when the sealed-result consumer rejects', async () => {
+    const service = harness.history();
+    const arrival = await service.openResponseArrival({
+      id: 'rejected-consumer',
+      submissionId: 'prompt',
+    });
+    await arrival.append({ type: 'text', text: 'discarded answer' });
+    await expect(
+      arrival.seal({}, undefined, async () => {
+        throw new Error('consumer rejected');
+      }),
+    ).rejects.toThrow('consumer rejected');
+    await service.waitForTokenUpdates();
+    expect(service.length()).toBe(0);
+    expect(service.getTotalTokens()).toBe(0);
+  });
 });

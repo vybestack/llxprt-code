@@ -13,7 +13,8 @@ export function withArrivalPublication<T>(
     prepareAfc(content: IContent): IContent;
     publish(token: T): void;
     cancel(token: T): void;
-    added(content: IContent): void;
+    added(content: IContent): void | Promise<void>;
+    reconcileMedia(): Promise<void>;
     first(content: IContent): void;
     origin: string | undefined;
   },
@@ -29,7 +30,7 @@ export function withArrivalPublication<T>(
       ),
     append: (block) => arrival.append(block),
     interrupt: (outcome) => arrival.interrupt(outcome),
-    seal: (metadata) =>
+    seal: (metadata, _afterAuxiliary, onSealed) =>
       host.enqueue(async () => {
         host.assertAdmission();
         const before = host.journal.getLength();
@@ -37,11 +38,12 @@ export function withArrivalPublication<T>(
         let ticket: { value: T } | undefined;
         let published = false;
         let first: IContent | undefined;
-        const observe = async (): Promise<void> => {
+        const observe = async (main = false): Promise<void> => {
           const sealed = await host.journal.lastContent();
           if (sealed === undefined)
             throw new Error('Sealed response is missing');
-          host.added(sealed);
+          await host.added(sealed);
+          if (main) await onSealed?.(sealed);
           if (before === 0 && first === undefined)
             first = {
               speaker: sealed.speaker,
@@ -51,7 +53,7 @@ export function withArrivalPublication<T>(
         };
         try {
           await arrival.seal(metadata, observe);
-          await observe();
+          await observe(true);
           ticket = { value: host.prepare(before) };
           scope.close(true);
           if (first !== undefined) host.first(first);
@@ -65,6 +67,7 @@ export function withArrivalPublication<T>(
               itemsRemoved: added,
               origin: host.origin,
             });
+          await host.reconcileMedia();
           throw error;
         } finally {
           scope.close(false);
