@@ -7,28 +7,28 @@
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import { getMcpServerOAuthStatus } from '@vybestack/llxprt-code-mcp';
 import { McpControl } from './mcpControl.js';
-import type { AgentMcpOperations } from '../mcpRuntimeAssembly.js';
+import type { McpControlReadPort } from '../mcpRuntimePorts.js';
 import {
   projectRegistryTool,
   readOptionalStringProp,
 } from '../agentBootstrap.js';
 
 export function buildOwnedMcpControl(
-  readServerSettings: AgentMcpOperations['readServerSettings'],
+  readServerSettings: McpControlReadPort['readServerSettings'],
   selection: ToolSelection,
-  listPrompts: AgentMcpOperations['listPrompts'],
-  listResources: AgentMcpOperations['listResources'],
-  readOAuthCredentials: AgentMcpOperations['readOAuthCredentials'],
-  performOAuth: AgentMcpOperations['performOAuth'],
-  status: AgentMcpOperations['status'],
-  refresh: AgentMcpOperations['refresh'],
-  reload: AgentMcpOperations['reload'],
+  listPrompts: McpControlReadPort['listPrompts'],
+  listResources: McpControlReadPort['listResources'],
+  readOAuthCredentials: McpControlReadPort['readOAuthCredentials'],
+  performOAuth: McpControlReadPort['performOAuth'],
+  status: McpControlReadPort['status'],
+  refresh: McpControlReadPort['refresh'],
+  reload: McpControlReadPort['reload'],
   isMcpAuthenticated: (server: string) => boolean,
   markAuthenticated: (server: string) => void,
   refreshClientTools: () => Promise<void>,
-  subscribeStatus?: AgentMcpOperations['subscribeStatus'],
-  findResource?: AgentMcpOperations['findResource'],
-  readResource?: AgentMcpOperations['readResource'],
+  subscribeStatus?: McpControlReadPort['subscribeStatus'],
+  findResource?: McpControlReadPort['findResource'],
+  readResource?: McpControlReadPort['readResource'],
 ): McpControl {
   const requiresOAuth = (server: string): boolean => {
     const current = status();

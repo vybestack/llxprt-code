@@ -70,8 +70,9 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import type { Agent } from '../api/agent.js';
 import type {
-  ChildTaskWorkspacePort,
+  ChildTaskInheritancePort,
   SessionMcpBindingPort,
+  SessionPolicyCompositionPort,
 } from '../api/mcpRuntimePorts.js';
 import type { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 
@@ -86,7 +87,7 @@ import { SessionHookComposition } from './session-hook-composition.js';
  * inherits.
  */
 interface ChildTaskComposition {
-  readonly workspace: ChildTaskWorkspacePort;
+  readonly workspace: ChildTaskInheritancePort & SessionPolicyCompositionPort;
   readonly policy: SessionPolicyOwner;
   readonly profiles: ProfileDefinitionReads;
   readonly subagents: SubagentDefinitionReads;
@@ -463,7 +464,7 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     });
   }
 
-  private bindSessionApproval(workspace: ChildTaskWorkspacePort) {
+  private bindSessionApproval(workspace: SessionPolicyCompositionPort) {
     const policy =
       this.borrowedBus === undefined
         ? new SessionPolicyOwner(workspace.policyOwner.workspace, this.config)

@@ -2,7 +2,6 @@ import { createMcpApprovalPolicy } from '@vybestack/llxprt-code-core/policy/mcp-
 import { persistPolicyToToml } from '@vybestack/llxprt-code-core/policy/config.js';
 import type { McpApprovalPolicy } from '@vybestack/llxprt-code-mcp';
 import { WorkspaceAuthorityComposition } from './workspace-authority-composition.js';
-import type { WorkspaceMcpSettings } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { WorkspaceCheckpointOwner } from '@vybestack/llxprt-code-core';
 import type { SessionMcpSettingsReads } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
@@ -19,64 +18,18 @@ import type {
   Config,
   WorkspaceTrustControlPort,
   WorkspaceIdePort,
-  WorkspaceCheckpointOperations,
   WorkspaceDefinitionOwner,
-  ProfileDefinitionReads,
-  ProfileDefinitionWrites,
-  SubagentDefinitionReads,
-  SubagentDefinitionWrites,
-  DiscoveredMCPResource,
 } from '@vybestack/llxprt-code-core';
 import type { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import type {
-  WorkspaceLspOwner,
-  WorkspaceLspInspection,
-} from '@vybestack/llxprt-code-core/lsp/workspace-lsp-owner.js';
+import type { WorkspaceLspOwner } from '@vybestack/llxprt-code-core/lsp/workspace-lsp-owner.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import type { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import type {
   McpClientManager,
-  DiscoveredMCPPrompt,
-  TokenStorage,
   McpOAuthBinding,
 } from '@vybestack/llxprt-code-mcp';
 import type { HostFeedbackSink } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
-import type {
-  McpRuntimeStatusView,
-  McpControlDeps,
-} from './control/mcpControl.js';
 import type { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
-
-export interface AgentMcpOperations {
-  readonly trust: WorkspaceTrustControlPort;
-  readonly ide: WorkspaceIdePort;
-  closeAdmission(): void;
-  readonly profileDefinitions: ProfileDefinitionReads;
-  readonly profileWrites: ProfileDefinitionWrites;
-  readonly subagentDefinitions: SubagentDefinitionReads;
-  readonly subagentWrites: SubagentDefinitionWrites;
-  readonly checkpointOperations: WorkspaceCheckpointOperations;
-  readonly workspacePaths: WorkspaceFilesystemOwner['paths'];
-  readonly workspaceFiles: WorkspaceFilesystemOwner['files'];
-  readonly workspaceIgnore: WorkspaceFilesystemOwner['ignore'];
-  readonly workspaceScans: WorkspaceFilesystemOwner['scans'];
-  readonly workspaceSearch: WorkspaceFilesystemOwner['search'];
-  readonly addWorkspaceDirectory: (directory: string) => void;
-  readonly lspInspection: WorkspaceLspInspection;
-  readonly policyInspection: RuntimePolicyOwner['session']['inspection'];
-  readonly performOAuth: NonNullable<McpControlDeps['performOAuth']>;
-  readonly readOAuthCredentials: TokenStorage['getCredentials'];
-  listPrompts(server: string): DiscoveredMCPPrompt[];
-  listResources(): DiscoveredMCPResource[];
-  findResource(identifier: string): DiscoveredMCPResource | undefined;
-  readResource(server: string, uri: string): Promise<unknown>;
-  status(): McpRuntimeStatusView | undefined;
-  subscribeStatus(listener: () => void): () => void;
-  refresh(server?: string): Promise<void>;
-  reload(): Promise<void>;
-  readServerSettings(): WorkspaceMcpSettings;
-  awaitDiscovery(): Promise<ReadonlyMap<string, string>>;
-}
 
 /**
  * A caller either supplies an owner with the promise of who releases it, or

@@ -125,12 +125,14 @@ import {
   retainMcpPolicyProjection,
   retainWorkspaceCheckpoints,
   resolveTrustHandoff,
-  type AgentMcpOperations,
   type McpOwnerHandoff,
   type McpRuntimeAcquisition,
   type McpRuntimeOperations,
 } from './mcp-runtime-construction.js';
-export type { AgentMcpOperations } from './mcp-runtime-construction.js';
+import type {
+  AgentExtensionOperationsPort,
+  AgentRuntimeMcpPort,
+} from './mcpRuntimePorts.js';
 
 import {
   type WorkspaceMcpSettings,
@@ -138,7 +140,9 @@ import {
 } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 
-export class McpRuntimeOwner implements AgentMcpOperations {
+export class McpRuntimeOwner
+  implements AgentRuntimeMcpPort, AgentExtensionOperationsPort
+{
   readonly trust: WorkspaceTrustControlPort;
   readonly ide: WorkspaceIdePort;
   private readonly authority: WorkspaceAuthorityComposition;

@@ -49,7 +49,7 @@ import {
 } from './directProviderAdmission.js';
 import type { AgentEvent } from './event-types.js';
 import { ForegroundRunLifecycle } from './foregroundRunLifecycle.js';
-import type { AgentMcpOperations } from './mcpRuntimeAssembly.js';
+import type { McpTeardownPort } from './mcpRuntimePorts.js';
 import { createRecordingExecution } from './recordingExecution.js';
 import { resetIdleChat } from './session-control-assembly.js';
 import {
@@ -71,7 +71,7 @@ export interface AgentTurnOwners {
     SessionProviderControl,
     'isProviderReady' | 'assertProfileIdle' | 'getModel'
   >;
-  readonly awaitMcpDiscovery: AgentMcpOperations['awaitDiscovery'];
+  readonly awaitMcpDiscovery: McpTeardownPort['awaitDiscovery'];
   readonly tools: Pick<ToolControl, 'notifyConfirmation' | 'notifyToolUpdate'>;
 }
 
@@ -140,7 +140,7 @@ export function createAgentTurnOwners(
   tools: ToolControl,
   settingsService: SettingsService,
   providerManager: RuntimeProviderManager,
-  awaitMcpDiscovery: AgentMcpOperations['awaitDiscovery'],
+  awaitMcpDiscovery: McpTeardownPort['awaitDiscovery'],
 ): AgentTurnOwners {
   return {
     session,

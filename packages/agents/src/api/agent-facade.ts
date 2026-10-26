@@ -59,9 +59,9 @@ import { createTasksControl } from './control/tasksControl.js';
 import type { ToolControl } from './control/toolControl.js';
 import { assembleToolKeys } from './control/toolKeysControl.js';
 import { WorkspaceControl } from './control/workspaceControl.js';
-import type { AgentMcpOperations } from './mcpRuntimeAssembly.js';
 import type {
-  PublishedMcpPort,
+  FacadePublicationPort,
+  McpTeardownPort,
   WorkspaceFacadeMcpPort,
 } from './mcpRuntimePorts.js';
 import { createNewSessionAdmission } from './new-session-admission.js';
@@ -150,7 +150,7 @@ export interface AgentFacadeOwners {
   readonly initialAuth: AgentAuth | undefined;
   readonly onOAuthPrompt: unknown;
   readonly closeRuntime: () => Promise<void> | void;
-  readonly awaitMcpDiscovery: AgentMcpOperations['awaitDiscovery'];
+  readonly awaitMcpDiscovery: McpTeardownPort['awaitDiscovery'];
   readonly closeMcpAdmission: () => void;
 }
 
@@ -461,7 +461,7 @@ export interface LeafFacadeValues {
   readonly sessionIdentityOwnership: 'config' | 'facade';
   readonly onOAuthPrompt: unknown;
   readonly closeRuntime: () => Promise<void> | void;
-  readonly awaitMcpDiscovery: AgentMcpOperations['awaitDiscovery'];
+  readonly awaitMcpDiscovery: McpTeardownPort['awaitDiscovery'];
   readonly closeMcpAdmission: () => void;
 }
 
@@ -475,7 +475,7 @@ export function assembleShellOwner(settings: SettingsService): ShellJobOwner {
  * ownership record and the closures that differ.
  */
 export function publishLeafFacade(
-  runtime: PublishedMcpPort,
+  runtime: FacadePublicationPort,
   config: Config,
   session: SessionClientOwner,
   settingsOwner: SessionSettingsOwner,
