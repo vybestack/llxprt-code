@@ -440,37 +440,53 @@ export class AppWrapper extends Component<AppProps> {
     const a = this.props.agent;
     const workspaceRuntime = this.props.workspaceCommands;
     return (add, setMemory, owner, raw) =>
-      createWorkspaceCommandOwners(
-        workspaceRuntime,
-        a.tools.list.bind(a.tools),
-        a.getEphemeralSetting.bind(a),
-        a.setEphemeralSetting.bind(a),
-        add,
-        setMemory,
-        async () => {
-          await a.sessionClient.publishTools();
+      createWorkspaceCommandOwners({
+        workspace: workspaceRuntime,
+        writes: { addItem: add, setMemoryFileCount: setMemory },
+        policies: {
+          readRules: a.policy.getRules.bind(a.policy),
+          readDefaultDecision: a.policy.getDefaultDecision.bind(a.policy),
+          readNonInteractive: a.policy.isNonInteractive.bind(a.policy),
         },
-        a.policy.getRules.bind(a.policy),
-        a.policy.getDefaultDecision.bind(a.policy),
-        a.policy.isNonInteractive.bind(a.policy),
-        a.hooks.listHooks.bind(a.hooks),
-        a.hooks.enable.bind(a.hooks),
-        a.hooks.disable.bind(a.hooks),
-        a.hooks.setDisabledHooks.bind(a.hooks),
-        a.tasks.list.bind(a.tasks),
-        a.tasks.listRunning.bind(a.tasks),
-        a.tasks.get.bind(a.tasks),
-        a.tasks.cancel.bind(a.tasks),
-        a.addDirectoryContext.bind(a),
-        bindDirectoryChangeRecording(
-          owner,
-          a.session.recordRecordingEvent.bind(a.session),
-          raw?.recordDirectoriesChanged.bind(raw),
-        ),
-        a.sessionClient.runImageOperation.bind(a.sessionClient),
-        () => a.session.readInitializedHistory() ?? undefined,
-        this.readIdeDisplayName,
-      );
+        hooks: {
+          list: a.hooks.listHooks.bind(a.hooks),
+          enable: a.hooks.enable.bind(a.hooks),
+          disable: a.hooks.disable.bind(a.hooks),
+          setDisabled: a.hooks.setDisabledHooks.bind(a.hooks),
+        },
+        tasks: {
+          list: a.tasks.list.bind(a.tasks),
+          listRunning: a.tasks.listRunning.bind(a.tasks),
+          get: a.tasks.get.bind(a.tasks),
+          cancel: a.tasks.cancel.bind(a.tasks),
+        },
+        tools: {
+          list: a.tools.list.bind(a.tools),
+          readSetting: a.getEphemeralSetting.bind(a),
+          writeSetting: a.setEphemeralSetting.bind(a),
+          refreshSchema: async () => {
+            await a.sessionClient.publishTools();
+          },
+        },
+        directory: {
+          addDirectoryContext: a.addDirectoryContext.bind(a),
+          recordDirectoriesChanged: bindDirectoryChangeRecording(
+            owner,
+            a.session.recordRecordingEvent.bind(a.session),
+            raw?.recordDirectoriesChanged.bind(raw),
+          ),
+        },
+        image: {
+          runImageOperation: a.sessionClient.runImageOperation.bind(
+            a.sessionClient,
+          ),
+        },
+        bug: {
+          getConversationHistory: () =>
+            a.session.readInitializedHistory() ?? undefined,
+          readIdeName: this.readIdeDisplayName,
+        },
+      });
   }
   private registerChatCommands(): RegisterChatCommands {
     const a = this.props.agent;

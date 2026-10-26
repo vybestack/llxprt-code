@@ -36,38 +36,57 @@ describe('workspace command registration operations', () => {
           getEphemeralSetting: decoy.getEphemeralSetting,
           setEphemeralSetting: decoy.setEphemeralSetting,
         });
-        return createWorkspaceCommandOwners(
-          {
+        return createWorkspaceCommandOwners({
+          workspace: {
             memory: null,
             bug: null,
             directory: null,
             getTargetDir: () => '',
           },
-          listTools,
-          actual.getEphemeralSetting.bind(actual),
-          actual.setEphemeralSetting.bind(actual),
-          () => 0,
-          () => {},
-          async () => {
-            await actual.sessionClient.publishTools();
+          writes: { addItem: () => 0, setMemoryFileCount: () => {} },
+          policies: {
+            readRules: actual.policy.getRules.bind(actual.policy),
+            readDefaultDecision: actual.policy.getDefaultDecision.bind(
+              actual.policy,
+            ),
+            readNonInteractive: actual.policy.isNonInteractive.bind(
+              actual.policy,
+            ),
           },
-          actual.policy.getRules.bind(actual.policy),
-          actual.policy.getDefaultDecision.bind(actual.policy),
-          actual.policy.isNonInteractive.bind(actual.policy),
-          actual.hooks.listHooks.bind(actual.hooks),
-          actual.hooks.enable.bind(actual.hooks),
-          actual.hooks.disable.bind(actual.hooks),
-          actual.hooks.setDisabledHooks.bind(actual.hooks),
-          actual.tasks.list.bind(actual.tasks),
-          actual.tasks.listRunning.bind(actual.tasks),
-          actual.tasks.get.bind(actual.tasks),
-          actual.tasks.cancel.bind(actual.tasks),
-          actual.addDirectoryContext.bind(actual),
-          () => {},
-          actual.sessionClient.runImageOperation.bind(actual.sessionClient),
-          () => undefined,
-          () => '',
-        );
+          hooks: {
+            list: actual.hooks.listHooks.bind(actual.hooks),
+            enable: actual.hooks.enable.bind(actual.hooks),
+            disable: actual.hooks.disable.bind(actual.hooks),
+            setDisabled: actual.hooks.setDisabledHooks.bind(actual.hooks),
+          },
+          tasks: {
+            list: actual.tasks.list.bind(actual.tasks),
+            listRunning: actual.tasks.listRunning.bind(actual.tasks),
+            get: actual.tasks.get.bind(actual.tasks),
+            cancel: actual.tasks.cancel.bind(actual.tasks),
+          },
+          tools: {
+            list: listTools,
+            readSetting: actual.getEphemeralSetting.bind(actual),
+            writeSetting: actual.setEphemeralSetting.bind(actual),
+            refreshSchema: async () => {
+              await actual.sessionClient.publishTools();
+            },
+          },
+          directory: {
+            addDirectoryContext: actual.addDirectoryContext.bind(actual),
+            recordDirectoriesChanged: async () => {},
+          },
+          image: {
+            runImageOperation: actual.sessionClient.runImageOperation.bind(
+              actual.sessionClient,
+            ),
+          },
+          bug: {
+            getConversationHistory: () => undefined,
+            readIdeName: () => '',
+          },
+        });
       },
       {
         initialProps: {

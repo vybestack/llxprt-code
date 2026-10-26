@@ -108,6 +108,55 @@ function fixtureCommand(name: string): SlashCommand {
   };
 }
 
+/** Every workspace command family, wired to unavailable operations. */
+function createUnavailableWorkspaceOwners(
+  addItem: Parameters<
+    CommandRegistrationFixture['registerWorkspaceCommands']
+  >[0],
+  setMemoryFileCount: Parameters<
+    CommandRegistrationFixture['registerWorkspaceCommands']
+  >[1],
+) {
+  return createWorkspaceCommandOwners({
+    workspace: {
+      memory: null,
+      bug: null,
+      directory: null,
+      getTargetDir: () => '',
+    },
+    writes: { addItem, setMemoryFileCount },
+    policies: {
+      readRules: () => null,
+      readDefaultDecision: unavailableOwner,
+      readNonInteractive: unavailableOwner,
+    },
+    hooks: {
+      list: null,
+      enable: unavailableOwner,
+      disable: unavailableOwner,
+      setDisabled: unavailableOwner,
+    },
+    tasks: {
+      list: null,
+      listRunning: unavailableOwner,
+      get: unavailableOwner,
+      cancel: unavailableOwner,
+    },
+    tools: {
+      list: null,
+      readSetting: unavailableOwner,
+      writeSetting: unavailableOwner,
+      refreshSchema: async () => {},
+    },
+    directory: {
+      addDirectoryContext: unavailableOwner,
+      recordDirectoriesChanged: unavailableOwner,
+    },
+    image: { runImageOperation: unavailableOwner },
+    bug: { getConversationHistory: unavailableOwner, readIdeName: () => '' },
+  });
+}
+
 export function createCommandRegistrationFixture(
   agent?: Agent,
 ): CommandRegistrationFixture {
@@ -133,37 +182,7 @@ export function createCommandRegistrationFixture(
           () => false,
         );
   return {
-    registerWorkspaceCommands: (addItem, setMemoryFileCount) =>
-      createWorkspaceCommandOwners(
-        {
-          memory: null,
-          bug: null,
-          directory: null,
-          getTargetDir: () => '',
-        },
-        null,
-        unavailableOwner,
-        unavailableOwner,
-        addItem,
-        setMemoryFileCount,
-        async () => {},
-        () => null,
-        unavailableOwner,
-        unavailableOwner,
-        null,
-        unavailableOwner,
-        unavailableOwner,
-        unavailableOwner,
-        null,
-        unavailableOwner,
-        unavailableOwner,
-        unavailableOwner,
-        unavailableOwner,
-        unavailableOwner,
-        unavailableOwner,
-        unavailableOwner,
-        () => '',
-      ),
+    registerWorkspaceCommands: createUnavailableWorkspaceOwners,
     registerChatCommands: (owner) => ({
       chatCommand: owner === 'agent' ? chatCommand : fixtureCommand('chat'),
       continueCommand: fixtureCommand('continue'),

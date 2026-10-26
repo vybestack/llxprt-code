@@ -42,127 +42,168 @@ export interface WorkspaceCommandRuntime {
   getTargetDir(): string;
 }
 
-export function createWorkspaceCommandOwners(
-  runtime: WorkspaceCommandRuntime,
-  listTools: Agent['tools']['list'] | null,
-  readSetting: Agent['getEphemeralSetting'],
-  writeSetting: Agent['setEphemeralSetting'],
-  addItem: UseHistoryManagerReturn['addItem'],
-  setMemoryFileCount: (count: number) => void,
-  refreshToolSchema: () => Promise<void>,
-  readPolicyRules: () => ReturnType<Agent['policy']['getRules']> | null,
-  readDefaultDecision: Agent['policy']['getDefaultDecision'],
-  readNonInteractive: Agent['policy']['isNonInteractive'],
-  listHooks: Agent['hooks']['listHooks'] | null,
-  enableHook: Agent['hooks']['enable'],
-  disableHook: Agent['hooks']['disable'],
-  setDisabledHooks: Agent['hooks']['setDisabledHooks'],
-  listTasks: Agent['tasks']['list'] | null,
-  listRunningTasks: Agent['tasks']['listRunning'],
-  getTask: Agent['tasks']['get'],
-  cancelTask: Agent['tasks']['cancel'],
-  addDirectoryContext: DirectoryCommandOperations['addDirectoryContext'],
-  recordDirectoriesChanged: DirectoryCommandOperations['recordDirectoriesChanged'],
-  runImageOperation: ImageCommandOperations['runImageOperation'],
-  getConversationHistory: BugCommandOperations['getConversationHistory'],
-  readIdeName: () => string,
-) {
+/** History and memory writes every workspace command family shares. */
+export interface WorkspaceCommandWrites {
+  readonly addItem: UseHistoryManagerReturn['addItem'];
+  readonly setMemoryFileCount: (count: number) => void;
+}
+
+/** Policy reads behind /policies. */
+export interface PoliciesCommandReads {
+  readRules(): ReturnType<Agent['policy']['getRules']> | null;
+  readDefaultDecision: Agent['policy']['getDefaultDecision'];
+  readNonInteractive: Agent['policy']['isNonInteractive'];
+}
+
+/** Hook listing and toggles behind /hooks; `list` is null when unavailable. */
+export interface HooksCommandReads {
+  readonly list: Agent['hooks']['listHooks'] | null;
+  readonly enable: Agent['hooks']['enable'];
+  readonly disable: Agent['hooks']['disable'];
+  readonly setDisabled: Agent['hooks']['setDisabledHooks'];
+}
+
+/** Task reads behind /tasks; `list` is null when the manager is absent. */
+export interface TasksCommandReads {
+  readonly list: Agent['tasks']['list'] | null;
+  readonly listRunning: Agent['tasks']['listRunning'];
+  readonly get: Agent['tasks']['get'];
+  readonly cancel: Agent['tasks']['cancel'];
+}
+
+/** Tool reads behind /tools; `list` is null when the registry is absent. */
+export interface ToolsCommandReads {
+  readonly list: Agent['tools']['list'] | null;
+  readonly readSetting: Agent['getEphemeralSetting'];
+  readonly writeSetting: Agent['setEphemeralSetting'];
+  readonly refreshSchema: () => Promise<void>;
+}
+
+/** Directory-context writes behind /directory. */
+export interface DirectoryCommandWrites {
+  readonly addDirectoryContext: DirectoryCommandOperations['addDirectoryContext'];
+  readonly recordDirectoriesChanged: DirectoryCommandOperations['recordDirectoriesChanged'];
+}
+
+/** Image generation behind /image. */
+export interface ImageCommandReads {
+  readonly runImageOperation: ImageCommandOperations['runImageOperation'];
+}
+
+/** Conversation and IDE reads behind /bug. */
+export interface BugCommandReads {
+  readonly getConversationHistory: BugCommandOperations['getConversationHistory'];
+  readonly readIdeName: () => string;
+}
+
+/**
+ * Every input the workspace command owners need, one narrow port per command
+ * family. All ports are required: a missing family is a composition mistake,
+ * not a runtime state.
+ */
+export interface WorkspaceCommandDeps {
+  readonly workspace: WorkspaceCommandRuntime;
+  readonly writes: WorkspaceCommandWrites;
+  readonly policies: PoliciesCommandReads;
+  readonly hooks: HooksCommandReads;
+  readonly tasks: TasksCommandReads;
+  readonly tools: ToolsCommandReads;
+  readonly directory: DirectoryCommandWrites;
+  readonly image: ImageCommandReads;
+  readonly bug: BugCommandReads;
+}
+
+export function createWorkspaceCommandOwners(deps: WorkspaceCommandDeps) {
+  const { workspace, writes, policies, hooks, tasks, tools, directory, image } =
+    deps;
   const policy = bindPoliciesCommand(
-    readPolicyRules,
-    readDefaultDecision,
-    readNonInteractive,
+    policies.readRules,
+    policies.readDefaultDecision,
+    policies.readNonInteractive,
   );
   return {
     memoryCommand: createMemoryCommand(
-      bindMemoryCommand(runtime.memory, addItem, setMemoryFileCount),
+      bindMemoryCommand(
+        workspace.memory,
+        writes.addItem,
+        writes.setMemoryFileCount,
+      ),
     ),
     bugCommand: createBugCommand(
-      bindBugCommand(runtime.bug, getConversationHistory, addItem, readIdeName),
+      bindBugCommand(
+        workspace.bug,
+        deps.bug.getConversationHistory,
+        writes.addItem,
+        deps.bug.readIdeName,
+      ),
     ),
     policiesCommand: createPoliciesCommand(policy),
-    hooksCommand: registerHooks(
-      listHooks !== null,
-      listHooks,
-      enableHook,
-      disableHook,
-      setDisabledHooks,
-      addItem,
-    ),
-    taskCommand: createRegisteredTaskCommand(
-      listTasks,
-      listRunningTasks,
-      getTask,
-      cancelTask,
-      addItem,
-    ),
-    toolsCommand: createRegisteredToolsCommand(
-      listTools,
-      readSetting,
-      writeSetting,
-      refreshToolSchema,
-      addItem,
-    ),
+    hooksCommand: registerHooks(hooks, writes.addItem),
+    taskCommand: createRegisteredTaskCommand(tasks, writes.addItem),
+    toolsCommand: createRegisteredToolsCommand(tools, writes.addItem),
     directoryCommand: createDirectoryCommand(
       bindDirectoryCommand(
-        runtime.directory,
-        addDirectoryContext,
-        recordDirectoriesChanged,
-        addItem,
-        setMemoryFileCount,
+        workspace.directory,
+        directory.addDirectoryContext,
+        directory.recordDirectoriesChanged,
+        writes.addItem,
+        writes.setMemoryFileCount,
       ),
     ),
     imageCommand: createImageCommand({
-      workspaceRoot: runtime.getTargetDir(),
-      runImageOperation,
-      addItem,
+      workspaceRoot: workspace.getTargetDir(),
+      runImageOperation: image.runImageOperation,
+      addItem: writes.addItem,
     }),
   };
 }
 
 function createRegisteredTaskCommand(
-  list: Agent['tasks']['list'] | null,
-  listRunning: Agent['tasks']['listRunning'],
-  get: Agent['tasks']['get'],
-  cancel: Agent['tasks']['cancel'],
+  tasks: TasksCommandReads,
   addItem: UseHistoryManagerReturn['addItem'],
 ) {
   return createTaskCommand(
-    list === null ? null : { list, listRunning, get, cancel },
+    tasks.list === null
+      ? null
+      : {
+          list: tasks.list,
+          listRunning: tasks.listRunning,
+          get: tasks.get,
+          cancel: tasks.cancel,
+        },
     addItem,
   );
 }
 
 function createRegisteredToolsCommand(
-  listTools: Agent['tools']['list'] | null,
-  readSetting: Agent['getEphemeralSetting'],
-  writeSetting: Agent['setEphemeralSetting'],
-  refreshToolSchema: () => Promise<void>,
+  tools: ToolsCommandReads,
   addItem: UseHistoryManagerReturn['addItem'],
 ) {
   return createToolsCommand(
-    listTools === null
+    tools.list === null
       ? null
-      : { listTools, readSetting, writeSetting, refreshToolSchema },
+      : {
+          listTools: tools.list,
+          readSetting: tools.readSetting,
+          writeSetting: tools.writeSetting,
+          refreshToolSchema: tools.refreshSchema,
+        },
     addItem,
   );
 }
 
 function registerHooks(
-  isConfigured: boolean,
-  listHooks: Agent['hooks']['listHooks'] | null,
-  enable: Agent['hooks']['enable'],
-  disable: Agent['hooks']['disable'],
-  setDisabledHooks: Agent['hooks']['setDisabledHooks'],
+  hooks: HooksCommandReads,
   addItem: UseHistoryManagerReturn['addItem'],
 ) {
   return createHooksCommand(
     {
-      listHooks: () => listHooks?.() ?? [],
-      isConfigured,
-      isAvailable: listHooks !== null,
-      enable,
-      disable,
-      setDisabledHooks,
+      listHooks: () => hooks.list?.() ?? [],
+      isConfigured: hooks.list !== null,
+      isAvailable: hooks.list !== null,
+      enable: hooks.enable,
+      disable: hooks.disable,
+      setDisabledHooks: hooks.setDisabled,
     },
     addItem,
   );
