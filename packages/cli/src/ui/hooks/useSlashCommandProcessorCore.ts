@@ -152,7 +152,7 @@ function buildHandlerDeps(
     },
     recordingIntegration: args.recordingIntegration,
     recordingSwapCallbacks: args.recordingSwapCallbacks,
-    sessionPersistence: args.config?.sessionPersistence,
+    sessionMediaStore: args.config?.sessionMediaStore,
     confirmationLogger,
     slashCommandLogger,
     beginSlashCommandAction: cancellation.beginSlashCommandAction,

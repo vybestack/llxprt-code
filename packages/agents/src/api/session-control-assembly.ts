@@ -7,12 +7,11 @@ import {
   SessionControl,
   type SessionControlDeps,
 } from './control/sessionControl.js';
-import { createAgentSessionPersistence } from './control/recordedHistoryPersistence.js';
 
 export function assembleSessionControl(
   config: SessionControlDeps['config'],
   mediaStore: SessionControlDeps['mediaStore'] | undefined,
-  operations: Omit<SessionControlDeps, 'config' | 'mediaStore' | 'persistence'>,
+  operations: Omit<SessionControlDeps, 'config' | 'mediaStore'>,
 ): SessionControl {
   const store = mediaStore ?? operations.resolveClient().mediaStore;
   if (store === undefined)
@@ -21,11 +20,5 @@ export function assembleSessionControl(
     ...operations,
     config,
     mediaStore: store,
-    persistence: createAgentSessionPersistence(
-      config.storageRoot,
-      config.projectChatsDir,
-      store,
-      config.getSessionPersistenceQueueByteLimit(),
-    ),
   });
 }

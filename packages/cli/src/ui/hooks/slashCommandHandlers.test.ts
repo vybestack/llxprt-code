@@ -13,7 +13,6 @@ import { mkdtemp, readFile, rm, realpath } from 'node:fs/promises';
 import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CliSessionPersistence } from '../../cliSessionPersistence.js';
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
@@ -699,15 +698,10 @@ describe('slashCommandHandlers', () => {
         providerManager: owner.providerManager,
       });
       deps.recordingSwapCallbacks = {} as never;
-      deps.sessionPersistence = {
-        mediaStore: new LocalMediaStore({
-          rootDirectory: join(tmpdir(), 'slash-resume-text-only-media'),
-          quotaBytes: 1024,
-        }),
-        forRecording: () => {
-          throw new Error('Mocked resume must not request a journal');
-        },
-      };
+      deps.sessionMediaStore = new LocalMediaStore({
+        rootDirectory: join(tmpdir(), 'slash-resume-text-only-media'),
+        quotaBytes: 1024,
+      });
       // Injected instead of vi.mock: bun module mocks leak across test files.
       deps.performResumeFn = performResumeMock;
       deps.commands = [
@@ -751,13 +745,6 @@ describe('slashCommandHandlers', () => {
         rootDirectory: join(root, 'media'),
         quotaBytes: 1024,
       });
-      const persistence = new CliSessionPersistence(
-        { projectRoot: config.storageRoot, chatsDir: config.projectChatsDir },
-        {
-          mediaStore: store,
-          maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
-        },
-      );
       try {
         const reference = await store.admit({
           bytes: new TextEncoder().encode('owned media'),
@@ -784,7 +771,7 @@ describe('slashCommandHandlers', () => {
             throw new Error('Mocked resume must not swap recordings');
           },
         };
-        deps.sessionPersistence = persistence;
+        deps.sessionMediaStore = store;
         deps.performResumeFn = async (_sessionRef, context) => {
           const bytes = await context.mediaStore?.readVerified(reference);
           if (bytes === undefined) throw new Error('Missing owner media store');
@@ -829,7 +816,6 @@ describe('slashCommandHandlers', () => {
 
         expect(displayed).toContain('owned media');
       } finally {
-        persistence.close();
         await store.close();
         await rm(root, { recursive: true, force: true });
       }

@@ -11,13 +11,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { Config } from '@vybestack/llxprt-code-core';
+import { Config, LocalMediaStore } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { inkRenderOptions } from './ui/inkRenderOptions.js';
 import { __setRenderForTesting } from './session/interactiveUI.js';
 
 import { LoadedSettings } from './config/settings.js';
-import { CliSessionPersistence } from './cliSessionPersistence.js';
 
 const createFakeAgent = (config: Config): Agent =>
   ({
@@ -140,7 +139,7 @@ describe('startInteractiveUI ink render options', () => {
       undefined,
       undefined,
       'raw',
-      rawPersistence(),
+      rawMediaStore(),
       startupSettings(),
     );
 
@@ -182,7 +181,7 @@ describe('startInteractiveUI ink render options', () => {
       undefined,
       undefined,
       'raw',
-      rawPersistence(),
+      rawMediaStore(),
       startupSettings(),
     );
 
@@ -210,9 +209,9 @@ function startupSettings(): {
   return { owner, store };
 }
 
-function rawPersistence(): CliSessionPersistence {
-  return new CliSessionPersistence(
-    { projectRoot: '/root', chatsDir: '/root/chats' },
-    {},
-  );
+function rawMediaStore(): LocalMediaStore {
+  return new LocalMediaStore({
+    rootDirectory: '/unused/test-media',
+    quotaBytes: 1024,
+  });
 }

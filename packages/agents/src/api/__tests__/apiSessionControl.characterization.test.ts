@@ -11,8 +11,6 @@ const fixturePaths = installTestWorkspacePaths({
 });
 
 import { describe, it, expect, vi } from 'bun:test';
-import { AgentSessionPersistence } from '../control/recordedHistoryPersistence.js';
-import { Storage } from '@vybestack/llxprt-code-settings';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core';
 import * as fc from 'fast-check';
 import {
@@ -105,13 +103,6 @@ function makeDeps(client: AgentClientContract): SessionControlDeps {
       rootDirectory: '/tmp/test-session-control/media',
       quotaBytes: 1024 * 1024,
     }),
-    persistence: new AgentSessionPersistence(
-      {
-        projectRoot: new Storage('/tmp/test-session-control').getProjectRoot(),
-        chatsDir: new Storage('/tmp/test-session-control').getProjectChatsDir(),
-      },
-      {},
-    ),
     sessionIdentityOwnership: 'config',
     sessionId: () => 'test-session',
     resolveClient: () => client,

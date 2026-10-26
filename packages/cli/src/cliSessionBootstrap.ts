@@ -25,6 +25,7 @@ import {
   type IContent,
   type LockHandle,
   clientMediaStore,
+  type LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
 /**
  * @license
@@ -48,7 +49,6 @@ import { loadCliConfig } from './config/config.js';
 import chalk from 'chalk';
 import type { LoadedSettings } from './config/settings.js';
 import { sessionId, debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { CliSessionPersistence } from './cliSessionPersistence.js';
 import {
   classifyContinueRef,
   describeUnreadableRecordings,
@@ -145,7 +145,7 @@ export interface ResolvedRecording {
 
 export interface SessionRecordingSetup extends ResolvedRecording {
   recordingIntegration: RecordingIntegration;
-  sessionPersistence: CliSessionPersistence;
+  sessionMediaStore: LocalMediaStore | undefined;
 }
 
 export interface RuntimeConfigBootstrap {
@@ -364,7 +364,6 @@ function registerRecordingCleanup(
   recordingIntegration: RecordingIntegration,
   recordingService: SessionRecordingPort,
   lockHandle: LockHandle | null,
-  sessionPersistence: CliSessionPersistence,
 ): void {
   registerCleanup(async () => {
     const failures: unknown[] = [];
@@ -373,7 +372,6 @@ function registerRecordingCleanup(
       () => withRecordingFailureReport(recordingIntegration.dispose()),
       () => recordingService.dispose(),
       () => lockHandle?.release() ?? Promise.resolve(),
-      () => Promise.resolve(sessionPersistence.close()),
     ]) {
       try {
         await operation();
@@ -393,15 +391,9 @@ function activateRecording(
   recordingService: SessionRecordingPort,
   lockHandle: LockHandle | null,
   bootstrapSelection: BootstrapSelection | null,
-  sessionPersistence: CliSessionPersistence,
 ): RecordingIntegration {
   const integration = new RecordingIntegration(recordingService);
-  registerRecordingCleanup(
-    integration,
-    recordingService,
-    lockHandle,
-    sessionPersistence,
-  );
+  registerRecordingCleanup(integration, recordingService, lockHandle);
   setupObservation(config, bootstrapSelection);
   return integration;
 }
@@ -422,19 +414,6 @@ async function resetAfterFailedResume(
   }
 }
 
-function createCliSessionPersistence(
-  config: Config,
-  sessionClient: RecordingClientOwner,
-): CliSessionPersistence {
-  return new CliSessionPersistence(
-    { projectRoot: config.storageRoot, chatsDir: config.projectChatsDir },
-    {
-      mediaStore: clientMediaStore(sessionClient.getAgentClient()),
-      maxQueueBytes: config.getSessionPersistenceQueueByteLimit(),
-    },
-  );
-}
-
 async function prepareLegacyRecording(
   config: Config,
   argv: Pick<ParsedCliArgs, 'listSessions' | 'deleteSession'>,
@@ -443,7 +422,7 @@ async function prepareLegacyRecording(
   ResolvedRecording & {
     projectHash: string;
     chatsDir: string;
-    sessionPersistence: CliSessionPersistence;
+    sessionMediaStore: LocalMediaStore | undefined;
   }
 > {
   const projectHash = getProjectHash(config.getProjectRoot());
@@ -451,14 +430,14 @@ async function prepareLegacyRecording(
   // --list-sessions / --delete-session: handle early exits.
   await handleSessionListAndDelete(argv, chatsDir, projectHash, config);
   await fsPromises.mkdir(chatsDir, { recursive: true });
-  const sessionPersistence = createCliSessionPersistence(config, sessionClient);
+  const sessionMediaStore = clientMediaStore(sessionClient.getAgentClient());
   const recording = await createOrResumeRecording(
     config,
     projectHash,
     chatsDir,
     sessionClient,
   );
-  return { ...recording, projectHash, chatsDir, sessionPersistence };
+  return { ...recording, projectHash, chatsDir, sessionMediaStore };
 }
 
 export async function setupSessionRecording(
@@ -470,7 +449,7 @@ export async function setupSessionRecording(
   const {
     projectHash,
     chatsDir,
-    sessionPersistence,
+    sessionMediaStore,
     recordingService,
     resumedBoot,
     resumedLockHandle,
@@ -540,13 +519,12 @@ export async function setupSessionRecording(
     activeRecordingService,
     activeLockHandle,
     bootstrapSelection,
-    sessionPersistence,
   );
 
   return {
     recordingService: activeRecordingService,
     recordingIntegration,
-    sessionPersistence,
+    sessionMediaStore,
     resumedBoot: didFallback ? null : resumedBoot,
     resumedLockHandle: activeLockHandle,
     resumedSessionId: didFallback ? null : resumedSessionId,

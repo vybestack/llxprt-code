@@ -60,12 +60,11 @@ import { collectAsync } from './collectAsync.js';
 import { startNewSessionTransition } from './new-session-transition.js';
 import type { SessionRecordingEvent } from './recordSessionEvent.js';
 import { recordSessionEvent } from './recordSessionEvent.js';
-import type { AgentSessionPersistence } from './recordedHistoryPersistence.js';
 import {
   persistSemanticMediaPurge as persistPurge,
   requireActiveRecording,
   restartRecording,
-} from './recordedHistoryPersistence.js';
+} from './journalRecordingLifecycle.js';
 import { exportRecordedSession } from './sessionControlExport.js';
 import { restoreOwnerTurns } from './sessionControlHistoryMutation.js';
 import {
@@ -110,7 +109,6 @@ export interface SessionControlDeps {
   readonly config: Config;
   readonly directories: () => readonly string[];
   readonly mediaStore: LocalMediaStore;
-  readonly persistence: AgentSessionPersistence;
   readonly sessionIdentityOwnership: 'config' | 'facade';
   /** The per-agent session id (AgentImpl uses deps.runtimeId). */
   readonly sessionId: () => string;
@@ -1013,9 +1011,9 @@ export class SessionControl implements AgentSessionControl {
     // FINDING A1: serialize teardown through the op-chain mutex so dispose never
     // races a concurrent resume()/setRecording() adopting resources it is
     // releasing (double-dispose / released-then-adopted lock).
-    return (this.disposalPromise ??= this.opChain
-      .then(() => this.teardownActiveSession())
-      .finally(() => this.deps.persistence.close()));
+    return (this.disposalPromise ??= this.opChain.then(() =>
+      this.teardownActiveSession(),
+    ));
   }
 
   /**

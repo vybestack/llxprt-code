@@ -11,7 +11,6 @@ import {
   type SessionMetadata,
   type LockHandle,
 } from '@vybestack/llxprt-code-core';
-import { CliSessionPersistence } from '../../cliSessionPersistence.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import {
   commandDeps,
@@ -99,13 +98,9 @@ describe('native CLI recording swap callbacks', () => {
             },
           },
         });
-        const persistence = new CliSessionPersistence(
-          { projectRoot: fixture.root, chatsDir },
-          { mediaStore },
-        );
         const deps = {
           ...commandDeps(context, messages),
-          sessionPersistence: persistence,
+          sessionMediaStore: mediaStore,
           recordingSwapCallbacks: {
             getCurrentRecording: (): SessionRecordingPort | null =>
               state?.recording ?? null,
@@ -158,7 +153,6 @@ describe('native CLI recording swap callbacks', () => {
           ).toStrictEqual({ type: 'handled' });
         } finally {
           cleanup.mockRestore();
-          persistence.close();
         }
         await verifySwap(
           stage,

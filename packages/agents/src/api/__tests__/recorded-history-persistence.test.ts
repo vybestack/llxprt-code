@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import {
   persistSemanticMediaPurge,
   restoreRecordedHistory,
-} from '../control/recordedHistoryPersistence.js';
+} from '../control/journalRecordingLifecycle.js';
 
 const image: IContent = {
   speaker: 'human',

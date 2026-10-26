@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { requireActiveRecording } from './recordedHistoryPersistence.js';
+import { requireActiveRecording } from './journalRecordingLifecycle.js';
 import {
   adoptRecordingSessionId,
   cleanupSessionResources,

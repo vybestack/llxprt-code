@@ -6,10 +6,7 @@
 
 import {
   SessionLockManager,
-  SessionPersistenceService,
   createLockedSessionRecorder,
-  type LocalMediaStore,
-  type SessionPersistenceServiceOptions,
   type SessionRecordingPort,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
@@ -22,50 +19,6 @@ export function requireActiveRecording(
   return recording;
 }
 
-export function createAgentSessionPersistence(
-  projectRoot: string,
-  chatsDir: string,
-  mediaStore: LocalMediaStore,
-  maxQueueBytes: number,
-): AgentSessionPersistence {
-  return new AgentSessionPersistence(
-    { projectRoot, chatsDir },
-    { mediaStore, maxQueueBytes },
-  );
-}
-
-export class AgentSessionPersistence {
-  private readonly journals = new Map<string, SessionPersistenceService>();
-  private closed = false;
-
-  constructor(
-    private readonly paths: {
-      readonly projectRoot: string;
-      readonly chatsDir: string;
-    },
-    private readonly options: SessionPersistenceServiceOptions,
-  ) {}
-
-  forRecording(sessionId: string): SessionPersistenceService {
-    if (this.closed) throw new Error('Agent session persistence is closed');
-    let journal = this.journals.get(sessionId);
-    if (journal === undefined) {
-      journal = new SessionPersistenceService(
-        this.paths,
-        sessionId,
-        this.options,
-      );
-      this.journals.set(sessionId, journal);
-    }
-    return journal;
-  }
-
-  close(): void {
-    if (this.closed) return;
-    this.closed = true;
-    this.journals.clear();
-  }
-}
 export async function persistSemanticMediaPurge(
   recording: SessionRecordingPort,
 ): Promise<void> {

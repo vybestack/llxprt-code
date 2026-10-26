@@ -77,7 +77,6 @@ import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/se
 import { recordedRows } from '../../../../agents/src/api/__tests__/support/recorded-rows.js';
 
 import { setupSessionRecording } from '../../cliSessionBootstrap.js';
-import { CliSessionPersistence } from '../../cliSessionPersistence.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import {
   __resetCleanupStateForTesting,
@@ -321,7 +320,7 @@ function createHandlerDeps(
   sessionClient: SessionClientOwner,
   callbacks: RecordingSwapCallbacks,
   messages: Message[],
-  persistence: CliSessionPersistence,
+  mediaStore: LocalMediaStore,
   settingsOwner: SessionSettingsOwner,
 ): SlashCommandHandlerDeps {
   const commandContext = createMockCommandContext({
@@ -343,7 +342,7 @@ function createHandlerDeps(
       ...composeFixtureRuntime(config),
       ...buildSettingsRuntime(config, createUiSessionOwner(), settingsOwner),
     },
-    sessionPersistence: persistence,
+    sessionMediaStore: mediaStore,
     commandContext,
     actions: createActions(),
     addItem: (item) => {
@@ -422,13 +421,7 @@ describe('continue package perform_resume integration', () => {
       metadata: null,
     };
     const messages: Message[] = [];
-    const persistence = new CliSessionPersistence(
-      { projectRoot: config.storageRoot, chatsDir: config.projectChatsDir },
-      {
-        mediaStore: requireMediaStore(built.sessionClient.getAgentClient()),
-        maxQueueBytes: config.getSessionPersistenceQueueByteLimit(),
-      },
-    );
+    const persistence = requireMediaStore(built.sessionClient.getAgentClient());
     Object.defineProperty(config, 'createSessionPersistenceService', {
       value: () => {
         throw new Error('Config persistence factory must not be used');
@@ -491,7 +484,6 @@ describe('continue package perform_resume integration', () => {
       expect(messages).toStrictEqual([]);
     } finally {
       await disposeActiveState(state);
-      persistence.close();
       await built.dispose();
       await rm(projectTemp, { recursive: true, force: true });
       await rm(root, { recursive: true, force: true });
@@ -541,13 +533,7 @@ describe('continue package perform_resume integration', () => {
       metadata: null,
     };
     const messages: Message[] = [];
-    const persistence = new CliSessionPersistence(
-      { projectRoot: config.storageRoot, chatsDir: config.projectChatsDir },
-      {
-        mediaStore: requireMediaStore(built.sessionClient.getAgentClient()),
-        maxQueueBytes: config.getSessionPersistenceQueueByteLimit(),
-      },
-    );
+    const persistence = requireMediaStore(built.sessionClient.getAgentClient());
 
     try {
       await processSlashCommand(
@@ -600,7 +586,6 @@ describe('continue package perform_resume integration', () => {
       expect(messages.some((message) => message.type === 'error')).toBe(true);
     } finally {
       await disposeActiveState(state);
-      persistence.close();
       await built.dispose();
       await rm(projectTemp, { recursive: true, force: true });
       await rm(root, { recursive: true, force: true });
@@ -629,13 +614,7 @@ describe('continue package perform_resume integration', () => {
     const built = await createConfig(join(root, 'workspace'), id, history);
     const config = built.config;
     const store = requireMediaStore(built.sessionClient.getAgentClient());
-    const persistence = new CliSessionPersistence(
-      { projectRoot: config.storageRoot, chatsDir: config.projectChatsDir },
-      {
-        mediaStore: store,
-        maxQueueBytes: config.getSessionPersistenceQueueByteLimit(),
-      },
-    );
+    const persistence = store;
     const state: ActiveRecordingState = {
       recording: null,
       integration: null,
@@ -674,7 +653,6 @@ describe('continue package perform_resume integration', () => {
       ).toStrictEqual([]);
     } finally {
       await disposeActiveState(state);
-      persistence.close();
       await built.dispose();
       await rm(config.projectTempDir, { recursive: true, force: true });
       await rm(root, { recursive: true, force: true });
@@ -715,14 +693,10 @@ describe('continue package perform_resume integration', () => {
       });
       await firstHistory.waitForCommit();
       await started.recordingService.flush();
-      const oldJournal = started.sessionPersistence
-        .forRecording(sessionId)
-        .getSessionFilePath();
+      const oldJournal = started.recordingService.getFilePath();
       await runExitCleanup();
       __resetCleanupStateForTesting();
-      expect(() => started.sessionPersistence.forRecording(sessionId)).toThrow(
-        'CLI session persistence is closed',
-      );
+      expect(started.recordingService.isActive()).toBe(false);
       expect(
         (await readdir(first.config.projectChatsDir)).filter((file) =>
           file.endsWith('.lock'),
@@ -745,11 +719,7 @@ describe('continue package perform_resume integration', () => {
         'legacy early resume',
       );
       expect(resumedSetup.recordingService.getSessionId()).toBe(sessionId);
-      expect(
-        resumedSetup.sessionPersistence
-          .forRecording(sessionId)
-          .getSessionFilePath(),
-      ).not.toBe(oldJournal);
+      expect(resumedSetup.recordingService.getFilePath()).toBe(oldJournal);
     } finally {
       await runExitCleanup();
       __resetCleanupStateForTesting();

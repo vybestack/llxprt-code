@@ -16,10 +16,13 @@ import {
   type Mock,
 } from 'bun:test';
 import { validateDnsResolutionOrder, startInteractiveUI } from './cli.js';
-import { Config, DebugLogger } from '@vybestack/llxprt-code-core';
+import {
+  Config,
+  DebugLogger,
+  LocalMediaStore,
+} from '@vybestack/llxprt-code-core';
 import { createMockAgent } from './__tests__/mockAgent.js';
 import type { LoadedSettings } from './config/settings.js';
-import { CliSessionPersistence } from './cliSessionPersistence.js';
 
 // Mock writeToStdout for exit-handler tests
 const { mockWriteToStdout } = {
@@ -182,7 +185,7 @@ describe('startInteractiveUI', () => {
       undefined,
       undefined,
       'raw',
-      rawPersistence(),
+      rawMediaStore(),
       startupSettings(),
     );
 
@@ -219,7 +222,7 @@ describe('startInteractiveUI', () => {
       undefined,
       undefined,
       'raw',
-      rawPersistence(),
+      rawMediaStore(),
       startupSettings(),
     );
 
@@ -287,7 +290,7 @@ describe('startInteractiveUI', () => {
         undefined,
         undefined,
         'raw',
-        rawPersistence(),
+        rawMediaStore(),
         startupSettings(),
       );
 
@@ -353,7 +356,7 @@ describe('startInteractiveUI', () => {
         undefined,
         undefined,
         'raw',
-        rawPersistence(),
+        rawMediaStore(),
         startupSettings(),
       ),
     ).rejects.toThrow('render failed');
@@ -369,7 +372,7 @@ describe('startInteractiveUI', () => {
 
   it('requires every raw startup to supply its own session persistence, never inheriting one from an earlier startup', async () => {
     await injectRenderSpy();
-    const startRaw = (persistence: CliSessionPersistence | undefined) =>
+    const startRaw = (persistence: LocalMediaStore | undefined) =>
       startInteractiveUI(
         mockConfig,
         mockAgent,
@@ -387,10 +390,10 @@ describe('startInteractiveUI', () => {
         startupSettings(),
       );
 
-    await startRaw(rawPersistence());
+    await startRaw(rawMediaStore());
 
     await expect(startRaw(undefined)).rejects.toThrow(
-      'Raw interactive startup requires its own CLI session persistence',
+      'Raw interactive startup requires its CLI session media store',
     );
   });
 
@@ -454,7 +457,7 @@ describe('startInteractiveUI', () => {
         undefined,
         undefined,
         'raw',
-        rawPersistence(),
+        rawMediaStore(),
         startupSettings(),
       );
 
@@ -508,9 +511,9 @@ function startupSettings(): {
   return { owner, store };
 }
 
-function rawPersistence(): CliSessionPersistence {
-  return new CliSessionPersistence(
-    { projectRoot: '/root', chatsDir: '/root/chats' },
-    {},
-  );
+function rawMediaStore(): LocalMediaStore {
+  return new LocalMediaStore({
+    rootDirectory: '/unused/test-media',
+    quotaBytes: 1024,
+  });
 }

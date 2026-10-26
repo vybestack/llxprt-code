@@ -54,7 +54,6 @@ import {
   verifyCheckpointFlush,
 } from './support/recorded-rows.js';
 import { SessionControl } from '../control/sessionControl.js';
-import { AgentSessionPersistence } from '../control/recordedHistoryPersistence.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
@@ -87,14 +86,13 @@ interface FakeConfig {
 
   readonly getLocalMediaStore: () => LocalMediaStore;
   readonly getSessionRecordingQueueByteLimit: () => number;
-  readonly persistence: AgentSessionPersistence;
   readonly getPersistenceChatsDir: () => string;
 }
 
 function buildFakeConfig(
   projectRoot: string,
   persistenceRoot = projectRoot,
-  persistenceQueueBytes = 1024 * 1024,
+  _persistenceQueueBytes = 1024 * 1024,
   initialSessionId = 'fake-recording-id',
 ): FakeConfig {
   const mediaStore = new LocalMediaStore({
@@ -114,16 +112,6 @@ function buildFakeConfig(
 
     getLocalMediaStore: () => mediaStore,
     getSessionRecordingQueueByteLimit: () => 1024 * 1024,
-    persistence: new AgentSessionPersistence(
-      {
-        projectRoot: persistenceStorage.getProjectRoot(),
-        chatsDir: persistenceStorage.getProjectChatsDir(),
-      },
-      {
-        mediaStore,
-        maxQueueBytes: persistenceQueueBytes,
-      },
-    ),
     getPersistenceChatsDir: () =>
       join(persistenceStorage.getProjectTempDir(), 'chats'),
   };
@@ -202,7 +190,6 @@ function buildDeps(
     config: config as unknown as SessionControlDeps['config'],
     readRecordingQueueLimit: () => config.getSessionRecordingQueueByteLimit(),
     mediaStore,
-    persistence: config.persistence,
     directories: () => [config.getProjectRoot()],
     sessionIdentityOwnership: 'config',
     sessionId: () => sessionId,
@@ -294,84 +281,6 @@ function unwrapFulfilled<T>(outcome: PromiseSettledResult<T>): T {
 }
 
 describe('Agent session persistence ownership', () => {
-  it('gives simultaneous same-label journals distinct paths when their timestamps match', async () => {
-    await withProjectRoot(async (projectRoot) => {
-      const timestamp = spyOn(Date.prototype, 'toISOString').mockReturnValue(
-        '2026-09-27T00:00:00.000Z',
-      );
-      try {
-        const storage = new IsolatedTestStorage(projectRoot);
-        const first = new AgentSessionPersistence(
-          {
-            projectRoot: storage.getProjectRoot(),
-            chatsDir: storage.getProjectChatsDir(),
-          },
-          {},
-        );
-        const second = new AgentSessionPersistence(
-          {
-            projectRoot: storage.getProjectRoot(),
-            chatsDir: storage.getProjectChatsDir(),
-          },
-          {},
-        );
-        const [left, right] = await Promise.all([
-          Promise.resolve().then(() => first.forRecording('same-label')),
-          Promise.resolve().then(() => second.forRecording('same-label')),
-        ]);
-        expect(left.getSessionFilePath()).not.toBe(right.getSessionFilePath());
-        first.close();
-        second.close();
-      } finally {
-        timestamp.mockRestore();
-      }
-    });
-  });
-
-  it('keeps same-label simultaneous journals isolated and leaves the surviving owner usable', async () => {
-    await withProjectRoot(async (projectRoot) => {
-      const storage = new IsolatedTestStorage(projectRoot);
-      const first = new AgentSessionPersistence(
-        {
-          projectRoot: storage.getProjectRoot(),
-          chatsDir: storage.getProjectChatsDir(),
-        },
-        {
-          maxQueueBytes: 4096,
-        },
-      );
-      const second = new AgentSessionPersistence(
-        {
-          projectRoot: storage.getProjectRoot(),
-          chatsDir: storage.getProjectChatsDir(),
-        },
-        {
-          maxQueueBytes: 4096,
-        },
-      );
-      const left = first.forRecording('same-label');
-      const right = second.forRecording('same-label');
-      await Promise.all([
-        left.save([humanText('left journal')]),
-        right.save([humanText('right journal')]),
-      ]);
-      expect(left.getSessionFilePath()).not.toBe(right.getSessionFilePath());
-      expect(readFileSync(left.getSessionFilePath(), 'utf8')).toContain(
-        'left journal',
-      );
-      expect(readFileSync(right.getSessionFilePath(), 'utf8')).toContain(
-        'right journal',
-      );
-      first.close();
-      expect(() => first.forRecording('same-label')).toThrow('closed');
-      await right.save([humanText('right again')]);
-      expect(
-        JSON.parse(readFileSync(right.getSessionFilePath(), 'utf8')).generation,
-      ).toBe(2);
-      second.close();
-    });
-  });
-
   it('records through its injected owner even when Config has no persistence factory', async () => {
     await withProjectRoot(async (projectRoot) => {
       const config = buildFakeConfig(projectRoot);
@@ -394,9 +303,6 @@ describe('Agent session persistence ownership', () => {
       } finally {
         await control.dispose();
       }
-      expect(() => config.persistence.forRecording('owned-session')).toThrow(
-        'closed',
-      );
       expect(remainingLockFiles(projectRoot)).toStrictEqual([]);
     });
   });

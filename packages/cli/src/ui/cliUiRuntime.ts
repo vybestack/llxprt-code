@@ -30,6 +30,7 @@ import type {
   ShellExecutionConfig,
   ShellReplacementMode,
   TelemetrySettings,
+  LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
 import type { Agent, FromConfigOptions } from '@vybestack/llxprt-code-agents';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
@@ -38,7 +39,6 @@ import {
   type GitHubCompletionReads,
 } from './hooks/githubAtCompletion.js';
 import type { PerfSnapshotCapability } from './commands/perfCommand.js';
-import type { CliSessionPersistencePort } from '../cliSessionPersistence.js';
 
 export interface RefreshMemoryResult {
   memoryContent: string;
@@ -906,7 +906,7 @@ export function buildSlashCommandRuntime(
     mcp: McpUiSelection;
   },
   perfSnapshotCapability?: PerfSnapshotCapability | null,
-  sessionPersistence?: CliSessionPersistencePort,
+  sessionMediaStore?: LocalMediaStore,
   bucketFailover?: BucketFailoverRuntime,
   skillOperations?: Pick<
     WorkspaceSkillOperations,
@@ -945,7 +945,7 @@ export function buildSlashCommandRuntime(
     },
     restartExtension !== undefined ? { restartExtension } : {},
     skillOperations !== undefined ? { skillOperations } : {},
-    sessionPersistence !== undefined ? { sessionPersistence } : {},
+    sessionMediaStore !== undefined ? { sessionMediaStore } : {},
     perfSnapshotCapability !== undefined && perfSnapshotCapability !== null
       ? { getPerfSnapshotCapability: () => perfSnapshotCapability }
       : {},
@@ -984,5 +984,5 @@ export type CliUiRuntime = UiRuntimeBareSource &
       WorkspaceSkillOperations,
       'list' | 'find' | 'reload' | 'isAdminEnabled'
     >;
-    readonly sessionPersistence?: CliSessionPersistencePort;
+    readonly sessionMediaStore?: LocalMediaStore;
   };

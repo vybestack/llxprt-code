@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect } from 'bun:test';
 import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
-import { persistSemanticMediaPurge } from '../../../api/control/recordedHistoryPersistence.js';
+import { persistSemanticMediaPurge } from '../../../api/control/journalRecordingLifecycle.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { nativeFileRows } from '../../../compression/__tests__/support/native-file-rows.js';
 import { compressionValueDigest } from '../../../compression/__tests__/compression-value-fixture.js';

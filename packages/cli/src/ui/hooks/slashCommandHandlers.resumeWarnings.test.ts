@@ -138,13 +138,10 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
           },
         },
       }),
-      sessionPersistence: {
-        mediaStore: new LocalMediaStore({
-          rootDirectory: join(root, 'media'),
-          quotaBytes: 1024,
-        }),
-        forRecording: () => undefined,
-      } as never,
+      sessionMediaStore: new LocalMediaStore({
+        rootDirectory: join(root, 'media'),
+        quotaBytes: 1024,
+      }),
       actions: {} as never,
       addItem,
       addMessage: (message) => {

@@ -7,7 +7,6 @@ import { resumeHistoryWindow } from '../utils/streamHistoryItems.js';
 
 import { requireSessionAgent } from '../commands/historyServiceAccess.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
-import type { CliSessionPersistencePort } from '../../cliSessionPersistence.js';
 import type {
   RecordingIntegration,
   ToolCallConfirmationDetails,
@@ -82,7 +81,7 @@ export interface SlashCommandHandlerDeps {
   ) => void;
   recordingIntegration?: RecordingIntegration;
   recordingSwapCallbacks?: RecordingSwapCallbacks;
-  sessionPersistence?: CliSessionPersistencePort;
+  sessionMediaStore?: LocalMediaStore;
   confirmationLogger: DebugLogger;
   slashCommandLogger: DebugLogger;
   /** Registers the action about to be awaited and returns its controller. */
@@ -760,9 +759,7 @@ function rawResumeContext(
   deps: SlashCommandHandlerDeps,
   config: CliUiRuntime,
 ): { mediaStore: LocalMediaStore; resumeContext: ResumeContext } {
-  const persistence = deps.sessionPersistence;
-  if (!persistence) throw new Error('CLI session persistence is unavailable');
-  const mediaStore = persistence.mediaStore;
+  const mediaStore = deps.sessionMediaStore;
   if (!mediaStore) throw new Error('CLI session media store is unavailable');
   return {
     mediaStore,

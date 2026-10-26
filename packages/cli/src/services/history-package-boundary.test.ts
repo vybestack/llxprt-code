@@ -4,7 +4,6 @@ import { spawnSync } from 'node:child_process';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
-import { SessionPersistenceService } from '@vybestack/llxprt-code-core/storage/SessionPersistenceService.js';
 
 describe('history package boundary', () => {
   it('exports journal dependencies to package consumers without source aliases', () => {
@@ -12,7 +11,6 @@ describe('history package boundary', () => {
       'recording/journalCounters',
       'recording/rowOwnership',
       'storage/history-media-ownership',
-      'storage/SessionPersistenceService',
     ]) {
       const result = spawnSync(
         'node',
@@ -41,6 +39,5 @@ describe('history package boundary', () => {
     counters.rowReleased();
     expect(snapshot().peakDecodedRows).toBe(1);
     expect(HistoryMediaOwnership).toBeFunction();
-    expect(SessionPersistenceService).toBeFunction();
   });
 });

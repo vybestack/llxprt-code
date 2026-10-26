@@ -13,6 +13,7 @@ import {
   resolvePerfSettings,
   getProjectHash,
   writeToStdout,
+  type LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
 import type { BucketFailoverRuntime } from '../ui/cliUiRuntime.js';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
@@ -58,7 +59,6 @@ import { isMouseEventsEnabled } from '../ui/mouseEventsEnabled.js';
 import { computeTerminalTitle } from '../utils/windowTitle.js';
 import { StreamingState } from '../ui/types.js';
 import { registerCleanup, registerSyncCleanup } from '../utils/cleanup.js';
-import type { CliSessionPersistencePort } from '../cliSessionPersistence.js';
 import { appendInteractiveUiDebug } from './debugLog.js';
 import { mouseEventsExitHandler } from './terminalCleanup.js';
 import {
@@ -429,7 +429,7 @@ export function startInteractiveUI(
   initialLockHandle?: LockHandle | null,
   suppressStartupWelcome?: boolean,
   recordingOwner?: 'raw',
-  sessionPersistence?: CliSessionPersistencePort,
+  sessionMediaStore?: LocalMediaStore,
   runtimeSettings?: {
     readonly owner: SessionSettingsOwner;
     readonly store: SettingsService;
@@ -448,7 +448,7 @@ export async function startInteractiveUI(
   initialLockHandle?: LockHandle | null,
   suppressStartupWelcome?: boolean,
   recordingOwner?: 'raw',
-  sessionPersistence?: CliSessionPersistencePort,
+  sessionMediaStore?: LocalMediaStore,
   runtimeSettings?: {
     readonly owner: SessionSettingsOwner;
     readonly store: SettingsService;
@@ -461,9 +461,9 @@ export async function startInteractiveUI(
       ? startup.runtimeMessageBus
       : startup;
 
-  if (!ownerStartup && !sessionPersistence) {
+  if (!ownerStartup && !sessionMediaStore) {
     throw new Error(
-      'Raw interactive startup requires its own CLI session persistence',
+      'Raw interactive startup requires its CLI session media store',
     );
   }
 
@@ -505,7 +505,7 @@ export async function startInteractiveUI(
       initialRecordingService,
       initialLockHandle,
       suppressStartupWelcome,
-      sessionPersistence,
+      sessionMediaStore,
     }),
   });
 }
@@ -620,7 +620,7 @@ export type CommitInteractiveStartupArgs = {
       readonly recordingIntegration?: RecordingIntegration;
       readonly initialRecordingService?: SessionRecordingPort;
       readonly initialLockHandle?: LockHandle | null;
-      readonly sessionPersistence?: CliSessionPersistencePort;
+      readonly sessionMediaStore?: LocalMediaStore;
     }
 );
 
@@ -677,7 +677,7 @@ function startupCommandRuntimes(
     args.config,
     args.agent,
     args.perfOwner?.snapshotCapability ?? null,
-    args.recordingOwner === 'agent' ? undefined : args.sessionPersistence,
+    args.recordingOwner === 'agent' ? undefined : args.sessionMediaStore,
     operations,
     args.skillOperations,
     args.restartExtension,
