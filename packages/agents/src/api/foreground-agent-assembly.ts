@@ -21,17 +21,6 @@ import type {
   OwnershipRecord,
   StableDisplayCallbacksHolder,
 } from './agentBootstrap.js';
-import {
-  assembleAgentShutdown,
-  collectDisposalError,
-  disposeAgentObservers,
-  disposeConfigInfrastructure,
-  disposeOAuthManager,
-  disposeWorkspaceFacades,
-  finishOwnedHooks,
-  joinAgentWork,
-  joinCapturedRun,
-} from './agentDisposeHelpers.js';
 import type { AgentAuth, EditorCallbacks } from './config-types.js';
 import { type AgentAuthState } from './control/authState.js';
 import { type HookControl } from './control/hooks.js';
@@ -53,10 +42,6 @@ import {
   createSessionProviderControl,
   type SessionProviderControl,
 } from './session-provider-reads.js';
-import type {
-  SessionCleanupAction,
-  SessionLifecycle,
-} from './sessionLifecycle.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -93,6 +78,7 @@ import {
 import {
   AgentOperations,
   createAgentApprovalOwner,
+  createAgentDisposalOwners,
   createAgentTurnOwners,
 } from './agent-operations.js';
 import { AgentImpl } from './agentImpl.js';
@@ -440,124 +426,6 @@ export abstract class ForegroundAgentAssembly {
   protected readonly rebuild = (): void =>
     this.facadeSessionOwner.rebuildExecution();
 
-  /**
-   * Full ordered dispose / teardown. Idempotent; collects every teardown
-   * failure into an errors[] accumulator (never short-circuiting on a single
-   * failure) and throws {@link AggregateDisposeError} at the END if any step
-   * failed. Tears down ONLY resources createAgent owns — caller-supplied
-   * resources are left untouched. The teardown order follows the authoritative
-   * pseudocode exactly:
-   *   20    fire SessionEnd lifecycle hook (REQ-015)
-   *   30    abort the facade-owned active-run controller
-   *   40-47 dispose facade-held injected-factory scheduler/coordinator handles
-   *   50-52 unsubscribe every recorded bus subscription + detach hooks
-   *   55    runtimeHandle.cleanup() (unregister runtime context)
-   *   60    config.dispose() (agentClient, LSP and extension teardown run
-   *         inside Config.dispose)
-   *   81-83 release every session lock (NET-NEW) + sessionLocksReleased
-   *   90-92 oauthManager.dispose?() (defensive; runtimeHandle.cleanup may own it)
-   *   100   throw AggregateDisposeError(errors) if any step failed
-   *
-   * @plan:PLAN-20260617-COREAPI.P24
-   * @requirement:REQ-016
-   * @requirement:REQ-015
-   * @pseudocode dispose.md 10-14, 20, 30, 40-47, 50-52, 55, 60, 70, 80-83, 90-92, 100-102
-   */
-  private lifecycle?: SessionLifecycle;
-
-  private disposeAgent(): Promise<void> {
-    this.lifecycle ??= this.createShutdownLifecycle();
-    return this.lifecycle.dispose();
-  }
-
-  private stopShutdownAdmissions(): readonly SessionCleanupAction[] {
-    return [
-      () => {
-        this.facadeOwnership.disposed = true;
-      },
-      () => this.facadeSessionOwner.closeAdmission(),
-      () => this.facadeTaskOwner.closeAdmissionAndAbort(),
-      () => this.facadeSessionOwner.closeHookAdmission(),
-      () => this.hooks.closeAdmission(),
-      () => this.profilePersistence.closeAdmission(),
-      () => this.closeMcpAdmission(),
-      () => this.facadeShellOwner.closeAdmission(),
-      () => this.skills.closeAdmission(),
-      () => this.workspace.closeAdmission(),
-      () => this.session.closeAdmission(),
-      () => this.ide.closeAdmission(),
-    ];
-  }
-
-  private createShutdownLifecycle(): SessionLifecycle {
-    const run = this.providerControl.activeRun;
-    return assembleAgentShutdown(
-      this.stopShutdownAdmissions(),
-      [
-        () => this.facadeSessionOwner.joinAuxiliaryShutdown(),
-        () => this.facadeSessionOwner.closeImageAdmission(),
-        () => this.facadeSessionOwner.toolCatalog.closeAdmission(),
-        () => this.tools.dispose(),
-      ],
-      [
-        () => run?.controller.abort(),
-        () => this.facadeSessionOwner.abortExecution(),
-      ],
-      [
-        () => this.providerControl.coordinator.dispose(),
-        () => this.facadeShellOwner.dispose(),
-      ],
-      (errors) =>
-        joinAgentWork(
-          () => this.providerControl.profiles.cancelAndJoin(),
-          () => this.mcp.cancelAndJoin(),
-          () => this.facadeTaskOwner.hasPendingWork(),
-          () => this.facadeTaskOwner.join(),
-          () => this.facadeOwnership.disposeMcpRuntime?.(),
-          errors,
-        ),
-      (errors) => joinCapturedRun(run, errors),
-      () => this.profilePersistence.join(),
-      async (errors) => {
-        await finishOwnedHooks(
-          () => this.hooks.finishSessionEnd(),
-          this.releaseHooks,
-          errors,
-        );
-        await disposeAgentObservers(
-          this.facadeOwnership.injectedSchedulerHandles,
-          () => this.hooks.detach(),
-          () =>
-            disposeWorkspaceFacades(
-              () => this.skills.dispose(),
-              () => this.workspace.dispose(),
-            ),
-          undefined,
-          errors,
-        );
-        await collectDisposalError(errors, () => this.session.dispose());
-      },
-      (errors) => this.releaseShutdownResources(errors),
-    );
-  }
-
-  private async releaseShutdownResources(errors: unknown[]): Promise<void> {
-    await collectDisposalError(errors, () => this.facadeSessionOwner.dispose());
-    await collectDisposalError(errors, this.closeRuntime);
-    await disposeConfigInfrastructure(
-      this.facadeOwnership.configOwnership === 'caller'
-        ? undefined
-        : () => this.config.dispose(),
-      this.facadeMediaOwner?.dispose.bind(this.facadeMediaOwner),
-      errors,
-    );
-    for (const lock of this.facadeOwnership.sessionLocks)
-      await collectDisposalError(errors, () => lock.release());
-    this.facadeOwnership.sessionLocksReleased = true;
-    await collectDisposalError(errors, () =>
-      disposeOAuthManager(this.facadeOAuth),
-    );
-  }
   protected initializeFacade(): Agent {
     this.providerControl = createSessionProviderControl(
       {
@@ -601,8 +469,8 @@ export abstract class ForegroundAgentAssembly {
     this.releaseHooks = this.facadeSessionOwner.transferHookRelease();
     return this.publishFacade();
   }
-  private publishFacade(): Agent {
-    const operations = new AgentOperations(
+  private constructOperations(): AgentOperations {
+    return new AgentOperations(
       createAgentTurnOwners(
         this.facadeSessionOwner,
         this.providerControl,
@@ -613,7 +481,34 @@ export abstract class ForegroundAgentAssembly {
         this.awaitMcpDiscovery,
       ),
       createAgentApprovalOwner(this.ide, this.config),
+      createAgentDisposalOwners(
+        {
+          ownership: this.facadeOwnership,
+          session: this.facadeSessionOwner,
+          coordinator: this.providerControl.coordinator,
+          tasks: this.facadeTaskOwner,
+          shell: this.facadeShellOwner,
+          hooks: this.hooks,
+          releaseHooks: this.releaseHooks,
+          profilePersistence: this.profilePersistence,
+          closeMcpAdmission: this.closeMcpAdmission,
+          skills: this.skills,
+          workspace: this.workspace,
+          sessionControl: this.session,
+          ide: this.ide,
+          tools: this.tools,
+          profiles: this.providerControl.profiles,
+          mcp: this.mcp,
+          closeRuntime: this.closeRuntime,
+          media: this.facadeMediaOwner,
+        },
+        this.config,
+        this.facadeOAuth,
+      ),
     );
+  }
+  private publishFacade(): Agent {
+    const operations = this.constructOperations();
     return new AgentImpl(
       this.facadeSessionOwner.createProviderFileOperations(() =>
         this.providerControl.coordinator.assertSettingsAdmission(),
@@ -669,7 +564,7 @@ export abstract class ForegroundAgentAssembly {
         generateJson: operations.generateJson.bind(operations),
         generateEmbedding: operations.generateEmbedding.bind(operations),
         listProviders: this.providerControl.listProviders,
-        dispose: this.disposeAgent.bind(this),
+        dispose: operations.dispose.bind(operations),
       },
     );
   }

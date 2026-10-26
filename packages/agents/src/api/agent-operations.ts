@@ -10,7 +10,11 @@ import {
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import type { SessionClientOwner } from '../session/session-client-owner.js';
+import type { ShellJobOwner } from '../session/shell-job-owner.js';
+import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
 import type {
   AgentInput,
   AgentMessage,
@@ -18,11 +22,27 @@ import type {
   GenerateOptions,
   TurnOptions,
 } from './agent.js';
+import type { OwnershipRecord } from './agentBootstrap.js';
+import {
+  assembleAgentShutdown,
+  collectDisposalError,
+  disposeAgentObservers,
+  disposeConfigInfrastructure,
+  disposeOAuthManager,
+  disposeWorkspaceFacades,
+  finishOwnedHooks,
+  joinAgentWork,
+  joinCapturedRun,
+} from './agentDisposeHelpers.js';
 import type { AgentExecutionCoordinator } from './agentExecutionCoordinator.js';
 import type { ProfilesControl } from './control/profilesControl.js';
 import type { SessionControl } from './control/sessionControl.js';
+import type { SkillsControl } from './control/skillsControl.js';
+import type { HookControl } from './control/hooks.js';
 import type { IdeControl } from './control/ideControl.js';
+import type { McpControl } from './control/mcpControl.js';
 import type { ToolControl } from './control/toolControl.js';
+import type { WorkspaceControl } from './control/workspaceControl.js';
 import {
   assembleDirectProviderAdmission,
   type DirectProviderAdmission,
@@ -36,6 +56,10 @@ import {
   UNCONFIGURED_AGENT_MESSAGE,
   type SessionProviderControl,
 } from './session-provider-reads.js';
+import type {
+  SessionCleanupAction,
+  SessionLifecycle,
+} from './sessionLifecycle.js';
 
 export interface AgentTurnOwners {
   readonly session: SessionClientOwner;
@@ -55,6 +79,47 @@ export interface AgentApprovalOwner {
   isTrustedFolder(): boolean;
   readApprovalMode(): ApprovalMode;
   writeApprovalMode(mode: ApprovalMode): void;
+}
+
+export interface AgentDisposalOwners {
+  readonly ownership: OwnershipRecord;
+  readonly session: SessionClientOwner;
+  readonly coordinator: AgentExecutionCoordinator;
+  readonly tasks: TaskLaunchOwner;
+  readonly shell: ShellJobOwner;
+  readonly hooks: HookControl;
+  readonly releaseHooks: () => Promise<void>;
+  readonly profilePersistence: {
+    closeAdmission(): void;
+    join(): Promise<void>;
+  };
+  readonly closeMcpAdmission: () => void;
+  readonly skills: SkillsControl;
+  readonly workspace: WorkspaceControl;
+  readonly sessionControl: SessionControl;
+  readonly ide: IdeControl;
+  readonly tools: ToolControl;
+  readonly profiles: ProfilesControl;
+  readonly mcp: McpControl;
+  readonly closeRuntime: () => Promise<void> | void;
+  readonly disposeConfig: (() => Promise<void>) | undefined;
+  readonly media: SessionMediaOwner | undefined;
+  readonly disposeOAuth: () => Promise<void>;
+}
+
+export function createAgentDisposalOwners(
+  owners: Omit<AgentDisposalOwners, 'disposeConfig' | 'disposeOAuth'>,
+  config: Config,
+  oauth: OAuthManager,
+): AgentDisposalOwners {
+  return {
+    ...owners,
+    disposeConfig:
+      owners.ownership.configOwnership === 'caller'
+        ? undefined
+        : () => config.dispose(),
+    disposeOAuth: () => disposeOAuthManager(oauth),
+  };
 }
 
 export function createAgentApprovalOwner(
@@ -96,10 +161,17 @@ export function createAgentTurnOwners(
 export class AgentOperations {
   readonly #turns: AgentTurnOwners;
   readonly #approval: AgentApprovalOwner;
+  readonly #disposal: AgentDisposalOwners;
+  #lifecycle?: SessionLifecycle;
 
-  constructor(turns: AgentTurnOwners, approval: AgentApprovalOwner) {
+  constructor(
+    turns: AgentTurnOwners,
+    approval: AgentApprovalOwner,
+    disposal: AgentDisposalOwners,
+  ) {
     this.#turns = turns;
     this.#approval = approval;
+    this.#disposal = disposal;
   }
 
   readonly #readHookSessionId = (): string =>
@@ -237,5 +309,101 @@ export class AgentOperations {
     if (!turns.providers.isProviderReady())
       throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     return turns.session.generateEmbedding(texts);
+  }
+
+  /**
+   * Full ordered dispose / teardown. Idempotent; collects every teardown
+   * failure into an errors[] accumulator (never short-circuiting on a single
+   * failure) and throws {@link AggregateDisposeError} at the END if any step
+   * failed. Tears down ONLY resources createAgent owns — caller-supplied
+   * resources are left untouched.
+   */
+  dispose(): Promise<void> {
+    this.#lifecycle ??= this.#createShutdownLifecycle();
+    return this.#lifecycle.dispose();
+  }
+
+  #stopShutdownAdmissions(): readonly SessionCleanupAction[] {
+    const disposal = this.#disposal;
+    return [
+      () => {
+        disposal.ownership.disposed = true;
+      },
+      () => disposal.session.closeAdmission(),
+      () => disposal.tasks.closeAdmissionAndAbort(),
+      () => disposal.session.closeHookAdmission(),
+      () => disposal.hooks.closeAdmission(),
+      () => disposal.profilePersistence.closeAdmission(),
+      () => disposal.closeMcpAdmission(),
+      () => disposal.shell.closeAdmission(),
+      () => disposal.skills.closeAdmission(),
+      () => disposal.workspace.closeAdmission(),
+      () => disposal.sessionControl.closeAdmission(),
+      () => disposal.ide.closeAdmission(),
+    ];
+  }
+
+  #createShutdownLifecycle(): SessionLifecycle {
+    const disposal = this.#disposal;
+    const run = disposal.coordinator.current();
+    return assembleAgentShutdown(
+      this.#stopShutdownAdmissions(),
+      [
+        () => disposal.session.joinAuxiliaryShutdown(),
+        () => disposal.session.closeImageAdmission(),
+        () => disposal.session.toolCatalog.closeAdmission(),
+        () => disposal.tools.dispose(),
+      ],
+      [() => run?.controller.abort(), () => disposal.session.abortExecution()],
+      [() => disposal.coordinator.dispose(), () => disposal.shell.dispose()],
+      (errors) =>
+        joinAgentWork(
+          () => disposal.profiles.cancelAndJoin(),
+          () => disposal.mcp.cancelAndJoin(),
+          () => disposal.tasks.hasPendingWork(),
+          () => disposal.tasks.join(),
+          () => disposal.ownership.disposeMcpRuntime?.(),
+          errors,
+        ),
+      (errors) => joinCapturedRun(run, errors),
+      () => disposal.profilePersistence.join(),
+      async (errors) => {
+        await finishOwnedHooks(
+          () => disposal.hooks.finishSessionEnd(),
+          disposal.releaseHooks,
+          errors,
+        );
+        await disposeAgentObservers(
+          disposal.ownership.injectedSchedulerHandles,
+          () => disposal.hooks.detach(),
+          () =>
+            disposeWorkspaceFacades(
+              () => disposal.skills.dispose(),
+              () => disposal.workspace.dispose(),
+            ),
+          undefined,
+          errors,
+        );
+        await collectDisposalError(errors, () =>
+          disposal.sessionControl.dispose(),
+        );
+      },
+      (errors) => this.#releaseShutdownResources(errors),
+    );
+  }
+
+  async #releaseShutdownResources(errors: unknown[]): Promise<void> {
+    const disposal = this.#disposal;
+    await collectDisposalError(errors, () => disposal.session.dispose());
+    await collectDisposalError(errors, disposal.closeRuntime);
+    await disposeConfigInfrastructure(
+      disposal.disposeConfig,
+      disposal.media?.dispose.bind(disposal.media),
+      errors,
+    );
+    for (const lock of disposal.ownership.sessionLocks)
+      await collectDisposalError(errors, () => lock.release());
+    disposal.ownership.sessionLocksReleased = true;
+    await collectDisposalError(errors, disposal.disposeOAuth);
   }
 }
