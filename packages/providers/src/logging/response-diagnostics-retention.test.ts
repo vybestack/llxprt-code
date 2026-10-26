@@ -5,6 +5,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   createStreamAccumulatorState,
   processStreamChunk,
+  processLoggedStreamChunk,
   resolveTokenCounts,
 } from './streamProcessor.js';
 
@@ -35,14 +36,18 @@ function recorder(): AttemptRecorder {
   return result;
 }
 
-function exercise(retainAll: boolean): { live: number; chunks: number } {
+function exercise(
+  retainAll: boolean,
+  logBodies = false,
+): { live: number; chunks: number } {
   const attempt = recorder();
   const state = createStreamAccumulatorState();
   const control: string[] = [];
   for (let index = 0; index < 64; index++) {
     const text = `${index}:` + 'x'.repeat(1024);
     if (retainAll) control.push(text);
-    processStreamChunk(
+    const process = logBodies ? processLoggedStreamChunk : processStreamChunk;
+    process(
       { speaker: 'ai', blocks: [{ type: 'text', text }] },
       state,
       performance.now(),
@@ -56,6 +61,16 @@ function exercise(retainAll: boolean): { live: number; chunks: number } {
 }
 
 describe('response diagnostics ownership', () => {
+  it('keeps no completed response prefix in the body-logging accumulator', () => {
+    const result = exercise(false, true);
+    expect(result.chunks).toBe(64);
+    expect(result.live).toBe(0);
+  });
+
+  it('rejects an accumulating body-logging control', () => {
+    expect(exercise(true, true).live).toBeGreaterThan(64 * 1024);
+  });
+
   it('keeps no response payload in the wrapper or active attempt', () => {
     const result = exercise(false);
     expect(result.chunks).toBe(64);

@@ -29,10 +29,8 @@ import {
   type TokenCounts,
   extractTokenCountsFromResponse,
 } from './logging/tokenCounts.js';
-import {
-  writeResponseLog as writeResponseLogEntry,
-  type ConversationLogContext,
-} from './logging/conversationResponseLogger.js';
+import type { ConversationLogContext } from './logging/conversationResponseLogger.js';
+import { StreamedResponseLog } from './logging/streamed-response-log.js';
 import {
   logApiRequestTelemetry as logApiRequestTelemetryEntry,
   logSizedApiRequestTelemetry,
@@ -581,6 +579,7 @@ export class LoggingProviderWrapper implements IProvider {
     policy: RequestLoggingPolicy,
     context: ConversationLogContext,
   ): AsyncIterableIterator<IContent> {
+    const responseLog = new StreamedResponseLog(config, context, policy);
     yield* logResponseStreamWithRecorderGen(
       config,
       stream,
@@ -592,18 +591,10 @@ export class LoggingProviderWrapper implements IProvider {
         debug: context.debug,
         performanceTracker: this.performanceTracker,
       },
-      (content, pid, duration, success, error) =>
-        writeResponseLogEntry(
-          config,
-          content,
-          pid,
-          duration,
-          success,
-          error,
-          context,
-          policy,
-        ),
+      (_content, pid, duration, success, error) =>
+        responseLog.finish(pid, duration, success, error),
       policy,
+      responseLog,
     );
   }
 

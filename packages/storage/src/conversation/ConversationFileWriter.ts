@@ -15,6 +15,7 @@ export type { RequestArtifactDescriptor } from './request-artifact.js';
 import type { StorageLogger } from '../types/logger.js';
 import { NullStorageLoggerImpl } from '../types/logger.js';
 import { Storage } from '../config/storage.js';
+import { ResponseArtifactStream } from './response-artifact.js';
 
 function defaultConversationLogPath(): string {
   return path.join(Storage.getGlobalDataDir(), 'conversations');
@@ -104,6 +105,18 @@ export class ConversationFileWriter {
     });
     this.writeChain = pending.then(() => undefined).catch(() => {});
     return pending;
+  }
+
+  openResponseStream(provider: string): Promise<ResponseArtifactStream> {
+    return ResponseArtifactStream.open(this.logPath, provider, (complete) => {
+      const pending = this.writeChain.then(async () => {
+        const artifact = await complete();
+        await appendArtifact(artifact, this.currentLogFile);
+        return artifact;
+      });
+      this.writeChain = pending.then(() => undefined).catch(() => {});
+      return pending;
+    });
   }
 
   async writeResponse(

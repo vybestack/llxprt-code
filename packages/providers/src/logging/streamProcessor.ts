@@ -29,7 +29,6 @@ import type { RequestLoggingPolicy } from './requestLoggingPolicy.js';
 
 export interface StreamAccumulatorState {
   estimatedOutputTokens: number;
-  responseContent: string;
   chunkCount: number;
   firstChunkTime: number | null;
   lastChunkTime: number | null;
@@ -40,7 +39,6 @@ export interface StreamAccumulatorState {
 export function createStreamAccumulatorState(): StreamAccumulatorState {
   return {
     estimatedOutputTokens: 0,
-    responseContent: '',
     chunkCount: 0,
     firstChunkTime: null,
     lastChunkTime: null,
@@ -170,7 +168,6 @@ export function processLoggedStreamChunk(
   }
   const content = extractSimpleContent(chunk);
   if (content) {
-    acc.responseContent += content;
     acc.estimatedOutputTokens += estimateTokens(content);
   }
   let chunkUsage: UsageStats | undefined;
@@ -474,9 +471,11 @@ async function* captureLoggedResponse(
   start: number,
   recorder: AttemptRecorder,
   policy: RequestLoggingPolicy | undefined,
+  responseLog: ResponseChunkLog | undefined,
 ): AsyncGenerator<IContent, IContent['metadata']> {
   let terminalMetadata: IContent['metadata'];
   for await (const chunk of stream) {
+    await responseLog?.append(extractSimpleContent(chunk));
     const processed = processLoggedStreamChunk(chunk, acc, start, recorder);
     if (policy?.strictDurableResponse === true && isResponseTerminal(chunk))
       terminalMetadata = { ...terminalMetadata, ...chunk.metadata };
@@ -534,6 +533,11 @@ async function logStrictReply(
   return publish;
 }
 
+export interface ResponseChunkLog {
+  append(text: string): Promise<void>;
+  abort(): Promise<void>;
+}
+
 export async function* logResponseStreamWithRecorderGen(
   config: ProviderRequestDiagnostics,
   stream: AsyncIterableIterator<IContent>,
@@ -543,6 +547,7 @@ export async function* logResponseStreamWithRecorderGen(
   ctx: StreamProcessContext,
   writeLog: ResponseLogWriter,
   policy?: RequestLoggingPolicy,
+  responseLog?: ResponseChunkLog,
 ): AsyncIterableIterator<IContent> {
   const startTime = performance.now();
   const acc = createStreamAccumulatorState();
@@ -557,6 +562,7 @@ export async function* logResponseStreamWithRecorderGen(
       startTime,
       recorder,
       policy,
+      responseLog,
     );
 
     const duration = performance.now() - startTime;
@@ -566,7 +572,7 @@ export async function* logResponseStreamWithRecorderGen(
       modelName,
       ctx,
       writeLog,
-      content: acc.responseContent,
+      content: '',
       promptId,
       duration,
     });
@@ -580,7 +586,7 @@ export async function* logResponseStreamWithRecorderGen(
     );
     finalized = true;
     if (policy?.strictDurableResponse !== true)
-      await writeLog(acc.responseContent, promptId, duration, true, undefined);
+      await writeLog('', promptId, duration, true, undefined);
     if (publish !== undefined) {
       const deferred = publish;
       await afterReply(
@@ -609,6 +615,7 @@ export async function* logResponseStreamWithRecorderGen(
     );
   } finally {
     if (!finalized) {
+      await responseLog?.abort();
       recorder.finalizeAttempt('aborted', modelName, acc.latestTokenUsage);
     }
   }
