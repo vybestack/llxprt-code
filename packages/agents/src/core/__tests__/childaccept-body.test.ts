@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import { describe, expect, it } from 'bun:test';
 import { copyFile, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -146,10 +147,16 @@ describe('child facade resume markers', () => {
       );
       const path = fixture.child.runtime.history.journalPath();
       if (path === null) throw new Error('Child journal absent');
-      await copyFile(path, join(directory, `child${childJournalExtension()}`));
-      const boot = await openChildResumeBoot(path);
+      const resumePath = join(directory, `child${childJournalExtension()}`);
+      await copyFile(path, resumePath);
+      const boot = await openChildResumeBoot(resumePath);
       try {
-        await sendChildHistory(fixture.child, boot.streamRows());
+        await sendChildHistory(
+          fixture.child,
+          callerOwnedRawProviderSource(
+            await Array.fromAsync(boot.streamRows()),
+          ),
+        );
         expect(await readFile(join(directory, 'request-2.json'), 'utf8')).toBe(
           referenceBody(rows, true),
         );

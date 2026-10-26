@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import { retainedShapeEntries } from './token-usage-source-fixture.js';
 import { createHash } from 'node:crypto';
 import {
@@ -131,20 +132,21 @@ function records(path: string): Array<Record<string, unknown>> {
 }
 async function oracle(setup: Setup, mode: Mode, large: boolean) {
   const projection = await setup.provider.projectPromptEnvelope({
-    contents: {
-      async *[Symbol.asyncIterator]() {
-        if (mode === 'hook')
-          yield {
-            speaker: 'human' as const,
-            blocks: [{ type: 'text' as const, text: 'new context' }],
-          };
-        else {
-          for (let index = 0; index < 64; index++)
-            yield diskTextRow(index, large);
-          yield sourcePending;
-        }
-      },
-    },
+    contents: callerOwnedRawProviderSource(
+      mode === 'hook'
+        ? [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'new context' }],
+            },
+          ]
+        : [
+            ...Array.from({ length: 64 }, (_, index) =>
+              diskTextRow(index, large),
+            ),
+            sourcePending,
+          ],
+    ),
     invocation: setup.runtime.prepareProviderInvocation(setup.provider.name),
     resolved: { model: 'gpt-5.6' },
     systemInstruction: setup.generation.systemInstruction,

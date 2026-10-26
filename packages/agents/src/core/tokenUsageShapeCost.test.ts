@@ -100,10 +100,14 @@ function facadeCallback0(): void {
   // Three contents, one of which carries a tool result. A tool result is
   // counted once for its content and once for its own attribution entry;
   // anything more means a body is being re-serialized.
+  const tool = toolTurn('call-1', 'some tool output');
   const contents: IContent[] = [
     textTurn(1),
     textTurn(2),
-    toolTurn('call-1', 'some tool output'),
+    {
+      ...tool,
+      blocks: [...tool.blocks, { type: 'text', text: 'tool status' }],
+    },
   ];
   const tokenizer = new CountingTokenizer();
 

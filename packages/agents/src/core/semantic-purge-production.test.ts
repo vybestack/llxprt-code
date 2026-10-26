@@ -119,9 +119,7 @@ async function verifyProduction(size: number): Promise<number> {
       const second = await next;
       if (!second) throw new Error('Missing next attempt');
       await second.complete({ ...success, status: 'cancelled' });
-      await expect(
-        attempt.candidateHistory.streamRows().next(),
-      ).rejects.toThrow('closed');
+      expect(() => attempt.candidateHistory.streamRows()).toThrow('closed');
       expect(ownership.snapshot().peakRows).toBeLessThanOrEqual(440);
       expect(ownership.snapshot().peakSerializedBytes).toBeLessThanOrEqual(
         8 * 1024 * 1024,
@@ -170,9 +168,7 @@ describe('invoked production streaming semantic purge session: cancels construct
         if (!attempt) throw new Error('Missing attempt after cancellation');
         await attempt.finalize();
         expect(ownership.snapshot().liveRows).toBe(0);
-        await expect(
-          attempt.requestHistory.streamRows().next(),
-        ).rejects.toThrow('closed');
+        expect(() => attempt.requestHistory.streamRows()).toThrow('closed');
       },
       2048,
       imageRow,

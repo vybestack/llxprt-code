@@ -136,9 +136,16 @@ for (const pending of [false, true]) {
         const { history, recorder, releaseWriter, owners } = fixture;
         await initializeBaseline(fixture, pending);
         const options = await turnOptions(history);
+        const baselineTokens = pending
+          ? new Promise<number>((resolve) => {
+              history.once('tokensUpdated', () =>
+                resolve(history.getTotalTokens()),
+              );
+            })
+          : Promise.resolve(history.getTotalTokens());
         const operation = turnHistory.commitTurnHistory(options);
-        expect(history.getTotalTokens()).toBe(12);
         releaseWriter();
+        expect(await baselineTokens).toBe(12);
         await operation;
         const rows = await rowsOf(history);
         expect(rows.slice(0, 3)).toStrictEqual([

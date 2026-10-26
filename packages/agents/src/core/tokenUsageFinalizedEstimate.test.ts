@@ -19,6 +19,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import {
   estimatePromptEnvelope,
   type PromptEnvelopeEstimate,
@@ -125,16 +126,6 @@ function createResponsesProvider(): OpenAIResponsesProvider {
   return new OpenAIResponsesProvider('token-test', 'https://api.openai.com/v1');
 }
 
-function toStream(rows: readonly IContent[]): AsyncIterable<IContent> {
-  return {
-    async *[Symbol.asyncIterator]() {
-      for (const row of rows) {
-        yield row;
-      }
-    },
-  };
-}
-
 async function estimateResponsesPrompt(
   provider: OpenAIResponsesProvider,
   contents: readonly IContent[],
@@ -150,7 +141,7 @@ async function estimateResponsesPrompt(
       },
       ...(stateful ? { ephemerals: { 'responses-stateful': true } } : {}),
     }),
-    contents: toStream(contents),
+    contents: callerOwnedRawProviderSource(contents),
   });
   return estimatePromptEnvelope(
     provider.name,
