@@ -7,7 +7,13 @@ import { vi } from 'bun:test';
 import type { BootstrapProfileArgs } from '../config/profileBootstrap.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { AgentActivationOperation } from '@vybestack/llxprt-code-agents';
-import type { loadCliConfig } from '../config/config.js';
+import type { ConfigBuildPreflight, loadCliConfig } from '../config/config.js';
+
+/** The preflight a bootstrap path hands to `loadCliConfig`, plus the provider
+ * probe the entry point calls on the same object. */
+type StubbablePreflight = ConfigBuildPreflight & {
+  hasActiveProvider(): boolean;
+};
 
 export function handoffCliConfig(
   config: Config,
@@ -19,9 +25,10 @@ export function handoffCliConfig(
     if (preflightOperation !== undefined)
       vi.spyOn(preflight, 'preflight').mockImplementation(preflightOperation);
     if (hasActiveProvider !== undefined)
-      vi.spyOn(preflight, 'hasActiveProvider').mockImplementation(
-        hasActiveProvider,
-      );
+      vi.spyOn(
+        preflight as StubbablePreflight,
+        'hasActiveProvider',
+      ).mockImplementation(hasActiveProvider);
     return config;
   };
 }

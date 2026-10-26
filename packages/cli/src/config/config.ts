@@ -7,7 +7,6 @@
  */
 
 import type {
-  AgentProfilePreflight,
   AgentActivationOperation,
   AgentProfileApplication,
 } from '@vybestack/llxprt-code-agents';
@@ -72,6 +71,23 @@ type ConfigBuildPieces = {
 };
 
 import type { ContextResolutionResult } from './interactiveContext.js';
+import type { PostConfigPreflight } from './postConfigRuntime.js';
+
+/**
+ * The preflight operations `loadCliConfig` and its post-configuration pipeline
+ * drive. Callers hand in the created preflight; this contract names only the
+ * operations the pipeline itself calls.
+ */
+export interface ConfigBuildPreflight extends PostConfigPreflight {
+  readProviderDefaultModel(provider: string): string | undefined;
+  chooseProviderModel(provider: string, model: string): void;
+  captureSettings(): Record<string, unknown>;
+  bindMcpSettings(
+    initial: Parameters<SessionSettingsOwner['bindMcpSettings']>[0],
+    load: Parameters<SessionSettingsOwner['bindMcpSettings']>[1],
+  ): void;
+  dispose(): Promise<void>;
+}
 
 /** Values `loadCliConfig` reads once while it builds the Config. */
 export interface CliConfigLoadInput {
@@ -81,7 +97,7 @@ export interface CliConfigLoadInput {
   readonly sessionId: string;
   readonly argv: CliArgs;
   readonly cwd: string;
-  readonly preflight: AgentProfilePreflight;
+  readonly preflight: ConfigBuildPreflight;
   /** An externally owned settings owner the preflight prepares its workspace over. */
   readonly settingsOwner?: SessionSettingsOwner;
 }
@@ -96,7 +112,6 @@ export interface CliConfigReadyCallbacks {
   readonly activationBootstrap?: (operation: AgentActivationOperation) => void;
   readonly profileApplication: (application: AgentProfileApplication) => void;
   readonly providerSwitch: (switchProvider: ProviderSwitcher) => void;
-  readonly preflight: (operation: AgentProfilePreflight) => void;
 }
 
 const ignore = (): void => undefined;
@@ -104,7 +119,6 @@ const ignore = (): void => undefined;
 export const ignoreReady: CliConfigReadyCallbacks = {
   profileApplication: ignore,
   providerSwitch: ignore,
-  preflight: ignore,
 };
 
 // ─── Orchestrator ────────────────────────────────────────────────────────────
@@ -114,7 +128,10 @@ function resolveProviderModelSelection(
   argv: CliArgs,
   profileMergedSettings: MergedSettings,
   profileResult: ProfileLoadResult,
-  runtimeState: AgentProfilePreflight,
+  runtimeState: Pick<
+    ConfigBuildPreflight,
+    'readProviderDefaultModel' | 'chooseProviderModel'
+  >,
 ) {
   const providerModel = resolveProviderAndModel({
     cliProvider: argv.provider,
@@ -167,7 +184,10 @@ async function resolveConfigBuildPieces(
   argv: CliArgs,
   settings: Settings,
   declarative: DeclarativeCliConfig,
-  runtimeState: AgentProfilePreflight,
+  runtimeState: Pick<
+    ConfigBuildPreflight,
+    'readProviderDefaultModel' | 'chooseProviderModel'
+  >,
   cwd: string,
 ): Promise<ConfigBuildPieces> {
   const {
@@ -295,7 +315,6 @@ export async function loadCliConfig(
   const { bootstrap, profileResult } = declarative;
   const bootstrapArgs = bootstrap.bootstrapArgs;
   const profileMergedSettings = profileResult.profileMergedSettings;
-  onReady.preflight(runtimeState);
 
   const pieces = await resolveConfigBuildPieces(
     argv,
@@ -339,7 +358,7 @@ export async function loadCliConfig(
 }
 
 function bindSelectedMcpSettings(
-  owner: Pick<AgentProfilePreflight, 'bindMcpSettings'>,
+  owner: Pick<ConfigBuildPreflight, 'bindMcpSettings'>,
   pieces: ConfigBuildPieces,
 ): void {
   owner.bindMcpSettings(

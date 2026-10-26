@@ -15,9 +15,10 @@ import {
 
 import {
   type AgentActivationOperation,
+  type AgentActivationPreflightResult,
   type AgentPostConfigSettings,
   type AgentProfileApplication,
-  type AgentProfilePreflight,
+  type ProviderActivationIntent,
 } from '@vybestack/llxprt-code-agents';
 import type { EphemeralSettings } from '@vybestack/llxprt-code-settings';
 import { applyCliSetArguments } from '@vybestack/llxprt-code-settings/settings/cli-ephemeral-settings.js';
@@ -43,7 +44,7 @@ const logger = new DebugLogger('llxprt:config:postConfigRuntime');
 export interface PostConfigInput {
   readonly bindMcpSettings?: () => void;
   readonly config: Config;
-  readonly runtimeState: AgentProfilePreflight;
+  readonly runtimeState: PostConfigPreflight;
   readonly bootstrapArgs: BootstrapProfileArgs;
   readonly argv: CliArgs;
   readonly settings: Settings;
@@ -53,6 +54,54 @@ export interface PostConfigInput {
   readonly defaultDisabledTools: readonly string[];
   readonly approvalMode: ApprovalMode;
   readonly interactive: boolean;
+}
+
+/** CLI arguments `applyArgumentOverrides` re-applies after a provider switch. */
+export interface CliOverrideArguments {
+  readonly key?: string;
+  readonly keyfile?: string;
+  readonly baseurl?: string;
+  readonly set?: string[];
+}
+
+/** Bootstrap overrides those CLI arguments are merged over. */
+export interface CliOverrideBootstrap {
+  readonly keyOverride?: string | null;
+  readonly keyNameOverride?: string | null;
+  readonly keyfileOverride?: string | null;
+  readonly baseurlOverride?: string | null;
+  readonly setOverrides?: string[] | null;
+}
+
+/**
+ * The preflight operations the finalization pipeline drives. The pipeline
+ * prepares the configured workspace, writes the settings steps 14-16 resolve,
+ * and finishes or transfers the prepared activation; it never holds the whole
+ * preflight.
+ */
+export interface PostConfigPreflight extends AgentPostConfigSettings {
+  prepareConfiguredWorkspace(
+    config: Config,
+    beforePreparation: () => void,
+    suppliedSettings?: SessionSettingsOwner,
+  ): Promise<void>;
+  captureSwitchOperation(): ProviderSwitcher;
+  captureProfileOperation(): AgentProfileApplication;
+  transferActivation(
+    ready: (operation: AgentActivationOperation) => void,
+  ): void;
+  finishPostConfiguration(): Promise<void>;
+  preflight(
+    intent: ProviderActivationIntent,
+  ): Promise<AgentActivationPreflightResult>;
+  chooseProviderModel(provider: string, model: string): void;
+  readSetting(key: string): unknown;
+  writeSetting(key: string, value: unknown): void;
+  applyArgumentOverrides(
+    owner: Pick<SessionSettingsOwner, 'writeUserParameter'>,
+    argv: CliOverrideArguments,
+    bootstrap: CliOverrideBootstrap | undefined,
+  ): Promise<void>;
 }
 
 // ─── Narrowed per-function input types ───────────────────────────────────────

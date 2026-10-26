@@ -56,6 +56,7 @@ export async function loadCliConfigWithPreflight(
 ): Promise<Config> {
   const cwd = input.cwd ?? process.cwd();
   const prepared = input.preflight ?? (await prepareFixturePreflight(input));
+  input.onPreflightReady?.(prepared);
   try {
     return await loadCliConfig(
       {
@@ -74,7 +75,6 @@ export async function loadCliConfigWithPreflight(
           input.onProfileApplicationReady ?? ignoreReady.profileApplication,
         providerSwitch:
           input.onProviderSwitchReady ?? ignoreReady.providerSwitch,
-        preflight: input.onPreflightReady ?? ignoreReady.preflight,
       },
     );
   } finally {
