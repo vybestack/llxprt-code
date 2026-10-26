@@ -32,20 +32,20 @@ export type CapturedOwnerArgs = [
 
 /** `acquireSessionClient` without the credential authority. */
 export type CapturedAcquisitionArgs = [
-  config: AcquireArgs[0],
-  settings: AcquireArgs[1],
-  settingsOwner: AcquireArgs[2],
-  providerManager: AcquireArgs[3],
-  oauthManager: AcquireArgs[4],
-  contentGeneratorFactory: AcquireArgs[5],
-  tokenizerFactory: AcquireArgs[6],
-  providerFileLifecycle: AcquireArgs[7],
-  mediaStore: AcquireArgs[8],
-  factory: AcquireArgs[9],
-  readInstructions: AcquireArgs[10],
-  workspacePaths: AcquireArgs[11],
-  messageBus?: AcquireArgs[13],
-  imageOperation?: AcquireArgs[14],
+  config: AcquireArgs[0]['config'],
+  settings: AcquireArgs[1]['settings'],
+  settingsOwner: AcquireArgs[1]['settingsOwner'],
+  providerManager: AcquireArgs[2],
+  oauthManager: AcquireArgs[3],
+  contentGeneratorFactory: AcquireArgs[4]['contentGeneratorFactory'],
+  tokenizerFactory: AcquireArgs[4]['tokenizerFactory'],
+  providerFileLifecycle: AcquireArgs[4]['providerFiles'],
+  mediaStore: AcquireArgs[4]['mediaStore'],
+  factory: AcquireArgs[4]['clientFactory'],
+  readInstructions: AcquireArgs[0]['readInstructions'],
+  workspacePaths: AcquireArgs[0]['workspacePaths'],
+  messageBus?: AcquireArgs[0]['messageBus'],
+  imageOperation?: AcquireArgs[0]['imageOperation'],
 ];
 
 /**
@@ -128,21 +128,27 @@ export async function acquireCapturedSessionClient(
     imageOperation,
   ] = args;
   const owner = await acquireSessionClient(
-    config,
-    settings,
-    settingsOwner,
+    {
+      config,
+      messageBus,
+      workspacePaths,
+      readInstructions,
+      imageOperation,
+    },
+    { settings, settingsOwner },
     providerManager,
     oauthManager,
-    contentGeneratorFactory,
-    tokenizerFactory,
-    providerFileLifecycle,
-    mediaStore,
-    recordingFactory(factory ?? buildAgentClientFactory(), built),
-    readInstructions,
-    workspacePaths,
-    new CredentialAuthority(),
-    messageBus,
-    imageOperation,
+    {
+      contentGeneratorFactory,
+      tokenizerFactory,
+      providerFiles: providerFileLifecycle,
+      mediaStore,
+      authority: new CredentialAuthority(),
+      clientFactory: recordingFactory(
+        factory ?? buildAgentClientFactory(),
+        built,
+      ),
+    },
   );
   builtClients.set(owner, built);
   return owner;

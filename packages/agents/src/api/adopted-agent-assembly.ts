@@ -625,19 +625,24 @@ async function acquireAdoptedSession(
       'Missing explicit session client media store',
     );
   return acquireSessionClient(
-    config,
-    settingsService,
-    selectedSettings,
+    {
+      config,
+      messageBus: undefined,
+      workspacePaths: mcp.workspacePaths,
+      readInstructions: mcp.readInstructions,
+      imageOperation: undefined,
+    },
+    { settings: settingsService, settingsOwner: selectedSettings },
     manager,
     oauth,
-    content,
-    tokenizer,
-    files,
-    store,
-    undefined,
-    mcp.readInstructions,
-    mcp.workspacePaths,
-    authority,
+    {
+      contentGeneratorFactory: content,
+      tokenizerFactory: tokenizer,
+      providerFiles: files,
+      mediaStore: store,
+      authority,
+      clientFactory: undefined,
+    },
   );
 }
 

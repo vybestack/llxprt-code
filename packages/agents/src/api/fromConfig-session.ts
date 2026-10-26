@@ -172,20 +172,27 @@ async function acquireActivationClient(
   media: SessionMediaOwner,
 ): Promise<SessionClientOwner> {
   const client = await acquireSessionClient(
-    config,
-    providers.settings,
-    settingsOwner,
+    {
+      config,
+      messageBus: activation.bus,
+      workspacePaths: activation.filesystem.paths,
+      readInstructions: () => undefined,
+      imageOperation: undefined,
+    },
+    { settings: providers.settings, settingsOwner },
     providers.manager,
     auth.oauth,
-    createRuntimeContentGeneratorFactory(),
-    configureProviderTokenizer(providers.manager, undefined),
-    activation.files,
-    media.store,
-    undefined,
-    () => undefined,
-    activation.filesystem.paths,
-    activation.authority,
-    activation.bus,
+    {
+      contentGeneratorFactory: createRuntimeContentGeneratorFactory(),
+      tokenizerFactory: configureProviderTokenizer(
+        providers.manager,
+        undefined,
+      ),
+      providerFiles: activation.files,
+      mediaStore: media.store,
+      authority: activation.authority,
+      clientFactory: undefined,
+    },
   );
   release.acquire('manager', () => client.dispose());
   client.adoptProviderLifetime(activation.providerLifetime);

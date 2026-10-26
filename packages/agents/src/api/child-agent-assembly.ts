@@ -282,20 +282,24 @@ export class ChildAgentAssembly {
 
   private async prepareClient(): Promise<void> {
     this.client = await acquireSessionClient(
-      this.config,
-      this.settings,
-      this.settingsOwner,
+      {
+        config: this.config,
+        messageBus: this.operations.messageBus,
+        workspacePaths: this.operations.workspacePaths,
+        readInstructions: this.operations.readMcpInstructions,
+        imageOperation: undefined,
+      },
+      { settings: this.settings, settingsOwner: this.settingsOwner },
       this.manager,
       this.oauth,
-      this.content,
-      this.tokenizer,
-      this.files,
-      this.media.store,
-      this.clientFactory,
-      this.operations.readMcpInstructions,
-      this.operations.workspacePaths,
-      this.acquisition.authority,
-      this.operations.messageBus,
+      {
+        contentGeneratorFactory: this.content,
+        tokenizerFactory: this.tokenizer,
+        providerFiles: this.files,
+        mediaStore: this.media.store,
+        authority: this.acquisition.authority,
+        clientFactory: this.clientFactory,
+      },
     );
     this.acquired.push(() => this.client.dispose());
     this.client.bindDefinitionReads(

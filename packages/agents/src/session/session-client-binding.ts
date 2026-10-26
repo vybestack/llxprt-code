@@ -164,58 +164,80 @@ export function captureGenerationState(
   });
 }
 
+/**
+ * The session the client is acquired for: its config, the bus the client
+ * publishes on, the workspace reads it inherits and the image capability it may
+ * run.
+ */
+export interface SessionClientTarget {
+  readonly config: Config;
+  /** The policy owner's bus, or none when the caller composes no policy yet. */
+  readonly messageBus: MessageBus | undefined;
+  readonly workspacePaths: WorkspacePathOperations;
+  readonly readInstructions: () => string | undefined;
+  readonly imageOperation: SessionImageSelection['imageOperation'];
+}
+
+/** The settings service a client reads, and the owner that owns it. */
+export interface SessionClientSettings {
+  readonly settings: SettingsService;
+  readonly settingsOwner: SessionSettingsOwner;
+}
+
+/** The owners and factories a client is built from, all created before it. */
+export interface SessionClientConstruction {
+  readonly contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>;
+  readonly tokenizerFactory: RuntimeTokenizerFactory;
+  readonly providerFiles: ProviderFileLifecycle;
+  readonly mediaStore: LocalMediaStore;
+  readonly authority: CredentialAuthority;
+  /** Defaults to the production client factory when a caller observes none. */
+  readonly clientFactory: AgentClientFactory | undefined;
+}
+
 export async function acquireSessionClient(
-  config: Config,
-  settings: SettingsService,
-  settingsOwner: SessionSettingsOwner,
+  target: SessionClientTarget,
+  settings: SessionClientSettings,
   providerManager: RuntimeProviderManager,
-  oauthManager: OAuthManager | undefined,
-  contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
-  tokenizerFactory: RuntimeTokenizerFactory,
-  providerFileLifecycle: ProviderFileLifecycle,
-  mediaStore: LocalMediaStore,
-  factory: AgentClientFactory = buildAgentClientFactory(),
-  readInstructions: () => string | undefined,
-  workspacePaths: WorkspacePathOperations,
-  authority: CredentialAuthority,
-  messageBus?: MessageBus,
-  imageOperation?: SessionImageSelection['imageOperation'],
+  oauth: OAuthManager | undefined,
+  construction: SessionClientConstruction,
 ): Promise<SessionClientOwner> {
+  const { config, messageBus, readInstructions, workspacePaths } = target;
   const client = await SessionClientOwner.create(
     config,
-    assembleTaskSchemaPolicy(settings),
+    assembleTaskSchemaPolicy(settings.settings),
     providerManager,
-    factory,
-    mediaStore,
+    construction.clientFactory ?? buildAgentClientFactory(),
+    construction.mediaStore,
     readInstructions,
     workspacePaths,
-    settingsOwner,
-    contentGeneratorFactory,
-    tokenizerFactory,
-    authority,
+    settings.settingsOwner,
+    construction.contentGeneratorFactory,
+    construction.tokenizerFactory,
+    construction.authority,
     messageBus,
   );
   try {
-    if (oauthManager !== undefined)
+    if (oauth !== undefined)
       client.bindInteractiveAuthRequests((prompt) =>
-        oauthManager.requestInteractiveAuth(prompt),
+        oauth.requestInteractiveAuth(prompt),
       );
     assembleSessionImages(
       client,
       config.getTargetDir(),
       providerManager,
-      oauthManager,
-      settings,
-      imageOperation,
+      oauth,
+      settings.settings,
+      target.imageOperation,
     );
     const mainScope = config.getSessionId();
     client.bindProviderFiles(
-      providerFileLifecycle,
-      (provider) => oauthManager?.composeRetryOperations(provider) ?? {},
+      construction.providerFiles,
+      (provider) => oauth?.composeRetryOperations(provider) ?? {},
       (scope) =>
         scope === mainScope
           ? Promise.resolve()
-          : cleanupProviderScope(providerFileLifecycle, scope),
+          : cleanupProviderScope(construction.providerFiles, scope),
     );
   } catch (error) {
     await rethrowAfterCleanup(

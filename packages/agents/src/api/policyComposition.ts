@@ -72,21 +72,24 @@ export async function bindCreatedSessionClient(
   authority: CredentialAuthority,
 ): Promise<SessionClientOwner> {
   const client = await acquireSessionClient(
-    config,
-    settings,
-    settingsOwner,
+    {
+      config,
+      messageBus: mcp.messageBus,
+      workspacePaths: mcp.workspacePaths,
+      readInstructions: mcp.readInstructions,
+      imageOperation,
+    },
+    { settings, settingsOwner },
     providerManager,
     oauthManager,
-    contentGeneratorFactory,
-    tokenizerFactory,
-    providerFileLifecycle,
-    media.store,
-    undefined,
-    mcp.readInstructions,
-    mcp.workspacePaths,
-    authority,
-    mcp.messageBus,
-    imageOperation,
+    {
+      contentGeneratorFactory,
+      tokenizerFactory,
+      providerFiles: providerFileLifecycle,
+      mediaStore: media.store,
+      authority,
+      clientFactory: undefined,
+    },
   );
   try {
     client.bindMcpRuntime(mcp);
