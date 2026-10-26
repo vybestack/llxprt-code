@@ -297,10 +297,7 @@ export class ChatSession {
 
     this.compressionHandler = this.createCompression(triggerCompressionHook);
 
-    this.tokenUsageLogger = createTokenUsageLogger(
-      this.runtimeContext,
-      this.config,
-    );
+    this.tokenUsageLogger = this.createTokenUsageLogger();
     this.compressionHandler.tokenUsageLogger = this.tokenUsageLogger;
 
     // Resolve the Anthropic default base URL at construction time so that
@@ -353,6 +350,14 @@ export class ChatSession {
       resolveBaseUrl,
     );
     this.directProcessor = this.createDirectMessageProcessor();
+  }
+
+  private createTokenUsageLogger(): TokenUsageLogger {
+    return createTokenUsageLogger(
+      this.runtimeContext.tokenUsageLoggingEnabled,
+      this.runtimeContext.state.sessionId,
+      this.config,
+    );
   }
 
   private createDirectMessageProcessor(): DirectMessageProcessor {

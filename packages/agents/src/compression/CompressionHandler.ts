@@ -152,7 +152,8 @@ export class CompressionHandler {
    * @requirement REQ-THINK-005.1, REQ-THINK-005.2
    */
   getEffectiveTokenCount(): number {
-    return computeEffectiveTokenCount(this.historyService, this.runtimeContext);
+    const reasoning = this.runtimeContext.ephemerals.reasoning;
+    return computeEffectiveTokenCount(this.historyService, reasoning);
   }
 
   /**

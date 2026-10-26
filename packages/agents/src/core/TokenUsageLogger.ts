@@ -7,7 +7,6 @@
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { appendFile, mkdir } from 'node:fs/promises';
 import * as path from 'node:path';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   TOKEN_USAGE_SCHEMA_VERSION,
@@ -723,11 +722,10 @@ export class TokenUsageLogger {
 }
 
 export function createTokenUsageLogger(
-  view: AgentRuntimeContext,
+  tokenUsageEnabled: boolean,
+  sessionId: string,
   config: Config | undefined,
 ): TokenUsageLogger {
-  const tokenUsageEnabled = view.tokenUsageLoggingEnabled;
-  const sessionId = view.state.sessionId;
   let logFilePath: string | undefined;
   if (tokenUsageEnabled && config) {
     try {
