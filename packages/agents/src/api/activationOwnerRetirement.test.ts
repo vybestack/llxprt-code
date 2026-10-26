@@ -71,6 +71,26 @@ describe('retireActivationOwners', () => {
     ]);
   });
 
+  it('retires the session client exactly once when memory disposal fails', async () => {
+    const events: string[] = [];
+    const retiring = retireActivationOwners(
+      recordingOwners(events, {
+        memory: Promise.reject(new Error('Workspace memory is disposed')),
+      }),
+    );
+    const error = await retiring.then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(AggregateError);
+    const aggregate = error as AggregateError;
+    expect(aggregate.message).toBe('Activation owner cleanup failed');
+    expect(aggregate.errors.map((entry: Error) => entry.message)).toStrictEqual(
+      ['Workspace memory is disposed'],
+    );
+    expect(events.filter((event) => event === 'client')).toHaveLength(1);
+  });
+
   it.each(['resolves', 'rejects'] as const)(
     'keeps definitions, media, trust and filesystem pending until the client step %s',
     async (outcome) => {

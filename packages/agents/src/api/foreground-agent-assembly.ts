@@ -7,7 +7,6 @@ import {
   type Config,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
@@ -15,16 +14,6 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-import {
-  type WorkspaceDefinitionOwner,
-  type WorkspaceTrustControlPort,
-} from '@vybestack/llxprt-code-core';
-
-import { type WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import { type WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
-
-import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 
 import { admittedEndpoint } from '../core/admittedRouteSecurity.js';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
@@ -53,6 +42,23 @@ import { type AgentSchedulerHandle } from './config-types.js';
 
 import { resolveSchedulerFactory } from '../session/assembleSchedulerOwner.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
+import type {
+  PreflightAuthInput,
+  PreflightProviderInput,
+} from './activationPreflightState.js';
+
+/** The preflight's runtime owners, handed to the foreground once. */
+export interface ForegroundPreflightTransfer {
+  mcp: McpRuntimeOwner;
+  mediaOwner: SessionMediaOwner | undefined;
+  sessionClient: SessionClientOwner;
+  release(): Promise<void>;
+}
+
+/** The preflight's session settings owner, handed to the foreground once. */
+export interface ForegroundPreflightSettings {
+  settingsOwner: SessionSettingsOwner;
+}
 
 export class ForegroundAssembly {
   protected config!: Config;
@@ -62,28 +68,28 @@ export class ForegroundAssembly {
     this.#constructionCancellation.abort();
   }
   protected mediaOwner: SessionMediaOwner | undefined;
-  protected ownsSessionClient = true;
-  protected ownsSettings = true;
-  protected ownsMemory = false;
-  protected providerFileLifecycle!: ProviderFileLifecycle | undefined;
   protected ownedSessionClient!: SessionClientOwner;
-  protected workspaceFilesystem!: WorkspaceFilesystemOwner;
-  protected workspaceMemory!: WorkspaceMemoryOwner;
-  protected ownsFilesystem!: boolean;
   protected settingsOwner!: SessionSettingsOwner;
-  protected settingsOwnerOwnership!: 'borrowed' | 'transferred';
-  protected workspaceDefinitions!: WorkspaceDefinitionOwner;
-  protected ownsDefinitions!: boolean;
-  protected workspaceTrust!: WorkspaceTrustControlPort;
-  protected trustCleanup!: (() => Promise<void>) | undefined;
-  protected oauthManager!: OAuthManager | undefined;
-  protected messageBus!: MessageBus | undefined;
-  protected workspaceMemoryOwnership!: 'borrowed' | 'transferred';
   protected foregroundMcp: McpRuntimeOwner | undefined;
   protected foregroundSettings!: SettingsService;
   protected foregroundManager!: RuntimeProviderManager;
   protected foregroundOAuth!: OAuthManager;
   protected releaseForegroundProviders!: () => Promise<void>;
+  protected acceptPreflightTransfer(
+    transfer: ForegroundPreflightTransfer,
+    settings: ForegroundPreflightSettings,
+    providers: PreflightProviderInput,
+    auth: PreflightAuthInput,
+  ): void {
+    this.foregroundMcp = transfer.mcp;
+    this.mediaOwner = transfer.mediaOwner;
+    this.ownedSessionClient = transfer.sessionClient;
+    this.settingsOwner = settings.settingsOwner;
+    this.foregroundSettings = providers.settings;
+    this.foregroundManager = providers.manager;
+    this.foregroundOAuth = auth.oauth;
+    this.releaseForegroundProviders = () => transfer.release();
+  }
   protected assertConstructionOpen(): void {
     this.#constructionCancellation.signal.throwIfAborted();
   }

@@ -16,6 +16,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 
 import { type RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import {
   type ProviderRuntimeContext,
   type RuntimeKind,
@@ -138,6 +139,14 @@ export class AgentActivationBootstrap
   #switcher!: ProviderSwitcher;
   #sessionResources!: ActivationSessionResources;
   #sessionAuth!: ActivationSessionAuth;
+  #mcp: McpRuntimeOwner | undefined;
+  #mediaOwner: SessionMediaOwner | undefined;
+  #releaseForegroundProviders!: () => Promise<void>;
+  #ownsFilesystem = false;
+  #ownsDefinitions = false;
+  #ownsMemory = false;
+  #ownsSessionClient = true;
+  #ownsSettings = true;
   protected constructor(config?: Config) {
     super(config);
   }
@@ -154,11 +163,8 @@ export class AgentActivationBootstrap
     bootstrap.#providers = providers;
     bootstrap.#auth = auth;
     bootstrap.#policy = activation.policy;
-    bootstrap.foregroundSettings = providers.settings;
-    bootstrap.foregroundManager = providers.manager;
-    bootstrap.foregroundOAuth = auth.oauth;
     bootstrap.#runtimeContext = activation.runtimeContext;
-    bootstrap.releaseForegroundProviders =
+    bootstrap.#releaseForegroundProviders =
       activation.releaseForegroundProviders;
     return bootstrap;
   }
@@ -189,12 +195,10 @@ export class AgentActivationBootstrap
 
   #acceptSessionResources(acquired: ActivationSessionResources): void {
     this.#sessionResources = acquired;
-    this.ownedSessionClient = acquired.sessionClient;
-    this.settingsOwner = acquired.settingsOwner;
-    this.mediaOwner = acquired.media;
-    this.ownsFilesystem = true;
-    this.ownsMemory = true;
-    this.ownsDefinitions = true;
+    this.#mediaOwner = acquired.media;
+    this.#ownsFilesystem = true;
+    this.#ownsMemory = true;
+    this.#ownsDefinitions = true;
   }
 
   protected initializePreparedActivation(): void {
@@ -229,7 +233,9 @@ export class AgentActivationBootstrap
     );
   }
   readHistory(): ReturnType<SessionClientOwner['readHistory']> {
-    return this.#admitPublic(() => this.ownedSessionClient.readHistory());
+    return this.#admitPublic(() =>
+      this.#sessionResources.sessionClient.readHistory(),
+    );
   }
   #foregroundAgent: Agent | undefined;
   #foregroundPending: Promise<Agent> | undefined;
@@ -257,17 +263,17 @@ export class AgentActivationBootstrap
       { operation: this, token },
       this.config,
       intent,
-      this.foregroundManager,
-      this.foregroundSettings,
+      this.#providers.manager,
+      this.#providers.settings,
     );
-    if (this.#sessionAuth.oauth !== this.foregroundOAuth)
+    if (this.#sessionAuth.oauth !== this.#auth.oauth)
       throw new AgentBootstrapError(
         'Foreground OAuth differs from the acquired owner',
       );
-    this.foregroundManager.setRuntimeContext(
+    this.#providers.manager.setRuntimeContext(
       this.#runtimeContext,
-      this.settingsOwner,
-      this.foregroundSettings,
+      this.#sessionResources.settingsOwner,
+      this.#providers.settings,
       this.config,
     );
     this.#foregroundHost = host;
@@ -292,42 +298,40 @@ export class AgentActivationBootstrap
         { operation: this, token },
         this.config,
         intent,
-        this.foregroundManager,
-        this.foregroundSettings,
+        this.#providers.manager,
+        this.#providers.settings,
       );
       broker = assembleHostGitHubBroker(this.#foregroundHost);
       await this.#constructForegroundMcp();
-      if (this.foregroundMcp === undefined)
-        throw new Error('Foreground MCP is not acquired');
-      this.ownsFilesystem = false;
-      this.ownsDefinitions = false;
-      this.ownsMemory = false;
+      const mcp = this.#mcp;
+      if (mcp === undefined) throw new Error('Foreground MCP is not acquired');
+      this.#ownsFilesystem = false;
+      this.#ownsDefinitions = false;
+      this.#ownsMemory = false;
       this.assertConstructionOpen();
-      const client = this.ownedSessionClient;
-      client.bindHostGitHub(broker);
-      client.bindMcpRuntime(
-        this.foregroundMcp,
-        this.foregroundMcp.profileDefinitions,
-        this.foregroundMcp.subagentDefinitions,
+      const client = await this.#bindForegroundClient(broker, mcp);
+      this.assertConstructionOpen();
+      this.acceptPreflightTransfer(
+        {
+          mcp,
+          mediaOwner: this.#mediaOwner,
+          sessionClient: client,
+          release: () => this.#releaseForegroundProviders(),
+        },
+        { settingsOwner: this.#sessionResources.settingsOwner },
+        this.#providers,
+        this.#auth,
       );
-      if (!client.hasHookComposition()) client.bindHooks();
-      await this.foregroundMcp.initialize();
-      await client.initializeTools();
-      this.assertConstructionOpen();
       const agent = await this.finishForeground();
       this.#foregroundAgent = agent;
-      this.ownsSessionClient = false;
-      this.ownsSettings = false;
-      this.mediaOwner = undefined;
+      this.#ownsSessionClient = false;
+      this.#ownsSettings = false;
+      this.#mediaOwner = undefined;
       this.assertConstructionOpen();
       await this.#disposeAcquisition();
-      this.#foregroundHost.onSkills?.(
-        this.foregroundMcp.workspaceSkills.operations,
-      );
+      this.#foregroundHost.onSkills?.(mcp.workspaceSkills.operations);
       this.#foregroundHost.onExtensionRestart?.(
-        this.foregroundMcp.extensionOperations.restart.bind(
-          this.foregroundMcp.extensionOperations,
-        ),
+        mcp.extensionOperations.restart.bind(mcp.extensionOperations),
       );
       return agent;
     } catch (primary) {
@@ -343,20 +347,34 @@ export class AgentActivationBootstrap
         }
         throw primary;
       }
+      const mcp = this.#mcp;
       return cleanupFailedAdoption(
         primary,
         () =>
           runCleanupSteps([
             () => this.#disposeAcquisition(),
-            () => this.releaseForegroundProviders(),
+            () => this.#releaseForegroundProviders(),
             () => broker?.cleanupFailedConstruction(),
             () => this.config.dispose(),
           ]),
-        this.foregroundMcp?.dispose.bind(this.foregroundMcp),
+        mcp?.dispose.bind(mcp),
         undefined,
         undefined,
       );
     }
+  }
+
+  async #bindForegroundClient(
+    broker: ReturnType<typeof assembleHostGitHubBroker>,
+    mcp: McpRuntimeOwner,
+  ): Promise<SessionClientOwner> {
+    const client = this.#sessionResources.sessionClient;
+    client.bindHostGitHub(broker);
+    client.bindMcpRuntime(mcp, mcp.profileDefinitions, mcp.subagentDefinitions);
+    if (!client.hasHookComposition()) client.bindHooks();
+    await mcp.initialize();
+    await client.initializeTools();
+    return client;
   }
 
   async #constructForegroundMcp(): Promise<void> {
@@ -405,10 +423,11 @@ export class AgentActivationBootstrap
             this.#foregroundHost.registerSkillTools ??
             DEFAULT_SKILL_OPERATIONS.registerTools,
         },
-        mcpSettings: this.settingsOwner.readMcpSettingsBinding(),
+        mcpSettings:
+          this.#sessionResources.settingsOwner.readMcpSettingsBinding(),
       },
     );
-    this.foregroundMcp = mcp;
+    this.#mcp = mcp;
   }
 
   prepareProfileActivation(
@@ -417,7 +436,9 @@ export class AgentActivationBootstrap
     return this.#admitPublic(async () => {
       signal.throwIfAborted();
       const replacement =
-        await this.ownedSessionClient.prepareProfileActivation(signal);
+        await this.#sessionResources.sessionClient.prepareProfileActivation(
+          signal,
+        );
       try {
         signal.throwIfAborted();
         const commitHistory = await replacement.prepareHistoryCommit();
@@ -521,8 +542,8 @@ export class AgentActivationBootstrap
     ++this.#attempt;
     this.#receipt = undefined;
     const resources = this.#sessionResources;
-    if (this.ownsDefinitions) resources.workspaceDefinitions.closeAdmission();
-    const memoryClosing = this.ownsMemory
+    if (this.#ownsDefinitions) resources.workspaceDefinitions.closeAdmission();
+    const memoryClosing = this.#ownsMemory
       ? resources.workspaceMemory.dispose()
       : undefined;
     void memoryClosing?.catch(() => undefined);
@@ -530,21 +551,21 @@ export class AgentActivationBootstrap
       publicWork: Promise.allSettled([this.#tail, ...this.#publicWork]),
       memory: memoryClosing,
       sessionClient: () =>
-        this.ownsSessionClient ? resources.sessionClient.dispose() : undefined,
+        this.#ownsSessionClient ? resources.sessionClient.dispose() : undefined,
       afterClient: [
         () =>
-          this.ownsDefinitions
+          this.#ownsDefinitions
             ? resources.workspaceDefinitions.dispose()
             : undefined,
-        () => this.mediaOwner?.dispose(),
-        () => (this.ownsFilesystem ? resources.trustCleanup?.() : undefined),
+        () => this.#mediaOwner?.dispose(),
+        () => (this.#ownsFilesystem ? resources.trustCleanup?.() : undefined),
         () =>
-          this.ownsFilesystem
+          this.#ownsFilesystem
             ? resources.workspaceFilesystem.dispose()
             : undefined,
       ],
       settings: () =>
-        this.ownsSettings && resources.settingsOwnership === 'transferred'
+        this.#ownsSettings && resources.settingsOwnership === 'transferred'
           ? resources.settingsOwner.dispose()
           : undefined,
     });
@@ -580,7 +601,7 @@ export class AgentActivationBootstrap
       throw new AgentBootstrapError(
         'Activation preflight belongs to a different ProviderManager',
       );
-    operation.settingsOwner.assertSettingsIdentity(settings);
+    operation.#sessionResources.settingsOwner.assertSettingsIdentity(settings);
     if (
       intent === undefined ||
       operation.#receipt.fingerprint !==
