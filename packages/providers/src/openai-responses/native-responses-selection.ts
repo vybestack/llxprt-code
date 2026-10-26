@@ -29,6 +29,14 @@ export async function statefulUnsupportedMedia(
   pdfEnabled: boolean,
 ): Promise<readonly UnsupportedMediaEntry[]> {
   const indexed = rows.native?.indexed;
+  if (
+    indexed !== undefined &&
+    !(await indexed.hasPersistedMedia()) &&
+    indexed.viewPlan.changedSources.find(
+      (row) => (row.entry.flags & ROW_FLAG.hasMedia) !== 0,
+    ) === undefined
+  )
+    return [];
   const unsupported = new UnsupportedMediaSummary();
   for (let index = skipRows; index < rows.count; index++) {
     const entry =
