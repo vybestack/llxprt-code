@@ -25,7 +25,7 @@ import type { AgentAuth, EditorCallbacks } from './config-types.js';
 import { type AgentAuthState } from './control/authState.js';
 import { type HookControl } from './control/hooks.js';
 import type { IdeControl } from './control/ideControl.js';
-import { LspControl } from './control/lspControl.js';
+import type { LspControl } from './control/lspControl.js';
 import type { McpControl } from './control/mcpControl.js';
 import { PolicyControl } from './control/policyControl.js';
 import type { SessionControl } from './control/sessionControl.js';
@@ -84,15 +84,13 @@ import {
 import { AgentImpl } from './agentImpl.js';
 import { type AgentSchedulerHandle } from './config-types.js';
 import { createAgentAuthState } from './control/authState.js';
-import { assembleIdeControl } from './control/ideControl.js';
 
 import { resolveSchedulerFactory } from '../session/assembleSchedulerOwner.js';
-import { buildOwnedMcpControl } from './control/mcpControlWiring.js';
 import {
   assembleSessionAuthentication,
   clearProviderAuthenticationCache,
 } from './control/session-authentication.js';
-import { assembleForegroundWorkspace } from './foreground-workspace-control.js';
+import { assembleWorkspaceFacade } from './agent-facade.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 
 export abstract class ForegroundAgentAssembly {
@@ -245,28 +243,23 @@ export abstract class ForegroundAgentAssembly {
     this.facadeMediaOwner = this.mediaOwner;
     this.facadeTaskOwner = tasks;
     this.facadeShellOwner = shell;
-    this.workspace = assembleForegroundWorkspace(
+    const controls = assembleWorkspaceFacade(
       this.foregroundMcp,
       this.config,
+      this.ownedSessionClient,
+      auth,
+      editors,
     );
-    this.ide = assembleIdeControl(
-      this.foregroundMcp.trust,
-      this.foregroundMcp.ide,
-      () => editors.editorCallbacks,
-    );
-    this.lsp = new LspControl(this.foregroundMcp.lspInspection);
+    this.workspace = controls.workspace;
+    this.ide = controls.ide;
+    this.lsp = controls.lsp;
     this.awaitMcpDiscovery = this.foregroundMcp.awaitDiscovery.bind(
       this.foregroundMcp,
     );
     this.closeMcpAdmission = this.foregroundMcp.closeAdmission.bind(
       this.foregroundMcp,
     );
-    this.mcp = assembleForegroundMcpControl(
-      this.foregroundMcp,
-      this.ownedSessionClient.toolCatalog.selection,
-      auth,
-      () => this.ownedSessionClient.refreshToolDefinitions(),
-    );
+    this.mcp = controls.mcp;
     this.facadeAuthState = auth;
     this.facadeProviderManager = this.foregroundManager;
     this.facadeOAuth = this.foregroundOAuth;
@@ -568,29 +561,4 @@ export abstract class ForegroundAgentAssembly {
       },
     );
   }
-}
-
-export function assembleForegroundMcpControl(
-  workspace: McpRuntimeOwner,
-  selection: Parameters<typeof buildOwnedMcpControl>[1],
-  auth: AgentAuthState,
-  refreshTools: () => Promise<void>,
-): McpControl {
-  return buildOwnedMcpControl(
-    workspace.readServerSettings.bind(workspace),
-    selection,
-    workspace.listPrompts.bind(workspace),
-    workspace.listResources.bind(workspace),
-    workspace.readOAuthCredentials.bind(workspace),
-    workspace.performOAuth.bind(workspace),
-    workspace.status.bind(workspace),
-    workspace.refresh.bind(workspace),
-    workspace.reload.bind(workspace),
-    (server) => auth.mcpAuth.has(server),
-    (server) => auth.mcpAuth.add(server),
-    refreshTools,
-    workspace.subscribeStatus.bind(workspace),
-    workspace.findResource.bind(workspace),
-    workspace.readResource.bind(workspace),
-  );
 }

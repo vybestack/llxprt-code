@@ -55,20 +55,16 @@ import {
   type AgentSchedulerHandle,
 } from './config-types.js';
 import { createAgentAuthState } from './control/authState.js';
-import { assembleIdeControl } from './control/ideControl.js';
-import { LspControl } from './control/lspControl.js';
 import {
   assembleSessionAuthentication,
   clearProviderAuthenticationCache,
 } from './control/session-authentication.js';
 import { resolveSchedulerFactory } from '../session/assembleSchedulerOwner.js';
-import { assembleForegroundMcpControl } from './foreground-agent-assembly.js';
-import { assembleForegroundWorkspace } from './foreground-workspace-control.js';
+import { assembleWorkspaceFacade } from './agent-facade.js';
 import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
 import { AdoptedSessionAssembly } from './fromConfig-session.js';
 import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import { acquireAdoptedMedia } from './session-image-assembly.js';
-import { projectTrustedSubagents } from './workspace-definition-assembly.js';
 import { DEFAULT_SKILL_OPERATIONS } from './workspace-skill-assembly.js';
 export abstract class AdoptedAgentAssembly extends AdoptedSessionAssembly {
   protected constructor(config?: Config) {
@@ -220,13 +216,10 @@ export abstract class AdoptedAgentAssembly extends AdoptedSessionAssembly {
     client.bindInteractiveAuthRequests((prompt) =>
       this.adoptOauth.requestInteractiveAuth(prompt),
     );
-    const definitions = this.adoptMcp.workspaceDefinitions;
     client.bindMcpRuntime(
       this.adoptMcp,
-      definitions.profileReads,
-      projectTrustedSubagents(definitions, () =>
-        this.adoptMcp.trust.isTrustedFolder(),
-      ),
+      this.adoptMcp.profileDefinitions,
+      this.adoptMcp.subagentDefinitions,
     );
     if (!client.hasHookComposition()) client.bindHooks();
     await this.activateAdoptedProviders();
@@ -329,28 +322,22 @@ export abstract class AdoptedAgentAssembly extends AdoptedSessionAssembly {
     this.facadeMediaOwner = this.adoptMedia;
     this.facadeTaskOwner = tasks;
     this.facadeShellOwner = shell;
-    this.workspace = assembleForegroundWorkspace(
+    const controls = assembleWorkspaceFacade(
       this.adoptMcp,
       this.config,
-      undefined,
+      this.adoptClient,
+      auth,
+      editors,
     );
-    this.ide = assembleIdeControl(
-      this.adoptMcp.trust,
-      this.adoptMcp.ide,
-      () => editors.editorCallbacks,
-    );
-    this.lsp = new LspControl(this.adoptMcp.lspInspection);
+    this.workspace = controls.workspace;
+    this.ide = controls.ide;
+    this.lsp = controls.lsp;
     this.awaitMcpDiscovery = () => {
       if (ownership.disposed) throw new Error('MCP facade is closed');
       return this.adoptMcp.awaitDiscovery();
     };
     this.closeMcpAdmission = () => this.adoptMcp.closeAdmission();
-    this.mcp = assembleForegroundMcpControl(
-      this.adoptMcp,
-      this.adoptClient.toolCatalog.selection,
-      auth,
-      () => this.adoptClient.refreshToolDefinitions(),
-    );
+    this.mcp = controls.mcp;
     this.facadeAuthState = auth;
     this.facadeProviderManager = this.adoptManager;
     this.facadeOAuth = this.adoptOauth;

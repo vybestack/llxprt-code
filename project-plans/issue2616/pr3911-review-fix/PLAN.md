@@ -1476,7 +1476,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T7.2a B3 AgentOperations turn operations
 - [x] T7.2b B3 AgentOperations approval and provider list
 - [x] T7.2c B3 AgentOperations disposal
-- [ ] T7.3 E1 one workspace and facade builder
+- [x] T7.3 E1 one workspace and facade builder
 - [ ] T7.4 B3 publishAgentFacade outside the assembly, reachability tests
 - [ ] T7.5 B3 edge to PreferredAgentAssembly
 - [ ] T7.6 B3 edge AdoptedSessionAssembly removed

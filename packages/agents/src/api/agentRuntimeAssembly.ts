@@ -23,19 +23,11 @@ import {
 import { ForegroundAgentAssembly } from './foreground-agent-assembly.js';
 
 import type { AgentAuth } from './config-types.js';
-import {
-  createAgentAuthState,
-  type AgentAuthState,
-} from './control/authState.js';
-import { assembleIdeControl } from './control/ideControl.js';
-import { LspControl } from './control/lspControl.js';
-import type { McpControl } from './control/mcpControl.js';
-import { buildOwnedMcpControl } from './control/mcpControlWiring.js';
+import { createAgentAuthState } from './control/authState.js';
 import {
   assembleSessionAuthentication,
   clearProviderAuthenticationCache,
 } from './control/session-authentication.js';
-import { WorkspaceControl } from './control/workspaceControl.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -115,6 +107,7 @@ import {
   assembleHostGitHubBroker,
   type HostGitHubBrokerOwner,
 } from './host-github-broker-owner.js';
+import { assembleWorkspaceFacade } from './agent-facade.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import {
   assembleOwnedMcpRuntime,
@@ -546,54 +539,11 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
       return cleanupFailedShellBootstrap(primary, tasks, shell);
     }
   }
-  #constructMcpControl(auth: AgentAuthState): McpControl {
-    if (this.preferredSessionClient === undefined)
-      throw new Error('Preferred Agent client was not acquired');
-    return buildOwnedMcpControl(
-      (...args) => this.mcpRuntime.readServerSettings(...args),
-      this.preferredSessionClient.toolCatalog.selection,
-      (...args) => this.mcpRuntime.listPrompts(...args),
-      (...args) => this.mcpRuntime.listResources(...args),
-      (...args) => this.mcpRuntime.readOAuthCredentials(...args),
-      (...args) => this.mcpRuntime.performOAuth(...args),
-      (...args) => this.mcpRuntime.status(...args),
-      (...args) => this.mcpRuntime.refresh(...args),
-      (...args) => this.mcpRuntime.reload(...args),
-      (server) => auth.mcpAuth.has(server),
-      (server) => auth.mcpAuth.add(server),
-      () => this.#refreshClientTools(),
-      (...args) => this.mcpRuntime.subscribeStatus(...args),
-      (...args) => this.mcpRuntime.findResource(...args),
-      (...args) => this.mcpRuntime.readResource(...args),
-    );
-  }
-  #refreshClientTools(): Promise<void> {
-    if (this.preferredSessionClient === undefined)
-      throw new Error('Preferred Agent client was not acquired');
-    return this.preferredSessionClient.refreshToolDefinitions();
-  }
   #authentication(): Agent['authentication'] {
     return assembleSessionAuthentication(this.oauth, (provider) =>
       clearProviderAuthenticationCache(
         this.manager.getProviderByName(provider),
       ),
-    );
-  }
-  #constructWorkspace(): WorkspaceControl {
-    return new WorkspaceControl(
-      this.mcpRuntime.profileDefinitions,
-      this.mcpRuntime.profileWrites,
-      this.mcpRuntime.subagentDefinitions,
-      this.mcpRuntime.subagentWrites,
-      this.mcpRuntime.checkpointOperations,
-      this.mcpRuntime.workspaceIgnore,
-      this.mcpRuntime.workspaceSearch,
-      this.mcpRuntime.workspaceFiles,
-      this.mcpRuntime.workspacePaths.contains,
-      this.mcpRuntime.workspacePaths.directories,
-      this.mcpRuntime.addWorkspaceDirectory,
-      this.config.getTargetDir(),
-      this.config.getProjectRoot(),
     );
   }
   #constructFacade(
@@ -625,18 +575,21 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
     this.facadeMediaOwner = this.preferredMediaOwner;
     this.facadeTaskOwner = tasks;
     this.facadeShellOwner = shell;
-    this.workspace = this.#constructWorkspace();
-    this.ide = assembleIdeControl(
-      this.mcpRuntime.trust,
-      this.mcpRuntime.ide,
-      () => editors.editorCallbacks,
+    const controls = assembleWorkspaceFacade(
+      this.mcpRuntime,
+      this.config,
+      this.preferredSessionClient,
+      auth,
+      editors,
     );
-    this.lsp = new LspControl(this.mcpRuntime.lspInspection);
+    this.workspace = controls.workspace;
+    this.ide = controls.ide;
+    this.lsp = controls.lsp;
     this.awaitMcpDiscovery = (...args) =>
       this.mcpRuntime.awaitDiscovery(...args);
     this.closeMcpAdmission = (...args) =>
       this.mcpRuntime.closeAdmission(...args);
-    this.mcp = this.#constructMcpControl(auth);
+    this.mcp = controls.mcp;
     this.facadeAuthState = auth;
     this.facadeProviderManager = this.manager;
     this.facadeOAuth = this.oauth;
