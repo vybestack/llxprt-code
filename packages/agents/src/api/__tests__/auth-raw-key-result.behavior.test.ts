@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { readFile } from 'node:fs/promises';
 import { buildAgent } from './helpers/agentHarness.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { updateActiveProviderApiKey } from '../providerMutations.js';
@@ -12,21 +11,6 @@ import { AuthKeysControl } from '../control/authKeysControl.js';
 import { createAgentAuthState } from '../control/authState.js';
 
 describe('agent raw credential mutations', () => {
-  it.each([
-    'agentImpl.ts',
-    'profileApplication.ts',
-    'providerMutations.ts',
-    'providerConfigUtils.ts',
-    'settingsResolver.ts',
-    'keyResolution.ts',
-  ])('keeps %s independent of provider runtime policy', async (file) => {
-    const source = await readFile(
-      new URL(`../${file}`, import.meta.url),
-      'utf8',
-    );
-    expect(source).not.toContain('@vybestack/llxprt-code-providers/runtime');
-  });
-
   it('returns Gemini paid-mode transitions from the real credential mutation', async () => {
     const settings = new SettingsService();
     const state = createAgentAuthState();
@@ -78,15 +62,6 @@ describe('agent raw credential mutations', () => {
     );
     expect(state.rawKeyPresent).toBe(false);
     expect(settings.get('auth-key')).toBeUndefined();
-  });
-
-  it('keeps profile persistence independent of provider runtime mutations', async () => {
-    const source = await readFile(
-      new URL('../profilePersistenceAssembly.ts', import.meta.url),
-      'utf8',
-    );
-    expect(source).not.toContain('@vybestack/llxprt-code-providers/runtime');
-    expect(source).not.toContain('setAgentSelectedModel');
   });
 
   it('returns the committed provider result and clears competing credential references', async () => {

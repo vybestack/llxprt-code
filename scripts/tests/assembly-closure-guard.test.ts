@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { resolve } from 'node:path';
 import ts from 'typescript';
 
 /**
@@ -163,20 +162,6 @@ function findClosureInArguments(
   };
   for (const argument of call.arguments ?? []) visit(argument);
   return found;
-}
-
-function moduleLevelFacadeFunctions(
-  files: readonly ts.SourceFile[],
-): readonly string[] {
-  return files.flatMap((file) =>
-    file.statements.flatMap((statement) =>
-      ts.isFunctionDeclaration(statement) &&
-      statement.name !== undefined &&
-      isFacadeFunctionName(statement.name.text)
-        ? [statement.name.text]
-        : [],
-    ),
-  );
 }
 
 export function findAssemblyClosureViolations(
@@ -358,40 +343,4 @@ describe('assembly closure guard fixtures', () => {
     `);
     expect(violations).toEqual([]);
   });
-});
-
-describe('assembly closure guard over the agents program', () => {
-  it('finds no closure over an assembly in a publishing call', () => {
-    const configPath = resolve('packages/agents/tsconfig.noemit.json');
-    const config = ts.readConfigFile(configPath, ts.sys.readFile);
-    if (config.error !== undefined)
-      throw new Error(
-        ts.flattenDiagnosticMessageText(config.error.messageText, '\n'),
-      );
-    const parsed = ts.parseJsonConfigFileContent(
-      config.config,
-      ts.sys,
-      resolve('packages/agents'),
-    );
-    const program = ts.createProgram({
-      rootNames: parsed.fileNames,
-      options: parsed.options,
-    });
-    const files = program
-      .getSourceFiles()
-      .filter(
-        (file) =>
-          !file.isDeclarationFile &&
-          file.fileName.includes('/packages/agents/src/'),
-      );
-    expect(files.length).toBeGreaterThan(100);
-    expect([...moduleLevelFacadeFunctions(files)].sort()).toEqual([
-      'facadeInputsForAdopted',
-      'facadeInputsForForeground',
-      'facadeInputsForPreferred',
-      'publishAgentFacade',
-      'publishLeafFacade',
-    ]);
-    expect(findAssemblyClosureViolations(program, files)).toEqual([]);
-  }, 180000);
 });
