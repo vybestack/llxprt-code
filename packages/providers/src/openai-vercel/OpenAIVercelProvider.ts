@@ -53,7 +53,7 @@ import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
 import { isAbortSignal } from '../utils/abortSignal.js';
 import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
 import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
-import { dropTransportRows, openTransportRowsMedia } from './transportRows.js';
+import { openTransportRowsMedia, transportMessages } from './transportRows.js';
 import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
 import { filterThinkingForContext } from '../reasoning/reasoningUtils.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
@@ -246,6 +246,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     modelId: string,
     reasoning: ReturnType<typeof resolveReasoningSettings>,
   ): ModelMessage[] {
+    if (readsRequestRowsAtTransport(options)) {
+      // The SDK validates nonempty messages before fetch replaces this sentinel.
+      return [{ role: 'user', content: '' }];
+    }
     const stripPolicy = reasoning.enabled ? reasoning.stripFromContext : 'all';
     return this.convertToModelMessages(
       filterThinkingForContext(options.contents, stripPolicy),
@@ -254,6 +258,30 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         resolvedModel: modelId,
       },
     );
+  }
+
+  private streamedMessages(
+    options: NormalizedGenerateChatOptions,
+    mediaRequest: ResolvedMediaRequest,
+    reasoning: ReturnType<typeof resolveReasoningSettings>,
+    logger: DebugLogger,
+  ): (() => AsyncIterable<ModelMessage>) | undefined {
+    if (!readsRequestRowsAtTransport(options)) return undefined;
+    const media = captureRequestMediaInput(
+      options.metadata['logicalRequestId'],
+      options.invocation.runtimeId,
+      this.requestMediaBudgetBytes,
+      this.requestMediaResolver,
+    );
+    const format = resolveToolFormat(
+      options.resolved.model,
+      this.name,
+      readInvocationPolicyRecord(this.captureOwnerPolicy()[this.name])
+        .toolFormat,
+      logger,
+    );
+    return () =>
+      transportMessages(options, media, mediaRequest, reasoning, format);
   }
 
   /**
@@ -281,10 +309,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       materializedMessages.push(
         ...this.convertRequestContents(effectiveOptions, modelId, rs),
       );
-      // The SDK messages are the one body this request needs; the transient
-      // neutral rows go away now that they exist (issue #854 WP10).
-      if (readsRequestRowsAtTransport(effectiveOptions))
-        dropTransportRows(mediaRequest);
 
       const formattedTools = convertToolsToOpenAIVercel(tools);
       logChatPayload(logger, materializedMessages, formattedTools ?? undefined);
@@ -303,6 +327,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         streamingEnabled,
         captureBuffer,
         logger,
+        this.streamedMessages(effectiveOptions, mediaRequest, rs, logger),
       );
 
       logSendRequest(

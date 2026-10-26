@@ -92,7 +92,7 @@ function sse(streaming: boolean): Response {
 function installFetch(streaming: boolean): void {
   globalThis.fetch = Object.assign(
     async (_input: RequestInfo | URL, init?: RequestInit) => {
-      network.bodies.push(typeof init?.body === 'string' ? init.body : '');
+      network.bodies.push(await new Response(init?.body).text());
       network.leasesDuringSend.push(activeRequestBodyCount());
       network.onSend?.();
       if (network.failure !== undefined) throw network.failure;
@@ -557,7 +557,8 @@ describe('Vercel request rows preparation lifecycle (WP10)', () => {
       ),
     ).rejects.toThrow('no-credential-configured');
     if (originalKey !== undefined) process.env.OPENAI_API_KEY = originalKey;
-    expect(probe.returned()).toBe(1);
+    expect(probe.opened()).toBe(0);
+    expect(probe.returned()).toBe(0);
     expect(network.bodies).toHaveLength(0);
     expect(activeRequestBodyCount()).toBe(before);
   });

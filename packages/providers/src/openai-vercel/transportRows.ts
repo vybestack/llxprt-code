@@ -1,66 +1,74 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { ModelMessage } from 'ai';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { resolveRequestMedia } from '../utils/request-media-resolution.js';
+import { resolveRowsMedia } from '../openai-responses/responses-row-media.js';
+import { convertToVercelMessages } from './messageConversion.js';
+import { filterThinkingForContext } from '../reasoning/reasoningUtils.js';
+import type { ReasoningSettings } from './vercelStreamTypes.js';
+import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
+import { transportToolIds } from './transport-tool-ids.js';
 
-/**
- * The Vercel provider keeps whole-history arrays by decision (GitHub #3869).
- * These helpers are its copy of the transport-rows reader; no other provider
- * reads a selection into an array.
- *
- * Reads the call's `requestRows` inside a concrete transport. The neutral rows
- * are only a transient input to the one body the SDK or wire format needs, so
- * callers drop them with {@link dropTransportRows} as soon as that body exists.
- */
-export async function readTransportRows(
-  options: NormalizedGenerateChatOptions,
-): Promise<IContent[]> {
-  const rows = options.requestRows;
-  if (rows === undefined) {
-    throw new Error('Provider transport rows require a requestRows selection');
-  }
-  const signal = getRequestSignal(options);
-  signal?.throwIfAborted();
-  const history: IContent[] = [];
-  for await (const row of rows.openReader(signal)) {
-    signal?.throwIfAborted();
-    history.push(row);
-  }
-  if (history.length !== rows.count) {
-    throw new Error('Provider request rows count changed');
-  }
-  return history;
-}
-
-/** Reads the transport rows and resolves their media. */
-export async function openTransportRowsMedia(
+/** History stays in the selection; this owner holds only media reservations. */
+export function openTransportRowsMedia(
   options: NormalizedGenerateChatOptions,
   media: Parameters<typeof resolveRequestMedia>[0],
 ): Promise<ResolvedMediaRequest> {
-  const history = await readTransportRows(options);
-  const mediaRequest = await resolveRequestMedia(
-    media,
-    history,
-    getRequestSignal(options),
-  );
-  // The resolver may own a separate resolved array; only one list of rows
-  // may stay alive until the body is built.
-  if (mediaRequest.withContents((contents) => contents) !== history) {
-    history.splice(0);
-  }
-  return mediaRequest;
+  return resolveRequestMedia(media, [], getRequestSignal(options));
 }
 
-/** Drops the transient neutral rows once the wire body no longer needs them. */
-export function dropTransportRows(mediaRequest: ResolvedMediaRequest): void {
-  mediaRequest.withContents((contents) => {
-    contents.splice(0);
-  });
+export async function* transportMessages(
+  options: NormalizedGenerateChatOptions,
+  media: Parameters<typeof resolveRequestMedia>[0],
+  owner: ResolvedMediaRequest,
+  reasoning: ReasoningSettings,
+  toolFormat: ToolFormat,
+): AsyncIterable<ModelMessage> {
+  const rows = options.requestRows;
+  if (rows === undefined)
+    throw new Error('Provider transport rows require a requestRows selection');
+  const signal = getRequestSignal(options);
+  const strip = reasoning.enabled ? reasoning.stripFromContext : 'all';
+  let lastThinking = -1;
+  if (strip === 'allButLast') {
+    for (let index = rows.count - 1; index >= 0; index--) {
+      if (
+        (await rows.readAt(index, signal)).blocks.some(
+          (block) => block.type === 'thinking',
+        )
+      ) {
+        lastThinking = index;
+        break;
+      }
+    }
+  }
+  const mapping = await transportToolIds(options, toolFormat);
+  try {
+    let count = 0;
+    for await (const row of resolveRowsMedia(
+      rows.openReader(signal),
+      media,
+      owner,
+      signal,
+      rows.native,
+    )) {
+      signal?.throwIfAborted();
+      const rowStrip = strip === 'allButLast' ? 'all' : strip;
+      const contents = filterThinkingForContext(
+        [row],
+        count === lastThinking ? 'none' : rowStrip,
+      );
+      const mapper = await mapping.rowIds?.(row, count);
+      yield* convertToVercelMessages(contents, mapper?.(), {
+        includeReasoningInContext: reasoning.includeInContext,
+      });
+      count++;
+    }
+    if (count !== rows.count)
+      throw new Error('Provider request rows count changed');
+  } finally {
+    await mapping.release();
+  }
 }
