@@ -112,9 +112,8 @@ export function createTestChildOrchestrator(
           runtimeLoader: options.runtimeLoader ?? loadAgentRuntime,
           scopeFactory:
             options.scopeFactory ?? SubAgentScope.create.bind(SubAgentScope),
-          clientFactory:
-            options.agentClientFactory ?? buildAgentClientFactory(),
         },
+        options.agentClientFactory ?? buildAgentClientFactory(),
         {
           messageBus: options.messageBus,
           requestInteractiveAuth: options.requestInteractiveAuth,
