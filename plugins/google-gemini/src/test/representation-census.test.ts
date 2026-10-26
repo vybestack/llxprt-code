@@ -7,9 +7,9 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/
 import {
   withRequestRepresentationObserver,
   type RequestRepresentationKind,
-} from '../utils/requestScopedBody.js';
-import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
-import { GeminiProvider } from '../../../../plugins/google-gemini/src/gemini/GeminiProvider.js';
+} from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
+import { OpenAIVercelProvider } from '@vybestack/llxprt-code-providers';
+import { GeminiProvider } from '../gemini/GeminiProvider.js';
 
 describe('SDK streamed history follow-ups', () => {
   const originalFetch = globalThis.fetch;

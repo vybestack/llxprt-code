@@ -13,10 +13,10 @@ import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/reques
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { journalSendFixture } from '../__tests__/support/journal-send-fixture.js';
-import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
-import { GeminiProvider } from '../../../../plugins/google-gemini/src/gemini/GeminiProvider.js';
-import frozen from './scale-wire-digests.json' with { type: 'json' };
+import { journalSendFixture } from '../../../../packages/providers/src/__tests__/support/journal-send-fixture.js';
+import { OpenAIVercelProvider } from '@vybestack/llxprt-code-providers';
+import { GeminiProvider } from '../gemini/GeminiProvider.js';
+import frozen from '../../../../packages/providers/src/openai-vercel/scale-wire-digests.json' with { type: 'json' };
 
 describe('SDK streamed history follow-ups', () => {
   const originalFetch = globalThis.fetch;
