@@ -7,7 +7,6 @@
 import type { TokenUsageLogger } from '../core/TokenUsageLogger.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
@@ -20,6 +19,15 @@ import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/hist
  * boundary for compression telemetry, so a resolver failure is reported there
  * once rather than being silently turned into null provenance here.
  */
+/**
+ * What compression telemetry reads from the runtime: the session identity and
+ * the compression profile name that decided the model.
+ */
+export interface CompressionTelemetryRuntime {
+  readonly state: { readonly sessionId: string; readonly model: string };
+  readonly ephemerals: { compressionProfile(): string | undefined };
+}
+
 interface ResolvedCompressionModel {
   readonly model: string | null;
   readonly provider: string | null;
@@ -78,7 +86,7 @@ function extractCompressionUsage(
  */
 export async function emitCompressionLifecycleEvent(
   logger: TokenUsageLogger | null,
-  runtimeCtx: AgentRuntimeContext,
+  runtimeCtx: CompressionTelemetryRuntime,
   history: HistoryService,
   resolveProvider: (
     profileName?: string,
@@ -125,7 +133,7 @@ export async function emitCompressionLifecycleEvent(
 export async function recordCompressionTelemetry(
   logger: DebugLogger,
   tokenUsageLogger: TokenUsageLogger | null,
-  runtimeContext: AgentRuntimeContext,
+  runtimeContext: CompressionTelemetryRuntime,
   historyService: HistoryService,
   providerResolver: (
     profileName?: string,

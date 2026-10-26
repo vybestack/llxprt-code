@@ -5,8 +5,16 @@
  */
 
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+
+/**
+ * The two lookups the resolver needs when the caller has no provider handle:
+ * the runtime-state model fallback and the active-provider lookup.
+ */
+export interface GeneratingModelRuntime {
+  readonly state: { readonly model: string };
+  readonly provider: { getActiveProvider(): RuntimeProvider };
+}
 
 const logger = new DebugLogger('llxprt:agents:generating-model');
 
@@ -66,7 +74,7 @@ function readProviderCurrentModel(
  * answer.
  */
 export function resolveGeneratingModel(
-  runtimeContext: AgentRuntimeContext,
+  runtimeContext: GeneratingModelRuntime,
   provider?: RuntimeProvider,
 ): string {
   const liveProvider = provider ?? resolveActiveProvider(runtimeContext);
@@ -80,7 +88,7 @@ export function resolveGeneratingModel(
 }
 
 function resolveActiveProvider(
-  runtimeContext: AgentRuntimeContext,
+  runtimeContext: GeneratingModelRuntime,
 ): RuntimeProvider | undefined {
   try {
     return runtimeContext.provider.getActiveProvider();

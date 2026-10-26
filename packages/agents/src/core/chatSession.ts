@@ -114,6 +114,7 @@ import { CompressionHandler } from '../compression/CompressionHandler.js';
 import {
   beginSemanticMediaPurge,
   createSemanticMediaPurgeSession,
+  semanticPurgeRuntime,
 } from './chatSessionMediaLifecycle.js';
 import { createCompressionHookTrigger } from './compressionHookWiring.js';
 import { resolveCompressionProvider } from './CompressionProfileResolver.js';
@@ -272,7 +273,7 @@ export class ChatSession {
     this.historyService = this.runtimeContext.history;
     this.generationConfig = generationConfig;
     this.semanticMediaPurge = createSemanticMediaPurgeSession(
-      this.runtimeContext,
+      () => this.runtimeContext.ephemerals.semanticMediaPurge(),
       this.historyService,
     );
     // Carry the assembler onto the generation config so the three send seams
@@ -392,7 +393,7 @@ export class ChatSession {
       history,
     });
     const semanticMediaPurge = createSemanticMediaPurgeSession(
-      runtimeContext,
+      () => runtimeContext.ephemerals.semanticMediaPurge(),
       history,
     );
     return () => {
@@ -608,7 +609,7 @@ export class ChatSession {
   ): ReturnType<SemanticMediaPurgeSession['begin']> {
     return beginSemanticMediaPurge(
       this.semanticMediaPurge,
-      this.runtimeContext,
+      semanticPurgeRuntime(this.runtimeContext),
       this.runtimeState.provider,
       execution,
     );
