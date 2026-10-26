@@ -17,16 +17,7 @@ import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { WorkspaceControl } from './control/workspaceControl.js';
-import type {
-  Agent,
-  AgentInput,
-  AgentMemoryControl,
-  AgentMessage,
-  CompressionResult,
-  GenerateOptions,
-  ProviderInfo,
-  TurnOptions,
-} from './agent.js';
+import type { Agent, AgentMemoryControl, ProviderInfo } from './agent.js';
 import type {
   OwnershipRecord,
   StableDisplayCallbacksHolder,
@@ -56,14 +47,10 @@ import type { TasksControl } from './control/tasksControl.js';
 import { createTasksControl } from './control/tasksControl.js';
 import type { ToolControl } from './control/toolControl.js';
 import { assembleToolKeys } from './control/toolKeysControl.js';
-import { assembleDirectProviderAdmission } from './directProviderAdmission.js';
-import type { AgentEvent } from './event-types.js';
-import { ForegroundRunLifecycle } from './foregroundRunLifecycle.js';
 import type { AgentMcpOperations } from './mcpRuntimeAssembly.js';
 import { createNewSessionAdmission } from './new-session-admission.js';
 import { assembleProfilePersistence } from './profilePersistenceAssembly.js';
-import { createRecordingExecution } from './recordingExecution.js';
-import { idleClient, resetIdleChat } from './session-control-assembly.js';
+import { idleClient } from './session-control-assembly.js';
 import {
   createSessionProviderControl,
   type SessionProviderControl,
@@ -105,6 +92,7 @@ import {
   recordOwnership,
   type StableEditorCallbacksHolder,
 } from './agentBootstrap.js';
+import { AgentOperations, createAgentTurnOwners } from './agent-operations.js';
 import { AgentImpl } from './agentImpl.js';
 import { type AgentSchedulerHandle } from './config-types.js';
 import { createAgentAuthState } from './control/authState.js';
@@ -118,8 +106,6 @@ import {
 } from './control/session-authentication.js';
 import { assembleForegroundWorkspace } from './foreground-workspace-control.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
-const UNCONFIGURED_AGENT_MESSAGE =
-  'No provider is configured. Run /setup to choose a hosted provider, configure a local model, set up a custom compatible endpoint, or select an existing profile before using the agent.';
 
 export abstract class ForegroundAgentAssembly {
   protected workspace!: WorkspaceControl;
@@ -443,44 +429,6 @@ export abstract class ForegroundAgentAssembly {
    */
 
   /**
-   * Injects a mid-turn steer message into the active agent loop. Delegates to
-   * the current loop's injectSteer. No-op when no loop is running.
-   */
-  injectSteer(text: string): void {
-    this.providerControl.activeRun?.loop?.injectSteer(text);
-  }
-
-  /**
-   * Streams AgentEvents by delegating to the current loop's run().
-   * @plan:PLAN-20260617-COREAPI.P15
-   * @requirement:REQ-003
-   * @pseudocode createAgent.md steps 130-148 (loop drives the turn)
-   */
-  stream(input: AgentInput, opts?: TurnOptions): AsyncIterable<AgentEvent> {
-    const admission = assembleDirectProviderAdmission(
-      this.facadeSettingsService,
-      this.facadeProviderManager,
-      () => this.providerControl.getModel(),
-    );
-    return new ForegroundRunLifecycle(
-      createRecordingExecution(
-        this.session,
-        this.readHookSessionId,
-        this.facadeSessionOwner.hookOperations,
-      ),
-      () => this.providerControl.profiles.isApplying(),
-      () => this.providerControl.isProviderReady(),
-      (run) => this.providerControl.coordinator.admit(run),
-      (run) => this.providerControl.coordinator.release(run),
-      () => this.facadeSessionOwner.resolveExecution(),
-      () => admission.admit(),
-      () => this.awaitMcpDiscovery(),
-      this.tools.notifyConfirmation.bind(this.tools),
-      this.tools.notifyToolUpdate.bind(this.tools),
-    ).stream(input, opts);
-  }
-
-  /**
    * @plan:PLAN-20260622-COREAPIGAP.P04
    * @requirement:REQ-001
    * @pseudocode lines 1-4
@@ -505,106 +453,6 @@ export abstract class ForegroundAgentAssembly {
   }
 
   /**
-   * Resets the chat through the durable history-clear path while recording is
-   * active, preserving its initial history prefix. Without recording, delegates to the
-   * client's full reset contract.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  async resetChat(): Promise<void> {
-    this.providerControl.assertProfileIdle();
-    await resetIdleChat(this.providerControl.coordinator, this.session, () =>
-      this.facadeSessionOwner.conversation.resetChat(),
-    );
-  }
-
-  /**
-   * Explicitly triggers history compression via the chat contract's
-   * performCompression, mapping the fine-grained PerformCompressionResult enum
-   * to the public CompressionResult.status and capturing token counts (from the
-   * HistoryService) only when the history was actually compressed. The public
-   * original/new token counts are guaranteed monotonic (original >= new) on the
-   * 'compressed' path.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-011
-   */
-  async compress(opts?: {
-    readonly promptId?: string;
-  }): Promise<CompressionResult> {
-    if (!this.providerControl.isProviderReady())
-      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
-    // Ensure the chat is initialized before accessing it: setHistory can run
-    // before the first turn (startChat is otherwise lazy on first turn).
-    return this.facadeSessionOwner.compressHistory(
-      opts?.promptId ?? `compress-${Date.now()}`,
-      this.session,
-      this.facadeSessionOwner.hookOperations,
-    );
-  }
-
-  /**
-   * Side-channel single-shot generation. Delegates to the client's detached
-   * direct-message path. History reads and writes are opt-in, and generation
-   * does not run a tool loop. Returns the response
-   * text (empty string when the model emits no text part).
-   * @plan:PLAN-20260617-COREAPI.P21
-   * @requirement:REQ-012
-   */
-  async generate(input: AgentInput, opts?: GenerateOptions): Promise<string> {
-    if (!this.providerControl.isProviderReady())
-      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
-    return this.facadeSessionOwner.generateText(
-      input,
-      opts,
-      createRecordingExecution(
-        this.session,
-        () => this.session.getSessionId(),
-        this.facadeSessionOwner.hookOperations,
-      ),
-      assembleDirectProviderAdmission(
-        this.facadeSettingsService,
-        this.facadeProviderManager,
-        this.providerControl.getModel,
-      ).admit(),
-    );
-  }
-
-  /**
-   * Side-channel structured (JSON) generation. Delegates to the client's
-   * generateJson contract against a snapshot copy of the supplied contents —
-   * detached from the live conversation history.
-   * @plan:PLAN-20260617-COREAPI.P21
-   * @requirement:REQ-012
-   */
-  async generateJson(
-    contents: readonly AgentMessage[],
-    schema: Readonly<Record<string, unknown>>,
-    opts?: GenerateOptions,
-  ): Promise<Record<string, unknown>> {
-    if (!this.providerControl.isProviderReady())
-      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
-    return this.facadeSessionOwner.generateJson(
-      contents,
-      schema,
-      opts?.model ?? this.providerControl.getModel(),
-      opts?.signal,
-    );
-  }
-
-  /**
-   * Side-channel embedding generation. Delegates to the client's
-   * generateEmbedding contract against a snapshot copy of the input texts —
-   * detached from the live conversation history.
-   * @plan:PLAN-20260617-COREAPI.P21
-   * @requirement:REQ-012
-   */
-  async generateEmbedding(texts: readonly string[]): Promise<number[][]> {
-    if (!this.providerControl.isProviderReady())
-      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
-    return this.facadeSessionOwner.generateEmbedding(texts);
-  }
-
-  /**
    * Returns a concrete ProviderInfo[] from the runtime provider manager.
    * @plan:PLAN-20260617-COREAPI.P15
    * @requirement:REQ-017
@@ -623,16 +471,6 @@ export abstract class ForegroundAgentAssembly {
    */
   protected readonly rebuild = (): void =>
     this.facadeSessionOwner.rebuildExecution();
-
-  /**
-   * Provider readiness: true when the manager reports an active provider.
-   * Used by the fail-closed guards on stream/generate/generateJson/
-   * generateEmbedding/compress/setModel to prevent model-dependent operations
-   * when no provider is configured.
-   */
-
-  private readonly readHookSessionId = (): string =>
-    this.session.getSessionId();
 
   /**
    * Full ordered dispose / teardown. Idempotent; collects every teardown
@@ -796,6 +634,17 @@ export abstract class ForegroundAgentAssembly {
     return this.publishFacade();
   }
   private publishFacade(): Agent {
+    const operations = new AgentOperations(
+      createAgentTurnOwners(
+        this.facadeSessionOwner,
+        this.providerControl,
+        this.session,
+        this.tools,
+        this.facadeSettingsService,
+        this.facadeProviderManager,
+        this.awaitMcpDiscovery,
+      ),
+    );
     return new AgentImpl(
       this.facadeSessionOwner.createProviderFileOperations(() =>
         this.providerControl.coordinator.assertSettingsAdmission(),
@@ -835,8 +684,8 @@ export abstract class ForegroundAgentAssembly {
         tasks: this.tasks,
         memory: this.memory,
         skills: this.skills,
-        injectSteer: this.injectSteer.bind(this),
-        stream: this.stream.bind(this),
+        injectSteer: operations.injectSteer.bind(operations),
+        stream: operations.stream.bind(operations),
         getProvider: this.providerControl.getProvider,
         setProvider: this.providerControl.setProvider,
         getProviderStatus: this.providerControl.getProviderStatus,
@@ -845,11 +694,11 @@ export abstract class ForegroundAgentAssembly {
         getApprovalMode: this.getApprovalMode.bind(this),
         setApprovalMode: this.setApprovalMode.bind(this),
         getModelParams: this.providerControl.getModelParams,
-        resetChat: this.resetChat.bind(this),
-        compress: this.compress.bind(this),
-        generate: this.generate.bind(this),
-        generateJson: this.generateJson.bind(this),
-        generateEmbedding: this.generateEmbedding.bind(this),
+        resetChat: operations.resetChat.bind(operations),
+        compress: operations.compress.bind(operations),
+        generate: operations.generate.bind(operations),
+        generateJson: operations.generateJson.bind(operations),
+        generateEmbedding: operations.generateEmbedding.bind(operations),
         listProviders: this.listProviders.bind(this),
         dispose: this.disposeAgent.bind(this),
       },
