@@ -1041,6 +1041,8 @@ Behavior-preserving. How it stays green in small commits: TypeScript is structur
 
 Every task: scope is exactly its file list plus the test files that import those files (listed in the commit body); verification is the focused commands for each edited test file, the touched packages' typecheck, eslint and prettier on edited files, the touched packages' suites (background), and `npm run check:runtime-boundary`. Each task's acceptance includes: the wide type name no longer appears in any of its scope files.
 
+This phase was carried out directly against review items B4 and B6, with no inventory slices. T8.0-list, T8.0-Sxx and T8.0-agg were not run, and the producer projection tasks T8.7a-n were replaced by the work itself. The tasks were R-B4a, R-B4b, R-B4c, R-B4d, R-B4e, R-B4f, R-B4g, R-B4h and R-B6. The measure was the review's own end state, not the inventory: each consumer declares the ports it reads, and the wide runtime types are gone. The file lists below record the intended shape of the work; the commits named above are what landed.
+
 #### T8.0 Consumer inventory (list, slices, aggregation; no source change)
 
 `CliUiRuntime` and its alias alone have 46 production consumer files at the starting head, so this inventory follows the bounded inventory rule (phase 6).
@@ -1070,6 +1072,8 @@ Every task: scope is exactly its file list plus the test files that import those
 
 Must not (all): `Pick<>` from the old bag; a new flattened adapter under another name; editing a producer in a consumer task.
 ### Phase 9: scanners detect without exclusions (C3, C2, C1)
+
+This phase was carried out directly against review items C1, C2 and C3, with no inventory slices. The tasks were R-C23, R-C1 and R-C13b. The measure was the review's own end state, not the inventory: the three scanners report the shapes the review named, without name or path exclusions, and the production findings they raised were fixed in code as part of the same commits (frozen tables and loggers built where they log, under R-C23). T9.Fxx production fixes were R-C23's commits.
 
 #### T9.1 C3: cross-package imported mutators
 
@@ -1483,27 +1487,46 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T7.7a B3 preflight transfer record
 - [x] T7.7b B3 edge to AgentActivationBootstrap, preflight drops bootstrap references
 - [x] T7.8 B3 last edge, foreground base concrete and private, all reachability cases green
-- [ ] T8.0-list B4 consumer file list and slices
-- [ ] T8.0-Sxx B4 consumer inventory slices (ids added by T8.0-list)
-- [ ] T8.0-agg B4 consumer inventory aggregation and producer tasks
-- [ ] T8.1 B4 McpRuntimeOwner consumers
-- [ ] T8.2 B4 AgentProfilePreflight consumers
-- [ ] T8.3 B4 AgentRuntimeContext consumers
-- [ ] T8.4 B4 workspace and memory command ports
-- [ ] T8.5 B4 slash command processor ports
-- [ ] T8.6a B4 command hosts
-- [ ] T8.6b B4 components 1
-- [ ] T8.6c B4 components 2 (settings dialog)
-- [ ] T8.6d B4 completion and command hooks
-- [ ] T8.6e B4 other hooks
-- [ ] T8.6f B4 containers and layouts
-- [ ] T8.7a-n B4 producer projections (ids added by T8.0-agg)
-- [ ] T8.8 B4 delete CliUiRuntime and SlashCommandRuntime
-- [ ] T9.1 C3 cross-package mutators
-- [ ] T9.2 C2 scanner roots
-- [ ] T9.3 C1 class and protected bundles
-- [ ] T9.Fxx C1-C3 production fixes (ids added by T9.1-T9.3, may be none)
+- [ ] T8.0-list B4 consumer file list and slices (not run; replaced by direct review-item tasks)
+- [ ] T8.0-Sxx B4 consumer inventory slices (not run; replaced by direct review-item tasks)
+- [ ] T8.0-agg B4 consumer inventory aggregation and producer tasks (not run; replaced by direct review-item tasks)
+- [x] T8.1 B4 McpRuntimeOwner consumers (done as R-B4c)
+- [x] T8.2 B4 AgentProfilePreflight consumers (done as R-B4b)
+- [x] T8.3 B4 AgentRuntimeContext consumers (done as R-B4d, R-B4g)
+- [x] T8.4 B4 workspace and memory command ports (done as R-B4a)
+- [x] T8.5 B4 slash command processor ports (done as R-B4a)
+- [x] T8.6a B4 command hosts (done as R-B4a)
+- [x] T8.6b B4 components 1 (done as R-B4a)
+- [x] T8.6c B4 components 2 (settings dialog) (done as R-B4a)
+- [x] T8.6d B4 completion and command hooks (done as R-B4a)
+- [x] T8.6e B4 other hooks (done as R-B4a)
+- [x] T8.6f B4 containers and layouts (done as R-B4a, R-B4e, R-B4h)
+- [ ] T8.7a-n B4 producer projections (not run; replaced by direct review-item tasks)
+- [x] T8.8 B4 delete CliUiRuntime and SlashCommandRuntime (done as R-B4a, R-B4b, R-B4h)
+- [x] T9.1 C3 cross-package mutators (done as R-C23)
+- [x] T9.2 C2 scanner roots (done as R-C23)
+- [x] T9.3 C1 class and protected bundles (done as R-C1, R-C13b)
+- [x] T9.Fxx C1-C3 production fixes (done as R-C23; the production fixes were R-C23's commits)
 - [ ] T10.0 finish all writing and formatting
 - [ ] T10.1 one full run on the final head
 - [ ] T10.2 push, PR CI, nightly, Windows tests confirmed (including the eight physical hook cases)
 - [ ] T10.3 PR body rewrite
+
+**Review-item tasks**
+
+- [x] R-B4a CLI carriers: slash command, components, hooks and layouts take narrow ports
+- [x] R-B4b CLI carriers: preflight, sandbox, session bootstrap and config pipeline
+- [x] R-B4c McpRuntimeOwner consumers, plus the B6 remainder
+- [x] R-B4d AgentRuntimeContext and ChatSession ports
+- [x] R-B4e CLI carriers: input operations, layout, bootstrap and workspace owners
+- [x] R-B4f MCP ports and required adoption authority
+- [x] R-B4g AgentRuntimeContext and ChatSession ports
+- [x] R-B4h CLI carriers: AppWrapper, AppContainer and the startup stub
+- [x] R-B6 positional constructors for SubAgentScope, ChildAgentAssembly, createToolRegistry and bindTaskRegistration
+- [x] R-A5 session facade stops wrapping JSON and embedding calls twice
+- [x] R-C23 scanner roots and cross-package mutators, with frozen tables and loggers built where they log
+- [x] R-C1 scanner reports a stored bundle and an optional bag
+- [x] R-C13b scanner reports the class surface and resolves a bare package root to source
+- [x] R-S1 structural-only tests removed
+- [x] R-S2 structural test cases removed
+- [x] R-M1 merge of main
