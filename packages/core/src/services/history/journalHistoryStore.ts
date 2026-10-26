@@ -97,7 +97,6 @@ export class JournalHistoryStore
     owners: () => this.owners,
     exclusive: (run) => this.exclusive(run),
     commit: (build) => {
-      this.publication.accepted();
       this.tokenDraft = undefined;
       return this.commitStep(undefined, build, undefined, true);
     },
@@ -739,9 +738,7 @@ export class JournalHistoryStore
       if (owners !== this.owners) this.owners.invalidate();
       try {
         if (arrival) {
-          const added = group.after.rows - snapshot.rows;
-          assertArrivalRowDelta(added);
-          this.tentativeRows += added;
+          this.acceptArrivalRows(group.after.rows - snapshot.rows);
         } else if (rowsAfter === undefined) {
           this.tentativeRows = group.after.rows;
         } else if (group.after.rows !== rowsAfter) {
@@ -757,6 +754,12 @@ export class JournalHistoryStore
     } finally {
       await snapshot.close();
     }
+  }
+
+  private acceptArrivalRows(added: number): void {
+    assertArrivalRowDelta(added);
+    if (added > 0) this.publication.accepted();
+    this.tentativeRows += added;
   }
 
   /** The mutation FIFO keeps the queue empty around a whole operation; a count that differs means it did not. */

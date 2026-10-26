@@ -110,6 +110,23 @@ describe('journal history store publication and compensation', () => {
     expect(Array.from(store.capturePublicationOwners())).toStrictEqual([]);
   });
 
+  it('keeps context mutation marks current during arrivals until a response is sealed', async () => {
+    const { store } = await withOld('arrival-context-mark.llxj');
+    const mark = store.mutationMark();
+    const arrival = await store.openResponseArrival(
+      { speaker: 'ai', blocks: [] },
+      { id: 'arrival-context', submissionId: 'prompt' },
+    );
+    try {
+      await arrival.append({ type: 'text', text: 'not yet context' });
+      expect(store.isCurrentMutationMark(mark)).toBe(true);
+      await arrival.seal({});
+      expect(store.isCurrentMutationMark(mark)).toBe(false);
+    } finally {
+      await arrival.interrupt();
+    }
+  });
+
   it('writes a streamed replacement of any size as one group that resolves at its ack', async () => {
     const { store } = await withOld('stream.llxj');
     const before = store.lastAck?.commitSeq ?? 0;
