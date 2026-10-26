@@ -1,6 +1,8 @@
 import { assembleMcpFilesystem } from './mcp-filesystem-assembly.js';
 import {
+  handoffOwner,
   retainPolicyOwner,
+  type McpOwnerHandoff,
   type McpPolicyHandoff,
 } from './mcp-runtime-construction.js';
 import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
@@ -33,7 +35,6 @@ import {
   type WorkspaceMcpSettings,
   type SessionMcpSettingsReads,
 } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import type { MemoryHandoff } from './mcpOAuthAssembly.js';
 import type { McpConstructionResources } from './mcp-construction-resources.js';
 import { updateWorkspaceExtensionDefinitions } from './workspace-definition-assembly.js';
 import type { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
@@ -71,13 +72,14 @@ export function retainWorkspaceMemory(
   config: Config,
   filesystem: WorkspaceFilesystemOwner,
   trust: WorkspaceTrustControlPort,
-  supplied: MemoryHandoff | undefined,
+  handoff: McpOwnerHandoff<WorkspaceMemoryOwner>,
   readExtensions: () => LlxprtExtension[],
 ): WorkspaceMemoryOwner {
+  const supplied = handoffOwner(handoff);
   const memory =
-    supplied?.owner ??
+    supplied ??
     assembleWorkspaceMemory(config, filesystem, trust, readExtensions);
-  if (supplied === undefined) resources.retain(() => memory.dispose());
+  if (handoff.kind === 'none') resources.retain(() => memory.dispose());
   return memory;
 }
 
@@ -190,12 +192,11 @@ export function retainWorkspaceEnvironment(
   resources: McpConstructionResources,
   config: Config,
   trust: WorkspaceTrustControlPort,
-  filesystemOwner: WorkspaceFilesystemOwner | undefined,
-  filesystemOwnership: 'runtime' | 'caller',
-  memoryOwner: MemoryHandoff | undefined,
+  filesystem: McpOwnerHandoff<WorkspaceFilesystemOwner>,
+  memory: McpOwnerHandoff<WorkspaceMemoryOwner>,
   readExtensions: () => LlxprtExtension[],
-  policy: McpPolicyHandoff | undefined,
-  filesystemService: FileSystemService | undefined,
+  policy: McpPolicyHandoff,
+  filesystemService: McpOwnerHandoff<FileSystemService>,
 ): [
   WorkspaceFilesystemOwner,
   WorkspaceMemoryOwner,
@@ -203,28 +204,27 @@ export function retainWorkspaceEnvironment(
   boolean,
   () => void,
 ] {
-  const filesystem = assembleMcpFilesystem(
+  const retained = assembleMcpFilesystem(
     config,
-    filesystemOwner,
-    filesystemOwnership,
+    filesystem,
     resources,
     trust,
-    filesystemService,
+    handoffOwner(filesystemService),
   );
-  const memory = retainWorkspaceMemory(
+  const retainedMemory = retainWorkspaceMemory(
     resources,
     config,
-    filesystem.filesystem,
+    retained.filesystem,
     trust,
-    memoryOwner,
+    memory,
     readExtensions,
   );
   const retainedPolicy = retainPolicyOwner(resources, config, policy, trust);
   return [
-    filesystem.filesystem,
-    memory,
+    retained.filesystem,
+    retainedMemory,
     retainedPolicy.owner,
     retainedPolicy.owned,
-    filesystem.unsubscribe,
+    retained.unsubscribe,
   ];
 }

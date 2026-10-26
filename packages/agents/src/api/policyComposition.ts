@@ -50,7 +50,7 @@ export async function assembleOwnedMcpRuntime(
   return assembleMcpRuntime(
     config,
     options,
-    { owner: policy, ownership: 'runtime' },
+    { kind: 'supplied', owner: policy, ownership: 'runtime' },
     settingsOwner,
   );
 }

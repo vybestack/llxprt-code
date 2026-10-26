@@ -10,21 +10,20 @@ import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import type { McpConstructionResources } from './mcp-construction-resources.js';
+import {
+  handoffOwner,
+  type McpOwnerHandoff,
+} from './mcp-runtime-construction.js';
 
 export function assembleMcpFilesystem(
   config: Config,
-  supplied: WorkspaceFilesystemOwner | undefined,
-  ownership: 'runtime' | 'caller',
+  handoff: McpOwnerHandoff<WorkspaceFilesystemOwner>,
   resources: McpConstructionResources,
   trust: WorkspaceTrustControlPort,
   service: FileSystemService | undefined,
 ): { filesystem: WorkspaceFilesystemOwner; unsubscribe: () => void } {
-  if (ownership === 'caller' && supplied === undefined)
-    throw new Error(
-      'Caller-owned filesystem requires an explicit workspace root',
-    );
   const filesystem =
-    supplied ??
+    handoffOwner(handoff) ??
     new WorkspaceFilesystemOwner({
       targetDir: config.getTargetDir(),
       customExcludes: config.customExcludes,
@@ -33,8 +32,7 @@ export function assembleMcpFilesystem(
       fileSystem:
         service === undefined ? undefined : { service, ownership: 'caller' },
     });
-  if (ownership === 'runtime' && supplied === undefined)
-    resources.retain(() => filesystem.dispose());
+  if (handoff.kind === 'none') resources.retain(() => filesystem.dispose());
   const unsubscribe = trust.subscribeTrustChange(() =>
     filesystem.notifyTrustChanged(),
   );

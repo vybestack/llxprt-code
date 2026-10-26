@@ -1,9 +1,12 @@
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type {
+  SessionMcpSettingsReads,
+  SessionSettingsOwner,
+} from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 
 import {
@@ -15,16 +18,17 @@ import { defaultFeedbackSink } from '@vybestack/llxprt-code-mcp/host/hostService
 import { openBrowserSecurely } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentConfig } from './config-types.js';
-import type { McpPolicyHandoff } from './mcp-runtime-construction.js';
+import type {
+  McpCapability,
+  McpOwnerHandoff,
+  McpPolicyHandoff,
+  McpTrustHandoff,
+} from './mcp-runtime-construction.js';
 import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 
 export type MemoryHandoff =
   | { readonly owner: WorkspaceMemoryOwner; readonly ownership?: 'caller' }
   | { readonly owner: WorkspaceMemoryOwner; readonly ownership: 'runtime' };
-
-export function ownsMcpMemory(handoff: MemoryHandoff | undefined): boolean {
-  return handoff === undefined || handoff.ownership === 'runtime';
-}
 
 export type McpAssemblyOptions = Pick<
   AgentConfig,
@@ -50,36 +54,45 @@ export interface McpTransferHandoff {
   readonly onTransferAccepted?: () => void;
 }
 
+/**
+ * The host's explicit choice of who releases an owner it hands over. A key the
+ * host set to `agent` means MCP owns it; an omitted key keeps the handover
+ * caller-owned, which is what the option meant before it had a name.
+ */
+function handoffOf<Owner>(
+  owner: Owner | undefined,
+  ownership: 'agent' | 'runtime' | 'caller' | undefined,
+): McpOwnerHandoff<Owner> {
+  if (owner === undefined) return { kind: 'none' };
+  return {
+    kind: 'supplied',
+    owner,
+    ownership:
+      ownership === 'agent' || ownership === 'runtime' ? 'runtime' : 'caller',
+  };
+}
+
 export async function assembleMcpRuntime(
   config: Config,
   options: McpAssemblyOptions &
     McpTransferHandoff & { readonly trustCleanup?: () => Promise<void> },
-  policy: McpPolicyHandoff | undefined,
+  policy: McpPolicyHandoff,
   settingsOwner?: SessionSettingsOwner,
 ): Promise<McpRuntimeOwner> {
-  if (options.lspOwnership === 'caller' && options.lspOwner === undefined)
-    throw new Error('Caller-owned LSP requires an explicit workspace root');
-  if (
-    options.filesystemOwnership === 'caller' &&
-    options.filesystemOwner === undefined
-  )
-    throw new Error(
-      'Caller-owned filesystem requires an explicit workspace root',
-    );
-  if (
-    options.definitionOwnership === 'caller' &&
-    options.definitionOwner === undefined
-  )
-    throw new Error(
-      'Caller-owned definitions require an explicit workspace root',
-    );
   const feedback = options.mcpHost?.emitFeedback ?? defaultFeedbackSink;
-  const ownership =
-    options.lspOwnership ??
-    (options.lspOwner === undefined ? 'agent' : 'caller');
-  const filesystemOwnership =
-    options.filesystemOwnership ??
-    (options.filesystemOwner === undefined ? 'agent' : 'caller');
+  const trust: McpTrustHandoff =
+    options.trustPort === undefined
+      ? { kind: 'none' }
+      : {
+          kind: 'supplied',
+          owner: options.trustPort,
+          cleanup: options.trustCleanup,
+        };
+  const settingsReads = settingsOwner?.readMcpSettingsBinding();
+  const mcpSettings: McpCapability<SessionMcpSettingsReads> =
+    settingsReads === undefined
+      ? { kind: 'none' }
+      : { kind: 'supplied', capability: settingsReads };
   // create() retains the supplied owners synchronously, before its first
   // await, so the handoff below never leaves a window without an authority.
   const runtime = McpRuntimeOwner.create(
@@ -94,38 +107,44 @@ export async function assembleMcpRuntime(
       },
       config,
       managerFactory: McpClientManager,
-      extensionLoader: undefined,
+      extensionLoader: { kind: 'none' },
       policy,
-      lspOwner: options.lspOwner,
-      lspOwnership: ownership === 'agent' ? 'runtime' : 'caller',
-      filesystemOwner: options.filesystemOwner,
-      filesystemOwnership:
-        filesystemOwnership === 'agent' ? 'runtime' : 'caller',
-      filesystemService: options.filesystemService,
-      memoryOwner:
-        options.memoryOwner === undefined
-          ? undefined
+      lsp: handoffOf(options.lspOwner, options.lspOwnership),
+      filesystem: handoffOf(
+        options.filesystemOwner,
+        options.filesystemOwnership,
+      ),
+      filesystemService:
+        options.filesystemService === undefined
+          ? { kind: 'none' }
           : {
+              kind: 'supplied',
+              owner: options.filesystemService,
+              ownership: 'caller',
+            },
+      memory:
+        options.memoryOwner === undefined
+          ? { kind: 'none' }
+          : {
+              kind: 'supplied',
               owner: options.memoryOwner.owner,
               ownership:
-                options.memoryOwner.ownership === 'agent'
+                options.memoryOwner.ownership === 'agent' ||
+                options.memoryOwner.ownership === undefined
                   ? 'runtime'
-                  : 'caller',
+                  : options.memoryOwner.ownership,
             },
-      definitionOwner: options.definitionOwner,
-      definitionOwnership:
-        options.definitionOwnership === 'agent' ||
-        options.definitionOwner === undefined
-          ? 'runtime'
-          : 'caller',
-      trustPort: options.trustPort,
-      trustCleanup: options.trustCleanup,
-      idePort: options.idePort,
+      definitions: handoffOf(
+        options.definitionOwner,
+        options.definitionOwnership,
+      ),
+      trust,
+      ide: handoffOf(options.idePort, 'caller'),
     },
     {
       emitFeedback: feedback,
-      skillOperations: undefined,
-      mcpSettings: settingsOwner?.readMcpSettingsBinding(),
+      skillOperations: { kind: 'none' },
+      mcpSettings,
     },
   );
   options.onTransferAccepted?.();

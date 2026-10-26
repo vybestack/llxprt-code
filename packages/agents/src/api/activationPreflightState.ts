@@ -70,6 +70,8 @@ import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
 
 import { assembleHostGitHubBroker } from './host-github-broker-owner.js';
 import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
+import type { McpCapability } from './mcp-runtime-construction.js';
+import type { SessionMcpSettingsReads } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { type PreparedProfileFacade } from './profileApplicationAssembly.js';
 import { canonicalProviderActivationIntent } from './provider-activation-intent.js';
 import { type ProviderActivationResult } from './providerActivationExecutor.js';
@@ -425,38 +427,56 @@ export class AgentActivationBootstrap
         },
         config: this.#config,
         managerFactory: McpClientManager,
-        extensionLoader: undefined,
-        policy: { owner: policyOwner, ownership: 'caller' },
-        lspOwner: undefined,
-        lspOwnership: 'runtime',
-        filesystemOwner: this.#sessionResources.workspaceFilesystem,
-        filesystemOwnership: 'runtime',
-        filesystemService: undefined,
-        memoryOwner: {
+        extensionLoader: { kind: 'none' },
+        policy: { kind: 'supplied', owner: policyOwner, ownership: 'caller' },
+        lsp: { kind: 'none' },
+        filesystem: {
+          kind: 'supplied',
+          owner: this.#sessionResources.workspaceFilesystem,
+          ownership: 'runtime',
+        },
+        filesystemService: { kind: 'none' },
+        memory: {
+          kind: 'supplied',
           owner: this.#sessionResources.workspaceMemory,
           ownership: 'runtime',
         },
-        definitionOwner: this.#sessionResources.workspaceDefinitions,
-        definitionOwnership: 'runtime',
-        trustPort: this.#sessionResources.workspaceTrust,
-        trustCleanup: this.#sessionResources.trustCleanup,
-        idePort: undefined,
+        definitions: {
+          kind: 'supplied',
+          owner: this.#sessionResources.workspaceDefinitions,
+          ownership: 'runtime',
+        },
+        trust: {
+          kind: 'supplied',
+          owner: this.#sessionResources.workspaceTrust,
+          cleanup: this.#sessionResources.trustCleanup,
+        },
+        ide: { kind: 'none' },
       },
       {
         emitFeedback: feedback,
         skillOperations: {
-          reloadPolicy:
-            this.#foregroundHost.skillPolicy ??
-            DEFAULT_SKILL_OPERATIONS.reloadPolicy,
-          registerTools:
-            this.#foregroundHost.registerSkillTools ??
-            DEFAULT_SKILL_OPERATIONS.registerTools,
+          kind: 'supplied',
+          capability: {
+            reloadPolicy:
+              this.#foregroundHost.skillPolicy ??
+              DEFAULT_SKILL_OPERATIONS.reloadPolicy,
+            registerTools:
+              this.#foregroundHost.registerSkillTools ??
+              DEFAULT_SKILL_OPERATIONS.registerTools,
+          },
         },
-        mcpSettings:
-          this.#sessionResources.settingsOwner.readMcpSettingsBinding(),
+        mcpSettings: this.#readMcpSettingsCapability(),
       },
     );
     this.#mcp = mcp;
+  }
+
+  #readMcpSettingsCapability(): McpCapability<SessionMcpSettingsReads> {
+    const reads = this.#sessionResources.settingsOwner.readMcpSettingsBinding();
+    return reads === undefined
+      ? { kind: 'none' }
+      : { kind: 'supplied', capability: reads };
   }
 
   prepareProfileActivation(

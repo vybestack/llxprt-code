@@ -27,7 +27,6 @@ import {
   type WorkspaceTrustControlPort,
   type WorkspaceIdePort,
 } from '@vybestack/llxprt-code-core';
-import { ownsMcpMemory, type MemoryHandoff } from './mcpOAuthAssembly.js';
 import {
   retainWorkspaceTools,
   retainWorkspaceEnvironment,
@@ -118,11 +117,15 @@ import { MCP_SESSION_APPROVAL_SOURCE } from '@vybestack/llxprt-code-core/policy/
 
 import {
   assembleWorkspaceApproval,
+  capabilityValue,
+  handoffOwner,
+  handoffOwnership,
   retainSuppliedRuntimeOwners,
   retainWorkspaceAuthority,
   retainMcpPolicyProjection,
   retainWorkspaceCheckpoints,
   type AgentMcpOperations,
+  type McpOwnerHandoff,
   type McpRuntimeAcquisition,
   type McpRuntimeOperations,
 } from './mcp-runtime-construction.js';
@@ -165,7 +168,7 @@ export class McpRuntimeOwner implements AgentMcpOperations {
     return this.workspaceCheckpoints.operations;
   }
   readonly workspaceMemory: WorkspaceMemoryOwner;
-  private readonly ownsMemory = (): boolean => ownsMcpMemory(this.memoryOwner);
+  private readonly ownsMemory: boolean;
   readonly workspaceFilesystem: WorkspaceFilesystemOwner;
   private readonly ownsFilesystem: boolean;
   readonly workspaceLsp: WorkspaceLspOwner;
@@ -262,7 +265,6 @@ export class McpRuntimeOwner implements AgentMcpOperations {
 
   private readonly config: Config;
   private readonly managerFactory: typeof McpClientManager;
-  private readonly memoryOwner: MemoryHandoff | undefined;
   private readonly mcpSettings: SessionMcpSettingsReads | undefined;
 
   private constructor(
@@ -272,22 +274,21 @@ export class McpRuntimeOwner implements AgentMcpOperations {
   ) {
     this.config = inputs.config;
     this.managerFactory = inputs.managerFactory;
-    this.memoryOwner = inputs.memoryOwner;
-    this.mcpSettings = operations.mcpSettings;
+    this.ownsMemory = handoffOwnership(inputs.memory) === 'runtime';
+    this.mcpSettings = capabilityValue(operations.mcpSettings);
     this.serverCommand = inputs.config.getMcpServerCommand();
     this.debugMode = inputs.config.getDebugMode();
     [this.serverSettings, this.extensions, this.allowedServers] =
       captureWorkspaceServerDeclarations(
         inputs.config,
-        inputs.extensionLoader,
-        operations.mcpSettings,
+        handoffOwner(inputs.extensionLoader),
+        this.mcpSettings,
       );
     this.authority = retainWorkspaceAuthority(
       resources,
       inputs.config,
-      inputs.trustPort ?? inputs.policy?.owner.trust,
-      inputs.idePort,
-      inputs.trustCleanup,
+      inputs.trust,
+      inputs.ide,
     );
     this.trust = this.authority.trust;
     this.initialTrust = this.trust.isTrustedFolder();
@@ -302,32 +303,23 @@ export class McpRuntimeOwner implements AgentMcpOperations {
       this.policyOwner,
       this.ownsPolicy,
     ] = this.composeEnvironment(resources, inputs);
-    this.ownsFilesystem = inputs.filesystemOwnership === 'runtime';
+    this.ownsFilesystem = handoffOwnership(inputs.filesystem) === 'runtime';
     this.releasePolicyProjection = retainMcpPolicyProjection(
       resources,
       this.policyOwner,
       () => this.serverSettings.settingsMcpServers,
     );
-    this.ownsDefinitions = inputs.definitionOwnership === 'runtime';
+    this.ownsDefinitions = handoffOwnership(inputs.definitions) === 'runtime';
     [this.workspaceDefinitions, this.definitionContributions] =
-      composeDefinitionRoots(
-        resources,
-        inputs.config,
-        inputs.definitionOwner,
-        inputs.definitionOwnership,
-      );
-    this.workspaceLsp = this.composeLsp(
-      resources,
-      inputs.lspOwner,
-      inputs.lspOwnership,
-    );
-    this.ownsLsp = inputs.lspOwnership === 'runtime';
+      composeDefinitionRoots(resources, inputs.config, inputs.definitions);
+    this.workspaceLsp = this.composeLsp(resources, inputs.lsp);
+    this.ownsLsp = handoffOwnership(inputs.lsp) === 'runtime';
     this.tools = this.composeTools(resources);
     [this.workspaceSkills, this.workspaceExtensions] =
       this.composeSkillsAndExtensions(
         resources,
-        operations.skillOperations ?? DEFAULT_SKILL_OPERATIONS,
-        inputs.extensionLoader,
+        capabilityValue(operations.skillOperations) ?? DEFAULT_SKILL_OPERATIONS,
+        handoffOwner(inputs.extensionLoader),
       );
     ({ binding: this.oauth, readCredentials: this.readOAuthCredentials } =
       assembleRuntimeOAuth(inputs.oauth));
@@ -351,9 +343,8 @@ export class McpRuntimeOwner implements AgentMcpOperations {
       resources,
       inputs.config,
       this.trust,
-      inputs.filesystemOwner,
-      inputs.filesystemOwnership,
-      inputs.memoryOwner,
+      inputs.filesystem,
+      inputs.memory,
       () => this.extensions.slice(),
       inputs.policy,
       inputs.filesystemService,
@@ -398,10 +389,9 @@ export class McpRuntimeOwner implements AgentMcpOperations {
 
   private composeLsp(
     resources: McpConstructionResources,
-    owner: WorkspaceLspOwner | undefined,
-    ownership: 'runtime' | 'caller',
+    handoff: McpOwnerHandoff<WorkspaceLspOwner>,
   ): WorkspaceLspOwner {
-    return composeMcpLsp(resources, this.config, owner, ownership, this.trust);
+    return composeMcpLsp(resources, this.config, handoff, this.trust);
   }
   private composeTools(
     resources: McpConstructionResources,
@@ -728,7 +718,7 @@ export class McpRuntimeOwner implements AgentMcpOperations {
     this.workspaceExtensions.closeAdmission();
     if (this.ownsPolicy) this.policyOwner.closeAdmission();
     if (this.ownsFilesystem) this.workspaceFilesystem.closeFileAdmission();
-    if (this.ownsMemory()) this.workspaceMemory.closeAdmission();
+    if (this.ownsMemory) this.workspaceMemory.closeAdmission();
     if (this.ownsDefinitions) this.workspaceDefinitions.closeAdmission();
   }
 
@@ -842,7 +832,7 @@ export class McpRuntimeOwner implements AgentMcpOperations {
       () => this.managerClosing,
       () => this.releaseMcpPublication?.(),
       () => this.tools.dispose(),
-      () => (this.ownsMemory() ? this.workspaceMemory.dispose() : undefined),
+      () => (this.ownsMemory ? this.workspaceMemory.dispose() : undefined),
       () =>
         this.ownsFilesystem ? this.workspaceFilesystem.dispose() : undefined,
     ]) {

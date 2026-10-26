@@ -7,20 +7,20 @@ import { WorkspaceLspOwner } from '@vybestack/llxprt-code-core/lsp/workspace-lsp
 import type { WorkspaceTrustReadPort } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { McpConstructionResources } from './mcp-construction-resources.js';
+import type { McpOwnerHandoff } from './mcp-runtime-construction.js';
 
 export function composeMcpLsp(
   resources: McpConstructionResources,
   config: Config,
-  supplied: WorkspaceLspOwner | undefined,
-  ownership: 'runtime' | 'caller',
+  handoff: McpOwnerHandoff<WorkspaceLspOwner>,
   trust: WorkspaceTrustReadPort,
 ): WorkspaceLspOwner {
-  const owner =
-    supplied ??
-    new WorkspaceLspOwner(config.getLspConfig(), config.getTargetDir(), () =>
-      trust.isTrustedFolder(),
-    );
-  if (ownership === 'runtime' && supplied === undefined)
-    resources.retain(() => owner.dispose());
+  if (handoff.kind === 'supplied') return handoff.owner;
+  const owner = new WorkspaceLspOwner(
+    config.getLspConfig(),
+    config.getTargetDir(),
+    () => trust.isTrustedFolder(),
+  );
+  resources.retain(() => owner.dispose());
   return owner;
 }
