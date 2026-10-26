@@ -28,6 +28,7 @@ export type HttpOptions = { headers: Record<string, string> };
 
 /** Resolved setup for a generation call. */
 export interface GeminiGenerationSetup {
+  requestContents?: () => AsyncIterable<import('./geminiWireTypes.js').Content>;
   authMode: GeminiAuthMode;
   authToken: string;
   currentModel: string;

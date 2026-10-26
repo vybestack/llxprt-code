@@ -24,6 +24,8 @@ import {
   type CreateGeminiApiClient,
 } from '../gemini/GeminiProvider.js';
 import { createProviderCallOptions } from './testSupport.js';
+import { createGeminiApiClient } from '../gemini/geminiApiClientFactory.js';
+const originalFetch = globalThis.fetch;
 
 interface FakeSdkState {
   /** JSON of each request, captured at call time (before lease release). */
@@ -50,31 +52,49 @@ function resetSdk(): void {
   sdk.failure = undefined;
   sdk.onSend = undefined;
   sdk.chunks = [{ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }];
+  globalThis.fetch = Object.assign(
+    async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      sdk.sent.push(await new Response(init?.body).text());
+      sdk.leasesDuringSend.push(activeRequestBodyCount());
+      sdk.onSend?.();
+      if (sdk.failure !== undefined) throw sdk.failure;
+      if (String(input).includes('streamGenerateContent')) {
+        return new Response(
+          sdk.chunks
+            .map(
+              (chunk) => `data: ${JSON.stringify(chunk)}
+
+`,
+            )
+            .join(''),
+          { headers: { 'content-type': 'text/event-stream' } },
+        );
+      }
+      return Response.json(sdk.chunks[0]);
+    },
+    { preconnect() {} },
+  );
 }
 
-function recordSend(request: { contents: unknown[] }): void {
-  sdk.sent.push(JSON.stringify(request));
-  sdk.requests.push(request);
-  sdk.leasesDuringSend.push(activeRequestBodyCount());
-  sdk.onSend?.();
-  if (sdk.failure !== undefined) throw sdk.failure;
-}
-
-const fakeClientFactory = (async () => ({
-  models: {
-    generateContentStream: async (request: { contents: unknown[] }) => {
-      recordSend(request);
-      const chunks = sdk.chunks;
-      return (async function* () {
-        yield* chunks;
-      })();
+const fakeClientFactory: CreateGeminiApiClient = async (options) => {
+  const client = await createGeminiApiClient(options);
+  return {
+    models: {
+      generateContentStream: async (request) => {
+        if (!Array.isArray(request.contents))
+          throw new Error('Expected provider contents');
+        sdk.requests.push({ contents: request.contents });
+        return client.models.generateContentStream(request);
+      },
+      generateContent: async (request) => {
+        if (!Array.isArray(request.contents))
+          throw new Error('Expected provider contents');
+        sdk.requests.push({ contents: request.contents });
+        return client.models.generateContent(request);
+      },
     },
-    generateContent: async (request: { contents: unknown[] }) => {
-      recordSend(request);
-      return sdk.chunks[0];
-    },
-  },
-})) as unknown as CreateGeminiApiClient;
+  };
+};
 
 function createTestProvider(): GeminiProvider {
   return new GeminiProvider(
@@ -306,6 +326,7 @@ describe('Gemini transport-owned request rows body (WP09)', () => {
   });
 
   afterEach(() => {
+    globalThis.fetch = originalFetch;
     if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = originalKey;
   });
@@ -386,7 +407,7 @@ describe('Gemini transport-owned request rows body (WP09)', () => {
     const wrong = { ...options, requestRows: { ...probe.selection, count: 3 } };
     const before = activeRequestBodyCount();
     await expect(drain(provider.generateChatCompletion(wrong))).rejects.toThrow(
-      'Provider request rows count changed',
+      'Provider request row index is out of range',
     );
     expect(sdk.sent).toHaveLength(0);
     expect(activeRequestBodyCount()).toBe(before);
@@ -403,6 +424,7 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
   });
 
   afterEach(() => {
+    globalThis.fetch = originalFetch;
     if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = originalKey;
   });
@@ -536,7 +558,8 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
     await expect(
       drain(provider.generateChatCompletion(rowsOptions(scenario, probe))),
     ).rejects.toThrow('client unavailable');
-    expect(probe.returned()).toBe(1);
+    expect(probe.opened()).toBe(0);
+    expect(probe.returned()).toBe(0);
     expect(sdk.sent).toHaveLength(0);
     expect(activeRequestBodyCount()).toBe(before);
   });

@@ -51,6 +51,7 @@ type PatternFetch = NonNullable<GoogleGenerativeAIProviderSettings['fetch']>;
 export function createPatternPreservingFetch(
   tools: LanguageModelV4CallOptions['tools'],
   onRequestBytes?: (bytes: number) => void,
+  innerFetch: PatternFetch = globalThis.fetch,
 ): PatternFetch {
   const schemas = new Map(
     tools?.flatMap((tool) =>
@@ -65,7 +66,7 @@ export function createPatternPreservingFetch(
       if (typeof init?.body === 'string') {
         onRequestBytes?.(Buffer.byteLength(init.body, 'utf8'));
       }
-      return globalThis.fetch(input, init);
+      return innerFetch(input, init);
     }
     if (typeof init?.body !== 'string') {
       throw new Error('Expected an AI SDK JSON request body');
@@ -100,7 +101,7 @@ export function createPatternPreservingFetch(
     });
     const projectedBody = JSON.stringify({ ...body, tools: projected });
     onRequestBytes?.(Buffer.byteLength(projectedBody, 'utf8'));
-    return globalThis.fetch(input, { ...init, body: projectedBody });
+    return innerFetch(input, { ...init, body: projectedBody });
   };
   // `preconnect` is a Bun-only member of `fetch`. The build tsconfig does not
   // see globalThis.fetch with that member even though the AI SDK's fetch type

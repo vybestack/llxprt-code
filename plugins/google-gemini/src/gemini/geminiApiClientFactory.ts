@@ -10,6 +10,7 @@ import type {
   LanguageModelV4Content,
 } from '@ai-sdk/provider';
 import { createPatternPreservingFetch } from './gemini-pattern-fetch.js';
+import { createStreamedGeminiFetch } from './streamed-request.js';
 import {
   toCallOptions,
   toFinishReason,
@@ -69,7 +70,22 @@ export async function createGeminiApiClient(
       ...(options.httpOptions?.headers !== undefined
         ? { headers: options.httpOptions.headers }
         : {}),
-      fetch: createPatternPreservingFetch(tools, options.onRequestBytes),
+      fetch: createPatternPreservingFetch(
+        tools,
+        options.requestContents === undefined
+          ? options.onRequestBytes
+          : undefined,
+        options.requestContents === undefined
+          ? globalThis.fetch
+          : createStreamedGeminiFetch(
+              options.requestContents,
+              params.model,
+              typeof params['systemInstruction'] === 'string'
+                ? params['systemInstruction']
+                : undefined,
+              options.onRequestBytes,
+            ),
+      ),
     }).languageModel(params.model);
 
   return {

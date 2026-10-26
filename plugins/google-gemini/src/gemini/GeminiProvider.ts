@@ -58,7 +58,7 @@ import {
 import { readsRequestRowsAtTransport } from '@vybestack/llxprt-code-providers/BaseProviderNormalization.js';
 import { reportRequestSize } from '@vybestack/llxprt-code-providers/logging/requestSizeReport.js';
 import { acquireRequestScopedBody } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
-import { dropTransportRows, openTransportRowsMedia } from './transportRows.js';
+import { openTransportRowsMedia, transportContents } from './transportRows.js';
 
 /**
  * Represents the default Gemini provider.
@@ -386,7 +386,9 @@ export class GeminiProvider extends BaseProvider {
         () => this.getBaseURL(),
         this.getLogger(),
       );
-      if (sourceRoute) dropTransportRows(mediaRequest);
+      if (sourceRoute)
+        setup.requestContents = () =>
+          transportContents(effectiveOptions, mediaInput, mediaRequest);
       // The SDK `Content[]` is the one body this request needs; it is
       // released once the call settles on any outcome (issue #854 WP09).
       const sdkBody = acquireRequestScopedBody('gemini', {
@@ -476,15 +478,16 @@ export class GeminiProvider extends BaseProvider {
       params: GenerateContentParameters,
     ) => Promise<AsyncIterable<GenerateContentResponse>>;
   }> {
-    const client = await this.createClient(
-      this.buildGoogleGenAIOptions(
+    const client = await this.createClient({
+      ...this.buildGoogleGenAIOptions(
         setup.authToken,
         setup.authMode,
         setup.httpOptions,
         setup.baseURL,
         (bytes) => reportRequestSize(metadata, bytes),
       ),
-    );
+      requestContents: setup.requestContents,
+    });
     return client.models;
   }
 
