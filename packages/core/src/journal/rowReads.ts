@@ -46,7 +46,7 @@ export async function readRowIds(
     );
   }
   const header = decodeRowHeader(head.kindHeader);
-  if (header.label !== entry.label) {
+  if (entry.transcriptId === 0n && header.label !== entry.label) {
     throw new JournalFormatError(
       `Row at offset ${entry.recordOffset} has label ${header.label}, its entry says ${entry.label}`,
     );

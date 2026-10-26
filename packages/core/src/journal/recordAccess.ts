@@ -29,6 +29,7 @@ const DEFAULT_WHAT = 'record';
  * offset and the trailer that led to it.
  */
 export interface RecordAccess {
+  readonly sourceIdentity?: object;
   readonly rowWindowStats?: RowReadWindowStats;
   recordError(head: FrameHead, error: Error): JournalCorruptionError;
   /**
@@ -181,6 +182,7 @@ export function createRecordAccess(
     }
   };
   return {
+    sourceIdentity: reader,
     rowWindowStats: window?.stats,
     recordError: (head, error) => corruption('ROW', head.offset, error),
     async readRecordHead(

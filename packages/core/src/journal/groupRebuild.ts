@@ -60,8 +60,13 @@ export async function writeFresh(
 ): Promise<RowEntry> {
   const offset = await appender.append(encoded.record);
   return segment.replaces === undefined
-    ? entryForNewRow(encoded, offset)
-    : entryForRewrittenRow(encoded, offset, segment.replaces);
+    ? entryForNewRow(encoded, offset, appender.transcriptIdentity?.(offset))
+    : entryForRewrittenRow(
+        encoded,
+        offset,
+        segment.replaces,
+        appender.transcriptIdentity?.(offset),
+      );
 }
 
 /**

@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { RecordAccess } from './recordAccess.js';
 import {
   encodeBodylessFrame,
   frameParts,
@@ -20,6 +21,8 @@ export interface GroupRecord {
  * frame length is known as soon as the record is encoded.
  */
 export interface RecordAppender {
+  readonly transcriptIdentity?: (offset: number) => bigint;
+  readonly retainsSource?: (source: RecordAccess) => boolean;
   /** The offset the next appended record will start at. */
   readonly nextOffset: number;
   /** Takes the record and returns the offset it starts at. */

@@ -25,7 +25,10 @@ export async function copyForeignRow(
   const read = ids ?? (await readRowIds(source, entry));
   const head =
     read.head ?? (await readSourceHead(source, entry.recordOffset, 'ROW'));
-  const written = await appendSourceRecord(source, appender, head, 'ROW');
+  const shared = appender.retainsSource?.(source) === true;
+  const written = shared
+    ? { offset: entry.recordOffset, bytes: entry.recordLength }
+    : await appendSourceRecord(source, appender, head, 'ROW');
   if (written.bytes !== entry.recordLength) {
     throw new JournalFormatError(
       `Row ${entry.label} is ${written.bytes} bytes at offset ${entry.recordOffset}, its entry says ${entry.recordLength}`,
@@ -33,9 +36,10 @@ export async function copyForeignRow(
   }
   return entryForNewRow(
     {
-      header: { ...read.header, owner: entry.owner },
+      header: { ...read.header, label: entry.label, owner: entry.owner },
       recordLength: written.bytes,
     },
     written.offset,
+    shared ? entry.transcriptId : appender.transcriptIdentity?.(written.offset),
   );
 }

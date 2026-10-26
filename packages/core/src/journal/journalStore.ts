@@ -54,7 +54,10 @@ import type { CommitEffect } from './commitEffect.js';
 import type { OccurrencePlanner, VersionEdit } from './groupEdits.js';
 import type { RecordAppender } from './groupAppender.js';
 import type { JournalFileHandle } from './positionalFile.js';
-import { prepareBuild } from './preparedGroup.js';
+import {
+  prepareTranscriptBuild as prepareBuild,
+  finishTranscript,
+} from './transcript-group.js';
 import type { GroupPlan, PlanContext } from './groupPlanTypes.js';
 import type { CommitAck, JournalGroupWriter } from './groupWriter.js';
 import type { IdFactDeps } from './idFactQueries.js';
@@ -759,7 +762,7 @@ export class JournalStore {
             return undefined;
           }
           const filled = await this.finishBuilt(
-            built,
+            await finishTranscript(built),
             appender,
             resolvedEdits,
             factIndex,

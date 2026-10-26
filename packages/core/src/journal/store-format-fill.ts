@@ -122,6 +122,7 @@ export async function finishStoreFormats(
   policies: StoreFormatPolicies,
   effect: CommitEffect | undefined,
 ): ReturnType<typeof fillRowFormats> {
+  context = { ...context, ...built.groupCaches };
   const filled = await fillStoreFormats(
     context,
     await fillNeutralRowFacts(context, built, appender, edits),

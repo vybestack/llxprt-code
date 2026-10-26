@@ -343,10 +343,12 @@ export async function buildIncremental(
   );
   const stateRoot = await commitState(ctx, plan, appender);
   return {
-    changedRows: (function* (): Generator<RowEntry> {
-      yield* changes.replace;
-      yield* changes.insert;
-    })(),
+    changedRows: {
+      *[Symbol.iterator](): Generator<RowEntry> {
+        yield* changes.replace;
+        yield* changes.insert;
+      },
+    },
     state: trailerState(ctx, plan, mutation, chainBase, {
       ...tree,
       idRoot,

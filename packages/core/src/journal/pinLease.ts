@@ -68,6 +68,10 @@ export function releaseRead(
 /** The reads of `raw`, each refused once the lease is free (a swap may have moved what they reach). */
 function leased(raw: RecordAccess, lease: PinLease): RecordAccess {
   return {
+    get sourceIdentity() {
+      lease.require();
+      return raw.sourceIdentity;
+    },
     get rowWindowStats() {
       return raw.rowWindowStats;
     },

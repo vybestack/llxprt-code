@@ -40,6 +40,8 @@ export interface BuildContext extends FactDeps {
 
 /** What the store keeps after the group is acked, and nothing before. */
 export interface BuiltGroup {
+  readonly groupCaches?: Pick<BuildContext, 'metaCache' | 'stateCache'>;
+  readonly finishTranscript?: (built: BuiltGroup) => Promise<BuiltGroup>;
   readonly changedRows?: Iterable<RowEntry>;
   readonly state: TrailerState;
   readonly spine: RightSpine | undefined;
@@ -73,7 +75,9 @@ export async function writeRows(
   const entries: RowEntry[] = [];
   for (const row of encoded) {
     const offset = await appender.append(row.record);
-    entries.push(entryForNewRow(row, offset));
+    entries.push(
+      entryForNewRow(row, offset, appender.transcriptIdentity?.(offset)),
+    );
   }
   return entries;
 }

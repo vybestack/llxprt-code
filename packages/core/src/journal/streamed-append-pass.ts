@@ -122,9 +122,11 @@ export class StreamedAppendPass {
         const encoded = encodeRowDraft(label, input.draft);
         await this.observe(input.draft.ids.map((id) => id.rawId));
         await applyDraftRow(this.facts, this.ctx, label, input.draft);
+        const offset = await this.appender.append(encoded.record);
         entry = entryForNewRow(
           encoded,
-          await this.appender.append(encoded.record),
+          offset,
+          this.appender.transcriptIdentity?.(offset),
         );
       } else {
         const row = 'foreign' in input ? input.foreign : input.existing;
