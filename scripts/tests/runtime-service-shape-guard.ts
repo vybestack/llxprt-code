@@ -256,10 +256,13 @@ function isConfigLocator(
  * queries retain explicit resource-limit findings.
  * An exposed surface is judged by reachability: private and protected storage
  * does not expose capabilities, and consumers only reach exposed members. A
- * class is an owner rather than a grouping, so owning several single-service
- * collaborators is not a bundle. A class field or constructor parameter
- * property whose declared type groups two or more runtime services is, whatever
- * its visibility, because the bag is what the boundary forbids. An interface or
+ * class is judged by its public instance surface exactly as an interface is: an
+ * owner whose public members expose two or more services is a bundle, and an
+ * owner that keeps its collaborators private and publishes operations is not,
+ * so owning several single-service collaborators stays allowed. A class field or
+ * constructor parameter property whose declared type groups two or more runtime
+ * services is, whatever its visibility, because the bag is what the boundary
+ * forbids. An interface or
  * type alias is judged by what it exposes, and an intersection, object-literal
  * type, `Object.assign` result or spread of several services groups them all.
  * Union branches stay alternatives.
@@ -428,7 +431,9 @@ export function scanRuntimeServiceProgram(
      * A class names an owner, not a grouping. Its stored positions are what the
      * boundary judges: a field or constructor parameter property whose declared
      * type is a bundle stores a bag, whatever its visibility. Owning several
-     * single-service fields is not a bundle, which is the design we want.
+     * single-service fields is not a bundle, which is the design we want; a
+     * class whose public surface hands out two services is judged on that
+     * surface, through the stored position's declared verdict.
      */
     function reportStoredDeclarations(node: ts.ClassDeclaration): void {
       if (isAssemblyNode(node, options, program)) return;
