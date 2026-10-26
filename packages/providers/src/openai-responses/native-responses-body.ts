@@ -133,10 +133,33 @@ export class NativeResponsesPrompt {
     if (this.closed) throw new Error('Native Responses prompt is closed');
   }
 
+  private async *streamRows(estimation: boolean): AsyncGenerator<IContent> {
+    const source = this.rows.openReader(this.options.invocation.signal);
+    let current: IteratorResult<IContent> | undefined;
+    try {
+      for (;;) {
+        current = await source.next();
+        if (current.done === true) return;
+        this.requireOpen();
+        yield estimation
+          ? toEstimationContents([current.value])[0]
+          : current.value;
+        current = undefined;
+      }
+    } finally {
+      current = undefined;
+      await source.return();
+    }
+  }
+
   private async *selectedRows(
     skipRows: number,
     estimation: boolean,
   ): AsyncGenerator<IContent> {
+    if (skipRows === 0 && this.rows.native !== undefined) {
+      yield* this.streamRows(estimation);
+      return;
+    }
     for (let index = skipRows; index < this.rows.count; index++) {
       this.requireOpen();
       const row = await this.rows.readAt(index, this.options.invocation.signal);
