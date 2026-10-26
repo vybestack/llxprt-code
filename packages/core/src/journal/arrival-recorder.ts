@@ -91,6 +91,29 @@ export class JournalArrivalRecorder {
     await this.flush();
     return this.mutate((group) => group.beginBlock(row, type, true));
   }
+  async indexedBlock(
+    row: ArrivalRow,
+    type: number,
+    sourceId: string,
+  ): Promise<ArrivalBlock> {
+    await this.flush();
+    return this.mutate((group) => group.indexedBlock(row, type, sourceId));
+  }
+  async endRowBlocks(row: ArrivalRow): Promise<void> {
+    await this.flush();
+    let ordinal = 0;
+    for (;;) {
+      const result = await this.mutate((group) =>
+        group.endNextBlock(row, ordinal),
+      );
+      if (result === undefined) return;
+      if (result.error !== undefined) {
+        await this.finishAttempt(row, 'error');
+        throw new Error(result.error);
+      }
+      ordinal = result.next;
+    }
+  }
   appendTextDelta(block: ArrivalBlock, value: string): void | Promise<void> {
     this.check();
     const escaped = JSON.stringify(value).slice(1, -1);

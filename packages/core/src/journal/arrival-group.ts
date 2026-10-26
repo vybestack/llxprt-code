@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { createHash } from 'node:crypto';
 import type { BuildContext, BuiltGroup } from './groupBuildShared.js';
 import { mapReader } from './groupBuildShared.js';
 import type { RecordAppender } from './groupAppender.js';
@@ -94,6 +95,9 @@ export interface ArrivalStore {
 }
 
 export class ArrivalGroup {
+  private binding:
+    | { readonly key: string; readonly bytes: Uint8Array }
+    | undefined;
   private readonly manifests = new Map<
     bigint,
     { entry: TranscriptEntry; header: RowHeader }
@@ -210,6 +214,50 @@ export class ArrivalGroup {
       chunk: { ...header.chunk, blocksRoot, blockCount: ordinal + 1 },
     });
     return { ...row, ordinal };
+  }
+  async indexedBlock(
+    row: ArrivalRow,
+    type: number,
+    sourceId: string,
+  ): Promise<ArrivalBlock> {
+    const digest = createHash('sha256').update(sourceId).digest('hex');
+    const key = `arrival:${row.transcriptId}:${type}:${digest}`;
+    const previous = await mapReader(this.ctx, 'state').get(
+      this.built.state.stateRoot,
+      key,
+    );
+    if (previous !== undefined) {
+      if (previous.length !== 4) throw new Error('Invalid arrival binding');
+      return {
+        ...row,
+        ordinal: new DataView(
+          previous.buffer,
+          previous.byteOffset,
+          4,
+        ).getUint32(0),
+      };
+    }
+    const handle = await this.beginBlock(row, type, true);
+    const bytes = new Uint8Array(4);
+    new DataView(bytes.buffer).setUint32(0, handle.ordinal);
+    this.binding = { key, bytes };
+    return handle;
+  }
+  async endNextBlock(
+    row: ArrivalRow,
+    start: number,
+  ): Promise<{ readonly next: number; readonly error?: string } | undefined> {
+    const { header } = await this.find(row);
+    if (header.chunk === undefined) throw new Error('Missing manifest');
+    for (let ordinal = start; ordinal < header.chunk.blockCount; ordinal++) {
+      const block = await chunkBlock(this.access(), header.chunk, ordinal);
+      if (block.ended) continue;
+      const handle = { ...row, ordinal };
+      const error = await this.blockError(handle);
+      if (error === undefined) await this.endBlock(handle);
+      return { next: ordinal + 1, error };
+    }
+    return undefined;
   }
   async namedField(
     handle: ArrivalBlock,
@@ -567,6 +615,8 @@ export class ArrivalGroup {
     state.set(TRANSCRIPT_HEAD_KEY, encodeTranscriptHead(this.head));
     if (this.outcome !== undefined)
       state.set(this.outcome.key, this.outcome.bytes);
+    if (this.binding !== undefined)
+      state.set(this.binding.key, this.binding.bytes);
     return {
       value,
       built: {

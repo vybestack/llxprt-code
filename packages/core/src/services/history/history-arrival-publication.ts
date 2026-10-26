@@ -18,6 +18,8 @@ export function withArrivalPublication<T>(
   },
 ): ResponseArrival {
   return {
+    selectAttempt: (id) => arrival.selectAttempt(id),
+    appendToolArguments: (delta) => arrival.appendToolArguments(delta),
     append: (block) => arrival.append(block),
     interrupt: (outcome) => arrival.interrupt(outcome),
     seal: (metadata) =>

@@ -16,7 +16,7 @@ import { cancellableResponseStream } from './cancellableResponseStream.js';
 import {
   openResponseArrival,
   responseArrivalFor,
-  appendResponseBlocks,
+  appendResponseChunk,
   prefetchResponseArrival,
   takePrefetchedArrival,
 } from './responseArrival.js';
@@ -731,11 +731,7 @@ export class StreamProcessor {
         admissions.push(...streamMediaAdmissions(historyChunk, turnId));
         const pendingArrival = takePrefetchedArrival(chunk)
           ? undefined
-          : appendResponseBlocks(
-              arrival,
-              historyChunk.content.blocks,
-              includeThoughts,
-            );
+          : appendResponseChunk(arrival, historyChunk, includeThoughts);
         if (pendingArrival !== undefined) await pendingArrival;
         accumulator.add(historyChunk);
         yield { ...chunk, content: filteredContent };

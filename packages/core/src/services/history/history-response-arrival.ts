@@ -10,8 +10,11 @@ import type {
 import { ROW_BLOCK_TYPE } from '../../journal/rowRecord.js';
 import { encodeContentRow } from './journalRowCodec.js';
 import type { ContentBlock, ContentMetadata, IContent } from './IContent.js';
+import type { ToolArgumentDelta } from './tool-argument-delta.js';
 
 export interface ResponseArrival {
+  selectAttempt(id: string | undefined): Promise<void>;
+  appendToolArguments(delta: ToolArgumentDelta): Promise<void>;
   append(block: ContentBlock): void | Promise<void>;
   seal(metadata: ContentMetadata): Promise<void>;
   interrupt(outcome?: Exclude<ArrivalOutcome, 'completed'>): Promise<void>;
@@ -26,14 +29,18 @@ class JournalResponseArrival implements ResponseArrival {
       }
     | undefined;
   private finished = false;
+  private toolAttemptId: string | undefined;
   constructor(
     private readonly recorder: JournalArrivalRecorder,
-    private readonly row: ArrivalRow,
-    private readonly content: IContent,
+    private row: ArrivalRow,
+    private content: IContent,
+    private readonly owner: number,
+    private readonly attempt: ArrivalAttempt,
   ) {}
   private async end(): Promise<void> {
     if (this.current === undefined) return;
-    await this.recorder.endBlock(this.current.block);
+    if (this.current.streamId === undefined)
+      await this.recorder.endBlock(this.current.block);
     this.current = undefined;
   }
   append(block: ContentBlock): void | Promise<void> {
@@ -57,10 +64,17 @@ class JournalResponseArrival implements ResponseArrival {
       this.current = {
         type: block.type,
         streamId,
-        block: await this.recorder.beginNamedBlock(
-          this.row,
-          ROW_BLOCK_TYPE[block.type],
-        ),
+        block:
+          streamId === undefined
+            ? await this.recorder.beginNamedBlock(
+                this.row,
+                ROW_BLOCK_TYPE[block.type],
+              )
+            : await this.recorder.indexedBlock(
+                this.row,
+                ROW_BLOCK_TYPE[block.type],
+                streamId,
+              ),
       };
     }
     if (block.type === 'text')
@@ -73,6 +87,50 @@ class JournalResponseArrival implements ResponseArrival {
         streamId === undefined ? 'delta' : 'snapshot',
       );
       await this.appendThinkingMetadata(block, this.current.block);
+    }
+  }
+  async selectAttempt(id: string | undefined): Promise<void> {
+    if (id === undefined) return;
+    if (this.toolAttemptId !== undefined && this.toolAttemptId !== id) {
+      await this.end();
+      await this.recorder.finishAttempt(this.row, 'superseded');
+      this.content = {
+        ...this.content,
+        metadata: { ...this.content.metadata, id },
+      };
+      this.row = await this.recorder.beginRow(
+        encodeContentRow(this.content, { owner: this.owner }),
+        { ...this.attempt, id },
+      );
+    }
+    this.toolAttemptId = id;
+  }
+  async appendToolArguments(delta: ToolArgumentDelta): Promise<void> {
+    if (this.finished) throw new Error('Response arrival is finished');
+    await this.selectAttempt(delta.attemptId);
+    await this.end();
+    const handle = await this.recorder.indexedBlock(
+      this.row,
+      ROW_BLOCK_TYPE.tool_call,
+      delta.sourceId,
+    );
+    await this.recorder.appendText(handle, 'id', delta.id, 'snapshot');
+    await this.recorder.appendText(handle, 'name', delta.name, 'snapshot');
+    await this.recorder.appendText(handle, 'parameters', delta.arguments);
+    if (delta.replacementArguments !== undefined)
+      await this.recorder.replaceField(
+        handle,
+        'parameters',
+        delta.replacementArguments,
+      );
+    if (delta.complete === true) {
+      try {
+        await this.recorder.endBlock(handle);
+      } catch (error) {
+        this.finished = true;
+        await this.recorder.close();
+        throw error;
+      }
     }
   }
   private async appendThinkingMetadata(
@@ -124,6 +182,7 @@ class JournalResponseArrival implements ResponseArrival {
   async seal(metadata: ContentMetadata): Promise<void> {
     if (this.finished) throw new Error('Response arrival is finished');
     await this.end();
+    await this.recorder.endRowBlocks(this.row);
     await this.recorder.sealRow(this.row, {
       ...this.content.metadata,
       ...metadata,
@@ -152,5 +211,5 @@ export async function openJournalResponseArrival(
     encodeContentRow(content, { owner }),
     attempt,
   );
-  return new JournalResponseArrival(recorder, row, content);
+  return new JournalResponseArrival(recorder, row, content, owner, attempt);
 }

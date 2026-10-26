@@ -20,14 +20,7 @@ export async function prefetchResponseArrival(
       throw new EmptyStreamError(
         'Model stream ended immediately with no content.',
       );
-    await appendResponseBlocks(
-      arrival,
-      filterHookRestrictedBlocks(
-        first.value.content.blocks,
-        first.value.hookRestrictions?.allowedToolNames,
-      ),
-      includeThoughts,
-    );
+    await appendResponseChunk(arrival, first.value, includeThoughts);
     markPrefetchedArrival(first.value);
     const stream = prependAsyncGenerator(first.value, converted);
     bindResponseArrival(stream, arrival);
@@ -38,6 +31,41 @@ export async function prefetchResponseArrival(
   }
 }
 
+export function appendResponseChunk(
+  arrival: ResponseArrival,
+  chunk: ModelStreamChunk,
+  includeThoughts: boolean,
+): void | Promise<void> {
+  const id = chunk.content.responseAttemptId;
+  if (id === undefined)
+    return appendResponseChunkBlocks(arrival, chunk, includeThoughts);
+  return arrival
+    .selectAttempt(id)
+    .then(() => appendResponseChunkBlocks(arrival, chunk, includeThoughts));
+}
+function appendResponseChunkBlocks(
+  arrival: ResponseArrival,
+  chunk: ModelStreamChunk,
+  includeThoughts: boolean,
+): void | Promise<void> {
+  const allowed = chunk.hookRestrictions?.allowedToolNames;
+  const blocks = filterHookRestrictedBlocks(chunk.content.blocks, allowed);
+  const delta = chunk.content.toolArgumentDelta;
+  if (
+    delta === undefined ||
+    (allowed !== undefined && !allowed.includes(delta.name))
+  )
+    return appendResponseBlocks(arrival, blocks, includeThoughts);
+  return arrival.appendToolArguments(delta).then(() =>
+    appendResponseBlocks(
+      arrival,
+      blocks.filter(
+        (block) => block.type !== 'tool_call' || block.id !== delta.id,
+      ),
+      includeThoughts,
+    ),
+  );
+}
 export function appendResponseBlocks(
   arrival: ResponseArrival,
   blocks: ModelStreamChunk['content']['blocks'],

@@ -84,7 +84,9 @@ describe('production prompt submission barrier', () => {
           });
           const rows = entries.filter((entry) => entry.rowRef !== 0);
           expect(rows).toHaveLength(mode === 'stream' ? 2 : 1);
-          expect(rows[1]?.status).toBe(mode === 'stream' ? 0 : undefined);
+          expect(rows.slice(1).map((entry) => entry.status)).toStrictEqual(
+            mode === 'stream' ? [0] : [],
+          );
           const opened =
             mode === 'stream'
               ? decodeStoredRow(await transcript.readRow(rows[1]))
