@@ -23,7 +23,10 @@
  * requests keep using the WebSocket.
  */
 
-import { WebSocket } from 'undici';
+import {
+  openWsSocket,
+  ResponsesWebSocketFragmentError,
+} from './responses-websocket-socket.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   parseResponsesStream,
@@ -36,9 +39,13 @@ import {
 import { createStreamInterruptionError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
-import { BoundedJsonBody } from '../utils/boundedJsonBody.js';
+import {
+  BoundedJsonBody,
+  DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
+  DEFAULT_STREAMING_JSON_CHUNK_BYTES,
+} from '../utils/boundedJsonBody.js';
 import { isPreviousResponseNotFoundError } from './openAIResponsesStatefulRecovery.js';
-import { assembleFrame } from './responses-websocket-frame.js';
+import { sendWebSocketFragments } from './responses-websocket-fragments.js';
 import { ResponsesHiddenPrefix } from './openai-responses-hidden-prefix.js';
 import {
   decideLifecycleRetry,
@@ -49,7 +56,8 @@ import {
   WEBSOCKET_CONNECTION_LIMIT_CODE,
 } from './openai-responses-websocket-lifetime.js';
 
-export const DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES = 32 * 1024 * 1024;
+export const DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES =
+  DEFAULT_HTTP_JSON_ENVELOPE_BYTES;
 export const CODEX_WEBSOCKET_BETA_HEADER = 'responses_websockets=2026-02-06';
 
 /**
@@ -105,12 +113,9 @@ export interface StreamResponseOptions {
   readonly responsesStored?: boolean;
   readonly onStreamLiveness?: ParseResponsesStreamOptions['onStreamLiveness'];
   readonly onResponseEvent?: () => void;
-  /**
-   * Request-scoped source of the complete `response.create` frame bytes (disk
-   * source route). Called once per send attempt; the assembled frame is
-   * released as soon as the socket has taken it.
-   */
+  /** Repeatable disk-backed bytes, read one chunk per completed fragment write. */
   readonly requestFrameBytes?: () => AsyncIterable<Uint8Array>;
+  readonly requestFrameByteLength?: number;
 }
 
 export interface WebSocketTransport {
@@ -131,8 +136,9 @@ export interface TransportSocket {
   readonly readyState: number;
   readonly CONNECTING: number;
   readonly OPEN: number;
-  send(data: string | Uint8Array): void;
+  sendFragment(data: Uint8Array, fin: boolean): Promise<void>;
   close(): void;
+  terminate(): void;
   onOpen(listener: () => void): () => void;
   onMessage(listener: (data: unknown) => void): () => void;
   onClose(listener: (info: SocketCloseInfo) => void): () => void;
@@ -241,65 +247,6 @@ async function waitForTurn(
   throwIfAborted(abortSignal);
 }
 
-class UndiciTransportSocket implements TransportSocket {
-  readonly CONNECTING = WebSocket.CONNECTING;
-  readonly OPEN = WebSocket.OPEN;
-
-  constructor(private readonly socket: WebSocket) {}
-
-  get readyState(): number {
-    return this.socket.readyState;
-  }
-
-  send(data: string | Uint8Array): void {
-    this.socket.send(data);
-  }
-
-  close(): void {
-    this.socket.close();
-  }
-
-  onOpen(listener: () => void): () => void {
-    const handler = (): void => listener();
-    this.socket.addEventListener('open', handler);
-    return () => this.socket.removeEventListener('open', handler);
-  }
-
-  onMessage(listener: (data: unknown) => void): () => void {
-    const handler = (event: { data?: unknown }): void => listener(event.data);
-    this.socket.addEventListener('message', handler);
-    return () => this.socket.removeEventListener('message', handler);
-  }
-
-  onClose(listener: (info: SocketCloseInfo) => void): () => void {
-    const handler = (event: {
-      readonly code: number;
-      readonly reason: string;
-      readonly wasClean: boolean;
-    }): void =>
-      listener({
-        code: event.code,
-        reason: event.reason,
-        wasClean: event.wasClean,
-      });
-    this.socket.addEventListener('close', handler);
-    return () => this.socket.removeEventListener('close', handler);
-  }
-
-  onError(listener: () => void): () => void {
-    const handler = (): void => listener();
-    this.socket.addEventListener('error', handler);
-    return () => this.socket.removeEventListener('error', handler);
-  }
-}
-
-function openUndiciSocket(
-  url: string,
-  headers: Readonly<Record<string, string>>,
-): TransportSocket {
-  return new UndiciTransportSocket(new WebSocket(url, { headers }));
-}
-
 interface LiveConnection {
   readonly socket: TransportSocket;
   readonly identity: string;
@@ -350,10 +297,14 @@ class RequestFrameSource {
           `Codex Responses WebSocket closed: code=${info.code ?? 'n/a'}, reason=${info.reason ?? 'n/a'}, wasClean=${info.wasClean ?? 'n/a'}`,
       );
       this.fail(
-        createStreamInterruptionError(
-          'Codex Responses WebSocket closed before response.completed',
-          { closeInfo: info },
-        ),
+        info.code === 1002 || info.code === 1003
+          ? new ResponsesWebSocketFragmentError(
+              `server rejected message (${info.code}: ${info.reason ?? ''})`,
+            )
+          : createStreamInterruptionError(
+              'Codex Responses WebSocket closed before response.completed',
+              { closeInfo: info },
+            ),
       );
     });
     const detachError = socket.onError(() => {
@@ -545,38 +496,54 @@ function createResponseByteStream(
 async function sendBoundedRequestEnvelope(
   socket: TransportSocket,
   request: OpenAIResponsesRequest,
-  requestFrameBytes?: () => AsyncIterable<Uint8Array>,
+  options: StreamResponseOptions,
 ): Promise<void> {
-  if (requestFrameBytes !== undefined) {
-    socket.send(
-      await assembleFrame(
-        requestFrameBytes(),
-        DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES,
-      ),
+  if (options.requestFrameBytes !== undefined) {
+    if (options.requestFrameByteLength === undefined)
+      throw new Error(
+        'Streamed WebSocket request requires a declared byte length',
+      );
+    await sendWebSocketFragments(
+      socket,
+      options.requestFrameBytes(),
+      options.requestFrameByteLength,
+      options.abortSignal,
     );
     return;
   }
   const boundedEnvelope = new BoundedJsonBody(
     { ...request, type: 'response.create' },
     {
-      maxChunkBytes: DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES,
+      maxChunkBytes: DEFAULT_STREAMING_JSON_CHUNK_BYTES,
       maxEnvelopeBytes: DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES,
     },
   );
   try {
-    socket.send(boundedEnvelope.toUint8Array());
-  } catch (error) {
-    try {
-      await boundedEnvelope.dispose(error);
-    } catch (disposalError) {
-      throw new AggregateError(
-        [error, disposalError],
-        'Codex Responses WebSocket send and request cleanup failed',
-      );
-    }
-    throw error;
+    await sendWebSocketFragments(
+      socket,
+      boundedEnvelopeChunks(boundedEnvelope),
+      boundedEnvelope.byteLength,
+      options.abortSignal,
+    );
+  } finally {
+    await boundedEnvelope.dispose();
   }
-  await boundedEnvelope.dispose();
+}
+
+async function* boundedEnvelopeChunks(
+  body: BoundedJsonBody,
+): AsyncGenerator<Uint8Array> {
+  const reader = body.createStream().getReader();
+  try {
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) return;
+      yield next.value;
+    }
+  } finally {
+    await reader.cancel();
+    reader.releaseLock();
+  }
 }
 
 class CodexResponsesWebSocketTransport implements WebSocketTransport {
@@ -590,7 +557,7 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
   private readonly streamIdleTimeoutMs: number;
 
   constructor(private readonly config: WebSocketTransportConfig) {
-    this.openSocket = config.openSocket ?? openUndiciSocket;
+    this.openSocket = config.openSocket ?? openWsSocket;
     this.handshakeTimeoutMs = config.handshakeTimeoutMs ?? HANDSHAKE_TIMEOUT_MS;
     this.streamIdleTimeoutMs =
       config.streamIdleTimeoutMs ?? STREAM_IDLE_TIMEOUT_MS;
@@ -692,11 +659,7 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
       throwIfAborted(options.abortSignal);
       // #3199: the physical body goes out through the bounded envelope so a
       // large media payload cannot serialize an unbounded string here.
-      await sendBoundedRequestEnvelope(
-        socket,
-        request,
-        options.requestFrameBytes,
-      );
+      await sendBoundedRequestEnvelope(socket, request, options);
       for await (const message of parseResponsesStream(
         createResponseByteStream(source),
         {
@@ -901,29 +864,13 @@ export async function* streamOverWebSocketOrFallback(
   logger: TransportLogger | undefined,
   onSuccess: (() => void) | undefined = undefined,
 ): AsyncIterableIterator<IContent> {
-  const frame =
-    streamOptions.requestFrameBytes === undefined
-      ? undefined
-      : await assembleFrame(
-          streamOptions.requestFrameBytes(),
-          DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES,
-        );
-  const preparedOptions =
-    frame === undefined
-      ? streamOptions
-      : {
-          ...streamOptions,
-          async *requestFrameBytes(): AsyncGenerator<Uint8Array> {
-            yield frame;
-          },
-        };
   // The only safe recovery boundary is the point at which an IContent is
   // yielded downstream.
   let contentYielded = false;
   try {
     for await (const message of transport.streamResponse(
       request,
-      preparedOptions,
+      streamOptions,
     )) {
       contentYielded = true;
       yield message;
@@ -946,6 +893,7 @@ export async function* streamOverWebSocketOrFallback(
     // observe; absorbing them into the HTTP fallback would hide the dead id so
     // later turns re-discover it and the provider degrades to sticky HTTP.
     if (
+      error instanceof ResponsesWebSocketFragmentError ||
       isStatefulConnectionRenewalError(error) ||
       isPreviousResponseNotFoundError(error)
     ) {

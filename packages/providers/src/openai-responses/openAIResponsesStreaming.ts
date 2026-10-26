@@ -40,6 +40,16 @@ import {
 } from '../utils/boundedJsonBody.js';
 import { jsonValueByteLength } from '../utils/progressive-json-body.js';
 
+async function webSocketFrameLength(
+  params: StreamResponsesParams,
+): Promise<number> {
+  return (
+    (await params.streamRequestBodyLength()) +
+    jsonValueByteLength({ type: 'response.create' }) -
+    1
+  );
+}
+
 async function planResponsesRequest(
   params: StreamResponsesParams,
   websocket: boolean,
@@ -125,6 +135,7 @@ async function* streamOverWebSocketWithRenewal(
         {
           ...baseOptions,
           requestFrameBytes: rebuilt.streamWebSocketFrame,
+          requestFrameByteLength: await webSocketFrameLength(rebuilt),
         },
         () => streamOverHttp(rebuilt, deps),
         deps.onWebSocketFallback,
@@ -153,6 +164,7 @@ async function buildWebSocketStreamOptions(
     responsesStored: params.responsesStored,
     onStreamLiveness: params.normalizedOptions.onStreamLiveness,
     requestFrameBytes: params.streamWebSocketFrame,
+    requestFrameByteLength: await webSocketFrameLength(params),
   };
 }
 

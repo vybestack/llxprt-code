@@ -45,11 +45,19 @@ export class FakeSocket implements TransportSocket {
   // WebSocket which fires exactly one close event.
   private closeDispatched = false;
 
-  send(data: string | Uint8Array): void {
-    const text =
-      typeof data === 'string' ? data : new TextDecoder().decode(data);
+  private readonly fragments: Uint8Array[] = [];
+
+  async sendFragment(data: Uint8Array, fin: boolean): Promise<void> {
+    this.fragments.push(data);
+    if (!fin) return;
+    const text = new TextDecoder().decode(Buffer.concat(this.fragments));
+    this.fragments.length = 0;
     this.sent.push(text);
     this.onSend?.(text);
+  }
+
+  terminate(): void {
+    this.close();
   }
 
   close(): void {
