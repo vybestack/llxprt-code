@@ -20,7 +20,7 @@ import { SLOT_SUMMARY_BYTES } from './slotSummary.js';
 import { ROW_FLAG, ROW_SPEAKER } from './rowRecord.js';
 
 /** A leaf entry of the row tree at format version 3 (design 3.2). */
-export const ROW_ENTRY_BYTES = 1112;
+export const ROW_ENTRY_BYTES = 1120;
 
 /** Offsets inside one entry. The design gives the sizes of each group; the order follows its table. */
 export const ROW_ENTRY_LAYOUT = {
@@ -46,6 +46,7 @@ export const ROW_ENTRY_LAYOUT = {
   media: span(984, 56),
   tokens: span(1040, 48),
   stamp: span(1088, 24),
+  transcriptId: span(1112, 8),
 };
 
 /** The same marker the `ROW` record uses for a row without a chronology seq. */
@@ -72,6 +73,7 @@ export interface EntryMedia {
 }
 
 export interface RowEntry {
+  readonly transcriptId: bigint;
   readonly label: bigint;
   readonly recordOffset: number;
   readonly recordLength: number;
@@ -166,6 +168,7 @@ export function encodeRowEntryInto(
   const view = viewOf(target);
   const at = (name: keyof typeof ROW_ENTRY_LAYOUT): number =>
     offset + L[name].offset;
+  putU64Big(view, at('transcriptId'), 'transcriptId', entry.transcriptId);
   putU64Big(view, at('label'), 'label', entry.label);
   putU64(view, at('recordOffset'), 'recordOffset', entry.recordOffset);
   putU64(view, at('recordLength'), 'recordLength', entry.recordLength);
@@ -257,6 +260,7 @@ export function decodeRowEntry(source: Uint8Array, offset: number): RowEntry {
   };
   const stamp = at('stamp');
   const entry: RowEntry = {
+    transcriptId: getU64Big(view, at('transcriptId')),
     label: getU64Big(view, at('label')),
     recordOffset: getU64(view, at('recordOffset'), 'recordOffset'),
     recordLength: getU64(view, at('recordLength'), 'recordLength'),

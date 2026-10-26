@@ -133,9 +133,11 @@ const UNSTAMPED = { gen: 0, imageGen: 0 };
 export function entryForNewRow(
   encoded: Pick<EncodedRow, 'header' | 'recordLength'>,
   recordOffset: number,
+  transcriptId = 0n,
 ): RowEntry {
   const { header } = encoded;
   return {
+    transcriptId,
     label: header.label,
     recordOffset,
     recordLength: encoded.recordLength,
@@ -175,8 +177,9 @@ export function entryForRewrittenRow(
   encoded: EncodedRow,
   recordOffset: number,
   previous: RowEntry,
+  transcriptId = 0n,
 ): RowEntry {
-  const fresh = entryForNewRow(encoded, recordOffset);
+  const fresh = entryForNewRow(encoded, recordOffset, transcriptId);
   return {
     ...fresh,
     flags: fresh.flags | (previous.flags & ENTRY_FLAG.pairSensitive),

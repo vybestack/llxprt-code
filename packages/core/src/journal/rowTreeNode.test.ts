@@ -58,15 +58,15 @@ describe('RTNODE sizes (design 3.2)', () => {
     expect(8 + 8 + 4 + AGGREGATE_BYTES).toBeLessThanOrEqual(CHILD_SLOT_BYTES);
   });
 
-  it('is 8,936 bytes for a full leaf and 9,896 for a full internal node, with the frame', () => {
-    expect(frameBytes(leaf(8))).toBe(8936);
+  it('is 9,000 bytes for a full leaf and 9,896 for a full internal node, with the frame', () => {
+    expect(frameBytes(leaf(8))).toBe(9000);
     expect(frameBytes(internal(8))).toBe(9896);
-    expect(8 * ROW_ENTRY_BYTES + ROW_TREE_NODE_HEADER_BYTES).toBe(8912);
+    expect(8 * ROW_ENTRY_BYTES + ROW_TREE_NODE_HEADER_BYTES).toBe(8976);
     expect(8 * CHILD_SLOT_BYTES + ROW_TREE_NODE_HEADER_BYTES).toBe(9872);
   });
 
   it('takes only the bytes of the entries or slots it holds', () => {
-    expect(frameBytes(leaf(1))).toBe(8936 - 7 * ROW_ENTRY_BYTES);
+    expect(frameBytes(leaf(1))).toBe(9000 - 7 * ROW_ENTRY_BYTES);
     expect(frameBytes(internal(3))).toBe(9896 - 5 * CHILD_SLOT_BYTES);
   });
 

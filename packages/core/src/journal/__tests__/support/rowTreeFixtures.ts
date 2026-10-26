@@ -46,6 +46,7 @@ export function syntheticEntry(
 ): RowEntry {
   const stamp = { gen: 1, imageGen: 1 };
   return {
+    transcriptId: 0n,
     label: BigInt(index + 1) * 1000n,
     recordOffset: 4096 + index * 64,
     recordLength: 64 + random.int(200),

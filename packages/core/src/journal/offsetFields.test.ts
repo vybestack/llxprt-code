@@ -1,6 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
+  decodeTranscriptHead,
+  encodeTranscriptHead,
+  decodeMembership,
+  encodeMembership,
+} from './transcript-head.js';
+import {
+  decodeTranscriptNode,
+  encodeTranscriptNode,
+} from './transcript-tree.js';
+import {
   encodeCheckpointDescriptor,
   parseCheckpointDescriptor,
 } from './checkpointDescriptor.js';
@@ -36,7 +46,7 @@ import { SeededRandom } from './__tests__/support/seededRandom.js';
 
 /** The record kinds each rule can apply to. */
 const RULE_TARGETS: Record<OffsetRule, readonly PointsAt[]> = {
-  copyNode: ['RTNODE', 'ITNODE'],
+  copyNode: ['RTNODE', 'ITNODE', 'TNODE'],
   copyRecord: ['ROW', 'LENS', 'VALUE'],
   lastRow: ['ROW'],
   ownTrailer: ['TRAILER'],
@@ -130,6 +140,73 @@ function observedFields(): Record<string, string[]> {
     }),
   );
   return {
+    TranscriptHead: KEYS(
+      decodeTranscriptHead(
+        encodeTranscriptHead({
+          root: 1,
+          count: 1,
+          nextId: 2n,
+          openRoot: 0,
+          reachableBytes: 64,
+        }),
+      ),
+    ),
+    TranscriptMembership: KEYS(
+      decodeMembership(
+        encodeMembership({
+          count: 1,
+          label: 1n,
+          rowRef: 64,
+          occurrencesRoot: 128,
+        }),
+      ),
+    ),
+    TranscriptEntry: KEYS(
+      decodeTranscriptNode(
+        encodeTranscriptNode({
+          mode: 'transcript',
+          level: 0,
+          entries: [
+            {
+              transcriptId: 1n,
+              rowRef: 64,
+              recordLength: 10,
+              label: 1n,
+              revision: 1,
+              audience: 0,
+              status: 1,
+              attemptRef: 0,
+              supersedesId: 0n,
+              presentationRef: 0,
+            },
+          ],
+          children: [],
+        }),
+        'transcript',
+      ).entries[0],
+    ),
+    TranscriptChild: KEYS(
+      decodeTranscriptNode(
+        encodeTranscriptNode({
+          mode: 'transcript',
+          level: 1,
+          entries: [],
+          children: [{ maxId: 1n, maxRowRef: 64, ref: 128, count: 1 }],
+        }),
+        'transcript',
+      ).children[0],
+    ),
+    TranscriptNode: KEYS(
+      decodeTranscriptNode(
+        encodeTranscriptNode({
+          mode: 'transcript',
+          level: 1,
+          entries: [],
+          children: [{ maxId: 1n, maxRowRef: 64, ref: 128, count: 1 }],
+        }),
+        'transcript',
+      ),
+    ),
     TrailerHeader: KEYS(trailer),
     Aggregate: KEYS(trailer.rootAggregate),
     SlotStamp: KEYS(trailer.rootAggregate.stamp[0]),

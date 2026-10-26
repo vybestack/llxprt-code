@@ -1,4 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type {
+  TranscriptHead,
+  TranscriptMembership,
+} from './transcript-head.js';
+import type {
+  TranscriptEntry,
+  TranscriptChild,
+  TranscriptNode,
+} from './transcript-tree.js';
 import type { Aggregate, SlotStamp } from './aggregate.js';
 import type { CheckpointDescriptor } from './checkpointDescriptor.js';
 import type { BlockPosition, EligibleCall, IdFact } from './idFactCodec.js';
@@ -23,6 +32,7 @@ import type { TrailerHeader } from './trailerRecord.js';
 export type PointsAt =
   | 'ROW'
   | 'RTNODE'
+  | 'TNODE'
   | 'ITNODE'
   | 'LENS'
   | 'VALUE'
@@ -74,7 +84,12 @@ export type RecordName =
   | 'MetaMapEntry'
   | 'StateMapEntry'
   | 'CheckpointDescriptor'
-  | 'RelocationValue';
+  | 'RelocationValue'
+  | 'TranscriptHead'
+  | 'TranscriptMembership'
+  | 'TranscriptEntry'
+  | 'TranscriptChild'
+  | 'TranscriptNode';
 
 export interface OffsetField {
   readonly record: RecordName;
@@ -97,6 +112,56 @@ function offsetField(
 
 /** The table, by name, so the copier asks for the rule of the field it is remapping. */
 export const OFFSET = {
+  transcriptRoot: offsetField(
+    'TranscriptHead',
+    'root',
+    'TNODE',
+    'copyNode',
+    true,
+  ),
+  transcriptOpen: offsetField(
+    'TranscriptHead',
+    'openRoot',
+    'TNODE',
+    'copyNode',
+    true,
+  ),
+  transcriptRow: offsetField(
+    'TranscriptEntry',
+    'rowRef',
+    'ROW',
+    'copyRecord',
+    true,
+  ),
+  transcriptAttempt: offsetField(
+    'TranscriptEntry',
+    'attemptRef',
+    'VALUE',
+    'copyRecord',
+    true,
+  ),
+  transcriptPresentation: offsetField(
+    'TranscriptEntry',
+    'presentationRef',
+    'VALUE',
+    'copyRecord',
+    true,
+  ),
+  transcriptChild: offsetField('TranscriptChild', 'ref', 'TNODE', 'copyNode'),
+  membershipRow: offsetField(
+    'TranscriptMembership',
+    'rowRef',
+    'ROW',
+    'copyRecord',
+    true,
+  ),
+  membershipRoot: offsetField(
+    'TranscriptMembership',
+    'occurrencesRoot',
+    'TNODE',
+    'copyNode',
+    true,
+  ),
   trailerSelf: offsetField(
     'TrailerHeader',
     'selfOffset',
@@ -263,6 +328,7 @@ const AGGREGATE: Record<keyof Aggregate, FieldDecl> = {
 };
 
 const ROW_ENTRY: Record<keyof RowEntry, FieldDecl> = {
+  transcriptId: 'sequence',
   label: 'label',
   recordOffset: OFFSET.rowTreeRecord,
   recordLength: 'size',
@@ -323,6 +389,43 @@ const ROW_HEADER: Record<keyof RowHeader, FieldDecl> = {
  * either a declared offset field (a member of `OFFSET_FIELDS`) or plain.
  */
 export const RECORD_FIELDS: Record<RecordName, Record<string, FieldDecl>> = {
+  TranscriptHead: {
+    root: OFFSET.transcriptRoot,
+    count: 'count',
+    nextId: 'sequence',
+    openRoot: OFFSET.transcriptOpen,
+    reachableBytes: 'size',
+  } satisfies Record<keyof TranscriptHead, FieldDecl>,
+  TranscriptMembership: {
+    count: 'count',
+    label: 'label',
+    rowRef: OFFSET.membershipRow,
+    occurrencesRoot: OFFSET.membershipRoot,
+  } satisfies Record<keyof TranscriptMembership, FieldDecl>,
+  TranscriptEntry: {
+    transcriptId: 'sequence',
+    rowRef: OFFSET.transcriptRow,
+    recordLength: 'size',
+    label: 'label',
+    revision: 'count',
+    audience: 'code',
+    status: 'code',
+    attemptRef: OFFSET.transcriptAttempt,
+    supersedesId: 'sequence',
+    presentationRef: OFFSET.transcriptPresentation,
+  } satisfies Record<keyof TranscriptEntry, FieldDecl>,
+  TranscriptChild: {
+    maxId: 'sequence',
+    maxRowRef: 'derived',
+    ref: OFFSET.transcriptChild,
+    count: 'count',
+  } satisfies Record<keyof TranscriptChild, FieldDecl>,
+  TranscriptNode: {
+    mode: 'code',
+    level: 'count',
+    entries: 'nested',
+    children: 'nested',
+  } satisfies Record<keyof TranscriptNode, FieldDecl>,
   TrailerHeader: TRAILER,
   Aggregate: AGGREGATE,
   SlotStamp: { gen: 'count', imageGen: 'count' } satisfies Record<

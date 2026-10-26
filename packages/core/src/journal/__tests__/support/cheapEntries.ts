@@ -12,6 +12,7 @@ const STAMP = { gen: 1, imageGen: 1 };
  */
 export function cheapEntry(index: number): RowEntry {
   return {
+    transcriptId: 0n,
     label: BigInt(index + 1) * 1000n,
     recordOffset: 4096 + index * 64,
     recordLength: 64,

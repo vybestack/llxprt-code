@@ -1,11 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { getU64, getU64Big, putU64, putU64Big, viewOf } from './bytes.js';
-import type { IdNodeCache } from './idTrieCache.js';
+import { BoundedIdNodeCache, type IdNodeCache } from './idTrieCache.js';
 import { JournalFormatError } from './errors.js';
 import type { RecordAppender } from './groupAppender.js';
 import type { RecordAccess } from './recordAccess.js';
 
-export const TRANSCRIPT_NODE_KIND = 0x08;
+import { RECORD_KIND } from './recordKinds.js';
+export const TRANSCRIPT_NODE_KIND = RECORD_KIND.TNODE;
 export const TRANSCRIPT_FANOUT = 32;
 export type TranscriptTreeMode = 'transcript' | 'membership';
 export interface TranscriptEntry {
@@ -141,7 +142,7 @@ export async function readTranscriptNode(
 
 /** A fixed cache bounds both committed and freshly written path nodes. */
 export class TranscriptTreeWriter {
-  private readonly cache = new Map<number, TranscriptNode>();
+  private readonly cache = new BoundedIdNodeCache();
   constructor(
     private readonly access: () => RecordAccess,
     private readonly appender: RecordAppender,
@@ -151,7 +152,7 @@ export class TranscriptTreeWriter {
 
   private async read(ref: number): Promise<TranscriptNode> {
     const cached = this.cache.get(ref);
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) return decodeTranscriptNode(cached, this.mode);
     const bytes = this.committedCache?.get(ref);
     if (bytes !== undefined) return decodeTranscriptNode(bytes, this.mode);
     await this.appender.drain();
@@ -163,9 +164,7 @@ export class TranscriptTreeWriter {
       kind: TRANSCRIPT_NODE_KIND,
       kindHeader: encodeTranscriptNode(node),
     });
-    if (this.cache.size >= 64)
-      this.cache.delete(this.cache.keys().next().value ?? 0);
-    this.cache.set(ref, node);
+    this.cache.put(ref, encodeTranscriptNode(node));
     return {
       ref,
       maxRowRef:
@@ -199,17 +198,55 @@ export class TranscriptTreeWriter {
   }
 
   async findRowRef(root: number, rowRef: number): Promise<TranscriptEntry> {
-    let node = await this.read(root);
-    while (node.level > 0) {
-      const child = node.children.find((slot) => slot.maxRowRef >= rowRef);
-      if (child === undefined)
-        throw new JournalFormatError('Context row has no transcript identity');
-      node = await this.read(child.ref);
-    }
-    const entry = node.entries.find((item) => item.rowRef === rowRef);
+    const entry = await this.lookupRowRef(root, rowRef);
     if (entry === undefined)
       throw new JournalFormatError('Context row has no transcript identity');
     return entry;
+  }
+
+  private async lookupRowRef(
+    root: number,
+    rowRef: number,
+  ): Promise<TranscriptEntry | undefined> {
+    const node = await this.read(root);
+    if (node.level === 0)
+      return node.entries.find((entry) => entry.rowRef === rowRef);
+    for (const child of node.children) {
+      if (child.maxRowRef < rowRef) continue;
+      const entry = await this.lookupRowRef(child.ref, rowRef);
+      if (entry !== undefined) return entry;
+    }
+    return undefined;
+  }
+
+  async remove(root: number, id: bigint): Promise<number> {
+    if (root === 0)
+      throw new JournalFormatError('Missing membership occurrence');
+    const child = await this.removeFrom(root, id);
+    return child?.ref ?? 0;
+  }
+
+  private async removeFrom(
+    ref: number,
+    id: bigint,
+  ): Promise<TranscriptChild | undefined> {
+    const node = await this.read(ref);
+    if (node.level === 0) {
+      const entries = node.entries.filter((entry) => entry.transcriptId !== id);
+      if (entries.length === node.entries.length)
+        throw new JournalFormatError('Missing membership occurrence');
+      return entries.length === 0
+        ? undefined
+        : this.write({ ...node, entries });
+    }
+    const at = node.children.findIndex((child) => child.maxId >= id);
+    if (at < 0) throw new JournalFormatError('Missing membership occurrence');
+    const replacement = await this.removeFrom(node.children[at].ref, id);
+    const children = [...node.children];
+    children.splice(at, 1, ...(replacement === undefined ? [] : [replacement]));
+    return children.length === 0
+      ? undefined
+      : this.write({ ...node, children });
   }
 
   async insert(root: number, entry: TranscriptEntry): Promise<number> {

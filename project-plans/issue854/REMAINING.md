@@ -38,3 +38,17 @@ The admitted-workspace regression is fixed. Session facts use an explicit `VALUE
 - Load-sensitive timeouts on this machine (load average around 20): several 8,192-row cases against Bun's default 5 s budget, `journal-responses-frozen` batches, `native-anthropic-spans-send` first case, `send-peak.native-full-tools` (168.3 s against 170 s).
 - #3917: `sanitizeParams` drops an own `"__proto__"` key.
 - `bun:ffi` type error in `core/src/journal/flushRecords.ts` under the providers, agents and cli test tsconfigs.
+
+## Section 16 slices 1-2 verification (2026-10-26)
+
+Passing subsets are being committed separately; the full suite is not green. The inherited run reports these open failures, retained here until reproduced and fixed:
+
+- `idFactBatch.memory`: 4,000/8,000 ids grow by 2,727,835/3,470,987 bytes against the unchanged 1 MiB bound; 40,000 small rows write 273-284 MB because transcript paths are copied per row.
+- `prepared-append-read-cost`: 8,192 rows require 72,733 reads against 68,201; the frozen format-12 proof also needs a format-13 replacement that preserves its behavioral checks.
+- `restored-version-read-cost`: restore requires 43 reads against 32, and its unchanged-state-root assertion conflicts with the Section 16.3 operation marker.
+- `versionCopy.compaction`: the relocation correctness fixture assumes a row-dominated graph; transcript/membership nodes change that graph. Preserve coverage of every relocation kind.
+- `journalStore.compaction`: live-byte accounting still excludes transcript retention, and the old popped-body reclamation assertion conflicts with Section 16.3.
+- `versionCopy.memory` reports a negative baseline; `mirrorSeed.memory` times out; `history-journal-store-dispose` loses the first disposal failure on the second call. Root causes remain unconfirmed.
+- Coalesced edits still admit transcript rows in final context order and omit pending rows removed within the group. Slice 1 is not complete.
+
+The detailed inherited handoff is `tmp/r4b-transcript/remaining.txt`; current verification logs are under `tmp/r4c-transcript/`. Review skipped per Andrew 2026-10-09.

@@ -316,6 +316,7 @@ Every other bit is zero.
 | 4 | LENS |
 | 5 | VALUE |
 | 6 | EVENT |
+| 8 | TNODE |
 | 127 | TRAILER |
 
 #### ROW fixed part
@@ -559,7 +560,7 @@ A live writer keeps its last acked trailer in memory and never searches.
 
 The row tree is an order-statistic B+tree over live rows, keyed by label. Leaves hold up to 8 entries and internal nodes up to 8 children. An internal child slot holds `{childOffset, maxLabel, count, Aggregate}` (8 + 8 + 4 + 1,208 bytes, padded to 1,232), so every subtree knows its row count and its range aggregate (Section 2.5). Node records are `RTNODE`. The arity is 8 because the `Aggregate` in every child slot dominates the node size, so a smaller fan-out writes fewer bytes per path copy, at the price of more levels. The transfer summaries made the aggregate 1,144 bytes where the scalar layout needed 296, which moves the optimum toward a smaller arity. Arity 4 would write about 25 percent fewer bytes per path copy at 100k rows (about 41.9 KB against 55.8 KB, with 7 internal levels instead of 5). Phase 2 measures both before the layout is frozen, and the write budget test (13.6) decides.
 
-A leaf entry is the row's index entry, 1,112 bytes at format version 3:
+A leaf entry is the row's index entry, 1,120 bytes at format version 13:
 
 | Field | Size | Mutable by copy-on-write? | Content |
 |-------|------|---------------------------|---------|
@@ -573,8 +574,9 @@ A leaf entry is the row's index entry, 1,112 bytes at format version 3:
 | `media` | 56 | yes | the row's contribution to `mediaChars`, `imageChars[3]` and `pdfBytes[3]` (Section 8.4) |
 | `tokens` | 48 | yes | per vector (stripped self, reconstructed, adjacent response) and tokenizer slot a `u32` token count, 4 slots, 3 vectors |
 | `stamp[3]` | 24 | yes | per format slot, the `{gen, imageGen}` the summary and media numbers were computed for (Section 8.5) |
+| `transcriptId` | 8 | no | admission identity, independent of context label (Section 16.1) |
 
-Node sizes follow: a leaf is 8 * 1,112 + 16 = 8,912 bytes of body (8,936 with the 20-byte frame head and 4-byte body CRC), an internal node is 8 * 1,232 + 16 = 9,872 bytes (9,896 with the frame).
+Node sizes follow: a leaf is 8 * 1,120 + 16 = 8,976 bytes of body (9,000 with the 20-byte frame head and 4-byte body CRC), an internal node is 8 * 1,232 + 16 = 9,872 bytes (9,896 with the frame).
 
 Cost model:
 - Ordinal to entry, label to entry, and prefix or range aggregate: `O(depth)` preads. Depth is `1 + ceil(log8(rows / 8))`: 4 for 1k rows, 6 for 100k rows, 7 for 1M rows and 14 for 2^40 rows. The right spine is kept by the writer, so an append reads nothing.
@@ -1880,7 +1882,7 @@ This section governs recording and UI retention for [#854](https://github.com/vy
 - Audience is `model-and-display`, `model-only`, or `display-only`. Display-only rows are never inserted into `rowRoot`, id facts, provider format aggregates or tokenizer totals. No provider must implement a second audience filter.
 - Add `member:<transcriptId>` to the versioned meta map, mapping to a membership descriptor with count and current context label/body revision. If a self-merge selects the same body more than once, store the additional label/revision occurrences in a disk tree, not an array. Build/update membership with context edits and restore it with `metaRoot` on pop. The UI resolves membership for only the visible ids. A first/last chronology range cannot represent holes, replacements or synthetic summaries.
 
-Use format version 9 and refuse older journal formats under the existing no-upgrade policy. The reason is that chunk-backed row references and new index kinds change the reachable-record graph; old readers must fail before interpreting it. This is a single format cutover, not a compatibility reader. Extend `OFFSET_FIELDS` for every new root, descriptor and piece reference; ordinary `EVENT` records remain optional audit data, never the only copy of displayed output.
+Use format version 13 and refuse older journal formats under the existing no-upgrade policy. The reason is that chunk-backed row references and new index kinds change the reachable-record graph; old readers must fail before interpreting it. This is a single format cutover, not a compatibility reader. Extend `OFFSET_FIELDS` for every new root, descriptor and piece reference; ordinary `EVENT` records remain optional audit data, never the only copy of displayed output.
 
 ### 16.2 Recording protocol
 

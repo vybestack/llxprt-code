@@ -25,9 +25,9 @@ function encode(entry: RowEntry): Uint8Array {
 }
 
 describe('row entry (design 3.2)', () => {
-  it('is 1,112 bytes with the fields tiling it', () => {
-    expect(ROW_ENTRY_BYTES).toBe(1112);
-    assertContiguous(ROW_ENTRY_LAYOUT, 1112);
+  it('is 1,120 bytes with the fields tiling it', () => {
+    expect(ROW_ENTRY_BYTES).toBe(1120);
+    assertContiguous(ROW_ENTRY_LAYOUT, 1120);
   });
 
   it('sizes each field group as the design table does', () => {
@@ -51,6 +51,7 @@ describe('row entry (design 3.2)', () => {
     expect(sizes.media).toBe(56);
     expect(sizes.tokens).toBe(48);
     expect(sizes.stamp).toBe(24);
+    expect(sizes.transcriptId).toBe(8);
   });
 
   it('round-trips random entries', () => {
@@ -60,6 +61,18 @@ describe('row entry (design 3.2)', () => {
 
       expect(decodeRowEntry(encode(entry), 0)).toStrictEqual(entry);
     }
+  });
+
+  it('preserves a u64 transcript identity independently of context order', () => {
+    const entry = {
+      ...syntheticEntry(new SeededRandom(17), 0, TEST_KINDS),
+      transcriptId: 0xffff_ffff_ffff_fffen,
+    };
+    const changed = { ...entry, label: entry.label + 3n };
+    expect(decodeRowEntry(encode(changed), 0).transcriptId).toBe(
+      entry.transcriptId,
+    );
+    expect(decodeRowEntry(encode(changed), 0).label).toBe(changed.label);
   });
 
   it('keeps the derived flag bits above the ROW flag bits', () => {
