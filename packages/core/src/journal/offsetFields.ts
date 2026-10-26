@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { ChunkManifest, ChunkBlock } from './chunk-row.js';
 import type {
   TranscriptHead,
   TranscriptMembership,
@@ -31,6 +32,7 @@ import type { TrailerHeader } from './trailerRecord.js';
 /** The record kind an offset points at. */
 export type PointsAt =
   | 'ROW'
+  | 'PIECE'
   | 'RTNODE'
   | 'TNODE'
   | 'ITNODE'
@@ -89,7 +91,11 @@ export type RecordName =
   | 'TranscriptMembership'
   | 'TranscriptEntry'
   | 'TranscriptChild'
-  | 'TranscriptNode';
+  | 'TranscriptNode'
+  | 'ChunkManifest'
+  | 'ChunkBlock'
+  | 'ChunkPieceEntry'
+  | 'ChunkBlockEntry';
 
 export interface OffsetField {
   readonly record: RecordName;
@@ -112,6 +118,28 @@ function offsetField(
 
 /** The table, by name, so the copier asks for the rule of the field it is remapping. */
 export const OFFSET = {
+  chunkBlocks: offsetField(
+    'ChunkManifest',
+    'blocksRoot',
+    'TNODE',
+    'copyNode',
+    true,
+  ),
+  chunkMeta: offsetField('ChunkManifest', 'metaRef', 'VALUE', 'copyRecord'),
+  blockPieces: offsetField(
+    'ChunkBlock',
+    'piecesRoot',
+    'TNODE',
+    'copyNode',
+    true,
+  ),
+  blockDescriptor: offsetField(
+    'ChunkBlockEntry',
+    'rowRef',
+    'VALUE',
+    'copyRecord',
+  ),
+  pieceRecord: offsetField('ChunkPieceEntry', 'rowRef', 'PIECE', 'copyRecord'),
   transcriptRoot: offsetField(
     'TranscriptHead',
     'root',
@@ -382,6 +410,7 @@ const ROW_HEADER: Record<keyof RowHeader, FieldDecl> = {
   parentEndpoint: 'hash',
   blocks: 'nested',
   ids: 'nested',
+  chunk: 'nested',
 };
 
 /**
@@ -389,6 +418,20 @@ const ROW_HEADER: Record<keyof RowHeader, FieldDecl> = {
  * either a declared offset field (a member of `OFFSET_FIELDS`) or plain.
  */
 export const RECORD_FIELDS: Record<RecordName, Record<string, FieldDecl>> = {
+  ChunkManifest: {
+    transcriptId: 'sequence',
+    blocksRoot: OFFSET.chunkBlocks,
+    metaRef: OFFSET.chunkMeta,
+    blockCount: 'count',
+  } satisfies Record<keyof ChunkManifest, FieldDecl>,
+  ChunkBlock: {
+    piecesRoot: OFFSET.blockPieces,
+    length: 'size',
+    type: 'code',
+    ended: 'flags',
+  } satisfies Record<keyof ChunkBlock, FieldDecl>,
+  ChunkPieceEntry: { rowRef: OFFSET.pieceRecord },
+  ChunkBlockEntry: { rowRef: OFFSET.blockDescriptor },
   TranscriptHead: {
     root: OFFSET.transcriptRoot,
     count: 'count',

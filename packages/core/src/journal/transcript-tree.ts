@@ -9,7 +9,19 @@ import type { RecordAccess } from './recordAccess.js';
 import { RECORD_KIND } from './recordKinds.js';
 export const TRANSCRIPT_NODE_KIND = RECORD_KIND.TNODE;
 export const TRANSCRIPT_FANOUT = 32;
-export type TranscriptTreeMode = 'transcript' | 'membership';
+export type TranscriptTreeMode =
+  | 'transcript'
+  | 'blocks'
+  | 'pieces'
+  | 'membership'
+  | 'open';
+const MODE_CODES = {
+  transcript: 0,
+  blocks: 1,
+  pieces: 2,
+  membership: 3,
+  open: 4,
+};
 export interface TranscriptEntry {
   readonly transcriptId: bigint;
   readonly rowRef: number;
@@ -41,7 +53,7 @@ export function encodeTranscriptNode(node: TranscriptNode): Uint8Array {
     throw new JournalFormatError('Invalid transcript fanout');
   const bytes = new Uint8Array(8 + count * (node.level === 0 ? 64 : 32));
   const view = viewOf(bytes);
-  view.setUint8(0, node.mode === 'transcript' ? 0 : 3);
+  view.setUint8(0, MODE_CODES[node.mode]);
   view.setUint8(1, node.level);
   view.setUint16(2, count, true);
   node.entries.forEach((entry, index) =>
@@ -94,7 +106,7 @@ export function decodeTranscriptNode(
   const view = viewOf(bytes);
   const level = view.getUint8(1);
   const count = view.getUint16(2, true);
-  const modeCode = mode === 'transcript' ? 0 : 3;
+  const modeCode = MODE_CODES[mode];
   const expectedSize = 8 + count * (level === 0 ? 64 : 32);
   if (
     view.getUint8(0) !== modeCode ||

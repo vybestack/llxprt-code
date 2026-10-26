@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { decodeRowHeader } from '../../rowRecord.js';
+import { decodeChunkBlock } from '../../chunk-row.js';
 import { expect } from 'bun:test';
 import { readValueBody } from '../../mapEntries.js';
 import {
@@ -30,6 +32,7 @@ import { readVersionAt } from '../../trailerAccess.js';
 import type { Version } from '../../version.js';
 
 const KIND_OF: Record<PointsAt, number> = {
+  PIECE: RECORD_KIND.PIECE,
   TNODE: RECORD_KIND.TNODE,
   ROW: RECORD_KIND.ROW,
   RTNODE: RECORD_KIND.RTNODE,
@@ -163,6 +166,7 @@ export class OffsetAudit {
     }
     for (const entry of node.entries) {
       await this.check(OFFSET.rowTreeRecord, entry.recordOffset, offset);
+      await this.walkChunkRow(entry.recordOffset);
       for (const ref of entry.lensRef) {
         if (ref !== 0) await this.check(OFFSET.rowTreeLens, ref, offset);
       }
@@ -223,6 +227,16 @@ export class OffsetAudit {
         await this.check(OFFSET.transcriptRoot, value.root, offset);
         await this.walkTranscript(value.root, 'transcript');
       }
+      if (value.openRoot !== 0) {
+        await this.check(OFFSET.transcriptOpen, value.openRoot, offset);
+        await this.walkTranscript(value.openRoot, 'open');
+      }
+    } else if (key === 'recording:block') {
+      const block = decodeChunkBlock(await readValueBody(this.access, head));
+      if (block.piecesRoot !== 0) {
+        await this.check(OFFSET.blockPieces, block.piecesRoot, offset);
+        await this.walkTranscript(block.piecesRoot, 'pieces');
+      }
     } else if (key.startsWith('member:')) {
       const value = decodeMembership(await readValueBody(this.access, head));
       if (value.rowRef !== 0)
@@ -246,8 +260,14 @@ export class OffsetAudit {
       await this.walkTranscript(child.ref, mode);
     }
     for (const entry of node.entries) {
-      if (entry.rowRef !== 0)
-        await this.check(OFFSET.transcriptRow, entry.rowRef, offset);
+      if (entry.rowRef !== 0) {
+        let spec: OffsetField = OFFSET.transcriptRow;
+        if (mode === 'pieces') spec = OFFSET.pieceRecord;
+        else if (mode === 'blocks') spec = OFFSET.blockDescriptor;
+        await this.check(spec, entry.rowRef, offset);
+        if (mode === 'blocks') await this.walkTranscriptValue(entry.rowRef);
+        else if (mode !== 'pieces') await this.walkChunkRow(entry.rowRef);
+      }
       if (entry.attemptRef !== 0)
         await this.check(OFFSET.transcriptAttempt, entry.attemptRef, offset);
       if (entry.presentationRef !== 0)
@@ -256,6 +276,17 @@ export class OffsetAudit {
           entry.presentationRef,
           offset,
         );
+    }
+  }
+
+  private async walkChunkRow(ref: number): Promise<void> {
+    const head = await this.access.readRecordHead(ref, 'ROW');
+    const row = decodeRowHeader(head.kindHeader);
+    if (row.chunk === undefined) return;
+    await this.check(OFFSET.chunkMeta, row.chunk.metaRef, ref);
+    if (row.chunk.blocksRoot !== 0) {
+      await this.check(OFFSET.chunkBlocks, row.chunk.blocksRoot, ref);
+      await this.walkTranscript(row.chunk.blocksRoot, 'blocks');
     }
   }
 

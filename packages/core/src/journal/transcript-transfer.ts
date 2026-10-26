@@ -23,12 +23,18 @@ import {
 async function copyEntry(
   copier: GroupCopier,
   entry: TranscriptEntry,
+  mode: TranscriptTreeMode,
 ): Promise<TranscriptEntry> {
   const copy = (spec: OffsetField, ref: number): Promise<number> =>
     remapOffset(spec, ref, (old) => copier.copyRecord(old, spec.points));
+  let rowRef: number;
+  if (mode === 'pieces') rowRef = await copy(OFFSET.pieceRecord, entry.rowRef);
+  else if (mode === 'blocks')
+    rowRef = await copy(OFFSET.blockDescriptor, entry.rowRef);
+  else rowRef = await copy(OFFSET.transcriptRow, entry.rowRef);
   return {
     ...entry,
-    rowRef: await copy(OFFSET.transcriptRow, entry.rowRef),
+    rowRef,
     attemptRef: await copy(OFFSET.transcriptAttempt, entry.attemptRef),
     presentationRef: await copy(
       OFFSET.transcriptPresentation,
@@ -62,7 +68,7 @@ export async function copyTranscriptTree(
   const entries: TranscriptEntry[] = [];
   const children: TranscriptChild[] = [];
   for (const entry of node.entries)
-    entries.push(await copyEntry(copier, entry));
+    entries.push(await copyEntry(copier, entry, mode));
   for (const child of node.children) {
     const copied = await copyTranscriptTree(copier, child.ref, mode);
     children.push({ ...child, ref: copied.ref, maxRowRef: copied.maxRowRef });
@@ -109,7 +115,11 @@ export async function copyTranscriptValue(
       value.root === 0
         ? 0
         : (await copyTranscriptTree(copier, value.root, 'transcript')).ref;
-    bytes = encodeTranscriptHead({ ...value, root });
+    const openRoot =
+      value.openRoot === 0
+        ? 0
+        : (await copyTranscriptTree(copier, value.openRoot, 'open')).ref;
+    bytes = encodeTranscriptHead({ ...value, root, openRoot });
   } else {
     const value = decodeMembership(body);
     const rowRef = await remapOffset(

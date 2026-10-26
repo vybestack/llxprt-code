@@ -8,6 +8,7 @@ export const RECORD_KIND = {
   LENS: 0x04,
   VALUE: 0x05,
   EVENT: 0x06,
+  PIECE: 0x07,
   TNODE: 0x08,
   TRAILER: 0x7f,
 } as const;

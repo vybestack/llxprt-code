@@ -1,4 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  encodeManifest,
+  decodeManifest,
+  type ChunkManifest,
+} from './chunk-row.js';
 import { createHash } from 'node:crypto';
 import {
   assertAllZero,
@@ -112,6 +117,7 @@ export interface RowIdTuple {
 
 /** The kind header of a `ROW` record. Block and id counts are the array lengths. */
 export interface RowHeader {
+  readonly chunk?: ChunkManifest;
   readonly label: bigint;
   readonly owner: number;
   readonly speaker: number;
@@ -245,7 +251,13 @@ export function encodeRowHeader(row: RowHeader): Uint8Array {
     encodeIdTuple(bytes, view, base, tuple);
     base += ID_TUPLE_BYTES;
   }
-  return bytes;
+  if (row.chunk === undefined) return bytes;
+  bytes[13] = 1;
+  const manifest = encodeManifest(row.chunk);
+  const result = new Uint8Array(bytes.length + manifest.length);
+  result.set(bytes);
+  result.set(manifest, bytes.length);
+  return result;
 }
 
 function decodeBlockEntry(view: DataView, base: number): RowBlockEntry {
@@ -284,17 +296,24 @@ export function decodeRowHeader(bytes: Uint8Array): RowHeader {
   const view = viewOf(bytes);
   const blockCount = view.getUint32(FIXED.blockCount.offset, true);
   const idCount = view.getUint32(FIXED.idCount.offset, true);
-  if (bytes.length !== rowHeaderBytes(blockCount, idCount)) {
+  const chunked = view.getUint8(13) === 1;
+  if (chunked && bytes.length !== rowHeaderBytes(blockCount, idCount) + 32)
+    throw new JournalFormatError('Invalid chunk ROW reserved tag');
+  if (
+    bytes.length !==
+    rowHeaderBytes(blockCount, idCount) + (chunked ? 32 : 0)
+  ) {
     throw new JournalFormatError(
       `Row header of ${bytes.length} bytes does not match ${blockCount} blocks and ${idCount} ids (${rowHeaderBytes(blockCount, idCount)} bytes)`,
     );
   }
-  assertAllZero(
-    bytes,
-    FIXED.reserved.offset,
-    FIXED.reserved.offset + 1,
-    'Row header reserved byte',
-  );
+  if (!chunked)
+    assertAllZero(
+      bytes,
+      FIXED.reserved.offset,
+      FIXED.reserved.offset + 1,
+      'Row header reserved byte',
+    );
   const speaker = view.getUint8(FIXED.speaker.offset);
   if (speaker > ROW_SPEAKER.tool) {
     throw new JournalFormatError(`Row speaker ${speaker} is not 0, 1 or 2`);
@@ -313,6 +332,9 @@ export function decodeRowHeader(bytes: Uint8Array): RowHeader {
     ids.push(decodeIdTuple(bytes, view, base));
   }
   return {
+    ...(chunked
+      ? { chunk: decodeManifest(bytes.subarray(bytes.length - 32)) }
+      : {}),
     label: getU64Big(view, FIXED.label.offset),
     owner: view.getUint32(FIXED.owner.offset, true),
     speaker,
@@ -339,6 +361,11 @@ export function decodeRowHeader(bytes: Uint8Array): RowHeader {
  * that no block starts inside the two pieces before it.
  */
 export function validateRowAgainstBody(row: RowHeader, bodyLen: number): void {
+  if (row.chunk !== undefined) {
+    if (bodyLen !== 0)
+      throw new JournalFormatError('Chunk manifest has a body');
+    return;
+  }
   const blocksStart = row.idsLen + row.metaLen + 2 * ROW_PIECE_CRC_BYTES;
   if (blocksStart > bodyLen) {
     throw new JournalFormatError(

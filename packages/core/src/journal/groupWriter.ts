@@ -199,8 +199,9 @@ export class JournalGroupWriter {
     build: (
       appender: VectoredRecordAppender,
     ) => Promise<TrailerState | undefined>,
+    flushTrailer = false,
   ): Promise<CommitAck | undefined> {
-    const turn = this.queue.then(() => this.runGroup(build));
+    const turn = this.queue.then(() => this.runGroup(build, flushTrailer));
     this.queue = turn.then(noop, noop);
     return turn;
   }
@@ -280,6 +281,7 @@ export class JournalGroupWriter {
     build: (
       appender: VectoredRecordAppender,
     ) => Promise<TrailerState | undefined>,
+    flushTrailer: boolean,
   ): Promise<CommitAck | undefined> {
     if (this.closed) throw new Error('The journal writer is closed');
     if (this.failure !== undefined) {
@@ -291,7 +293,7 @@ export class JournalGroupWriter {
     const appender = new VectoredRecordAppender(
       this.handle,
       startOffset,
-      undefined,
+      flushTrailer ? 16 * 1024 : undefined,
       {
         position: () => this.writeOffset,
         reserve: (bytes) => this.reserve(bytes),
@@ -309,6 +311,7 @@ export class JournalGroupWriter {
       const trailer = this.buildTrailer(state, selfOffset);
       const record = encodeTrailerRecord(trailer);
       await this.writeRecordsFlushThenTrailer(appender, record, selfOffset);
+      if (flushTrailer) this.dependencies.flush(this.handle.fd);
       return this.acknowledge(trailer);
     } catch (error) {
       if (error instanceof JournalInputError) {

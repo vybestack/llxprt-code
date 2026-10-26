@@ -1,4 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  decodeManifest,
+  encodeManifest,
+  decodeChunkBlock,
+  encodeChunkBlock,
+} from './chunk-row.js';
 import { describe, expect, it } from 'bun:test';
 import {
   decodeTranscriptHead,
@@ -47,7 +53,7 @@ import { SeededRandom } from './__tests__/support/seededRandom.js';
 /** The record kinds each rule can apply to. */
 const RULE_TARGETS: Record<OffsetRule, readonly PointsAt[]> = {
   copyNode: ['RTNODE', 'ITNODE', 'TNODE'],
-  copyRecord: ['ROW', 'LENS', 'VALUE'],
+  copyRecord: ['ROW', 'LENS', 'VALUE', 'PIECE'],
   lastRow: ['ROW'],
   ownTrailer: ['TRAILER'],
   retainedTrailer: ['TRAILER'],
@@ -140,6 +146,23 @@ function observedFields(): Record<string, string[]> {
     }),
   );
   return {
+    ChunkManifest: KEYS(
+      decodeManifest(
+        encodeManifest({
+          transcriptId: 1n,
+          blocksRoot: 2,
+          metaRef: 3,
+          blockCount: 4,
+        }),
+      ),
+    ),
+    ChunkBlock: KEYS(
+      decodeChunkBlock(
+        encodeChunkBlock({ piecesRoot: 2, length: 3, type: 0, ended: true }),
+      ),
+    ),
+    ChunkPieceEntry: ['rowRef'],
+    ChunkBlockEntry: ['rowRef'],
     TranscriptHead: KEYS(
       decodeTranscriptHead(
         encodeTranscriptHead({

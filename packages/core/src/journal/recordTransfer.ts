@@ -19,6 +19,7 @@ export interface CopyStats {
 export function emptyCopyStats(): CopyStats {
   return {
     copied: {
+      PIECE: 0,
       TNODE: 0,
       ROW: 0,
       RTNODE: 0,
@@ -35,6 +36,7 @@ export function emptyCopyStats(): CopyStats {
 /** The record kinds that are copied whole, byte for byte, and the kind each is checked to be. */
 const WHOLE_RECORD_KIND = {
   ROW: RECORD_KIND.ROW,
+  PIECE: RECORD_KIND.PIECE,
   LENS: RECORD_KIND.LENS,
   VALUE: RECORD_KIND.VALUE,
 } as const;

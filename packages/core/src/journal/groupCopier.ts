@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { copyChunkRow, copyChunkDescriptor } from './chunk-transfer.js';
 import {
   readTranscriptNode,
   type TranscriptTreeMode,
@@ -136,7 +137,13 @@ export class GroupCopier {
     if (earlier !== undefined) return earlier;
     const head =
       knownHead ?? (await readSourceHead(this.source, oldOffset, points));
+    if (points === 'ROW') {
+      const chunk = await copyChunkRow(this, head);
+      if (chunk !== undefined) return chunk;
+    }
     if (points === 'VALUE') {
+      const descriptor = await copyChunkDescriptor(this, head);
+      if (descriptor !== undefined) return descriptor;
       const transcript = await copyTranscriptValue(this, oldOffset, head);
       if (transcript !== undefined) return transcript;
     }

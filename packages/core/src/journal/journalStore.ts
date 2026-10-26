@@ -1,4 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  recordingMutations,
+  interruptRecordingOrphans,
+} from './store-recording.js';
+import { compactStoreFile } from './store-compaction-run.js';
+import { openStoreIdFacts } from './store-id-facts.js';
 import { CommittedIdNodes } from './committed-id-nodes.js';
 import { writtenLabelsOf, type SpineEntry } from './journal-store-state.js';
 import { JournalAdmissions } from './row-admission.js';
@@ -37,9 +43,8 @@ import {
   rollbackEffect,
   type CommitEffectFactory,
 } from './commitEffect.js';
-import { COMPACTION_REARM_BYTES, removeStaleCompaction } from './compaction.js';
+import { removeStaleCompaction } from './compaction.js';
 import {
-  CompactionSwap,
   realFileOperations,
   swapInUnlinkedCandidate,
   type FileOperations,
@@ -58,7 +63,6 @@ import type { GroupPlan, PlanContext } from './groupPlanTypes.js';
 import type { CommitAck, JournalGroupWriter } from './groupWriter.js';
 import type { IdFactDeps } from './idFactQueries.js';
 import { BoundedIdNodeCache, type IdNodeCache } from './idTrieCache.js';
-import { IdTrieReader } from './idTrieReader.js';
 import {
   createJournal,
   createSynchronousJournal,
@@ -74,7 +78,7 @@ import {
 } from './recordAccess.js';
 import { PinLease, PinnedRead } from './pinLease.js';
 import { JournalMediaPins } from './journalMediaPins.js';
-import { PinnedIdFacts } from './pinnedIdFacts.js';
+import type { PinnedIdFacts } from './pinnedIdFacts.js';
 import type { RowEntry } from './rowEntry.js';
 import type { RightSpine, RowTreeAlgebra } from './rowTreeBuilder.js';
 import {
@@ -92,7 +96,6 @@ import { readVersionAt } from './trailerAccess.js';
 import { versionOf, type Version } from './version.js';
 import { VersionSnapshot } from './versionSnapshot.js';
 import {
-  writeCompactionCandidate,
   writeUnlinkedCompactionCandidate,
   transcriptCompactionDue,
 } from './storeCompaction.js';
@@ -302,6 +305,7 @@ export class JournalStore {
       await removeStaleCompaction(path);
       const { writer } = await openJournalForOwner(path, deps.journal);
       const store = new JournalStore(path, writer, deps, false, release);
+      await interruptRecordingOrphans(store, () => store.requireAccess());
       store.tail = store.compactWhenIdle();
       return store;
     } catch (error) {
@@ -335,6 +339,25 @@ export class JournalStore {
   commitDetailed(edits: readonly VersionEdit[]): Promise<CommittedGroup> {
     return this.enqueueCommit(() => this.runCommit(edits));
   }
+
+  readonly mutateRecording = recordingMutations({
+    enqueue: (run) => this.enqueueCommit(run),
+    writer: () => this.writer,
+    context: () => this.buildContext(),
+    installed: (result) => {
+      const trailer = this.writer.published?.trailer;
+      this.install(trailer);
+      if (trailer !== undefined)
+        this.chain = result.built.chainBase.push(trailer.selfOffset);
+      if (result.built.spine !== undefined && trailer !== undefined)
+        this.spineEntry = {
+          rowRoot: trailer.rowRoot,
+          spine: result.built.spine,
+        };
+      this.metaCache = this.makeCache();
+      this.stateCache = this.makeCache();
+    },
+  });
 
   private async enqueueCommit<T>(run: () => Promise<T>): Promise<T> {
     if (this.closing) throw new Error('The journal store is closed');
@@ -493,21 +516,10 @@ export class JournalStore {
 
   /** Id facts of the published version; close them when the queries are done (they hold a pin). */
   async idFacts(): Promise<PinnedIdFacts> {
-    const read = await this.openRead();
-    const root = read.version?.roots.idRoot ?? 0;
-    const reader =
-      read.version === undefined
-        ? undefined
-        : new IdTrieReader(read.access, this.idCache);
-    return new PinnedIdFacts(
-      {
-        get: async (hash) => {
-          read.requireOpen();
-          return reader === undefined ? undefined : reader.lookup(root, hash);
-        },
-      },
+    return openStoreIdFacts(
+      await this.openRead(),
+      this.idCache,
       this.deps.idDeps,
-      read,
     );
   }
 
@@ -642,43 +654,20 @@ export class JournalStore {
     });
   }
 
-  private async compactOnce(): Promise<SwapOutcome> {
-    const published = this.requireVersion();
-    if (this.unlinked) {
-      const candidate = await writeUnlinkedCompactionCandidate(
-        this.path,
-        this.requireAccess(),
-        published,
-        this.deps.journal,
-        this.deps.idDeps.hasher,
-      );
-      const swapped = await swapInUnlinkedCandidate(
-        this.writer,
-        this.fileOperations,
-        candidate,
-      );
-      this.restartOnNewFile();
-      return swapped;
-    }
-    const candidate = await writeCompactionCandidate(
-      this.path,
-      this.requireAccess(),
-      published,
-      this.deps.journal,
-      this.deps.idDeps.hasher,
-      this.fileOperations,
-    );
-    const outcome = await new CompactionSwap(
-      this.writer,
-      this.path,
-      this.fileOperations,
-    ).run(candidate);
-    if (outcome === 'refused') {
-      this.rearmAt = published.durableEnd + COMPACTION_REARM_BYTES;
-      return outcome;
-    }
-    this.restartOnNewFile();
-    return outcome;
+  private compactOnce(): Promise<SwapOutcome> {
+    return compactStoreFile({
+      path: this.path,
+      unlinked: this.unlinked,
+      writer: this.writer,
+      access: this.requireAccess(),
+      version: this.requireVersion(),
+      deps: this.deps,
+      fileOperations: this.fileOperations,
+      restart: () => this.restartOnNewFile(),
+      rearm: (value) => {
+        this.rearmAt = value;
+      },
+    });
   }
 
   /** Every offset a cache or a chain holds belongs to the old file. */

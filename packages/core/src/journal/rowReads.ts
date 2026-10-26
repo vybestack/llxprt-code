@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { chunkValue, hydrateChunkHeader, readChunkBlock } from './chunk-row.js';
 import { JournalFormatError } from './errors.js';
 import type { RecordAccess } from './recordAccess.js';
 import { RECORD_KIND } from './recordKinds.js';
@@ -45,13 +46,17 @@ export async function readRowIds(
       `Record at offset ${entry.recordOffset} is not a row (kind ${head.kind})`,
     );
   }
-  const header = decodeRowHeader(head.kindHeader);
+  const header = await hydrateChunkHeader(
+    access,
+    decodeRowHeader(head.kindHeader),
+  );
   if (entry.transcriptId === 0n && header.label !== entry.label) {
     throw new JournalFormatError(
       `Row at offset ${entry.recordOffset} has label ${header.label}, its entry says ${entry.label}`,
     );
   }
   validateRowAgainstBody(header, head.bodyLen);
+  if (header.chunk !== undefined) return { head, header, rawIds: [] };
   const withCrc = await idPieceOf(
     access,
     head,
@@ -139,11 +144,25 @@ export async function readStoredRow(
       `Record at offset ${entry.recordOffset} is not a row (kind ${head.kind})`,
     );
   }
-  const header = decodeRowHeader(head.kindHeader);
+  const header = await hydrateChunkHeader(
+    access,
+    decodeRowHeader(head.kindHeader),
+  );
   if (header.label !== entry.label) {
     throw new JournalFormatError(
       `Row at offset ${entry.recordOffset} has label ${header.label}, its entry says ${entry.label}`,
     );
+  }
+  if (header.chunk !== undefined) {
+    const blocks: Uint8Array[] = [];
+    for (let ordinal = 0; ordinal < header.chunk.blockCount; ordinal++)
+      blocks.push(await readChunkBlock(access, header.chunk, ordinal));
+    return {
+      header,
+      rawIds: [],
+      meta: await chunkValue(access, header.chunk.metaRef),
+      blocks,
+    };
   }
   const body = await readBody(access, head);
   return storedRowFromBody(access, head, header, body);
