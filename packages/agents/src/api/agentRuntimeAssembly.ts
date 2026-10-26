@@ -1,4 +1,3 @@
-import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import type { SettingsStateSnapshot } from '@vybestack/llxprt-code-settings';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
@@ -6,28 +5,18 @@ import { runCleanupSteps } from '../core/subagent-cleanup.js';
 import type { SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
 import { withChildToolDisplay } from '../session/childToolAssembly.js';
 import { ChildToolDisplay } from '../session/childToolDisplay.js';
-import { ShellJobOwner } from '../session/shell-job-owner.js';
-import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
 import {
   assembleTaskOwner,
   cleanupFailedShellBootstrap,
 } from './agent-shell-assembly.js';
 import {
-  buildFacadeState,
   createStableDisplayCallbacks,
   recordOwnership,
   wrapApprovalHandler,
   type StableDisplayCallbacksHolder,
-  type StableEditorCallbacksHolder,
 } from './agentBootstrap.js';
 import { ForegroundAgentAssembly } from './foreground-agent-assembly.js';
 
-import type { AgentAuth } from './config-types.js';
-import { createAgentAuthState } from './control/authState.js';
-import {
-  assembleSessionAuthentication,
-  clearProviderAuthenticationCache,
-} from './control/session-authentication.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -107,7 +96,12 @@ import {
   assembleHostGitHubBroker,
   type HostGitHubBrokerOwner,
 } from './host-github-broker-owner.js';
-import { assembleWorkspaceFacade } from './agent-facade.js';
+import {
+  assembleShellOwner,
+  publishLeafFacade,
+  type FacadeParsedConfig,
+  type LeafFacadeValues,
+} from './agent-facade.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import {
   assembleOwnedMcpRuntime,
@@ -323,11 +317,8 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
     return trust;
   }
 
-  private async releaseProviders(): Promise<void> {
-    await runCleanupSteps([
-      () => this.release.close(),
-      () => this.inheritedTrustRelease.rollback(),
-    ]);
+  private releaseProviders(): Promise<void> {
+    return releasePreferredProviders(this.release, this.inheritedTrustRelease);
   }
 
   private async acquireProviders(): Promise<void> {
@@ -493,9 +484,7 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
   }
 
   async #acquireFacade(
-    parsed: Parameters<typeof buildFacadeState>[0] & {
-      readonly auth?: AgentAuth;
-    },
+    parsed: FacadeParsedConfig,
     baseUrl: string | undefined,
     handles: AgentSchedulerHandle[],
     scheduler: SchedulerConstruction | undefined,
@@ -503,9 +492,7 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
     if (this.preferredSessionClient === undefined)
       throw new Error('Preferred Agent client was not acquired');
     const tasks = assembleTaskOwner(this.preferredSettings, undefined);
-    const shell = new ShellJobOwner(() =>
-      resolveShellJobSettings(this.preferredSettings),
-    );
+    const shell = assembleShellOwner(this.preferredSettings);
     const child = new ChildToolDisplay();
     const display: StableDisplayCallbacksHolder = {};
     try {
@@ -525,7 +512,8 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
         this.onApproval ? wrapApprovalHandler(this.onApproval) : undefined,
         createStableDisplayCallbacks(editors, display),
       );
-      return this.#constructFacade(
+      this.preferredSessionClient.initializeConversation();
+      const construction = {
         parsed,
         baseUrl,
         handles,
@@ -534,82 +522,67 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
         child,
         editors,
         display,
+      };
+      return publishLeafFacade(
+        this.mcpRuntime,
+        this.config,
+        this.preferredSessionClient,
+        this.settingsOwner,
+        this.preferredMediaOwner,
+        this.preferredSettings,
+        this.manager,
+        this.oauth,
+        construction,
+        facadeInputsForPreferred(
+          this.mcpRuntime,
+          this.release,
+          this.inheritedTrustRelease,
+          this.runtimeId,
+          this.preferredOAuthPrompt,
+          handles,
+        ),
       );
     } catch (primary) {
       return cleanupFailedShellBootstrap(primary, tasks, shell);
     }
   }
-  #authentication(): Agent['authentication'] {
-    return assembleSessionAuthentication(this.oauth, (provider) =>
-      clearProviderAuthenticationCache(
-        this.manager.getProviderByName(provider),
-      ),
-    );
-  }
-  #constructFacade(
-    parsed: Parameters<typeof buildFacadeState>[0] & {
-      readonly auth?: AgentAuth;
-    },
-    baseUrl: string | undefined,
-    handles: AgentSchedulerHandle[],
-    tasks: TaskLaunchOwner,
-    shell: ShellJobOwner,
-    child: ChildToolDisplay,
-    editors: StableEditorCallbacksHolder,
-    display: StableDisplayCallbacksHolder,
-  ): Agent {
-    if (this.preferredSessionClient === undefined)
-      throw new Error('Preferred Agent client was not acquired');
-    const runtimeState = buildFacadeState(parsed, baseUrl, this.runtimeId);
-    const ownership = recordOwnership({
-      runtimeHandle: { cleanup: () => this.releaseProviders() },
+}
+
+async function releasePreferredProviders(
+  release: AcquisitionRelease,
+  inheritedTrustRelease: AcquisitionRelease,
+): Promise<void> {
+  await runCleanupSteps([
+    () => release.close(),
+    () => inheritedTrustRelease.rollback(),
+  ]);
+}
+
+function facadeInputsForPreferred(
+  runtime: McpRuntimeOwner,
+  release: AcquisitionRelease,
+  inheritedTrustRelease: AcquisitionRelease,
+  runtimeId: string,
+  onOAuthPrompt: unknown,
+  handles: AgentSchedulerHandle[],
+): LeafFacadeValues {
+  const closeRuntime = (): Promise<void> =>
+    releasePreferredProviders(release, inheritedTrustRelease);
+  return {
+    runtimeId,
+    readRuntimeKind: () => 'agent',
+    ownership: recordOwnership({
+      runtimeHandle: { cleanup: closeRuntime },
       injectedSchedulerHandles: handles,
       configOwnership: 'agent',
-      disposeMcpRuntime: () => this.mcpRuntime.dispose(),
-    });
-    this.preferredSessionClient.initializeConversation();
-    const auth = createAgentAuthState();
-    this.facadeSettingsOwner = this.settingsOwner;
-    this.facadeSessionOwner = this.preferredSessionClient;
-    this.facadeWorkspaceSkills = this.mcpRuntime.workspaceSkills.operations;
-    this.facadeMediaOwner = this.preferredMediaOwner;
-    this.facadeTaskOwner = tasks;
-    this.facadeShellOwner = shell;
-    const controls = assembleWorkspaceFacade(
-      this.mcpRuntime,
-      this.config,
-      this.preferredSessionClient,
-      auth,
-      editors,
-    );
-    this.workspace = controls.workspace;
-    this.ide = controls.ide;
-    this.lsp = controls.lsp;
-    this.awaitMcpDiscovery = (...args) =>
-      this.mcpRuntime.awaitDiscovery(...args);
-    this.closeMcpAdmission = (...args) =>
-      this.mcpRuntime.closeAdmission(...args);
-    this.mcp = controls.mcp;
-    this.facadeAuthState = auth;
-    this.facadeProviderManager = this.manager;
-    this.facadeOAuth = this.oauth;
-    this.facadeRuntimeKind = () => 'agent';
-    this.facadeSettingsService = this.preferredSettings;
-    this.facadeRuntimeId = this.runtimeId;
-    this.closeRuntime = () => this.releaseProviders();
-
-    this.facadeRuntimeState = runtimeState;
-    this.facadeOwnership = ownership;
-    this.sessionIdentityOwnership = 'config';
-
-    this.facadeEditors = editors;
-    this.facadeDisplay = display;
-    this.onOAuthPrompt = this.preferredOAuthPrompt;
-    this.initialAuth = parsed.auth;
-    this.childDisplay = child;
-    this.authentication = this.#authentication();
-    return this.initializeFacade();
-  }
+      disposeMcpRuntime: () => runtime.dispose(),
+    }),
+    sessionIdentityOwnership: 'config',
+    onOAuthPrompt,
+    closeRuntime,
+    awaitMcpDiscovery: () => runtime.awaitDiscovery(),
+    closeMcpAdmission: () => runtime.closeAdmission(),
+  };
 }
 
 async function rejectPreferredAcquisition(

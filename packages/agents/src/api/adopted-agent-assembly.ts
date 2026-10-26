@@ -5,7 +5,6 @@
  */
 import type { Config } from '@vybestack/llxprt-code-core';
 import { openBrowserSecurely } from '@vybestack/llxprt-code-core';
-import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import {
@@ -31,8 +30,6 @@ import { withChildToolDisplay } from '../session/childToolAssembly.js';
 import { ChildToolDisplay } from '../session/childToolDisplay.js';
 import { cleanupProviderScope } from '../session/session-client-cleanup.js';
 import { type SessionClientOwner } from '../session/session-client-owner.js';
-import { ShellJobOwner } from '../session/shell-job-owner.js';
-import { type TaskLaunchOwner } from '../session/task-launch-owner.js';
 import { releaseAdoptedFileScope } from './adoption-release.js';
 import {
   assembleTaskOwner,
@@ -40,27 +37,24 @@ import {
 } from './agent-shell-assembly.js';
 import { type Agent } from './agent.js';
 import {
-  buildFacadeState,
   createStableDisplayCallbacks,
   generateRuntimeId,
   recordOwnership,
   validateAgentRuntimeId,
   type StableDisplayCallbacksHolder,
-  type StableEditorCallbacksHolder,
 } from './agentBootstrap.js';
 import {
   FromConfigValidatableSchema,
   type AgentAdoptionIntent,
-  type AgentAuth,
   type AgentSchedulerHandle,
 } from './config-types.js';
-import { createAgentAuthState } from './control/authState.js';
-import {
-  assembleSessionAuthentication,
-  clearProviderAuthenticationCache,
-} from './control/session-authentication.js';
 import { resolveSchedulerFactory } from '../session/assembleSchedulerOwner.js';
-import { assembleWorkspaceFacade } from './agent-facade.js';
+import {
+  assembleShellOwner,
+  publishLeafFacade,
+  type FacadeParsedConfig,
+  type LeafFacadeValues,
+} from './agent-facade.js';
 import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
 import { AdoptedSessionAssembly } from './fromConfig-session.js';
 import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
@@ -253,17 +247,13 @@ export abstract class AdoptedAgentAssembly extends AdoptedSessionAssembly {
     );
   }
   async #adoptAcquireFacade(
-    parsed: Parameters<typeof buildFacadeState>[0] & {
-      readonly auth?: AgentAuth;
-    },
+    parsed: FacadeParsedConfig,
     baseUrl: string | undefined,
     handles: AgentSchedulerHandle[],
     scheduler: SchedulerConstruction | undefined,
   ): Promise<Agent> {
     const tasks = assembleTaskOwner(this.adoptSettingsService, undefined);
-    const shell = new ShellJobOwner(() =>
-      resolveShellJobSettings(this.adoptSettingsService),
-    );
+    const shell = assembleShellOwner(this.adoptSettingsService);
     const child = new ChildToolDisplay();
     const display: StableDisplayCallbacksHolder = {};
     try {
@@ -279,88 +269,64 @@ export abstract class AdoptedAgentAssembly extends AdoptedSessionAssembly {
         undefined,
         createStableDisplayCallbacks(editors, display),
       );
-      const runtimeState = buildFacadeState(
+      this.adoptClient.initializeConversation();
+      const construction = {
         parsed,
         baseUrl,
-        this.adoptRuntimeId,
-      );
-      const ownership = recordOwnership({
-        runtimeHandle: { cleanup: () => this.adoptRelease.close() },
-        injectedSchedulerHandles: handles,
-        configOwnership: 'caller',
-        disposeMcpRuntime: () => this.adoptMcp.dispose(),
-      });
-      return this.#adoptConstructFacade(
-        runtimeState,
-        ownership,
-        parsed.auth,
+        handles,
         tasks,
         shell,
         child,
         editors,
         display,
+      };
+      return publishLeafFacade(
+        this.adoptMcp,
+        this.config,
+        this.adoptClient,
+        this.adoptSelectedSettings,
+        this.adoptMedia,
+        this.adoptSettingsService,
+        this.adoptManager,
+        this.adoptOauth,
+        construction,
+        facadeInputsForAdopted(
+          this.adoptMcp,
+          this.adoptRelease,
+          this.adoptRuntimeId,
+          handles,
+        ),
       );
     } catch (primary) {
       return cleanupFailedShellBootstrap(primary, tasks, shell);
     }
   }
-  #adoptConstructFacade(
-    runtimeState: ReturnType<typeof buildFacadeState>,
-    ownership: ReturnType<typeof recordOwnership>,
-    initialAuth: AgentAuth | undefined,
-    tasks: TaskLaunchOwner,
-    shell: ShellJobOwner,
-    child: ChildToolDisplay,
-    editors: StableEditorCallbacksHolder,
-    display: StableDisplayCallbacksHolder,
-  ): Agent {
-    this.adoptClient.initializeConversation();
-    const auth = createAgentAuthState();
-    this.facadeSettingsOwner = this.adoptSelectedSettings;
-    this.facadeSessionOwner = this.adoptClient;
-    this.facadeWorkspaceSkills = this.adoptMcp.workspaceSkills.operations;
-    this.facadeMediaOwner = this.adoptMedia;
-    this.facadeTaskOwner = tasks;
-    this.facadeShellOwner = shell;
-    const controls = assembleWorkspaceFacade(
-      this.adoptMcp,
-      this.config,
-      this.adoptClient,
-      auth,
-      editors,
-    );
-    this.workspace = controls.workspace;
-    this.ide = controls.ide;
-    this.lsp = controls.lsp;
-    this.awaitMcpDiscovery = () => {
+}
+
+function facadeInputsForAdopted(
+  runtime: McpRuntimeOwner,
+  release: AcquisitionRelease,
+  runtimeId: string,
+  handles: AgentSchedulerHandle[],
+): LeafFacadeValues {
+  const closeRuntime = (): Promise<void> => release.close();
+  const ownership = recordOwnership({
+    runtimeHandle: { cleanup: closeRuntime },
+    injectedSchedulerHandles: handles,
+    configOwnership: 'caller',
+    disposeMcpRuntime: () => runtime.dispose(),
+  });
+  return {
+    runtimeId,
+    readRuntimeKind: () => 'agent',
+    ownership,
+    sessionIdentityOwnership: 'facade',
+    onOAuthPrompt: undefined,
+    closeRuntime,
+    awaitMcpDiscovery: () => {
       if (ownership.disposed) throw new Error('MCP facade is closed');
-      return this.adoptMcp.awaitDiscovery();
-    };
-    this.closeMcpAdmission = () => this.adoptMcp.closeAdmission();
-    this.mcp = controls.mcp;
-    this.facadeAuthState = auth;
-    this.facadeProviderManager = this.adoptManager;
-    this.facadeOAuth = this.adoptOauth;
-    this.facadeRuntimeKind = () => 'agent';
-    this.facadeSettingsService = this.adoptSettingsService;
-    this.facadeRuntimeId = this.adoptRuntimeId;
-    this.closeRuntime = () => this.adoptRelease.close();
-
-    this.facadeRuntimeState = runtimeState;
-    this.facadeOwnership = ownership;
-    this.sessionIdentityOwnership = 'facade';
-
-    this.facadeEditors = editors;
-    this.facadeDisplay = display;
-    this.initialAuth = initialAuth;
-    this.childDisplay = child;
-    this.authentication = assembleSessionAuthentication(
-      this.adoptOauth,
-      (provider) =>
-        clearProviderAuthenticationCache(
-          this.adoptManager.getProviderByName(provider),
-        ),
-    );
-    return this.initializeFacade();
-  }
+      return runtime.awaitDiscovery();
+    },
+    closeMcpAdmission: () => runtime.closeAdmission(),
+  };
 }
