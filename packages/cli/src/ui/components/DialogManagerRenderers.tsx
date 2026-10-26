@@ -15,7 +15,8 @@ import type {
  * stay hook-free and trivially testable.
  */
 
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { PermissionsTrustRuntime } from '../commands/permissionsCommandHost.js';
+import type { DynamicToolSettingsSource } from '../../utils/dynamicSettings.js';
 import { Box, Text } from 'ink';
 import { theme } from '../semantic-colors.js';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
@@ -86,6 +87,24 @@ export interface DialogData {
   toolsDialogDisabledTools: string[];
 }
 
+/** Session reads the session-browser dialog makes for its chats directory. */
+export interface SessionBrowserReads {
+  getProjectTempDir(): string;
+  getProjectRoot(): string;
+  getSessionId(): string;
+}
+
+/**
+ * Runtime the store-backed dialogs read: folder trust, the tool registry for
+ * dynamic settings, the session browser's directories, and the working
+ * directory the folder-trust dialog displays.
+ */
+export type StoreDialogRuntime = PermissionsTrustRuntime &
+  DynamicToolSettingsSource &
+  SessionBrowserReads & {
+    getWorkingDir(): string;
+  };
+
 export interface StoreDialogRenderContext {
   readIdeWorkspaceTrust: () => boolean | undefined;
   subscribeIdeWorkspaceTrust: (
@@ -95,7 +114,7 @@ export interface StoreDialogRenderContext {
   uiState: DialogData;
   uiActions: AppCommands;
   settings: LoadedSettings;
-  config: CliUiRuntime;
+  config: StoreDialogRuntime;
   addItem: UseHistoryManagerReturn['addItem'];
 }
 
@@ -416,7 +435,7 @@ export function renderModelsDialog(
  * @plan PLAN-20260214-SESSIONBROWSER.P23
  */
 export function renderSessionBrowserDialog(
-  config: CliUiRuntime,
+  config: SessionBrowserReads,
   commandContext: {
     ui: { pendingItem: unknown };
   },

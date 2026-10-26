@@ -10,7 +10,25 @@ import { selectDialogOpen } from '../stores/dialog/dialogStore.js';
 import React from 'react';
 import { Box, type DOMElement } from 'ink';
 import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { AppHeaderRuntime } from '../components/AppHeader.js';
+import type { StoreDialogRuntime } from '../components/DialogManagerRenderers.js';
+import type { ToolGroupRuntime } from '../components/messages/ToolGroupMessage.js';
+import type { InlineContentRuntime } from './InlineContent.js';
+
+/**
+ * Composition of the ports the layout's regions hand to their children: the
+ * header, the transcript rows, the inline content (composer plus MCP status),
+ * the dialogs, and the footer's directory/debug labels. Nothing here is a
+ * runtime the layout itself reads wholesale; it is assembled at
+ * AppContainerRuntime and forwarded field by field.
+ */
+export type LayoutRuntime = AppHeaderRuntime &
+  ToolGroupRuntime &
+  InlineContentRuntime &
+  StoreDialogRuntime & {
+    getTargetDir(): string;
+    getDebugMode(): boolean;
+  };
 import type { LoadedSettings } from '../../config/settings.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
 import type { SlashCommand } from '../commands/types.js';
@@ -53,7 +71,7 @@ function useHistoryItemDisplayProps(
   readIdeDiffingEnabled: () => boolean | null,
   subscribeIdeDiffing: (listener: () => void) => () => void,
   resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
-  config: CliUiRuntime,
+  config: LayoutRuntime,
   mainAreaWidth: number,
   showTodoPanelSetting: boolean,
   slashCommands: readonly SlashCommand[] | undefined,
@@ -82,7 +100,7 @@ export function useListItems(
   readIdeDiffingEnabled: () => boolean | null,
   subscribeIdeDiffing: (listener: () => void) => () => void,
   resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
-  config: CliUiRuntime,
+  config: LayoutRuntime,
   mainAreaWidth: number,
   staticAreaMaxItemHeight: number,
   slashCommands: readonly SlashCommand[] | undefined,
@@ -137,7 +155,7 @@ export function useStaticItems(
   readIdeDiffingEnabled: () => boolean | null,
   subscribeIdeDiffing: (listener: () => void) => () => void,
   resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
-  config: CliUiRuntime,
+  config: LayoutRuntime,
   settings: LoadedSettings,
   version: string,
   nightly: boolean,
@@ -213,7 +231,7 @@ export function usePendingItems(
   readIdeDiffingEnabled: () => boolean | null,
   subscribeIdeDiffing: (listener: () => void) => () => void,
   resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
-  config: CliUiRuntime,
+  config: LayoutRuntime,
   mainAreaWidth: number,
   constrainHeight: boolean,
   effectiveAvailableHeight: number,
@@ -271,7 +289,7 @@ export function usePendingElement(
   readIdeDiffingEnabled: () => boolean | null,
   subscribeIdeDiffing: (listener: () => void) => () => void,
   resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
-  config: CliUiRuntime,
+  config: LayoutRuntime,
   mainAreaWidth: number,
   constrainHeight: boolean,
   effectiveAvailableHeight: number,
@@ -318,7 +336,7 @@ function useScrollableCenterItems(
   readIdeDiffingEnabled: () => boolean | null,
   subscribeIdeDiffing: (listener: () => void) => () => void,
   resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
-  config: CliUiRuntime,
+  config: LayoutRuntime,
   settings: LoadedSettings,
   version: string,
   nightly: boolean,
@@ -388,7 +406,7 @@ export function useScrollableContent(
   readIdeDiffingEnabled: () => boolean | null,
   subscribeIdeDiffing: (listener: () => void) => () => void,
   resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
-  config: CliUiRuntime,
+  config: LayoutRuntime,
   settings: LoadedSettings,
   version: string,
   nightly: boolean,
@@ -468,7 +486,7 @@ export function useScrollableContent(
 
 export interface FooterProps {
   isTrustedFolder: boolean;
-  config: CliUiRuntime;
+  config: LayoutRuntime;
   settings: LoadedSettings;
   hideFooter: boolean;
   showMemoryUsage: boolean;
@@ -558,7 +576,7 @@ export interface QuittingDisplayProps {
   effectiveAvailableHeight: number;
   terminalWidth: number;
   quittingMessages: HistoryItem[];
-  config: CliUiRuntime;
+  config: LayoutRuntime;
   slashCommands: readonly SlashCommand[] | undefined;
   showTodoPanelSetting: boolean;
 }

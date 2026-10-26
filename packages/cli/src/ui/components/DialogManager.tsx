@@ -11,7 +11,6 @@ import {
   useProviderStatus,
 } from '../contexts/RuntimeContext.js';
 
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { Box } from 'ink';
 import { useCallback, useMemo } from 'react';
 
@@ -28,6 +27,7 @@ import { useModelDialogHandler } from './modelDialogHandler.js';
 import {
   type DialogData,
   type StoreDialogRenderContext,
+  type StoreDialogRuntime,
   renderAuthDialog,
   renderCreateProfileDialog,
   renderEarlyStoreDialog,
@@ -68,7 +68,7 @@ interface DialogManagerProps {
     listener: (trusted: boolean | undefined) => void,
   ) => () => void;
 
-  config: CliUiRuntime;
+  config: StoreDialogRuntime;
   settings: LoadedSettings;
 }
 
@@ -155,7 +155,7 @@ function useTerminalDialogValues() {
 
 function useDialogManagerState(
   addItem: UseHistoryManagerReturn['addItem'],
-  config: CliUiRuntime,
+  config: StoreDialogRuntime,
   uiActions: AppCommands,
   runtimeGetActiveProviderName: GetActiveProviderNameOperation,
 ) {
@@ -471,7 +471,7 @@ function renderDialogBody(
   uiState: DialogData,
   uiActions: AppCommands,
   settings: LoadedSettings,
-  config: CliUiRuntime,
+  config: StoreDialogRuntime,
   addItem: UseHistoryManagerReturn['addItem'],
   state: ReturnType<typeof useDialogManagerState>,
   readIdeWorkspaceTrust: () => boolean | undefined,

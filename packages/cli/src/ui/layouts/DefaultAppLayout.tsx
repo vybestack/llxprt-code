@@ -30,6 +30,7 @@ import {
   useScrollableContent,
   usePendingElement,
   QuittingDisplay,
+  type LayoutRuntime,
   type ScrollableMainContentItem,
 } from './DefaultAppLayoutHelpers.js';
 import {
@@ -38,7 +39,6 @@ import {
   DialogRegion,
   PanelsRegion,
 } from './DefaultAppLayoutRegions.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
 import { themeManager } from '../themes/theme-manager.js';
 
@@ -61,7 +61,7 @@ export interface DefaultAppLayoutProps {
   screenReaderEnabled: boolean;
   disableLoadingPhrases: boolean;
   debugMode: boolean;
-  slashCommandRuntime: CliUiRuntime;
+  slashCommandRuntime: LayoutRuntime;
   settings: LoadedSettings;
   startupWarnings: string[];
   version: string;
