@@ -12,15 +12,31 @@ import {
 } from '../contexts/RuntimeContext.js';
 
 import { KeychainTokenStorage } from '@vybestack/llxprt-code-mcp';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { ApprovalMode } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 
 import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 import type { DiagnosticsCommandReads } from './diagnosticsCommand.js';
 import { appendOAuthTokens } from './diagnosticsTokens.js';
+import type { McpState } from '../cliUiRuntime.js';
+
+/**
+ * The static session/workstation facts /diagnostics prints.
+ */
+export interface DiagnosticsCommandRuntime {
+  getWorkingDir(): string;
+  getDebugMode(): boolean;
+  getApprovalMode(): ApprovalMode;
+  getMcpServers(): ReturnType<McpState['getMcpServers']>;
+  getMcpServerCommand(): string | undefined;
+  getUserMemory(): string;
+  getLlxprtMdFileCount(): number;
+  readFailoverBuckets?(): string[];
+  readCurrentBucket?(): string | undefined;
+}
 
 export function bindDiagnosticsReads(
-  config: CliUiRuntime | null,
+  runtime: DiagnosticsCommandRuntime | null,
   settings: LoadedSettings,
   listTools: DiagnosticsCommandReads['listTools'],
   runtimeApiGetLoadBalancerStats: GetLoadBalancerStatsOperation,
@@ -33,33 +49,33 @@ export function bindDiagnosticsReads(
   readIdeAvailable: () => boolean,
 ): DiagnosticsCommandReads {
   return {
-    isConfigured: config !== null,
+    isConfigured: runtime !== null,
     readSnapshot: () => runtimeApiGetRuntimeDiagnosticsSnapshot(),
     isOAuthAvailable: () => oauth.isAvailable(),
     readSessionBucket: (provider) => oauth.getSessionBucket(provider),
-    readFailoverBuckets: () => config?.readFailoverBuckets?.() ?? [],
-    readCurrentBucket: () => config?.readCurrentBucket?.(),
+    readFailoverBuckets: () => runtime?.readFailoverBuckets?.() ?? [],
+    readCurrentBucket: () => runtime?.readCurrentBucket?.(),
     readProviderName: () =>
       runtimeApiProviderStatus().providerName ?? undefined,
     readLoadBalancerStats: () => runtimeApiGetLoadBalancerStats(),
     readTokenAccounting: () => runtimeApiGetLoadBalancerTokenAccounting(),
     readSessionTokens: () => runtimeApiGetSessionTokenUsage(),
     readStaticInfo: () => {
-      if (!config) throw new Error('Configuration not available');
+      if (!runtime) throw new Error('Configuration not available');
       const { merged } = settings;
       return {
-        workingDirectory: config.getWorkingDir(),
-        debugMode: config.getDebugMode(),
-        approvalMode: config.getApprovalMode(),
+        workingDirectory: runtime.getWorkingDir(),
+        debugMode: runtime.getDebugMode(),
+        approvalMode: runtime.getApprovalMode(),
         theme: merged.ui.theme,
         defaultProfile: merged.defaultProfile,
         sandbox: merged.sandbox,
         ideMode: readIdeMode(),
         ideConnected: readIdeAvailable(),
-        mcpServers: Object.keys(config.getMcpServers() ?? {}),
-        mcpServerCommand: config.getMcpServerCommand(),
-        userMemory: config.getUserMemory(),
-        memoryFileCount: config.getLlxprtMdFileCount(),
+        mcpServers: Object.keys(runtime.getMcpServers() ?? {}),
+        mcpServerCommand: runtime.getMcpServerCommand(),
+        userMemory: runtime.getUserMemory(),
+        memoryFileCount: runtime.getLlxprtMdFileCount(),
         usageStatistics: merged.ui.usageStatisticsEnabled === true,
       };
     },

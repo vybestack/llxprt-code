@@ -5,34 +5,48 @@
  */
 import type { LoadedSettings } from '../../config/settings.js';
 import { SettingScope } from '../../config/settings.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type {
+  TelemetrySettings,
+  RedactionConfig,
+} from '@vybestack/llxprt-code-core';
 import type { LoggingCommandOperations } from './loggingCommand.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+
+/**
+ * Runtime telemetry/logging reads used by /logging.
+ */
+export interface LoggingCommandRuntime {
+  getTelemetrySettings(): TelemetrySettings;
+  updateTelemetrySettings(settings: Partial<TelemetrySettings>): Promise<void>;
+  getConversationLogPath(): string;
+  getRedactionConfig(): RedactionConfig;
+}
+
 export function bindLoggingCommand(
-  config: CliUiRuntime | null,
+  runtime: LoggingCommandRuntime | null,
   settings: LoadedSettings,
   addItem: UseHistoryManagerReturn['addItem'],
 ): LoggingCommandOperations {
   return {
-    isConfigured: config !== null,
+    isConfigured: runtime !== null,
     readTelemetry: () => settings.merged.telemetry,
     writeTelemetry: (value) =>
       settings.setValue(SettingScope.User, 'telemetry', value),
     readRuntimeTelemetry: () => {
-      if (!config) throw new Error('Logging runtime unavailable');
-      return config.getTelemetrySettings();
+      if (!runtime) throw new Error('Logging runtime unavailable');
+      return runtime.getTelemetrySettings();
     },
     updateRuntimeTelemetry: async (value) => {
-      if (!config) throw new Error('Logging runtime unavailable');
-      await config.updateTelemetrySettings(value);
+      if (!runtime) throw new Error('Logging runtime unavailable');
+      await runtime.updateTelemetrySettings(value);
     },
     getConversationLogPath: () => {
-      if (!config) throw new Error('Logging runtime unavailable');
-      return config.getConversationLogPath();
+      if (!runtime) throw new Error('Logging runtime unavailable');
+      return runtime.getConversationLogPath();
     },
     getRedactionConfig: () => {
-      if (!config) throw new Error('Logging runtime unavailable');
-      return config.getRedactionConfig();
+      if (!runtime) throw new Error('Logging runtime unavailable');
+      return runtime.getRedactionConfig();
     },
     addItem,
   };
