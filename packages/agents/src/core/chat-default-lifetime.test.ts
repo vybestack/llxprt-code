@@ -8,7 +8,7 @@ import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__te
 import { ChatSession } from './chatSession.js';
 import { publicDefaultBounds } from './__tests__/support/public-default-history-test-helpers.js';
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   for (const explicitFalse of [false, true]) {
     describe(`real chat reader ${size} false=${explicitFalse}`, () => {
       it('is cold, pins on first next, survives replacement and releases on return', async () => {

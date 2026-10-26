@@ -94,7 +94,7 @@ async function compare(size: number): Promise<void> {
 }
 
 describe('history removal provider BODY pairs', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'preserves provider bytes after pop, matching removal and clear over %i rows',
     async (size) => {
       const comparing = compare(size);

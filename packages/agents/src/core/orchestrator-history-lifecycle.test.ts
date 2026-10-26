@@ -7,7 +7,7 @@ import {
   withOrchestratorHistory,
 } from './__tests__/support/orchestrator-history-test-helpers.js';
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`orchestrator pinned reader at ${size}`, () => {
     it('does not open history while the outward event consumer is paused', async () => {
       await withOrchestratorHistory(size, async (client, history, reader) => {

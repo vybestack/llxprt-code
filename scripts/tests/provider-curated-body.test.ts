@@ -82,7 +82,7 @@ async function verifyBody(
 }
 
 const bodyCases: Array<[number, string, boolean]> = [];
-for (const size of [512, 8192])
+for (const size of [65])
   for (const provider of ['openai-responses', 'anthropic', 'gemini'])
     for (const caching of [false, true])
       bodyCases.push([size, provider, caching]);

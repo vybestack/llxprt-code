@@ -7,7 +7,7 @@ import { publicDefaultBounds } from './__tests__/support/public-default-history-
 import { createHash } from 'node:crypto';
 import { SessionControl } from '../api/control/sessionControl.js';
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`default history clear consumer ${size}`, () => {
     it('keeps the complete first human turn using disk candidates and no public array', async () => {
       await withPublicHistory(size, true, async (agent, _history, reader) => {

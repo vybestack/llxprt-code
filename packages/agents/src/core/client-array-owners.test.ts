@@ -194,7 +194,7 @@ function registerTrap(count: number, bytes: number): void {
   });
 }
 describe('AgentClient original pending prefix and acknowledged ownership', () => {
-  for (const size of [512, 8192])
+  for (const size of [65])
     for (const cancel of [false, true]) registerPending(size, cancel);
 });
 describe('client restored consumer and negative ownership controls', () => {

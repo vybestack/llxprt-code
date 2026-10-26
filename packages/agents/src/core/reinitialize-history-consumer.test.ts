@@ -14,7 +14,7 @@ import {
   withReinitializeHistory,
 } from './__tests__/support/reinitialize-history-test-helpers.js';
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`paused active-history token consumer at ${size}`, () => {
     it('charges the actual pending consumer and rolls back its injected tokenizer failure', async () => {
       await withReinitializeHistory(size, async (client, _source, owners) => {

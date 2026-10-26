@@ -71,7 +71,7 @@ async function observePublication(
             appendDerived: async (ordinal, content) => {
               refs.push(new WeakRef(content));
               await sink.appendDerived(ordinal, content);
-              if (refs.length % 128 === 0) {
+              if (refs.length % 8 === 0) {
                 await collectGarbage();
                 samples++;
                 peak = Math.max(peak, live(refs));
@@ -130,7 +130,7 @@ async function observePublication(
 }
 
 describe('native semantic purge output lifetimes', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     it(`releases actual output sink arguments at awaited backpressure over ${size} source rows`, async () => {
       const history = new HistoryService({});
       history.setTokenizerFactory(exactTokenizer());

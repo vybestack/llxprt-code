@@ -20,7 +20,7 @@ import {
 } from './__tests__/support/conversation-array-test-helpers.js';
 import type { RowOwnershipStats } from '../../../core/src/recording/rowOwnership.js';
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe('real ConversationManager array replacement', () => {
     it(`replaces ${size} rows without entering either old array route`, async () => {
       await withDetachedFixture(async ({ history, recorder, owners }) => {

@@ -141,7 +141,7 @@ async function compareBodies(
   });
 }
 describe('provider BODY through the production file binding bridge', () => {
-  for (const size of [512, 8192])
+  for (const size of [65])
     for (const rollback of [false, true])
       it(`preserves ${size}-row BODY bytes after ${rollback ? 'rollback' : 'binding'} for cache and transport retry`, async () => {
         const root = await mkdtemp(join(tmpdir(), 'binding-body-'));

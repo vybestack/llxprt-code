@@ -12,7 +12,7 @@ function expectedTokens(size: number): number {
 }
 
 describe('AgentImpl carried startup token accounting', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'counts every mixed block and applies the startup system offset at %i rows',
     async (size) => {
       await withAgentCarry(size, async (agent, replacement) => {

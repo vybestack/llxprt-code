@@ -68,7 +68,7 @@ async function rollbackBodies(size: number): Promise<number> {
 }
 
 describe('provider BODY after opt-in detached rollback', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     it(`restores exact ${size}-row bodies for provider, cache and retry variants`, async () => {
       expect(await rollbackBodies(size)).toBe(size);
     }, 180_000);

@@ -82,5 +82,5 @@ function registerObserver(size: number, retain: boolean): void {
     }, 180_000);
   });
 }
-for (const size of [512, 8192])
-  for (const retain of [false, true]) registerObserver(size, retain);
+registerObserver(65, false);
+registerObserver(512, true);

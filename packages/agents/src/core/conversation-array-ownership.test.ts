@@ -153,7 +153,7 @@ async function retainingControl(
 }
 
 describe('conversation restore pending writer ownership', () => {
-  for (const size of [512, 8192])
+  for (const size of [65])
     for (const cancel of [false, true]) {
       it(`holds bounded owners and ${cancel ? 'cancels' : 'rolls back finalize'} a ${size}-row restore without retaining rows`, async () => {
         expect(

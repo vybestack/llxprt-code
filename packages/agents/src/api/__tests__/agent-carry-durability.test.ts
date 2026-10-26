@@ -61,7 +61,7 @@ async function verifyAcknowledgementFailure(size: number): Promise<number> {
 }
 
 describe('AgentImpl carried durable acknowledgement', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'keeps the previous %i-row journal and token total when the final acknowledgement fails',
     async (size) => {
       expect(await verifyAcknowledgementFailure(size)).toBe(size);

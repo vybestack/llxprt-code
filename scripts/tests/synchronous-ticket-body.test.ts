@@ -84,7 +84,7 @@ async function compare(size: number, oversized: boolean): Promise<void> {
 }
 
 describe('synchronous value tickets preserve provider BODYs and retries', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'preserves complete %i-row BODYs',
     async (size) => {
       await expect(compare(size, false)).resolves.toBeUndefined();

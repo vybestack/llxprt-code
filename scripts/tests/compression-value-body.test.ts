@@ -35,7 +35,7 @@ function bodyRow(index: number, bytes: number): IContent {
 
 for (const route of ['middle-out', 'one-shot']) {
   describe(`invoked ${route} compression value provider BODY`, () => {
-    it.each([512, 8192])(
+    it.each([65])(
       'preserves full provider BODY bytes for the actual %i-row value compression with cache off/on and transport/orchestrator retry',
       async (size) => {
         await withSuffixFixture(

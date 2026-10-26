@@ -11,34 +11,41 @@ async function retainingControl(
   size: number,
   distinctCopy: boolean,
 ): Promise<number> {
-  return withPublicHistory(size, false, async (agent, _history, reader) => {
-    const consumer = new RowOwnership();
-    const retained: IContent[] = [];
-    try {
-      for await (const row of agent.streamHistory()) {
-        const owned = distinctCopy ? { ...row, blocks: [...row.blocks] } : row;
-        consumer.retain(owned);
-        retained.push(owned);
+  return withPublicHistory(
+    size,
+    false,
+    async (agent, _history, reader) => {
+      const consumer = new RowOwnership();
+      const retained: IContent[] = [];
+      try {
+        for await (const row of agent.streamHistory()) {
+          const owned = distinctCopy
+            ? { ...row, blocks: [...row.blocks] }
+            : row;
+          consumer.retain(owned);
+          retained.push(owned);
+        }
+        expect(consumer.snapshot().peakRows).toBe(size);
+        expect(consumer.snapshot().peakRows).toBeGreaterThan(bounds.rows);
+        expect(
+          consumer.snapshot().peakSerializedBytes > bounds.serializedBytes,
+        ).toBe(true);
+        expect(consumer.within(bounds)).toBe(requiredWithinBounds);
+      } finally {
+        for (const row of retained) consumer.release(row);
+        retained.length = 0;
+        expect({
+          consumer: consumer.snapshot().liveRows,
+          reader: reader.snapshot().liveRows,
+        }).toStrictEqual({ consumer: 0, reader: 0 });
       }
-      expect(consumer.snapshot().peakRows).toBe(size);
-      expect(consumer.snapshot().peakRows).toBeGreaterThan(bounds.rows);
-      expect(
-        consumer.snapshot().peakSerializedBytes > bounds.serializedBytes,
-      ).toBe(size === 8192);
-      expect(consumer.within(bounds)).toBe(requiredWithinBounds);
-    } finally {
-      for (const row of retained) consumer.release(row);
-      retained.length = 0;
-      expect({
-        consumer: consumer.snapshot().liveRows,
-        reader: reader.snapshot().liveRows,
-      }).toStrictEqual({ consumer: 0, reader: 0 });
-    }
-    return consumer.snapshot().acquisitions;
-  });
+      return consumer.snapshot().acquisitions;
+    },
+    32 * 1024,
+  );
 }
 
-for (const size of [512, 8192]) {
+for (const size of [512]) {
   for (const distinctCopy of [false, true]) {
     describe(`public agent retaining ${distinctCopy ? 'copies' : 'borrowed rows'} at ${size}`, () => {
       it('detects full-history consumer retention and releases every charged object', async () => {

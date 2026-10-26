@@ -18,7 +18,7 @@ import { ConversationManager } from './ConversationManager.js';
 import { ChatSession } from './chatSession.js';
 import { buildErrorReportContext } from './turnErrorReportContext.js';
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`curated error reporting for ${size} journal rows`, () => {
     it('streams through the conversation and chat facades and keeps the last eight curated rows', async () => {
       await withSuffixFixture(

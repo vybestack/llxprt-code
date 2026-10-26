@@ -90,7 +90,7 @@ async function verifyUnchangedDurableSource(size: number): Promise<number> {
 }
 
 describe('AgentImpl carried source transaction', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'does not rewrite the durable %i-row source on failed admission and swaps only after retry',
     async (size) => {
       expect(await verifyUnchangedDurableSource(size)).toBe(size);

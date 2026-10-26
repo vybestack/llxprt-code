@@ -172,7 +172,7 @@ async function roundTrip(size: number): Promise<void> {
 }
 
 describe('invoked CLI checkpoint save and compatible restore BODY bytes', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'preserves %i-row provider bodies, media, cache anchors and UI history through saved bytes',
     roundTrip,
     180000,

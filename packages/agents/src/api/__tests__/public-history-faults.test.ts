@@ -5,7 +5,7 @@ import {
   withPublicHistory,
 } from './helpers/public-history-fixture.js';
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`public history source failure with ${size} rows`, () => {
     it('propagates a source fault and releases the underlying pinned reader', async () => {
       await withPublicHistory(

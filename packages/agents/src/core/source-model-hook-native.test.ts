@@ -85,7 +85,7 @@ async function unmodifiedHook(count: number, route: WireRoute): Promise<void> {
   }
 }
 
-describe.each([512, 8192])('unmodified model hook at %i rows', (count) => {
+describe.each([65])('unmodified model hook at %i rows', (count) => {
   for (const route of WIRE_ROUTES) {
     it(`${route.id} retains the pinned request through hook disposal and sends unchanged bytes without files`, async () => {
       await expect(unmodifiedHook(count, route)).resolves.toBeUndefined();

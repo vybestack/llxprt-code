@@ -3,7 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'bun:test';
 import {
   mkdirSync,
   mkdtempSync,
@@ -236,14 +236,53 @@ describe('o200k chunked source counting', () => {
     });
   });
 
-  describe('chunked o200k speed', () => {
-    it('estimates 1 MiB of mixed text within the speed floor', async () => {
-      const text = mixedText(1024 * 1024, 21);
-      const started = performance.now();
-      const count = await chunked(text, DEFAULT_CHUNKED_TUNING);
-      const elapsed = performance.now() - started;
-      expect(count).toBe(countO200kBaseTokens(encoder, text));
-      expect(elapsed).toBeLessThan(2000);
+  describe('chunked o200k large-source parity', () => {
+    it.each([64 * 1024, 1024 * 1024])(
+      'estimates %i characters exactly with bounded encoder work',
+      async (size) => {
+        const text = mixedText(size, 21);
+        const expected = countO200kBaseTokens(encoder, text);
+        const encode = vi.spyOn(encoder, 'encode');
+        const started = performance.now();
+        try {
+          const count = await chunked(text, DEFAULT_CHUNKED_TUNING);
+          const encodedChars = encode.mock.calls.reduce(
+            (total, [piece]) => total + piece.length,
+            0,
+          );
+          expect(count).toBe(expected);
+          expect(encodedChars).toBeLessThanOrEqual(size);
+          process.stdout.write(
+            JSON.stringify({
+              size,
+              encodedChars,
+              elapsed: performance.now() - started,
+            }) + '\n',
+          );
+        } finally {
+          encode.mockRestore();
+        }
+      },
+      60000,
+    );
+
+    it('rejects a prefix-rescanning control despite exact final tokens', async () => {
+      const text = mixedText(64 * 1024, 21);
+      const expected = countO200kBaseTokens(encoder, text);
+      const encode = vi.spyOn(encoder, 'encode');
+      try {
+        let count = 0;
+        for (let end = 4096; end <= text.length; end += 4096)
+          count = await chunked(text.slice(0, end), DEFAULT_CHUNKED_TUNING);
+        const encodedChars = encode.mock.calls.reduce(
+          (total, [piece]) => total + piece.length,
+          0,
+        );
+        expect(count).toBe(expected);
+        expect(encodedChars <= text.length).toBe(false);
+      } finally {
+        encode.mockRestore();
+      }
     }, 60000);
   });
 });

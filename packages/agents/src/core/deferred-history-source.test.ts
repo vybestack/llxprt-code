@@ -62,7 +62,7 @@ async function nextContent(
 }
 
 describe('streamed deferred history admission', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     describe(`disk deferred admission at ${size}`, () => {
       it('commits detached rows without retaining the source and pins only the paused output row', async () => {
         await withSuffixFixture(

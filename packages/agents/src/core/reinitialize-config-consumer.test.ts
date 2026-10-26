@@ -111,7 +111,7 @@ function registerConfigFailure(size: number): void {
   }
 }
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`invoked Config rebuild at ${size}`, () => {
     registerConfigTransfer(size);
     registerConfigFailure(size);

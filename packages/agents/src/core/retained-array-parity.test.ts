@@ -4,6 +4,5 @@ import {
   RETAINED_PARITY_STAGES,
 } from './__tests__/support/client-array-parity-cases.js';
 
-// Each 8192-row stage has its own file to keep the unchanged operation and
-// assertions within the runner's per-file budget.
-registerRetainedParityCases([512], RETAINED_PARITY_STAGES);
+registerRetainedParityCases([65], RETAINED_PARITY_STAGES);
+registerRetainedParityCases([8192], ['success']);

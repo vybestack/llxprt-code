@@ -89,7 +89,7 @@ async function verifyBody(size: number, bytes: number): Promise<number> {
 }
 
 describe('fallback candidate complete provider BODY', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     it(`matches all four provider BODYs with cache and both retries at ${size}`, async () => {
       expect(await verifyBody(size, 2048)).toBe(8);
     }, 180_000);

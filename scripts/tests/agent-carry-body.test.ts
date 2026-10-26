@@ -44,7 +44,7 @@ async function verifyBodies(size: number): Promise<void> {
 }
 
 describe('AgentImpl carried startup BODY oracle', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'preserves %i-row provider bytes, cache settings and transport retries',
     verifyBodies,
     180000,

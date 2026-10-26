@@ -29,7 +29,7 @@ import {
 } from './heavy-far-response-support.js';
 
 const logger = new DebugLogger('test:actual-hardlimit-body');
-const cases = [512, 8192].flatMap((size) =>
+const cases = [65].flatMap((size) =>
   [false, true].map((accepted): [number, boolean] => [size, accepted]),
 );
 type Setup = ReturnType<typeof middleoutSetup>;

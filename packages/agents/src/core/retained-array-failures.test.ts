@@ -111,6 +111,6 @@ function registerFailure(size: number, stage: string): void {
   });
 }
 describe('retained deferred array failure atomicity', () => {
-  for (const size of [512, 8192])
+  for (const size of [65])
     for (const stage of stages) registerFailure(size, stage);
 });

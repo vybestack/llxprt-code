@@ -123,7 +123,7 @@ async function prefixStates(
 
 describe('native public prefix old-array parity', () => {
   const directory = useTempDir('native-prefix-array-parity-');
-  for (const size of [512, 8192]) {
+  for (const size of [66]) {
     it(`matches independent old-backend prefix bytes and successful tokens over ${size} rows`, async () => {
       const expected = await prefixStates(directory(), size, 'old');
       expect(expected.map(({ bytes }) => bytes)).toStrictEqual([

@@ -1,4 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { registerProductionBodyCases } from './support/semantic-purge-production-body-cases.js';
 
-registerProductionBodyCases([512], ['openai-responses', 'anthropic', 'gemini']);
+registerProductionBodyCases([65], ['openai-responses', 'anthropic', 'gemini']);

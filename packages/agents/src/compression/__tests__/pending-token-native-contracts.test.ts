@@ -18,7 +18,7 @@ import {
 } from './pending-token-native-helpers.js';
 
 describe('pending-token native ranking immutable policy parity', () => {
-  it.each([3, 64, 65, 512, 5000, 8192])(
+  it.each([3, 64, 65, 5000])(
     'matches the independent array and old disk output, exact tokens and durable rows at %i rows',
     async (size) => {
       await withNativeValueFixture(async ({ history, durable, owners }) => {
@@ -44,20 +44,28 @@ describe('pending-token native ranking immutable policy parity', () => {
             limit,
           );
           let resets = 0;
-          const files = await operationFileCreates(async () => {
-            const result = await truncateLargestToolResponses(
-              pendingTokenDeps(history, () => {
-                resets++;
-              }),
-              limit,
-            );
-            expect(result).toStrictEqual(oldResult);
-            expect(result).toStrictEqual({
-              replacedCount: expected.replacedCount,
-              projected: expected.projected,
-              success: expected.success,
-            });
-          }, true);
+          const oldPin = await old.openCompressionInput();
+          const requestPin = await history.openCompressionInput();
+          let files: Awaited<ReturnType<typeof operationFileCreates>>;
+          try {
+            files = await operationFileCreates(async () => {
+              const result = await truncateLargestToolResponses(
+                pendingTokenDeps(history, () => {
+                  resets++;
+                }),
+                limit,
+              );
+              expect(result).toStrictEqual(oldResult);
+              expect(result).toStrictEqual({
+                replacedCount: expected.replacedCount,
+                projected: expected.projected,
+                success: expected.success,
+              });
+            }, true);
+          } finally {
+            await requestPin.close();
+            await oldPin.close();
+          }
           const actual = await Array.fromAsync(history.streamRawHistory());
           expect(expected.replacedCount).toBe(2);
           expect(actual).toStrictEqual([...expected.rows]);

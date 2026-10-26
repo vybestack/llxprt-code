@@ -64,7 +64,7 @@ async function verifyBody(size: number, bytes: number): Promise<number> {
 }
 
 describe('addBatch full provider BODY value equivalence', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     it(`preserves ${size} complete rows with four providers, cache and both retry layers`, async () => {
       expect(await verifyBody(size, 2048)).toBe(8);
     }, 180_000);

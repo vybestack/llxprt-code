@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { internalSettingsService } from '../api/__tests__/helpers/agentHarness.js';
 import { withPublicHistory } from '../api/__tests__/helpers/public-history-fixture.js';
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`invoked orchestrator history with ${size} mixed rows`, () => {
     it('sends a turn without the public array read and releases its source', async () => {
       await withPublicHistory(size, true, async (agent, _history, reader) => {

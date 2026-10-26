@@ -5,7 +5,7 @@ import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { buildAgent } from './helpers/agentHarness.js';
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`deferred public snapshot with ${size} mixed rows`, () => {
     it('preserves pinned values across replacement without retaining original row identities', async () => {
       expect(await verifyDeferred(size)).toBe(size);

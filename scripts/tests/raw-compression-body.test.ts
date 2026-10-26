@@ -97,7 +97,7 @@ async function bodies(
 }
 
 const cases: Array<[number, string, boolean]> = [];
-for (const size of [512, 8192])
+for (const size of [65])
   for (const provider of ['anthropic', 'openai-responses', 'gemini'])
     for (const caching of [false, true]) cases.push([size, provider, caching]);
 

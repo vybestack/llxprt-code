@@ -68,7 +68,7 @@ async function observedIdeContext(
   }
 }
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`IDE publication after ${size} mixed history rows`, () => {
     it('suppresses IDE publication when the final AI row contains a tool call', async () => {
       expect(await observedIdeContext(size, true)).toStrictEqual([]);

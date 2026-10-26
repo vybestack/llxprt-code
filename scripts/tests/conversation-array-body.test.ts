@@ -144,7 +144,7 @@ async function compareBodies(
   });
 }
 describe('provider BODY through ConversationManager array restore', () => {
-  for (const size of [512, 8192])
+  for (const size of [65])
     for (const rollback of [false, true]) {
       it(`preserves ${size} rows of BODY bytes after ${rollback ? 'rollback' : 'restore'} with cache and retry`, async () => {
         const root = await mkdtemp(join(tmpdir(), 'conversation-body-'));

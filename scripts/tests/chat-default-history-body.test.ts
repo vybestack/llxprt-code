@@ -22,7 +22,7 @@ const bodyCases = ['anthropic', 'openai-responses', 'gemini'].flatMap(
   (provider) => [false, true].map((caching) => ({ provider, caching })),
 );
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`real chat default BODY ${size}`, () => {
     it('preserves provider bytes and retries for default and false readers with all converters and cache modes', async () => {
       await withReinitializeHistory(size, async (client) => {

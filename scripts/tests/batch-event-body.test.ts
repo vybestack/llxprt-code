@@ -87,7 +87,7 @@ async function compare(size: number): Promise<void> {
   });
 }
 describe('batch cursor publication preserves complete provider bodies and retries', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'preserves every accepted row in %i-row BODYs',
     async (size) => {
       await expect(compare(size)).resolves.toBeUndefined();

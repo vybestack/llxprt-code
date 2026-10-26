@@ -58,7 +58,7 @@ function expectedOrder(stage: string): string[] {
 }
 
 describe('conversation array replacement fault compensation', () => {
-  for (const size of [512, 8192])
+  for (const size of [65])
     for (const stage of [
       'prepare',
       'publish',

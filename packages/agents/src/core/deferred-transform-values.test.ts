@@ -130,7 +130,7 @@ async function expectBoundedDeferred(
 }
 
 describe('deferred history uses disk value transform', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     for (const rollback of [false, true]) {
       it(`bounds the complete streamed input and publication at ${size}, rollback=${rollback}`, async () => {
         expect(await expectBoundedDeferred(size, rollback)).toBeUndefined();

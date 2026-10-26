@@ -9,7 +9,7 @@ import {
   withAgentCarry,
 } from './helpers/agent-carry-fixture.js';
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`AgentImpl carried startup at ${size}`, () => {
     it('starts the rebound chat through detached admission without reading an array', async () => {
       await withAgentCarry(

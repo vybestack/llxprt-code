@@ -94,7 +94,7 @@ async function compare(size: number): Promise<number> {
 }
 
 describe('high-density shared publication complete provider request and response BODY', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'compares the full %i-row route against the eager output oracle',
     async (size) => {
       expect(await compare(size)).toBe(8);

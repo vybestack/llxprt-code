@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { observeMergeWork } from './merge-work-test-helpers.js';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -99,13 +100,29 @@ describe('o200k in-memory heap BPE', () => {
     expect(countPieceInMemory(bytes)).toBe(await onDisk(bytes));
   });
 
-  it('counts a 64 KiB single-character piece far faster than the disk BPE could', () => {
-    const bytes = Buffer.from('a'.repeat(65536));
-    const started = performance.now();
-    const count = countPieceInMemory(bytes);
-    const elapsed = performance.now() - started;
-    expect(count).toBe(countO200kBaseTokens(encoder, 'a'.repeat(65536)));
-    expect(elapsed).toBeLessThan(500);
+  it('counts single-character pieces exactly with bounded merge work', () => {
+    const work = [4096, 65536].map((size) => {
+      const bytes = Buffer.from('a'.repeat(size));
+      const measurement = observeMergeWork();
+      const started = performance.now();
+      try {
+        const count = countPieceInMemory(bytes);
+        const operations = measurement.operations();
+        expect(count).toBe(encoder.encode('a'.repeat(size), [], []).length);
+        expect(operations).toBeLessThanOrEqual(size * 8 + 64);
+        process.stdout.write(
+          JSON.stringify({
+            size,
+            operations,
+            elapsed: performance.now() - started,
+          }) + '\n',
+        );
+        return operations;
+      } finally {
+        measurement.restore();
+      }
+    });
+    expect(work[1]).toBeLessThanOrEqual((work[0] + 64) * 16);
   });
 
   it('rejects a piece beyond the index bound instead of miscounting', () => {

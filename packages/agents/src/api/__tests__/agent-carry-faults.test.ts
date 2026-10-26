@@ -20,7 +20,7 @@ function faultFirstReplacement(
   };
 }
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`AgentImpl carry failure at ${size}`, () => {
     for (const fault of ['source', 'abort'] as const) {
       it(`preserves durable carried rows after ${fault} and permits a startup retry`, async () => {

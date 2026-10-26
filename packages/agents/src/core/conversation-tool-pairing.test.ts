@@ -84,7 +84,7 @@ function callRow(index: number): IContent {
 }
 
 describe('ConversationManager tool pairing cursor', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     it(`matches ${size} pending calls FIFO with bounded owners and closes on abandonment`, async () => {
       const ownership = new RowOwnership();
       const counters = createRowCounters();

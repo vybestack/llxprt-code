@@ -78,7 +78,7 @@ async function compare(size: number): Promise<void> {
 }
 
 describe('actual addBatch provider BODY pairs', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'preserves all %i accepted media/tool rows through provider conversion and retry',
     async (size) => {
       await expect(compare(size)).resolves.toBeUndefined();

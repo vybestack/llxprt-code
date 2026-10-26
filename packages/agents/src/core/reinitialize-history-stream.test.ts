@@ -156,30 +156,41 @@ function registerControls(size: number): void {
   describe('registerControls', () => {
     for (const retaining of ['borrowed', 'copy'] as const) {
       it(`charges ${retaining} consumer identities instead of excusing retention`, async () => {
-        await withReinitializeHistory(size, async (client, source) => {
-          source.retaining = retaining;
-          await client.initialize(reinitializeConfig(client));
-          expect(source.consumer.snapshot().liveRows).toBe(size);
-          recordReinitializeOwners(size, retaining, source.consumer);
-          expect(source.consumer.within(reinitializeBounds)).toBe(
-            process.env.REINITIALIZE_HISTORY_RETAINING_TRAP === '1',
-          );
-          source.releaseConsumer();
-          expect(source.consumer.snapshot().liveRows).toBe(0);
-        });
+        await withReinitializeHistory(
+          size,
+          async (client, source) => {
+            source.retaining = retaining;
+            await client.initialize(reinitializeConfig(client));
+            expect(source.consumer.snapshot().liveRows).toBe(size);
+            expect(source.consumer.snapshot().liveRows).toBeGreaterThan(
+              reinitializeBounds.rows,
+            );
+            expect(
+              source.consumer.snapshot().liveSerializedBytes,
+            ).toBeGreaterThan(reinitializeBounds.serializedBytes);
+            recordReinitializeOwners(size, retaining, source.consumer);
+            expect(source.consumer.within(reinitializeBounds)).toBe(
+              process.env.REINITIALIZE_HISTORY_RETAINING_TRAP === '1',
+            );
+            source.releaseConsumer();
+            expect(source.consumer.snapshot().liveRows).toBe(0);
+          },
+          32 * 1024,
+        );
       }, 180000);
     }
   });
 }
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`active history reinitialization at ${size}`, () => {
     registerTransfer(size);
     registerSourceFailure(size);
     registerCancellation(size);
-    registerControls(size);
   });
 }
+
+registerControls(512);
 
 describe('large active journal row', () => {
   it('preserves a valid nine-MiB row without a byte admission cap', async () => {

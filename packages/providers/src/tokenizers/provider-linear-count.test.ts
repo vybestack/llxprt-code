@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterAll, describe, expect, it } from 'bun:test';
+import { observeMergeWork } from './merge-work-test-helpers.js';
 import { get_encoding } from '@dqbd/tiktoken';
 import { countO200kBaseTokens } from './o200kBaseCounter.js';
 import { OpenAITokenizer } from './OpenAITokenizer.js';
@@ -149,11 +150,43 @@ describe('provider exact linear token counts', () => {
     it(`${name} counts 64 KiB and 1 MiB runs with linear work`, async () => {
       const expected = whole('x'.repeat(4096));
       await count('x'.repeat(4096));
+      const work: number[] = [];
       for (const size of [65536, 1048576]) {
+        const measurement = observeMergeWork();
         const start = performance.now();
-        expect(await count('x'.repeat(size))).toBe(expected * (size / 4096));
-        expect(performance.now() - start).toBeLessThan((size / 65536) * 250);
+        try {
+          expect(await count('x'.repeat(size))).toBe(expected * (size / 4096));
+          const operations = measurement.operations();
+          expect(operations).toBeLessThanOrEqual(size * 8 + 64);
+          work.push(operations);
+          process.stdout.write(
+            JSON.stringify({
+              name,
+              size,
+              operations,
+              elapsed: performance.now() - start,
+            }) + '\n',
+          );
+        } finally {
+          measurement.restore();
+        }
       }
+      expect(work[1]).toBeLessThanOrEqual((work[0] + 64) * 16);
     });
   }
+  it('rejects whole-prefix rescanning under the merge-work bound with exact final tokens', async () => {
+    const size = 4096;
+    const expected = oracle.encode('x'.repeat(size), [], []).length;
+    const measurement = observeMergeWork();
+    try {
+      let count = 0;
+      for (let end = 256; end <= size; end += 256)
+        count = await openai.countTokens('x'.repeat(end), 'gpt-4o');
+      const operations = measurement.operations();
+      expect(count).toBe(expected);
+      expect(operations <= size * 8 + 64).toBe(false);
+    } finally {
+      measurement.restore();
+    }
+  });
 });

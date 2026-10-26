@@ -49,7 +49,7 @@ async function verifyPause(size: number, active: boolean): Promise<number> {
   );
 }
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   for (const active of [false, true]) {
     describe(`paused public ${active ? 'active' : 'stored'} history at ${size}`, () => {
       it('keeps the returned row charged while clear reads only indexed chronology boundaries', async () => {

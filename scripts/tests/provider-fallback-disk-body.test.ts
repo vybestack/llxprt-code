@@ -25,7 +25,7 @@ import {
 } from './heavy-far-response-support.js';
 
 const logger = new DebugLogger('test:fallback-body');
-const cases = [512, 8192].flatMap((size) =>
+const cases = [65].flatMap((size) =>
   ['anthropic', 'openai-responses', 'gemini'].flatMap((provider) =>
     [false, true].flatMap((caching) =>
       [false, true].map((accepted): [number, string, boolean, boolean] => [

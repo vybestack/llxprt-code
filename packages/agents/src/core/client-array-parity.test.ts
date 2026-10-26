@@ -4,4 +4,5 @@ import {
   registerParityCases,
 } from './__tests__/support/client-array-parity-cases.js';
 
-registerParityCases([512], PARITY_STAGES);
+registerParityCases([65], PARITY_STAGES);
+registerParityCases([8192], ['success']);

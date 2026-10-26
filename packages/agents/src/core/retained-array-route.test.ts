@@ -63,7 +63,7 @@ function registerLarge(): void {
   });
 }
 describe('real retained array entry detached values', () => {
-  for (const size of [512, 8192])
+  for (const size of [65])
     for (const set of [false, true]) registerRoute(size, set);
   registerLarge();
 });

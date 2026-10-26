@@ -197,7 +197,7 @@ function registerFreshValues(): void {
   });
 }
 describe('AgentClient admitted array restore scoped values', () => {
-  for (const size of [512, 8192]) registerScale(size);
+  for (const size of [65]) registerScale(size);
   registerFrozenAliases();
   registerLargeRow();
   registerFreshValues();

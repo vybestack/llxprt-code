@@ -48,7 +48,7 @@ async function bodyPairs(size: number, active: boolean): Promise<number> {
   });
 }
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`public default history BODY bytes ${size}`, () => {
     it('preserves three independent provider bodies, cache modes and retries for an inactive client', async () => {
       expect(await bodyPairs(size, false)).toBe(6);

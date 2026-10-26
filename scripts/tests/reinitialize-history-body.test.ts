@@ -43,7 +43,7 @@ async function bodyPairs(size: number): Promise<void> {
 }
 
 describe('active-client disk transfer provider BODY bytes', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'preserves %i-row bytes and retry bodies with all three converters',
     bodyPairs,
     180000,

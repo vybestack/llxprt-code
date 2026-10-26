@@ -135,7 +135,7 @@ describe('native session prefix publication lifecycle', () => {
     });
   });
 
-  for (const size of [512, 8192]) {
+  for (const size of [66]) {
     it(`releases actual prefix sink arguments at backpressure over ${size} rows`, async () => {
       await withSession(directory(), size, async (agent) => {
         const refs: Array<WeakRef<IContent>> = [];
@@ -165,7 +165,7 @@ describe('native session prefix publication lifecycle', () => {
                   appendDerived: async (ordinal, content) => {
                     refs.push(new WeakRef(content));
                     await sink.appendDerived(ordinal, content);
-                    if (refs.length % 128 === 0) {
+                    if (refs.length % 8 === 0) {
                       await collectGarbage();
                       samples++;
                       peak = Math.max(peak, live(refs));

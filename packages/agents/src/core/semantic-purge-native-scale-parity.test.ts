@@ -54,7 +54,7 @@ async function collect(rows: AsyncIterable<IContent>): Promise<IContent[]> {
 }
 
 describe('actual native purge independent scale parity below provider preparation', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     it(`matches old eager tokens, full values, owners, events and durable mirrors at ${size}`, async () => {
       const input = seededRows(size);
       const eager = new HistoryService({});

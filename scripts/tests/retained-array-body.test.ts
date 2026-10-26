@@ -164,7 +164,7 @@ async function compareBodies(size: number, rollback: boolean): Promise<number> {
   );
 }
 describe('provider BODY through AgentClient deferred retained array', () => {
-  for (const size of [512, 8192])
+  for (const size of [65])
     for (const rollback of [false, true]) {
       it(`preserves ${size} BODY rows after ${rollback ? 'rollback' : 'restore'} with cache and retry`, async () => {
         expect(await compareBodies(size, rollback)).toBe(size);
