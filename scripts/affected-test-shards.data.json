@@ -100,7 +100,7 @@
     "lsp": [],
     "mcp": ["test-utils"],
     "policy": [],
-    "providers": ["policy", "telemetry", "test-utils"],
+    "providers": ["agents", "policy", "telemetry", "test-utils"],
     "settings": [],
     "storage": [],
     "telemetry": [],
