@@ -15,7 +15,6 @@
  * The hook accepts an injectable `fsOps` parameter so tests can avoid real I/O.
  */
 
-import type { StreamRuntime } from '../../cliUiRuntime.js';
 import { useEffect, useRef } from 'react';
 import path from 'path';
 import { promises as nodeFs } from 'fs';
@@ -148,7 +147,7 @@ async function saveRestorableToolCalls(
     | undefined,
   history: HistoryItem[],
   readHistory: CheckpointHistoryReader,
-  checkpointDir: StreamRuntime['projectCheckpointsDir'],
+  checkpointDir: string,
   onDebugMessage: (message: string) => void,
   fsOps?: FsOps,
   checkpointedCallIds?: Set<string>,
@@ -236,7 +235,7 @@ export function useCheckpointPersistence(
     | undefined,
   history: HistoryItem[],
   readHistory: CheckpointHistoryReader,
-  checkpointDir: StreamRuntime['projectCheckpointsDir'],
+  checkpointDir: string,
   onDebugMessage: (message: string) => void,
   fsOps?: FsOps,
 ): void {

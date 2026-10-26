@@ -124,6 +124,7 @@ import {
   useInputAgentOperations,
   useInputReadOperations,
   useInputStreamPolicy,
+  type InputAgentOperations,
 } from './inputOwnerBindings.js';
 import { getInteractiveTranscriptPath } from './transcriptPath.js';
 
@@ -180,7 +181,7 @@ export interface AppContainerRuntimeProps
   dialogsRuntime: AppDialogsRuntime;
   browserSession: BrowserResumeRuntime;
   session: Parameters<typeof useInputBrowserCommands>[0] &
-    Parameters<typeof useInputAgentOperations>[10];
+    InputAgentOperations['session'];
   readRawBrowserCatalog: Parameters<typeof useInputBrowserCommands>[4];
   deleteRawBrowserTarget: Parameters<typeof useInputBrowserCommands>[5];
   bindRawBrowserSession: (
@@ -189,14 +190,14 @@ export interface AppContainerRuntimeProps
     logger: Parameters<typeof bindRawBrowserSession>[3],
   ) => ReturnType<typeof bindRawBrowserSession>;
   isAgentClientPresent: () => boolean;
-  readHistory: Parameters<typeof useInputAgentOperations>[0];
-  stream: Parameters<typeof useInputAgentOperations>[1];
-  injectSteer: Parameters<typeof useInputAgentOperations>[3];
-  getProviderContextLimit: Parameters<typeof useInputAgentOperations>[4];
-  getContentPrefixIdentity: Parameters<typeof useInputAgentOperations>[5];
-  tools: Parameters<typeof useInputAgentOperations>[6];
-  mcp: Parameters<typeof useInputAgentOperations>[7];
-  tasks: Parameters<typeof useInputAgentOperations>[9];
+  readHistory: InputAgentOperations['readHistory'];
+  stream: InputAgentOperations['stream'];
+  injectSteer: InputAgentOperations['injectSteer'];
+  getProviderContextLimit: InputAgentOperations['getProviderContextLimit'];
+  getContentPrefixIdentity: InputAgentOperations['getContentPrefixIdentity'];
+  tools: InputAgentOperations['tools'];
+  mcp: InputAgentOperations['mcp'];
+  tasks: InputAgentOperations['tasks'];
   disposeInput: AppInputParams['disposeInput'];
   readApprovalMode: AppInputParams['readApprovalMode'];
   setApprovalMode: AppInputParams['setApprovalMode'];
@@ -297,21 +298,21 @@ function useAppDialogsRuntime(
 
 /** Stream operations the input path binds from the agent props. */
 function useInputStreamOperations(props: AppContainerRuntimeProps) {
-  return useInputAgentOperations(
-    props.readHistory,
-    props.stream,
-    props.appendHistory,
-    props.injectSteer,
-    props.getProviderContextLimit,
-    props.getContentPrefixIdentity,
-    props.tools,
-    props.mcp,
-    props.metrics,
-    props.tasks,
-    props.session,
-    props.recordingOwner,
-    props.recordingIntegration,
-  );
+  return useInputAgentOperations({
+    readHistory: props.readHistory,
+    stream: props.stream,
+    appendHistory: props.appendHistory,
+    injectSteer: props.injectSteer,
+    getProviderContextLimit: props.getProviderContextLimit,
+    getContentPrefixIdentity: props.getContentPrefixIdentity,
+    tools: props.tools,
+    mcp: props.mcp,
+    metrics: props.metrics,
+    tasks: props.tasks,
+    session: props.session,
+    recordingOwner: props.recordingOwner,
+    recorder: props.recordingIntegration,
+  });
 }
 
 /** Input runtime: wiring only; every param is bootstrap/store-owned. */

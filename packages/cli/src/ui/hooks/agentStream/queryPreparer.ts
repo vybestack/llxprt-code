@@ -38,7 +38,7 @@ export interface PrepareQueryDeps {
   readResource: (server: string, uri: string) => Promise<unknown>;
   getToolHandle: (name: string) => AgentToolHandle | undefined;
   /**
-   * Subagent manager for @subagent mention resolution. StreamRuntime does not
+   * Subagent manager for @subagent mention resolution. The runtime does not
    * yet expose getSubagentManager, so this is threaded separately and may be
    * undefined; when absent, @subagent mentions fall through to file resolution
    * (graceful degradation).
@@ -47,7 +47,7 @@ export interface PrepareQueryDeps {
   /**
    * Logs a user-prompt telemetry event. Provided by the caller (which has
    * access to the full telemetry-config boundary) so this module depends only
-   * on the nested StreamRuntime rather than a flat aggregate.
+   * on the nested runtime rather than a flat aggregate.
    */
   logUserPrompt: (event: UserPromptEvent) => void;
   addItem: UseHistoryManagerReturn['addItem'];

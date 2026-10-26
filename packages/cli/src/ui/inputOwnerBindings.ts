@@ -30,30 +30,37 @@ import {
   useTurnFlush,
   useCancelRunningSubagents,
 } from './hooks/agentStream/useStreamOwnerCallbacks.js';
-export function useInputAgentOperations(
-  readHistory: Agent['getHistory'],
-  stream: Agent['stream'],
-  appendHistory: Agent['addHistory'],
-  injectSteer: Agent['injectSteer'],
-  getProviderContextLimit: Agent['getProviderContextLimit'],
-  getContentPrefixIdentity: ReturnType<typeof useContentIdentityReader>,
-  tools: Pick<
+/** The exact agent operations the stream input path binds. */
+export interface InputAgentOperations {
+  readonly readHistory: Agent['getHistory'];
+  readonly stream: Agent['stream'];
+  readonly appendHistory: Agent['addHistory'];
+  readonly injectSteer: Agent['injectSteer'];
+  readonly getProviderContextLimit: Agent['getProviderContextLimit'];
+  readonly getContentPrefixIdentity: ReturnType<
+    typeof useContentIdentityReader
+  >;
+  readonly tools: Pick<
     Agent['tools'],
     | 'setDisplayCallbacks'
     | 'setEditorCallbacks'
     | 'openClientChannel'
     | 'subscribeChildTools'
     | 'get'
-  >,
-  mcp: Pick<Agent['mcp'], 'findResource' | 'readResource'>,
-  metrics: Pick<Agent['metrics'], 'setLastPromptTokenCount'>,
-  tasks: Pick<
+  >;
+  readonly mcp: Pick<Agent['mcp'], 'findResource' | 'readResource'>;
+  readonly metrics: Pick<Agent['metrics'], 'setLastPromptTokenCount'>;
+  readonly tasks: Pick<
     Agent['tasks'],
     'listRunning' | 'cancel' | 'subscribeNotifications'
-  >,
-  session: Pick<Agent['session'], 'flushRecording'>,
-  recordingOwner: 'agent' | 'raw' | undefined,
-  recorder: RecordingIntegration | undefined,
+  >;
+  readonly session: Pick<Agent['session'], 'flushRecording'>;
+  readonly recordingOwner: 'agent' | 'raw' | undefined;
+  readonly recorder: RecordingIntegration | undefined;
+}
+
+export function useInputAgentOperations(
+  ops: InputAgentOperations,
 ): Pick<
   AgentStreamInputs,
   | 'readHistory'
@@ -74,6 +81,21 @@ export function useInputAgentOperations(
   | 'subscribeTaskNotifications'
   | 'flushRecording'
 > {
+  const {
+    readHistory,
+    stream,
+    appendHistory,
+    injectSteer,
+    getProviderContextLimit,
+    getContentPrefixIdentity,
+    tools,
+    mcp,
+    metrics,
+    tasks,
+    session,
+    recordingOwner,
+    recorder,
+  } = ops;
   return {
     readHistory,
     stream,

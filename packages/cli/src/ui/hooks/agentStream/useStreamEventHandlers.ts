@@ -165,7 +165,7 @@ interface StreamEventHandlerDeps {
   lastProfileNameRef: React.MutableRefObject<string | undefined>;
   lastModelInfoRef: React.MutableRefObject<string | null>;
   lastModelIdentityRef: React.MutableRefObject<string | null>;
-  // Optional: sourced from the app runtime when available. StreamRuntime does
+  // Optional: sourced from the app runtime when available. The runtime does
   // not yet expose getSubagentManager, so this is undefined in the streaming
   // path until a runtime slice is added; @subagent mentions degrade gracefully.
   subagentManager?: UiSubagentManager;

@@ -46,7 +46,7 @@ export type FindMcpResource = (
 
 type MaybeToolHandle = AgentToolHandle | undefined;
 
-// @plan:ISSUE-2376 — file/workspace access flows through the #2384 UiRuntime
+// @plan:ISSUE-2376 — file/workspace access flows through the #2384 runtime
 // abstraction (FileWorkspaceState), but tool lookup is routed through the
 // public Agent surface (AgentToolHandle) rather than the tool registry, so the
 // runtime slice here carries only file/workspace access.

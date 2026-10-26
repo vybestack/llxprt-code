@@ -526,7 +526,7 @@ export function handleSubmissionError(
 
 /**
  * Builds a narrow adapter satisfying {@link ApiErrorRuntimeInfo} from the
- * nested StreamRuntime, so API-error helpers receive focused capability
+ * nested runtime, so API-error helpers receive focused capability
  * objects rather than a flat aggregate.
  */
 export function buildApiErrorInfo(
