@@ -31,6 +31,7 @@ export interface RuntimeSwitchOptions {
     event: OAuthUIEvent,
     timestamp?: number,
   ) => number | undefined;
+  readonly publication?: 'deferred';
 }
 
 /**
@@ -43,22 +44,30 @@ export interface RuntimeSwitchOptions {
  * union; the public callback accepts the wider {@link AgentOAuthUIEvent} shape
  * (every OAuthUIEvent variant is structurally assignable to AgentOAuthUIEvent),
  * so the event is forwarded without coercion.
+ *
+ * `publication: 'deferred'` makes the switch leave model publication to its
+ * caller.
  */
 export function toRuntimeSwitchOptions(
   options: AgentProviderSwitchOptions | undefined,
+  publication?: 'deferred',
 ): RuntimeSwitchOptions {
   if (options === undefined) {
-    return {};
+    return publication === undefined ? {} : { publication };
   }
   const adapted: {
     preserveEphemerals?: string[];
     skipModelDefaults?: boolean;
     autoOAuth?: boolean;
     addItem?: (event: OAuthUIEvent, timestamp?: number) => number | undefined;
+    publication?: 'deferred';
   } = {
     preserveEphemerals: options.preserveEphemerals,
     skipModelDefaults: options.skipModelDefaults,
   };
+  if (publication !== undefined) {
+    adapted.publication = publication;
+  }
   if (options.autoOAuth !== undefined) {
     adapted.autoOAuth = options.autoOAuth;
   }

@@ -25,6 +25,7 @@
  */
 
 import type { AuthBucket } from '../agent.js';
+import type { AgentAuth } from '../config-types.js';
 
 /**
  * The REQ-008 precedence winner. Determines which auth source surfaces in
@@ -87,6 +88,35 @@ export function createAgentAuthState(): AgentAuthState {
     mcpAuth: new Set<string>(),
     buckets: new Map<string, AuthBucket[]>(),
   };
+}
+
+/**
+ * Seeds the per-agent auth state from the threaded initial auth config.
+ * inlineKeyPresent from auth.apiKey, keyFile from auth.apiKeyFile, baseUrl
+ * from auth.baseUrl, oauthEnabled add(provider) if auth.oauth, keyName seed
+ * onto providerState.keyName from auth.keyName. The secret value is NEVER
+ * stored on authState or providerState.
+ * @plan:PLAN-20260617-COREAPI.P18
+ * @requirement:REQ-008
+ */
+export function seedAgentAuthState(
+  authState: AgentAuthState,
+  providerState: { keyName?: string },
+  initialAuth: AgentAuth | undefined,
+  provider: string,
+): void {
+  if (initialAuth === undefined) {
+    return;
+  }
+  authState.inlineKeyPresent = initialAuth.apiKey !== undefined;
+  authState.keyFile = initialAuth.apiKeyFile;
+  authState.baseUrl = initialAuth.baseUrl;
+  if (initialAuth.oauth === true) {
+    authState.oauthEnabled.add(provider);
+  }
+  if (initialAuth.keyName !== undefined) {
+    providerState.keyName = initialAuth.keyName;
+  }
 }
 
 /**

@@ -113,9 +113,14 @@ import {
 import type { EditorCallbacks } from './config-types.js';
 import { createAgentAuthState } from './control/authState.js';
 import type { AgentAuthState, AuthWinner } from './control/authState.js';
-import { computeAuthWinner } from './control/authState.js';
+import { computeAuthWinner, seedAgentAuthState } from './control/authState.js';
 import type { AgentSchedulerHandle } from './config-types.js';
 import { toRuntimeSwitchOptions } from './providerSwitchOptionsAdapter.js';
+import {
+  applyModelWithPublication,
+  publishProviderSwitch,
+  type ModelTransitionSteps,
+} from './modelPublication.js';
 import {
   projectSessionStats,
   projectCurrentSequenceModel,
@@ -319,7 +324,8 @@ export class AgentImpl implements Agent {
       baseUrl: rs.baseUrl,
     };
     // @plan:PLAN-20260617-COREAPI.P18 @requirement:REQ-008
-    this.seedAuthState(rs.provider);
+    const { authState, providerState } = this;
+    seedAgentAuthState(authState, providerState, deps.initialAuth, rs.provider);
     // Shared mutable holders threaded from finalizeAgent.
     this.editorCallbacksHolder = deps.editorCallbacksHolder;
     this.tools = assembleAgentTools(deps, this.coordinator);
@@ -361,6 +367,13 @@ export class AgentImpl implements Agent {
     this.workspace = this.newControls.workspace;
     this.lsp = this.newControls.lsp;
   }
+
+  private readonly modelTransitionSteps: ModelTransitionSteps = {
+    setOwnerModel: (model) => this.setOwnerModel(model),
+    refreshAuth: () => this.deps.sessionClient.refreshAuth(),
+    restoreChatVisibility: () => this.restoreChatVisibility(),
+    rebuild: () => this.rebuild(),
+  };
 
   private readonly prepareReplacement = (
     changed: boolean,
@@ -458,31 +471,6 @@ export class AgentImpl implements Agent {
       () => this.deps.config.getTargetDir(),
       () => currentRecordingPath(this.session),
     );
-  }
-
-  /**
-   * Seeds the per-agent auth state from the threaded initial auth config.
-   * inlineKeyPresent from auth.apiKey, keyFile from auth.apiKeyFile, baseUrl
-   * from auth.baseUrl, oauthEnabled add(provider) if auth.oauth, keyName seed
-   * onto providerState.keyName from auth.keyName. The secret value is NEVER
-   * stored on authState or providerState.
-   * @plan:PLAN-20260617-COREAPI.P18
-   * @requirement:REQ-008
-   */
-  private seedAuthState(provider: string): void {
-    const initialAuth = this.deps.initialAuth;
-    if (initialAuth === undefined) {
-      return;
-    }
-    this.authState.inlineKeyPresent = initialAuth.apiKey !== undefined;
-    this.authState.keyFile = initialAuth.apiKeyFile;
-    this.authState.baseUrl = initialAuth.baseUrl;
-    if (initialAuth.oauth === true) {
-      this.authState.oauthEnabled.add(provider);
-    }
-    if (initialAuth.keyName !== undefined) {
-      this.providerState.keyName = initialAuth.keyName;
-    }
   }
 
   /**
@@ -677,7 +665,16 @@ export class AgentImpl implements Agent {
   ): Promise<AgentProviderSwitchResult> {
     this.assertProfileIdle();
     if (this.activeRun !== undefined) throw new AgentBusyError();
-    return this.applyProviderSwitch(provider, model, options);
+    return this.coordinator.withIdleBoundary(() =>
+      publishProviderSwitch(
+        this.deps.settingsOwner,
+        this.providerState.model,
+        model,
+        () => this.getActiveProfileName(),
+        (publication) =>
+          this.applyProviderSwitch(provider, model, options, publication),
+      ),
+    );
   }
 
   /**
@@ -720,11 +717,14 @@ export class AgentImpl implements Agent {
     if (!this.isProviderReady()) {
       throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     }
-    await this.setOwnerModel(model);
-    await this.deps.sessionClient.refreshAuth();
-    await this.restoreChatVisibility();
-    this.rebuild();
-    this.providerState.model = model;
+    await this.coordinator.withIdleBoundary(() =>
+      applyModelWithPublication(
+        this.deps.settingsOwner,
+        this.providerState,
+        model,
+        this.modelTransitionSteps,
+      ),
+    );
   }
 
   /**
@@ -1096,6 +1096,7 @@ export class AgentImpl implements Agent {
     provider: string,
     model?: string,
     options?: AgentProviderSwitchOptions,
+    publication?: 'deferred',
   ): Promise<AgentProviderSwitchResult> {
     const previousProvider = this.providerState.provider;
     // switchActiveProvider rebuilds the content generator internally; under the
@@ -1106,7 +1107,7 @@ export class AgentImpl implements Agent {
     try {
       const switchResult = await this.deps.switchProvider(
         provider,
-        toRuntimeSwitchOptions(options),
+        toRuntimeSwitchOptions(options, publication),
       );
       providerChanged = switchResult.changed;
       infoMessages = switchResult.infoMessages;
@@ -1118,22 +1119,19 @@ export class AgentImpl implements Agent {
       // provider-switch failure (env var not set) must propagate so a genuine
       // failure is never reported as success — facade state below is then left
       // untouched.
-      const isFakeSeam = process.env.LLXPRT_FAKE_RESPONSES !== undefined;
-      if (!isFakeSeam) {
-        throw error;
-      }
+      if (process.env.LLXPRT_FAKE_RESPONSES === undefined) throw error;
       // Provider not registered (fake seam) — the active provider handles all
       // requests. Per-agent state still reflects the switch (getProvider etc.).
     }
     if (providerChanged) {
       // Real provider switch succeeded; apply the requested model (if any) via
       // setActiveModel + the explicit model-only rebuild.
-      if (model !== undefined && model !== this.providerState.model) {
+      if (model !== undefined && model !== this.getModel()) {
         await this.setOwnerModel(model);
         await this.deps.sessionClient.refreshAuth();
       }
       await this.restoreChatVisibility();
-    } else if (model !== undefined && model !== this.providerState.model) {
+    } else if (model !== undefined && model !== this.getModel()) {
       // Same provider, different model — apply the model to the runtime
       // without reinitializing the content generator (the provider did not
       // change, so the client/HistoryService identity is preserved).
@@ -1144,9 +1142,10 @@ export class AgentImpl implements Agent {
     // Under the fake seam (providerChanged === false), the client is unchanged;
     // history/HistoryService identity is trivially preserved (same client).
     this.providerState.provider = provider;
-    if (model !== undefined) {
-      this.providerState.model = model;
-    }
+    // A real switch without an explicit model leaves the target provider's
+    // default in force; the applied model must describe what the runtime uses.
+    if (providerChanged || model !== undefined)
+      this.providerState.model = this.getModel();
     this.rebuild();
     return {
       changed: providerChanged,

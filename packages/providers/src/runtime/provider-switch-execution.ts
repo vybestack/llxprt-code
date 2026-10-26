@@ -195,14 +195,17 @@ export async function executeProviderSwitch(
 function survivingSwitchParameterKeys(
   ephemerals: SwitchEphemeralOperations,
 ): Set<string> {
+  const definedKeys = (values: object, prefix: string): string[] =>
+    Object.entries(values)
+      .filter(([, value]) => value !== undefined)
+      .map(([key]) => `${prefix}${key}`);
   const surviving = ephemerals.getEphemeralSettings();
-  const preAliasKeys = new Set(
-    Object.keys(surviving).flatMap((key) => {
+  return new Set(
+    definedKeys(surviving, '').flatMap((key) => {
       const value = surviving[key];
       return key === 'reasoning' && typeof value === 'object' && value !== null
-        ? Object.keys(value).map((child) => `reasoning.${child}`)
+        ? definedKeys(value, 'reasoning.')
         : [key];
     }),
   );
-  return preAliasKeys;
 }
