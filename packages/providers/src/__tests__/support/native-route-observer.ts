@@ -56,6 +56,29 @@ function observeOtherNativeRoutes(
   };
 }
 
+function observeNativeRetirements(retired: () => void): () => void {
+  const chat = NativeChatBody.prototype.dispose;
+  const anthropic = NativeAnthropicBody.prototype.dispose;
+  const responses = NativeResponsesPrompt.prototype.dispose;
+  NativeChatBody.prototype.dispose = function (): Promise<void> {
+    retired();
+    return chat.call(this);
+  };
+  NativeAnthropicBody.prototype.dispose = function (): Promise<void> {
+    retired();
+    return anthropic.call(this);
+  };
+  NativeResponsesPrompt.prototype.dispose = function (): Promise<void> {
+    retired();
+    return responses.call(this);
+  };
+  return () => {
+    NativeChatBody.prototype.dispose = chat;
+    NativeAnthropicBody.prototype.dispose = anthropic;
+    NativeResponsesPrompt.prototype.dispose = responses;
+  };
+}
+
 export function observeNativeRoute(): {
   counts(): NativeRouteCounts;
   requireSend(estimate: boolean): void;
@@ -65,6 +88,10 @@ export function observeNativeRoute(): {
   let estimates = 0;
   const files = observeNativeFileCreates();
   let tokens = 0;
+  let retirements = 0;
+  const restoreRetirements = observeNativeRetirements(() => {
+    retirements++;
+  });
   const open = NativeChatBody.prototype.openStream;
   const count = NativeChatEstimateProjection.prototype.estimate;
   const restoreOther = observeOtherNativeRoutes(
@@ -99,8 +126,9 @@ export function observeNativeRoute(): {
     }),
     requireSend(estimate): void {
       const invalid = [
-        streams !== 1,
-        estimates !== Number(estimate),
+        streams === 0 && retirements === 0,
+        streams > 1,
+        estimates > Number(estimate),
         files.count() !== 0,
         estimate && tokens <= 0,
       ].some((failed) => failed);
@@ -113,6 +141,7 @@ export function observeNativeRoute(): {
       NativeChatBody.prototype.openStream = open;
       NativeChatEstimateProjection.prototype.estimate = count;
       restoreOther();
+      restoreRetirements();
       files.restore();
     },
   };

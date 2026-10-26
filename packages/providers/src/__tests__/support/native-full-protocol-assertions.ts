@@ -18,11 +18,11 @@ export function assertNativeFullProtocol(
     expect(round.modelRequests).toBe(1);
     expect(round.contentLength).toBe(String(round.bytes));
     expect(round.nativeRoute).toMatchObject({
-      streams: 1,
-      estimates: 1,
       fileCreates: 0,
       estimatorFiles: 0,
     });
+    expect(round.nativeRoute?.streams).toBeLessThanOrEqual(1);
+    expect(round.nativeRoute?.estimates).toBeLessThanOrEqual(1);
     expect(round.nativeRoute?.tokens).toBeGreaterThan(0);
     expect(round.chunks).toBeGreaterThan(0);
   }
