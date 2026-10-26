@@ -30,6 +30,21 @@ import {
 } from './journalScalars.js';
 
 export abstract class JournalHistoryStoreReads {
+  async hasPromptSubmission(id: string): Promise<boolean> {
+    await this.waitForDurable();
+    return (
+      (await this.requireOpen().session.store.getMeta(`submission:${id}`)) !==
+      undefined
+    );
+  }
+
+  async flushCommitted(): Promise<void> {
+    await this.waitForDurable();
+    await this.settleFanout();
+    await this.requireOpen().session.store.flushCommitted();
+    await this.mirrors.flushCommitted();
+  }
+
   protected abstract readonly options: JournalHistoryStoreOptions;
   protected abstract journal: OpenJournal | undefined;
   protected abstract boundary: bigint | undefined;

@@ -144,6 +144,7 @@ export interface HistoryMediaOwner {
 }
 
 export interface HistoryBatchOptions {
+  readonly submissionId?: string;
   /** Identity of the owner that published the batch (carried from #3842). */
   readonly origin?: object;
   /** Whole-source replacement uses rewind/content, rather than per-row density deltas. */

@@ -33,6 +33,8 @@ const PORT_METHODS = [
   'waitForDurable',
   'settleFanout',
   'waitForCommit',
+  'hasPromptSubmission',
+  'flushCommitted',
   'getLength',
   'materialize',
   'streamRows',

@@ -378,6 +378,9 @@ export class JournalStore {
    * Resolves when every commit and compaction submitted so far has finished,
    * and throws what a compaction that failed on its own threw.
    */
+  flushCommitted = (): Promise<void> =>
+    this.enqueueCommit(() => this.writer.flushCommitted());
+
   async idle(): Promise<void> {
     await this.tail;
     if (this.compactionFailure !== undefined) {
@@ -735,7 +738,7 @@ export class JournalStore {
     const warm = await this.reuseRowFormat(edits);
     if (warm !== undefined) return warm;
     let resolvedEdits = edits;
-    let streamedAppend: boolean | undefined;
+    let publication: Awaited<ReturnType<typeof prepareBuild>> | undefined;
     let factIndex = this.factIndex;
     let plan: GroupPlan | undefined;
     let built: BuiltGroup | undefined;
@@ -755,7 +758,7 @@ export class JournalStore {
             this.registerNativeFacts(),
           );
           ({ plan, built, edits: resolvedEdits, facts: factIndex } = prepared);
-          streamedAppend = prepared.streamedAppend;
+          publication = prepared;
           if (built === undefined) {
             await effect?.settle(false);
             return undefined;
@@ -800,8 +803,9 @@ export class JournalStore {
         before,
         after: this.requireVersion(),
         read: this.readOfPublished(),
-        writtenLabels: streamedAppend === true ? [] : writtenLabelsOf(plan),
-        streamedAppend,
+        writtenLabels: writtenLabelsOf(plan, publication?.streamedAppend),
+        streamedAppend: publication?.streamedAppend,
+        retainedMetadataKeys: publication?.retainedMetadataKeys,
       },
       resolvedEdits,
     );

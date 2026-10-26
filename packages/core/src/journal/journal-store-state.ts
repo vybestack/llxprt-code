@@ -74,12 +74,14 @@ export interface CommittedGroup {
   readonly writtenLabels: readonly bigint[];
   readonly resolvedEdits?: readonly VersionEdit[];
   readonly streamedAppend?: boolean;
+  readonly retainedMetadataKeys?: readonly string[];
   readonly unchanged?: boolean;
   close(): void | Promise<void>;
 }
 
 /** Labels written by an indexed group; streamed groups return none. */
-export function writtenLabelsOf(plan: GroupPlan): bigint[] {
+export function writtenLabelsOf(plan: GroupPlan, streamed = false): bigint[] {
+  if (streamed) return [];
   if (plan.segments === undefined) return plan.newRows.map((row) => row.label);
   const labels: bigint[] = [];
   for (const segment of plan.segments) {

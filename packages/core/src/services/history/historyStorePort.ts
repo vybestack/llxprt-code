@@ -263,6 +263,8 @@ export interface HistoryCompensationMark {
  * the only implementation until the journal-backed store lands (#854 phase 4).
  */
 export interface HistoryStorePort {
+  hasPromptSubmission(id: string): Promise<boolean>;
+  flushCommitted(): Promise<void>;
   prepareCurated(
     request: HistoryPrepareCuratedRequest,
   ): Promise<ProviderRequestSnapshot>;

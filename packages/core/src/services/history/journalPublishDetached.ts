@@ -42,6 +42,14 @@ export async function publishDetachedOnJournal(
   modelName: string | undefined,
   options: DetachedHistoryOptions,
 ): Promise<void> {
+  if (
+    options.submissionId !== undefined &&
+    (await store.hasPromptSubmission(options.submissionId))
+  ) {
+    task.dispose?.();
+    task.transform = undefined;
+    return;
+  }
   let snapshot: VersionSnapshot | undefined;
   let publication: JournalDetachedPublication | undefined;
   let failure: { error: unknown } | undefined;
@@ -50,7 +58,7 @@ export async function publishDetachedOnJournal(
       () => host.waitForTokenUpdates(),
       options.signal,
     );
-    publication = new JournalDetachedPublication(store);
+    publication = new JournalDetachedPublication(store, options.submissionId);
     await publishOver(
       snapshot,
       publication,

@@ -15,6 +15,23 @@ import {
  * lifecycle live in {@link HistoryService}.
  */
 export abstract class HistoryServiceReads extends HistoryServiceCore {
+  async submitPrompt(
+    submissionId: string,
+    rows: readonly IContent[],
+    modelName?: string,
+    origin?: object,
+  ): Promise<void> {
+    await this.detachedValues.append(rows, modelName, {
+      submissionId,
+      origin,
+      publishBatch: true,
+    });
+    await this.journal.flushCommitted();
+  }
+
+  hasPromptSubmission(id: string): Promise<boolean> {
+    return this.journal.hasPromptSubmission(id);
+  }
   async *streamRawHistory(
     signal?: AbortSignal,
   ): AsyncGenerator<IContent, void, unknown> {

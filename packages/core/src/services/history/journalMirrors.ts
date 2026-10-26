@@ -36,6 +36,13 @@ export interface BoundRecorder {
  * `HistoryFanoutFeed` and the mirror translation of the JSONL stack.
  */
 export class JournalMirrors {
+  async flushCommitted(): Promise<void> {
+    await this.flush();
+    for (const held of this.recorders.values()) {
+      if (held.session !== undefined) await held.session.store.flushCommitted();
+    }
+  }
+
   private readonly fanout: MirrorFanout;
   private primaryOrigin: string | undefined;
   private readonly recorders = new Map<

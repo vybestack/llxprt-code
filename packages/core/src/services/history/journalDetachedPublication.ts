@@ -148,6 +148,7 @@ export class JournalDetachedPublication {
   }
 
   async abortAppends(error: unknown): Promise<void> {
+    await this.submissionFeed?.abort(error);
     await this.annotated?.abort(error);
   }
 
@@ -171,7 +172,12 @@ export class JournalDetachedPublication {
     }
   }
 
-  constructor(private readonly store: JournalHistoryStore) {
+  private submissionFeed: PullFeed<RowDraft, void> | undefined;
+
+  constructor(
+    private readonly store: JournalHistoryStore,
+    private readonly submissionId?: string,
+  ) {
     this.mark = store.captureCompensation();
   }
 
@@ -266,6 +272,10 @@ export class JournalDetachedPublication {
     origin?: string,
     inheritedOwner?: number,
   ): Promise<void> {
+    if (this.submissionId !== undefined) {
+      await this.appendSubmission(content, origin);
+      return;
+    }
     try {
       const draft = encodeAppended(this.store.writes, content, origin);
       if (this.annotated !== undefined) {
@@ -289,11 +299,43 @@ export class JournalDetachedPublication {
   /** Writes the rows {@link appendOne} still holds; call it once the transform has returned. */
   async flushAppends(): Promise<void> {
     try {
+      if (this.submissionId !== undefined) {
+        await (await this.submissionFeedFor()).close();
+        return;
+      }
       await this.writePendingAppends();
     } catch (error) {
       this.failure = error;
       throw error;
     }
+  }
+
+  private async submissionFeedFor(
+    origin?: string,
+  ): Promise<PullFeed<RowDraft, void>> {
+    const id = this.submissionId;
+    if (id === undefined) throw new Error('Missing submission identity');
+    if (this.submissionFeed !== undefined) return this.submissionFeed;
+    const owner = await this.store.resolveOwner(origin);
+    this.submissionFeed = pullFeed(async (drafts) => {
+      await this.prepare(async (group) => {
+        await group.append(inputDrafts(drafts), owner.edits);
+        await group.retainMetadata(`submission:${id}`, new Uint8Array([1]));
+      }, owner.edits);
+    });
+    return this.submissionFeed;
+  }
+
+  private async appendSubmission(
+    content: IContent,
+    origin?: string,
+  ): Promise<void> {
+    const feed = await this.submissionFeedFor(origin);
+    const owner = await this.store.resolveOwner(origin);
+    await feed.put({
+      ...encodeAppended(this.store.writes, content, origin),
+      owner: owner.id,
+    });
   }
 
   private async writePendingAppends(): Promise<void> {

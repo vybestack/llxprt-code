@@ -31,6 +31,7 @@ export interface GroupDelta {
    */
   readonly touched: readonly bigint[];
   readonly appendedFrom?: number;
+  readonly retainedMetadataKeys?: readonly string[];
 }
 
 function lowest(values: readonly bigint[]): bigint | undefined {
@@ -94,5 +95,6 @@ export function deltaOf(
     trimBelow: highest(retains),
     touched: ascending([...group.writtenLabels, ...edits.flatMap(namedLabels)]),
     appendedFrom: streamedAppend ? rowsBefore : undefined,
+    retainedMetadataKeys: group.retainedMetadataKeys,
   };
 }

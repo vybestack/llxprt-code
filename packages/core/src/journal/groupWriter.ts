@@ -87,6 +87,20 @@ function groupTagFrom(random: Uint8Array): bigint {
  * writer. A marked input failure discards the uncommitted tail instead.
  */
 export class JournalGroupWriter {
+  flushCommitted(): Promise<void> {
+    const turn = this.queue.then(() => {
+      if (this.failure !== undefined) throw this.failure.error;
+      try {
+        this.dependencies.flush(this.requireHandle().fd);
+      } catch (error) {
+        this.failure = { error };
+        throw error;
+      }
+    });
+    this.queue = turn.then(noop, noop);
+    return turn;
+  }
+
   private handle: JournalFileHandle;
   private syncMarker: Uint8Array;
   private readonly dependencies: GroupWriterDependencies;

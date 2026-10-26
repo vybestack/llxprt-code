@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { SourceRow, VersionEdit } from './groupEdits.js';
+import { copySubmissionMetadata } from './submission-metadata.js';
 import type { GroupDelta } from './groupDelta.js';
 import type { PinnedRead } from './pinLease.js';
 import type { RecordAccess } from './recordAccess.js';
@@ -37,15 +38,7 @@ export function resyncEdits(
   pin: PinnedVersion | undefined,
 ): VersionEdit[] {
   if (pin === undefined) return [{ kind: 'clear' }];
-  if (target.metadataKeys === undefined || target.metadataKeys.length === 0)
-    return [
-      {
-        kind: 'adoptAll',
-        rows: acceptedRows(pin.access, pin.version, target.owner),
-        nextLabel: pin.version.nextLabel,
-      },
-    ];
-  const keys = target.metadataKeys;
+  const keys = target.metadataKeys ?? [];
   return [
     {
       kind: 'prepared',
@@ -59,6 +52,11 @@ export function resyncEdits(
           },
         ]);
         await group.copyMetadata(pin.access, pin.version.roots.metaRoot, keys);
+        await copySubmissionMetadata(
+          group,
+          pin.access,
+          pin.version.roots.metaRoot,
+        );
       },
     },
   ];
@@ -199,11 +197,18 @@ export async function mirrorEdits(
   delta: GroupDelta,
   target: MirrorTarget,
 ): Promise<VersionEdit[]> {
+  const selected = {
+    ...target,
+    metadataKeys: [
+      ...(target.metadataKeys ?? []),
+      ...(delta.retainedMetadataKeys ?? []),
+    ],
+  };
   const read = await target.store.openRead();
   try {
-    const edits = await editsFor(delta, target, await stateOf(read));
+    const edits = await editsFor(delta, selected, await stateOf(read));
     const metadataChanged =
-      (target.metadataKeys?.length ?? 0) > 0 &&
+      selected.metadataKeys.length > 0 &&
       (delta.before?.roots.metaRoot ?? 0) !== delta.after.roots.metaRoot;
     if (!metadataChanged || edits.some((edit) => edit.kind === 'prepared'))
       return edits;
@@ -216,7 +221,7 @@ export async function mirrorEdits(
           await group.copyMetadata(
             delta.access,
             delta.after.roots.metaRoot,
-            target.metadataKeys ?? [],
+            selected.metadataKeys,
           );
         },
       },

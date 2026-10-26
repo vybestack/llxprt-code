@@ -49,6 +49,7 @@ export interface PreparedBuild {
   readonly edits: readonly VersionEdit[];
   readonly facts: NativeFactIndexRegistration | undefined;
   readonly streamedAppend?: boolean;
+  readonly retainedMetadataKeys?: readonly string[];
 }
 
 async function sameMetadata(
@@ -277,6 +278,10 @@ class PreparedBuilder {
         value,
         storage,
       ),
+      retainedMetadataKeys:
+        kind === 'meta' && key.startsWith('submission:')
+          ? [...(this.result.retainedMetadataKeys ?? []), key]
+          : this.result.retainedMetadataKeys,
     };
   }
 }
