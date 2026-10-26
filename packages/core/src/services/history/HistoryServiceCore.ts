@@ -147,7 +147,7 @@ export abstract class HistoryServiceCore
    * @plan PLAN-20260917-ISSUE854.P05b3
    */
   protected readonly journal: HistoryStorePort;
-  protected readonly captureTokenRow: () => TokenRowSource;
+  protected readonly captureTokenRow: (start?: number) => TokenRowSource;
   readonly detachedValues: DetachedHistoryAPI;
 
   /**
@@ -251,7 +251,7 @@ export abstract class HistoryServiceCore
     this.mutationOwnership = options.mutationOwnership;
     const journal = createHistoryStore(options);
     this.journal = journal;
-    this.captureTokenRow = () => journal.captureTokenRow();
+    this.captureTokenRow = (start) => journal.captureTokenRow(start);
     this.detachedValues = createDetachedHistoryAPI(
       this,
       this.journal,

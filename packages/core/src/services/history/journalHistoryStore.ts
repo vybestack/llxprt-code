@@ -428,13 +428,12 @@ export class JournalHistoryStore
 
   readonly compressionRowCount = this.getLength;
 
-  captureTokenRow(): TokenRowSource {
+  captureTokenRow(start?: number): TokenRowSource {
     this.assertUsable();
-    if (this.tokenDraft !== undefined) this.tokenDraft.captured = true;
-    return this.tokenRows.capture(
-      this.tentativeRows - 1,
-      this.tokenDraft?.sequence,
-    );
+    const draft = this.tokenDraft;
+    if (draft !== undefined) draft.captured = true;
+    const tail = this.tentativeRows - 1;
+    return this.tokenRows.capture(tail, draft?.sequence, start);
   }
 
   private takeTokenDraft(sequence: number | undefined): IContent | undefined {

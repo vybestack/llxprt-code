@@ -16,7 +16,11 @@ export class JournalTokenRows {
 
   constructor(private readonly host: TokenRowHost) {}
 
-  capture(index: number, sequence: number | undefined): TokenRowSource {
+  capture(
+    index: number,
+    sequence: number | undefined,
+    start?: number,
+  ): TokenRowSource {
     let batch = this.current;
     if (batch === undefined) {
       const created: TokenRowBatch = new TokenRowBatch(this.host, () => {
@@ -25,7 +29,11 @@ export class JournalTokenRows {
       this.current = created;
       batch = created;
     }
-    return batch.capture(index, sequence);
+    return batch.capture(
+      start ?? index,
+      start === undefined ? sequence : undefined,
+      index + 1,
+    );
   }
 
   seal(): void {
@@ -43,9 +51,13 @@ class TokenRowBatch {
     private readonly detached: () => void,
   ) {}
 
-  capture(index: number, sequence: number | undefined): TokenRowSource {
+  capture(
+    index: number,
+    sequence: number | undefined,
+    end = index + 1,
+  ): TokenRowSource {
     this.readers++;
-    return new TokenRowRange(this, this.host, index, sequence);
+    return new TokenRowRange(this, this.host, index, sequence, end);
   }
 
   release(): Promise<void> {
@@ -76,8 +88,9 @@ class TokenRowRange implements TokenRowSource {
     private readonly host: TokenRowHost,
     private index: number,
     private sequence: number | undefined,
+    end: number,
   ) {
-    this.end = index + 1;
+    this.end = end;
   }
 
   merge(source: TokenRowSource): boolean {

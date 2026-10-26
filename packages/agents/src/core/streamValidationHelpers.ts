@@ -77,9 +77,11 @@ export function validateStreamCompletion(
   userInput: IContent | IContent[],
   outcome: ResponseOutcome,
   finishReason: string | undefined,
-  responseText: string,
+  responseText: string | number,
   rawStopReason?: string,
 ): void {
+  const responseTextLength =
+    typeof responseText === 'number' ? responseText : responseText.length;
   const inputArray = Array.isArray(userInput) ? userInput : [userInput];
   const isToolContinuationInput = inputArray.some((content) =>
     content.blocks.some((b) => b.type === 'tool_response'),
@@ -87,7 +89,7 @@ export function validateStreamCompletion(
 
   const hasMissingFinishAndNoText =
     isMissingFinishReason(finishReason) && !outcome.hasVisibleText;
-  const isEmptyResponse = responseText === '';
+  const isEmptyResponse = responseTextLength === 0;
   const noRelevantContent =
     !outcome.hasToolCalls && !isToolContinuationInput && !outcome.hasThinking;
   const isInvalidResponse =
@@ -103,7 +105,7 @@ export function validateStreamCompletion(
           hasTextResponse: outcome.hasVisibleText,
           hasThinkingResponse: outcome.hasThinking,
           finishReason,
-          responseTextLength: responseText.length,
+          responseTextLength,
           isToolContinuationInput,
         },
       );
@@ -119,7 +121,7 @@ export function validateStreamCompletion(
         hasTextResponse: outcome.hasVisibleText,
         hasThinkingResponse: outcome.hasThinking,
         finishReason,
-        responseTextLength: responseText.length,
+        responseTextLength,
         isToolContinuationInput,
       },
     );
@@ -142,7 +144,7 @@ export function validateStreamCompletion(
         hasThinkingResponse: outcome.hasThinking,
         finishReason,
         rawStopReason,
-        responseTextLength: responseText.length,
+        responseTextLength,
         isToolContinuationInput,
       },
     );

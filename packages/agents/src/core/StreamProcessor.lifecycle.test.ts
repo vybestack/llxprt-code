@@ -1,268 +1,187 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
-/**
- * Release of in-flight stream state on abnormal paths (issue #2852).
- *
- * The accumulation tests cover the normal terminal path. A long-running session
- * also cancels turns, hits provider errors, and sees streams that stop without
- * a finish chunk. On every one of those paths the blocks accumulated so far
- * must be released rather than carried into the next turn.
- */
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { StreamProcessor } from './StreamProcessor.js';
-import { arrivalHistoryFixture } from './__tests__/support/arrival-history-fixture.js';
-const createHistory = arrivalHistoryFixture();
-import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import {
+  MediaAdmissionService,
+  type MediaAdmissionContext,
+} from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 
-function makeChunk(text: string): ModelStreamChunk {
-  return toModelStreamChunk({
-    speaker: 'ai',
-    blocks: [{ type: 'text', text }],
-  } as IContent);
+class ObservedAdmission extends MediaAdmissionService {
+  readonly admitted = new Map<string, string>();
+  override async admitContent(
+    content: IContent,
+    context: MediaAdmissionContext,
+  ): Promise<IContent> {
+    const admitted = await super.admitContent(content, context);
+    for (const block of admitted.blocks)
+      if (block.type === 'text') this.admitted.set(block.text, context.turnId);
+    return admitted;
+  }
+}
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
+import {
+  processorFixture,
+  sourcePending,
+} from './__tests__/support/streamprocessor-source-fixture.js';
+
+async function* textStream(prefix: string): AsyncGenerator<ModelStreamChunk> {
+  yield {
+    content: { speaker: 'ai', blocks: [{ type: 'text', text: `${prefix}-a` }] },
+  };
+  yield {
+    content: { speaker: 'ai', blocks: [{ type: 'text', text: `${prefix}-b` }] },
+    finishReason: 'stop',
+  };
+}
+async function responseTexts(history: HistoryService): Promise<string[]> {
+  const results: string[] = [];
+  for await (const row of history.streamRawHistory()) {
+    if (row.speaker === 'ai')
+      results.push(
+        row.blocks
+          .flatMap((block) => (block.type === 'text' ? [block.text] : []))
+          .join(''),
+      );
+  }
+  return results;
+}
+async function drain(stream: AsyncGenerator<ModelStreamChunk>): Promise<void> {
+  for await (const _chunk of stream) {
+    /* Consume through publication. */
+  }
 }
 
-function makeFinishChunk(text: string): ModelStreamChunk {
-  return toModelStreamChunk({
-    speaker: 'ai',
-    blocks: [{ type: 'text', text }],
-    metadata: { finishReason: 'stop', rawStopReason: 'STOP' },
-  } as IContent);
-}
-
-function createUserInput(): IContent {
-  return {
-    speaker: 'human',
-    blocks: [{ type: 'text', text: 'Hi' }],
-  } as IContent;
-}
-
-function collectFinalizedText(finalize: ReturnType<typeof vi.fn>): string[] {
-  return finalize.mock.calls.map((call) => {
-    const output = call[0] as { content: { blocks: Array<{ text?: string }> } };
-    return output.content.blocks.map((block) => block.text ?? '').join('');
-  });
-}
-
-let processor: StreamProcessor;
-let finalize: ReturnType<typeof vi.fn>;
-
-describe('StreamProcessor.processStreamResponse — stream state release (#2852)', () => {
-  beforeEach(() => {
-    processor = Object.create(StreamProcessor.prototype);
-    Object.assign(processor, {
-      runtimeContext: {
-        state: { model: 'test' },
-        ephemerals: { reasoning: { includeInContext: () => false } },
-      },
-      compressionHandler: { lastPromptTokenCount: 0 },
-      conversationManager: {
-        recordHistory: vi.fn(),
-        recordStreamingHistory: vi.fn(),
-      },
-      historyService: createHistory(),
-      logger: new DebugLogger('test'),
-      eagerlyRecordedToolResponseCallIds: new Set<string>(),
+describe('StreamProcessor journal attempt lifetime', () => {
+  const root = sourceRootSetup();
+  for (const failure of ['cancelled', 'error']) {
+    it(`does not publish ${failure} output or carry it into the next turn`, async () => {
+      const setup = await processorFixture(
+        root(),
+        'http://127.0.0.1:1/v1',
+        false,
+        0,
+      );
+      async function* failedStream(): AsyncGenerator<ModelStreamChunk> {
+        yield {
+          content: {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'abandoned' }],
+          },
+        };
+        throw new Error('provider exploded');
+      }
+      try {
+        const abandoned = setup.processor.processStreamResponse(
+          failedStream(),
+          sourcePending,
+        );
+        await abandoned.next();
+        const outcome =
+          failure === 'error'
+            ? abandoned.next().then(
+                () => undefined,
+                (error: unknown) =>
+                  error instanceof Error ? error.message : String(error),
+              )
+            : abandoned.return(undefined).then(() => undefined);
+        expect(await outcome).toBe(
+          failure === 'error' ? 'provider exploded' : undefined,
+        );
+        expect(await setup.history.countCuratedRows()).toBe(0);
+        await drain(
+          setup.processor.processStreamResponse(
+            textStream('fresh'),
+            sourcePending,
+          ),
+        );
+        expect(await responseTexts(setup.history)).toStrictEqual([
+          'fresh-afresh-b',
+        ]);
+      } finally {
+        await setup.history.dispose();
+        await setup.config.dispose();
+      }
     });
-    finalize = vi.fn().mockResolvedValue(undefined);
-    (processor as unknown as Record<string, unknown>)[
-      '_finalizeStreamProcessing'
-    ] = finalize;
-  });
-  it('does not carry cancelled blocks into the next turn', async () => {
-    async function* cancelledStream(): AsyncGenerator<ModelStreamChunk> {
-      yield makeChunk('cancelled-a');
-      yield makeChunk('cancelled-b');
-      yield makeChunk('cancelled-c');
-    }
-
-    // The consumer abandons the stream part-way, as a turn cancellation does.
-    const iterator = processor.processStreamResponse(
-      cancelledStream(),
-      createUserInput(),
+  }
+  it('seals truncated nonempty responses without mixing turns', async () => {
+    const setup = await processorFixture(
+      root(),
+      'http://127.0.0.1:1/v1',
+      false,
+      0,
     );
-    await iterator.next();
-    await iterator.return(undefined);
-
-    async function* nextStream(): AsyncGenerator<ModelStreamChunk> {
-      yield makeChunk('fresh-');
-      yield makeFinishChunk('turn');
+    async function* truncated(text: string): AsyncGenerator<ModelStreamChunk> {
+      yield { content: { speaker: 'ai', blocks: [{ type: 'text', text }] } };
     }
-    for await (const _chunk of processor.processStreamResponse(
-      nextStream(),
-      createUserInput(),
-    )) {
-      // drain
+    try {
+      await drain(
+        setup.processor.processStreamResponse(truncated('one'), sourcePending),
+      );
+      await drain(
+        setup.processor.processStreamResponse(truncated('two'), sourcePending),
+      );
+      expect(await responseTexts(setup.history)).toStrictEqual(['one', 'two']);
+    } finally {
+      await setup.history.dispose();
+      await setup.config.dispose();
     }
-
-    expect(collectFinalizedText(finalize)).toStrictEqual(['fresh-turn']);
   });
-  it('does not carry blocks from an errored stream into the next turn', async () => {
-    async function* failingStream(): AsyncGenerator<ModelStreamChunk> {
-      yield makeChunk('errored-a');
-      yield makeChunk('errored-b');
-      throw new Error('provider exploded');
-    }
-
-    await expect(
-      (async () => {
-        for await (const _chunk of processor.processStreamResponse(
-          failingStream(),
-          createUserInput(),
-        )) {
-          // drain
-        }
-      })(),
-    ).rejects.toThrow('provider exploded');
-
-    // A stream that failed must not be finalized with partial output.
-    expect(finalize).not.toHaveBeenCalled();
-
-    async function* nextStream(): AsyncGenerator<ModelStreamChunk> {
-      yield makeChunk('recovered-');
-      yield makeFinishChunk('turn');
-    }
-    for await (const _chunk of processor.processStreamResponse(
-      nextStream(),
-      createUserInput(),
-    )) {
-      // drain
-    }
-
-    expect(collectFinalizedText(finalize)).toStrictEqual(['recovered-turn']);
-  });
-  it('finalizes a stalled stream with only its own blocks', async () => {
-    // A stream that ends without a finish chunk (idle timeout, truncated
-    // response) still completes the generator, so it is finalized — but it must
-    // not pick up anything from a previous turn.
-    async function* firstStalled(): AsyncGenerator<ModelStreamChunk> {
-      yield makeChunk('stalled-one');
-    }
-    for await (const _chunk of processor.processStreamResponse(
-      firstStalled(),
-      createUserInput(),
-    )) {
-      // drain
-    }
-
-    async function* secondStalled(): AsyncGenerator<ModelStreamChunk> {
-      yield makeChunk('stalled-two');
-    }
-    for await (const _chunk of processor.processStreamResponse(
-      secondStalled(),
-      createUserInput(),
-    )) {
-      // drain
-    }
-
-    expect(collectFinalizedText(finalize)).toStrictEqual([
-      'stalled-one',
-      'stalled-two',
-    ]);
-  });
-  it('appends blocks in place instead of copying them per chunk', () => {
-    // The envelope is folded with an empty block list, so the fold is constant
-    // work per chunk and every block lands in one array. Array identity is a
-    // deterministic witness for that, unlike an elapsed-time threshold.
-    const accumulator = new StreamOutputAccumulator();
-    for (let index = 0; index < 5_000; index += 1) {
-      accumulator.add(makeChunk(`chunk-${index}`));
-    }
-
-    const first = accumulator.materialize();
-    const second = accumulator.materialize();
-    expect({
-      sameBlockArray: first.content.blocks === second.content.blocks,
-      blockCount: first.content.blocks.length,
-    }).toStrictEqual({ sameBlockArray: true, blockCount: 5_000 });
-  });
-  it('threads each concurrent stream immutable turn identity through media admission', async () => {
-    const admittedTurnByText = new Map<string, string>();
-    Reflect.set(processor, 'runtimeContext', {
-      state: { model: 'test' },
-      ephemerals: { reasoning: { includeInContext: () => false } },
-      mediaAdmission: {
-        admitContent: (
-          content: IContent,
-          context: { readonly turnId: string },
-        ): Promise<IContent> => {
-          const text = content.blocks.find(
-            (block) => block.type === 'text',
-          )?.text;
-          if (text !== undefined) admittedTurnByText.set(text, context.turnId);
-          return Promise.resolve(content);
-        },
-        admitContents: (contents: readonly IContent[]): Promise<IContent[]> =>
-          Promise.resolve([...contents]),
-      },
+  it('keeps interleaved response writers and turn identities separate', async () => {
+    const setup = await processorFixture(
+      root(),
+      'http://127.0.0.1:1/v1',
+      false,
+      0,
+    );
+    const store = new LocalMediaStore({
+      rootDirectory: `${root()}/media`,
+      quotaBytes: 1024 * 1024,
     });
-
-    async function* streamOf(prefix: string): AsyncGenerator<ModelStreamChunk> {
-      yield makeChunk(`${prefix}-first`);
-      await Promise.resolve();
-      yield makeFinishChunk(`${prefix}-last`);
-    }
-    const left = processor.processStreamResponse(
-      streamOf('left'),
-      createUserInput(),
-      undefined,
-      'turn-left',
-    );
-    await left.next();
-    const right = processor.processStreamResponse(
-      streamOf('right'),
-      createUserInput(),
-      undefined,
-      'turn-right',
-    );
-
-    await Promise.all([
-      (async () => {
-        for await (const _chunk of left) {
-          // drain
-        }
-      })(),
-      (async () => {
-        for await (const _chunk of right) {
-          // drain
-        }
-      })(),
-    ]);
-
-    expect(Object.fromEntries(admittedTurnByText)).toStrictEqual({
-      'left-first': 'turn-left',
-      'left-last': 'turn-left',
-      'right-first': 'turn-right',
-      'right-last': 'turn-right',
+    const admission = new ObservedAdmission(store);
+    setup.processor.rebindHistory({
+      ...setup.runtime,
+      mediaAdmission: admission,
     });
-  });
-  it('keeps concurrent streams from sharing accumulated blocks', async () => {
-    async function* streamOf(prefix: string): AsyncGenerator<ModelStreamChunk> {
-      yield makeChunk(`${prefix}-a`);
-      yield makeFinishChunk(`${prefix}-b`);
+    try {
+      const left = setup.processor.processStreamResponse(
+        textStream('left'),
+        sourcePending,
+        undefined,
+        'left-turn',
+      );
+      const right = setup.processor.processStreamResponse(
+        textStream('right'),
+        sourcePending,
+        undefined,
+        'right-turn',
+      );
+      await left.next();
+      await drain(right);
+      await drain(left);
+      const rows = (
+        await Array.fromAsync(setup.history.streamRawHistory())
+      ).filter((row) => row.speaker === 'ai');
+      expect(Object.fromEntries(admission.admitted)).toStrictEqual({
+        'left-a': 'left-turn',
+        'left-b': 'left-turn',
+        'right-a': 'right-turn',
+        'right-b': 'right-turn',
+      });
+      expect(rows.map((row) => row.metadata?.turnId)).toStrictEqual([
+        'right-turn',
+        'left-turn',
+      ]);
+      expect(await responseTexts(setup.history)).toStrictEqual([
+        'right-aright-b',
+        'left-aleft-b',
+      ]);
+    } finally {
+      await store.close();
+      await setup.history.dispose();
+      await setup.config.dispose();
     }
-
-    await Promise.all(
-      ['left', 'right'].map(async (prefix) => {
-        for await (const _chunk of processor.processStreamResponse(
-          streamOf(prefix),
-          createUserInput(),
-        )) {
-          // drain
-        }
-      }),
-    );
-
-    expect(collectFinalizedText(finalize).sort()).toStrictEqual([
-      'left-aleft-b',
-      'right-aright-b',
-    ]);
   });
 });

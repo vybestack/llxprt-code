@@ -15,8 +15,12 @@ import type { ToolArgumentDelta } from './tool-argument-delta.js';
 export interface ResponseArrival {
   selectAttempt(id: string | undefined): Promise<void>;
   appendToolArguments(delta: ToolArgumentDelta): Promise<void>;
+  replaceAfcHistory(contents: AsyncIterable<IContent>): Promise<void>;
   append(block: ContentBlock): void | Promise<void>;
-  seal(metadata: ContentMetadata): Promise<void>;
+  seal(
+    metadata: ContentMetadata,
+    afterAuxiliary?: () => Promise<void>,
+  ): Promise<void>;
   interrupt(outcome?: Exclude<ArrivalOutcome, 'completed'>): Promise<void>;
 }
 
@@ -29,6 +33,9 @@ class JournalResponseArrival implements ResponseArrival {
       }
     | undefined;
   private finished = false;
+  private afcGeneration = 0;
+  private afcCount = 0;
+  private afcFinished = 0;
   private toolAttemptId: string | undefined;
   constructor(
     private readonly recorder: JournalArrivalRecorder,
@@ -93,6 +100,7 @@ class JournalResponseArrival implements ResponseArrival {
     if (id === undefined) return;
     if (this.toolAttemptId !== undefined && this.toolAttemptId !== id) {
       await this.end();
+      await this.finishAfc('superseded');
       await this.recorder.finishAttempt(this.row, 'superseded');
       this.content = {
         ...this.content,
@@ -133,6 +141,50 @@ class JournalResponseArrival implements ResponseArrival {
       }
     }
   }
+  async replaceAfcHistory(contents: AsyncIterable<IContent>): Promise<void> {
+    if (this.finished) throw new Error('Response arrival is finished');
+    await this.end();
+    await this.finishAfc('superseded');
+    this.afcGeneration++;
+    for await (const content of contents) {
+      const row = await this.recorder.beginRow(
+        encodeContentRow({ ...content, blocks: [] }, { owner: this.owner }),
+        {
+          ...this.attempt,
+          id: `${this.attempt.id}:afc:${this.afcGeneration}:${this.afcCount}`,
+        },
+      );
+      await this.recorder.bindRow(
+        this.row,
+        `afc:${this.afcGeneration}:${this.afcCount}`,
+        row,
+      );
+      this.afcCount++;
+      for (const block of content.blocks)
+        await this.appendCompleteToRow(row, block);
+    }
+  }
+  private async finishAfc(
+    outcome: ArrivalOutcome,
+    afterAuxiliary?: () => Promise<void>,
+  ): Promise<void> {
+    for (let index = this.afcFinished; index < this.afcCount; index++) {
+      const row = await this.recorder.lookupRow(
+        this.row,
+        `afc:${this.afcGeneration}:${index}`,
+      );
+      if (outcome === 'completed') {
+        await this.recorder.sealRow(row);
+        this.afcFinished = index + 1;
+        await afterAuxiliary?.();
+      } else {
+        await this.recorder.finishAttempt(row, outcome);
+        this.afcFinished = index + 1;
+      }
+    }
+    this.afcCount = 0;
+    this.afcFinished = 0;
+  }
   private async appendThinkingMetadata(
     block: Extract<ContentBlock, { type: 'thinking' }>,
     handle: ArrivalBlock,
@@ -170,8 +222,14 @@ class JournalResponseArrival implements ResponseArrival {
   }
   private async appendComplete(block: ContentBlock): Promise<void> {
     await this.end();
+    await this.appendCompleteToRow(this.row, block);
+  }
+  private async appendCompleteToRow(
+    row: ArrivalRow,
+    block: ContentBlock,
+  ): Promise<void> {
     const handle = await this.recorder.beginBlock(
-      this.row,
+      row,
       ROW_BLOCK_TYPE[block.type],
     );
     const bytes = new TextEncoder().encode(JSON.stringify(block));
@@ -179,10 +237,14 @@ class JournalResponseArrival implements ResponseArrival {
       await this.recorder.appendField(handle, bytes.subarray(at, at + 65536));
     await this.recorder.endBlock(handle);
   }
-  async seal(metadata: ContentMetadata): Promise<void> {
+  async seal(
+    metadata: ContentMetadata,
+    afterAuxiliary?: () => Promise<void>,
+  ): Promise<void> {
     if (this.finished) throw new Error('Response arrival is finished');
     await this.end();
     await this.recorder.endRowBlocks(this.row);
+    await this.finishAfc('completed', afterAuxiliary);
     await this.recorder.sealRow(this.row, {
       ...this.content.metadata,
       ...metadata,
@@ -194,6 +256,7 @@ class JournalResponseArrival implements ResponseArrival {
     outcome: Exclude<ArrivalOutcome, 'completed'> = 'interrupted',
   ): Promise<void> {
     if (this.finished) return;
+    await this.finishAfc(outcome);
     await this.recorder.finishAttempt(this.row, outcome);
     this.finished = true;
     await this.recorder.close();

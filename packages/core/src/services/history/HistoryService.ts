@@ -15,6 +15,7 @@
  */
 
 import { withArrivalPublication } from './history-arrival-publication.js';
+import { stampAiTurnModel } from './IContent.js';
 import { historyOriginId } from './historyOriginId.js';
 import { firstEntryContextRange } from './contextRange.js';
 import type { ArrivalAttempt } from '../../journal/arrival-group.js';
@@ -110,12 +111,21 @@ export class HistoryService extends HistoryServiceReads {
       origin: originId,
       enqueue: (run) => this.enqueueAsynchronousHistoryMutation(run),
       assertAdmission: () => this.tokenTickets.assertAdmission(),
-      prepare: () =>
+      prepare: (start) =>
         this.tokenTickets.prepare(
-          this.captureTokenRow(),
+          this.captureTokenRow(start),
           undefined,
           this.syncGeneration,
         ),
+      prepareAfc: (row) => {
+        const stamped = stampAiTurnModel(
+          row,
+          metadata.model,
+          metadata.providerBaseURL,
+        );
+        this.chronology.stamp(stamped);
+        return stamped;
+      },
       publish: (ticket) => this.tokenTickets.publish(ticket),
       cancel: (ticket) => this.tokenTickets.cancel(ticket),
       added: (sealed) => {

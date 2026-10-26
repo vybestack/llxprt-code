@@ -120,7 +120,7 @@ export function openResponseArrival(
       model: resolveGeneratingModel(runtime),
       ...(runtime.state.baseUrl === undefined
         ? {}
-        : { baseURL: runtime.state.baseUrl }),
+        : { providerBaseURL: runtime.state.baseUrl }),
     },
     origin,
   );

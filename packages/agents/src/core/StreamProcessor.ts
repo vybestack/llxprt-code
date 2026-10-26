@@ -11,7 +11,7 @@ import type {
   ModelOutput,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
+import { StreamTerminalState } from './streamTerminalState.js';
 import { cancellableResponseStream } from './cancellableResponseStream.js';
 import {
   openResponseArrival,
@@ -678,15 +678,7 @@ export class StreamProcessor {
     );
   }
 
-  /**
-   * Process streaming response chunks into a complete conversation turn.
-   *
-   * CRITICAL: yield chunks inline during the for-await loop. Collecting all
-   * chunks first blocks user output, abort checks, and stalled provider streams.
-   * See issue #1846.
-   *
-   * @plan PLAN-20260707-AGENTNEUTRAL.P07 — accumulates neutral ModelStreamChunk
-   */
+  /** Journal each arrival before yielding or pulling the next provider chunk. */
   async *processStreamResponse(
     streamResponse: AsyncGenerator<ModelStreamChunk>,
     userInput: IContent | IContent[],
@@ -708,7 +700,7 @@ export class StreamProcessor {
         turnId,
         origin,
       ));
-    const accumulator = new StreamOutputAccumulator();
+    const terminal = new StreamTerminalState();
     const admissions: MediaAdmissionRelease[] = [];
     let finalized = false;
     let failureCleanupStarted = false;
@@ -733,11 +725,12 @@ export class StreamProcessor {
           ? undefined
           : appendResponseChunk(arrival, historyChunk, includeThoughts);
         if (pendingArrival !== undefined) await pendingArrival;
-        accumulator.add(historyChunk);
+        terminal.add(historyChunk, includeThoughts);
+        await this._recordStreamAfc(historyChunk, arrival);
         yield { ...chunk, content: filteredContent };
       }
       await this._finalizeStreamProcessing(
-        accumulator.materialize(),
+        terminal,
         userInput,
         includeThoughts,
         semanticMediaPurge,
@@ -759,8 +752,22 @@ export class StreamProcessor {
     }
   }
 
+  private async _recordStreamAfc(
+    chunk: ModelStreamChunk,
+    arrival: ResponseArrival,
+  ): Promise<void> {
+    const afc = chunk.afcHistory;
+    if (afc === undefined) return;
+    const start = await this.historyService.matchingCuratedPrefix(afc);
+    await arrival.replaceAfcHistory(
+      (async function* () {
+        for (let index = start; index < afc.length; index++) yield afc[index];
+      })(),
+    );
+  }
+
   private _finalizeStreamProcessing(
-    acc: ModelOutput,
+    terminal: StreamTerminalState,
     userInput: IContent | IContent[],
     includeThoughts: boolean,
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
@@ -777,7 +784,7 @@ export class StreamProcessor {
       historyService: this.historyService,
       compressionHandler: this.compressionHandler,
       runtimeContext: this.runtimeContext,
-      accumulated: acc,
+      terminal,
       userInput,
       includeThoughts,
       semanticMediaPurge,

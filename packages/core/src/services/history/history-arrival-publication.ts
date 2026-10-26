@@ -9,7 +9,8 @@ export function withArrivalPublication<T>(
     journal: HistoryStorePort;
     enqueue(run: () => Promise<void>): Promise<void>;
     assertAdmission(): void;
-    prepare(): T;
+    prepare(start: number): T;
+    prepareAfc(content: IContent): IContent;
     publish(token: T): void;
     cancel(token: T): void;
     added(content: IContent): void;
@@ -20,36 +21,51 @@ export function withArrivalPublication<T>(
   return {
     selectAttempt: (id) => arrival.selectAttempt(id),
     appendToolArguments: (delta) => arrival.appendToolArguments(delta),
+    replaceAfcHistory: (contents) =>
+      arrival.replaceAfcHistory(
+        (async function* () {
+          for await (const content of contents) yield host.prepareAfc(content);
+        })(),
+      ),
     append: (block) => arrival.append(block),
     interrupt: (outcome) => arrival.interrupt(outcome),
     seal: (metadata) =>
       host.enqueue(async () => {
         host.assertAdmission();
-        const wasEmpty = host.journal.getLength() === 0;
+        const before = host.journal.getLength();
         const scope = host.journal.openPublication();
         let ticket: { value: T } | undefined;
         let published = false;
-        try {
-          await arrival.seal(metadata);
-          const sealed = await host.journal.lastContent('ai');
+        let first: IContent | undefined;
+        const observe = async (): Promise<void> => {
+          const sealed = await host.journal.lastContent();
           if (sealed === undefined)
             throw new Error('Sealed response is missing');
-          ticket = { value: host.prepare() };
-          try {
-            host.added(sealed);
-          } catch (error) {
-            host.journal.apply({
-              kind: 'rewind',
-              itemsRemoved: 1,
-              cutSeq: sealed.metadata?.chronology?.seq,
-              origin: host.origin,
-            });
-            throw error;
-          }
+          host.added(sealed);
+          if (before === 0 && first === undefined)
+            first = {
+              speaker: sealed.speaker,
+              blocks: [],
+              metadata: sealed.metadata,
+            };
+        };
+        try {
+          await arrival.seal(metadata, observe);
+          await observe();
+          ticket = { value: host.prepare(before) };
           scope.close(true);
-          if (wasEmpty) host.first(sealed);
+          if (first !== undefined) host.first(first);
           host.publish(ticket.value);
           published = true;
+        } catch (error) {
+          const added = host.journal.getLength() - before;
+          if (added > 0)
+            host.journal.apply({
+              kind: 'rewind',
+              itemsRemoved: added,
+              origin: host.origin,
+            });
+          throw error;
         } finally {
           scope.close(false);
           if (!published && ticket !== undefined) host.cancel(ticket.value);

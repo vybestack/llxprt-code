@@ -243,6 +243,30 @@ export class ArrivalGroup {
     this.binding = { key, bytes };
     return handle;
   }
+  async bindRow(
+    parent: ArrivalRow,
+    key: string,
+    row: ArrivalRow,
+  ): Promise<void> {
+    const bytes = new Uint8Array(8);
+    new DataView(bytes.buffer).setBigUint64(0, row.transcriptId);
+    this.binding = { key: `arrival-row:${parent.transcriptId}:${key}`, bytes };
+  }
+  async lookupRow(parent: ArrivalRow, key: string): Promise<ArrivalRow> {
+    const bytes = await mapReader(this.ctx, 'state').get(
+      this.built.state.stateRoot,
+      `arrival-row:${parent.transcriptId}:${key}`,
+    );
+    if (bytes === undefined || bytes.length !== 8)
+      throw new Error('Missing arrival row binding');
+    return {
+      transcriptId: new DataView(
+        bytes.buffer,
+        bytes.byteOffset,
+        8,
+      ).getBigUint64(0),
+    };
+  }
   async endNextBlock(
     row: ArrivalRow,
     start: number,

@@ -99,6 +99,18 @@ export class JournalArrivalRecorder {
     await this.flush();
     return this.mutate((group) => group.indexedBlock(row, type, sourceId));
   }
+  async bindRow(
+    parent: ArrivalRow,
+    key: string,
+    row: ArrivalRow,
+  ): Promise<void> {
+    await this.flush();
+    await this.mutate((group) => group.bindRow(parent, key, row));
+  }
+  async lookupRow(parent: ArrivalRow, key: string): Promise<ArrivalRow> {
+    await this.flush();
+    return this.mutate((group) => group.lookupRow(parent, key));
+  }
   async endRowBlocks(row: ArrivalRow): Promise<void> {
     await this.flush();
     let ordinal = 0;
