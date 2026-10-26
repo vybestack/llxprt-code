@@ -5,6 +5,7 @@
  */
 
 import type * as Tiktoken from '@dqbd/tiktoken';
+import { countLongNeutralText } from '@vybestack/llxprt-code-core/utils/neutral-long-piece.js';
 
 /**
  * Provenance of the pinned local `o200k_base` BPE asset.
@@ -71,5 +72,8 @@ export function countO200kBaseTokens(
   encoder: O200kBaseEncoder,
   text: string,
 ): number {
-  return encoder.encode(text, [], []).length;
+  return countLongNeutralText(
+    text,
+    (piece) => encoder.encode(piece, [], []).length,
+  );
 }

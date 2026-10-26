@@ -434,6 +434,10 @@
       "bun": "./src/utils/secure-browser-launcher.ts",
       "import": "./dist/src/utils/secure-browser-launcher.js"
     },
+    "./utils/neutral-long-piece.js": {
+      "bun": "./src/utils/neutral-long-piece.ts",
+      "import": "./dist/src/utils/neutral-long-piece.js"
+    },
     "./utils/toolOutputLimiter.js": {
       "bun": "./src/utils/toolOutputLimiter.ts",
       "import": "./dist/src/utils/toolOutputLimiter.js"

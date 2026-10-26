@@ -4,43 +4,91 @@ import { createRequire } from 'node:module';
 import { z } from 'zod';
 import { NeutralMergeQueue } from './neutral-merge-queue.js';
 
-let ranks: ReadonlyMap<string, number> | undefined;
-let pieces: RegExp | undefined;
-function tokenRanks(): ReadonlyMap<string, number> {
-  if (ranks !== undefined) return ranks;
-  const path = createRequire(import.meta.url).resolve(
-    '@dqbd/tiktoken/encoders/o200k_base.json',
-  );
-  const vocabulary = z
-    .object({ bpe_ranks: z.string(), pat_str: z.string() })
-    .parse(JSON.parse(readFileSync(path, 'utf8')));
-  // Sticky matching never retries at later positions. Each alternative either
-  // consumes its run or the next alternative consumes the run it inspected.
-  // Rust whitespace differs from JavaScript's, and JS lacks inline flags.
-  const pattern = vocabulary.pat_str
+export type LongTextCounter = (
+  text: string,
+  countShort: (text: string) => number,
+) => number;
+
+/** Reuse the exact rank-ordered merge algorithm with each codec's own assets. */
+export function createLongTextCounter(
+  bpeRanks: string,
+  patStr: string,
+): LongTextCounter {
+  const pattern = patStr
     .replaceAll('\\s', '\\p{White_Space}')
     .replaceAll('\\S', '\\P{White_Space}')
+    .replaceAll('\\p{Han}', '\\p{Script=Han}')
     .replaceAll(
       "(?i:'s|'t|'re|'ve|'m|'ll|'d)",
       "(?:'[sStTmMdD]|'[rR][eE]|'[vV][eE]|'[lL][lL])",
     );
-  pieces = new RegExp(pattern, 'uy');
+  const pieces = new RegExp(pattern, pattern.includes('&&') ? 'vy' : 'uy');
+  let ranks: ReadonlyMap<string, number> | undefined;
+  return (text, countShort) => {
+    if (text.length <= 512) return countShort(text);
+    const matcher = new RegExp(pieces);
+    let count = 0;
+    let start = 0;
+    let position = 0;
+    for (
+      let match = matcher.exec(text);
+      match !== null;
+      match = matcher.exec(text)
+    ) {
+      position = matcher.lastIndex;
+      if (match[0].length > 512) {
+        ranks ??= parseRanks(bpeRanks);
+        if (match.index > start)
+          count += countShort(text.slice(start, match.index));
+        count += countBpePiece(Buffer.from(match[0]), ranks);
+        start = position;
+      }
+    }
+    if (position !== text.length)
+      throw new Error('Tokenizer pattern did not cover input');
+    return start < text.length ? count + countShort(text.slice(start)) : count;
+  };
+}
+
+function parseRanks(bpeRanks: string): ReadonlyMap<string, number> {
   const result = new Map<string, number>();
-  const fields = vocabulary.bpe_ranks.split(' ');
-  if (fields[0] !== '!' || fields[1] !== '0')
-    throw new Error('Unrecognized neutral tokenizer ranks');
-  for (let index = 2; index < fields.length; index++)
+  const fields = bpeRanks.trim().split(/\s+/);
+  const compact = fields[0] === '!' && fields[1] === '0';
+  for (
+    let index = compact ? 2 : 0;
+    index < fields.length;
+    index += compact ? 1 : 2
+  )
     result.set(
       Buffer.from(fields[index], 'base64').toString('latin1'),
-      index - 2,
+      compact ? index - 2 : Number(fields[index + 1]),
     );
-  ranks = result;
   return result;
 }
 
-function countPiece(text: string): number {
-  const dictionary = tokenRanks();
-  const bytes = Buffer.from(text).toString('latin1');
+const encodings = new Map<string, LongTextCounter>();
+export function encodingLongTextCounter(encoding: string): LongTextCounter {
+  const cached = encodings.get(encoding);
+  if (cached !== undefined) return cached;
+  const path = createRequire(import.meta.url).resolve(
+    `@dqbd/tiktoken/encoders/${encoding}.json`,
+  );
+  const vocabulary = z
+    .object({ bpe_ranks: z.string(), pat_str: z.string() })
+    .parse(JSON.parse(readFileSync(path, 'utf8')));
+  const counter = createLongTextCounter(
+    vocabulary.bpe_ranks,
+    vocabulary.pat_str,
+  );
+  encodings.set(encoding, counter);
+  return counter;
+}
+
+export function countBpePiece(
+  input: Buffer,
+  dictionary: ReadonlyMap<string, number>,
+): number {
+  const bytes = input.toString('latin1');
   if (dictionary.has(bytes)) return 1;
   const next = new Int32Array(bytes.length + 1);
   const previous = new Int32Array(bytes.length + 1);
@@ -83,23 +131,5 @@ export function countLongNeutralText(
   text: string,
   countShort: (text: string) => number,
 ): number {
-  tokenRanks();
-  if (pieces === undefined)
-    throw new Error('Neutral tokenizer pattern is not initialized');
-  let count = 0;
-  let start = 0;
-  const matcher = new RegExp(pieces);
-  for (
-    let match = matcher.exec(text);
-    match !== null;
-    match = matcher.exec(text)
-  ) {
-    if (match[0].length > 512) {
-      if (match.index > start)
-        count += countShort(text.slice(start, match.index));
-      count += countPiece(match[0]);
-      start = match.index + match[0].length;
-    }
-  }
-  return start < text.length ? count + countShort(text.slice(start)) : count;
+  return encodingLongTextCounter('o200k_base')(text, countShort);
 }

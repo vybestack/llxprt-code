@@ -32,7 +32,7 @@ import { TiktokenRuntime } from './tiktokenRuntime.js';
  * This conversion is valid because the underlying algorithm is
  * byte-level BPE, not an incompatible tokenizer type.
  */
-const GLM_PAT_STR =
+export const GLM_PAT_STR =
   String.raw`(?i:'s|'t|'re|'ve|'m|'ll|'d)|` +
   String.raw`[^\r\n\p{L}\p{N}]?\p{L}+|` +
   String.raw`\p{N}{1,3}|` +
