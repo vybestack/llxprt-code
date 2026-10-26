@@ -54,13 +54,17 @@ function failure(
 async function prepareSourceAssets(
   request: RuntimePromptEstimateRequest,
 ): Promise<DiskCounter> {
+  try {
+    const { diskAssets } = await import('./o200k-disk-assets.js');
+    diskAssets();
+  } catch (error) {
+    throw failure(request, 'asset-unavailable', error);
+  }
   await prepareGpt56RuntimeTokenizer(
     request.activeProvider,
     request.canonicalModel,
   );
   try {
-    const { diskAssets } = await import('./o200k-disk-assets.js');
-    diskAssets();
     const encoder = await getO200kBaseEncoder();
     return (source, options) =>
       countO200kBaseTokensChunked(source, encoder, options);
