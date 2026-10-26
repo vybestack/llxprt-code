@@ -30,6 +30,7 @@ import type {
 import type { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import type { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 import type { WorkspaceSkillOwner } from '@vybestack/llxprt-code-core/skills/workspace-skill-owner.js';
+import type { WorkspaceExtensionOperations } from '@vybestack/llxprt-code-core/utils/workspace-extension-owner.js';
 import type { WorkspaceMcpSettings } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type {
@@ -139,6 +140,7 @@ export interface AgentFacadeMcpPort {
   readonly ide: WorkspaceIdePort;
   readonly lspInspection: WorkspaceLspInspection;
   readonly workspaceSkills: Pick<WorkspaceSkillOwner, 'operations'>;
+  readonly extensionOperations: WorkspaceExtensionOperations;
   readonly readOAuthCredentials: TokenStorage['getCredentials'];
   readonly performOAuth: NonNullable<McpControlDeps['performOAuth']>;
   listPrompts(server: string): DiscoveredMCPPrompt[];
@@ -158,5 +160,6 @@ export interface AgentFacadeMcpPort {
  */
 export interface ForegroundMcpPort
   extends AgentFacadeMcpPort,
+    SessionMcpBindingPort,
     AgentActivationPort,
     McpTeardownPort {}

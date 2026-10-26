@@ -71,6 +71,7 @@ import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
 import { assembleHostGitHubBroker } from './host-github-broker-owner.js';
 import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import type { McpCapability } from './mcp-runtime-construction.js';
+import type { ForegroundMcpPort } from './mcpRuntimePorts.js';
 import type { SessionMcpSettingsReads } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { type PreparedProfileFacade } from './profileApplicationAssembly.js';
 import { canonicalProviderActivationIntent } from './provider-activation-intent.js';
@@ -150,7 +151,7 @@ export class AgentActivationBootstrap
   #switcher!: ProviderSwitcher;
   #sessionResources!: ActivationSessionResources;
   #sessionAuth!: ActivationSessionAuth;
-  #mcp: McpRuntimeOwner | undefined;
+  #mcp: ForegroundMcpPort | undefined;
   #mediaOwner: SessionMediaOwner | undefined;
   #releaseForegroundProviders!: () => Promise<void>;
   #ownsFilesystem = false;
@@ -397,7 +398,7 @@ export class AgentActivationBootstrap
 
   async #bindForegroundClient(
     broker: ReturnType<typeof assembleHostGitHubBroker>,
-    mcp: McpRuntimeOwner,
+    mcp: ForegroundMcpPort,
   ): Promise<SessionClientOwner> {
     const client = this.#sessionResources.sessionClient;
     client.bindHostGitHub(broker);

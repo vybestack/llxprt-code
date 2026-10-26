@@ -131,7 +131,7 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
   #lifecycle: AdoptionLifecyclePort | undefined;
   #settingsService!: SettingsService;
   #intent!: AgentAdoptionIntent;
-  #mcp!: McpRuntimeOwner;
+  #mcp!: ForegroundMcpPort & { readonly messageBus: MessageBus };
   #media: SessionMediaOwner | undefined;
   #selectedSettings!: SessionSettingsOwner;
   #files!: ProviderFileLifecycle;
@@ -233,7 +233,9 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
     return runtimeId;
   }
 
-  #adoptConstructMcp(): Promise<McpRuntimeOwner> {
+  #adoptConstructMcp(): Promise<
+    ForegroundMcpPort & { readonly messageBus: MessageBus }
+  > {
     const feedback = defaultFeedbackSink;
     return McpRuntimeOwner.create(
       {
