@@ -1,55 +1,44 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { dirname } from 'node:path';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import type { IContent } from '../services/history/IContent.js';
-import { Storage } from '@vybestack/llxprt-code-settings';
 import type { HistoryService } from '../services/history/HistoryService.js';
-import {
-  SessionPersistenceService,
-  type SessionPersistenceServiceOptions,
-} from './SessionPersistenceService.js';
+import { JournalSession } from '../services/history/journalSession.js';
+import { encodeContentRow } from '../services/history/journalRowCodec.js';
+import { NativeRecordingProbe } from './native-recording-probe.test-support.js';
 
-class SnapshotTestStorage extends Storage {
-  constructor(private readonly directory: string) {
-    super(directory);
-  }
-  override getProjectTempDir(): string {
-    return this.directory;
-  }
-}
-
-export function createCursorPersistence(
+export async function createCursorJournal(
   history: HistoryService,
   sessionId: string,
-  options: SessionPersistenceServiceOptions = {},
-): SessionPersistenceService {
-  const journal = history.journalPath();
-  if (journal === null) throw new Error('Missing persistence fixture journal');
-  const storage = new SnapshotTestStorage(dirname(journal));
-  return new SessionPersistenceService(
-    {
-      projectRoot: storage.getProjectRoot(),
-      chatsDir: storage.getProjectChatsDir(),
-    },
-    sessionId,
-    options,
+) {
+  const path = history.journalPath();
+  if (path === null) throw new Error('Missing persistence fixture journal');
+  const probe = new NativeRecordingProbe();
+  const session = await JournalSession.create(
+    join(dirname(path), `${sessionId}.llxj`),
+    probe.options,
   );
+  return { session, probe };
 }
 
-export async function seedCursorPersistence(
-  persistence: SessionPersistenceService,
-  row: IContent,
+export async function replaceJournalRows(
+  session: JournalSession,
+  rows: AsyncIterable<IContent>,
+): Promise<void> {
+  async function* drafts() {
+    for await (const row of rows) yield encodeContentRow(row, { owner: 0 });
+  }
+  await session.store.commit([{ kind: 'replace', rows: drafts() }]);
+}
+
+export async function journalHistoryDigest(
+  session: JournalSession,
 ): Promise<string> {
-  const expected = JSON.stringify({
-    version: 1,
-    generation: 1,
-    sessionId: 'independent-cursor-fixture',
-    projectHash: 'cursor-fixture',
-    createdAt: '2026-10-01T00:00:00.000Z',
-    updatedAt: '2026-10-01T00:00:00.000Z',
-    history: [row],
-  });
-  await mkdir(persistence.getChatsDir(), { recursive: true });
-  await writeFile(persistence.getSessionFilePath(), expected, 'utf8');
-  return expected;
+  const { createHash } = await import('node:crypto');
+  const hash = createHash('sha256').update('[');
+  let separator = '';
+  for await (const { content } of session.rows()) {
+    hash.update(separator).update(JSON.stringify(content));
+    separator = ',';
+  }
+  return hash.update(']').digest('hex');
 }

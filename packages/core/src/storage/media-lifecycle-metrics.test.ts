@@ -14,12 +14,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Storage } from '@vybestack/llxprt-code-settings';
 import { JournalRecordingService } from '../recording/journalRecordingService.js';
 import { NativeRecordingProbe } from './native-recording-probe.test-support.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
-import { SessionPersistenceService } from './SessionPersistenceService.js';
 import { LocalMediaStore } from './local-media-store.js';
 import { MediaAdmissionService } from './media-admission-service.js';
 import {
@@ -71,19 +69,6 @@ class ProviderRetentionSource {
   }
 }
 
-type PersistenceSaveOutcome =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly error: unknown };
-
-function observePersistenceSave(
-  work: Promise<void>,
-): Promise<PersistenceSaveOutcome> {
-  return work.then(
-    (): PersistenceSaveOutcome => ({ ok: true }),
-    (error: unknown): PersistenceSaveOutcome => ({ ok: false, error }),
-  );
-}
-
 function rssBehavior(): number {
   expect(maxRssToBytes(4096)).toBe(4_194_304);
   expect(maxRssToBytes(0)).toBeNull();
@@ -95,15 +80,7 @@ let directory = '';
 
 let recording: JournalRecordingService | undefined;
 
-let persistenceSave: Promise<PersistenceSaveOutcome> | undefined;
-
-async function finishPersistenceSave(): Promise<void> {
-  const pending = persistenceSave;
-  persistenceSave = undefined;
-  if (pending === undefined) return;
-  const outcome = await pending;
-  if (!outcome.ok) throw outcome.error;
-}
+let persistedRecording: JournalRecordingService | undefined;
 
 async function lifecycleBehavior(): Promise<number> {
   let releasedDiskSpoolBytes = 0;
@@ -131,20 +108,20 @@ async function lifecycleBehavior(): Promise<number> {
   const probe = new NativeRecordingProbe();
   const activeRecording = await startMetricRecording(probe);
   recording = activeRecording;
-  const persistence = new SessionPersistenceService(
-    {
-      projectRoot: new Storage(directory).getProjectRoot(),
-      chatsDir: new Storage(directory).getProjectChatsDir(),
-    },
-    'metrics-session',
-    { mediaStore: store },
-  );
+  const persistence = new NativeRecordingProbe();
+  persistedRecording = JournalRecordingService.create({
+    sessionId: 'metrics-persisted',
+    projectHash: 'metrics-project',
+    chatsDir: join(directory, 'persisted'),
+    journal: persistence.options,
+    workspaceDirs: [],
+    provider: 'test',
+    model: 'test',
+  });
+  const persistedSession = await persistedRecording.session();
   await collectRowsForAssertions(
     history.streamRawHistory(),
     async (contentsForAssertions) => {
-      persistenceSave = observePersistenceSave(
-        persistence.save([...contentsForAssertions]),
-      );
       const providerRetention = new ProviderRetentionSource(321);
       const metrics = new MediaLifecycleMetrics({
         store,
@@ -165,15 +142,22 @@ async function lifecycleBehavior(): Promise<number> {
           await session.append([admittedHistory]);
         },
         async () => {
-          const active = await metrics.snapshot();
-          assertActiveMetrics(active, payload.byteLength, encoded.length);
+          await persistence.measureWrite(
+            async () => {
+              await persistedSession.append([admittedHistory]);
+            },
+            async () => {
+              const active = await metrics.snapshot();
+              assertActiveMetrics(active, payload.byteLength, encoded.length);
+            },
+          );
         },
       );
 
       await resolved.release();
       await history.clear();
       providerRetention.release();
-      await finishPersistenceSave();
+      await persistedRecording?.flush();
       await activeRecording.flush();
       const released = await metrics.snapshot();
 
@@ -239,7 +223,7 @@ describe('MediaLifecycleMetrics', () => {
   afterEach(async () => {
     const failures: unknown[] = [];
     try {
-      await finishPersistenceSave();
+      await persistedRecording?.dispose();
     } catch (error: unknown) {
       failures.push(error);
     }

@@ -186,8 +186,6 @@ export const productionPolicy: AuditPolicy = {
     'core/src/utils/workspaceContext.ts': 'WorkspaceContext',
     'core/src/utils/extensionLoader.ts': 'ExtensionLoader',
     'core/src/storage/local-media-store.ts': 'LocalMediaStore',
-    'core/src/storage/SessionPersistenceService.ts':
-      'SessionPersistenceService',
     'storage/src/services/fileDiscoveryService.ts': 'FileDiscoveryService',
     'storage/src/services/fileSystemService.ts': 'FileSystemService',
     'policy/src/policy-engine.ts': 'PolicyEngine',

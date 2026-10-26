@@ -7,7 +7,6 @@
 import { mkdtemp, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Storage } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import { createSessionRecorder } from '../../packages/core/src/recording/sessionRecorderFactory.js';
@@ -15,7 +14,7 @@ import { requireJournalRecorder } from '../../packages/core/src/services/history
 import { NativeRecordingProbe } from '../../packages/core/src/storage/native-recording-probe.test-support.js';
 import { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import { SessionPersistenceService } from '../../packages/core/src/storage/SessionPersistenceService.js';
+import { JournalSession } from '../../packages/core/src/services/history/journalSession.js';
 import { LocalMediaStore } from '../../packages/core/src/storage/local-media-store.js';
 import { historyOwnerIdFor } from '../../packages/core/src/storage/media-admission-service.js';
 import { useTempDir } from '../../packages/core/src/journal/__tests__/support/useTempDir.js';
@@ -227,15 +226,13 @@ describe('issue 3199 media memory lifecycle', () => {
           blocks: [{ type: 'text', text: 'queued before failure' }],
         },
       ]);
-      const persistence = new SessionPersistenceService(
-        {
-          projectRoot: directory,
-          chatsDir: new Storage(directory).getProjectChatsDir(),
-        },
-        'initialization-probe',
-        { mediaStore: store },
+      const persistence = new NativeRecordingProbe();
+      const persistedSession = await JournalSession.create(
+        join(directory, 'persisted.llxj'),
+        persistence.options,
       );
       resources.persistence = persistence;
+      resources.persistedSession = persistedSession;
       const providerRetention = new ProviderFileLifecycle({
         maxFiles: 1,
         maxBytes: 1024,

@@ -252,7 +252,6 @@ export {
 } from './storage/provider-key-storage.js';
 export * from './storage/scratch-root.js';
 export * from './storage/local-media-store.js';
-export * from './storage/SessionPersistenceService.js';
 export * from './storage/media-admission-service.js';
 export { HistoryMediaIndex } from './storage/history-media-index.js';
 export { collectMediaReferences } from './storage/media-reference-lifecycle.js';

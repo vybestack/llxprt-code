@@ -184,8 +184,10 @@ export function maxRssToBytes(maxRSS: number): number | null {
   return requireByteCount('osPeakFootprintBytes', Math.round(maxRSS * 1024));
 }
 
-function osPeakFootprintBytes(): number | null {
-  return maxRssToBytes(process.resourceUsage().maxRSS);
+function osPeakFootprintBytes(residentBytes: number): number | null {
+  const peak = maxRssToBytes(process.resourceUsage().maxRSS);
+  // getrusage reports whole KiB; a peak must also include the current RSS.
+  return peak === null ? null : Math.max(peak, residentBytes);
 }
 
 /**
@@ -213,7 +215,7 @@ export class MediaLifecycleMetrics {
         this.sources.decodedImageCache,
       );
       const processMetrics = processMemoryMetrics();
-      const peakFootprint = osPeakFootprintBytes();
+      const peakFootprint = osPeakFootprintBytes(processMetrics.rss);
       const measured = await retained;
       if (!measured.ok) throw measured.error;
       const diskSpoolBytes = requireByteCount(

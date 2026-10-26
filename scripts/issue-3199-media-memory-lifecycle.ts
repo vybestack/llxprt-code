@@ -11,7 +11,8 @@ import { historyOwnerIdFor } from '../packages/core/src/storage/media-admission-
 import type { IContent } from '../packages/core/src/services/history/IContent.js';
 import type { SessionRecordingPort } from '../packages/core/src/recording/recordingPort.js';
 import type { HistoryService } from '../packages/core/src/services/history/HistoryService.js';
-import type { SessionPersistenceService } from '../packages/core/src/storage/SessionPersistenceService.js';
+import type { NativeRecordingProbe } from '../packages/core/src/storage/native-recording-probe.test-support.js';
+import type { JournalSession } from '../packages/core/src/services/history/journalSession.js';
 import type { LocalMediaStore } from '../packages/core/src/storage/local-media-store.js';
 import type { RequestMediaResolver } from '../packages/core/src/storage/request-media-resolver.js';
 import type { ProviderFileLifecycle } from '../packages/providers/src/providerFilePolicy.js';
@@ -115,7 +116,8 @@ export interface MediaProbeResources {
   history?: HistoryService;
   resolver?: RequestMediaResolver;
   recording?: SessionRecordingPort;
-  persistence?: SessionPersistenceService;
+  persistence?: NativeRecordingProbe;
+  persistedSession?: JournalSession;
   providerRetention?: ProviderFileLifecycle;
 }
 
@@ -142,6 +144,9 @@ export async function cleanupMediaProbeResources(
   if (recording !== undefined) {
     cleanupSteps.push(() => recording.dispose());
   }
+  const persistedSession = resources.persistedSession;
+  if (persistedSession !== undefined)
+    cleanupSteps.push(() => persistedSession.close());
   const persistence = resources.persistence;
   if (persistence !== undefined) {
     cleanupSteps.push(() => {

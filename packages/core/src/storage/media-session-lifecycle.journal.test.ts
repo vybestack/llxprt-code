@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -26,7 +25,6 @@ import { readJournalFileFacts } from '../recording/journalSessionListing.js';
 import { retiredJournalMessage } from '../journal/journalRefusal.js';
 import { LocalMediaStore } from './local-media-store.js';
 import { MediaAdmissionService } from './media-admission-service.js';
-import { SessionPersistenceService } from './SessionPersistenceService.js';
 
 function diagnosticMessages(error: unknown): string {
   if (!(error instanceof Error)) return String(error);
@@ -78,10 +76,20 @@ describe('media-session-lifecycle', () => {
   }
 
   class ReplayDiagnosticFailureStore extends LocalMediaStore {
+    private admissions = 0;
     override async readVerified(
       _reference: MediaReferenceBlock,
     ): Promise<Uint8Array> {
       throw new Error('verification unavailable');
+    }
+
+    override async reserveAndReadVerified(
+      reference: MediaReferenceBlock,
+      ownerId: string,
+    ): Promise<Uint8Array> {
+      if (this.admissions++ === 0)
+        return super.reserveAndReadVerified(reference, ownerId);
+      return this.readVerified(reference);
     }
 
     override async release(contentId: string, ownerId: string): Promise<void> {
@@ -438,27 +446,18 @@ describe('media-session-lifecycle', () => {
           expect(await failingStore.hasReservations(reference.contentId)).toBe(
             false,
           );
-          const persistenceConfig = {
-            projectRoot: tempDirectory(),
-            chatsDir: join(tempDirectory(), 'aggregate-persistence'),
-          };
-          const persisted = new SessionPersistenceService(
-            persistenceConfig,
-            'aggregate-persistence',
-            { mediaStore: sourceStore },
-          );
-          await collectJournalFileRowsForAssertions(filePath, async (rows) => {
-            await persisted.save([...rows]);
-          });
-          const loader = new SessionPersistenceService(
-            persistenceConfig,
-            'aggregate-persistence',
-            { mediaStore: failingStore },
-          );
-          const loadFailure = await loader.loadMostRecent().then(
-            () => undefined,
-            (error: unknown) => error,
-          );
+          const loadFailure = await new MediaAdmissionService(failingStore)
+            .admitContent(
+              { speaker: 'human', blocks: [reference, reference] },
+              {
+                turnId: 'aggregate-replay-turn',
+                source: 'journal-resume',
+              },
+            )
+            .then(
+              () => undefined,
+              (error: unknown) => error,
+            );
           expect(loadFailure).toBeInstanceOf(AggregateError);
           const diagnostics = diagnosticMessages(loadFailure);
           expect(diagnostics).toContain(reference.contentId);
@@ -482,27 +481,20 @@ describe('media-session-lifecycle', () => {
           inlineContent(),
           { turnId: 'turn-media', source: 'acp-image' },
         );
-        const service = new SessionPersistenceService(
-          {
-            projectRoot: storage.getProjectRoot(),
-            chatsDir: storage.getProjectChatsDir(),
-          },
+        const recording = await nativeFixture(
+          tempDirectory(),
           'session-media',
-          {
-            mediaStore: store,
-            maxQueueBytes: 1024 * 1024,
-          },
+          admitted,
         );
-
-        await service.save([admitted]);
         await expect(
           store.readVerified(referenceFrom(admitted)),
         ).resolves.toBeInstanceOf(Uint8Array);
-        const restored = await service.loadMostRecent();
-
-        expect(service.getPendingByteCount()).toBe(0);
-        expect(restored?.history[0]).toStrictEqual(admitted);
-        const serialized = await readFile(service.getSessionFilePath(), 'utf8');
+        await recording.flush();
+        const filePath = requirePath(recording);
+        await recording.dispose();
+        const restored = await nativeRows(filePath, store);
+        expect(restored[0]).toStrictEqual(admitted);
+        const serialized = await readFile(filePath, 'utf8');
         expect(serialized).not.toContain(PNG_BASE64);
         expect(serialized).not.toContain(projectRoot);
         await rm(storage.getProjectTempDir(), { recursive: true, force: true });

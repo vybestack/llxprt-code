@@ -4,6 +4,7 @@ import type { JournalSessionOptions } from '../services/history/journalSession.j
 
 export class NativeRecordingProbe {
   private pendingBytes = 0;
+  private peakPendingBytes = 0;
   private observe: (() => Promise<void>) | undefined;
 
   readonly options: JournalSessionOptions = {
@@ -38,6 +39,10 @@ export class NativeRecordingProbe {
     return this.pendingBytes;
   }
 
+  getPeakPendingByteCount(): number {
+    return this.peakPendingBytes;
+  }
+
   async measureWrite(
     write: () => Promise<void>,
     observe: () => Promise<void>,
@@ -63,6 +68,7 @@ export class NativeRecordingProbe {
     write: () => Promise<T>,
   ): Promise<T> {
     this.pendingBytes += bytes;
+    this.peakPendingBytes = Math.max(this.peakPendingBytes, this.pendingBytes);
     const observe = this.observe;
     this.observe = undefined;
     try {

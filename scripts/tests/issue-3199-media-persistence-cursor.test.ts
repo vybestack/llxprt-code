@@ -1,9 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { readFile, readdir } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import {
-  createCursorPersistence,
-  seedCursorPersistence,
+  createCursorJournal,
+  journalHistoryDigest,
 } from '../../packages/core/src/storage/cursor-persistence-test-helpers.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { withMetricStore } from '../../packages/core/src/storage/media-metrics-test-helpers.js';
@@ -40,23 +41,27 @@ describe('media probe persistence cursor', () => {
       await withSuffixFixture(
         1,
         async (history, owners) => {
-          const persistence = createCursorPersistence(history, 'save-probe', {
-            mediaStore: store,
-            maxQueueBytes: 8 * 1024 * 1024,
-          });
-          const saved = await saveMediaProbeHistory(history, persistence);
-          expect(saved).toBe(1);
-          expect(await countMediaProbeHistory(history)).toBe(1);
-          const session: unknown = JSON.parse(
-            await readFile(persistence.getSessionFilePath(), 'utf8'),
+          const { session, probe: persistence } = await createCursorJournal(
+            history,
+            'save-probe',
           );
-          expect(session).toMatchObject({
-            history: [admitted],
-            sessionId: 'save-probe',
-          });
-          expect(persistence.getPendingByteCount()).toBe(0);
-          expect(owners.snapshot().peakRows).toBe(1);
-          expect(owners.snapshot().liveRows).toBe(0);
+          try {
+            const saved = await saveMediaProbeHistory(
+              history,
+              session,
+              persistence,
+            );
+            expect(saved).toBe(1);
+            expect(await countMediaProbeHistory(history)).toBe(1);
+            const rows = [];
+            for await (const row of session.rows()) rows.push(row.content);
+            expect(rows).toMatchObject([admitted]);
+            expect(persistence.getPendingByteCount()).toBe(0);
+            expect(owners.snapshot().peakRows).toBe(1);
+            expect(owners.snapshot().liveRows).toBe(0);
+          } finally {
+            await session.close();
+          }
         },
         0,
         () => admitted,
@@ -68,23 +73,29 @@ describe('media probe persistence cursor', () => {
 
   it('rejects empty and multi-row probe saves without replacing the previous target', async () => {
     await withSuffixFixture(1, async (history) => {
-      const persistence = createCursorPersistence(history, 'atomic-probe');
-      const before = await seedCursorPersistence(persistence, mergeRow(30));
-      for (const size of [0, 2])
-        await withSuffixFixture(size, async (badHistory) => {
-          await expect(
-            saveMediaProbeHistory(badHistory, persistence),
-          ).rejects.toThrow('exactly one');
-          expect(await readFile(persistence.getSessionFilePath(), 'utf8')).toBe(
-            before,
-          );
-          expect(persistence.getPendingByteCount()).toBe(0);
-        });
-      expect(
-        (await readdir(persistence.getChatsDir())).filter((name) =>
-          name.endsWith('.tmp'),
-        ),
-      ).toStrictEqual([]);
+      const { session, probe: persistence } = await createCursorJournal(
+        history,
+        'atomic-probe',
+      );
+      try {
+        await session.append([mergeRow(30)]);
+        const before = await journalHistoryDigest(session);
+        for (const size of [0, 2])
+          await withSuffixFixture(size, async (badHistory) => {
+            await expect(
+              saveMediaProbeHistory(badHistory, session, persistence),
+            ).rejects.toThrow('exactly one');
+            expect(await journalHistoryDigest(session)).toBe(before);
+            expect(persistence.getPendingByteCount()).toBe(0);
+          });
+        expect(
+          (await readdir(dirname(session.path))).filter((name) =>
+            name.endsWith('.tmp'),
+          ),
+        ).toStrictEqual([]);
+      } finally {
+        await session.close();
+      }
     });
   });
 });

@@ -36,7 +36,7 @@ describe('production source does not import the test runner', () => {
   it('recognises test support files by name and location', () => {
     for (const path of [
       'packages/core/src/recording/__tests__/support/p05dTestKit.ts',
-      'packages/core/src/storage/SessionPersistenceService.test-helpers.ts',
+      'packages/core/src/storage/cursor-persistence-test-helpers.ts',
       'packages/core/src/recording/resumeSession.test.helpers.ts',
       'packages/core/src/hooks/hookRunner-test-helpers.ts',
       'packages/providers/src/runtime/responses-source-write.test-helper.ts',

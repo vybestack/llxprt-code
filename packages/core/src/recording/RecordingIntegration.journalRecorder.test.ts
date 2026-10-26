@@ -6,7 +6,6 @@ import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 
 import type { IContent } from '../services/history/IContent.js';
-import { SessionPersistenceService } from '../storage/SessionPersistenceService.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
 import { SessionLockManager } from './SessionLockManager.js';
@@ -64,14 +63,6 @@ describe('RecordingIntegration over a journal recorder', () => {
     return rows;
   }
 
-  function persistence(): SessionPersistenceService {
-    return new SessionPersistenceService(
-      { projectRoot: directory(), chatsDir },
-      SESSION_ID,
-      { maxQueueBytes: 1024 * 1024 },
-    );
-  }
-
   it('holds the rows in the recorder file once the turn boundary has flushed', async () => {
     integration = new RecordingIntegration(recorder);
     await integration.subscribeToJournal(history);
@@ -84,7 +75,6 @@ describe('RecordingIntegration over a journal recorder', () => {
   });
 
   it('does not write the per-turn JSON snapshot for a journal recorder', async () => {
-    const saving = persistence();
     integration = new RecordingIntegration(recorder);
     await integration.subscribeToJournal(history);
 
@@ -93,11 +83,11 @@ describe('RecordingIntegration over a journal recorder', () => {
       history.add(textRow('ai', `answer ${turn}`));
       await integration.flushAtTurnBoundary();
       await integration.flushAtTurnBoundary();
-      await expect(fsp.stat(saving.getSessionFilePath())).rejects.toMatchObject(
-        {
-          code: 'ENOENT',
-        },
-      );
+      await expect(
+        fsp.stat(path.join(chatsDir, `persisted-session-${SESSION_ID}.json`)),
+      ).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
       expect(
         (await fsp.readdir(chatsDir)).filter((name) => name.endsWith('.json')),
       ).toStrictEqual([]);

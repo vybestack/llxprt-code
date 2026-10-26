@@ -4,10 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Storage } from '@vybestack/llxprt-code-settings';
-import { SessionPersistenceService } from './SessionPersistenceService.js';
 import { describe, expect, it } from 'bun:test';
-import { link, mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
+import { link, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LocalMediaStore } from './local-media-store.js';
@@ -305,73 +303,28 @@ describe('known media admission close', () => {
   });
 });
 
-class TemporaryMediaStorage extends Storage {
-  constructor(private readonly directory: string) {
-    super(directory);
-  }
-  override getProjectTempDir(): string {
-    return this.directory;
-  }
-}
-
-describe('durable prepared snapshots', () => {
-  it('removes newly archived bytes when a published prepared snapshot rolls back', async () => {
-    await withOwners(async (directory, first) => {
-      const persistence = new SessionPersistenceService(
-        {
-          projectRoot: new TemporaryMediaStorage(
-            join(directory, 'first'),
-          ).getProjectRoot(),
-          chatsDir: new TemporaryMediaStorage(
-            join(directory, 'first'),
-          ).getProjectChatsDir(),
-        },
-        'snapshot',
-        { mediaStore: first.store },
-      );
-      const reference = await first.store.admit({
-        bytes: new Uint8Array([1, 2, 3, 4]),
-        mimeType: 'image/png',
-        semanticMetadata: {},
-      });
-      const prepared = await persistence.prepareSave([
-        { speaker: 'human', blocks: [reference] },
-      ]);
-      await prepared.publish();
-      await prepared.rollback();
-      const archive = first.store.recordingArchive;
-      if (archive === undefined) throw new Error('Missing archive');
-      expect(await archive.getStoredByteLength()).toBe(0);
-    });
-  });
-
+describe('durable packaged snapshots', () => {
   it('exports media retained only in a durable snapshot through a fresh owner', async () => {
     await withOwners(async (directory, first, second) => {
       const journal = await record(first, join(directory, 'first'));
-      const persistence = new SessionPersistenceService(
-        {
-          projectRoot: new TemporaryMediaStorage(
-            join(directory, 'first'),
-          ).getProjectRoot(),
-          chatsDir: new TemporaryMediaStorage(
-            join(directory, 'first'),
-          ).getProjectChatsDir(),
-        },
-        'durable-owner',
-        { mediaStore: first.store },
-      );
       const reference = await first.store.admit({
         bytes: new Uint8Array([8, 6, 4, 2]),
         mimeType: 'image/png',
         semanticMetadata: {},
       });
-      await persistence.save([{ speaker: 'human', blocks: [reference] }]);
-      const snapshotPath = persistence.getSessionFilePath();
-      const serialized = JSON.parse(await readFile(snapshotPath, 'utf8'));
+      const contents: IContent[] = [{ speaker: 'human', blocks: [reference] }];
+      const staged = await stageRecordedMedia(first.store, contents);
       await writeFile(
-        snapshotPath,
-        JSON.stringify({ ...serialized, projectHash: 'owner-project' }),
+        join(directory, 'first', 'chats', 'persisted-session-fixture.json'),
+        JSON.stringify({
+          version: 1,
+          sessionId: 'durable-owner',
+          projectHash: 'owner-project',
+          history: contents,
+        }),
       );
+      staged.commit();
+      await staged.finalize();
       await first.dispose();
       const fresh = new SessionMediaOwner(
         join(directory, 'first'),
