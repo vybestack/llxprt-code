@@ -101,7 +101,10 @@ import {
   type FacadeParsedConfig,
   type LeafFacadeValues,
 } from './agent-facade.js';
-import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
+import type {
+  AgentRuntimeMcpPort,
+  ForegroundMcpPort,
+} from './mcpRuntimePorts.js';
 import {
   assembleOwnedMcpRuntime,
   bindCreatedSessionClient,
@@ -140,7 +143,7 @@ export class PreferredAgentAssembly {
   private tokenizerFactory!: RuntimeTokenizerFactory;
   private contentGeneratorFactory!: RuntimeContentGeneratorFactory<ContentGenerator>;
   private release!: AcquisitionRelease;
-  private mcpRuntime!: McpRuntimeOwner;
+  private mcpRuntime!: AgentRuntimeMcpPort;
   private preferredSessionClient: SessionClientOwner | undefined;
   private preferredMediaOwner!: SessionMediaOwner;
   private agent!: Agent;
@@ -558,7 +561,7 @@ async function releasePreferredProviders(
 }
 
 function facadeInputsForPreferred(
-  runtime: McpRuntimeOwner,
+  runtime: ForegroundMcpPort,
   release: AcquisitionRelease,
   inheritedTrustRelease: AcquisitionRelease,
   runtimeId: string,

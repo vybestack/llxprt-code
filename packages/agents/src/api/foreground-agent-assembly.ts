@@ -35,7 +35,7 @@ import type { Agent } from './agent.js';
 import { type AgentSchedulerHandle } from './config-types.js';
 
 import { resolveSchedulerFactory } from '../session/assembleSchedulerOwner.js';
-import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
+import type { ForegroundMcpPort } from './mcpRuntimePorts.js';
 import type {
   PreflightAuthInput,
   PreflightProviderInput,
@@ -43,7 +43,7 @@ import type {
 
 /** The runtime owners the foreground is handed once, exactly. */
 export interface ForegroundPreflightTransfer {
-  mcp: McpRuntimeOwner;
+  mcp: ForegroundMcpPort;
   mediaOwner: SessionMediaOwner | undefined;
   sessionClient: SessionClientOwner;
   release(): Promise<void>;
@@ -168,7 +168,7 @@ export class ForegroundAssembly {
 }
 
 function facadeInputsForForeground(
-  runtime: McpRuntimeOwner,
+  runtime: ForegroundMcpPort,
   config: Config,
   releaseProviders: () => Promise<void>,
   handles: AgentSchedulerHandle[],

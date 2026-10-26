@@ -35,7 +35,7 @@ import type {
   GenerateOptions,
 } from '../api/agent.js';
 import { AgentBootstrapError, bindTelemetry } from '../api/agentBootstrap.js';
-import type { McpRuntimeOwner } from '../api/mcpRuntimeAssembly.js';
+import type { SessionWorkspaceAuthorityPort } from '../api/mcpRuntimePorts.js';
 import type { PreparedProfileFacade } from '../api/profileApplicationAssembly.js';
 import {
   SessionProviderFileBinding,
@@ -172,7 +172,7 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     this.instructions,
   );
 
-  protected boundWorkspace: McpRuntimeOwner | undefined;
+  protected boundWorkspace: SessionWorkspaceAuthorityPort | undefined;
 
   protected sessionPolicy: SessionPolicyOwner | undefined;
 

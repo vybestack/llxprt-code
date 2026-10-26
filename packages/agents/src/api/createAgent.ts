@@ -24,7 +24,7 @@ import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/sess
  * @pseudocode createAgent.md steps 10-176
  */
 
-import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
+import type { AgentActivationPort } from './mcpRuntimePorts.js';
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
@@ -131,7 +131,7 @@ export async function activateCreatedSession(
   oauthManager: OAuthManager,
   readRuntimeKind: () => RuntimeKind,
   messageBus: MessageBus,
-  mcpRuntime: McpRuntimeOwner,
+  mcpRuntime: AgentActivationPort,
   client: SessionClientOwner,
 ): ReturnType<typeof applyActivation> {
   return applyActivation(
@@ -242,7 +242,7 @@ async function applyActivation(
   messageBus: MessageBus,
   switchProvider: ProviderSwitcher,
   settingsService: SettingsService,
-  mcpRuntime: McpRuntimeOwner,
+  mcpRuntime: AgentActivationPort,
   manager: RuntimeProviderManager,
   refreshClient: (method?: string) => Promise<void>,
   selection: ModelSelectionOperations,

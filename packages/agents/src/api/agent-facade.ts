@@ -59,10 +59,8 @@ import { createTasksControl } from './control/tasksControl.js';
 import type { ToolControl } from './control/toolControl.js';
 import { assembleToolKeys } from './control/toolKeysControl.js';
 import { WorkspaceControl } from './control/workspaceControl.js';
-import type {
-  AgentMcpOperations,
-  McpRuntimeOwner,
-} from './mcpRuntimeAssembly.js';
+import type { AgentMcpOperations } from './mcpRuntimeAssembly.js';
+import type { AgentFacadeMcpPort } from './mcpRuntimePorts.js';
 import { createNewSessionAdmission } from './new-session-admission.js';
 import { assembleProfilePersistence } from './profilePersistenceAssembly.js';
 import { idleClient } from './session-control-assembly.js';
@@ -81,11 +79,11 @@ export interface WorkspaceFacadeControls {
 /**
  * Builds the workspace, IDE, LSP and MCP controls the agent facade publishes,
  * for every construction path. Subagent definitions come from
- * `McpRuntimeOwner.subagentDefinitions`, which is the one place that filters
+ * the runtime's `subagentDefinitions`, which is the one place that filters
  * extension subagents by workspace trust.
  */
 export function assembleWorkspaceFacade(
-  runtime: McpRuntimeOwner,
+  runtime: AgentFacadeMcpPort,
   config: Config,
   session: SessionClientOwner,
   auth: AgentAuthState,
@@ -474,7 +472,7 @@ export function assembleShellOwner(settings: SettingsService): ShellJobOwner {
  * ownership record and the closures that differ.
  */
 export function publishLeafFacade(
-  runtime: McpRuntimeOwner,
+  runtime: AgentFacadeMcpPort,
   config: Config,
   session: SessionClientOwner,
   settingsOwner: SessionSettingsOwner,

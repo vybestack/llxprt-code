@@ -69,7 +69,11 @@ import { SessionPolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import type { Agent } from '../api/agent.js';
-import type { McpRuntimeOwner } from '../api/mcpRuntimeAssembly.js';
+import type {
+  ChildTaskWorkspacePort,
+  SessionMcpBindingPort,
+} from '../api/mcpRuntimePorts.js';
+import type { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 
 import { SessionMcpApproval } from './session-mcp-approval.js';
 import { bindToolOutputSummary } from './session-tool-catalog-owner.js';
@@ -82,7 +86,7 @@ import { SessionHookComposition } from './session-hook-composition.js';
  * inherits.
  */
 interface ChildTaskComposition {
-  readonly workspace: McpRuntimeOwner;
+  readonly workspace: ChildTaskWorkspacePort;
   readonly policy: SessionPolicyOwner;
   readonly profiles: ProfileDefinitionReads;
   readonly subagents: SubagentDefinitionReads;
@@ -338,16 +342,14 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     this.requestInteractiveAuth = operation;
   }
 
-  bindWorkspaceInstructions(
-    workspace: McpRuntimeOwner['workspaceMemory'],
-  ): void {
+  bindWorkspaceInstructions(workspace: WorkspaceMemoryOwner): void {
     this.instructions.bindWorkspace(workspace, this.config, (instructions) =>
       this.publishInstructions(instructions),
     );
   }
 
   bindMcpRuntime(
-    workspace: McpRuntimeOwner,
+    workspace: SessionMcpBindingPort,
     profiles: ProfileDefinitionReads = workspace.profileDefinitions,
     subagents: SubagentDefinitionReads = workspace.subagentDefinitions,
   ): void {
@@ -461,7 +463,7 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     });
   }
 
-  private bindSessionApproval(workspace: McpRuntimeOwner) {
+  private bindSessionApproval(workspace: ChildTaskWorkspacePort) {
     const policy =
       this.borrowedBus === undefined
         ? new SessionPolicyOwner(workspace.policyOwner.workspace, this.config)

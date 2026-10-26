@@ -40,6 +40,7 @@ import type {
 } from './mcpOAuthAssembly.js';
 import { assembleMcpRuntime } from './mcpOAuthAssembly.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
+import type { CreatedSessionMcpPort } from './mcpRuntimePorts.js';
 
 export async function assembleOwnedMcpRuntime(
   config: Config,
@@ -65,7 +66,7 @@ export async function bindCreatedSessionClient(
   tokenizerFactory: RuntimeTokenizerFactory,
   providerFileLifecycle: ProviderFileLifecycle,
   media: SessionMediaOwner,
-  mcp: McpRuntimeOwner,
+  mcp: CreatedSessionMcpPort,
   forceConfirmations: boolean,
   imageOperation: AgentConfig['imageOperation'],
   authority: CredentialAuthority,

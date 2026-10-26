@@ -76,6 +76,10 @@ import type {
   PreflightProviderInput,
 } from './activationPreflightState.js';
 import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
+import type {
+  ChildTaskWorkspacePort,
+  ForegroundMcpPort,
+} from './mcpRuntimePorts.js';
 import { assembleModelSelection } from './model-selection.js';
 import { executeProviderActivation } from './providerActivationExecutor.js';
 import { assembleProviderSwitch } from './providerSwitchAssembly.js';
@@ -606,7 +610,7 @@ async function acquireAdoptedSession(
   content: RuntimeContentGeneratorFactory<ContentGenerator>,
   tokenizer: RuntimeTokenizerFactory,
   files: ProviderFileLifecycle,
-  mcp: McpRuntimeOwner,
+  mcp: ChildTaskWorkspacePort,
   authority: CredentialAuthority,
 ): Promise<SessionClientOwner> {
   selectedSettings.initializeProviderSelection(
@@ -677,7 +681,7 @@ async function activateAdoptedSession(
 }
 
 function facadeInputsForAdopted(
-  runtime: McpRuntimeOwner,
+  runtime: ForegroundMcpPort,
   release: AcquisitionRelease,
   runtimeId: string,
   handles: AgentSchedulerHandle[],
