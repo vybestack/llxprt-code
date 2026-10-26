@@ -9,8 +9,8 @@ import {
   ExitCodes,
   WorkspaceFilesystemOwner,
 } from '@vybestack/llxprt-code-core';
-import type { AgentProfilePreflight } from '@vybestack/llxprt-code-agents';
 import { setTuiOwnsTerminal } from '@vybestack/llxprt-code-providers/auth.js';
+import type { ConfigBuildPreflight } from './config/config.js';
 import { ignoreReady, loadCliConfig } from './config/config.js';
 import { isImageModeActive } from './config/imageMode.js';
 import { buildImageModeFlags } from './config/imageModeDispatch.js';
@@ -139,7 +139,7 @@ export interface SandboxHopOptions {
   settings: LoadedSettings;
   argv: ParsedCliArgs;
   workspaceRoot: string;
-  prepareSandboxPreflight: () => Promise<AgentProfilePreflight>;
+  prepareSandboxPreflight: () => Promise<ConfigBuildPreflight>;
   initialAuthFailed: boolean;
   readStdin: () => Promise<string>;
   hasPipedInput: boolean;

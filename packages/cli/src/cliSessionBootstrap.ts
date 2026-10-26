@@ -14,14 +14,12 @@ import {
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  Agent,
-  AgentProfilePreflight,
-} from '@vybestack/llxprt-code-agents';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 
 import { buildMcpAuthFactoryRegistry } from '@vybestack/llxprt-code-mcp/auth/mcp-auth-factory.js';
 import { sessionId } from '@vybestack/llxprt-code-telemetry';
 import chalk from 'chalk';
+import type { ConfigBuildPreflight } from './config/config.js';
 import { ignoreReady, loadCliConfig } from './config/config.js';
 import type { LoadedSettings } from './config/settings.js';
 import {
@@ -129,7 +127,7 @@ export async function bootstrapRuntimeAndConfig(
   settings: LoadedSettings,
   argv: ParsedCliArgs,
   workspaceRoot: string,
-  preflight: AgentProfilePreflight,
+  preflight: ConfigBuildPreflight,
 ): Promise<Config> {
   registerCleanup(() => preflight.dispose());
   try {
