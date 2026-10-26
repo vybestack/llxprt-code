@@ -6,41 +6,52 @@
 
 import type { SessionRecordingEvent } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { DirectoryCommandOperations } from './directoryCommand.js';
 
+/**
+ * The workspace-directory operations /directory needs.
+ */
+export interface DirectoryCommandRuntime {
+  addDirectory(path: string): void;
+  directories(): readonly string[];
+  getFolderTrust(): boolean;
+  isRestrictiveSandbox(): boolean;
+  refreshMemory(): Promise<{ fileCount: number }>;
+  shouldLoadMemoryFromIncludeDirectories(): boolean;
+}
+
 export function bindDirectoryCommand(
-  config: CliUiRuntime | null,
+  runtime: DirectoryCommandRuntime | null,
   addDirectoryContext: DirectoryCommandOperations['addDirectoryContext'],
   recordDirectoriesChanged: DirectoryCommandOperations['recordDirectoriesChanged'],
   addItem: UseHistoryManagerReturn['addItem'],
   setMemoryFileCount: (count: number) => void,
 ): DirectoryCommandOperations {
   return {
-    isConfigured: config !== null,
+    isConfigured: runtime !== null,
     addDirectory: (path) => {
-      if (!config) throw new Error('Directory runtime is unavailable');
-      config.addDirectory(path);
+      if (!runtime) throw new Error('Directory runtime is unavailable');
+      runtime.addDirectory(path);
     },
     directories: () => {
-      if (!config) throw new Error('Directory runtime is unavailable');
-      return config.directories();
+      if (!runtime) throw new Error('Directory runtime is unavailable');
+      return runtime.directories();
     },
     getFolderTrust: () => {
-      if (!config) throw new Error('Directory runtime is unavailable');
-      return config.getFolderTrust();
+      if (!runtime) throw new Error('Directory runtime is unavailable');
+      return runtime.getFolderTrust();
     },
     isRestrictiveSandbox: () => {
-      if (!config) throw new Error('Directory runtime is unavailable');
-      return config.isRestrictiveSandbox();
+      if (!runtime) throw new Error('Directory runtime is unavailable');
+      return runtime.isRestrictiveSandbox();
     },
     refreshMemory: async () => {
-      if (!config) throw new Error('Directory runtime is unavailable');
-      return config.refreshMemory();
+      if (!runtime) throw new Error('Directory runtime is unavailable');
+      return runtime.refreshMemory();
     },
     shouldLoadMemoryFromIncludeDirectories: () => {
-      if (!config) throw new Error('Directory runtime is unavailable');
-      return config.shouldLoadMemoryFromIncludeDirectories();
+      if (!runtime) throw new Error('Directory runtime is unavailable');
+      return runtime.shouldLoadMemoryFromIncludeDirectories();
     },
     addItem,
     setMemoryFileCount,

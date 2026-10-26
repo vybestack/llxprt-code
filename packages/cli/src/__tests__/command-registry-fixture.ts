@@ -135,7 +135,12 @@ export function createCommandRegistrationFixture(
   return {
     registerWorkspaceCommands: (addItem, setMemoryFileCount) =>
       createWorkspaceCommandOwners(
-        null,
+        {
+          memory: null,
+          bug: null,
+          directory: null,
+          getTargetDir: unavailableOwner,
+        },
         null,
         unavailableOwner,
         unavailableOwner,

@@ -37,7 +37,12 @@ describe('workspace command registration operations', () => {
           setEphemeralSetting: decoy.setEphemeralSetting,
         });
         return createWorkspaceCommandOwners(
-          null,
+          {
+            memory: null,
+            bug: null,
+            directory: null,
+            getTargetDir: () => '',
+          },
           listTools,
           actual.getEphemeralSetting.bind(actual),
           actual.setEphemeralSetting.bind(actual),

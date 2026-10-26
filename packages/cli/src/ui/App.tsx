@@ -6,7 +6,10 @@
 import { createIdeCommand } from './commands/ideCommand.js';
 import { bindIdeCommand } from './commands/ideCommandHost.js';
 import { generateAutoPrompt } from './utils/autoPromptGenerator.js';
-import { createWorkspaceCommandOwners } from './hooks/workspaceCommandOwners.js';
+import {
+  createWorkspaceCommandOwners,
+  type WorkspaceCommandRuntime,
+} from './hooks/workspaceCommandOwners.js';
 import { bindDirectoryChangeRecording } from './commands/directoryCommandHost.js';
 import {
   bindChatOwnerOperations,
@@ -480,9 +483,15 @@ export class AppWrapper extends Component<AppProps> {
   private registerWorkspaceCommands(): RegisterWorkspaceCommands {
     const a = this.props.agent;
     const c = this.props.slashCommandRuntime;
+    const workspaceRuntime: WorkspaceCommandRuntime = {
+      memory: c,
+      bug: c,
+      directory: c,
+      getTargetDir: () => c.getTargetDir(),
+    };
     return (add, setMemory, owner, raw) =>
       createWorkspaceCommandOwners(
-        c,
+        workspaceRuntime,
         a.tools.list.bind(a.tools),
         a.getEphemeralSetting.bind(a),
         a.setEphemeralSetting.bind(a),

@@ -12,26 +12,38 @@ import {
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs/promises';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { MemoryCommandOperations } from './memoryCommand.js';
 
+/**
+ * The memory operations the /memory command family reads. Sized to this
+ * consumer only; the composition root supplies it from the UI runtime.
+ */
+export interface MemoryCommandRuntime {
+  getUserMemory(): string;
+  getLlxprtMdFileCount(): number;
+  getLlxprtMdFilePaths(): string[];
+  refreshMemory(): Promise<{ memoryContent: string; fileCount: number }>;
+  updateSystemInstructionIfInitialized(): void | Promise<void>;
+  getWorkingDir(): string;
+}
+
 export function bindMemoryCommand(
-  config: CliUiRuntime | null,
+  runtime: MemoryCommandRuntime | null,
   addItem: UseHistoryManagerReturn['addItem'],
   setMemoryFileCount: (count: number) => void,
 ): MemoryCommandOperations {
   return {
-    isConfigured: config !== null,
-    getUserMemory: () => config?.getUserMemory() ?? '',
-    getLlxprtMdFileCount: () => config?.getLlxprtMdFileCount() ?? 0,
-    getLlxprtMdFilePaths: () => config?.getLlxprtMdFilePaths() ?? [],
+    isConfigured: runtime !== null,
+    getUserMemory: () => runtime?.getUserMemory() ?? '',
+    getLlxprtMdFileCount: () => runtime?.getLlxprtMdFileCount() ?? 0,
+    getLlxprtMdFilePaths: () => runtime?.getLlxprtMdFilePaths() ?? [],
     refreshMemory: async () => {
-      if (!config) throw new Error('Memory runtime is unavailable');
-      return config.refreshMemory();
+      if (!runtime) throw new Error('Memory runtime is unavailable');
+      return runtime.refreshMemory();
     },
     updateSystemInstruction: async () => {
-      if (!config) throw new Error('Memory runtime is unavailable');
-      await config.updateSystemInstructionIfInitialized();
+      if (!runtime) throw new Error('Memory runtime is unavailable');
+      await runtime.updateSystemInstructionIfInitialized();
     },
     addItem,
     setMemoryFileCount,
@@ -39,7 +51,7 @@ export function bindMemoryCommand(
       const filePath =
         scope === 'core.project'
           ? getProjectCoreMemoryFilePath(
-              config?.getWorkingDir() ?? process.cwd(),
+              runtime?.getWorkingDir() ?? process.cwd(),
             )
           : getGlobalCoreMemoryFilePath(coreStorageServiceAdapter);
       await MemoryTool.performAddMemoryEntry(fact, filePath, {

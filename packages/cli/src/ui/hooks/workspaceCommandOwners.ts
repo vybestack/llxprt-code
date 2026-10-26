@@ -5,7 +5,9 @@
  */
 
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { MemoryCommandRuntime } from '../commands/memoryCommandHost.js';
+import type { BugCommandRuntime } from '../commands/bugCommandHost.js';
+import type { DirectoryCommandRuntime } from '../commands/directoryCommandHost.js';
 import { createHooksCommand } from '../commands/hooksCommand.js';
 import { createTaskCommand } from '../commands/tasksCommand.js';
 import { createToolsCommand } from '../commands/toolsCommand.js';
@@ -29,8 +31,19 @@ import { createPoliciesCommand } from '../commands/policiesCommand.js';
 import { bindPoliciesCommand } from '../commands/policiesCommandHost.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 
+/**
+ * The runtime reads the workspace command owners need: one narrow port per
+ * command family, plus the workspace root used by /image.
+ */
+export interface WorkspaceCommandRuntime {
+  readonly memory: MemoryCommandRuntime | null;
+  readonly bug: BugCommandRuntime | null;
+  readonly directory: DirectoryCommandRuntime | null;
+  getTargetDir(): string;
+}
+
 export function createWorkspaceCommandOwners(
-  config: CliUiRuntime | null,
+  runtime: WorkspaceCommandRuntime,
   listTools: Agent['tools']['list'] | null,
   readSetting: Agent['getEphemeralSetting'],
   writeSetting: Agent['setEphemeralSetting'],
@@ -61,14 +74,14 @@ export function createWorkspaceCommandOwners(
   );
   return {
     memoryCommand: createMemoryCommand(
-      bindMemoryCommand(config, addItem, setMemoryFileCount),
+      bindMemoryCommand(runtime.memory, addItem, setMemoryFileCount),
     ),
     bugCommand: createBugCommand(
-      bindBugCommand(config, getConversationHistory, addItem, readIdeName),
+      bindBugCommand(runtime.bug, getConversationHistory, addItem, readIdeName),
     ),
     policiesCommand: createPoliciesCommand(policy),
     hooksCommand: registerHooks(
-      config !== null,
+      listHooks !== null,
       listHooks,
       enableHook,
       disableHook,
@@ -91,7 +104,7 @@ export function createWorkspaceCommandOwners(
     ),
     directoryCommand: createDirectoryCommand(
       bindDirectoryCommand(
-        config,
+        runtime.directory,
         addDirectoryContext,
         recordDirectoriesChanged,
         addItem,
@@ -99,7 +112,7 @@ export function createWorkspaceCommandOwners(
       ),
     ),
     imageCommand: createImageCommand({
-      workspaceRoot: config?.getTargetDir(),
+      workspaceRoot: runtime.getTargetDir(),
       runImageOperation,
       addItem,
     }),
