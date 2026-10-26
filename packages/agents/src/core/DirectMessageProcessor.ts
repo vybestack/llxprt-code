@@ -25,7 +25,7 @@ import {
   toModelStreamChunk,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { DirectMessagePorts } from './directMessagePorts.js';
 import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
@@ -81,7 +81,12 @@ import {
 } from './hookWireAdapter.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
-import { logApiError, logApiRequest, logApiResponse } from './turnLogging.js';
+import {
+  logApiError,
+  logApiRequest,
+  logApiResponse,
+  turnTelemetryPorts,
+} from './turnLogging.js';
 
 /**
  * Reads the next chunk from the stream iterator, applying idle-timeout
@@ -148,17 +153,21 @@ function buildBlockingModelOutput(
 export class DirectMessageProcessor {
   private logger = new DebugLogger('llxprt:direct-message-processor');
 
+  private telemetryPorts() {
+    return turnTelemetryPorts(this.ports.state, this.ports.telemetry);
+  }
+
   rebindHistory(
-    runtimeContext: AgentRuntimeContext,
+    ports: DirectMessagePorts,
     providerFileBindings: ProviderFileBindingStore,
   ): void {
-    this.runtimeContext = runtimeContext;
-    this.historyService = runtimeContext.history;
+    this.ports = ports;
+    this.historyService = ports.history;
     this.providerFileBindings = providerFileBindings;
   }
 
   constructor(
-    private runtimeContext: AgentRuntimeContext,
+    private ports: DirectMessagePorts,
     private readonly config: Config | undefined,
     private readonly mediaResolver: RequestMediaResolutionService | undefined,
     private readonly requestMediaBudgetBytes: number | undefined,
@@ -189,7 +198,7 @@ export class DirectMessageProcessor {
       params.modelParameters?.route?.provider ??
       this.providerResolver('DirectMessageProcessor');
     const model =
-      params.modelParameters?.route?.model ?? this.runtimeContext.state.model;
+      params.modelParameters?.route?.model ?? this.ports.state.model;
     const providerRuntime: unknown = provider;
     if (providerRuntime === undefined || providerRuntime === null) {
       throw new Error('No active provider configured');
@@ -199,13 +208,14 @@ export class DirectMessageProcessor {
       params.message,
       prompt_id,
     );
+    const mediaAdmission = this.ports.mediaAdmission;
     const userIContents =
-      this.runtimeContext.mediaAdmission === undefined
+      mediaAdmission === undefined
         ? convertedUserContents
-        : await this.runtimeContext.mediaAdmission.admitContents(
-            convertedUserContents,
-            { turnId: prompt_id, source: 'direct-user-input' },
-          );
+        : await mediaAdmission.admitContents(convertedUserContents, {
+            turnId: prompt_id,
+            source: 'direct-user-input',
+          });
 
     // #2410: when the user message converts to zero IContent turns (e.g.
     // empty array), skip the provider call entirely — never submit a
@@ -222,13 +232,7 @@ export class DirectMessageProcessor {
             userIContents,
             params.historyPrefix,
           );
-    logApiRequest(
-      this.runtimeContext,
-      this.runtimeContext.state,
-      contents,
-      model,
-      prompt_id,
-    );
+    logApiRequest(this.telemetryPorts(), contents, model, prompt_id);
 
     const startTime = Date.now();
 
@@ -244,8 +248,7 @@ export class DirectMessageProcessor {
 
       const durationMs = Date.now() - startTime;
       logApiResponse(
-        this.runtimeContext,
-        this.runtimeContext.state,
+        this.telemetryPorts(),
         model,
         prompt_id,
         durationMs,
@@ -256,14 +259,7 @@ export class DirectMessageProcessor {
       return response;
     } catch (error) {
       const durationMs = Date.now() - startTime;
-      logApiError(
-        this.runtimeContext,
-        this.runtimeContext.state,
-        model,
-        prompt_id,
-        durationMs,
-        error,
-      );
+      logApiError(this.telemetryPorts(), model, prompt_id, durationMs, error);
       throw error;
     }
   }
@@ -492,7 +488,7 @@ export class DirectMessageProcessor {
       timeoutController,
       timeoutSignal,
       upstreamAbortSignal,
-      resolveStreamIdleTimeoutMs(this.runtimeContext.readStreamTimeoutPolicy()),
+      resolveStreamIdleTimeoutMs(this.ports.readStreamTimeoutPolicy()),
       onAbort,
       allowedFunctionNames,
     );
@@ -535,9 +531,9 @@ export class DirectMessageProcessor {
         '[DirectMessageProcessor] Calling provider.generateChatCompletion (non-stream retry path)',
       {
         providerName: provider.name,
-        model: this.runtimeContext.state.model,
+        model: this.ports.state.model,
         toolCount: effectiveToolsFromConfig?.length ?? 0,
-        baseUrl: this.runtimeContext.state.baseUrl,
+        baseUrl: this.ports.state.baseUrl,
       },
     );
 
@@ -553,18 +549,18 @@ export class DirectMessageProcessor {
       tools: effectiveToolsFromConfig,
       invocation:
         params.invocation === undefined
-          ? this.runtimeContext.prepareProviderInvocation(
+          ? this.ports.prepareProviderInvocation(
               provider.name,
               params.modelParameters,
               timeoutSignal,
             )
           : {
               ...params.invocation,
-              runtimeId: this.runtimeContext.state.runtimeId,
+              runtimeId: this.ports.state.runtimeId,
               signal: timeoutSignal,
             },
       modelParameters: params.modelParameters,
-      requestDiagnostics: this.runtimeContext.requestDiagnostics,
+      requestDiagnostics: this.ports.requestDiagnostics,
       ...(params.modelParameters?.route === undefined
         ? {}
         : {
@@ -607,7 +603,7 @@ export class DirectMessageProcessor {
     allowedFunctionNames: string[] | undefined;
   }> {
     const model =
-      params.modelParameters?.route?.model ?? this.runtimeContext.state.model;
+      params.modelParameters?.route?.model ?? this.ports.state.model;
     const requestTools = this._selectRequestTools(params);
     const toolsFromConfig = Array.isArray(requestTools) ? requestTools : [];
 
@@ -656,7 +652,7 @@ export class DirectMessageProcessor {
   private async _applyToolSelectionHook(
     toolsFromConfig: ToolDeclaration[],
     owner?: HookExecutionOwner,
-    model = this.runtimeContext.state.model,
+    model = this.ports.state.model,
   ): Promise<ToolSelectionHookResult> {
     if (owner?.beforeToolSelection === undefined)
       return { tools: toolsFromConfig, allowedFunctionNames: undefined };
@@ -696,7 +692,7 @@ export class DirectMessageProcessor {
     userIContents: IContent[],
     effectiveToolsFromConfig: ToolDeclaration[] | undefined,
     owner?: HookExecutionOwner,
-    model = this.runtimeContext.state.model,
+    model = this.ports.state.model,
   ): Promise<{
     blockedOutput?: ModelOutput;
     modifiedContents?: IContent[];
@@ -760,7 +756,7 @@ export class DirectMessageProcessor {
   private _applyHookRequestModifications(
     beforeModelResult: BeforeModelHookOutput,
     userIContents: IContent[],
-    model = this.runtimeContext.state.model,
+    model = this.ports.state.model,
   ): IContent[] | undefined {
     const result = applyRequestModifications(
       beforeModelResult,
@@ -865,7 +861,7 @@ export class DirectMessageProcessor {
     const filteredIContent = iContentFromBlocks(filteredBlocks, 'ai');
     const afterModelResult = await owner.afterModel(
       afterModelRequestEnvelope(
-        llmRequest?.model ?? this.runtimeContext.state.model,
+        llmRequest?.model ?? this.ports.state.model,
         llmRequest?.contents,
         llmRequest?.tools,
       ),

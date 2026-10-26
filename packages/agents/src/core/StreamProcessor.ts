@@ -70,7 +70,7 @@ import {
 } from './streamTelemetryLogger.js';
 import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
-import { logApiError } from './turnLogging.js';
+import { logApiError, turnTelemetryPorts } from './turnLogging.js';
 
 import { assertAdmittedRoute } from './admittedRouteSecurity.js';
 import {
@@ -94,6 +94,13 @@ function isPreparedUserTurn(
 }
 export class StreamProcessor {
   private logger = new DebugLogger('llxprt:gemini:stream-processor');
+
+  private turnTelemetryPorts() {
+    return turnTelemetryPorts(
+      this.runtimeContext.state,
+      this.runtimeContext.telemetry,
+    );
+  }
   private eagerlyRecordedToolResponseCallIds = new Set<string>();
   private currentPromptEnvelopeEstimate: PromptEnvelopeEstimate | null = null;
 
@@ -416,7 +423,7 @@ export class StreamProcessor {
       );
 
       logOutgoingRequest(
-        this.runtimeContext,
+        this.turnTelemetryPorts(),
         { ...requestPayload, contents: streamPreparation.contents },
         this.runtimeContext.state.model,
         promptId,
@@ -540,8 +547,7 @@ export class StreamProcessor {
     } catch (error) {
       const durationMs = Date.now() - startTime;
       logApiError(
-        this.runtimeContext,
-        this.runtimeContext.state,
+        this.turnTelemetryPorts(),
         this.runtimeContext.state.model,
         promptId,
         durationMs,
@@ -703,7 +709,7 @@ export class StreamProcessor {
     }
 
     await logStreamTelemetry(
-      this.runtimeContext,
+      this.turnTelemetryPorts(),
       telemetryContext,
       lastIContent,
       this.compressionHandler.tokenUsageLogger,

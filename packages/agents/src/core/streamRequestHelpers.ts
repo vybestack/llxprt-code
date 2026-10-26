@@ -23,9 +23,8 @@ import type {
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SendMessageParams } from './chatSession.js';
-import { logApiRequest } from './turnLogging.js';
+import { logApiRequest, type TurnTelemetryPorts } from './turnLogging.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -293,21 +292,15 @@ export function applyRequestModifications(
 }
 
 /**
- * Log the outgoing API request via the telemetry runtime context.
+ * Log the outgoing API request through the turn telemetry ports.
  */
 export function logOutgoingRequest(
-  runtimeContext: AgentRuntimeContext,
+  telemetry: TurnTelemetryPorts,
   requestPayload: { contents: IContent[] },
   modelName: string,
   promptId: string,
 ): void {
-  logApiRequest(
-    runtimeContext,
-    runtimeContext.state,
-    requestPayload.contents,
-    modelName,
-    promptId,
-  );
+  logApiRequest(telemetry, requestPayload.contents, modelName, promptId);
 }
 
 const systemInstructionLogger = new DebugLogger(

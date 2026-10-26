@@ -10,13 +10,12 @@
  * usage recording after a stream attempt completes successfully.
  */
 
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type {
   ContentBlock,
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { TokenUsageLogger } from './TokenUsageLogger.js';
-import { logApiResponse } from './turnLogging.js';
+import { logApiResponse, type TurnTelemetryPorts } from './turnLogging.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { safeJsonStringify } from './turnJsonUtils.js';
 import {
@@ -150,7 +149,7 @@ export class RawTokenDeltaBridge {
  * stream completion always carries `attempt_outcome: 'success'`.
  */
 export async function logStreamTelemetry(
-  runtimeContext: AgentRuntimeContext,
+  telemetryPorts: TurnTelemetryPorts,
   telemetry:
     | {
         promptId: string;
@@ -170,7 +169,7 @@ export async function logStreamTelemetry(
   if (telemetry === undefined || lastIContent === undefined) return;
   try {
     await emitStreamTelemetry(
-      runtimeContext,
+      telemetryPorts,
       telemetry,
       lastIContent,
       tokenUsageLogger,
@@ -217,7 +216,7 @@ export function attachStreamTiming(
 }
 
 async function emitStreamTelemetry(
-  runtimeContext: AgentRuntimeContext,
+  telemetryPorts: TurnTelemetryPorts,
   telemetry: { promptId: string; startTime: number; attemptIndex?: number },
   lastIContent: IContent,
   tokenUsageLogger: TokenUsageLogger | null | undefined,
@@ -225,9 +224,8 @@ async function emitStreamTelemetry(
   const durationMs = Date.now() - telemetry.startTime;
   const usage = lastIContent.metadata?.usage;
   logApiResponse(
-    runtimeContext,
-    runtimeContext.state,
-    runtimeContext.state.model,
+    telemetryPorts,
+    telemetryPorts.model,
     telemetry.promptId,
     durationMs,
     usage ? { ...usage } : undefined,

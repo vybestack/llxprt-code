@@ -119,6 +119,7 @@ import { createCompressionHookTrigger } from './compressionHookWiring.js';
 import { resolveCompressionProvider } from './CompressionProfileResolver.js';
 import { ConversationManager } from './ConversationManager.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
+import { directMessagePorts } from './directMessagePorts.js';
 import {
   convertPartListUnionToIContent,
   validateHistory,
@@ -356,7 +357,7 @@ export class ChatSession {
 
   private createDirectMessageProcessor(): DirectMessageProcessor {
     return new DirectMessageProcessor(
-      this.runtimeContext,
+      directMessagePorts(this.runtimeContext),
       this.config,
       this.mediaResolver,
       this.requestMediaBudgetBytes,
@@ -406,7 +407,10 @@ export class ChatSession {
       this.conversationManager.rebindHistory(runtimeContext);
       this.streamProcessor.rebindHistory(runtimeContext, providerFileBindings);
       this.turnProcessor.rebindHistory(runtimeContext, providerFileBindings);
-      this.directProcessor.rebindHistory(runtimeContext, providerFileBindings);
+      this.directProcessor.rebindHistory(
+        directMessagePorts(runtimeContext),
+        providerFileBindings,
+      );
       this.semanticMediaPurge = semanticMediaPurge;
       this._installDensityWrapper();
     };

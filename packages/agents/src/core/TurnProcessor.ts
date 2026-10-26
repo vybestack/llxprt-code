@@ -64,6 +64,7 @@ import {
   createProviderSendTiming,
   logModelOutputResponse,
   readProviderStreamResponse,
+  turnTelemetryPorts,
   validateProviderForSend,
   type ProviderSendTiming,
 } from './turnLogging.js';
@@ -119,6 +120,13 @@ function wrapChunk(chunk: ModelStreamChunk): StreamEvent {
  * Orchestrates non-streaming sends and delegates streaming to StreamProcessor.
  */
 export class TurnProcessor {
+  private loggingPorts() {
+    return turnTelemetryPorts(
+      this.runtimeContext.state,
+      this.runtimeContext.telemetry,
+    );
+  }
+
   private logger = new DebugLogger('llxprt:turn-processor');
   private sendPromise: Promise<void> = Promise.resolve();
   private lastPromptTokenCount: number | null = null;
@@ -516,7 +524,7 @@ export class TurnProcessor {
         semanticMediaPurge,
       );
       logModelOutputResponse(
-        this.runtimeContext,
+        this.loggingPorts(),
         prompt_id,
         timing.elapsedSinceSend(),
         response,
@@ -526,7 +534,7 @@ export class TurnProcessor {
       this.sendPromise = Promise.resolve();
       return throwTurnSendError(
         error,
-        this.runtimeContext,
+        this.loggingPorts(),
         prompt_id,
         timing.elapsedSinceSend(),
         this._normalizeRequestTools(params),
@@ -599,7 +607,7 @@ export class TurnProcessor {
         ),
       enforce: (contents, estimate) =>
         enforceTurnMediaRequestContents({
-          runtimeContext: this.runtimeContext,
+          telemetry: this.loggingPorts(),
           historyService: this.historyService,
           compressionHandler: this.compressionHandler,
           userContents: contents,
