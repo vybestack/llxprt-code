@@ -100,10 +100,16 @@ export function classStoredDeclarations(
  * is how a flat aggregate such as `A & B`, an `Object.assign` result or a spread
  * of several services reads. A union is an alternative, so it stores a bag only
  * when one of its branches does, which covers an optional bag such as
- * `Ports | undefined` without calling `Scheduler | Context` a bag. A class type
- * is an owner rather than a grouping: it is a bag only through the type
- * arguments it was given, because an owner holding several single-service
- * collaborators is the shape the boundary wants.
+ * `Ports | undefined` without calling `Scheduler | Context` a bag.
+ *
+ * A class type is a bag when its public instance surface exposes two or more
+ * runtime services, read exactly as an interface is: public fields, public
+ * getters and public methods whose return type carries a service. An owner that
+ * keeps its collaborators private, protected or `#` and publishes operations
+ * instead exposes none, which is the design the boundary wants; that is why
+ * BaseProvider and the workspace owners are not findings. A class handed a bag
+ * as a type argument is still a bag through that argument, so `Cell<Bundle>`
+ * remains a finding.
  *
  * An unfinished analysis of any branch is reported rather than dropped, so the
  * caller learns that the position is undecided instead of reading it as clean.
@@ -128,15 +134,19 @@ export function storedServiceVerdict(
   }
   if (type.isIntersection()) return analyze(type, location);
   if (isClassType(type)) {
-    if (!isTypeReference(type)) return { bundle: false, incomplete: false };
-    const arguments_ = checker
-      .getTypeArguments(type)
-      .map((argument) =>
-        storedServiceVerdict(argument, checker, analyze, location, path),
-      );
+    const surface = analyze(type, location);
+    const arguments_ = isTypeReference(type)
+      ? checker
+          .getTypeArguments(type)
+          .map((argument) =>
+            storedServiceVerdict(argument, checker, analyze, location, path),
+          )
+      : [];
     return {
-      bundle: arguments_.some((argument) => argument.bundle),
-      incomplete: arguments_.some((argument) => argument.incomplete),
+      bundle: surface.bundle || arguments_.some((argument) => argument.bundle),
+      incomplete:
+        surface.incomplete ||
+        arguments_.some((argument) => argument.incomplete),
     };
   }
   return analyze(type, location);

@@ -75,6 +75,66 @@ describe('runtime service shape guard stored and aggregate shapes', () => {
     ]);
   });
 
+  it('rejects a class bag with two public service fields behind a private field', () => {
+    expect(
+      scan(
+        imports +
+          `class Services { scheduler = new Scheduler(); context = new Context(); }
+class Owner { private readonly services!: Services; }`,
+      ),
+    ).toEqual([
+      expect.objectContaining({ rule: 'runtime-service-bundle', line: 3 }),
+    ]);
+  });
+
+  it('rejects a class bag with two public getters returning services', () => {
+    expect(
+      scan(
+        imports +
+          `class Services {
+  private readonly scheduler!: Scheduler;
+  get clock(): Scheduler { return this.scheduler; }
+  get context(): Context { return new Context(); }
+}
+class Owner { private readonly services!: Services; }`,
+      ),
+    ).toEqual([
+      expect.objectContaining({ rule: 'runtime-service-bundle', line: 7 }),
+    ]);
+  });
+
+  it('rejects a class bag whose public methods return services', () => {
+    expect(
+      scan(
+        imports +
+          `class Services {
+  private readonly scheduler!: Scheduler;
+  clock(): Scheduler { return this.scheduler; }
+  context(): Context { return new Context(); }
+}
+class Owner { private readonly services!: Services; }`,
+      ),
+    ).toEqual([
+      expect.objectContaining({ rule: 'runtime-service-bundle', line: 7 }),
+    ]);
+  });
+
+  it('allows an owner that keeps collaborators private and exposes operations', () => {
+    expect(
+      scan(
+        imports +
+          `class Owner {
+  private readonly scheduler!: Scheduler;
+  #context = new Context();
+  schedule(): void { this.scheduler.schedule(); }
+  contextId(): string { return this.#context.contextId; }
+}
+class Holder { private readonly owner!: Owner; }
+function consume(owner: Owner): void {}`,
+      ),
+    ).toEqual([]);
+  });
+
   it('rejects an intersection of capability services as the CliUiRuntime shape', () => {
     expect(
       scan(
