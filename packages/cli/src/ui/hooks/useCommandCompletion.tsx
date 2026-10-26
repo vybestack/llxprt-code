@@ -11,19 +11,34 @@ import type { TextBuffer } from '../components/shared/text-buffer.js';
 import { logicalPosToOffset } from '../components/shared/buffer-operations.js';
 import { isSlashCommand } from '../utils/commandUtils.js';
 import { toCodePoints } from '../utils/textUtils.js';
-import { useAtCompletion } from './useAtCompletion.js';
-import { useSlashCompletion } from './useSlashCompletion.js';
-import type {
-  PromptCompletion,
-  PromptTextGenerator,
-} from './usePromptCompletion.js';
+import {
+  useAtCompletion,
+  type AtCompletionRuntime,
+} from './useAtCompletion.js';
+import {
+  useSlashCompletion,
+  type SlashCompletionRuntime,
+} from './useSlashCompletion.js';
 import {
   usePromptCompletion,
   PROMPT_COMPLETION_MIN_LENGTH,
+  type PromptCompletion,
+  type PromptCompletionRuntime,
+  type PromptTextGenerator,
 } from './usePromptCompletion.js';
 
 import { useCompletion } from './useCompletion.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+
+/**
+ * Everything the composer's completion state reads. Each member is the narrow
+ * port of the hook that needs it, plus the workspace directories used to scope
+ * `@path` completion.
+ */
+export type CommandCompletionRuntime = AtCompletionRuntime &
+  SlashCompletionRuntime &
+  PromptCompletionRuntime & {
+    directories(): readonly string[];
+  };
 
 export enum CompletionMode {
   IDLE = 'IDLE',
@@ -93,7 +108,7 @@ function analyzeCompletionMode(
   cursorCol: number,
   bufferLines: string[],
   bufferText: string,
-  config: CliUiRuntime | undefined,
+  config: CommandCompletionRuntime | undefined,
 ): CompletionAnalysis {
   const currentLine = bufferLines[cursorRow] || '';
   const codePoints = toCodePoints(currentLine);
@@ -339,7 +354,7 @@ export function useCommandCompletion(
   commandContext: CommandContext,
   reverseSearchActive: boolean = false,
   shellModeActive: boolean,
-  config: CliUiRuntime | undefined,
+  config: CommandCompletionRuntime | undefined,
   generateContent: PromptTextGenerator | null,
 ): UseCommandCompletionReturn {
   const dirs = useMemo(() => config?.directories() ?? [cwd], [config, cwd]);

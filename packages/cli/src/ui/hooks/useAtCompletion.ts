@@ -39,17 +39,24 @@ import {
 } from './githubAtCompletion.js';
 
 /**
- * Filesystem search, filtering and non-file suggestion sources the `@`
- * completion path reads. Sizing this by what the hook calls keeps the whole
- * runtime out of completion.
+ * Filesystem search and filtering reads shared by every `@`/path completion
+ * path.
  */
-export interface AtCompletionRuntime {
+export interface FileSearchRuntime {
   readonly search: WorkspaceSearchOperations['search'];
   readonly initializeSearch: WorkspaceSearchOperations['initializeSearch'];
   readonly ignore: Pick<WorkspaceIgnoreOperations, 'shouldIgnoreFile'>;
   getFileFilteringOptions(): FileFilteringOptions;
   getEnableRecursiveFileSearch(): boolean;
   getFileFilteringDisableFuzzySearch(): boolean;
+}
+
+/**
+ * Filesystem search plus the non-file suggestion sources the `@` completion
+ * path reads. Sizing this by what the hook calls keeps the whole runtime out
+ * of completion.
+ */
+export interface AtCompletionRuntime extends FileSearchRuntime {
   getSubagentManager(): UiSubagentManager | undefined;
   readonly githubCompletion?: GitHubCompletionReads;
   listResources(): ReturnType<WorkspaceResourceSelection['listResources']>;

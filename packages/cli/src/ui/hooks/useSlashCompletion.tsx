@@ -16,10 +16,10 @@ import { useCompletion } from './useCompletion.js';
 import type { SlashCommandCompletionContext } from './slashCompletionTypes.js';
 import {
   handleCompletionEffect,
-  type StateRefs,
   type AllSetters,
+  type AtPathCompletionRuntime,
+  type StateRefs,
 } from './slashCompletionEffect.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 export interface UseSlashCompletionReturn {
   suggestions: Suggestion[];
@@ -40,7 +40,16 @@ export interface UseSlashCompletionReturn {
   leafCommand: SlashCommand | null;
 }
 
-type RuntimeExtensionConfig = Partial<Pick<CliUiRuntime, 'isExtensionEnabled'>>;
+type RuntimeExtensionConfig = Partial<{
+  isExtensionEnabled(extensionName: string): boolean;
+}>;
+
+/**
+ * Everything slash completion reads from the runtime: extension enablement for
+ * extension-provided commands, plus the `@path` file reads.
+ */
+export type SlashCompletionRuntime = AtPathCompletionRuntime &
+  RuntimeExtensionConfig;
 
 function computeCmdIdx(
   row: number,
@@ -135,7 +144,7 @@ function useSetupEffect(
   buf: TextBuffer,
   cmds: readonly SlashCommand[],
   ctx: CommandContext,
-  cfg: CliUiRuntime | undefined,
+  cfg: SlashCompletionRuntime | undefined,
   dirs: readonly string[],
   cwd: string,
   reverseSearchActive: boolean,
@@ -192,7 +201,7 @@ function useSlashCompletionSetup(
   buffer: TextBuffer,
   slashCommands: readonly SlashCommand[],
   commandContext: CommandContext,
-  config: CliUiRuntime | undefined,
+  config: SlashCompletionRuntime | undefined,
   dirs: readonly string[],
   cwd: string,
   reverseSearchActive: boolean,
@@ -354,7 +363,7 @@ export function useSlashCompletion(
   slashCommands: readonly SlashCommand[],
   commandContext: CommandContext,
   reverseSearchActive: boolean = false,
-  config?: CliUiRuntime,
+  config?: SlashCompletionRuntime,
 ): UseSlashCompletionReturn {
   const {
     suggestions,
