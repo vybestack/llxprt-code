@@ -23,7 +23,7 @@ import { createDebugCommand } from '../commands/debugCommands.js';
 import { bindDebugCommand } from '../commands/debugCommandHost.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { BuiltinCommandOwners } from '../../services/BuiltinCommandLoader.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { LoggingCommandRuntime } from '../commands/loggingCommandHost.js';
 import { useOAuthControl } from '../contexts/OAuthControlContext.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import { createStatsCommand } from '../commands/statsCommand.js';
@@ -32,7 +32,7 @@ import { createLoggingCommand } from '../commands/loggingCommand.js';
 import { bindLoggingCommand } from '../commands/loggingCommandHost.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 export function useUtilityCommands(
-  config: CliUiRuntime | null,
+  logging: LoggingCommandRuntime | null,
   settings: LoadedSettings,
   addItem: UseHistoryManagerReturn['addItem'],
 ): Pick<
@@ -77,8 +77,8 @@ export function useUtilityCommands(
     [readQuota, available, discover, readStartTime, addItem],
   );
   const loggingCommand = useMemo(
-    () => createLoggingCommand(bindLoggingCommand(config, settings, addItem)),
-    [config, settings, addItem],
+    () => createLoggingCommand(bindLoggingCommand(logging, settings, addItem)),
+    [logging, settings, addItem],
   );
   const debugCommand = useMemo(
     () =>

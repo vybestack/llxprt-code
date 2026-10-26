@@ -288,7 +288,7 @@ describe('ordinary IDE consumer subscriptions', () => {
     const subscribe = (listener: () => void) =>
       first.subscribeConnection(() => listener());
     const hook = renderHook(() =>
-      useHostCommands(null, settings, () => 0, register, subscribe),
+      useHostCommands(null, null, () => 0, register, subscribe),
     );
     expect(hook.result.current.ideCommand).toBeNull();
     await owner.initialize();

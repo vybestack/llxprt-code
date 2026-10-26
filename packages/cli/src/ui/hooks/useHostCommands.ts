@@ -7,15 +7,25 @@
 import { createSetupGithubCommand } from '../commands/setupGithubCommand.js';
 import { bindGithubSetup } from '../commands/setupGithubCommandHost.js';
 import { useMemo, useEffect, useReducer } from 'react';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
-import type { LoadedSettings } from '../../config/settings.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { SlashCommand } from '../commands/types.js';
 import { createPermissionsCommand } from '../commands/permissionsCommand.js';
-import { bindPermissionCommit } from '../commands/permissionsCommandHost.js';
+import {
+  bindPermissionCommit,
+  type PermissionsTrustRuntime,
+} from '../commands/permissionsCommandHost.js';
+
+/**
+ * The workspace and proxy reads the host (IDE/trust/GitHub) commands need.
+ */
+export interface HostCommandsRuntime {
+  getWorkingDir(): string;
+  getProxy(): string | undefined;
+}
+
 export function useHostCommands(
-  config: CliUiRuntime | null,
-  settings: LoadedSettings,
+  runtime: HostCommandsRuntime | null,
+  trust: PermissionsTrustRuntime | null,
   addItem: UseHistoryManagerReturn['addItem'],
   registerIdeCommand: (
     addItem: UseHistoryManagerReturn['addItem'],
@@ -34,20 +44,20 @@ export function useHostCommands(
   const permissionsCommand = useMemo(
     () =>
       createPermissionsCommand(
-        () => config?.getWorkingDir() ?? process.cwd(),
-        bindPermissionCommit(config),
+        () => runtime?.getWorkingDir() ?? process.cwd(),
+        bindPermissionCommit(trust),
       ),
-    [config],
+    [runtime, trust],
   );
   const setupGithubCommand = useMemo(
     () =>
       createSetupGithubCommand(
         bindGithubSetup(
-          config?.getWorkingDir() ?? process.cwd(),
-          config?.getProxy(),
+          runtime?.getWorkingDir() ?? process.cwd(),
+          runtime?.getProxy(),
         ),
       ),
-    [config],
+    [runtime],
   );
   return useMemo(
     () => ({ ideCommand, permissionsCommand, setupGithubCommand }),

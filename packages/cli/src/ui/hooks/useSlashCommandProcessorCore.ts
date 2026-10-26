@@ -307,13 +307,18 @@ function useStaticBuiltinCommands(
     ),
     ...useHostCommands(
       config,
-      settings,
+      config,
       addItem,
       registerIdeCommand,
       subscribeCommandChanges,
     ),
     ...useUtilityCommands(config, settings, addItem),
-    ...useResourceCommands(config, settings, addItem, setPendingItem),
+    ...useResourceCommands(
+      config?.skillOperations,
+      settings,
+      addItem,
+      setPendingItem,
+    ),
   };
 }
 

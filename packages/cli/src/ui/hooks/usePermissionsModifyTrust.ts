@@ -17,18 +17,12 @@ import {
   type TrustedFolderSnapshot,
 } from '../../config/trustedFolders.js';
 import { normalizeTrustPathInput } from '../../config/trustPaths.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { PermissionsTrustRuntime } from '../commands/permissionsCommandHost.js';
 import { useIdeTrustListener } from './useIdeTrustListener.js';
 import { combineTrustUpdateFailure } from '../trustDialogHelpers.js';
 import process from 'node:process';
 
-export type PermissionsTrustRuntime = Pick<
-  CliUiRuntime,
-  | 'getWorkingDir'
-  | 'getFolderTrust'
-  | 'isTrustedFolder'
-  | 'setTrustedFolderLive'
->;
+export type { PermissionsTrustRuntime };
 
 function useMountedRef() {
   const mountedRef = useRef(true);
