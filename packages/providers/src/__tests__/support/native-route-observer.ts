@@ -5,7 +5,6 @@ import { NativeAnthropicBody } from '../../anthropic/native-anthropic-request.js
 import { NativeAnthropicEstimateProjection } from '../../anthropic/native-anthropic-estimate.js';
 import { NativeResponsesPrompt } from '../../openai-responses/native-responses-body.js';
 import { NativeResponsesEstimateProjection } from '../../openai-responses/native-responses-estimate.js';
-import { PromptEstimatorFiles } from '../../runtime/prompt-estimator-files.js';
 import { observeNativeFileCreates } from './native-file-observer.js';
 
 export interface NativeRouteCounts {
@@ -65,11 +64,9 @@ export function observeNativeRoute(): {
   let streams = 0;
   let estimates = 0;
   const files = observeNativeFileCreates();
-  let estimatorFiles = 0;
   let tokens = 0;
   const open = NativeChatBody.prototype.openStream;
   const count = NativeChatEstimateProjection.prototype.estimate;
-  const write = PromptEstimatorFiles.prototype.writeMessages;
   const restoreOther = observeOtherNativeRoutes(
     () => {
       streams++;
@@ -92,16 +89,12 @@ export function observeNativeRoute(): {
       return result;
     });
   };
-  PromptEstimatorFiles.prototype.writeMessages = function (...args) {
-    estimatorFiles++;
-    return write.call(this, ...args);
-  };
   return {
     counts: () => ({
       streams,
       estimates,
       fileCreates: files.count(),
-      estimatorFiles,
+      estimatorFiles: files.count(),
       tokens,
     }),
     requireSend(estimate): void {
@@ -109,12 +102,11 @@ export function observeNativeRoute(): {
         streams !== 1,
         estimates !== Number(estimate),
         files.count() !== 0,
-        estimatorFiles !== 0,
         estimate && tokens <= 0,
       ].some((failed) => failed);
       if (invalid)
         throw new Error(
-          `Native route assertion failed: ${JSON.stringify({ streams, estimates, fileCreates: files.count(), estimatorFiles, tokens })}`,
+          `Native route assertion failed: ${JSON.stringify({ streams, estimates, fileCreates: files.count(), estimatorFiles: files.count(), tokens })}`,
         );
     },
     restore(): void {
@@ -122,7 +114,6 @@ export function observeNativeRoute(): {
       NativeChatEstimateProjection.prototype.estimate = count;
       restoreOther();
       files.restore();
-      PromptEstimatorFiles.prototype.writeMessages = write;
     },
   };
 }

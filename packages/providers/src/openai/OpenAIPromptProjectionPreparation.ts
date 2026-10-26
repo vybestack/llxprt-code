@@ -17,7 +17,7 @@ import {
 import { chatMediaStage } from './OpenAISourceRoute.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { ProviderMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
-import type { ChatPromptEstimate } from './OpenAIChatEstimatorFiles.js';
+import type { ChatPromptEstimate } from './native-chat-estimate.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import type { RowsMediaInput } from '../openai-responses/responses-row-media.js';
 import {
@@ -108,8 +108,7 @@ interface ChatProjectionPreparationDeps {
 
 /**
  * The prepared body belongs to the media request: finishing the request, on
- * any outcome, disposes the spool, the tool id index and, for a projected
- * request, the estimator files.
+ * any outcome, releases the body, pinned row selection and estimate projection.
  */
 export async function registerOpenAIChatRequestCleanup(
   mediaRequest: ResolvedMediaRequest,
@@ -136,7 +135,7 @@ export interface PreparedOpenAIChatProjection {
 
 /**
  * An unprojected send builds its one chat body inside the transport and hands
- * its spool to the media request, which disposes it when the call ends. The
+ * its lazy body to the media request, which disposes it when the call ends. The
  * media stage comes from the Kimi pre-pass when it ran, otherwise it resolves
  * the call's stored media as the rows are read.
  */
@@ -217,7 +216,9 @@ export async function prepareOpenAIChatProjection(
     await registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
     const { estimate } = requestContext;
     if (estimate === undefined) {
-      throw new Error('A projected chat request carries its estimator files');
+      throw new Error(
+        'A projected chat request carries its estimate projection',
+      );
     }
     return { mediaRequest, requestContext, estimate };
   } catch (error) {

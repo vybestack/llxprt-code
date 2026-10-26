@@ -27,8 +27,7 @@ export interface AnthropicSendRequest {
   readonly model: string;
   readonly thinking: unknown;
   /**
-   * What a request dump records: the dump body streamed from the files written
-   * with the spool. Absent when the request was prepared without a dump form.
+   * What a request dump records: the dump body converted lazily from the pinned rows. Absent when the request was prepared without a dump form.
    */
   readonly dump: StreamedDumpBody | undefined;
   readonly call: (
@@ -38,7 +37,7 @@ export interface AnthropicSendRequest {
   ) => AnthropicApiCall;
 }
 
-/** A request whose body is a sealed spool, posted without being read whole. */
+/** A request whose lazy body is posted without being read whole. */
 export function sendRequestFromSpool(
   request: PreparedAnthropicRequest,
 ): AnthropicSendRequest {
@@ -64,7 +63,7 @@ const NO_DUMP_BODY: Readonly<Record<string, unknown>> = Object.freeze({});
 
 /**
  * The body a request dump records. Nothing is read unless `dumpcontext` asks
- * for a dump on success or on failure, and a spool is never read back whole.
+ * for a dump on success or on failure; rows are converted one at a time.
  */
 export function requestBodyForDump(
   dumpMode: DumpMode | undefined,

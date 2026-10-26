@@ -6,7 +6,7 @@
 
 import type { PreparedOpenAIChatProjection } from './OpenAIPromptProjectionPreparation.js';
 import type { RequestContext } from './OpenAIRequestPreparation.js';
-import type { ChatPromptEstimate } from './OpenAIChatEstimatorFiles.js';
+import type { ChatPromptEstimate } from './native-chat-estimate.js';
 import type { PreparedResponsesRequestContext } from '../openai-responses/openAIResponsesExecutor.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -49,9 +49,8 @@ export class OpenAIPromptEnvelopeStore {
   }
 
   /**
-   * The chat projection of the one prepared request: the estimator reads the
-   * sealed prompt-key files written with the body. Unsupported media comes
-   * from the ledger written as the rows passed.
+   * The chat projection of the prepared request reads its pinned row selection.
+   * Unsupported media diagnostics are collected while planning that selection.
    */
   async storeChatProjection(
     prepared: Extract<

@@ -34,7 +34,7 @@ import {
 } from '../providerMediaTransportCapabilities.js';
 import { wantsRequestDump } from '../utils/dumpContext.js';
 import type { StreamedDumpBody } from '../utils/dumpSDKContext.js';
-import type { ChatPromptEstimate } from './OpenAIChatEstimatorFiles.js';
+import type { ChatPromptEstimate } from './native-chat-estimate.js';
 import { prepareNativePlainRequest } from './native-chat-body.js';
 import type { ChatHttpBody } from '../utils/chat-http-body.js';
 
@@ -47,23 +47,22 @@ export interface RequestContext {
   detectedFormat: string;
   formattedTools: OpenAITool[] | undefined;
   streamingEnabled: boolean;
-  /** The sealed request body; its size is the Content-Length. */
+  /** The lazy request body; its size is the Content-Length. */
   spool: ChatHttpBody;
   /** Messages in the body, the system message included. */
   messageCount: number;
   /**
-   * The estimator form of the prompt keys, written with the body when the
-   * request is projected. The caller owns it once it has the request.
+   * The lazy estimate projection, sharing the request row selection.
+   * The caller owns it once it has the request.
    */
   estimate: ChatPromptEstimate | undefined;
   /**
-   * The body a request dump records, streamed from the dump-form files written
-   * with the body. Present only when the call's `dumpcontext` asks for a dump.
+   * The body a request dump records, converted lazily from the pinned rows. Present only when the call's `dumpcontext` asks for a dump.
    */
   dump: StreamedDumpBody | undefined;
   /**
    * Builds the request that follows a reply of tool calls and no text, as a
-   * second spool over the same rows.
+   * second lazy body over the same rows.
    */
   continuation: ChatContinuation;
   /** Releases the body and its request-owned resources. Idempotent. */
@@ -219,7 +218,7 @@ function applyRequestBodyOverrides(
 }
 
 /**
- * The messages are the spooled array; an override cannot replace them, because
+ * The messages are streamed from the row selection; an override cannot replace them, because
  * the body is written from the rows and a replacement would be dropped or sent
  * without the conversion rules applied.
  */
@@ -329,7 +328,7 @@ export async function prepareRequest(
   const streamingEnabled = ephemeralSettings['streaming'] !== 'disabled';
 
   // The envelope keeps `messages` in its key position as an empty placeholder;
-  // the spool writer replaces it with the streamed array.
+  // the native body writer replaces it with the streamed array.
   const envelope: OpenAIChatRequestBody = {
     model,
     messages: [],

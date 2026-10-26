@@ -231,7 +231,7 @@ export interface ApiExecutionParams {
   }>;
   dumpMode: DumpMode | undefined;
   baseURL: string;
-  /** What the request dump records: the body, or a body streamed from files. */
+  /** What the request dump records: the lazy body converted from the pinned rows. */
   requestBody: Record<string, unknown> | StreamedDumpBody;
   streamingEnabled: boolean;
   headers?: Record<string, string>;

@@ -16,8 +16,8 @@ import {
 import { readExplicitFixture } from '../../__tests__/support/frozenWire/explicit/explicitFixture.js';
 import { normalizedRows } from '../../__tests__/support/frozenWire/normalizedRows.js';
 import { recordedMembers } from '../../__tests__/support/lengthModel/recorded.js';
-import type { EnvelopeSink } from '../../utils/envelope-writer.js';
-import { writeMessagesSegment } from '../OpenAIChatMessagesSegment.js';
+import { nativeChatMessages } from '../native-chat-messages.js';
+import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { analyzeChat } from './support/lengthModel/chatLengthModel.js';
 import {
   HARNESS_SYSTEM_INSTRUCTION,
@@ -128,44 +128,50 @@ describe('chat length model against the frozen chat counterexamples', () => {
   });
 });
 
-function byteCounter(): { sink: EnvelopeSink; bytes: () => number } {
-  let total = 0;
-  return {
-    sink: {
-      append(data) {
-        total +=
-          typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength;
-      },
-    },
-    bytes: () => total,
-  };
-}
+const VIDEO_SETTINGS: RowFormatSettings = {
+  formatId: 'openai-chat:plain',
+  formatRev: 1,
+  model: 'video-test',
+  endpoint: 'https://example.test/v1',
+  isOAuth: false,
+  toolNameTransform: 'none',
+  supportsUrlImages: true,
+  reasoningEnabled: false,
+  reasoningFieldName: 'reasoning_content',
+  mediaPdfEnabled: false,
+  unsupportedMedia: 'notice',
+  outputLimits: null,
+};
 
 describe('chat length model against tool videos in the chat body writer', () => {
   for (const video of toolVideoHistories()) {
     it(`video histories: ${video.name}`, async () => {
-      const counter = byteCounter();
-      await writeMessagesSegment(
-        counter.sink,
-        HARNESS_SYSTEM_INSTRUCTION,
-        {
-          async *rows() {
-            for (const row of video.rows) yield structuredClone(row);
-          },
-        },
-        {
-          reasoning: { invocation: { ephemerals: {} } },
-          toolFormat: 'openai',
-        },
-        undefined,
+      async function* rows() {
+        for (const row of video.rows) yield structuredClone(row);
+      }
+      let bytes = Buffer.byteLength(
+        `[${JSON.stringify({ role: 'system', content: HARNESS_SYSTEM_INSTRUCTION })}]`,
       );
+      for await (const chunk of nativeChatMessages(
+        rows(),
+        VIDEO_SETTINGS,
+        'none',
+        -1,
+        undefined,
+        !video.rows.some(
+          (row) =>
+            row.speaker === 'ai' &&
+            row.blocks.some((block) => block.type === 'tool_call'),
+        ),
+      ))
+        bytes += chunk.byteLength;
       const analysis = analyzeChat(
         video.rows,
         chatSettingsOf('openai-chat-plain', {}),
         HARNESS_SYSTEM_INSTRUCTION,
         1,
       );
-      expect(analysis.predicted).toBe(counter.bytes());
+      expect(analysis.predicted).toBe(bytes);
       expect(analysis.reached.has(5)).toBe(true);
     });
   }

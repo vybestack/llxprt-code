@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { createUnitTokenCounter } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type {
   RuntimePromptEstimateRequest,
@@ -311,4 +312,11 @@ export class NativeChatEstimateProjection {
     this.closed = true;
     return Promise.resolve();
   }
+}
+
+/** The lazy estimate projection and media diagnostics owned by a Chat request. */
+export interface ChatPromptEstimate {
+  readonly projection: NativeChatEstimateProjection;
+  readonly unsupportedMedia: readonly UnsupportedMediaEntry[];
+  discard(): void;
 }
