@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { UnsupportedMediaSummary } from '../utils/unsupported-media-summary.js';
 import {
   callerOwnedAnthropicEngine,
   callerOwnedAnthropicCache,
@@ -503,12 +504,12 @@ async function prepareCallerOwnedAnthropic(
       typeof piece === 'string' ? piece : JSON.stringify(piece),
     );
   const parts = await envelopeParts(envelope);
-  const unsupportedMedia: UnsupportedMediaEntry[] = [];
+  const unsupportedMedia = new UnsupportedMediaSummary();
   if (options.estimate === true) {
     const supports = createMediaSupportPredicate(settings.endpoint);
     for await (const row of rows.openReader(getRequestSignal(params.options)))
-      unsupportedMedia.push(
-        ...unsupportedMediaOfRow(measurableAnthropicRow(row), supports),
+      unsupportedMedia.addAll(
+        unsupportedMediaOfRow(measurableAnthropicRow(row), supports),
       );
   }
   return requestFromEngine(
@@ -528,7 +529,7 @@ async function prepareCallerOwnedAnthropic(
     },
     options.estimate === true,
     mediaStage,
-    unsupportedMedia,
+    unsupportedMedia.entries(),
     options.recoveryBudget,
     recoveredImages,
   );

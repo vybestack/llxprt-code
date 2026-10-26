@@ -15,6 +15,7 @@ import {
   identitySlotSummary,
 } from '@vybestack/llxprt-code-core/journal/summaryComposition.js';
 import { unitCount } from '@vybestack/llxprt-code-core/journal/unitContributions.js';
+import { UnsupportedMediaSummary } from '../utils/unsupported-media-summary.js';
 import { classifyMediaBlock } from '../utils/mediaUtils.js';
 import {
   responsesUnitLength,
@@ -28,7 +29,7 @@ export async function statefulUnsupportedMedia(
   pdfEnabled: boolean,
 ): Promise<readonly UnsupportedMediaEntry[]> {
   const indexed = rows.native?.indexed;
-  const unsupported: UnsupportedMediaEntry[] = [];
+  const unsupported = new UnsupportedMediaSummary();
   for (let index = skipRows; index < rows.count; index++) {
     const entry =
       indexed === undefined
@@ -43,33 +44,27 @@ export async function statefulUnsupportedMedia(
       continue;
     if (indexed === undefined) {
       const row = await rows.readAt(index);
-      unsupported.push(...unsupportedMediaForRow(row, pdfEnabled));
+      unsupported.addAll(unsupportedMediaForRow(row, pdfEnabled));
     } else {
-      unsupported.push(
-        ...(await unsupportedMediaForPlan(indexed, index, pdfEnabled)),
-      );
+      await unsupportedMediaForPlan(indexed, index, pdfEnabled, unsupported);
     }
   }
-  return unsupported;
+  return unsupported.entries();
 }
 
 async function unsupportedMediaForPlan(
   indexed: NativeProviderFormat['indexed'],
   index: number,
   pdfEnabled: boolean,
-): Promise<UnsupportedMediaEntry[]> {
+  unsupported: UnsupportedMediaSummary,
+): Promise<void> {
   const plan = await indexed.planAt(index);
-  const unsupported: UnsupportedMediaEntry[] = [];
   for await (const block of plan.openBlocks()) {
     if (block.type === 'media')
-      unsupported.push(
-        ...unsupportedMediaForRow(
-          { ...plan.header, blocks: [block] },
-          pdfEnabled,
-        ),
+      unsupported.addAll(
+        unsupportedMediaForRow({ ...plan.header, blocks: [block] }, pdfEnabled),
       );
   }
-  return unsupported;
 }
 
 export function unsupportedMediaForRow(

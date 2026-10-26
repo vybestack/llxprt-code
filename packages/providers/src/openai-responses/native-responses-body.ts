@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { UnsupportedMediaSummary } from '../utils/unsupported-media-summary.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { PDF_AGGREGATE_MAX_BYTES } from '../utils/mediaUtils.js';
 import { CallerOwnedToolQuery } from '../utils/caller-owned-tool-query.js';
@@ -410,14 +411,14 @@ async function callerOwnedByteLength(
 ): Promise<PreparedHistory> {
   const query = rows.index ?? (await CallerOwnedToolQuery.create(rows));
   const settings = nativeSettings(options);
-  const unsupportedMedia: UnsupportedMediaEntry[] = [];
+  const unsupportedMedia = new UnsupportedMediaSummary();
   let pdfBytes = 0;
   let bytes = 2;
   let items = 0;
   let generatedIds = 0;
   for (let at = selection.skipRows; at < rows.count; at++) {
     const row = await rows.readAt(at, options.invocation.signal);
-    unsupportedMedia.push(...unsupportedMediaForRow(row, options.pdfEnabled));
+    unsupportedMedia.addAll(unsupportedMediaForRow(row, options.pdfEnabled));
     const pairs = await responsesUnitPairs(row, query, selection.skipRows);
     const measured = responsesUnitLength(
       row,
@@ -441,7 +442,7 @@ async function callerOwnedByteLength(
     );
   return {
     byteLength: overrideByteLength(shell.request, []) - 2 + bytes,
-    unsupportedMedia,
+    unsupportedMedia: unsupportedMedia.entries(),
   };
 }
 

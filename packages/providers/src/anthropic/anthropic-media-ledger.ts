@@ -7,6 +7,7 @@ import type {
   NativeFactIndexWriter,
 } from '@vybestack/llxprt-code-core/journal/nativeFactIndex.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
+import { UnsupportedMediaSummary } from '../utils/unsupported-media-summary.js';
 import { unsupportedMediaOfRow } from '../utils/mediaUtils.js';
 import { createMediaSupportPredicate } from './AnthropicEndpointUtils.js';
 import { measurableAnthropicRow } from './anthropic-measured-media.js';
@@ -53,7 +54,7 @@ export async function readAnthropicMediaLedger(
   const count = await facts.get(['unsupported-rows']);
   if (count === undefined)
     throw new Error('Missing Anthropic unsupported-media facts');
-  const ledger: UnsupportedMediaEntry[] = [];
+  const ledger = new UnsupportedMediaSummary();
   const changed = query.viewPlan.changedSources;
   const changes = changed[Symbol.iterator]();
   let next = changes.next();
@@ -62,7 +63,7 @@ export async function readAnthropicMediaLedger(
       const row = next.value;
       next = changes.next();
       for (let at = row.start; at < row.start + row.count; at++)
-        ledger.push(...unsupported(await query.readAt(at), settings));
+        ledger.addAll(unsupported(await query.readAt(at), settings));
     }
   };
   for (let ordinal = 0; ordinal < count[0]; ordinal++) {
@@ -74,8 +75,8 @@ export async function readAnthropicMediaLedger(
     if (
       !changed.some((row) => at >= row.start && at < row.start + row.oldCount)
     )
-      ledger.push(...unsupported(await query.readAt(at), settings));
+      ledger.addAll(unsupported(await query.readAt(at), settings));
   }
   await appendChanged(Infinity);
-  return ledger;
+  return ledger.entries();
 }
