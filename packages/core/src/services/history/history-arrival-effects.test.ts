@@ -94,7 +94,7 @@ describe('response arrival publication effects', () => {
     expect(service.length()).toBe(0);
     expect(service.getTotalTokens()).toBe(0);
   });
-  it('returns the sealed main row without returning auxiliary rows to the result consumer', async () => {
+  it('acknowledges the sealed main row once after auxiliary publication', async () => {
     const service = harness.history();
     const arrival = await service.openResponseArrival({
       id: 'receipt',
@@ -111,14 +111,33 @@ describe('response arrival publication effects', () => {
     await arrival.append({ type: 'text', text: 'main ' });
     await arrival.append({ type: 'text', text: 'answer' });
     const published: IContent[] = [];
-    await arrival.seal({}, undefined, async (content) => {
-      await Promise.resolve();
+    const acknowledgedLengths: number[] = [];
+    await arrival.seal({}, undefined, async () => {
+      acknowledgedLengths.push(service.length());
+      const content = await service.getLastContent();
+      if (content === undefined) throw new Error('Missing published response');
       published.push(content);
     });
     expect(published.map((content) => content.blocks)).toStrictEqual([
       [{ type: 'text', text: 'main answer' }],
     ]);
+    expect(acknowledgedLengths).toStrictEqual([2]);
     expect(service.length()).toBe(2);
+  });
+  it('compensates sealed response rows when a batch observer rejects publication', async () => {
+    const service = harness.history();
+    service.on('contentBatchAdded', () => {
+      throw new Error('batch observer rejected');
+    });
+    const arrival = await service.openResponseArrival({
+      id: 'batch-rejected',
+      submissionId: 'prompt',
+    });
+    await arrival.append({ type: 'text', text: 'unpublished response' });
+    await expect(arrival.seal({})).rejects.toThrow('batch observer rejected');
+    await service.waitForTokenUpdates();
+    expect(service.length()).toBe(0);
+    expect(service.getTotalTokens()).toBe(0);
   });
   it('compensates the row and token ticket when the sealed-result consumer rejects', async () => {
     const service = harness.history();

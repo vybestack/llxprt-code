@@ -20,7 +20,7 @@ export interface ResponseArrival {
   seal(
     metadata: ContentMetadata,
     afterAuxiliary?: () => Promise<void>,
-    onSealed?: (content: IContent) => void | Promise<void>,
+    onSealed?: () => void | Promise<void>,
   ): Promise<void>;
   interrupt(outcome?: Exclude<ArrivalOutcome, 'completed'>): Promise<void>;
 }

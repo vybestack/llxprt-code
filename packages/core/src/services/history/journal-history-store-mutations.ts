@@ -27,6 +27,7 @@ import type {
   HistoryProfileReplacementRequest,
   StagedProfileAdoption,
   HistoryCompensationMark,
+  ArrivalPublicationRollback,
 } from './historyStorePort.js';
 import type {
   DetachedHistoryHost,
@@ -254,6 +255,14 @@ export abstract class JournalHistoryStoreMutations extends JournalHistoryStoreRe
         }
       }),
     );
+  }
+
+  captureArrivalRollback(): ArrivalPublicationRollback {
+    const mark = this.captureCompensation();
+    return {
+      rollback: (error) => this.compensate(mark, error),
+      close: () => this.releaseCompensation(mark),
+    };
   }
 
   /** Lets go of the version a mark names; the owner of the mark calls it once, after the last compensation. */

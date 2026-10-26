@@ -5,13 +5,17 @@
  */
 
 import { TurnAdmission } from './turn-admission.js';
+import {
+  consumeDirectResponse,
+  failDirectTurn,
+  type DirectResponseArrival,
+} from './directResponseArrival.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { withRetryRequestState } from './retry-request-state.js';
 import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
-import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type {
@@ -28,7 +32,6 @@ import {
   type PreparedSourcePromptEnvelopeSend,
 } from './prompt-envelope-source-send.js';
 import { sendTurnSource } from './turnSourceRequest.js';
-import { resolveGeneratingModel } from './generatingModelResolver.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -40,19 +43,16 @@ import {
   INVALID_CONTENT_RETRY_OPTIONS,
 } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import {
-  filterHookRestrictedBlocks,
-  filterAfcByHookRestrictions,
-} from './hookToolRestrictions.js';
-import { canonicalizeToolName } from './toolGovernance.js';
+  selectDirectRequestTools,
+  logDirectRequestTools,
+  type ToolSelectionHookResult,
+} from './directRequestTools.js';
 import {
   shouldRetryStreamAttempt,
   applyRetryTemperature,
   chunkHasVisibleOutput,
 } from './turnAbortHelpers.js';
-import {
-  turnSystemInstruction,
-  withReportedUsage,
-} from './streamRequestHelpers.js';
+import { turnSystemInstruction } from './streamRequestHelpers.js';
 
 import {
   AgentExecutionStoppedError,
@@ -61,20 +61,13 @@ import {
 import {
   createProviderSendTiming,
   logModelOutputResponse,
-  readProviderStreamResponse,
   validateProviderForSend,
   type ProviderSendTiming,
 } from './turnLogging.js';
 import { throwTurnSendError } from './turnSendError.js';
 
-import type {
-  ModelStreamChunk,
-  ModelOutput,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
-import {
-  toModelStreamChunk,
-  emptyModelOutput,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { TurnReceipt } from '@vybestack/llxprt-code-core/core/turnReceipt.js';
 import { recordAbandonedStreamAttempt } from './tokenUsageActualLogger.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 
@@ -85,17 +78,11 @@ import {
   prepareAdmittedUserTurn,
   type PreparedUserTurn,
 } from './mediaAdmissionSeam.js';
-import { commitTurnHistory } from './turnHistoryCommit.js';
 import {
   failedTurnCleanup,
   throwAfterFailedTurnCleanup,
   wrapStreamGeneratorLifecycle,
 } from './turnMediaAdmissionLifecycle.js';
-
-interface ToolSelectionHookResult {
-  tools: ToolDeclaration[] | undefined;
-  allowedFunctionNames: string[] | undefined;
-}
 
 /**
  * Wraps a neutral ModelStreamChunk into a CHUNK StreamEvent.
@@ -119,7 +106,6 @@ export class TurnProcessor {
   private sendPromise: Promise<void> = Promise.resolve();
   private lastPromptTokenCount: number | null = null;
   private eagerlyRecordedToolResponseCallIds = new Set<string>();
-  private stampingBaseUrl: string | undefined = undefined;
   private currentPromptEnvelopeEstimate: PromptEnvelopeEstimate | null = null;
 
   /**
@@ -163,7 +149,7 @@ export class TurnProcessor {
     params: SendMessageParams,
     promptId: string,
     factory?: SemanticMediaPurgeFactory,
-  ): Promise<ModelOutput> {
+  ): Promise<TurnReceipt> {
     return this.turnAdmission.run(() =>
       this.sendAdmittedMessage(params, promptId, factory),
     );
@@ -188,7 +174,7 @@ export class TurnProcessor {
     params: SendMessageParams,
     prompt_id: string,
     semanticMediaPurgeFactory?: SemanticMediaPurgeFactory,
-  ): Promise<ModelOutput> {
+  ): Promise<TurnReceipt> {
     await this.sendPromise;
 
     this._resetPerTurnState();
@@ -206,10 +192,11 @@ export class TurnProcessor {
     // entirely — never submit a fabricated placeholder to the provider.
     if (prepared.userIContents.length === 0) {
       await prepared.releaseIfUncommitted();
-      return emptyModelOutput();
+      return { status: 'empty', promptId: prompt_id, turnId: prepared.turnId };
     }
 
     let semanticMediaPurge: SemanticMediaPurgeAttempt | undefined;
+    let directResponse: DirectResponseArrival | undefined;
     try {
       await this.streamProcessor.submitUserPrompt(
         prepared.userIContents,
@@ -226,6 +213,7 @@ export class TurnProcessor {
         semanticMediaPurge,
       );
 
+      directResponse = response;
       await semanticMediaPurge?.complete({
         status: 'success',
         usage: response.usage,
@@ -233,19 +221,26 @@ export class TurnProcessor {
         retryHandoff: this.lastSendAttemptIndex > 0,
       });
 
-      this.sendPromise = this._commitSendResult(
-        response,
+      const committed = response.commit(
         prepared,
+        this.compressionHandler,
         prompt_id,
-        provider,
-        params.recordingExecution?.historyOrigin,
+        this.lastSendAttemptIndex,
       );
+      this.sendPromise = committed.then(() => undefined);
       await this.sendPromise;
+      const output = await committed;
+      this.eagerlyRecordedToolResponseCallIds.clear();
       await semanticMediaPurge?.finalize();
-      return response;
+      return output;
     } catch (error: unknown) {
       this.sendPromise = Promise.resolve();
-      return throwAfterFailedTurnCleanup(error, prepared, semanticMediaPurge);
+      return failDirectTurn(
+        error,
+        directResponse,
+        prepared,
+        semanticMediaPurge,
+      );
     }
   }
 
@@ -519,7 +514,7 @@ export class TurnProcessor {
     provider: IProvider,
     prompt_id: string,
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
-  ): Promise<ModelOutput> {
+  ): Promise<DirectResponseArrival> {
     const requestParams = withRetryRequestState(params);
     this._validateProvider(provider);
     const timing = createProviderSendTiming();
@@ -539,11 +534,12 @@ export class TurnProcessor {
         this.runtimeContext,
         prompt_id,
         timing.elapsedSinceSend(),
-        response,
+        response.terminal.metadata(),
       );
       return response;
     } catch (error) {
       this.sendPromise = Promise.resolve();
+      this.currentPromptEnvelopeEstimate = null;
       return throwTurnSendError(
         error,
         this.runtimeContext,
@@ -580,76 +576,72 @@ export class TurnProcessor {
     providerBaseUrl: string | undefined,
     timing: ProviderSendTiming,
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
-  ): Promise<ModelOutput> {
+  ): Promise<DirectResponseArrival> {
     const requestTools = this._selectRequestTools(requestParams);
-    const toolSelection = await this._applyToolSelectionHook(
+    const toolSelection = await selectDirectRequestTools(
+      this.runtimeContext.state.model,
       requestTools,
       requestParams.hookOwner ?? requestParams.recordingExecution?.hookOwner,
     );
     const { provider: boundProvider, runtimeContext } =
       this._bindRequestRuntime(provider, requestTools, toolSelection);
     provider = boundProvider;
-    this._logToolDiagnostics(provider, toolSelection.tools, providerBaseUrl);
+    logDirectRequestTools(
+      this.logger,
+      provider.name,
+      this.runtimeContext.state.model,
+      toolSelection.tools,
+      providerBaseUrl,
+    );
     const signal = requestParams.config?.abortSignal;
-    try {
-      const response = await sendTurnSource({
-        runtime: this.runtimeContext,
-        compression: this.compressionHandler,
-        history: this.historyService,
-        provider,
-        promptId: prompt_id,
-        userContents: userIContents,
-        semanticMediaPurge,
-        tools: toolSelection.tools,
-        signal,
-        recordingExecution: requestParams.recordingExecution,
-        modelParameters: requestParams.modelParameters,
-        hookOwner:
-          requestParams.hookOwner ??
-          requestParams.recordingExecution?.hookOwner,
-        log: (message) => this.logger.debug(() => message),
-        buildOptions: (contents) =>
-          this._buildProviderChatOptions(
-            contents,
-            toolSelection.tools,
-            runtimeContext,
-            signal ?? new AbortController().signal,
-            requestParams.config?.providerRequestContext,
-            provider.name,
-            turnSystemInstruction(requestParams, this.generationConfig),
-          ),
-        onPrepared: (prepared) =>
-          this._recordPreparedSend(
+    let response: DirectResponseArrival | undefined;
+    await sendTurnSource({
+      runtime: this.runtimeContext,
+      compression: this.compressionHandler,
+      history: this.historyService,
+      provider,
+      promptId: prompt_id,
+      userContents: userIContents,
+      semanticMediaPurge,
+      tools: toolSelection.tools,
+      signal,
+      recordingExecution: requestParams.recordingExecution,
+      modelParameters: requestParams.modelParameters,
+      hookOwner:
+        requestParams.hookOwner ?? requestParams.recordingExecution?.hookOwner,
+      log: (message) => this.logger.debug(() => message),
+      buildOptions: (contents) =>
+        this._buildProviderChatOptions(
+          contents,
+          toolSelection.tools,
+          runtimeContext,
+          signal ?? new AbortController().signal,
+          requestParams.config?.providerRequestContext,
+          provider.name,
+          turnSystemInstruction(requestParams, this.generationConfig),
+        ),
+      onPrepared: (prepared) =>
+        this._recordPreparedSend(
+          prepared,
+          prompt_id,
+          toolSelection.tools,
+          turnSystemInstruction(requestParams, this.generationConfig),
+        ),
+      attempt: async (prepared, attemptIndex) => {
+        this.lastSendAttemptIndex = attemptIndex;
+        response = await timing.measure(() =>
+          this._consumeSourceAttempt(
+            provider,
             prepared,
+            requestParams,
             prompt_id,
-            toolSelection.tools,
-            turnSystemInstruction(requestParams, this.generationConfig),
+            toolSelection.allowedFunctionNames,
           ),
-        attempt: (prepared, attemptIndex) => {
-          // Recorded on the instance rather than threaded as a tenth parameter;
-          // `_syncTokenCounts` reads it when the turn is recorded.
-          this.lastSendAttemptIndex = attemptIndex;
-          return timing.measure(() =>
-            this._consumeSourceAttempt(
-              provider,
-              prepared,
-              runtimeContext,
-              signal,
-            ),
-          );
-        },
-      });
-      const output = toModelStreamChunk(response);
-      this._applyHookToolFiltering(
-        output,
-        response,
-        toolSelection.allowedFunctionNames,
-      );
-      return output;
-    } catch (error) {
-      this.currentPromptEnvelopeEstimate = null;
-      throw error;
-    }
+        );
+      },
+    });
+    if (response === undefined) throw new Error('No response from provider');
+    return response;
   }
 
   /** Builds the request collaborators and binds the provider to their media and file ports. */
@@ -717,48 +709,34 @@ export class TurnProcessor {
   private async _consumeSourceAttempt(
     provider: IProvider,
     prepared: PreparedSourcePromptEnvelopeSend,
-    runtimeContext: ProviderRequestCollaborators,
-    upstreamAbortSignal: AbortSignal | undefined,
-  ): Promise<IContent> {
+    params: SendMessageParams,
+    promptId: string,
+    allowedNames: string[] | undefined,
+  ): Promise<DirectResponseArrival> {
+    const upstreamAbortSignal = params.config?.abortSignal;
     const timeoutController = new AbortController();
     const onAbort = () => timeoutController.abort();
     upstreamAbortSignal?.addEventListener('abort', onAbort, { once: true });
     if (upstreamAbortSignal?.aborted === true) onAbort();
     try {
       const transport = bindSourceSignal(prepared, timeoutController.signal);
-      return await this._consumeProviderStream(
-        provider.generateChatCompletion(transport.options),
-        runtimeContext,
+      if (this.currentTurnId === null)
+        throw new Error('Missing direct turn identity');
+      return await consumeDirectResponse({
+        stream: provider.generateChatCompletion(transport.options),
+        runtime: this.runtimeContext,
+        history: this.historyService,
+        promptId,
+        turnId: this.currentTurnId,
+        origin: params.recordingExecution?.historyOrigin,
+        allowedNames,
         timeoutController,
         upstreamAbortSignal,
-      );
+        trackUsage: (content) => this._trackProviderPromptTokens(content),
+      });
     } finally {
       timeoutController.abort();
       upstreamAbortSignal?.removeEventListener('abort', onAbort);
-    }
-  }
-
-  private _applyHookToolFiltering(
-    output: ModelStreamChunk,
-    _lastResponse: IContent,
-    allowedFunctionNames: string[] | undefined,
-  ): void {
-    if (allowedFunctionNames === undefined) return;
-    output.content = {
-      ...output.content,
-      blocks: filterHookRestrictedBlocks(
-        output.content.blocks,
-        allowedFunctionNames,
-      ),
-    };
-    // P13 AFC boundary: toModelStreamChunk already extracted AFC into
-    // output.afcHistory and stripped it from providerMetadata. Apply
-    // hook-restriction filtering to the first-class afcHistory field only.
-    if (output.afcHistory !== undefined) {
-      output.afcHistory = filterAfcByHookRestrictions(
-        output.afcHistory,
-        allowedFunctionNames,
-      );
     }
   }
 
@@ -786,47 +764,6 @@ export class TurnProcessor {
     );
   }
 
-  private async _consumeProviderStream(
-    streamResponse: AsyncIterable<IContent>,
-    runtimeContext: ProviderRequestCollaborators,
-    timeoutController: AbortController,
-    upstreamAbortSignal: AbortSignal | undefined,
-  ): Promise<IContent> {
-    let lastResponse: IContent | undefined;
-    // Providers do not all report usage on the final chunk; some report it
-    // once, mid-stream. Keeping the newest reported usage stops a billed
-    // request from being recorded as having cost nothing (#3130).
-    let lastReportedUsage: UsageStats | undefined;
-    const blocks: IContent['blocks'] = [];
-    const iterator = streamResponse[Symbol.asyncIterator]();
-    const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(
-      this.runtimeContext.readStreamTimeoutPolicy(),
-    );
-
-    let nextResponse = await readProviderStreamResponse(
-      iterator,
-      timeoutController,
-      upstreamAbortSignal,
-      effectiveTimeoutMs,
-    );
-    while (nextResponse.done !== true) {
-      const iContent = nextResponse.value;
-      this._trackProviderPromptTokens(iContent);
-      blocks.push(...iContent.blocks);
-      lastResponse = iContent;
-      lastReportedUsage = iContent.metadata?.usage ?? lastReportedUsage;
-      nextResponse = await readProviderStreamResponse(
-        iterator,
-        timeoutController,
-        upstreamAbortSignal,
-        effectiveTimeoutMs,
-      );
-    }
-
-    if (!lastResponse) throw new Error('No response from provider');
-    return withReportedUsage({ ...lastResponse, blocks }, lastReportedUsage);
-  }
-
   private _trackProviderPromptTokens(iContent: IContent): void {
     const promptTokens = iContent.metadata?.usage?.promptTokens;
     if (promptTokens === undefined) {
@@ -847,95 +784,5 @@ export class TurnProcessor {
   ): ToolDeclaration[] | undefined {
     const tools = this._selectRequestTools(params);
     return Array.isArray(tools) ? tools : undefined;
-  }
-
-  private async _applyToolSelectionHook(
-    tools: AgentClientGenerateConfig['tools'],
-    hookOwner?: NonNullable<
-      SendMessageParams['recordingExecution']
-    >['hookOwner'],
-  ): Promise<ToolSelectionHookResult> {
-    const toolsFromConfig = Array.isArray(tools) ? tools : [];
-    if (hookOwner?.beforeToolSelection === undefined)
-      return { tools: toolsFromConfig, allowedFunctionNames: undefined };
-    const toolSelectionResult = await hookOwner.beforeToolSelection(
-      {
-        model: this.runtimeContext.state.model,
-        contents: [],
-        tools: toolsFromConfig,
-      },
-      hookOwner.signal,
-    );
-    const modifiedConfig = toolSelectionResult?.applyToolChoiceModifications({
-      tools: toolsFromConfig,
-    });
-    const toolChoice = modifiedConfig?.toolChoice;
-    if (toolChoice?.mode === 'none') {
-      return { tools: [], allowedFunctionNames: [] };
-    }
-    const allowedFunctions = toolChoice?.allowedToolNames;
-    if (!Array.isArray(allowedFunctions)) {
-      return { tools: toolsFromConfig, allowedFunctionNames: undefined };
-    }
-
-    const allowedNames = new Set(allowedFunctions.map(canonicalizeToolName));
-    const filteredTools = toolsFromConfig.filter((decl) =>
-      allowedNames.has(canonicalizeToolName(decl.name)),
-    );
-    return { tools: filteredTools, allowedFunctionNames: allowedFunctions };
-  }
-
-  private _logToolDiagnostics(
-    provider: IProvider,
-    tools: ToolDeclaration[] | undefined,
-    baseUrl: string | undefined,
-  ): void {
-    if (Array.isArray(tools)) {
-      const total = tools.length;
-      if (total === 0)
-        this.logger.warn(
-          () =>
-            `[TurnProcessor] Tools array exists but has 0 function declarations!`,
-          { tools, provider: provider.name },
-        );
-    }
-    this.logger.debug(
-      () => '[TurnProcessor] Calling provider.generateChatCompletion',
-      {
-        providerName: provider.name,
-        model: this.runtimeContext.state.model,
-        toolCount: Array.isArray(tools) ? tools.length : 0,
-        baseUrl,
-      },
-    );
-  }
-
-  /**
-   * Commits the send result to history: adds user and model content, syncs tokens.
-   */
-  private _commitSendResult(
-    response: ModelOutput,
-    preparedUserTurn: PreparedUserTurn,
-    promptId: string,
-    provider: IProvider,
-    origin?: object,
-  ): Promise<void> {
-    const currentModel = resolveGeneratingModel(this.runtimeContext, provider);
-    this.stampingBaseUrl = this.resolveProviderBaseUrl(provider);
-    return commitTurnHistory({
-      origin,
-      runtimeContext: this.runtimeContext,
-      historyService: this.historyService,
-      compressionHandler: this.compressionHandler,
-      response,
-      preparedUserTurn,
-      promptId,
-      currentModel,
-      baseUrl: this.stampingBaseUrl,
-      lastPromptTokenCount: this.lastPromptTokenCount,
-      attemptIndex: this.lastSendAttemptIndex,
-      eagerlyRecordedToolResponseCallIds:
-        this.eagerlyRecordedToolResponseCallIds,
-    });
   }
 }

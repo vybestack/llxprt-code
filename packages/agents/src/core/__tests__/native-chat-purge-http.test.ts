@@ -61,6 +61,7 @@ describe('public native plain Chat semantic purge HTTP', () => {
         import('@vybestack/llxprt-code-core/services/history/IContent.js').IContent
       >;
       const storedLengths: number[] = [];
+      const storedSubmissions: boolean[] = [];
       const estimates: number[] = [];
       const tokenizer = createRuntimeTokenizerFactory();
       const recording = JournalRecordingService.create({
@@ -79,6 +80,9 @@ describe('public native plain Chat semantic purge HTTP', () => {
           requests.push(await request.text());
           contentLengths.push(Number(request.headers.get('content-length')));
           storedLengths.push(history.length());
+          storedSubmissions.push(
+            await history.hasPromptSubmission('native-chat-session'),
+          );
           return Response.json({
             id: 'reply',
             object: 'chat.completion',
@@ -213,9 +217,11 @@ describe('public native plain Chat semantic purge HTTP', () => {
               persistSemanticMediaPurge: async () => undefined,
             },
           );
-          output = result.content.blocks
-            .flatMap((block) => (block.type === 'text' ? [block.text] : []))
-            .join('');
+          expect(result.status).toBe('published');
+          output =
+            (await chat.getHistoryService().getLastContent())?.blocks
+              .flatMap((block) => (block.type === 'text' ? [block.text] : []))
+              .join('') ?? '';
         }, true);
         expect(output).toBe('ok');
         expect(receipt).toStrictEqual({ files: [], directories: [] });
@@ -237,7 +243,8 @@ describe('public native plain Chat semantic purge HTTP', () => {
             ? undefined
             : ['latest first', 'latest second'].join('\n'),
         );
-        expect(storedLengths).toStrictEqual([3]);
+        expect(storedLengths).toStrictEqual([4]);
+        expect(storedSubmissions).toStrictEqual([true]);
         expect(JSON.parse(requests[0]).model).toBe('gpt-4o');
         await history.waitForCommit();
         const committed = await history.openDumpSnapshot();

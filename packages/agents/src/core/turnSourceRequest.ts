@@ -48,13 +48,14 @@ export interface TurnSourceRequestInput {
   readonly attempt: (
     prepared: PreparedSourcePromptEnvelopeSend,
     attemptIndex: number,
-  ) => Promise<IContent>;
+  ) => Promise<void>;
 }
 
 async function* singleResponse(
-  run: () => Promise<IContent>,
+  run: () => Promise<void>,
 ): AsyncGenerator<IContent, void, unknown> {
-  yield await run();
+  await run();
+  yield { speaker: 'ai', blocks: [] };
 }
 
 /**
@@ -64,7 +65,7 @@ async function* singleResponse(
  */
 export async function sendTurnSource(
   input: TurnSourceRequestInput,
-): Promise<IContent> {
+): Promise<void> {
   const stream = await streamDiskSource({
     runtime: input.runtime,
     compression: input.compression,
@@ -91,8 +92,7 @@ export async function sendTurnSource(
     const source = historySourceFailure(error);
     throw source === undefined ? error : source.error;
   });
-  let response: IContent | undefined;
-  for await (const chunk of stream) response = chunk;
-  if (response === undefined) throw new Error('No response from provider');
-  return response;
+  for await (const _completed of stream) {
+    /* The attempt owns its journal response, not this request source. */
+  }
 }

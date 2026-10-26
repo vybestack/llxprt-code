@@ -13,7 +13,11 @@ function emptyChatStream(): AsyncGenerator<never> {
 
 export function createTestAgentChat(): AgentChatContract {
   return {
-    sendMessage: async () => emptyModelOutput(),
+    sendMessage: async (_params, promptId) => ({
+      status: 'empty',
+      promptId,
+      turnId: 'unused',
+    }),
     sendMessageStream: async () => emptyChatStream(),
     generateDirectMessage: async () => emptyModelOutput(),
     getHistory: () => emptyChatStream(),

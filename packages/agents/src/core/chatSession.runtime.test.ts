@@ -27,7 +27,6 @@ import type {
   IContent,
   TextBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { getToolCalls } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
@@ -275,9 +274,7 @@ async function verifyRuntime1(): Promise<GenerateChatOptions> {
   return options;
 }
 
-async function verifyRuntime2(): Promise<
-  Awaited<ReturnType<ChatSession['sendMessage']>>
-> {
+async function verifyRuntime2(): Promise<IContent> {
   const generateChatCompletionMock = vi.fn(
     async function* (): AsyncGenerator<IContent> {
       yield {
@@ -345,7 +342,10 @@ async function verifyRuntime2(): Promise<
     JSON.stringify(await curatedHistoryAfterCommit(historyService)),
   ).not.toContain('run_shell_command');
 
-  return response;
+  expect(response.status).toBe('published');
+  const sealed = await historyService.getLastContent();
+  if (sealed === undefined) throw new Error('Missing sealed response');
+  return sealed;
 }
 
 async function verifyRuntime3(): Promise<
@@ -447,9 +447,11 @@ describe('ChatSession runtime context', () => {
     expect(await verifyRuntime1()).not.toHaveProperty('runtime');
   });
   it('filters hook-disallowed provider function calls from non-stream responses and history', async () => {
-    expect(getToolCalls(await verifyRuntime2())).toStrictEqual([
-      expect.objectContaining({ name: 'read_file' }),
-    ]);
+    expect(
+      (await verifyRuntime2()).blocks.filter(
+        (block) => block.type === 'tool_call',
+      ),
+    ).toStrictEqual([expect.objectContaining({ name: 'read_file' })]);
   });
   it('preserves direct response text when filtering hook-disallowed tool calls', async () => {
     expect(extractText(await verifyRuntime3())).toBe(

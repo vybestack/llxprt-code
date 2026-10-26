@@ -59,6 +59,7 @@ import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { ContentGenerator } from './contentGenerator.js';
 import type { TaskToolRegistration } from '../config/toolRegistryFactory.js';
 import type { ModelOutput } from '../llm-types/modelEnvelope.js';
+import type { TurnReceipt } from './turnReceipt.js';
 import type { AgentMessageInput } from '../llm-types/agentMessageInput.js';
 import type { JournalReadCounters } from '../recording/journalCounters.js';
 import type { RowOwnership } from '../recording/rowOwnership.js';
@@ -134,7 +135,7 @@ export interface AgentChatContract {
     params: AgentClientMessageParams,
     prompt_id: string,
     execution?: AgentChatRecordingExecution,
-  ): Promise<ModelOutput>;
+  ): Promise<TurnReceipt>;
   sendMessageStream(
     params: AgentClientMessageParams,
     prompt_id: string,

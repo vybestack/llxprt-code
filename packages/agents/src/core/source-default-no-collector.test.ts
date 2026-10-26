@@ -235,7 +235,8 @@ describe('default sends never collect history into an array', () => {
       { message: 'next question' },
       'default-turn',
     );
-    expect(response.content.blocks).toContainEqual({
+    expect(response.status).toBe('published');
+    expect((await history.getLastContent())?.blocks).toContainEqual({
       type: 'text',
       text: 'completed',
     });

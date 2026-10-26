@@ -90,6 +90,8 @@ import {
 import { CompressionHandler } from '../compression/CompressionHandler.js';
 import { ConversationManager } from './ConversationManager.js';
 import { TurnProcessor } from './TurnProcessor.js';
+import type { TurnReceipt } from '@vybestack/llxprt-code-core/core/turnReceipt.js';
+export type { TurnReceipt } from '@vybestack/llxprt-code-core/core/turnReceipt.js';
 import { StreamProcessor } from './StreamProcessor.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
@@ -597,7 +599,7 @@ export class ChatSession {
     execution:
       | AgentChatRecordingExecution
       | undefined = params.recordingExecution,
-  ): Promise<ModelOutput> {
+  ): Promise<TurnReceipt> {
     return this._withResolvedSystemPrompt(
       params,
       (turnParams) =>

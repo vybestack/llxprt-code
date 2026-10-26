@@ -113,7 +113,11 @@ function createScriptedAgentClient(scripts: TurnScript[]): ScriptedClient {
 
 function makeScriptedChat(history: IContent[]): AgentChatContract {
   return {
-    sendMessage: async () => emptyModelOutput(),
+    sendMessage: async (_params, promptId) => ({
+      status: 'empty',
+      promptId,
+      turnId: 'unused',
+    }),
     sendMessageStream: async () => {
       async function* emptyStream() {}
       return emptyStream();

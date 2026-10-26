@@ -133,6 +133,12 @@ export class HistoryService extends HistoryServiceReads {
         publishArrivalMedia(this.mediaOwner, sealed, () => {
           this.emit('contentAdded', sealed, origin);
         }),
+      batch: async (start) =>
+        notifyDetachedRows(
+          this,
+          undefined,
+          await this.journal.committedBatch(this.journal.getLength() - start),
+        ),
       reconcileMedia: async () => {
         if (this.mediaOwner !== undefined)
           await this.journal.reconcileMedia(this.mediaOwner);

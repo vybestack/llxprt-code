@@ -14,6 +14,7 @@ export function withArrivalPublication<T>(
     publish(token: T): void;
     cancel(token: T): void;
     added(content: IContent): void | Promise<void>;
+    batch(start: number): Promise<void>;
     reconcileMedia(): Promise<void>;
     first(content: IContent): void;
     origin: string | undefined;
@@ -35,15 +36,15 @@ export function withArrivalPublication<T>(
         host.assertAdmission();
         const before = host.journal.getLength();
         const scope = host.journal.openPublication();
+        const rollback = host.journal.captureArrivalRollback();
         let ticket: { value: T } | undefined;
         let published = false;
         let first: IContent | undefined;
-        const observe = async (main = false): Promise<void> => {
+        const observe = async (): Promise<void> => {
           const sealed = await host.journal.lastContent();
           if (sealed === undefined)
             throw new Error('Sealed response is missing');
           await host.added(sealed);
-          if (main) await onSealed?.(sealed);
           if (before === 0 && first === undefined)
             first = {
               speaker: sealed.speaker,
@@ -53,25 +54,22 @@ export function withArrivalPublication<T>(
         };
         try {
           await arrival.seal(metadata, observe);
-          await observe(true);
+          await observe();
+          await host.batch(before);
+          await onSealed?.();
           ticket = { value: host.prepare(before) };
           scope.close(true);
           if (first !== undefined) host.first(first);
           host.publish(ticket.value);
           published = true;
         } catch (error) {
-          const added = host.journal.getLength() - before;
-          if (added > 0)
-            host.journal.apply({
-              kind: 'rewind',
-              itemsRemoved: added,
-              origin: host.origin,
-            });
+          await rollback.rollback(error);
           await host.reconcileMedia();
           throw error;
         } finally {
           scope.close(false);
           if (!published && ticket !== undefined) host.cancel(ticket.value);
+          await rollback.close();
         }
       }),
   };

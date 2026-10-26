@@ -35,6 +35,8 @@ const PORT_METHODS = [
   'waitForCommit',
   'hasPromptSubmission',
   'openResponseArrival',
+  'committedBatch',
+  'captureArrivalRollback',
   'flushCommitted',
   'getLength',
   'materialize',

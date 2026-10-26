@@ -101,7 +101,11 @@ function createAgentClient(
   let deferredHistory: readonly IContent[] | undefined;
   const chat: AgentChatContract = {
     takeHistoryAdmissions: () => [],
-    sendMessage: async () => emptyModelOutput(),
+    sendMessage: async (_params, promptId) => ({
+      status: 'empty',
+      promptId,
+      turnId: 'unused',
+    }),
     sendMessageStream: async () => emptyStream(),
     generateDirectMessage: async () => emptyModelOutput(),
     getHistory: (_curated, signal) => history.streamRawHistory(signal),

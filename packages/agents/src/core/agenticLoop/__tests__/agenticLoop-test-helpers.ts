@@ -100,7 +100,11 @@ interface ScriptedClientState {
 function buildScriptedChat(state: ScriptedClientState): AgentChatContract {
   const { history, recordedToolCalls } = state;
   return {
-    sendMessage: async () => emptyModelOutput(),
+    sendMessage: async (_params, promptId) => ({
+      status: 'empty',
+      promptId,
+      turnId: 'unused',
+    }),
     sendMessageStream: async () => {
       async function* emptyStream() {}
       return emptyStream();

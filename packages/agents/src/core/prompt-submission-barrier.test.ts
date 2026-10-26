@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { TurnProcessor } from './TurnProcessor.js';
-import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { TurnReceipt } from '@vybestack/llxprt-code-core/core/turnReceipt.js';
 import { createSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
 import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
 import { TranscriptReader } from '@vybestack/llxprt-code-core/journal/transcript-reader.js';
@@ -33,7 +33,7 @@ function directProcessor(
 
 async function directResult(
   setup: Awaited<ReturnType<typeof processorFixture>>,
-): Promise<AsyncGenerator<ModelStreamChunk>> {
+): Promise<AsyncGenerator<TurnReceipt>> {
   const result = await directProcessor(setup).sendMessage(
     { message: 'Answer the history.', config: {} },
     'submission',
@@ -83,18 +83,11 @@ describe('production prompt submission barrier', () => {
             limit: 10,
           });
           const rows = entries.filter((entry) => entry.rowRef !== 0);
-          expect(rows).toHaveLength(mode === 'stream' ? 2 : 1);
-          expect(rows.slice(1).map((entry) => entry.status)).toStrictEqual(
-            mode === 'stream' ? [0] : [],
-          );
-          const opened =
-            mode === 'stream'
-              ? decodeStoredRow(await transcript.readRow(rows[1]))
-              : undefined;
-          expect(opened?.speaker).toBe(mode === 'stream' ? 'ai' : undefined);
-          expect(opened?.blocks).toStrictEqual(
-            mode === 'stream' ? [] : undefined,
-          );
+          expect(rows).toHaveLength(2);
+          expect(rows.slice(1).map((entry) => entry.status)).toStrictEqual([0]);
+          const opened = decodeStoredRow(await transcript.readRow(rows[1]));
+          expect(opened.speaker).toBe('ai');
+          expect(opened.blocks).toStrictEqual([]);
           const content = decodeStoredRow(await transcript.readRow(rows[0]));
           expect(content.speaker).toBe('human');
           expect(content.blocks).toStrictEqual(sourcePending.blocks);

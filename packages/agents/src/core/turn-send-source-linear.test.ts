@@ -54,7 +54,9 @@ async function countedSend(rows: number): Promise<SendCounts> {
           history,
           provider: fixture.provider,
           promptId: 'turn-send-linear',
-          userContents: [],
+          userContents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'continue' }] },
+          ],
           semanticMediaPurge: undefined,
           tools: undefined,
           signal: undefined,
@@ -65,7 +67,7 @@ async function countedSend(rows: number): Promise<SendCounts> {
             expect(prepared.options.requestRows.native).toBeDefined();
             for await (const row of prepared.options.requestRows.openReader())
               if (row.blocks.length > 0) rowsRead++;
-            return { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+            return;
           },
         });
         return {
@@ -88,7 +90,7 @@ describe('non-streaming turn send cost scales linearly with rows', () => {
 
     expect(small.opens).toBe(1);
     expect(large.opens).toBe(small.opens);
-    expect(small.rowsRead).toBe(SMALL);
-    expect(large.rowsRead).toBe(LARGE);
+    expect(small.rowsRead).toBe(SMALL + 1);
+    expect(large.rowsRead).toBe(LARGE + 1);
   }, 120_000);
 });
