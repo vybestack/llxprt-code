@@ -3,10 +3,21 @@ import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import { countDecodedRow } from './journalRowCounters.js';
 import type { IContent } from './IContent.js';
 import type { NativeProviderFormat } from './native-provider-format.js';
+import type { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
+
+export type ProviderRequestIndex = Pick<
+  IndexedJournalRequestSnapshot,
+  'count' | 'normalizedCount' | 'normalizedPosition'
+> & {
+  /** A projection that renders every structural tool block as ordinary text. */
+  readonly toolFree?: true;
+};
 
 export interface ProviderRequestRows {
   /** Caller-owned normalization with empty assistant turns kept for converters that require placeholders. */
   readonly emptyAiRows?: ProviderRequestRows;
+  /** Occurrence queries in this selection's coordinates, after projection. */
+  readonly index?: ProviderRequestIndex;
   readonly callerOwned?: true;
   readonly native?: NativeProviderFormat;
   readonly count: number;
@@ -103,6 +114,7 @@ export function providerRequestRows(
       ? {}
       : { emptyAiRows: snapshot.emptyAiRows }),
     ...(snapshot.native === undefined ? {} : { native: snapshot.native }),
+    ...(snapshot.index === undefined ? {} : { index: snapshot.index }),
     ...(snapshot.callerOwned === true ? { callerOwned: true } : {}),
     count: snapshot.count,
     openReader: (signal?: AbortSignal) => snapshot.openReader(signal),

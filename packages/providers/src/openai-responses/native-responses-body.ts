@@ -173,6 +173,7 @@ export class NativeResponsesPrompt {
   ): AsyncGenerator<ResponsesInputItem> {
     this.requireOpen();
     const indexed =
+      this.rows.index ??
       this.rows.native?.indexed ??
       (await CallerOwnedToolQuery.create(this.rows));
     let counter = 0;
@@ -335,7 +336,7 @@ async function historyByteLength(
   const native = rows?.native;
   if (rows === undefined)
     throw new Error('Native Responses requires request rows');
-  if (rows.callerOwned === true)
+  if (rows.callerOwned === true || rows.index?.toolFree === true)
     return callerOwnedByteLength(
       options,
       shell,
@@ -407,7 +408,7 @@ async function callerOwnedByteLength(
   selection: NativeResponsesSelection,
   rows: ProviderRequestRows,
 ): Promise<PreparedHistory> {
-  const query = await CallerOwnedToolQuery.create(rows);
+  const query = rows.index ?? (await CallerOwnedToolQuery.create(rows));
   const settings = nativeSettings(options);
   const unsupportedMedia: UnsupportedMediaEntry[] = [];
   let pdfBytes = 0;
@@ -520,7 +521,9 @@ export async function prepareNativeResponsesPrompt(
   const supplied = options.requestRows;
   if (
     supplied === undefined ||
-    (supplied.native === undefined && supplied.callerOwned !== true)
+    (supplied.native === undefined &&
+      supplied.index?.toolFree !== true &&
+      supplied.callerOwned !== true)
   )
     throw new Error('Native Responses requires native request rows');
   const rows =

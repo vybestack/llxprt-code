@@ -9,6 +9,7 @@ import {
   type ProviderRequestSelection,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import { compressionRequestIndex } from './compressionRequestIndex.js';
 import {
   adjustDiskToolBoundary,
   forwardDiskToolBoundary,
@@ -173,6 +174,31 @@ function compressionRowReader(
   };
 }
 
+function snapshotQuery(
+  rows: HistoryIndexedRows,
+  plan: MiddleOutDiskPlan,
+  ownership: RowOwnership,
+): (signal?: AbortSignal) => Promise<boolean> {
+  let scanned: boolean | undefined;
+  return async (signal) => {
+    if (scanned !== undefined) return scanned;
+    let found = false;
+    for (let index = plan.top; index < plan.bottom && !found; index++) {
+      signal?.throwIfAborted();
+      const row = await rows.readRow(index);
+      ownership.retain(row);
+      try {
+        signal?.throwIfAborted();
+        found = hasStateSnapshot(row);
+      } finally {
+        ownership.release(row);
+      }
+    }
+    scanned = found;
+    return found;
+  };
+}
+
 /**
  * The complete summarization request as a repeatable selection: the security
  * preamble, the compression prompt, the sanitized journal rows in
@@ -198,19 +224,7 @@ export function diskSummaryRequestSelection(
   const count = SUMMARY_FRAME_ROWS + (plan.bottom - plan.top) + tail.length;
   const journalEnd = 2 + (plan.bottom - plan.top);
   const sanitized = compressionRowReader(rows, scope);
-  // The trigger row depends on every journal row, so a random read of it scans
-  // the journal once; the answer is kept for later reads.
-  let scannedSnapshot: boolean | undefined;
-  const journalHasSnapshot = async (signal?: AbortSignal): Promise<boolean> => {
-    if (scannedSnapshot !== undefined) return scannedSnapshot;
-    let found = false;
-    for (let index = plan.top; index < plan.bottom && !found; index++) {
-      signal?.throwIfAborted();
-      found = hasStateSnapshot(await rows.readRow(index));
-    }
-    scannedSnapshot = found;
-    return found;
-  };
+  const journalHasSnapshot = snapshotQuery(rows, plan, ownership);
   async function* readRows(
     signal?: AbortSignal,
   ): AsyncGenerator<IContent, void, unknown> {
@@ -235,7 +249,11 @@ export function diskSummaryRequestSelection(
     yield summaryTriggerRow(priorSnapshot);
   }
   return {
-    callerOwned: true,
+    index: compressionRequestIndex(
+      count,
+      [COMPRESSION_SECURITY_PREAMBLE, promptRow, ...tail],
+      scope,
+    ),
     count,
     openReader: (signal) => scope.open(readRows(signal)),
     readAt(index, signal) {

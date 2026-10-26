@@ -53,6 +53,7 @@ function checkedRows(
       ? {}
       : { emptyAiRows: checkedRows(rows.emptyAiRows, requestSignal) }),
     ...(rows.native === undefined ? {} : { native: rows.native }),
+    ...(rows.index === undefined ? {} : { index: rows.index }),
     ...(rows.callerOwned === true ? { callerOwned: true } : {}),
     count,
     async *openReader(

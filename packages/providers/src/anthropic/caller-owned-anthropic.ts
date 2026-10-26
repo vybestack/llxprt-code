@@ -189,11 +189,14 @@ export async function callerOwnedAnthropicEngine(
   policy: RepairPolicy,
   rawDump = false,
 ): Promise<AnthropicStreamRepair<AnthropicRepairRows>> {
-  const toolQuery = await CallerOwnedToolQuery.create(
-    rows,
-    (row) => projectAnthropicUnit(row, settings, false),
-    rawDump,
-  );
+  const toolQuery =
+    rows.index?.toolFree === true
+      ? { ...rows.index, count: rows.count, hasToolBlocks: false }
+      : await CallerOwnedToolQuery.create(
+          rows,
+          (row) => projectAnthropicUnit(row, settings, false),
+          rawDump,
+        );
   const query: AnthropicRepairRows = Object.assign(toolQuery, {
     readAt: rows.readAt,
     rawChainAt: (at: number) => index.rawChainAt(at),

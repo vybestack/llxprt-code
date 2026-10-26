@@ -639,20 +639,21 @@ async function callerOwnedPlanning(
   rowInput: ChatRowInput,
   signal: AbortSignal | undefined,
 ): Promise<ChatPlanning> {
-  const rowIds = await callerOwnedChatIds(
-    rows,
-    settings.chat?.toolFormat ?? 'openai',
-  );
+  const rowIds =
+    rows.index?.toolFree === true
+      ? undefined
+      : await callerOwnedChatIds(rows, settings.chat?.toolFormat ?? 'openai');
   let allowOrphans = true;
-  for await (const row of rows.openReader(signal)) {
-    if (
-      row.speaker === 'ai' &&
-      row.blocks.some((block) => block.type === 'tool_call')
-    ) {
-      allowOrphans = false;
-      break;
+  if (rows.index?.toolFree !== true)
+    for await (const row of rows.openReader(signal)) {
+      if (
+        row.speaker === 'ai' &&
+        row.blocks.some((block) => block.type === 'tool_call')
+      ) {
+        allowOrphans = false;
+        break;
+      }
     }
-  }
   const plan = (
     captured: RowFormatSettings,
     selected: 0 | 1 | 2,
@@ -699,7 +700,7 @@ async function chatPlanning(
   },
 ): Promise<ChatPlanning> {
   const toolFormat = settings.chat?.toolFormat;
-  if (rows.callerOwned === true)
+  if (rows.callerOwned === true || rows.index?.toolFree === true)
     return callerOwnedPlanning(
       rows,
       options,
@@ -800,10 +801,7 @@ export async function prepareNativePlainRequest(
     rowInput,
   );
   const selected = selectedVariant(reasoningStrip(options));
-  const streamedPrompt =
-    rows.callerOwned === true || settings.chat?.toolFormat === 'kimi'
-      ? body.prompt
-      : undefined;
+  const streamedPrompt = streamedPlan === undefined ? undefined : body.prompt;
   const projection = use.estimate
     ? new NativeChatEstimateProjection(
         native,

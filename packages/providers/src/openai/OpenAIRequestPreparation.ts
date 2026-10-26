@@ -311,6 +311,7 @@ export async function prepareRequest(
 ): Promise<RequestContext> {
   if (
     options.requestRows?.native === undefined &&
+    options.requestRows?.index?.toolFree !== true &&
     options.requestRows?.callerOwned !== true
   )
     throw new Error(

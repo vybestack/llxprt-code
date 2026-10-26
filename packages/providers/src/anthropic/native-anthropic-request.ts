@@ -540,11 +540,15 @@ export async function prepareAnthropicRequestRows(
   mediaStage: MediaStage | undefined,
   options: AnthropicRequestOptions = {},
 ): Promise<PreparedAnthropicRequest> {
-  if (rows.native === undefined && rows.callerOwned !== true)
+  if (
+    rows.native === undefined &&
+    rows.index?.toolFree !== true &&
+    rows.callerOwned !== true
+  )
     throw new Error(
-      'Anthropic requires a native or caller-owned request selection',
+      'Anthropic requires an indexed or caller-owned request selection',
     );
-  if (rows.callerOwned === true)
+  if (rows.callerOwned === true || rows.index?.toolFree === true)
     return prepareCallerOwnedAnthropic(params, rows, mediaStage, options);
   return prepareNativeAnthropicRequest(
     params,

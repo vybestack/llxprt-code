@@ -151,6 +151,7 @@ class RequestRowsLease {
   private scopedRows(rows: ProviderRequestRows): ProviderRequestRows {
     return {
       ...(rows.native === undefined ? {} : { native: rows.native }),
+      ...(rows.index === undefined ? {} : { index: rows.index }),
       ...(rows.callerOwned === true ? { callerOwned: true } : {}),
       count: rows.count,
       openReader: (signal) => this.openReader(rows, signal),

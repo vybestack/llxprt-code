@@ -183,6 +183,10 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     }
   }
 
+  get index(): IndexedJournalRequestSnapshot {
+    return this.indexed;
+  }
+
   get count(): number {
     return this.indexed.count;
   }
