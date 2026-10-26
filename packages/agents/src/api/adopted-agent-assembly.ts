@@ -79,6 +79,7 @@ import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import type {
   ChildTaskWorkspacePort,
   ForegroundMcpPort,
+  McpTeardownPort,
 } from './mcpRuntimePorts.js';
 import { assembleModelSelection } from './model-selection.js';
 import { executeProviderActivation } from './providerActivationExecutor.js';
@@ -688,7 +689,7 @@ async function activateAdoptedSession(
 }
 
 function facadeInputsForAdopted(
-  runtime: ForegroundMcpPort,
+  runtime: McpTeardownPort,
   release: AcquisitionRelease,
   runtimeId: string,
   handles: AgentSchedulerHandle[],

@@ -103,7 +103,7 @@ import {
 } from './agent-facade.js';
 import type {
   AgentRuntimeMcpPort,
-  ForegroundMcpPort,
+  McpTeardownPort,
 } from './mcpRuntimePorts.js';
 import {
   assembleOwnedMcpRuntime,
@@ -561,7 +561,7 @@ async function releasePreferredProviders(
 }
 
 function facadeInputsForPreferred(
-  runtime: ForegroundMcpPort,
+  runtime: McpTeardownPort,
   release: AcquisitionRelease,
   inheritedTrustRelease: AcquisitionRelease,
   runtimeId: string,

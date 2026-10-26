@@ -35,7 +35,7 @@ import type { Agent } from './agent.js';
 import { type AgentSchedulerHandle } from './config-types.js';
 
 import { resolveSchedulerFactory } from '../session/assembleSchedulerOwner.js';
-import type { ForegroundMcpPort } from './mcpRuntimePorts.js';
+import type { ForegroundMcpPort, McpTeardownPort } from './mcpRuntimePorts.js';
 import type {
   PreflightAuthInput,
   PreflightProviderInput,
@@ -168,7 +168,7 @@ export class ForegroundAssembly {
 }
 
 function facadeInputsForForeground(
-  runtime: ForegroundMcpPort,
+  runtime: McpTeardownPort,
   config: Config,
   releaseProviders: () => Promise<void>,
   handles: AgentSchedulerHandle[],
