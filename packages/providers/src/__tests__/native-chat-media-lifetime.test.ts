@@ -164,7 +164,7 @@ async function verifyLifetime(
         };
     })(),
     [],
-    { mediaStore: store, directory: parent },
+    { mediaStore: store, directory: parent, seedBatchRows: count },
   );
   const route = WIRE_ROUTES.find((item) => item.id === 'openai-chat-plain');
   if (route === undefined) throw new Error('Missing plain Chat route');

@@ -19,12 +19,32 @@ export interface JournalSendFixture {
   close(): Promise<void>;
 }
 
+async function seedBatches(
+  service: HistoryService,
+  rows: Iterable<IContent> | AsyncIterable<IContent>,
+  size: number,
+): Promise<void> {
+  if (!Number.isSafeInteger(size) || size < 1)
+    throw new Error('Fixture seed batch size must be a positive integer');
+  let batch: IContent[] = [];
+  for await (const row of rows) {
+    batch.push(row);
+    if (batch.length === size) {
+      await service.addBatch(batch);
+      batch = [];
+    }
+  }
+  if (batch.length > 0) await service.addBatch(batch);
+  await service.waitForCommit();
+}
+
 export async function journalSendFixture(
   rows: Iterable<IContent> | AsyncIterable<IContent>,
   pending: readonly IContent[] = [],
   options: {
     readonly directory?: string;
     readonly oneRowAtATime?: boolean;
+    readonly seedBatchRows?: number;
     readonly mediaStore?: LocalMediaStore;
   } = {},
 ): Promise<JournalSendFixture> {
@@ -45,7 +65,9 @@ export async function journalSendFixture(
     return service;
   });
   try {
-    if (options.oneRowAtATime === true || Symbol.asyncIterator in rows) {
+    if (options.seedBatchRows !== undefined) {
+      await seedBatches(graph.service, rows, options.seedBatchRows);
+    } else if (options.oneRowAtATime === true || Symbol.asyncIterator in rows) {
       for await (const row of rows) await graph.service.addBatch([row]);
       await graph.service.waitForCommit();
     } else await graph.seed(rows);
