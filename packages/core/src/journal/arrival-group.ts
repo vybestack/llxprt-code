@@ -12,6 +12,8 @@ import {
   decodeRowHeader,
   encodeRowHeader,
   type RowHeader,
+  ROW_BLOCK_TYPE,
+  ROW_FLAG,
 } from './rowRecord.js';
 import { encodeRowDraft, entryForNewRow, type RowDraft } from './rowDraft.js';
 import { buildStreamedAppend } from './streamed-append-build.js';
@@ -36,7 +38,11 @@ import {
   encodeChunkBlock,
   findChunkEntry,
   pieceHeader,
+  readChunkBlock,
+  hydrateChunkHeader,
 } from './chunk-row.js';
+import type { ChunkBlock } from './chunk-row.js';
+import { fieldCode, type ArrivalFieldName } from './chunk-fields.js';
 import type { CommitAck } from './groupWriter.js';
 
 export interface ArrivalRow {
@@ -164,14 +170,22 @@ export class ArrivalGroup {
     await this.publish(entry, header);
     return { transcriptId: id };
   }
-  async beginBlock(row: ArrivalRow, type: number): Promise<ArrivalBlock> {
+  async beginBlock(
+    row: ArrivalRow,
+    type: number,
+    named = false,
+  ): Promise<ArrivalBlock> {
     const { entry, header } = await this.find(row);
     if (header.chunk === undefined) throw new Error('Missing manifest');
     const ordinal = header.chunk.blockCount;
+    let flag = 0;
+    if (type === ROW_BLOCK_TYPE.thinking) flag = ROW_FLAG.hasThinking;
+    if (type === ROW_BLOCK_TYPE.tool_call) flag = ROW_FLAG.hasToolCall;
+    if (type === ROW_BLOCK_TYPE.media) flag = ROW_FLAG.hasMedia;
     const ref = await appendChunkValue(
       this.target,
       'recording:block',
-      encodeChunkBlock({ piecesRoot: 0, length: 0, type, ended: false }),
+      encodeChunkBlock({ piecesRoot: 0, length: 0, type, ended: false, named }),
     );
     const blocksRoot = await this.tree('blocks').insert(
       header.chunk.blocksRoot,
@@ -179,9 +193,99 @@ export class ArrivalGroup {
     );
     await this.publish(entry, {
       ...header,
+      flags: header.flags | flag,
       chunk: { ...header.chunk, blocksRoot, blockCount: ordinal + 1 },
     });
     return { ...row, ordinal };
+  }
+  async namedField(
+    handle: ArrivalBlock,
+    name: ArrivalFieldName,
+  ): Promise<ChunkBlock | undefined> {
+    const { header } = await this.find(handle);
+    if (header.chunk === undefined) throw new Error('Missing manifest');
+    const block = await chunkBlock(this.access(), header.chunk, handle.ordinal);
+    if (block.named !== true || block.ended)
+      throw new Error('Named block is not open');
+    const found = await transcriptEntries(
+      this.access(),
+      block.piecesRoot,
+      'blocks',
+      BigInt(fieldCode(name)),
+      false,
+    ).next();
+    return found.value?.transcriptId === BigInt(fieldCode(name))
+      ? decodeChunkBlock(await chunkValue(this.access(), found.value.rowRef))
+      : undefined;
+  }
+  async appendNamed(
+    handle: ArrivalBlock,
+    name: ArrivalFieldName,
+    bytes: Uint8Array,
+    snapshot?: ChunkBlock['snapshot'],
+  ): Promise<void> {
+    const { entry, header } = await this.find(handle);
+    if (header.chunk === undefined) throw new Error('Missing manifest');
+    const block = await chunkBlock(this.access(), header.chunk, handle.ordinal);
+    const code = fieldCode(name);
+    const field = (await this.namedField(handle, name)) ?? {
+      piecesRoot: 0,
+      length: 0,
+      type: code,
+      ended: false,
+    };
+    let piecesRoot = field.piecesRoot;
+    if (bytes.length > 0) {
+      const ref = await this.target.append({
+        kind: RECORD_KIND.PIECE,
+        kindHeader: pieceHeader(
+          entry.transcriptId,
+          handle.ordinal,
+          field.length,
+          code,
+        ),
+        body: { length: bytes.length, chunks: [bytes] },
+      });
+      piecesRoot = await this.tree('pieces').insert(
+        piecesRoot,
+        directoryEntry(BigInt(field.length + 1), ref, bytes.length),
+      );
+    }
+    const fieldRef = await appendChunkValue(
+      this.target,
+      'recording:block',
+      encodeChunkBlock({
+        ...field,
+        piecesRoot,
+        length: field.length + bytes.length,
+        snapshot: snapshot ?? field.snapshot,
+      }),
+    );
+    const fieldsRoot = await this.tree('blocks').insert(
+      block.piecesRoot,
+      directoryEntry(BigInt(code), fieldRef),
+    );
+    const descriptor = await appendChunkValue(
+      this.target,
+      'recording:block',
+      encodeChunkBlock({
+        ...block,
+        piecesRoot: fieldsRoot,
+        length: block.length + bytes.length,
+      }),
+    );
+    const blocksRoot = await this.tree('blocks').insert(
+      header.chunk.blocksRoot,
+      directoryEntry(BigInt(handle.ordinal + 1), descriptor),
+    );
+    this.head = {
+      ...this.head,
+      reachableBytes: this.head.reachableBytes + bytes.length,
+    };
+    await this.publish(entry, {
+      ...header,
+      chunk: { ...header.chunk, blocksRoot },
+    });
   }
   async append(piece: ArrivalPiece): Promise<void> {
     const { entry, header } = await this.find(piece.block);
@@ -226,6 +330,34 @@ export class ArrivalGroup {
       ...header,
       chunk: { ...header.chunk, blocksRoot },
     });
+  }
+  async blockError(handle: ArrivalBlock): Promise<string | undefined> {
+    const { header } = await this.find(handle);
+    if (header.chunk === undefined) throw new Error('Missing manifest');
+    const block = await chunkBlock(this.access(), header.chunk, handle.ordinal);
+    if (block.named !== true || block.type !== 1) return undefined;
+    try {
+      const value: unknown = JSON.parse(
+        new TextDecoder('utf-8', { fatal: true }).decode(
+          await readChunkBlock(this.access(), header.chunk, handle.ordinal),
+        ),
+      );
+      if (value === null || typeof value !== 'object')
+        return 'Invalid tool call';
+      if (!('id' in value) || typeof value.id !== 'string' || value.id === '')
+        return 'Invalid tool call id';
+      if (
+        !('name' in value) ||
+        typeof value.name !== 'string' ||
+        value.name === ''
+      )
+        return 'Invalid tool call name';
+      if (!('parameters' in value)) return 'Invalid tool call';
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+      return 'Invalid tool call arguments';
+    }
+    return undefined;
   }
   async endBlock(handle: ArrivalBlock): Promise<void> {
     const { entry, header } = await this.find(handle);
@@ -321,7 +453,10 @@ export class ArrivalGroup {
     await this.target.drain();
     const source = this.access();
     const row = entryForNewRow(
-      { header, recordLength: entry.recordLength },
+      {
+        header: await hydrateChunkHeader(source, header),
+        recordLength: entry.recordLength,
+      },
       entry.rowRef,
       entry.transcriptId,
     );

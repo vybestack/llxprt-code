@@ -47,7 +47,14 @@ export async function copyChunkDescriptor(
   const piecesRoot = await remapOffset(
     OFFSET.blockPieces,
     block.piecesRoot,
-    async (ref) => (await copyTranscriptTree(copier, ref, 'pieces')).ref,
+    async (ref) =>
+      (
+        await copyTranscriptTree(
+          copier,
+          ref,
+          block.named === true ? 'blocks' : 'pieces',
+        )
+      ).ref,
   );
   const bytes = encodeChunkBlock({ ...block, piecesRoot });
   const ref = await copier.append(

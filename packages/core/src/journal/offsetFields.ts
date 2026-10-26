@@ -429,6 +429,8 @@ export const RECORD_FIELDS: Record<RecordName, Record<string, FieldDecl>> = {
     length: 'size',
     type: 'code',
     ended: 'flags',
+    named: 'flags',
+    snapshot: 'nested',
   } satisfies Record<keyof ChunkBlock, FieldDecl>,
   ChunkPieceEntry: { rowRef: OFFSET.pieceRecord },
   ChunkBlockEntry: { rowRef: OFFSET.blockDescriptor },

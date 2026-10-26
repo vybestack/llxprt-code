@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { setImmediate } from 'node:timers/promises';
 import {
   recordingMutations,
   interruptRecordingOrphans,
@@ -419,7 +420,10 @@ export class JournalStore {
       releaseVersion();
       if (!this.closing && this.pins === 0 && this.deferredByPin) {
         this.deferredByPin = false;
-        this.tail = this.tail.then(() => this.compactWhenIdle());
+        this.tail = this.tail.then(async () => {
+          await setImmediate();
+          await this.compactWhenIdle();
+        });
       }
       return this.mediaPins.afterReaderRelease(release);
     });

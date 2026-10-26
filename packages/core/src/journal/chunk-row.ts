@@ -20,6 +20,8 @@ export interface ChunkBlock {
   readonly length: number;
   readonly type: number;
   readonly ended: boolean;
+  readonly named?: boolean;
+  readonly snapshot?: { readonly units: number; readonly digest: string };
 }
 export function encodeManifest(value: ChunkManifest): Uint8Array {
   const bytes = new Uint8Array(32);
@@ -42,22 +44,37 @@ export function decodeManifest(bytes: Uint8Array): ChunkManifest {
   };
 }
 export function encodeChunkBlock(block: ChunkBlock): Uint8Array {
-  const bytes = new Uint8Array(24);
+  const bytes = new Uint8Array(block.snapshot === undefined ? 24 : 64);
   const view = viewOf(bytes);
   putU64(view, 0, 'piecesRoot', block.piecesRoot);
   putU64(view, 8, 'length', block.length);
   view.setUint8(16, block.type);
   view.setUint8(17, Number(block.ended));
+  view.setUint8(18, Number(block.named === true));
+  if (block.snapshot !== undefined) {
+    view.setUint8(19, 1);
+    putU64(view, 24, 'units', block.snapshot.units);
+    bytes.set(Buffer.from(block.snapshot.digest, 'hex'), 32);
+  }
   return bytes;
 }
 export function decodeChunkBlock(bytes: Uint8Array): ChunkBlock {
-  if (bytes.length !== 24) throw new JournalFormatError('Invalid chunk block');
+  if (bytes.length !== 24 && bytes.length !== 64)
+    throw new JournalFormatError('Invalid chunk block');
   const view = viewOf(bytes);
   return {
     piecesRoot: getU64(view, 0, 'piecesRoot'),
     length: getU64(view, 8, 'length'),
     type: view.getUint8(16),
     ended: view.getUint8(17) === 1,
+    named: view.getUint8(18) === 1,
+    snapshot:
+      view.getUint8(19) === 1
+        ? {
+            units: getU64(view, 24, 'units'),
+            digest: Buffer.from(bytes.subarray(32, 64)).toString('hex'),
+          }
+        : undefined,
   };
 }
 export async function chunkValue(
@@ -134,6 +151,18 @@ export async function* chunkBlockParts(
   ordinal: number,
 ): AsyncGenerator<Uint8Array> {
   const block = await chunkBlock(access, manifest, ordinal);
+  if (block.named === true) {
+    const { namedBlockParts } = await import('./chunk-fields.js');
+    yield* namedBlockParts(access, manifest, ordinal, block);
+  } else yield* chunkFieldParts(access, manifest, ordinal, block, 0);
+}
+export async function* chunkFieldParts(
+  access: RecordAccess,
+  manifest: ChunkManifest,
+  ordinal: number,
+  block: ChunkBlock,
+  fieldCode: number,
+): AsyncGenerator<Uint8Array> {
   let position = 0;
   for await (const entry of transcriptEntries(
     access,
@@ -158,7 +187,16 @@ export async function* chunkBlockParts(
       getU64(view, 24, 'position') !== position
     )
       throw new JournalFormatError('Arrival piece identity mismatch');
-    yield* access.readRecordBody(head, MAX_ARRIVAL_PIECE_BYTES, 'PIECE');
+    if (getU64(view, 16, 'fieldCode') !== fieldCode)
+      throw new JournalFormatError('Arrival piece field mismatch');
+    let verified: Uint8Array | undefined;
+    for await (const part of access.readRecordBody(
+      head,
+      MAX_ARRIVAL_PIECE_BYTES,
+      'PIECE',
+    ))
+      verified = part;
+    if (verified !== undefined) yield verified;
     position += head.bodyLen;
   }
   if (position !== block.length)
@@ -170,7 +208,13 @@ export async function readChunkBlock(
   ordinal: number,
 ): Promise<Uint8Array> {
   const block = await chunkBlock(access, manifest, ordinal);
-  const bytes = new Uint8Array(block.length);
+  const length =
+    block.named === true
+      ? await (
+          await import('./chunk-fields.js')
+        ).namedBlockLength(access, block)
+      : block.length;
+  const bytes = new Uint8Array(length);
   let position = 0;
   for await (const part of chunkBlockParts(access, manifest, ordinal)) {
     bytes.set(part, position);
@@ -182,12 +226,13 @@ export function pieceHeader(
   id: bigint,
   ordinal: number,
   position: number,
+  fieldCode = 0,
 ): Uint8Array {
   const bytes = new Uint8Array(32);
   const view = viewOf(bytes);
   putU64Big(view, 0, 'transcriptId', id);
   putU64(view, 8, 'ordinal', ordinal);
-  putU64(view, 16, 'fieldCode', 0);
+  putU64(view, 16, 'fieldCode', fieldCode);
   putU64(view, 24, 'position', position);
   return bytes;
 }

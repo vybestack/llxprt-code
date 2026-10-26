@@ -235,7 +235,10 @@ export class OffsetAudit {
       const block = decodeChunkBlock(await readValueBody(this.access, head));
       if (block.piecesRoot !== 0) {
         await this.check(OFFSET.blockPieces, block.piecesRoot, offset);
-        await this.walkTranscript(block.piecesRoot, 'pieces');
+        await this.walkTranscript(
+          block.piecesRoot,
+          block.named === true ? 'blocks' : 'pieces',
+        );
       }
     } else if (key.startsWith('member:')) {
       const value = decodeMembership(await readValueBody(this.access, head));

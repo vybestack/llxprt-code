@@ -1,4 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  encodeTextSuffix,
+  snapshotSuffix,
+  utf16Digest,
+  type ArrivalFieldName,
+  type ArrivalFieldMode,
+} from './chunk-fields.js';
 import type { RowDraft } from './rowDraft.js';
 import type { BuildContext } from './groupBuildShared.js';
 import type { RecordAppender } from './groupAppender.js';
@@ -73,6 +80,71 @@ export class JournalArrivalRecorder {
     await this.flush();
     return this.mutate((group) => group.beginBlock(row, type));
   }
+  async beginNamedBlock(row: ArrivalRow, type: number): Promise<ArrivalBlock> {
+    await this.flush();
+    return this.mutate((group) => group.beginBlock(row, type, true));
+  }
+  async appendText(
+    block: ArrivalBlock,
+    name: ArrivalFieldName,
+    value: string,
+    mode: ArrivalFieldMode = 'delta',
+  ): Promise<void> {
+    await this.flush();
+    const field = await this.mutate((group) => group.namedField(block, name));
+    try {
+      if (
+        field !== undefined &&
+        (field.snapshot !== undefined) !== (mode === 'snapshot')
+      )
+        throw new Error('Cannot mix snapshot and delta modes');
+      const start =
+        mode === 'snapshot' ? snapshotSuffix(value, field?.snapshot) : 0;
+      if (start === value.length && field !== undefined) return;
+      for (const bytes of encodeTextSuffix(
+        value,
+        start,
+        name === 'parameters',
+      )) {
+        await this.mutate((group) => group.appendNamed(block, name, bytes));
+        this.payloadBytes += bytes.length;
+      }
+      const snapshot =
+        mode === 'snapshot'
+          ? { units: value.length, digest: utf16Digest(value) }
+          : undefined;
+      await this.mutate((group) =>
+        group.appendNamed(block, name, new Uint8Array(), snapshot),
+      );
+    } catch (error) {
+      await this.finishAttempt(block, 'error');
+      throw error;
+    }
+  }
+  async appendMedia(
+    block: ArrivalBlock,
+    source: AsyncIterable<Uint8Array>,
+  ): Promise<void> {
+    await this.appendText(block, 'encoding', 'base64');
+    let carry = new Uint8Array();
+    for await (const input of source) {
+      for (let at = 0; at < input.length; at += 32766) {
+        const part = input.subarray(at, at + 32766);
+        const bytes = new Uint8Array(carry.length + part.length);
+        bytes.set(carry);
+        bytes.set(part, carry.length);
+        const end = bytes.length - (bytes.length % 3);
+        if (end > 0)
+          await this.appendText(
+            block,
+            'data',
+            Buffer.from(bytes.subarray(0, end)).toString('base64'),
+          );
+        carry = bytes.slice(end);
+      }
+    }
+    await this.appendText(block, 'data', Buffer.from(carry).toString('base64'));
+  }
   async appendField(block: ArrivalBlock, bytes: Uint8Array): Promise<void> {
     this.check();
     if (bytes.length === 0) return;
@@ -140,6 +212,11 @@ export class JournalArrivalRecorder {
   }
   async endBlock(block: ArrivalBlock): Promise<void> {
     await this.flush();
+    const error = await this.mutate((group) => group.blockError(block));
+    if (error !== undefined) {
+      await this.finishAttempt(block, 'error');
+      throw new Error(error);
+    }
     await this.mutate((group) => group.endBlock(block));
   }
   async sealRow(

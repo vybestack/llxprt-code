@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { chunkIds } from './chunk-ids.js';
 import { chunkValue, hydrateChunkHeader, readChunkBlock } from './chunk-row.js';
 import { JournalFormatError } from './errors.js';
 import type { RecordAccess } from './recordAccess.js';
@@ -46,7 +47,7 @@ export async function readRowIds(
       `Record at offset ${entry.recordOffset} is not a row (kind ${head.kind})`,
     );
   }
-  const header = await hydrateChunkHeader(
+  let header = await hydrateChunkHeader(
     access,
     decodeRowHeader(head.kindHeader),
   );
@@ -56,7 +57,22 @@ export async function readRowIds(
     );
   }
   validateRowAgainstBody(header, head.bodyLen);
-  if (header.chunk !== undefined) return { head, header, rawIds: [] };
+  if (header.chunk !== undefined) {
+    const rawIds: string[] = [];
+    const ids = [];
+    for await (const fact of chunkIds(access, header.chunk)) {
+      rawIds.push(fact.rawId);
+      ids.push({
+        idHash: hashId(fact.rawId),
+        kind: fact.kind,
+        block: fact.block,
+        score: fact.score,
+        nameLen: fact.nameLen,
+      });
+    }
+    header = { ...header, ids };
+    return { head, header, rawIds };
+  }
   const withCrc = await idPieceOf(
     access,
     head,

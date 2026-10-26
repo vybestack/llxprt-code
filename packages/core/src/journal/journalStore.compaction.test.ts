@@ -9,6 +9,7 @@ import {
 import { realFileOperations, type FileOperations } from './compactionSwap.js';
 import { JournalWriterPoisonedError } from './errors.js';
 import { decodeJournalHeader } from './fileHeader.js';
+import { JournalArrivalRecorder } from './arrival-recorder.js';
 import { JournalStore } from './journalStore.js';
 import { openJournalReadOnly } from './journalReader.js';
 import { compactionCopy } from './versionTransfer.js';
@@ -195,6 +196,23 @@ describe('compaction of a live store (design 4.11)', () => {
     await store.idle();
     expect(calls.filter((call) => call === 'rename')).toHaveLength(1);
     await store.close();
+  });
+
+  it('does not start deferred compaction during recorder shutdown', async () => {
+    const { store, calls } = await session('recording-shutdown.llxj');
+    const recorder = new JournalArrivalRecorder(store);
+    armed = true;
+    const row = await recorder.beginRow(
+      { ...draftRow(), blocks: [] },
+      { id: 'shutdown', submissionId: 's' },
+    );
+    const block = await recorder.beginBlock(row, 0);
+    await recorder.appendField(block, new TextEncoder().encode('finished'));
+    await recorder.endBlock(block);
+    await recorder.sealRow(row);
+    await recorder.close();
+    await store.close();
+    expect(calls).not.toContain('rename');
   });
 
   it('makes a read that starts during the swap wait for it and read the compacted file', async () => {

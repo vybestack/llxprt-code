@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { JournalReader } from './journalReader.js';
+import { rowDirectory, type DirectoryBlock } from './row-directory.js';
 import type { IdKeyHasher } from './idKeys.js';
 import { BoundedIdNodeCache } from './idTrieCache.js';
 import { KeyedMapReader } from './keyedMap.js';
@@ -91,6 +92,11 @@ export class TranscriptReader {
         ),
       );
     return members;
+  }
+  blocks(entry: TranscriptEntry): AsyncGenerator<DirectoryBlock> {
+    if (entry.rowRef === 0)
+      throw new JournalFormatError('An operation marker has no ROW payload');
+    return rowDirectory(this.journal, entry.rowRef);
   }
   async readRow(entry: TranscriptEntry): Promise<StoredRow> {
     if (entry.rowRef === 0)
