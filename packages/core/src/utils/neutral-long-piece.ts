@@ -33,8 +33,32 @@ export function createLongTextCounter(
       unitCache?.set(value, tokens);
       return tokens;
     };
+    const shortPieces = new Map<string, number>();
     const short = (value: string): number =>
-      counted(value, () => countShort(value));
+      counted(value, () => {
+        if (unitCache === undefined) return countShort(value);
+        const matcher = new RegExp(pieces);
+        let tokens = 0;
+        let position = 0;
+        for (
+          let match = matcher.exec(value);
+          match !== null;
+          match = matcher.exec(value)
+        ) {
+          const piece = match[0];
+          let measured = shortPieces.get(piece);
+          if (measured === undefined) {
+            measured = countShort(piece);
+            // Bound auxiliary entries even for a row of entirely unique words.
+            if (shortPieces.size < 256) shortPieces.set(piece, measured);
+          }
+          tokens += measured;
+          position = matcher.lastIndex;
+        }
+        if (position !== value.length)
+          throw new Error('Tokenizer pattern did not cover short input');
+        return tokens;
+      });
     if (text.length <= 512) return short(text);
     const matcher = new RegExp(pieces);
     let count = 0;

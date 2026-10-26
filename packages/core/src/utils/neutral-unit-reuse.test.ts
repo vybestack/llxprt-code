@@ -7,6 +7,41 @@ const oracle = get_encoding('o200k_base');
 
 describe('unit-scoped neutral count reuse', () => {
   afterAll(() => oracle.free());
+  it('bounds encoded short-piece work per row at two history sizes', () => {
+    const count = encodingLongTextCounter('o200k_base');
+    const measured = [20, 40].map((rows) => {
+      let characters = 0;
+      let tokens = 0;
+      for (let index = 0; index < rows; index++) {
+        const text = JSON.stringify({
+          messages: [
+            { role: 'user', content: 'cold payload 雪 '.repeat(1800) },
+          ],
+        });
+        tokens += count(
+          text,
+          (piece) => {
+            characters += piece.length;
+            return oracle.encode(piece).length;
+          },
+          new Map<string, number>(),
+        );
+      }
+      return { rows, characters, tokens };
+    });
+    expect(measured[1].tokens).toBe(measured[0].tokens * 2);
+    expect(measured[1].characters).toBe(measured[0].characters * 2);
+    const expected = oracle.encode(
+      JSON.stringify({
+        messages: [{ role: 'user', content: 'cold payload 雪 '.repeat(1800) }],
+      }),
+    ).length;
+    for (const result of measured) {
+      expect(result.tokens).toBe(expected * result.rows);
+      expect(result.characters).toBeLessThan(result.rows * 256);
+    }
+  });
+
   it('shares lexical runs between single and repeated projections without changing boundaries', () => {
     const messages = [
       { role: 'user', content: 'cold payload 雪 '.repeat(1800) },
