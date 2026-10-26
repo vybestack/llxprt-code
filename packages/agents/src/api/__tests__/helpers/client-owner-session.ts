@@ -16,6 +16,7 @@ import {
 } from '../../../core/subagent-cleanup.js';
 import type { SessionClientOwner } from '../../../session/session-client-owner.js';
 import { buildAgentClientFactory } from '../../agentBootstrap.js';
+import type { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
 import type {
   AgentConfig,
   ProviderActivationIntent,
@@ -45,6 +46,8 @@ export interface OpenedClientOwner {
   /** The Config the owner was built over; the test reads its session identity and storage paths. */
   readonly config: Config;
   readonly client: AgentClientContract;
+  /** The MCP runtime the owner is bound to; discovery is still running when the owner opens. */
+  readonly mcp: McpRuntimeOwner;
   readonly close: () => Promise<void>;
 }
 
@@ -59,23 +62,25 @@ export async function openClientOwner(
   activation: ProviderActivationIntent,
   options: ClientOwnerOptions = {},
 ): Promise<OpenedClientOwner> {
-  const { owner, config, closeResources } = await openProductionClientOwner({
-    authority,
-    selection,
-    activation,
-    providerContributions: undefined,
-    clientFactory: buildAgentClientFactory(),
-    contentGeneratorFactory:
-      options.contentGeneratorFactory ?? createRuntimeContentGeneratorFactory(),
-    createSettingsOwner: options.createSettingsOwner,
-  });
+  const { owner, config, mcp, closeResources } =
+    await openProductionClientOwner({
+      authority,
+      selection,
+      activation,
+      providerContributions: undefined,
+      clientFactory: buildAgentClientFactory(),
+      contentGeneratorFactory:
+        options.contentGeneratorFactory ??
+        createRuntimeContentGeneratorFactory(),
+      createSettingsOwner: options.createSettingsOwner,
+    });
   const close = (): Promise<void> =>
     runCleanupSteps([() => owner.dispose(), closeResources]);
   try {
     const clients = ownerClients(owner);
     const client = clients[clients.length - 1];
     await client.startChat();
-    return { owner, config, client, close };
+    return { owner, config, client, mcp, close };
   } catch (primary) {
     return cleanupAfterFailure(primary, close);
   }

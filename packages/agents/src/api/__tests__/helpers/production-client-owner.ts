@@ -84,6 +84,8 @@ export interface ProductionClientOwner {
   /** The Config the owner was built over; the test reads its session identity and storage paths. */
   readonly config: Config;
   readonly settingsOwner: SessionSettingsOwner;
+  /** The MCP runtime the owner is bound to; its discovery runs after `owner` is returned. */
+  readonly mcp: McpRuntimeOwner;
   /** Releases everything the assembly acquired except the owner. */
   readonly closeResources: () => Promise<void>;
 }
@@ -263,6 +265,7 @@ export async function openProductionClientOwner(
     owner,
     config,
     settingsOwner: stack.settingsOwner,
+    mcp,
     closeResources,
   };
 }

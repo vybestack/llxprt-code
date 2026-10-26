@@ -446,6 +446,13 @@ describe('MCP instruction ownership', () => {
         },
       );
       opened.push(owner);
+      // The owner opens while its MCP discovery is still running. Production
+      // gates a model turn on that discovery (foregroundRunLifecycle awaits it
+      // before the loop runs) and the lightweight system prompt reads whatever
+      // the servers have published, so a request sent without this wait can
+      // predate the owner's instructions. Awaiting the same signal also keeps a
+      // discovery failure from looking like a prompt assembly bug.
+      expect([...(await owner.mcp.awaitDiscovery())]).toStrictEqual([]);
       return owner;
     }
     async function generated(
