@@ -39,11 +39,25 @@ export async function withArrayClient<T>(
 export async function seedClientArrayHistory(
   fixture: DetachedFixture,
   size: number,
+  appendBatchSize?: number,
 ): Promise<void> {
   const journal = fixture.history.detachedValues.host().journal;
   if (!(journal instanceof JournalHistoryStore))
     throw new Error('Client array fixture requires a journal history store');
-  await journal.replaceFrom(detachedRows(size), size);
+  if (appendBatchSize === undefined)
+    await journal.replaceFrom(detachedRows(size), size);
+  else {
+    if (journal.getLength() !== 0 || appendBatchSize < 1)
+      throw new Error(
+        'Batched seeds require an empty journal and a positive batch size',
+      );
+    for (let first = 0; first < size; first += appendBatchSize) {
+      const end = Math.min(size, first + appendBatchSize);
+      for (let index = first; index < end; index++)
+        journal.apply({ kind: 'content', content: detachedRow(index) });
+      await journal.waitForDurable();
+    }
+  }
   await fixture.history.recalculateTotalTokens();
   await fixture.history.waitForCommit();
 }

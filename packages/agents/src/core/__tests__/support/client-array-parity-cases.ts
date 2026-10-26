@@ -65,7 +65,7 @@ async function outcome(
   return withDetachedFixture((fixture) =>
     withClient(fixture, async ({ client }) => {
       const { history, recorder } = fixture;
-      await seedClientArrayHistory(fixture, size);
+      await seedClientArrayHistory(fixture, size, 128);
       history.setBaseTokenOffset(17);
       history.setCacheAnchorSeq(1);
       const order: string[] = [];
