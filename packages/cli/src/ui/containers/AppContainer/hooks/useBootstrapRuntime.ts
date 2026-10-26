@@ -6,9 +6,8 @@
 import { useCallback, useMemo } from 'react';
 import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../../../config/settings.js';
-import type { UiRuntime } from '../../../cliUiRuntime.js';
+import type { EmojiFilterSettingsSource } from '../../../utils/iContentToHistoryItems.js';
 import { resolveEmojiFilterMode } from '../../../utils/iContentToHistoryItems.js';
-import { useBound } from '../../../hooks/agentStream/useStreamOwnerCallbacks.js';
 import type { RecordingHistorySubscription } from './historyTokenSubscriptions.js';
 import {
   useAppBootstrap,
@@ -33,20 +32,32 @@ type BootstrapInputs = Pick<
   | 'readIdeMode'
 >;
 
-function useBootstrapReads(
-  ephemeral: UiRuntime['ephemeral'],
-  shell: UiRuntime['shell'],
-  readCurrentIde: AppBootstrapProps['readCurrentIde'],
-  app: UiRuntime['app'],
-) {
+/**
+ * The runtime reads bootstrap setup makes: the emoji-filter setting, the
+ * terminal background, the debug flag, and the current IDE the input path
+ * reports.
+ */
+export interface BootstrapRuntimeReads {
+  readonly emojiFilter: EmojiFilterSettingsSource;
+  getTerminalBackground(): string | undefined;
+  getDebugMode(): boolean;
+  readonly readCurrentIde: AppBootstrapProps['readCurrentIde'];
+}
+
+function useBootstrapReads(reads: BootstrapRuntimeReads) {
+  const { emojiFilter, getTerminalBackground, getDebugMode, readCurrentIde } =
+    reads;
   return {
     readEmojiFilterMode: useCallback(
-      () => resolveEmojiFilterMode(ephemeral),
-      [ephemeral],
+      () => resolveEmojiFilterMode(emojiFilter),
+      [emojiFilter],
     ),
-    readTerminalBackground: useBound(shell, shell.getTerminalBackground),
+    readTerminalBackground: useCallback(
+      () => getTerminalBackground(),
+      [getTerminalBackground],
+    ),
     readCurrentIde,
-    readDebugMode: useBound(app, app.getDebugMode),
+    readDebugMode: useCallback(() => getDebugMode(), [getDebugMode]),
   };
 }
 
@@ -57,10 +68,7 @@ export function useBootstrapRuntime(
     AppBootstrapProps,
     'terminalStore' | 'turnStore' | 'settingsStore'
   >,
-  ephemeral: UiRuntime['ephemeral'],
-  shell: UiRuntime['shell'],
-  readCurrentIde: AppBootstrapProps['readCurrentIde'],
-  app: UiRuntime['app'],
+  reads: BootstrapRuntimeReads,
   connectRecordingHistory: RecordingHistorySubscription,
   recordingOwner: 'agent' | 'raw' | undefined,
   recordingIntegrationRef:
@@ -76,7 +84,7 @@ export function useBootstrapRuntime(
     historyMaxItems: settings.ui.historyMaxItems,
     historyMaxBytes: settings.ui.historyMaxBytes,
     hasSeenIdeIntegrationNudge: settings.hasSeenIdeIntegrationNudge,
-    ...useBootstrapReads(ephemeral, shell, readCurrentIde, app),
+    ...useBootstrapReads(reads),
     recordFeedback: useCallback(
       (severity, message) => {
         if (recordingOwner === 'agent') {

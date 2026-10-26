@@ -127,10 +127,12 @@ describe('bootstrap captured operation ownership', () => {
           },
           settings.merged,
           stores,
-          uiRuntime.ephemeral,
-          uiRuntime.shell,
-          () => owner.ide.readConnection().currentIde,
-          uiRuntime.app,
+          {
+            emojiFilter: uiRuntime.ephemeral,
+            getTerminalBackground: uiRuntime.shell.getTerminalBackground,
+            getDebugMode: uiRuntime.app.getDebugMode,
+            readCurrentIde: () => owner.ide.readConnection().currentIde,
+          },
           (recording) =>
             owner.session.connectRecordingHistory(() => recording.current),
           'agent',

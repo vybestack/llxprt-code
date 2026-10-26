@@ -23,12 +23,22 @@ import type { TerminalStore } from '../../../stores/terminal/terminalStore.js';
 import type { SettingsProfileStore } from '../../../stores/settings/settingsStore.js';
 import type { TurnStore } from '../../../stores/turn/turnStore.js';
 import { useStoreSelector } from '../../../stores/useStoreSelector.js';
-import type { UiRuntime } from '../../../cliUiRuntime.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
+
+/**
+ * The layout's runtime reads: the debug flag that filters console messages,
+ * the directory git branch info is read from, and the terminal size the pty is
+ * kept in sync with. Nothing else of the runtime is visible here.
+ */
+export interface AppLayoutRuntimeReads {
+  getDebugMode(): boolean;
+  getTargetDir(): string;
+  setPtyTerminalSize(width: number, height: number): void;
+}
 
 export interface AppLayoutParams {
   // From bootstrap
-  uiRuntime: UiRuntime;
+  uiRuntime: AppLayoutRuntimeReads;
   settings: LoadedSettings;
   clearConsoleMessagesState: AppBootstrapResult['clearConsoleMessagesState'];
   /**
@@ -129,7 +139,7 @@ function useLayoutContext(p: AppLayoutParams) {
     settingsStore.store,
     (s) => s.rawConsoleMessages,
   );
-  const debugMode = uiRuntime.app.getDebugMode();
+  const debugMode = uiRuntime.getDebugMode();
   const filteredConsoleMessages = useMemo(() => {
     if (debugMode) return consoleMessages;
     return consoleMessages.filter((msg) => msg.type !== 'debug');
@@ -138,9 +148,7 @@ function useLayoutContext(p: AppLayoutParams) {
   useEffect(() => {
     settingsStore.commands.setConsoleMessages(filteredConsoleMessages);
   }, [settingsStore, filteredConsoleMessages]);
-  const { branchName, isDirty } = useGitBranchInfo(
-    uiRuntime.session.getTargetDir(),
-  );
+  const { branchName, isDirty } = useGitBranchInfo(uiRuntime.getTargetDir());
   useEffect(() => {
     settingsStore.commands.setBranchInfo(branchName, isDirty);
   }, [settingsStore, branchName, isDirty]);
@@ -159,7 +167,7 @@ function useLayoutContext(p: AppLayoutParams) {
     terminalStore.commands.setPlaceholder(placeholder);
   }, [terminalStore, placeholder]);
   useEffect(() => {
-    uiRuntime.shell.setPtyTerminalSize(mainAreaWidth, terminalHeight);
+    uiRuntime.setPtyTerminalSize(mainAreaWidth, terminalHeight);
   }, [uiRuntime, mainAreaWidth, terminalHeight]);
   return { contextFileNames };
 }

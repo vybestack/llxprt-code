@@ -165,7 +165,7 @@ export interface AppContainerRuntimeProps
   recordRecordingEvent: AppBootstrapProps['recordRecordingEvent'];
   metrics: SessionMetricUpdates;
   subscribeHistoryTokens: AppBootstrapProps['subscribeHistoryTokens'];
-  connectRecordingHistory: Parameters<typeof useBootstrapRuntime>[7];
+  connectRecordingHistory: Parameters<typeof useBootstrapRuntime>[4];
   readProviderMetrics: AppBootstrapProps['readProviderMetrics'];
   readSessionTokenUsage: AppBootstrapProps['readSessionTokenUsage'];
   historyReads: RegisteredHistoryReads;
@@ -569,7 +569,11 @@ function useApplicationLayout(
   stores: AppStores,
 ): ReturnType<typeof useAppLayout> {
   return useAppLayout({
-    uiRuntime,
+    uiRuntime: {
+      getDebugMode: uiRuntime.app.getDebugMode,
+      getTargetDir: uiRuntime.session.getTargetDir,
+      setPtyTerminalSize: uiRuntime.shell.setPtyTerminalSize,
+    },
     settings,
     clearConsoleMessagesState,
     turnStore: stores.turnStore,
@@ -623,10 +627,12 @@ function useApplicationBootstrap(
     },
     settings.merged,
     stores,
-    uiRuntime.ephemeral,
-    uiRuntime.shell,
-    props.readCurrentIde,
-    uiRuntime.app,
+    {
+      emojiFilter: uiRuntime.ephemeral,
+      getTerminalBackground: uiRuntime.shell.getTerminalBackground,
+      getDebugMode: uiRuntime.app.getDebugMode,
+      readCurrentIde: props.readCurrentIde,
+    },
     props.connectRecordingHistory,
     props.recordingOwner,
     recordingIntegrationRef,
