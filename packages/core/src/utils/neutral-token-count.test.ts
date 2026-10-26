@@ -3,12 +3,38 @@ import { afterAll, describe, expect, it } from 'bun:test';
 import { encoding_for_model } from '@dqbd/tiktoken';
 import { NeutralMergeQueue } from './neutral-merge-queue.js';
 import { estimateTokens } from './toolOutputLimiter.js';
-import { countLongNeutralText } from './neutral-long-piece.js';
+import { countBpePiece, countLongNeutralText } from './neutral-long-piece.js';
+
+class ObservedRanks extends Map<string, number> {
+  reads = 0;
+  override get(key: string): number | undefined {
+    this.reads++;
+    return super.get(key);
+  }
+}
 
 const oracle = encoding_for_model('gpt-4o');
 
 describe('neutral token counting', () => {
   afterAll(() => oracle.free());
+  it('reuses token-pair ranks with linear work across large-row counts', () => {
+    const results = [16, 32].map((rows) => {
+      const ranks = new ObservedRanks([
+        ['x', 0],
+        ['xx', 1],
+        ['xxxx', 2],
+        ['xxxxxxxx', 3],
+      ]);
+      let tokens = 0;
+      for (let index = 0; index < rows; index++)
+        tokens += countBpePiece(Buffer.from('x'.repeat(65536)), ranks);
+      expect(tokens).toBe(rows * 8192);
+      expect(ranks.reads).toBeLessThan(rows * 64);
+      return ranks.reads;
+    });
+    expect(results[1]).toBe(results[0] * 2);
+  });
+
   it('batches short pieces into one encoder call at exact boundaries', () => {
     const text = 'cold payload 雪 '.repeat(1800);
     let calls = 0;

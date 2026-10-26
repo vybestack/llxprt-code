@@ -134,12 +134,19 @@ export function countBpePiece(
   if (dictionary.has(bytes)) return 1;
   const next = new Int32Array(bytes.length + 1);
   const previous = new Int32Array(bytes.length + 1);
+  const symbols = new Uint32Array(bytes.length);
+  const pairs = new Map<number, number>();
   const pending = new NeutralMergeQueue();
   const pairRank = (at: number): number | undefined => {
     const right = next[at];
-    return right >= bytes.length
-      ? undefined
-      : dictionary.get(bytes.slice(at, next[right]));
+    if (right >= bytes.length) return undefined;
+    const key = symbols[at] * 0x1_0000_0000 + symbols[right];
+    const cached = pairs.get(key);
+    if (cached !== undefined) return cached < 0 ? undefined : cached;
+    const rank = dictionary.get(bytes.slice(at, next[right]));
+    // Token identities make repeated pairs reusable without retaining text.
+    if (pairs.size < 256) pairs.set(key, rank ?? -1);
+    return rank;
   };
   const enqueue = (at: number): void => {
     const rank = pairRank(at);
@@ -149,6 +156,7 @@ export function countBpePiece(
     next[at] = at + 1;
     previous[at] = at - 1;
   }
+  for (let at = 0; at < bytes.length; at++) symbols[at] = input[at];
   for (let at = 0; at < bytes.length - 1; at++) enqueue(at);
   let count = bytes.length;
   // Only the two neighbours of a merge change. Each queued event and lookup
@@ -161,6 +169,7 @@ export function countBpePiece(
     const after = next[removed];
     next[at] = after;
     previous[after] = at;
+    symbols[at] = rank + 256;
     next[removed] = -1;
     count--;
     if (previous[at] >= 0) enqueue(previous[at]);
