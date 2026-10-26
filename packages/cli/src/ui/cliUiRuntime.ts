@@ -792,14 +792,6 @@ export function buildUiRuntimeFromSource(
 }
 
 /**
- * @deprecated Use {@link CliUiRuntime} instead. Slash-command code and other
- * broad-runtime consumers are being migrated to the canonical alias; this type
- * is retained temporarily to avoid a flag-day rename across all call sites and
- * will be removed once the migration completes.
- */
-export type SlashCommandRuntime = CliUiRuntime;
-
-/**
  * Builds a flat delegation adapter satisfying {@link CliUiRuntime} from the
  * bootstrap source. This breaks the Config identity link: downstream code
  * receives a plain object literal with delegated methods, not the raw Config

@@ -73,7 +73,7 @@ import {
   type RecordingIntegration,
   type SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
-import type { SlashCommandRuntime, UiRuntime } from './cliUiRuntime.js';
+import type { CliUiRuntime, UiRuntime } from './cliUiRuntime.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
 import type { OperationLifecycleRegistry } from './hooks/agentStream/operationLifecycle.js';
@@ -106,7 +106,7 @@ import {
 
 interface AppProps {
   uiRuntime: UiRuntime;
-  slashCommandRuntime: SlashCommandRuntime;
+  slashCommandRuntime: CliUiRuntime;
   /**
    * The single interactive Agent created at the CLI composition root.
    */

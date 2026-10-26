@@ -172,7 +172,6 @@ describe('#2373 config boundary guard', () => {
     expect(bootstrap).toMatch(/readLlxprtMdFileCount:\s*\(\)\s*=>\s*number/);
     expect(bootstrap).not.toMatch(/\b(?:uiRuntime|streamRuntime):/);
     expect(bootstrap).not.toMatch(/\bconfig:\s*CliUiRuntime\b/);
-    expect(bootstrap).not.toMatch(/\bconfig:\s*SlashCommandRuntime\b/);
     expect(bootstrap).not.toMatch(/\bconfig:\s*props\./);
     expect(bootstrap).not.toMatch(/\bconfig:\s*uiRuntime/);
     expect(bootstrap).not.toMatch(/agentClientSource:\s*props\.config/);
@@ -209,9 +208,7 @@ describe('#2373 config boundary guard', () => {
 
     for (const rel of entryPoints) {
       const text = read(rel);
-      expect(text).not.toMatch(
-        /config:\s*(?:Config|CliUiRuntime|SlashCommandRuntime)\b/,
-      );
+      expect(text).not.toMatch(/config:\s*(?:Config|CliUiRuntime)\b/);
     }
   });
 

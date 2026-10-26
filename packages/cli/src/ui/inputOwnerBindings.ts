@@ -8,7 +8,7 @@ import type { AgentStreamInputs } from './hooks/agentStream/useAgentStream.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
 import type { useContentIdentityReader } from './hooks/agentStream/useStreamOwnerCallbacks.js';
-import type { SlashCommandRuntime, UiRuntime } from './cliUiRuntime.js';
+import type { CliUiRuntime, UiRuntime } from './cliUiRuntime.js';
 import { resolveEmojiFilterMode } from './utils/iContentToHistoryItems.js';
 import {
   useBound,
@@ -144,7 +144,7 @@ export function useInputReadOperations(
   readIdeMode: () => boolean,
   shell: UiRuntime['shell'],
   mcp: UiRuntime['mcp'],
-  refreshMemory: SlashCommandRuntime['refreshMemory'],
+  refreshMemory: CliUiRuntime['refreshMemory'],
   readDebugMode: () => boolean,
 ) {
   return {

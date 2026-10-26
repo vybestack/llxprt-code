@@ -18,7 +18,7 @@ import {
   type UiRuntimeDeclarationSource,
 } from '../ui/cliUiRuntime.js';
 
-type SlashCommandRuntimeTestArgs = [
+type CliUiRuntimeTestArgs = [
   source: UiRuntimeDeclarationSource,
   agent: Parameters<typeof buildSlashCommandRuntime>[1],
   perfSnapshotCapability?: PerfSnapshotCapability | null,
@@ -39,7 +39,7 @@ type SlashCommandRuntimeTestArgs = [
  * reads keys from its own in-memory store.
  */
 export function buildSlashCommandRuntimeForTest(
-  ...args: SlashCommandRuntimeTestArgs
+  ...args: CliUiRuntimeTestArgs
 ): CliUiRuntime {
   const [source, agent, ...rest] = args;
   return buildSlashCommandRuntime(

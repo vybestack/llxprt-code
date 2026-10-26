@@ -38,7 +38,7 @@ import {
   DialogRegion,
   PanelsRegion,
 } from './DefaultAppLayoutRegions.js';
-import type { SlashCommandRuntime } from '../cliUiRuntime.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
 import { themeManager } from '../themes/theme-manager.js';
 
@@ -61,7 +61,7 @@ export interface DefaultAppLayoutProps {
   screenReaderEnabled: boolean;
   disableLoadingPhrases: boolean;
   debugMode: boolean;
-  slashCommandRuntime: SlashCommandRuntime;
+  slashCommandRuntime: CliUiRuntime;
   settings: LoadedSettings;
   startupWarnings: string[];
   version: string;

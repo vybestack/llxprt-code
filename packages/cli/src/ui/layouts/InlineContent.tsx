@@ -10,7 +10,7 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { StreamingState } from '../types.js';
 import type { ConsoleMessageItem } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
-import type { SlashCommandRuntime } from '../cliUiRuntime.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
 import { Colors } from '../colors.js';
 import { ShowMoreLines } from '../components/ShowMoreLines.js';
@@ -45,7 +45,7 @@ export interface InlineContentProps {
   llxprtMdFileCount: number;
   coreMemoryFileCount: number;
   contextFileNames: string[];
-  config: SlashCommandRuntime;
+  config: CliUiRuntime;
   showToolDescriptions: boolean;
   showAutoAcceptIndicator: ApprovalMode;
   shellModeActive: boolean;

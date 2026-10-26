@@ -21,7 +21,7 @@ import {
 } from '../../../contexts/RuntimeContext.js';
 
 import { selectDialogOpen } from '../../../stores/dialog/dialogStore.js';
-import type { SlashCommandRuntime } from '../../../cliUiRuntime.js';
+import type { CliUiRuntime } from '../../../cliUiRuntime.js';
 import type React from 'react';
 import type { AppAction } from '../../../reducers/appReducer.js';
 import { useCallback, useEffect, useMemo } from 'react';
@@ -77,7 +77,7 @@ export interface AppDialogsParams {
   subscribeIdeContext: Parameters<
     typeof useIdeContextBridge
   >[0]['subscribeIdeContext'];
-  config: SlashCommandRuntime;
+  config: CliUiRuntime;
   recordRecordingEvent: NonNullable<
     Parameters<typeof bindModelSwitchRecording>[1]
   >;

@@ -10,7 +10,7 @@ import { selectDialogOpen } from '../stores/dialog/dialogStore.js';
 import React from 'react';
 import { Box, type DOMElement } from 'ink';
 import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
-import type { SlashCommandRuntime } from '../cliUiRuntime.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
 import type { SlashCommand } from '../commands/types.js';
@@ -53,7 +53,7 @@ function useHistoryItemDisplayProps(
   readIdeDiffingEnabled: () => boolean | null,
   subscribeIdeDiffing: (listener: () => void) => () => void,
   resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
-  config: SlashCommandRuntime,
+  config: CliUiRuntime,
   mainAreaWidth: number,
   showTodoPanelSetting: boolean,
   slashCommands: readonly SlashCommand[] | undefined,
@@ -82,7 +82,7 @@ export function useListItems(
   readIdeDiffingEnabled: () => boolean | null,
   subscribeIdeDiffing: (listener: () => void) => () => void,
   resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
-  config: SlashCommandRuntime,
+  config: CliUiRuntime,
   mainAreaWidth: number,
   staticAreaMaxItemHeight: number,
   slashCommands: readonly SlashCommand[] | undefined,
@@ -137,7 +137,7 @@ export function useStaticItems(
   readIdeDiffingEnabled: () => boolean | null,
   subscribeIdeDiffing: (listener: () => void) => () => void,
   resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
-  config: SlashCommandRuntime,
+  config: CliUiRuntime,
   settings: LoadedSettings,
   version: string,
   nightly: boolean,
@@ -213,7 +213,7 @@ export function usePendingItems(
   readIdeDiffingEnabled: () => boolean | null,
   subscribeIdeDiffing: (listener: () => void) => () => void,
   resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
-  config: SlashCommandRuntime,
+  config: CliUiRuntime,
   mainAreaWidth: number,
   constrainHeight: boolean,
   effectiveAvailableHeight: number,
@@ -271,7 +271,7 @@ export function usePendingElement(
   readIdeDiffingEnabled: () => boolean | null,
   subscribeIdeDiffing: (listener: () => void) => () => void,
   resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
-  config: SlashCommandRuntime,
+  config: CliUiRuntime,
   mainAreaWidth: number,
   constrainHeight: boolean,
   effectiveAvailableHeight: number,
@@ -318,7 +318,7 @@ function useScrollableCenterItems(
   readIdeDiffingEnabled: () => boolean | null,
   subscribeIdeDiffing: (listener: () => void) => () => void,
   resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
-  config: SlashCommandRuntime,
+  config: CliUiRuntime,
   settings: LoadedSettings,
   version: string,
   nightly: boolean,
@@ -388,7 +388,7 @@ export function useScrollableContent(
   readIdeDiffingEnabled: () => boolean | null,
   subscribeIdeDiffing: (listener: () => void) => () => void,
   resolveIdeDiff: HistoryItemIdeProps['resolveIdeDiff'],
-  config: SlashCommandRuntime,
+  config: CliUiRuntime,
   settings: LoadedSettings,
   version: string,
   nightly: boolean,
@@ -468,7 +468,7 @@ export function useScrollableContent(
 
 export interface FooterProps {
   isTrustedFolder: boolean;
-  config: SlashCommandRuntime;
+  config: CliUiRuntime;
   settings: LoadedSettings;
   hideFooter: boolean;
   showMemoryUsage: boolean;
@@ -558,7 +558,7 @@ export interface QuittingDisplayProps {
   effectiveAvailableHeight: number;
   terminalWidth: number;
   quittingMessages: HistoryItem[];
-  config: SlashCommandRuntime;
+  config: CliUiRuntime;
   slashCommands: readonly SlashCommand[] | undefined;
   showTodoPanelSetting: boolean;
 }

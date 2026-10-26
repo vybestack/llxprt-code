@@ -61,7 +61,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SessionMetricUpdates } from '@vybestack/llxprt-code-telemetry';
-import type { SlashCommandRuntime, UiRuntime } from './cliUiRuntime.js';
+import type { CliUiRuntime, UiRuntime } from './cliUiRuntime.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
 import type { AppState, AppAction } from './reducers/appReducer.js';
@@ -175,7 +175,7 @@ export interface AppContainerRuntimeProps
   loadRegisteredCommands: LoadRegisteredCommands;
   subscribeCommandChanges: SubscribeCommandChanges;
   uiRuntime: UiRuntime;
-  slashCommandRuntime: SlashCommandRuntime;
+  slashCommandRuntime: CliUiRuntime;
   session: Parameters<typeof useInputBrowserCommands>[0] &
     Parameters<typeof useInputAgentOperations>[10];
   readRawBrowserCatalog: Parameters<typeof useInputBrowserCommands>[4];
@@ -226,7 +226,7 @@ export interface AppContainerRuntimeProps
 }
 
 /** Stores retain identity across renders and StrictMode effect replay. */
-export function useAppStores(runtime: Pick<SlashCommandRuntime, 'getModel'>): {
+export function useAppStores(runtime: Pick<CliUiRuntime, 'getModel'>): {
   dialogStore: DialogStore;
   terminalStore: TerminalStore;
   turnStore: TurnStore;
@@ -731,7 +731,7 @@ function useInputBrowserCommands(
 }
 
 function useInputCommandView(
-  readExtensions: () => ReturnType<SlashCommandRuntime['getExtensions']>,
+  readExtensions: () => ReturnType<CliUiRuntime['getExtensions']>,
   workingDir: string,
   stores: ReturnType<typeof useAppStores>,
   settings: LoadedSettings,
