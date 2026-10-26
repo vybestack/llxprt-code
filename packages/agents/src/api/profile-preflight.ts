@@ -72,10 +72,7 @@ import type {
 } from './config-types.js';
 import type { SessionClientOwner } from '../session/session-client-owner.js';
 
-import {
-  runCleanupSteps,
-  cleanupAfterFailure,
-} from '../core/subagent-cleanup.js';
+import { runCleanupSteps } from '../core/subagent-cleanup.js';
 
 export interface AgentPostConfigSettings {
   writeUserParameter(key: string, value: unknown): void;
@@ -687,53 +684,44 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
   ): Promise<void> {
     this.#assertOpen();
     const settingsOwner = this.#requireSettings();
-    class PreparedActivation extends AgentActivationBootstrap {
-      constructor(preflight: AgentProfilePreflight) {
-        super(config);
-        this.activationSettings = preflight.#settings;
-        this.activationManager = preflight.#manager;
-        this.activationOAuth = preflight.#oauth;
-        this.activationReadKind = () =>
-          preflight.#runtimeContext('post-config').runtimeKind;
-        this.activationProviderLifetime = () => preflight.#release.close();
-        this.activationFilesystem = filesystem;
-        this.activationMemory = memory;
-        this.activationSettingsOwner = settingsOwner;
-        this.activationSettingsOwnership = preflight.#ownsSettings
-          ? 'transferred'
-          : 'borrowed';
-        this.activationTrust = trust;
-        this.activationTrustCleanup = trustCleanup;
-        this.activationFiles = preflight.#files;
-        this.activationBus = preflight.#bus;
-        this.foregroundPolicy = policy;
-        this.foregroundSettings = preflight.#settings;
-        this.foregroundManager = preflight.#manager;
-        this.foregroundOAuth = preflight.#oauth;
-        this.foregroundAuthority = preflight.#authority;
-        this.foregroundRuntimeContext = {
-          ...preflight.#runtimeContext('post-config'),
+    const manager: RuntimeProviderManager = this.#manager;
+    const capabilities = preflightActivationCapabilities(
+      this.#host,
+      this.#release,
+      settingsOwner,
+      this.#ownsSettings,
+    );
+    const activation = AgentActivationBootstrap.forPreflight(
+      config,
+      {
+        ...capabilities,
+        filesystem,
+        memory,
+        trust,
+        trustCleanup,
+        files: this.#files,
+        policy,
+        authority: this.#authority,
+        runtimeContext: {
+          ...this.#runtimeContext('post-config'),
           runtimeKind: 'agent',
-        };
-        this.releaseForegroundProviders = () =>
-          preflight.#releaseForegroundProviders();
-      }
-      async prepare(): Promise<ProviderSwitcher> {
-        await this.acquireActivation();
-        try {
-          this.initializePreparedActivation();
-        } catch (error) {
-          return cleanupAfterFailure(error, () => this.dispose());
-        }
-        return this.activationSwitch;
-      }
-    }
-    const activation = new PreparedActivation(this);
+        },
+        bus: this.#bus,
+      },
+      {
+        settingsOwner,
+        settingsOwnership: this.#ownsSettings ? 'transferred' : 'borrowed',
+      },
+      { settings: this.#settings, manager },
+      { oauth: this.#oauth },
+    );
     this.#provisionalActivation = activation;
-    const switching = await activation.prepare().catch((error: unknown) => {
-      this.#provisionalActivation = undefined;
-      throw error;
-    });
+    const switching = await activation
+      .preparePreflight()
+      .catch((error: unknown) => {
+        this.#provisionalActivation = undefined;
+        throw error;
+      });
     this.#assertOpen();
     this.#switch = switching;
     this.#activation = activation;
@@ -787,13 +775,6 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     return preflight.#foregroundPending;
   }
 
-  async #releaseForegroundProviders(): Promise<void> {
-    await runCleanupSteps([
-      () => this.#release.close(),
-      () => (this.#ownsSettings ? this.#sessionSettings?.dispose() : undefined),
-    ]);
-  }
-
   dispose(): Promise<void> {
     if (this.#closing !== undefined) return this.#closing;
     if (!this.#foregroundTransferred)
@@ -822,6 +803,24 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     });
     return this.#closing;
   }
+}
+
+function preflightActivationCapabilities(
+  host: AgentPreflightHostInput,
+  release: AcquisitionRelease,
+  sessionSettings: SessionSettingsOwner,
+  ownsSettings: boolean,
+) {
+  return {
+    readKind: () =>
+      capturePreflightRuntimeContext(host, 'post-config').runtimeKind,
+    providerLifetime: () => release.close(),
+    releaseForegroundProviders: () =>
+      runCleanupSteps([
+        () => release.close(),
+        () => (ownsSettings ? sessionSettings.dispose() : undefined),
+      ]),
+  };
 }
 
 export function prepareAgentPreflight(

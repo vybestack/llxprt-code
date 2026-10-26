@@ -6,10 +6,20 @@
 import {
   Config,
   openBrowserSecurely,
+  type MessageBus,
+  type ProviderSwitcher,
   type RuntimeProviderManager,
+  type SessionSettingsOwner,
+  type WorkspaceFilesystemOwner,
+  type WorkspaceMemoryOwner,
+  type WorkspaceTrustControlPort,
 } from '@vybestack/llxprt-code-core';
 
 import { type RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import {
+  type ProviderRuntimeContext,
+  type RuntimeKind,
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 import {
   KeychainTokenStorage,
@@ -18,10 +28,17 @@ import {
 } from '@vybestack/llxprt-code-mcp';
 import { defaultFeedbackSink } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 
-import { type CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  type CredentialAuthority,
+  type OAuthManager,
+} from '@vybestack/llxprt-code-providers/auth.js';
+import { type ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { type SettingsService } from '@vybestack/llxprt-code-settings';
 
-import { runCleanupSteps } from '../core/subagent-cleanup.js';
+import {
+  cleanupAfterFailure,
+  runCleanupSteps,
+} from '../core/subagent-cleanup.js';
 import { type SessionClientOwner } from '../session/session-client-owner.js';
 import {
   type ActivationPreflight,
@@ -55,6 +72,35 @@ export type {
 } from './activation-types.js';
 export { canonicalProviderActivationIntent } from './provider-activation-intent.js';
 
+export interface PreflightActivationInput {
+  readKind(): RuntimeKind | undefined;
+  providerLifetime(): Promise<void>;
+  filesystem: WorkspaceFilesystemOwner;
+  memory: WorkspaceMemoryOwner;
+  trust: WorkspaceTrustControlPort;
+  trustCleanup: (() => Promise<void>) | undefined;
+  files: ProviderFileLifecycle;
+  policy: RuntimePolicyOwner;
+  authority: CredentialAuthority;
+  runtimeContext: ProviderRuntimeContext;
+  releaseForegroundProviders(): Promise<void>;
+  bus: MessageBus | undefined;
+}
+
+export interface PreflightSettingsInput {
+  settingsOwner: SessionSettingsOwner;
+  settingsOwnership: 'borrowed' | 'transferred';
+}
+
+export interface PreflightProviderInput {
+  settings: SettingsService;
+  manager: RuntimeProviderManager;
+}
+
+export interface PreflightAuthInput {
+  oauth: OAuthManager;
+}
+
 export class AgentActivationBootstrap
   extends AdoptedAgentAssembly
   implements AgentActivationOperation
@@ -81,8 +127,49 @@ export class AgentActivationBootstrap
   protected constructor(config?: Config) {
     super(config);
   }
+  static forPreflight(
+    config: Config,
+    activation: PreflightActivationInput,
+    settings: PreflightSettingsInput,
+    providers: PreflightProviderInput,
+    auth: PreflightAuthInput,
+  ): AgentActivationBootstrap {
+    const bootstrap = new AgentActivationBootstrap(config);
+    bootstrap.activationSettings = providers.settings;
+    bootstrap.activationManager = providers.manager;
+    bootstrap.activationOAuth = auth.oauth;
+    bootstrap.activationReadKind = activation.readKind;
+    bootstrap.activationProviderLifetime = activation.providerLifetime;
+    bootstrap.activationFilesystem = activation.filesystem;
+    bootstrap.activationMemory = activation.memory;
+    bootstrap.activationSettingsOwner = settings.settingsOwner;
+    bootstrap.activationSettingsOwnership = settings.settingsOwnership;
+    bootstrap.activationTrust = activation.trust;
+    bootstrap.activationTrustCleanup = activation.trustCleanup;
+    bootstrap.activationFiles = activation.files;
+    bootstrap.activationBus = activation.bus;
+    bootstrap.#policy = activation.policy;
+    bootstrap.foregroundSettings = providers.settings;
+    bootstrap.foregroundManager = providers.manager;
+    bootstrap.foregroundOAuth = auth.oauth;
+    bootstrap.foregroundAuthority = activation.authority;
+    bootstrap.#runtimeContext = activation.runtimeContext;
+    bootstrap.releaseForegroundProviders =
+      activation.releaseForegroundProviders;
+    return bootstrap;
+  }
+
+  async preparePreflight(): Promise<ProviderSwitcher> {
+    await this.acquireActivation();
+    try {
+      this.initializePreparedActivation();
+    } catch (error) {
+      return cleanupAfterFailure(error, () => this.dispose());
+    }
+    return this.activationSwitch;
+  }
+
   protected initializePreparedActivation(): void {
-    this.ownsMemory = this.workspaceMemoryOwnership === 'transferred';
     this.sessionClient = {
       workspaceDirectories: () => this.workspaceFilesystem.paths.directories(),
       refreshAuth: (method) =>
@@ -109,11 +196,8 @@ export class AgentActivationBootstrap
   #foregroundPending: Promise<Agent> | undefined;
   #publicClosing: Promise<void> | undefined;
   #foregroundHost!: AgentForegroundHost;
-  protected foregroundPolicy: RuntimePolicyOwner | undefined;
-
-  protected foregroundRuntimeContext!: Parameters<
-    RuntimeProviderManager['setRuntimeContext']
-  >[0];
+  #policy: RuntimePolicyOwner | undefined;
+  #runtimeContext!: ProviderRuntimeContext;
 
   closeForegroundAdmission(): void {
     this.closeConstructionAdmission();
@@ -142,7 +226,7 @@ export class AgentActivationBootstrap
         'Foreground OAuth differs from the acquired owner',
       );
     this.foregroundManager.setRuntimeContext(
-      this.foregroundRuntimeContext,
+      this.#runtimeContext,
       this.settingsOwner,
       this.foregroundSettings,
       this.config,
@@ -239,7 +323,7 @@ export class AgentActivationBootstrap
   async #constructForegroundMcp(): Promise<void> {
     const transport = this.#foregroundHost.mcpHost;
     const feedback = transport?.emitFeedback ?? defaultFeedbackSink;
-    const policyOwner = this.foregroundPolicy;
+    const policyOwner = this.#policy;
     if (policyOwner === undefined)
       throw new Error(
         'Foreground MCP construction requires the preflight policy owner',
@@ -262,13 +346,7 @@ export class AgentActivationBootstrap
         filesystemOwner: this.workspaceFilesystem,
         filesystemOwnership: 'runtime',
         filesystemService: undefined,
-        memoryOwner: {
-          owner: this.workspaceMemory,
-          ownership:
-            this.workspaceMemoryOwnership === 'transferred'
-              ? 'runtime'
-              : 'caller',
-        },
+        memoryOwner: { owner: this.workspaceMemory, ownership: 'runtime' },
         definitionOwner: this.workspaceDefinitions,
         definitionOwnership: 'runtime',
         trustPort: this.workspaceTrust,
