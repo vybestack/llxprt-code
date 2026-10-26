@@ -54,13 +54,13 @@ import { acquireSessionClient } from '../session/session-client-binding.js';
 import type { SessionClientOwner } from '../session/session-client-owner.js';
 import { AgentBootstrapError } from './agentBootstrap.js';
 import type { AgentAdoptionIntent } from './config-types.js';
-import { ForegroundAgentAssembly } from './foreground-agent-assembly.js';
+import { ForegroundAssembly } from './foreground-agent-assembly.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import { assembleModelSelection } from './model-selection.js';
 import { executeProviderActivation } from './providerActivationExecutor.js';
 import { assembleProviderSwitch } from './providerSwitchAssembly.js';
 
-export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
+export abstract class AdoptedSessionAssembly extends ForegroundAssembly {
   protected abstract adoptSettingsService: SettingsService;
   protected abstract adoptIntent: AgentAdoptionIntent;
 

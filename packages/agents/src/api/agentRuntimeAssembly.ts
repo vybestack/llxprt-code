@@ -15,7 +15,6 @@ import {
   wrapApprovalHandler,
   type StableDisplayCallbacksHolder,
 } from './agentBootstrap.js';
-import { ForegroundAgentAssembly } from './foreground-agent-assembly.js';
 
 /**
  * @license
@@ -130,7 +129,9 @@ export async function disposeIsolatedMediaRuntime(
     throw new AggregateError(failures, 'Isolated media runtime cleanup failed');
 }
 
-export class PreferredAgentAssembly extends ForegroundAgentAssembly {
+export class PreferredAgentAssembly {
+  private config!: Config;
+  private settingsOwner!: SessionSettingsOwner;
   private preferredSettings!: SettingsService;
 
   private files!: ProviderFileLifecycle;
@@ -177,9 +178,7 @@ export class PreferredAgentAssembly extends ForegroundAgentAssembly {
     private readonly rawConfig: AgentConfig,
     private readonly retainedFiles: readonly AgentRetainedProviderFile[],
     private readonly settingsSnapshot: SettingsStateSnapshot | undefined,
-  ) {
-    super();
-  }
+  ) {}
 
   async assemble(): Promise<Agent> {
     // Everything the caller transferred is owned from here on, so host

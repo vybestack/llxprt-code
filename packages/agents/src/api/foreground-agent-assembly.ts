@@ -54,7 +54,7 @@ import { type AgentSchedulerHandle } from './config-types.js';
 import { resolveSchedulerFactory } from '../session/assembleSchedulerOwner.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 
-export abstract class ForegroundAgentAssembly {
+export class ForegroundAssembly {
   protected config!: Config;
   readonly #constructionCancellation = new AbortController();
 
