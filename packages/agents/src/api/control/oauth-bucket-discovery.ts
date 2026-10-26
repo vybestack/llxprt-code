@@ -38,12 +38,19 @@ export interface DiscoveredProvider {
   readonly buckets: readonly DiscoveredBucket[];
 }
 
-const NO_OP_LOGGER: BucketDiscoveryLogger = {
-  debug: () => {},
-  error: () => {},
-  warn: () => {},
-  log: () => {},
-};
+/**
+ * Logger used when the caller supplies none. Built per call rather than shared
+ * at module scope: the function bag holds no data, and a shared mutable object
+ * would let one caller's decoration of it silence another's warnings.
+ */
+function createNoOpLogger(): BucketDiscoveryLogger {
+  return {
+    debug: () => {},
+    error: () => {},
+    warn: () => {},
+    log: () => {},
+  };
+}
 
 const PATH_RE = /[\\/]\S+/g;
 
@@ -103,7 +110,7 @@ export async function discoverProviderBuckets(
   oauthManager: OAuthBucketDiscoveryManager,
   logger?: BucketDiscoveryLogger,
 ): Promise<DiscoveredProvider[]> {
-  const log = logger ?? NO_OP_LOGGER;
+  const log = logger ?? createNoOpLogger();
   const supportedProviders = oauthManager.getSupportedProviders();
   if (supportedProviders.length === 0) {
     return [];

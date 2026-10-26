@@ -93,13 +93,16 @@ import { warnSkippedRecordings } from './skippedRecordings.js';
 const RECORDING_FORMAT = 'jsonl';
 
 /**
- * Module logger mirroring the neighboring toolControl.ts precedent
- * (a module-scoped core DebugLogger). Used to surface an otherwise-silent
- * recording-subscription gap so lost continuous recording is diagnosable.
+ * Logger for the otherwise-silent recording-subscription gap, so lost
+ * continuous recording is diagnosable. Built per call, matching the other lazy
+ * logger helpers in this package: only the logging path needs an instance, and
+ * a module-wide one would be shared mutable state.
  * @plan:PLAN-20260617-COREAPI.P20
  * @requirement:REQ-010
  */
-const logger = new DebugLogger('llxprt:agents:session-control');
+function logger(): DebugLogger {
+  return new DebugLogger('llxprt:agents:session-control');
+}
 
 /**
  * Callback bundle injected by AgentImpl so SessionControl can drive the core
@@ -319,10 +322,10 @@ export class SessionControl
     };
     const result = await resumeSession(request);
     if (!result.ok) {
-      warnSkippedRecordings(logger, result.skippedRecordings ?? []);
+      warnSkippedRecordings(logger(), result.skippedRecordings ?? []);
       throw new Error(`Failed to resume session: ${result.error}`);
     }
-    warnSkippedRecordings(logger, result.skippedRecordings);
+    warnSkippedRecordings(logger(), result.skippedRecordings);
     await this.commitPreparedSession(
       result.recording,
       result.lockHandle,
@@ -840,7 +843,7 @@ export class SessionControl
       this.persistenceProjectHash(),
       this.mediaStore,
     );
-    warnSkippedRecordings(logger, listing.unreadableRecordings);
+    warnSkippedRecordings(logger(), listing.unreadableRecordings);
     return listing;
   }
 

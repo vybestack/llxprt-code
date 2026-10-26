@@ -174,7 +174,13 @@ export function rejectHistorySubscription(
   throw error;
 }
 
-const logger = new DebugLogger('llxprt:agents:session-control');
+/**
+ * Logger for recording lifecycle diagnostics. Built per call rather than kept
+ * at module scope, matching the other lazy logger helpers in this package.
+ */
+function logger(): DebugLogger {
+  return new DebugLogger('llxprt:agents:session-control');
+}
 
 export abstract class SessionRecordingLifetime {
   protected abstract readonly nativeHistory: SessionNativeHistory;
@@ -273,7 +279,7 @@ export abstract class SessionRecordingLifetime {
         error,
         cleanupFailures,
         this.recordingSessionId,
-        logger,
+        logger(),
       );
     }
   }
@@ -316,7 +322,7 @@ export abstract class SessionRecordingLifetime {
     // subsequent turn is appended until a later start/resume re-attempts the
     // subscription. Left silent this is an invisible continuous-recording
     // loss; warn so it is diagnosable AND flag it for bounded re-attach.
-    logger.warn(
+    logger().warn(
       () =>
         `attachHistory: HistoryService unavailable for session ${this.recordingSessionId}; ` +
         `recording integration left unsubscribed (subsequent turns will not be recorded until re-subscribed)`,

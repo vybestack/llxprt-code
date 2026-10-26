@@ -16,7 +16,15 @@ import type { ProviderAliasConfig } from '@vybestack/llxprt-code-providers/compo
 import { detectApiKeyProvider } from '@vybestack/llxprt-code-providers';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
-const logger = new DebugLogger('llxprt:cli:stats');
+/**
+ * Logger for provider inspection diagnostics. Built per call, matching the
+ * neighboring lazy-logger helpers in this package: the logger is only needed
+ * while reporting, and a module-wide instance would let one caller's
+ * reconfiguration change what another caller emits.
+ */
+function logger(): DebugLogger {
+  return new DebugLogger('llxprt:cli:stats');
+}
 type ProviderWithBaseURL = {
   getBaseURL?: () => string | undefined;
 };
@@ -253,7 +261,9 @@ export function detectFromProviderConfig(providerInstance: unknown): {
   if (providerConfigUrl) {
     const detected = detectApiKeyProvider(providerConfigUrl);
     if (detected) {
-      logger.debug(() => `Detected ${detected} from provider config base-url`);
+      logger().debug(
+        () => `Detected ${detected} from provider config base-url`,
+      );
       return { provider: detected, baseUrl: providerConfigUrl };
     }
   }
@@ -264,7 +274,7 @@ export function detectFromProviderConfig(providerInstance: unknown): {
   if (baseConfigUrl) {
     const detected = detectApiKeyProvider(baseConfigUrl);
     if (detected) {
-      logger.debug(
+      logger().debug(
         () => `Detected ${detected} from base provider config base-url`,
       );
       return { provider: detected, baseUrl: baseConfigUrl };

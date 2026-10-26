@@ -55,7 +55,13 @@ import { readOptionalStringProp } from '../agentBootstrap.js';
 import type { EditorCallbacks } from '../config-types.js';
 import type { ToolConfirmation, ToolUpdate } from '../event-types.js';
 
-const logger = new DebugLogger('llxprt:agents:tool-control');
+/**
+ * Logger for best-effort tool-call persistence diagnostics, built per call
+ * like the other lazy logger helpers in this package.
+ */
+function logger(): DebugLogger {
+  return new DebugLogger('llxprt:agents:tool-control');
+}
 
 /**
  * Typed error thrown by {@link ToolControl.respondToConfirmation} when the
@@ -335,7 +341,7 @@ export class ToolControl implements AgentToolControl {
       this.recordCompletions(completed);
     } catch (error) {
       // History persistence is best-effort.
-      logger.debug(
+      logger().debug(
         `recordCompletedToolCalls best-effort persistence failed: ${error}`,
       );
     }
