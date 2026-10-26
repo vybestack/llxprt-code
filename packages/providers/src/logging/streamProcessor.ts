@@ -28,7 +28,7 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { RequestLoggingPolicy } from './requestLoggingPolicy.js';
 
 export interface StreamAccumulatorState {
-  streamedText: string;
+  estimatedOutputTokens: number;
   responseContent: string;
   chunkCount: number;
   firstChunkTime: number | null;
@@ -39,7 +39,7 @@ export interface StreamAccumulatorState {
 
 export function createStreamAccumulatorState(): StreamAccumulatorState {
   return {
-    streamedText: '',
+    estimatedOutputTokens: 0,
     responseContent: '',
     chunkCount: 0,
     firstChunkTime: null,
@@ -77,15 +77,14 @@ function recordChunkToAttempt(
 
 export function resolveTokenCounts(
   latestTokenUsage: UsageStats | undefined,
-  streamedText: string,
+  estimatedOutputTokens: number,
   debug: DebugLogger,
 ): ResponseTokenCounts {
   return latestTokenUsage
     ? extractTokenCountsFromTokenUsage(latestTokenUsage, debug)
     : {
         input_token_count: 0,
-        output_token_count:
-          streamedText.length > 0 ? estimateTokens(streamedText) : 0,
+        output_token_count: estimatedOutputTokens,
         cached_content_token_count: 0,
         thoughts_token_count: 0,
         tool_token_count: 0,
@@ -151,7 +150,8 @@ export function processStreamChunk(
       recorder,
     );
   }
-  acc.streamedText += chunkText;
+  acc.estimatedOutputTokens +=
+    chunkText.length > 0 ? estimateTokens(chunkText) : 0;
   return chunk;
 }
 
@@ -171,6 +171,7 @@ export function processLoggedStreamChunk(
   const content = extractSimpleContent(chunk);
   if (content) {
     acc.responseContent += content;
+    acc.estimatedOutputTokens += estimateTokens(content);
   }
   let chunkUsage: UsageStats | undefined;
   extractChunkMetadata(
@@ -220,7 +221,7 @@ function recordSourceStreamFailure(
   if (policy?.strictTelemetry !== true && acc.latestTokenUsage !== undefined) {
     const partialTokenCounts = resolveTokenCounts(
       acc.latestTokenUsage,
-      acc.streamedText,
+      acc.estimatedOutputTokens,
       ctx.debug,
     );
     accumulateTokenUsage(
@@ -279,7 +280,6 @@ export async function* processStreamWithRecorderGen(
       recorder,
       ctx,
       modelName,
-      acc.streamedText,
     );
     finalized = true;
     if (terminalMetadata !== undefined)
@@ -366,7 +366,7 @@ async function handleLoggedStreamError(
   ) {
     const partialTokenCounts = resolveTokenCounts(
       acc.latestTokenUsage,
-      acc.responseContent,
+      acc.estimatedOutputTokens,
       ctx.debug,
     );
     accumulateTokenUsage(
@@ -413,9 +413,12 @@ function recordLoggedStreamCompletion(
   recorder: AttemptRecorder,
   ctx: StreamProcessContext,
   modelName: string,
-  text = acc.responseContent,
 ): void {
-  const tokenCounts = resolveTokenCounts(acc.latestTokenUsage, text, ctx.debug);
+  const tokenCounts = resolveTokenCounts(
+    acc.latestTokenUsage,
+    acc.estimatedOutputTokens,
+    ctx.debug,
+  );
   if (acc.latestTokenUsage !== undefined)
     accumulateTokenUsage(tokenCounts, config, ctx.providerName, ctx.debug);
   const totalTokens =

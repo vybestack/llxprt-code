@@ -59,12 +59,12 @@ interface ActiveAttempt {
    * True once a raw token-delta timing signal (issue #3473) has stamped
    * this attempt. Raw-delta timing is then authoritative: later deferred
    * visible emissions (terminal combined chunk, buffered-text flush) still
-   * update usage, streamedText, chunkCount, and finishReasons but must not
+   * update usage, estimatedOutputTokens, chunkCount, and finishReasons but must not
    * overwrite first/last token timestamps.
    */
   rawTimingStamped: boolean;
   latestTokenUsage: UsageStats | undefined;
-  streamedText: string;
+  estimatedOutputTokens: number;
   chunkCount: number;
   hasEmittedTerminal: boolean;
   finishReasons: string[];
@@ -179,7 +179,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
       lastTokenMs: null,
       rawTimingStamped: false,
       latestTokenUsage: undefined,
-      streamedText: '',
+      estimatedOutputTokens: 0,
       chunkCount: 0,
       hasEmittedTerminal: false,
       finishReasons: [],
@@ -202,13 +202,13 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
 
   /**
    * Record a token-bearing chunk for the given attempt. Updates timing
-   * (first/last token timestamps) and accumulates text. Only token-bearing
+   * (first/last token timestamps) and sums per-piece token estimates. Only token-bearing
    * chunks should be passed here — metadata-only chunks must use
    * recordMetadataUsage instead.
    *
    * When raw token-delta timing has already stamped the attempt (issue
    * #3473), those raw stamps are authoritative: this method still updates
-   * usage, streamedText, chunkCount, and finishReasons but leaves
+   * usage, estimatedOutputTokens, chunkCount, and finishReasons but leaves
    * first/last token timestamps untouched, because deferred visible
    * emissions (terminal combined chunk, buffered-text flush) trail the
    * final raw delta.
@@ -231,7 +231,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     if (usage) {
       attempt.latestTokenUsage = usage;
     }
-    attempt.streamedText += text;
+    attempt.estimatedOutputTokens += text.length > 0 ? estimateTokens(text) : 0;
     attempt.chunkCount++;
     if (finishReason && !attempt.finishReasons.includes(finishReason)) {
       attempt.finishReasons.push(finishReason);
@@ -241,7 +241,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
   /**
    * Record a raw token-delta timing signal for the given attempt (issue
    * #3473). Stamps firstTokenMs/lastTokenMs via performance.now() without
-   * touching chunkCount, streamedText, usage, or finishReasons, and makes
+   * touching chunkCount, estimatedOutputTokens, usage, or finishReasons, and makes
    * the raw stamps authoritative over later visible-chunk stamps.
    */
   recordTimingOnly(attemptId: string): void {
@@ -328,7 +328,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
           `Failed to resolve attempt tokens: ${err instanceof Error ? err.message : String(err)}`,
       );
       resolved = {
-        tokenCounts: this.resolveTokenCounts(undefined, ''),
+        tokenCounts: this.resolveTokenCounts(undefined, 0),
         inputTokens: sanitize(info.inputTokens),
         outputTokens: sanitize(info.outputTokens),
         cachedTokens: sanitize(info.cachedTokens),
@@ -415,7 +415,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
   ): ResolvedAttemptTokens {
     const tokenCounts = this.resolveTokenCounts(
       attempt.latestTokenUsage,
-      attempt.streamedText,
+      attempt.estimatedOutputTokens,
     );
     return {
       tokenCounts,
@@ -656,11 +656,11 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
   }
 
   /**
-   * Resolve token counts from UsageStats metadata or estimate from text.
+   * Resolve token counts from UsageStats metadata or per-piece estimates.
    */
   private resolveTokenCounts(
     usage: UsageStats | undefined,
-    streamedText: string,
+    estimatedOutputTokens: number,
   ): ResponseTokenCounts {
     if (usage) {
       const counts: TokenCounts & {
@@ -670,8 +670,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     }
     return {
       input_token_count: 0,
-      output_token_count:
-        streamedText.length > 0 ? estimateTokens(streamedText) : 0,
+      output_token_count: estimatedOutputTokens,
       cached_content_token_count: 0,
       thoughts_token_count: 0,
       tool_token_count: 0,
