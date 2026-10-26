@@ -45,6 +45,26 @@ function recordModelChanges(): {
   };
 }
 
+function recordProfileChanges(): {
+  readonly payloads: ReadonlyArray<{ model: string; providerName?: string }>;
+  readonly stop: () => void;
+} {
+  const payloads: Array<{ model: string; providerName?: string }> = [];
+  const listener = (payload: {
+    model: string;
+    providerName?: string;
+  }): void => {
+    payloads.push(payload);
+  };
+  coreEvents.on(CoreEvent.ModelProfileChanged, listener);
+  return {
+    payloads,
+    stop: () => {
+      coreEvents.off(CoreEvent.ModelProfileChanged, listener);
+    },
+  };
+}
+
 function clientOwner(agent: Agent): SessionClientOwner {
   const deps = 'deps' in agent ? agent.deps : undefined;
   const owner =
@@ -320,6 +340,90 @@ describe('Agent.setModel model publication (#3954)', () => {
       ).toHaveLength(1);
       expect(agent.getProvider()).toBe('openai');
       expect(agent.getModel()).toBe('gpt-4o');
+    });
+  });
+
+  describe('provider switch with an explicit model', () => {
+    let profileChanges: ReturnType<typeof recordProfileChanges>;
+
+    beforeEach(() => {
+      profileChanges = recordProfileChanges();
+    });
+
+    afterEach(() => {
+      profileChanges.stop();
+    });
+
+    it('keeps one ModelProfileChanged and the target default model when no model is requested', async () => {
+      await agent.setProvider('openai');
+
+      const switchedModel = agent.getModel();
+      expect(switchedModel).not.toBe('fake-model');
+      expect(changes.models).toStrictEqual([switchedModel]);
+      expect(profileChanges.payloads).toStrictEqual([
+        expect.objectContaining({
+          model: switchedModel,
+          providerName: 'openai',
+        }),
+      ]);
+    });
+
+    it('applies a requested model that equals the previous model instead of keeping the target default', async () => {
+      const previousModel = agent.getModel();
+
+      await agent.setProvider('openai', previousModel);
+
+      expect(agent.getProvider()).toBe('openai');
+      expect(agent.getModel()).toBe(previousModel);
+      expect(changes.models).toStrictEqual([]);
+      expect(profileChanges.payloads).toStrictEqual([
+        expect.objectContaining({
+          model: previousModel,
+          providerName: 'openai',
+        }),
+      ]);
+    });
+
+    it('publishes only the requested model, never the target default, when it differs from the previous model', async () => {
+      await agent.setProvider('openai', 'gpt-4o');
+
+      expect(agent.getProvider()).toBe('openai');
+      expect(agent.getModel()).toBe('gpt-4o');
+      expect(changes.models).toStrictEqual(['gpt-4o']);
+      expect(profileChanges.payloads).toStrictEqual([
+        expect.objectContaining({ model: 'gpt-4o', providerName: 'openai' }),
+      ]);
+    });
+
+    it('publishes the requested model when the provider is unchanged', async () => {
+      await agent.setProvider('fake', 'fake-model-next');
+
+      expect(agent.getModel()).toBe('fake-model-next');
+      expect(changes.models).toStrictEqual(['fake-model-next']);
+    });
+
+    it('publishes nothing when applying the requested model fails after the provider switched', async () => {
+      const failure = new Error('credential refresh failed');
+      const owner = clientOwner(agent);
+      const refreshAuth = owner.refreshAuth.bind(owner);
+      let calls = 0;
+      const refresh = spyOn(owner, 'refreshAuth').mockImplementation(
+        async (method?: string) => {
+          calls += 1;
+          if (calls === 2) throw failure;
+          return refreshAuth(method);
+        },
+      );
+      try {
+        await expect(agent.setProvider('openai', 'gpt-4o')).rejects.toBe(
+          failure,
+        );
+      } finally {
+        refresh.mockRestore();
+      }
+
+      expect(changes.models).toStrictEqual([]);
+      expect(profileChanges.payloads).toStrictEqual([]);
     });
   });
 

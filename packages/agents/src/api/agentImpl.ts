@@ -118,6 +118,7 @@ import type { AgentSchedulerHandle } from './config-types.js';
 import { toRuntimeSwitchOptions } from './providerSwitchOptionsAdapter.js';
 import {
   applyModelWithPublication,
+  publishProviderSwitch,
   type ModelTransitionSteps,
 } from './modelPublication.js';
 import {
@@ -665,7 +666,14 @@ export class AgentImpl implements Agent {
     this.assertProfileIdle();
     if (this.activeRun !== undefined) throw new AgentBusyError();
     return this.coordinator.withIdleBoundary(() =>
-      this.applyProviderSwitch(provider, model, options),
+      publishProviderSwitch(
+        this.deps.settingsOwner,
+        this.providerState.model,
+        model,
+        () => this.getActiveProfileName(),
+        (publication) =>
+          this.applyProviderSwitch(provider, model, options, publication),
+      ),
     );
   }
 
@@ -1088,6 +1096,7 @@ export class AgentImpl implements Agent {
     provider: string,
     model?: string,
     options?: AgentProviderSwitchOptions,
+    publication?: 'deferred',
   ): Promise<AgentProviderSwitchResult> {
     const previousProvider = this.providerState.provider;
     // switchActiveProvider rebuilds the content generator internally; under the
@@ -1098,7 +1107,7 @@ export class AgentImpl implements Agent {
     try {
       const switchResult = await this.deps.switchProvider(
         provider,
-        toRuntimeSwitchOptions(options),
+        toRuntimeSwitchOptions(options, publication),
       );
       providerChanged = switchResult.changed;
       infoMessages = switchResult.infoMessages;
@@ -1110,22 +1119,19 @@ export class AgentImpl implements Agent {
       // provider-switch failure (env var not set) must propagate so a genuine
       // failure is never reported as success — facade state below is then left
       // untouched.
-      const isFakeSeam = process.env.LLXPRT_FAKE_RESPONSES !== undefined;
-      if (!isFakeSeam) {
-        throw error;
-      }
+      if (process.env.LLXPRT_FAKE_RESPONSES === undefined) throw error;
       // Provider not registered (fake seam) — the active provider handles all
       // requests. Per-agent state still reflects the switch (getProvider etc.).
     }
     if (providerChanged) {
       // Real provider switch succeeded; apply the requested model (if any) via
       // setActiveModel + the explicit model-only rebuild.
-      if (model !== undefined && model !== this.providerState.model) {
+      if (model !== undefined && model !== this.getModel()) {
         await this.setOwnerModel(model);
         await this.deps.sessionClient.refreshAuth();
       }
       await this.restoreChatVisibility();
-    } else if (model !== undefined && model !== this.providerState.model) {
+    } else if (model !== undefined && model !== this.getModel()) {
       // Same provider, different model — apply the model to the runtime
       // without reinitializing the content generator (the provider did not
       // change, so the client/HistoryService identity is preserved).
@@ -1138,10 +1144,8 @@ export class AgentImpl implements Agent {
     this.providerState.provider = provider;
     // A real switch without an explicit model leaves the target provider's
     // default in force; the applied model must describe what the runtime uses.
-    const inForce = providerChanged
-      ? this.deps.settingsOwner.readSelectedModel()
-      : undefined;
-    this.providerState.model = model ?? inForce ?? this.providerState.model;
+    if (providerChanged || model !== undefined)
+      this.providerState.model = this.getModel();
     this.rebuild();
     return {
       changed: providerChanged,
