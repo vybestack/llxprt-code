@@ -1,5 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import type { JournalDisplayHandle } from './journal-display-commands.js';
+import type { JournalDisplayDescriptor } from '../../journal/display-recording.js';
+import type { JournalDisplayCommands } from './journal-display-commands.js';
 import type { IContent } from './IContent.js';
 import type { JournalMirrors } from './journalMirrors.js';
 import type {
@@ -30,6 +33,22 @@ import {
 } from './journalScalars.js';
 
 export abstract class JournalHistoryStoreReads {
+  protected abstract readonly display: JournalDisplayCommands;
+
+  appendDisplay(
+    descriptor: JournalDisplayDescriptor,
+    source: string | AsyncIterable<string>,
+    origin?: string,
+  ): Promise<JournalDisplayHandle> {
+    this.assertUsable();
+    return this.display.append(descriptor, source, origin);
+  }
+
+  retractDisplay(row: JournalDisplayHandle): Promise<void> {
+    this.assertUsable();
+    return this.display.retract(row);
+  }
+
   async hasPromptSubmission(id: string): Promise<boolean> {
     await this.waitForDurable();
     return (

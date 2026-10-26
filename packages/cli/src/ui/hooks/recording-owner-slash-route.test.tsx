@@ -88,6 +88,55 @@ function slashInputs(
 }
 
 describe('interactive slash command recording route', () => {
+  it('commits command output to the journal before resolving without a ledger write', async () => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
+      await agent.session.setRecording({ enabled: true });
+      const inputs = slashInputs(agent, 'agent');
+      const { result, unmount } = renderHook(
+        () =>
+          useSlashCommandProcessorCore({
+            ...inputs,
+            addItem: () => {
+              throw new Error('Unexpected ledger write');
+            },
+          }),
+        { wrapper },
+      );
+      try {
+        await waitFor(() => {
+          expect(
+            result.current.slashCommands?.some((cmd) => cmd.name === 'chat'),
+          ).toBe(true);
+        });
+        await act(async () => {
+          await result.current.handleSlashCommand('/unknown-journal-command');
+        });
+        const path = agent.session.getRecording().path;
+        if (!path) throw new Error('Missing output journal');
+        const { NativeJournalCursor } = await import(
+          '../stores/turn/native-journal-cursor.js'
+        );
+        const cursor = await NativeJournalCursor.open(path, {}, 16);
+        try {
+          const entries = (await cursor.pageBack(16)).entries;
+          expect(
+            entries.flatMap((entry) =>
+              entry.kind === 'projected' ? [entry.item.text] : [],
+            ),
+          ).toStrictEqual([
+            'Unknown command: /unknown-journal-command',
+            '/unknown-journal-command',
+          ]);
+          expect(await agent.session.getHistory()).toStrictEqual([]);
+        } finally {
+          await cursor.close();
+        }
+      } finally {
+        unmount();
+      }
+    });
+  }, 30000);
+
   it('selects the owner handler through the real processor and command context', async () => {
     await withRecordingLifetimeFixture(async ({ agent }) => {
       await agent.setHistory([

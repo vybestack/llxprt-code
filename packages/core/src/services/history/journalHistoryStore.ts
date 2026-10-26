@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { journalDisplayCommands } from './journal-display-commands.js';
 import {
   responseArrivalOpener,
   assertArrivalRowDelta,
@@ -16,40 +17,20 @@ import type { RowDraft } from '../../journal/rowDraft.js';
 import type { MirrorCheckpoint } from '../../journal/mirrorCheckpoint.js';
 import type { TokenRowSource } from './history-token-tickets.js';
 import { JournalTokenRows } from './journal-token-rows.js';
-import { JournalHistoryStoreReads } from './journal-history-store-reads.js';
+import { JournalHistoryStoreMutations } from './journal-history-store-mutations.js';
 import { JournalRowMutations } from './journal-row-mutations.js';
-import { openJournalSemanticPurge } from './journalSemanticPurge.js';
 import { prepareJournalProviderRequest } from './native-purge-provider-request.js';
 import * as nativeFormat from './native-provider-format.js';
-import type { SemanticPurgeSnapshot } from './semantic-purge-native.js';
-import type { GroupPreparation } from '../../journal/preparedGroup.js';
-import type { EntryFill, VersionEdit } from '../../journal/groupEdits.js';
 import type { CommitAck } from '../../journal/groupWriter.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IContent } from './IContent.js';
-import {
-  type PositionedContent,
-  type PositionedOrigin,
-  type PositionedOwner,
-} from './journalHistoryEdits.js';
-import type { HistoryMediaOwner } from './historyBatchContracts.js';
 import type {
-  HistoryCompensationMark,
   HistoryStorePort,
-  HistoryClearRequest,
   HistoryJournalOp,
   HistoryMutationMark,
-  HistoryProfileReplacementRequest,
   HistoryPublicationScope,
-  HistoryDensityRequest,
-  HistoryMergeRequest,
-  HistoryRemoveTailRequest,
-  HistoryRepairRequest,
   HistoryResumeRequest,
-  ProfileCandidateRows,
-  StagedProfileAdoption,
 } from './historyStorePort.js';
-import { stageProfileReplacementOnJournal } from './journalProfileReplacement.js';
 import { journalCompressionInput } from './journalDumpSnapshot.js';
 import {
   adoptOnto,
@@ -58,32 +39,17 @@ import {
 } from './journalAdoption.js';
 import { JournalMirrors } from './journalMirrors.js';
 import { RecordingPrimary } from './recording-primary.js';
-import { JournalOwners, type ResolvedOwner } from './journalOwners.js';
-import {
-  JournalCheckpointLifetime,
-  journalCheckpointReader,
-  withRollbackCheckpointOnJournal,
-} from './journalCheckpoints.js';
-import { optimizeDensityOnJournal } from './journalDensity.js';
-import { mergeOnJournal } from './journalMerge.js';
-import { publishDetachedOnJournal } from './journalPublishDetached.js';
+import { JournalOwners } from './journalOwners.js';
+import { JournalCheckpointLifetime } from './journalCheckpoints.js';
 import {
   captureSettledJournalSnapshot,
   openJournalToolRanking,
 } from './journal-tool-ranking.js';
-import * as mediaMutations from './journalMediaMutations.js';
-import type {
-  DetachedHistoryHost,
-  DetachedHistoryOptions,
-  DetachedHistoryTask,
-} from './detachedHistoryMutation.js';
 import type { JournalSession } from './journalSession.js';
 import {
   replacementEditBuilder,
   JournalPublication,
   type EditBuilder,
-  JournalCompensationMark,
-  preparedDetachedEdit,
 } from './journalPublication.js';
 import type { JournalRecordingService } from '../../recording/journalRecordingService.js';
 import type { SessionRecordingPort } from '../../recording/recordingPort.js';
@@ -119,11 +85,30 @@ import type * as StoreTypes from './journal-history-store-types.js';
  * and a failure to open is the failure of the queue (decision D-W7-1).
  */
 export class JournalHistoryStore
-  extends JournalHistoryStoreReads
+  extends JournalHistoryStoreMutations
   implements HistoryStorePort
 {
+  protected get operationStore(): JournalHistoryStore {
+    return this;
+  }
+
   readonly openResponseArrival = responseArrivalOpener({
     store: () => this.session.store,
+    owners: () => this.owners,
+    exclusive: (run) => this.exclusive(run),
+    commit: (build) => {
+      this.publication.accepted();
+      this.tokenDraft = undefined;
+      return this.commitStep(undefined, build, undefined, true);
+    },
+  });
+
+  protected readonly display = journalDisplayCommands({
+    store: () => this.session.store,
+    target: async (origin) =>
+      this.adopted !== undefined && this.mirrors.primaryOriginId() === origin
+        ? this.session.store
+        : this.mirrors.displayTarget(origin),
     owners: () => this.owners,
     exclusive: (run) => this.exclusive(run),
     commit: (build) => {
@@ -160,7 +145,7 @@ export class JournalHistoryStore
       this.session.store.prepareSnapshotKimi(snapshot),
   });
 
-  private tentativeRows = 0;
+  protected tentativeRows = 0;
   private tokenDraftSequence = 0;
   private tokenDraft: TokenDraft | undefined;
   private appendingTokenRow = false;
@@ -243,14 +228,16 @@ export class JournalHistoryStore
     }
   }
 
-  private queue: Promise<void>;
-  private failure: { readonly error: unknown; reported?: boolean } | undefined;
+  protected queue: Promise<void>;
+  protected failure:
+    | { readonly error: unknown; reported?: boolean }
+    | undefined;
   private restoreFailed = false;
   private ack: CommitAck | undefined;
   private disposed = false;
   private disposal: Promise<void> | undefined;
   readonly checkpointLifetime = new JournalCheckpointLifetime();
-  private readonly publication = new JournalPublication();
+  protected readonly publication = new JournalPublication();
   protected journal: StoreTypes.OpenJournal | undefined;
   /** Settles when the journal is open; rejects with the reason it could not be. */
   private readonly opened: Promise<void>;
@@ -266,7 +253,7 @@ export class JournalHistoryStore
     enqueue: (rowsAfter, build) => this.enqueue(rowsAfter, build),
     offerPreview: (content, origin) => this.offerPreview(content, origin),
   };
-  private readonly rowMutations = new JournalRowMutations({
+  protected readonly rowMutations = new JournalRowMutations({
     writes: this.writes,
     assertUsable: () => this.assertUsable(),
     rows: () => this.tentativeRows,
@@ -339,11 +326,11 @@ export class JournalHistoryStore
     return this.journal;
   }
 
-  private get session(): JournalSession {
+  protected get session(): JournalSession {
     return this.requireOpen().session;
   }
 
-  private get owners(): JournalOwners {
+  protected get owners(): JournalOwners {
     return this.requireOpen().owners;
   }
 
@@ -459,101 +446,6 @@ export class JournalHistoryStore
     } finally {
       this.appendingTokenRow = false;
     }
-  }
-
-  purge(changes: readonly PositionedContent[]): void {
-    this.rowMutations.purge(changes);
-  }
-
-  changeOwners(changes: readonly PositionedOwner[]): void {
-    this.rowMutations.changeOwners(changes);
-  }
-
-  changeOwnersOf(changes: readonly PositionedOrigin[]): void {
-    this.rowMutations.changeOwnersOf(changes);
-  }
-
-  fill(fills: readonly EntryFill[]): void {
-    this.rowMutations.fill(fills);
-  }
-
-  /**
-   * Replaces the whole history by `rows` in one group. The rows are encoded
-   * as the writer pulls them, one at a time, so no encoded copy of the array
-   * exists. Only the references are copied, which keeps a later edit of the
-   * caller's array out of the queued group. Every row is written under
-   * `origin`, unowned when it is omitted.
-   */
-  replaceAll(rows: readonly IContent[], origin?: string): void {
-    this.assertUsable();
-    const held = [...rows];
-    this.enqueue(held.length, this.replaceEdits(held, origin));
-  }
-
-  /**
-   * Replaces the history by the `count` rows `rows` yields, as one group
-   * whose rows are pulled by the writer one at a time (design 4.5). It
-   * resolves with the ack of the group's trailer and not before: that is the
-   * only point at which the replacement is durable. A cancellation is honoured
-   * before the group starts; once rows are being written the group runs to its
-   * trailer, and the caller compensates after the ack if it still must undo it.
-   */
-  async replaceFrom(
-    rows: Iterable<IContent> | AsyncIterable<IContent>,
-    count: number,
-    signal?: AbortSignal,
-    origin?: string,
-  ): Promise<CommitAck> {
-    this.assertUsable();
-    signal?.throwIfAborted();
-    return this.requireAck(
-      this.enqueueTurn(count, this.replaceEdits(rows, origin)),
-    );
-  }
-
-  /**
-   * Like {@link replaceFrom}, for a source whose row count is known only when
-   * it ends (a transform streaming its output). The tentative count is not
-   * moved when the group is queued; the ack's count becomes the length. The
-   * caller must hold the store quiet around it, as the mutation FIFO does.
-   */
-  async replaceStreamed(
-    rows: AsyncIterable<IContent>,
-    signal?: AbortSignal,
-    origin?: string,
-  ): Promise<CommitAck> {
-    this.assertUsable();
-    signal?.throwIfAborted();
-    return this.requireAck(
-      this.enqueueTurn(undefined, this.replaceEdits(rows, origin)),
-    );
-  }
-
-  async prepareDetached(
-    prepare: GroupPreparation,
-    ownerEdits: readonly VersionEdit[],
-  ): Promise<CommitAck> {
-    this.assertUsable();
-    return this.requireAck(
-      this.enqueueTurn(undefined, () =>
-        Promise.resolve([preparedDetachedEdit(prepare, ownerEdits)]),
-      ),
-    );
-  }
-
-  /**
-   * The owner id of `origin` for rows a caller encodes before their group
-   * exists. The edits that register a new id must go in the group that
-   * writes those rows (see {@link prepareDetached}); when no such group is
-   * written the caller calls {@link discardOwnerRegistration}.
-   */
-  resolveOwner(origin: string | undefined): Promise<ResolvedOwner> {
-    return this.owners.resolve(origin);
-  }
-
-  /** Drops an owner id {@link resolveOwner} took that no group recorded. */
-  discardOwnerRegistration(): void {
-    this.owners.invalidate();
   }
 
   /**
@@ -679,135 +571,6 @@ export class JournalHistoryStore
 
   openDensityFiles = this.openToolResponseRanking.files;
 
-  openSemanticPurgeSnapshot(
-    host: DetachedHistoryHost,
-  ): Promise<SemanticPurgeSnapshot> {
-    return openJournalSemanticPurge(this, host);
-  }
-
-  clear(request: HistoryClearRequest): Promise<void> {
-    return this.rowMutations.clear(request);
-  }
-
-  validateAndFix(
-    request: HistoryRepairRequest,
-  ): Promise<StoreTypes.JournalRepair> {
-    return this.rowMutations.validateAndFix(request);
-  }
-
-  /** Hands the owner every row, one at a time, once the queue is durable. */
-  adoptMediaOwner(owner: mediaMutations.NativeMediaOwner): Promise<void> {
-    return mediaMutations.adoptOwner(this, () => this.session.store, owner);
-  }
-
-  /** Removes the newest row (design 4.3) and takes it back if the media effect or the observer fails. */
-  removeTail(request: HistoryRemoveTailRequest): Promise<IContent | undefined> {
-    return mediaMutations.removeTailOnJournal(this, request);
-  }
-
-  /** Makes the owner hold the media of the current rows, one streamed pass. */
-  reconcileMedia(owner: HistoryMediaOwner): Promise<void> {
-    return mediaMutations.reconcileMediaOnJournal(this, owner);
-  }
-
-  /** Appends the accepted rows of another history as one detached append. */
-  mergeFrom(request: HistoryMergeRequest): Promise<void> {
-    return mergeOnJournal(this, request);
-  }
-
-  /** Applies the decisions of a density optimizer as one detached transform. */
-  optimizeDensity(request: HistoryDensityRequest): Promise<void> {
-    return optimizeDensityOnJournal(this, request);
-  }
-
-  /** Writes `candidate` as the live rows at once; `rollback` restores the saved version (decision G3). */
-  stageProfileReplacement(
-    candidate: ProfileCandidateRows,
-    request: HistoryProfileReplacementRequest,
-  ): Promise<StagedProfileAdoption> {
-    return stageProfileReplacementOnJournal(this, candidate, request);
-  }
-
-  /**
-   * Names the version the queue reaches with everything accepted so far, so a
-   * later {@link compensate} can put it back without a copy of any row.
-   */
-  captureCompensation(): JournalCompensationMark {
-    this.assertUsable();
-    return this.publication.capture(
-      this,
-      this.exclusive(async () => {
-        const snapshot = await this.session.store.snapshot();
-        try {
-          return { snapshot, mirrors: await this.mirrors.checkpoint() };
-        } catch (error) {
-          await snapshot.close();
-          throw error;
-        }
-      }),
-    );
-  }
-
-  /** Lets go of the version a mark names; the owner of the mark calls it once, after the last compensation. */
-  async releaseCompensation(mark: JournalCompensationMark): Promise<void> {
-    await this.publication.release(mark);
-  }
-
-  /**
-   * Undoes everything admitted since `mark` with `restore(version)`. When no
-   * group was acked since, nothing is written. `held` is the failure the
-   * caller received from its own groups, or undefined when it received none
-   * from the store. Only that failure is cleared: a failure the queue holds
-   * that the caller does not hold was never reported to anyone, so it stays
-   * sticky and is thrown from here instead of being lost. If the restore
-   * itself fails the store keeps that failure.
-   */
-  async compensate(
-    mark: HistoryCompensationMark,
-    held: unknown,
-  ): Promise<void> {
-    if (!(mark instanceof JournalCompensationMark) || mark.store !== this) {
-      throw new Error('The compensation mark was not captured by this store');
-    }
-    const captured = await mark.captured;
-    const saved = captured.snapshot;
-    await this.queue;
-    if (this.failure !== undefined) {
-      if (this.failure.error !== held) throw this.failure.error;
-      this.failure = undefined;
-    }
-    const unchanged =
-      this.session.store.published?.commitSeq === saved.version?.commitSeq;
-    if (unchanged) {
-      this.tentativeRows = saved.rows;
-    } else {
-      await this.restoreTo(saved, captured.mirrors);
-    }
-    this.publication.compensated(mark);
-  }
-
-  /** Runs a detached task against the durable rows and publishes its result (design 4.5). */
-  publishDetached(
-    task: DetachedHistoryTask,
-    host: DetachedHistoryHost,
-    modelName: string | undefined,
-    options: DetachedHistoryOptions,
-  ): Promise<void> {
-    return publishDetachedOnJournal(this, task, host, modelName, options);
-  }
-
-  /** A checkpoint over the rows durable now (design 4.5): the callback reads them from the saved version. */
-  withCheckpoint = journalCheckpointReader(this, () => this.options.counters);
-
-  /** A checkpoint whose `restore` is `restore(version)` of the version saved now. */
-  withRollbackCheckpoint<T>(
-    host: DetachedHistoryHost,
-    enqueue: (execute: () => Promise<void>) => Promise<void>,
-    execute: (restore: () => Promise<void>) => Promise<T>,
-  ): Promise<T> {
-    return withRollbackCheckpointOnJournal(this, host, enqueue, execute);
-  }
-
   /** Settles the queue, then closes the journal. */
   dispose(beforeClose?: () => Promise<void>): Promise<void> {
     return (this.disposal ??= this.disposeInternal(beforeClose));
@@ -872,7 +635,10 @@ export class JournalHistoryStore
   }
 
   /** Runs `task` after everything queued, ahead of anything queued later; its failure goes to the caller and does not stop the queue. */
-  private exclusive<T>(task: () => Promise<T>, detaching = false): Promise<T> {
+  protected exclusive<T>(
+    task: () => Promise<T>,
+    detaching = false,
+  ): Promise<T> {
     this.appendRun = undefined;
     this.tokenRows.seal();
     const turn = this.queue.then(() => {
@@ -891,12 +657,12 @@ export class JournalHistoryStore
    * and committed when the operations before it are acked, and its ack must
    * show the count that was promised.
    */
-  private enqueue(rowsAfter: number, build: EditBuilder): void {
+  protected enqueue(rowsAfter: number, build: EditBuilder): void {
     this.assertUsable();
     void this.enqueueTurn(rowsAfter, build);
   }
 
-  private enqueueTurn(
+  protected enqueueTurn(
     rowsAfter: number | undefined,
     build: EditBuilder,
     mirrors?: MirrorCheckpoint,
@@ -913,7 +679,7 @@ export class JournalHistoryStore
   }
 
   /** The ack of a queued group; a group the queue skipped or failed throws the failure that stopped it. */
-  private async requireAck(
+  protected async requireAck(
     turn: Promise<CommitAck | undefined>,
   ): Promise<CommitAck> {
     const ack = await turn;
@@ -924,10 +690,10 @@ export class JournalHistoryStore
   }
 
   /** The builder of the single `replace` edit of `rows`, every row written under `origin`. */
-  private readonly replaceEdits = replacementEditBuilder(() => this.owners);
+  protected readonly replaceEdits = replacementEditBuilder(() => this.owners);
 
   /** Puts the version of `saved` back as the current one (design 4.5) and waits for its ack. */
-  private async restoreTo(
+  protected async restoreTo(
     saved: VersionSnapshot,
     mirrors?: MirrorCheckpoint,
   ): Promise<void> {

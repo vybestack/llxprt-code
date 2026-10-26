@@ -3,6 +3,14 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { writeSlashOutput } from './slash-journal-output.js';
+import {
+  stringifyPrompt,
+  addUserCommandToHistory,
+  handleMessageResult,
+  addSubcommandHelp,
+  addUnknownCommandMessage,
+} from './slash-command-messages.js';
 import { resumeHistoryWindow } from '../utils/streamHistoryItems.js';
 
 import { requireSessionAgent } from '../commands/historyServiceAccess.js';
@@ -22,7 +30,6 @@ import {
 import { SlashCommandEvent } from '@vybestack/llxprt-code-telemetry';
 import { join } from 'node:path';
 import { parseSlashCommand } from '../../utils/commands.js';
-import { secureInputHandler } from '../utils/secureInputHandler.js';
 import {
   createEmojiFilter,
   filterHistoryItems,
@@ -115,7 +122,8 @@ export async function processSlashCommand(
   deps.setIsProcessing(true);
   deps.setLocalIsProcessing(true);
   if (addToHistory) {
-    addUserCommandToHistory(deps, trimmed);
+    const admission = addUserCommandToHistory(deps, trimmed);
+    if (admission !== undefined) await admission;
   }
 
   const parsed = parseCommand(trimmed, deps.commands);
@@ -134,16 +142,6 @@ export async function processSlashCommand(
   } finally {
     finalizeCommand(deps, parsed, hasError);
   }
-}
-
-function addUserCommandToHistory(
-  deps: SlashCommandHandlerDeps,
-  trimmed: string,
-): void {
-  const sanitizedCommand = secureInputHandler.shouldUseSecureMode(trimmed)
-    ? secureInputHandler.sanitizeForHistory(trimmed)
-    : trimmed;
-  deps.addItem({ type: MessageType.USER, text: sanitizedCommand }, Date.now());
 }
 
 function parseCommand(
@@ -190,10 +188,10 @@ async function executeParsedCommand(
       : { type: 'handled' };
   }
   if (commandToExecute?.subCommands) {
-    addSubcommandHelp(deps, commandToExecute);
+    await addSubcommandHelp(deps, commandToExecute);
     return { type: 'handled' };
   }
-  addUnknownCommandMessage(deps, parsed.trimmed);
+  await addUnknownCommandMessage(deps, parsed.trimmed);
   return { type: 'handled' };
 }
 
@@ -337,35 +335,6 @@ async function handleActionResult(
   }
 }
 
-async function handleMessageResult(
-  deps: SlashCommandHandlerDeps,
-  context: CommandContext,
-  result: Extract<ActionResult, { type: 'message' }>,
-): Promise<SlashCommandProcessorResult> {
-  deps.addItem(
-    {
-      type:
-        result.messageType === 'error' ? MessageType.ERROR : MessageType.INFO,
-      text: result.content,
-    },
-    Date.now(),
-  );
-  if (result.messageType === 'error') {
-    if (context.recordingOwner === 'agent') {
-      const agent = context.services.agent;
-      if (!agent) throw new Error('Session agent is unavailable');
-      await agent.session.recordRecordingEvent({
-        type: 'session_event',
-        severity: 'error',
-        message: result.content,
-      });
-    } else {
-      deps.recordingIntegration?.recordSessionEvent('error', result.content);
-    }
-  }
-  return { type: 'handled' };
-}
-
 function handleDialogResult(
   deps: SlashCommandHandlerDeps,
   result: Extract<ActionResult, { type: 'dialog' }>,
@@ -493,26 +462,6 @@ async function handleLoadHistoryResult(
     context.ui.addItem(item, index);
   });
   return { type: 'handled' };
-}
-
-function stringifyPrompt(content: AgentRequestInput): string {
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (!Array.isArray(content)) {
-    return '';
-  }
-  return content
-    .map((part) => {
-      if (typeof part === 'string') {
-        return part;
-      }
-      if (typeof part === 'object' && 'text' in part) {
-        return (part as { text?: string }).text ?? '';
-      }
-      return '';
-    })
-    .join('');
 }
 
 async function confirmShellCommands(
@@ -790,35 +739,6 @@ function buildResumeContext(
   };
 }
 
-function addSubcommandHelp(
-  deps: SlashCommandHandlerDeps,
-  command: SlashCommand,
-): void {
-  const helpText = `Command '/${command.name}' requires a subcommand. Available:\n${command.subCommands
-    ?.map((sc) => `  - ${sc.name}: ${sc.description || ''}`)
-    .join('\n')}`;
-  deps.addMessage({
-    type: MessageType.INFO,
-    content: helpText,
-    timestamp: new Date(),
-  });
-}
-
-function addUnknownCommandMessage(
-  deps: SlashCommandHandlerDeps,
-  trimmed: string,
-): void {
-  const isMcpLoading =
-    deps.commandContext.services.agent?.mcp.discoveryState() === 'pending';
-  deps.addMessage({
-    type: MessageType.ERROR,
-    content: isMcpLoading
-      ? `Unknown command: ${trimmed}. Command might have been from an MCP server but MCP servers are not done loading.`
-      : `Unknown command: ${trimmed}`,
-    timestamp: new Date(),
-  });
-}
-
 async function handleCommandError(
   deps: SlashCommandHandlerDeps,
   parsed: ParsedCommandState,
@@ -828,7 +748,9 @@ async function handleCommandError(
     logParsedCommand(deps, parsed);
   }
   const errorText = error instanceof Error ? error.message : String(error);
-  deps.addItem({ type: MessageType.ERROR, text: errorText }, Date.now());
+  await writeSlashOutput(deps.commandContext, 'error', errorText, () => {
+    deps.addItem({ type: MessageType.ERROR, text: errorText }, Date.now());
+  });
   if (
     Object.getOwnPropertyDescriptor(deps.commandContext, 'recordingOwner')
       ?.value === 'agent'

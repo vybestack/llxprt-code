@@ -64,6 +64,16 @@ export class JournalMirrors {
     this.fanout = new MirrorFanout(primary, [JOURNAL_SPAN_WINDOW]);
   }
 
+  async displayTarget(origin: string | undefined): Promise<JournalStore> {
+    await this.materializeRecorders();
+    for (const held of this.recorders.values()) {
+      if (held.origin === origin && held.session !== undefined) {
+        return held.session.store;
+      }
+    }
+    throw new Error('No recording journal is bound for display output');
+  }
+
   get size(): number {
     return this.fanout.mirrors;
   }

@@ -39,6 +39,8 @@ const PORT_METHODS = [
   'getLength',
   'materialize',
   'streamRows',
+  'appendDisplay',
+  'retractDisplay',
   'lastContent',
   'readRows',
   'clear',

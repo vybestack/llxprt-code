@@ -15,6 +15,8 @@
  */
 
 import type { ArrivalAttempt } from '../../journal/arrival-group.js';
+import type { JournalDisplayHandle } from './journal-display-commands.js';
+import type { JournalDisplayDescriptor } from '../../journal/display-recording.js';
 import type { ResponseArrival } from './history-response-arrival.js';
 import type { NativeDensityPolicy } from './nativeDensityPolicy.js';
 import type { DebugLogger } from '../../debug/index.js';
@@ -265,6 +267,12 @@ export interface HistoryCompensationMark {
  * the only implementation until the journal-backed store lands (#854 phase 4).
  */
 export interface HistoryStorePort {
+  appendDisplay(
+    descriptor: JournalDisplayDescriptor,
+    source: string | AsyncIterable<string>,
+    origin?: string,
+  ): Promise<JournalDisplayHandle>;
+  retractDisplay(row: JournalDisplayHandle): Promise<void>;
   openResponseArrival(
     content: IContent,
     attempt: ArrivalAttempt,

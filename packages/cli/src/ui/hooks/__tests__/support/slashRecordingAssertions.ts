@@ -3,6 +3,7 @@ import { afterEach, expect, spyOn } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
+import { NativeJournalCursor } from '../../../stores/turn/native-journal-cursor.js';
 
 export async function assertNativeSlashEvent(
   path: string,
@@ -10,9 +11,26 @@ export async function assertNativeSlashEvent(
   message: string,
   logs: readonly string[],
 ): Promise<void> {
-  expect(new Uint8Array(await readFile(path))).toStrictEqual(
+  const after = new Uint8Array(await readFile(path));
+  expect(after.subarray(0, before.length)).toStrictEqual(
     new Uint8Array(before),
   );
+  const cursor = await NativeJournalCursor.open(path, {}, 16);
+  try {
+    const entries = (await cursor.pageBack(16)).entries;
+    expect(
+      entries.flatMap((entry) =>
+        entry.kind === 'projected' && entry.contextState === 'n/a'
+          ? [[entry.item.type, entry.item.text]]
+          : [],
+      ),
+    ).toStrictEqual([
+      ['error', message],
+      ['user', '/help'],
+    ]);
+  } finally {
+    await cursor.close();
+  }
   const expected = `[SessionRecording] error: ${message}`;
   expect(logs.filter((entry) => entry === expected)).toStrictEqual([expected]);
 }

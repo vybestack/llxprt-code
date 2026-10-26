@@ -5,7 +5,7 @@ import { JournalArrivalRecorder } from './arrival-recorder.js';
 import { encodeContentRow } from '../services/history/journalRowCodec.js';
 
 export type JournalDisplayDescriptor =
-  | { readonly type: 'info' | 'warning' | 'error' | 'slash' | 'shell' }
+  | { readonly type: 'user' | 'info' | 'warning' | 'error' | 'slash' | 'shell' }
   | {
       readonly type: 'tool-result';
       readonly attemptId: string;
@@ -25,6 +25,7 @@ export function decodeDisplayDescriptor(
     throw new Error('Invalid display descriptor');
   const type = value.type;
   switch (type) {
+    case 'user':
     case 'info':
     case 'warning':
     case 'error':
