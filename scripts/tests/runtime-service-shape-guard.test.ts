@@ -289,13 +289,17 @@ export function other(bag: { clock: Clock; session: Session }): void {}`;
     );
   });
 
-  it('checks private constructor injection while ignoring private storage for consumers', () => {
+  it('reports private constructor injection as a holder and a bag parameter', () => {
     expect(
       scan(
         imports +
           `class Owner { constructor(private bag: { clock: Scheduler; context: Context }) {} }\nfunction use(owner: Owner): void {}`,
       ),
     ).toEqual([
+      expect.objectContaining({
+        rule: 'runtime-service-bundle',
+        line: 2,
+      }),
       expect.objectContaining({
         rule: 'runtime-service-bag-parameter',
         line: 2,

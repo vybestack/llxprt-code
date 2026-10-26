@@ -12,6 +12,10 @@ import {
   serviceAnalyzer,
   unalias,
 } from './runtime-service-shape-analysis.js';
+import {
+  classStoredDeclarations,
+  storedServiceBundle,
+} from './runtime-service-shape-holders.js';
 
 export interface RuntimeDeclarationRoot {
   readonly file: string;
@@ -247,7 +251,16 @@ function isConfigLocator(
  * Discovery visits up to 10,000 nodes per query in bounded worklist chunks.
  * A witnessed bundle finishes a positive query early; unresolved negative
  * queries retain explicit resource-limit findings.
- * Private and protected storage does not expose capabilities. Generic domain
+ * An exposed surface is judged by reachability: private and protected storage
+ * does not expose capabilities, and consumers only reach exposed members. A
+ * class is an owner rather than a grouping, so owning several single-service
+ * collaborators is not a bundle. A class field or constructor parameter
+ * property whose declared type groups two or more runtime services is, whatever
+ * its visibility, because the bag is what the boundary forbids. An interface or
+ * type alias is judged by what it exposes, and an intersection, object-literal
+ * type, `Object.assign` result or spread of several services groups them all.
+ * Union branches stay alternatives.
+ * Generic domain
  * objects expose their instantiated public members, not phantom type arguments.
  * Config locators additionally recognize separately configured runtime objects.
  * Reporting includes actual call/new arguments, resolved signature returns and
@@ -287,12 +300,10 @@ export function scanRuntimeServiceProgram(
   const checker = program.getTypeChecker();
   const services = resolveRoots(program, options.services);
   const configs = resolveRoots(program, options.configs);
+  const runtimeObjects = resolveRoots(program, options.runtimeObjects ?? []);
   const analyze = serviceAnalyzer(services, checker, program);
   const analyzeRuntimeObject = serviceAnalyzer(
-    new Set([
-      ...services,
-      ...resolveRoots(program, options.runtimeObjects ?? []),
-    ]),
+    new Set([...services, ...runtimeObjects]),
     checker,
     program,
   );
@@ -366,6 +377,40 @@ export function scanRuntimeServiceProgram(
         );
       }
     }
+    /**
+     * A class names an owner, not a grouping. Its stored positions are what the
+     * boundary judges: a field or constructor parameter property whose declared
+     * type is a bundle stores a bag, whatever its visibility. Owning several
+     * single-service fields is not a bundle, which is the design we want.
+     */
+    function reportStoredDeclarations(node: ts.ClassDeclaration): void {
+      if (isAssemblyNode(node, options, program)) return;
+      for (const stored of classStoredDeclarations(node, checker)) {
+        if (isAssemblyNode(stored.node, options, program)) continue;
+        if (storedServiceBundle(stored.type, checker, analyze, stored.node)) {
+          report(stored.node, 'runtime-service-bundle');
+        } else if (analyze(stored.type, stored.node).incomplete) {
+          report(stored.node, 'runtime-service-analysis-resource-limit');
+        }
+      }
+    }
+    /**
+     * An interface or type alias is a bundle when the shape it names groups
+     * runtime services, and a parameter is a bag when the type it declares
+     * groups them.
+     */
+    function reportNamedShape(node: ts.Node, bag: boolean): void {
+      if (isAssemblyNode(node, options, program)) return;
+      const summary = analyze(checker.getTypeAtLocation(node), node);
+      if (summary.bundle) {
+        report(
+          node,
+          bag ? 'runtime-service-bag-parameter' : 'runtime-service-bundle',
+        );
+      } else if (summary.incomplete) {
+        report(node, 'runtime-service-analysis-resource-limit');
+      }
+    }
     function visit(node: ts.Node): void {
       if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
         reportCall(node);
@@ -386,19 +431,15 @@ export function scanRuntimeServiceProgram(
       } else if (ts.isReturnStatement(node) && node.expression) {
         reportExpression(node.expression);
       }
-      const bundle =
-        ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node);
-      const parameter = ts.isParameter(node);
-      if ((bundle || parameter) && !isAssemblyNode(node, options, program)) {
-        const summary = analyze(checker.getTypeAtLocation(node), node);
-        if (summary.bundle) {
-          report(
-            node,
-            bundle ? 'runtime-service-bundle' : 'runtime-service-bag-parameter',
-          );
-        } else if (summary.incomplete) {
-          report(node, 'runtime-service-analysis-resource-limit');
-        }
+      if (ts.isClassDeclaration(node)) {
+        reportStoredDeclarations(node);
+      } else if (
+        ts.isTypeAliasDeclaration(node) ||
+        ts.isInterfaceDeclaration(node)
+      ) {
+        reportNamedShape(node, false);
+      } else if (ts.isParameter(node)) {
+        reportNamedShape(node, true);
       }
       const locator = isConfigLocator(
         node,
