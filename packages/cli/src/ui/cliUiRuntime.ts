@@ -1,7 +1,5 @@
 import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFeatures.js';
 
-import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
-import { createKeyCommandReads } from './commands/key-completion-owner.js';
 import type {
   UserPromptEvent,
   SlashCommandEvent,
@@ -16,7 +14,6 @@ import { buildSettingsRuntime } from '../runtime/createRuntimeOwnerFeatures.js';
 import type {
   SessionEndReason,
   ModelProfileInfoPayload,
-  WorkspaceSkillOperations,
   WorkspaceCheckpointOperations,
   WorkspacePromptSelection,
   WorkspaceResourceSelection,
@@ -39,7 +36,6 @@ import {
   type GitHubCompletionReads,
 } from './hooks/githubAtCompletion.js';
 import type { PerfSnapshotCapability } from './commands/perfCommand.js';
-import type { CliSessionPersistencePort } from '../cliSessionPersistence.js';
 
 export interface RefreshMemoryResult {
   memoryContent: string;
@@ -68,7 +64,7 @@ export interface ExtensionEnablementSource {
 /**
  * Focused capability read-models. Each exposes only the members a single
  * consumer family needs, so callers depend on the smallest suitable surface
- * rather than the full CliUiRuntime aggregate.
+ * rather than a whole runtime.
  */
 
 /**
@@ -790,91 +786,3 @@ export function buildUiRuntimeFromSource(
     ),
   };
 }
-
-/**
- * Builds a flat delegation adapter satisfying {@link CliUiRuntime} from the
- * bootstrap source. This breaks the Config identity link: downstream code
- * receives a plain object literal with delegated methods, not the raw Config
- * instance. The adapter flattens every capability produced by
- * {@link buildUiRuntimeFromSource} into a single object so slash commands and
- * dialogs receive the flat surface they expect.
- */
-export function buildSlashCommandRuntime(
-  source: UiRuntimeDeclarationSource,
-  agent: Parameters<typeof buildUiWorkspaceRuntime>[1] & {
-    tools: Pick<Agent['tools'], 'describeConfiguration' | 'get'>;
-    mcp: McpUiSelection;
-  },
-  providerKeys: ProviderKeyStorageLike,
-  perfSnapshotCapability?: PerfSnapshotCapability | null,
-  sessionPersistence?: CliSessionPersistencePort,
-  bucketFailover?: BucketFailoverRuntime,
-  skillOperations?: Pick<
-    WorkspaceSkillOperations,
-    'list' | 'find' | 'reload' | 'isAdminEnabled'
-  >,
-  restartExtension?: (extension: LlxprtExtension) => Promise<void>,
-  telemetrySettings?: SessionSettingsOperations,
-): CliUiRuntime {
-  // Non-slice members must be destructured out and re-attached explicitly.
-  // The spread below only flattens capability SLICE OBJECTS; a member whose
-  // value is a bare function (or any non-object) contributes no own enumerable
-  // properties to Object.assign and would be dropped silently.
-  const {
-    projectTempDir,
-    projectChatsDir,
-    projectCheckpointsDir,
-    historyFilePath,
-    userCommandsDir,
-    projectCommandsDir,
-    ...capabilities
-  } = buildUiWorkspaceRuntime(source, agent, bucketFailover, telemetrySettings);
-  // This flattening assumes every capability object exposes unique property
-  // names. If a future capability overlaps an existing one, Object.assign will
-  // keep the last value silently, so add an explicit test when adding slices.
-  return Object.assign(
-    {},
-    ...Object.values(capabilities),
-    {
-      projectTempDir,
-      projectChatsDir,
-      projectCheckpointsDir,
-      historyFilePath,
-      userCommandsDir,
-      projectCommandsDir,
-      ...createKeyCommandReads(() => providerKeys),
-      describeToolConfiguration: () => agent.tools.describeConfiguration(),
-    },
-    restartExtension !== undefined ? { restartExtension } : {},
-    skillOperations !== undefined ? { skillOperations } : {},
-    sessionPersistence !== undefined ? { sessionPersistence } : {},
-    perfSnapshotCapability !== undefined && perfSnapshotCapability !== null
-      ? { getPerfSnapshotCapability: () => perfSnapshotCapability }
-      : {},
-  );
-}
-
-/**
- * Structural composition of all focused capability interfaces. This is NOT a
- * flat god-object — it is a type-level intersection of focused read-models.
- * The bootstrap runtime satisfies it structurally at runtime. Used by broader UI
- * hooks (slash commands, at-completion, tool dialog, etc.) that have not yet
- * been migrated to the nested UiRuntime pattern. The streaming path and
- * AppContainer MUST NOT use this type — they use StreamRuntime/UiRuntime.
- */
-export type CliUiRuntime = UiRuntimeBareSource & {
-  getProviderKeys(): ProviderKeyStorageLike;
-  listKeyCompletionNames(): Promise<readonly string[]>;
-  invalidateKeyCompletion(): void;
-} & CheckpointRuntime &
-  ToolRuntime &
-  McpState &
-  FileWorkspaceState &
-  MemoryState & {
-    readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
-    readonly skillOperations?: Pick<
-      WorkspaceSkillOperations,
-      'list' | 'find' | 'reload' | 'isAdminEnabled'
-    >;
-    readonly sessionPersistence?: CliSessionPersistencePort;
-  };

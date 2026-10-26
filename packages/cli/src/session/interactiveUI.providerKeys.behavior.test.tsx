@@ -27,7 +27,7 @@ import {
   runExitCleanup,
 } from '../utils/cleanup.js';
 import { AppWrapper } from '../ui/App.js';
-import type { CliUiRuntime } from '../ui/cliUiRuntime.js';
+import type { KeyCommandReads } from '../ui/cliCommandPorts.js';
 import {
   __resetInteractiveUIStateForTesting,
   __setRenderForTesting,
@@ -58,12 +58,12 @@ function installRender(
   return rendered;
 }
 
-function slashRuntimeOf(root: React.ReactElement): CliUiRuntime {
+function keyCommandsOf(root: React.ReactElement): KeyCommandReads {
   let node: React.ReactNode = root;
   while (React.isValidElement<{ children?: React.ReactNode }>(node)) {
     if (node.type === AppWrapper) {
       return (node.props as React.ComponentProps<typeof AppWrapper>)
-        .slashCommandRuntime;
+        .keyCommands;
     }
     node = node.props.children;
   }
@@ -229,10 +229,10 @@ describe('interactive UI key handle ownership', () => {
       });
 
     await commit(storeA);
-    const runtimeA = slashRuntimeOf(roots[0]);
-    await runtimeA.getProviderKeys().saveKey('only-in-a', 'secret-a');
-    runtimeA.invalidateKeyCompletion();
-    expect(await runtimeA.listKeyCompletionNames()).toStrictEqual([
+    const commandsA = keyCommandsOf(roots[0]);
+    await commandsA.getProviderKeys().saveKey('only-in-a', 'secret-a');
+    commandsA.invalidateKeyCompletion();
+    expect(await commandsA.listKeyCompletionNames()).toStrictEqual([
       'only-in-a',
     ]);
 
@@ -240,11 +240,11 @@ describe('interactive UI key handle ownership', () => {
     expect(storeA.closeCount).toBe(1);
 
     await commit(storeB);
-    const runtimeB = slashRuntimeOf(roots[1]);
-    expect(await runtimeB.listKeyCompletionNames()).toStrictEqual([]);
-    await runtimeB.getProviderKeys().saveKey('only-in-b', 'secret-b');
-    runtimeB.invalidateKeyCompletion();
-    expect(await runtimeB.listKeyCompletionNames()).toStrictEqual([
+    const commandsB = keyCommandsOf(roots[1]);
+    expect(await commandsB.listKeyCompletionNames()).toStrictEqual([]);
+    await commandsB.getProviderKeys().saveKey('only-in-b', 'secret-b');
+    commandsB.invalidateKeyCompletion();
+    expect(await commandsB.listKeyCompletionNames()).toStrictEqual([
       'only-in-b',
     ]);
     expect(await storeA.listKeys()).toStrictEqual(['only-in-a']);

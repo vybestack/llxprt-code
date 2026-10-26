@@ -125,7 +125,7 @@ async function mountLayout(borrowedBus?: InstanceType<typeof MessageBus>) {
         uiRuntime.app.getAccessibility().disableLoadingPhrases === true
       }
       debugMode={uiRuntime.app.getDebugMode()}
-      slashCommandRuntime={buildSlashCommandRuntimeForTest(
+      layoutRuntime={buildSlashCommandRuntimeForTest(
         config,
         await createUiSessionOwner(),
       )}

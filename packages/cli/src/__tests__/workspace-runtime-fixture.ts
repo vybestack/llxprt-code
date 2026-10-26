@@ -25,11 +25,11 @@ import type { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/servi
 
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import type {
-  CliUiRuntime,
-  UiRuntimeDeclarationSource,
-} from '../ui/cliUiRuntime.js';
-import { buildSlashCommandRuntimeForTest } from './slash-command-runtime-fixture.js';
+import type { UiRuntimeDeclarationSource } from '../ui/cliUiRuntime.js';
+import {
+  buildSlashCommandRuntimeForTest,
+  type FixtureCommandRuntime,
+} from './slash-command-runtime-fixture.js';
 
 type UiFixtureOwner = Awaited<ReturnType<typeof createUiSessionOwner>>;
 
@@ -57,7 +57,7 @@ type FixtureRuntime = ((
     >,
   sessionOwner?: UiFixtureOwner | Agent,
   settingsOwner?: SessionSettingsOwner,
-) => CliUiRuntime) & {
+) => FixtureCommandRuntime) & {
   dispose(): Promise<void>;
 };
 
@@ -142,7 +142,7 @@ function buildSuppliedSessionRuntime(
   source: Parameters<FixtureRuntime>[0],
   owner: UiFixtureOwner | Agent,
   settingsOwner: SessionSettingsOwner | undefined,
-): CliUiRuntime {
+): FixtureCommandRuntime {
   return buildSlashCommandRuntimeForTest(
     source,
     owner,
@@ -181,7 +181,7 @@ export function installWorkspaceRuntimeFixture(
     source: Parameters<FixtureRuntime>[0],
     suppliedSessionOwner?: UiFixtureOwner | Agent,
     settingsOwner?: SessionSettingsOwner,
-  ): CliUiRuntime => {
+  ): FixtureCommandRuntime => {
     if (suppliedSessionOwner)
       return buildSuppliedSessionRuntime(
         source,
@@ -248,7 +248,7 @@ export function installWorkspaceRuntimeHook(
   );
   const useFixtureRuntime = (
     source: UiRuntimeDeclarationSource,
-  ): CliUiRuntime => useMemo(() => compose(source), [source]);
+  ): FixtureCommandRuntime => useMemo(() => compose(source), [source]);
   return Object.assign(useFixtureRuntime, { dispose: compose.dispose });
 }
 
@@ -288,7 +288,7 @@ function buildFixtureSessionRuntime(
   instructions: SessionInstructionOwner,
   catalogs: WorkspaceMcpCatalogOwner,
   owner: UiFixtureOwner,
-): CliUiRuntime {
+): FixtureCommandRuntime {
   const servers = source.getMcpServers() ?? {};
   return buildSlashCommandRuntimeForTest(
     source,

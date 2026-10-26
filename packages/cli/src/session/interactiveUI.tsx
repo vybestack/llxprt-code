@@ -69,10 +69,11 @@ import {
 } from './interactiveUiLifecycle.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { InteractiveContextHost } from '../runtime/InteractiveContextHost.js';
+import { buildUiRuntimeFromSource } from '../ui/cliUiRuntime.js';
 import {
-  buildUiRuntimeFromSource,
-  buildSlashCommandRuntime,
-} from '../ui/cliUiRuntime.js';
+  buildInteractiveCommandPorts,
+  type InteractiveCommandPorts,
+} from '../ui/cliCommandPorts.js';
 
 /**
  * Module-level reference to the latest rendered Ink instance.
@@ -293,7 +294,7 @@ function extractTerminalRows(stream: { rows?: number }): number {
  */
 function buildRenderElement(
   uiRuntime: ReturnType<typeof buildUiRuntimeFromSource>,
-  slashCommandRuntime: ReturnType<typeof buildSlashCommandRuntime>,
+  commandPorts: InteractiveCommandPorts,
   agent: Agent,
   runtimeSettings: SessionSettingsOperations,
   settings: LoadedSettings,
@@ -313,7 +314,18 @@ function buildRenderElement(
   return renderInteractiveShell(
     <AppWrapper
       uiRuntime={uiRuntime}
-      slashCommandRuntime={slashCommandRuntime}
+      commandRegistry={commandPorts.commandRegistry}
+      fileCommands={commandPorts.fileCommands}
+      workspaceCommands={commandPorts.workspaceCommands}
+      chatCommands={commandPorts.chatCommands}
+      keyCommands={commandPorts.keyCommands}
+      approval={commandPorts.approval}
+      browserSession={commandPorts.browserSession}
+      emojiFilter={commandPorts.emojiFilter}
+      containerRuntime={commandPorts.containerRuntime}
+      slashCommandPorts={commandPorts.slashCommandPorts}
+      layoutRuntime={commandPorts.layoutRuntime}
+      dialogsRuntime={commandPorts.dialogsRuntime}
       agent={agent}
       renderRuntime={contextHost.renderRuntime}
       detectProviderQuota={contextHost.detectProviderQuota}
@@ -515,7 +527,7 @@ function buildTerminalRollbackCapabilities(mouseEventsEnabled: boolean): {
 export interface InteractiveStartupPorts {
   readonly renderOptions: typeof inkRenderOptions;
   readonly buildUiRuntime: typeof buildUiRuntimeFromSource;
-  readonly buildSlashRuntime: typeof buildSlashCommandRuntime;
+  readonly buildCommandPorts: typeof buildInteractiveCommandPorts;
   readonly debugAppend: (line: string) => void;
   readonly setupTerminal: typeof setupTerminalExitHandlers;
   readonly isMouseEnabled: typeof isMouseEventsEnabled;
@@ -535,7 +547,7 @@ export interface InteractiveStartupPorts {
 const defaultStartupPorts: InteractiveStartupPorts = {
   renderOptions: inkRenderOptions,
   buildUiRuntime: buildUiRuntimeFromSource,
-  buildSlashRuntime: buildSlashCommandRuntime,
+  buildCommandPorts: buildInteractiveCommandPorts,
   debugAppend: appendInteractiveUiDebug,
   setupTerminal: setupTerminalExitHandlers,
   isMouseEnabled: isMouseEventsEnabled,
@@ -595,8 +607,8 @@ export type CommitInteractiveStartupArgs = {
 
 /**
  * Runs every fallible stage after a perf owner successfully starts as ONE
- * transaction: inkRenderOptions, buildUiRuntimeFromSource,
- * buildSlashCommandRuntime, debug append, terminal/mouse staging, render,
+ * transaction: inkRenderOptions, buildUiRuntimeFromSource, the command-port
+ * build, debug append, terminal/mouse staging, render,
  * sync-cleanup registration, and setupInstanceLifecycle.
  *
  * On ANY failure the single transactional rollback: preserves the primary
@@ -674,18 +686,17 @@ function startupCommandRuntimes(
     operations,
     args.runtimeSettings,
   );
-  const slashCommandRuntime = ports.buildSlashRuntime(
-    args.config,
-    args.agent,
-    args.providerKeys,
-    args.perfOwner?.snapshotCapability ?? null,
-    args.recordingOwner === 'agent' ? undefined : args.sessionPersistence,
-    operations,
-    args.skillOperations,
-    args.restartExtension,
-    args.runtimeSettings,
-  );
-  return { uiRuntime, slashCommandRuntime };
+  const commandPorts = ports.buildCommandPorts({
+    runtime: uiRuntime,
+    providerKeys: args.providerKeys,
+    describeToolConfiguration: () => args.agent.tools.describeConfiguration(),
+    restartExtension: args.restartExtension,
+    skillOperations: args.skillOperations,
+    sessionPersistence:
+      args.recordingOwner === 'agent' ? undefined : args.sessionPersistence,
+    perfSnapshotCapability: args.perfOwner?.snapshotCapability ?? null,
+  });
+  return { uiRuntime, commandPorts };
 }
 
 export async function commitInteractiveStartup(
@@ -704,7 +715,7 @@ export async function commitInteractiveStartup(
   try {
     const renderOptions = ports.renderOptions(args.config, args.settings);
     const operations = startupBucketOperations(args);
-    const { uiRuntime, slashCommandRuntime } = startupCommandRuntimes(
+    const { uiRuntime, commandPorts } = startupCommandRuntimes(
       args,
       ports,
       operations,
@@ -722,7 +733,7 @@ export async function commitInteractiveStartup(
     state.instance = ports.render(
       buildRenderElement(
         uiRuntime,
-        slashCommandRuntime,
+        commandPorts,
         args.agent,
         args.runtimeSettings,
         args.settings,

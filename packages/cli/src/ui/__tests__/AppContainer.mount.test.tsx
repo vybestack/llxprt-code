@@ -410,7 +410,7 @@ import {
   buildUiRuntimeFromSource,
   type UiRuntimeBareSource,
 } from '../cliUiRuntime.js';
-import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
+import { buildAppContainerPortsForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 
 // Type for the mock config
 interface MockConfig {
@@ -438,6 +438,7 @@ interface MockConfig {
   setUserMemory: () => void;
   setLlxprtMdFileCount: () => void;
   getSessionId: () => string;
+  getProjectTempDir: () => string;
 }
 
 /**
@@ -465,6 +466,7 @@ function createMockConfig(overrides: Partial<MockConfig> = {}): MockConfig {
     setUserMemory: vi.fn(),
     setLlxprtMdFileCount: vi.fn(),
     getSessionId: () => 'test-session-id',
+    getProjectTempDir: () => '/test/temp',
     ...overrides,
   };
 }
@@ -494,7 +496,7 @@ describe('AppContainer.mount', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntimeForTest(
+        ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
@@ -525,7 +527,7 @@ describe('AppContainer.mount', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntimeForTest(
+        ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
@@ -561,7 +563,7 @@ describe('AppContainer.mount', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntimeForTest(
+        ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
@@ -600,7 +602,7 @@ describe('AppContainer.mount', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntimeForTest(
+        ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
@@ -635,7 +637,7 @@ describe('AppContainer.mount', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntimeForTest(
+        ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
@@ -669,7 +671,7 @@ describe('AppContainer.mount', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        slashCommandRuntime: buildSlashCommandRuntimeForTest(
+        ...buildAppContainerPortsForTest(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),

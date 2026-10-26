@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { handleAtCommand } from './atCommandProcessor.js';
 import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { FixtureCommandRuntime } from '../../__tests__/slash-command-runtime-fixture.js';
 import {
   createTestFile,
   unexpectedResourceRead,
@@ -20,7 +20,7 @@ import * as path from 'path';
 describe('handleAtCommand (subagent @mentions)', () => {
   let setup: AtCommandTestSetup;
   let testRootDir: string;
-  let mockConfig: CliUiRuntime;
+  let mockConfig: FixtureCommandRuntime;
   let mockAddItem: ReturnType<typeof vi.fn>;
   let mockOnDebugMessage: ReturnType<typeof vi.fn>;
   let abortController: AbortController;

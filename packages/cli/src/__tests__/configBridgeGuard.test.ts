@@ -133,17 +133,14 @@ describe('#2373 config boundary guard', () => {
     expect(filesUsingCoreConfig).toStrictEqual([]);
   });
 
-  it('keeps CliUiRuntime as a UI-owned structural source, not a core Config alias', () => {
+  it('keeps the UI runtime source off the core Config class', () => {
     const text = readFileSync(join(UI_ROOT, 'cliUiRuntime.ts'), 'utf8');
 
     for (const pattern of CORE_CONFIG_IMPORT_PATTERNS) {
       expect(text).not.toMatch(pattern);
     }
-    expect(text).not.toMatch(/type\s+CliUiRuntime\s*=\s*Config\b/);
-    expect(text).not.toMatch(/interface\s+CliUiRuntime\s+extends/);
-    expect(text).toMatch(
-      /export\s+type\s+CliUiRuntime\s*=\s*UiRuntimeBareSource/,
-    );
+    expect(text).not.toMatch(/=\s*Config\b/);
+    expect(text).not.toMatch(/extends\s+Config\b/);
     expect(text).not.toMatch(/buildStreamRuntimeFromConfig/);
     expect(text).not.toMatch(/buildUiRuntimeFromConfig/);
   });
@@ -171,7 +168,6 @@ describe('#2373 config boundary guard', () => {
     expect(bootstrap).toMatch(/subscribeHistoryTokens:\s*Parameters/);
     expect(bootstrap).toMatch(/readLlxprtMdFileCount:\s*\(\)\s*=>\s*number/);
     expect(bootstrap).not.toMatch(/\b(?:uiRuntime|streamRuntime):/);
-    expect(bootstrap).not.toMatch(/\bconfig:\s*CliUiRuntime\b/);
     expect(bootstrap).not.toMatch(/\bconfig:\s*props\./);
     expect(bootstrap).not.toMatch(/\bconfig:\s*uiRuntime/);
     expect(bootstrap).not.toMatch(/agentClientSource:\s*props\.config/);
@@ -208,18 +204,13 @@ describe('#2373 config boundary guard', () => {
 
     for (const rel of entryPoints) {
       const text = read(rel);
-      expect(text).not.toMatch(/config:\s*(?:Config|CliUiRuntime)\b/);
+      expect(text).not.toMatch(/config:\s*Config\b/);
     }
   });
 
-  it('does not expose broad CliUiRuntime in the streaming input hook', () => {
+  it('does not expose the bootstrap config in the streaming input hook', () => {
     const input = read('ui/containers/AppContainer/hooks/useAppInput.ts');
-    expect(input).not.toMatch(
-      /slashCommandRuntime:\s*AppBootstrapResult\['config'\]/,
-    );
-    expect(input).not.toMatch(/\bCliUiRuntime\b/);
     expect(input).not.toMatch(/config:\s*AppBootstrapResult\['config'\]/);
-    expect(input).not.toMatch(/config:\s*CliUiRuntime\b/);
   });
 
   it('keeps MCP display and auth commands independent of the legacy runtime bag', () => {
@@ -229,37 +220,7 @@ describe('#2373 config boundary guard', () => {
 
     expect(display).not.toMatch(/McpCommandRuntime|RuntimeMcpServices/);
     expect(auth).not.toMatch(/McpCommandRuntime|RuntimeMcpServices/);
-    expect(display).not.toMatch(/Omit<CliUiRuntime/);
     expect(display).not.toMatch(/asRuntimeConfig/);
     expect(command).not.toMatch(/asRuntimeConfig/);
-  });
-
-  function findAgentStreamModulesUsingCliUiRuntime(): readonly string[] {
-    const offenders: string[] = [];
-    for (const file of UI_FILES.filter((candidate) =>
-      relative(UI_ROOT, candidate).startsWith(join('hooks', 'agentStream')),
-    )) {
-      if (isTestFile(file)) continue;
-      const text = readFileSync(file, 'utf8');
-      if (/\bCliUiRuntime\b/.test(text)) {
-        offenders.push(relative(CLI_ROOT, file));
-      }
-    }
-
-    return offenders;
-  }
-
-  it('keeps agent stream modules on StreamRuntime rather than CliUiRuntime', () => {
-    const modulesUsingCliUiRuntime = findAgentStreamModulesUsingCliUiRuntime();
-    expect(modulesUsingCliUiRuntime).toStrictEqual([]);
-  });
-
-  it('does not pass raw Config as slashCommandRuntime at the composition root', () => {
-    const interactiveUI = read('session/interactiveUI.tsx');
-
-    // The composition root must build a delegation adapter via
-    // buildSlashCommandRuntime, never pass the raw config object directly.
-    expect(interactiveUI).toMatch(/buildSlashCommandRuntime/);
-    expect(interactiveUI).not.toMatch(/slashCommandRuntime=\{config\}/);
   });
 });

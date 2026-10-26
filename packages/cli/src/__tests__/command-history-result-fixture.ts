@@ -8,7 +8,7 @@ import type { CommandOwnerFixture } from './mockCommandContext.js';
 import { bindCommandOwnerResume } from '../ui/hooks/commandOwnerResumeHost.js';
 import { importOwnerSession } from '../ui/utils/ownerSessionUi.js';
 import { resumeOwnerSession } from '../ui/utils/resumeOwnerSession.js';
-import type { CliUiRuntime } from '../ui/cliUiRuntime.js';
+import type { FixtureCommandRuntime } from './slash-command-runtime-fixture.js';
 import { vi } from 'bun:test';
 import { CommandKind, type SlashCommand } from '../ui/commands/types.js';
 import { bindCommandHistoryLoader } from '../ui/hooks/commandHistoryLoaderHost.js';
@@ -49,7 +49,7 @@ export function createCommands(
 
 export function bindFixtureOwnerResume(
   context: CommandOwnerFixture,
-  config: CliUiRuntime | null,
+  config: FixtureCommandRuntime | null,
 ) {
   const agent = context.services.agent;
   const loadHistory = context.ui.loadHistory;

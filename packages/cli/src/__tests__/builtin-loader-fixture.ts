@@ -7,10 +7,13 @@ import {
   BuiltinCommandLoader as SelectedBuiltinCommandLoader,
   type BuiltinCommandOwners,
 } from '../services/BuiltinCommandLoader.js';
-import type { CliUiRuntime } from '../ui/cliUiRuntime.js';
+import type { FixtureCommandRuntime } from './slash-command-runtime-fixture.js';
 
 export class BuiltinCommandLoader extends SelectedBuiltinCommandLoader {
-  constructor(owners: BuiltinCommandOwners, config: CliUiRuntime | null) {
+  constructor(
+    owners: BuiltinCommandOwners,
+    config: FixtureCommandRuntime | null,
+  ) {
     const manager =
       config && 'extensionEnablementManager' in config
         ? config.extensionEnablementManager

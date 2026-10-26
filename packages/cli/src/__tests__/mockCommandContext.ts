@@ -11,7 +11,7 @@ import { vi } from 'bun:test';
 import type { CommandContext } from '../ui/commands/types.js';
 import type { RecordingSwapCallbacks } from '../services/performResume.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { CliUiRuntime } from '../ui/cliUiRuntime.js';
+import type { FixtureCommandRuntime } from './slash-command-runtime-fixture.js';
 import type { RuntimeApi } from './runtime-context-fixture.js';
 import type { ProviderAliasRefresh } from '../ui/contexts/ProviderAliasRefreshContext.js';
 import type { OAuthControl } from '../ui/contexts/OAuthControlContext.js';
@@ -44,7 +44,7 @@ export interface CommandOwnerFixture extends CommandContext {
   oauthControl: OAuthControl;
   services: {
     // Follow-up (#1569, abhipatel12): Ensure that config is never null.
-    config: CliUiRuntime | null;
+    config: FixtureCommandRuntime | null;
     /**
      * The rich Agent facade adopted from the CLI runtime via fromConfig().
      * Provides auth, mcp, tools, hooks, policy, tasks, session, profiles

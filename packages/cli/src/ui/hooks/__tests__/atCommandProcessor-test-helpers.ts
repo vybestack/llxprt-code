@@ -55,7 +55,7 @@ import * as os from 'os';
 import * as fsPromises from 'fs/promises';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { CliUiRuntime } from '../../cliUiRuntime.js';
+import type { FixtureCommandRuntime } from '../../../__tests__/slash-command-runtime-fixture.js';
 
 /**
  * Minimal adapter that wraps a real tool (from ToolRegistry.getTool) as an
@@ -145,7 +145,7 @@ export async function createTestFile(
 
 export interface AtCommandTestSetup {
   testRootDir: string;
-  mockConfig: CliUiRuntime;
+  mockConfig: FixtureCommandRuntime;
   mockAddItem: ReturnType<typeof vi.fn>;
   mockOnDebugMessage: ReturnType<typeof vi.fn>;
   abortController: AbortController;
@@ -155,7 +155,7 @@ export interface AtCommandTestSetup {
   getToolHandle: (name: string) => AgentToolHandle | undefined;
 }
 
-function buildMockConfig(testRootDir: string): CliUiRuntime {
+function buildMockConfig(testRootDir: string): FixtureCommandRuntime {
   const mockConfig = {
     getTargetDir: () => testRootDir,
     isSandboxed: () => false,
@@ -182,7 +182,7 @@ function buildMockConfig(testRootDir: string): CliUiRuntime {
     listResources: () => [],
     listPrompts: () => [],
     getDebugMode: () => false,
-  } as unknown as CliUiRuntime;
+  } as unknown as FixtureCommandRuntime;
 
   return mockConfig;
 }

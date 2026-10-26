@@ -32,7 +32,6 @@ import {
   useGetActiveProfileName,
   useGetActiveProviderName,
   useGetLoadBalancerStats,
-  useHasActiveProvider,
   useListAvailableModels,
   useListProviders,
   useListSavedProfiles,
@@ -61,7 +60,12 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SessionMetricUpdates } from '@vybestack/llxprt-code-telemetry';
-import type { CliUiRuntime, UiRuntime } from './cliUiRuntime.js';
+import type { UiRuntime } from './cliUiRuntime.js';
+import type {
+  BrowserResumeRuntime,
+  ContainerRuntimeReads,
+} from './cliCommandPorts.js';
+import type { LayoutRuntime } from './layouts/DefaultAppLayoutHelpers.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
 import type { AppState, AppAction } from './reducers/appReducer.js';
@@ -75,6 +79,7 @@ import { useAppDialogs } from './containers/AppContainer/hooks/useAppDialogs.js'
 import type {
   AppDialogsParams,
   AppDialogsResult,
+  AppDialogsRuntime,
 } from './containers/AppContainer/hooks/useAppDialogs.js';
 import { useAppInput } from './containers/AppContainer/hooks/useAppInput.js';
 import type {
@@ -83,24 +88,17 @@ import type {
 } from './containers/AppContainer/hooks/useAppInput.js';
 import { useAppLayout } from './containers/AppContainer/hooks/useAppLayout.js';
 import { useAppCommands } from './appCommandBindings.js';
-import { useUnconfiguredProviderGuidance } from './hooks/useUnconfiguredProviderGuidance.js';
 import {
-  createDialogStore,
-  type DialogStore,
-} from './stores/dialog/dialogStore.js';
-import {
-  createDialogOpeners,
-  type DialogOpeners,
-} from './stores/dialog/dialogOpeners.js';
-import {
-  createTerminalStore,
-  type TerminalStore,
-} from './stores/terminal/terminalStore.js';
-import { createTurnStore, type TurnStore } from './stores/turn/turnStore.js';
-import {
-  createSettingsProfileStore,
-  type SettingsProfileStore,
-} from './stores/settings/settingsStore.js';
+  useAppStores,
+  useUnconfiguredGuidance,
+  type AppStores,
+} from './containers/AppContainer/hooks/useAppStores.js';
+import type { DialogStore } from './stores/dialog/dialogStore.js';
+import type { TerminalStore } from './stores/terminal/terminalStore.js';
+import type { TurnStore } from './stores/turn/turnStore.js';
+import type { SettingsProfileStore } from './stores/settings/settingsStore.js';
+
+export { useAppStores } from './containers/AppContainer/hooks/useAppStores.js';
 import { useRef, useMemo, useCallback } from 'react';
 import { useBound } from './hooks/agentStream/useStreamOwnerCallbacks.js';
 import { useBrowserCatalogCommands } from './hooks/useBrowserCatalogCommands.js';
@@ -117,9 +115,9 @@ import { useSlashCommandActions } from './containers/AppContainer/hooks/useSlash
 import { useStoreSelector } from './stores/useStoreSelector.js';
 import type {
   SlashCommandProcessorCoreResult,
+  SlashCommandProcessorPorts,
   UseSlashCommandProcessorCoreArgs,
 } from './hooks/useSlashCommandProcessorCore.js';
-import { bindSlashCommandRuntimePorts } from './slashCommandRuntimePorts.js';
 import { useSlashCommandProcessorCore } from './hooks/useSlashCommandProcessorCore.js';
 import type { HistoryItem } from './types.js';
 import {
@@ -176,7 +174,11 @@ export interface AppContainerRuntimeProps
   loadRegisteredCommands: LoadRegisteredCommands;
   subscribeCommandChanges: SubscribeCommandChanges;
   uiRuntime: UiRuntime;
-  slashCommandRuntime: CliUiRuntime;
+  containerRuntime: ContainerRuntimeReads;
+  slashCommandPorts: SlashCommandProcessorPorts;
+  layoutRuntime: LayoutRuntime;
+  dialogsRuntime: AppDialogsRuntime;
+  browserSession: BrowserResumeRuntime;
   session: Parameters<typeof useInputBrowserCommands>[0] &
     Parameters<typeof useInputAgentOperations>[10];
   readRawBrowserCatalog: Parameters<typeof useInputBrowserCommands>[4];
@@ -226,54 +228,11 @@ export interface AppContainerRuntimeProps
   memoryController?: MemoryTelemetryController;
 }
 
-/** Stores retain identity across renders and StrictMode effect replay. */
-export function useAppStores(runtime: Pick<CliUiRuntime, 'getModel'>): {
-  dialogStore: DialogStore;
-  terminalStore: TerminalStore;
-  turnStore: TurnStore;
-  settingsStore: SettingsProfileStore;
-  dialogOpeners: DialogOpeners;
-} {
-  const storesRef = useRef<{
-    dialogStore: DialogStore;
-    terminalStore: TerminalStore;
-    turnStore: TurnStore;
-    settingsStore: SettingsProfileStore;
-  } | null>(null);
-  storesRef.current ??= {
-    dialogStore: createDialogStore(),
-    terminalStore: createTerminalStore(),
-    turnStore: createTurnStore(),
-    settingsStore: createSettingsProfileStore({
-      currentModel: runtime.getModel(),
-    }),
-  };
-  const stores = storesRef.current;
-  const dialogOpeners = useMemo(
-    () => createDialogOpeners(stores.dialogStore),
-    [stores],
-  );
-  return { ...stores, dialogOpeners };
-}
-
-/** Guidance nudge for sessions without an active provider configured. */
-function useUnconfiguredGuidance(
-  turnStore: TurnStore,
-  dialogStore: DialogStore,
-): void {
-  const hasActiveProvider = useHasActiveProvider();
-  useUnconfiguredProviderGuidance({
-    hasActiveProvider: hasActiveProvider(),
-    addItem: turnStore.commands.addItem,
-    store: dialogStore,
-  });
-}
-
 /** Dialog-data runtime: wiring only; every param is bootstrap/store-owned. */
 function useAppDialogsRuntime(
   props: AppContainerRuntimeProps,
   bootstrap: AppBootstrapResult,
-  stores: ReturnType<typeof useAppStores>,
+  stores: AppStores,
   recordingIntegrationRef: UseRecordingInfrastructureResult['recordingIntegrationRef'],
 ): AppDialogsResult {
   const {
@@ -290,7 +249,7 @@ function useAppDialogsRuntime(
   useUnconfiguredGuidance(turnStore, dialogStore);
   const setProvider = useSetProvider();
   return useAppDialogs({
-    config: props.slashCommandRuntime,
+    config: props.dialogsRuntime,
     recordRecordingEvent: bootstrap.recordRecordingEvent,
     switchProviderAfterAuth: useCallback(
       (provider: string) =>
@@ -347,7 +306,7 @@ function useInputBindings(
   recordingSwapCallbacks: UseRecordingInfrastructureResult['recordingSwapCallbacks'],
 ): AppInputResult {
   const { dialogStore, turnStore } = inputView;
-  const { uiRuntime: runtime, slashCommandRuntime: config } = props;
+  const { uiRuntime: runtime, browserSession: config } = props;
   const browser = useInputBrowserCommands(
     props.session,
     config,
@@ -407,8 +366,8 @@ function useInputBindings(
       props.readIdeMode,
       runtime.shell,
       runtime.mcp,
-      useBound(config, config.refreshMemory),
-      useBound(config, config.getDebugMode),
+      useBound(props.containerRuntime, props.containerRuntime.refreshMemory),
+      useBound(props.containerRuntime, props.containerRuntime.getDebugMode),
     ),
     ...inputView,
   });
@@ -417,16 +376,13 @@ function useInputBindings(
 function useAppInputRuntime(
   props: AppContainerRuntimeProps,
   bootstrap: AppBootstrapResult,
-  stores: ReturnType<typeof useAppStores>,
+  stores: AppStores,
   recordingIntegrationRef: UseRecordingInfrastructureResult['recordingIntegrationRef'],
   recordingSwapCallbacks: UseRecordingInfrastructureResult['recordingSwapCallbacks'],
 ) {
   const view = useInputCommandView(
-    useBound(
-      props.slashCommandRuntime,
-      props.slashCommandRuntime.getExtensions,
-    ),
-    props.slashCommandRuntime.getWorkingDir(),
+    useBound(props.containerRuntime, props.containerRuntime.getExtensions),
+    props.containerRuntime.getWorkingDir(),
     stores,
     props.settings,
     bootstrap.setLlxprtMdFileCount,
@@ -437,7 +393,7 @@ function useAppInputRuntime(
     loadRegisteredCommands: props.loadRegisteredCommands,
     subscribeCommandChanges: props.subscribeCommandChanges,
     ...props.historyReads,
-    ports: bindSlashCommandRuntimePorts(props.slashCommandRuntime),
+    ports: props.slashCommandPorts,
     registerIdeCommand: props.registerIdeCommand,
     readIdeMode: props.readIdeMode,
     readIdeAvailable: props.readIdeAvailable,
@@ -487,8 +443,8 @@ function useBootstrapMemoryReads(memory: UiRuntime['memory']) {
 
 export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   debug.debug('AppContainer architecture active (v2)');
-  const { uiRuntime, slashCommandRuntime: config, settings } = props;
-  const stores = useAppStores(config);
+  const { uiRuntime, containerRuntime, settings } = props;
+  const stores = useAppStores(containerRuntime);
   const { recordingIntegrationRef, recordingSwapCallbacks } =
     useRecordingInfrastructure(
       props.initialRecordingService,
@@ -530,7 +486,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
       resolveIdeDiff={props.resolveIdeDiff}
       readIdeWorkspaceTrust={props.readIdeWorkspaceTrust}
       subscribeIdeWorkspaceTrust={props.subscribeIdeWorkspaceTrust}
-      slashCommandRuntime={config}
+      layoutRuntime={props.layoutRuntime}
       version={props.version}
       screenReaderEnabled={uiRuntime.app.getScreenReader()}
       disableLoadingPhrases={
@@ -599,7 +555,7 @@ function AppRuntimeView({
 function useApplicationLayout(
   { uiRuntime, settings }: AppContainerRuntimeProps,
   clearConsoleMessagesState: AppBootstrapResult['clearConsoleMessagesState'],
-  stores: ReturnType<typeof useAppStores>,
+  stores: AppStores,
 ): ReturnType<typeof useAppLayout> {
   return useAppLayout({
     uiRuntime,
@@ -632,7 +588,7 @@ function useTranscriptReader(
 
 function useApplicationBootstrap(
   props: AppContainerRuntimeProps,
-  stores: ReturnType<typeof useAppStores>,
+  stores: AppStores,
   recordingIntegrationRef: UseRecordingInfrastructureResult['recordingIntegrationRef'],
 ): AppBootstrapResult {
   const { uiRuntime, metrics, settings } = props;
@@ -732,9 +688,9 @@ function useInputBrowserCommands(
 }
 
 function useInputCommandView(
-  readExtensions: () => ReturnType<CliUiRuntime['getExtensions']>,
+  readExtensions: () => ReturnType<ContainerRuntimeReads['getExtensions']>,
   workingDir: string,
-  stores: ReturnType<typeof useAppStores>,
+  stores: AppStores,
   settings: LoadedSettings,
   setLlxprtMdFileCount: (count: number) => void,
 ) {
@@ -800,7 +756,7 @@ function useInputCommandView(
 function noop(): void {}
 
 function buildInputView(
-  stores: ReturnType<typeof useAppStores>,
+  stores: AppStores,
   settings: LoadedSettings,
   appState: AppState,
   appDispatch: React.Dispatch<AppAction>,

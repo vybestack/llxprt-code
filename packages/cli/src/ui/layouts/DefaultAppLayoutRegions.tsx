@@ -88,7 +88,7 @@ function ComposerContent(props: DefaultAppLayoutProps) {
   return (
     <InlineContent
       {...fields}
-      config={props.slashCommandRuntime}
+      config={props.layoutRuntime}
       settings={props.settings}
       contextFileNames={props.contextFileNames}
       hideContextSummary={props.settings.merged.ui.hideContextSummary ?? false}
@@ -114,7 +114,7 @@ export function DialogRegion(props: DefaultAppLayoutProps): React.ReactNode {
         <DialogManager
           readIdeWorkspaceTrust={props.readIdeWorkspaceTrust}
           subscribeIdeWorkspaceTrust={props.subscribeIdeWorkspaceTrust}
-          config={props.slashCommandRuntime}
+          config={props.layoutRuntime}
           settings={props.settings}
         />
       ) : null}
@@ -151,7 +151,7 @@ export function FooterRegion(props: DefaultAppLayoutProps): React.ReactNode {
       )}
       <FooterSection
         {...fields}
-        config={props.slashCommandRuntime}
+        config={props.layoutRuntime}
         settings={props.settings}
         hideFooter={props.settings.merged.ui.hideFooter ?? false}
         showMemoryUsage={

@@ -17,7 +17,10 @@ import {
   startCatalogFixture,
   waitForFixtureFile,
 } from '../../../agents/src/api/__tests__/helpers/workspace-catalog-http-fixture.js';
-import { buildSlashCommandRuntimeForTest } from '../__tests__/slash-command-runtime-fixture.js';
+import {
+  buildSlashCommandRuntimeForTest,
+  type FixtureCommandRuntime,
+} from '../__tests__/slash-command-runtime-fixture.js';
 import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 import { renderHook, waitFor } from '../__tests__/render.js';
 import { useTestHarnessForAtCompletion } from '../ui/hooks/__tests__/useAtCompletion-test-helpers.js';
@@ -46,7 +49,7 @@ describe('production CLI workspace MCP consumers', () => {
   const builtCredentials = useOwnedCredentials();
   let workspaceDirectory: string;
   let workspaceAgent: Agent;
-  let workspaceCommands: ReturnType<typeof buildSlashCommandRuntimeForTest>;
+  let workspaceCommands: FixtureCommandRuntime;
   let setWorkspaceTrustedFolder: (trusted: boolean) => Promise<void>;
   let closeWorkspace: () => Promise<void>;
   async function openWorkspace(): Promise<void> {

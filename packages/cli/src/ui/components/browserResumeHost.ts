@@ -79,7 +79,7 @@ export function bindRawBrowserResume(
   };
 }
 
-type BrowserSessionReads = ResumeSessionReads & {
+export type BrowserSessionReads = ResumeSessionReads & {
   readonly sessionPersistence?: CliSessionPersistencePort;
 };
 

@@ -8,7 +8,7 @@ import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js'
 import { useBrowserCatalogCommands } from '../hooks/useBrowserCatalogCommands.js';
 import { join } from 'node:path';
 import { getProjectHash } from '@vybestack/llxprt-code-core';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { FixtureCommandRuntime } from '../../__tests__/slash-command-runtime-fixture.js';
 
 import { createAppCommandBindings } from '../../__tests__/appCommandBindings.js';
 import {
@@ -91,7 +91,7 @@ function CatalogView({
   runtime,
   context,
 }: {
-  runtime: CliUiRuntime;
+  runtime: FixtureCommandRuntime;
   context: CommandOwnerFixture;
 }) {
   const commands = useAppCommands();
@@ -109,7 +109,7 @@ function CatalogApplication({
   context,
   read,
 }: {
-  runtime: CliUiRuntime;
+  runtime: FixtureCommandRuntime;
   context: CommandOwnerFixture;
   read: BrowserCatalogReader;
 }) {

@@ -108,7 +108,7 @@ function noopPorts(): InteractiveStartupPorts {
     buildUiRuntime: (() => ({
       shell: { getTerminalBackground: () => '' },
     })) as never,
-    buildSlashRuntime: (() => ({})) as never,
+    buildCommandPorts: (() => ({})) as never,
     debugAppend: () => {},
     setupTerminal: () => {},
     isMouseEnabled: () => false,
@@ -257,13 +257,13 @@ describe('Finding B — transactional interactive startup', () => {
     assertOwnerDisposed(owner, scheduler);
   });
 
-  it('slash-runtime failure: owner disposed, no mouse staged', async () => {
+  it('command-port failure: owner disposed, no mouse staged', async () => {
     const scheduler = new CountingScheduler();
     const owner = await makeStartedOwner(scheduler);
     const ports = {
       ...noopPorts(),
-      buildSlashRuntime: (() => {
-        throw new Error('slash-runtime-boom');
+      buildCommandPorts: (() => {
+        throw new Error('command-port-boom');
       }) as never,
     };
 
@@ -283,7 +283,7 @@ describe('Finding B — transactional interactive startup', () => {
       caught = err;
     }
     expect(
-      errorMessages(caught).some((m) => m.includes('slash-runtime-boom')),
+      errorMessages(caught).some((m) => m.includes('command-port-boom')),
     ).toBe(true);
     assertOwnerDisposed(owner, scheduler);
   });

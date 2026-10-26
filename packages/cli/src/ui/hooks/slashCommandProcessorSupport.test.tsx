@@ -9,7 +9,7 @@ import { act, useCallback, useMemo, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { CommandKind, type SlashCommand } from '../commands/types.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { FixtureCommandRuntime } from '../../__tests__/slash-command-runtime-fixture.js';
 import { CoreEvent, coreEvents } from '@vybestack/llxprt-code-core';
 import { useCommandReload } from './slashCommandProcessorSupport.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
@@ -33,7 +33,7 @@ void vi.mock('../../services/BuiltinCommandLoader.js', () => ({
 
 void vi.mock('../../services/FileCommandLoader.js', () => ({
   FileCommandLoader: class {
-    constructor(private readonly config: CliUiRuntime) {}
+    constructor(private readonly config: FixtureCommandRuntime) {}
 
     loadCommands(): Promise<readonly SlashCommand[]> {
       return Promise.resolve(
@@ -58,7 +58,9 @@ void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   ...actual,
 }));
 
-function useCommandRegistry(config: CliUiRuntime): readonly SlashCommand[] {
+function useCommandRegistry(
+  config: FixtureCommandRuntime,
+): readonly SlashCommand[] {
   const [reloadTrigger, setReloadTrigger] = useState(0);
   const [commands, setCommands] = useState<readonly SlashCommand[]>([]);
   const reloadCommands = useCallback(() => {
@@ -93,7 +95,7 @@ describe('useCommandReload', () => {
       getFolderTrust: () => true,
 
       isTrustedFolder: () => trusted,
-    } as CliUiRuntime;
+    } as FixtureCommandRuntime;
     loaderState.fileCommands = [
       {
         name: 'trusted-file-command',
@@ -129,7 +131,7 @@ describe('useCommandReload', () => {
       getFolderTrust: () => true,
 
       isTrustedFolder: () => trusted,
-    } as CliUiRuntime;
+    } as FixtureCommandRuntime;
     const { result } = renderHook(() => useCommandRegistry(config));
     await waitFor(() => expect(result.current).toHaveLength(1));
 
@@ -147,7 +149,7 @@ describe('useCommandReload', () => {
       getFolderTrust: () => false,
 
       isTrustedFolder: () => true,
-    } as CliUiRuntime;
+    } as FixtureCommandRuntime;
     const listenersBeforeMount = coreEvents.listenerCount(
       CoreEvent.FolderTrustChanged,
     );

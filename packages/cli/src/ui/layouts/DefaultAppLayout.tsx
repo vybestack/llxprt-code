@@ -61,7 +61,7 @@ export interface DefaultAppLayoutProps {
   screenReaderEnabled: boolean;
   disableLoadingPhrases: boolean;
   debugMode: boolean;
-  slashCommandRuntime: LayoutRuntime;
+  layoutRuntime: LayoutRuntime;
   settings: LoadedSettings;
   startupWarnings: string[];
   version: string;
@@ -120,7 +120,7 @@ function QuittingRegion(props: DefaultAppLayoutProps) {
       terminalWidth={width}
       effectiveAvailableHeight={height}
       constrainHeight={constrain}
-      config={props.slashCommandRuntime}
+      config={props.layoutRuntime}
       readIdeMode={props.readIdeMode}
       readIdeDiffingEnabled={props.readIdeDiffingEnabled}
       subscribeIdeDiffing={props.subscribeIdeDiffing}
@@ -277,7 +277,7 @@ function AlternateTranscript(props: TranscriptProps) {
     props.readIdeDiffingEnabled,
     props.subscribeIdeDiffing,
     props.resolveIdeDiff,
-    props.slashCommandRuntime,
+    props.layoutRuntime,
     props.settings,
     props.version,
     props.nightly,
@@ -313,7 +313,7 @@ function TranscriptViewport(props: TranscriptProps) {
     props.readIdeDiffingEnabled,
     props.subscribeIdeDiffing,
     props.resolveIdeDiff,
-    props.slashCommandRuntime,
+    props.layoutRuntime,
     mainAreaWidth,
     constrainHeight,
     availableHeight,
@@ -408,7 +408,7 @@ function StandardStatic(props: TranscriptProps) {
         key={item.id}
         item={item}
         isPending={false}
-        config={props.slashCommandRuntime}
+        config={props.layoutRuntime}
         readIdeMode={props.readIdeMode}
         readIdeDiffingEnabled={props.readIdeDiffingEnabled}
         subscribeIdeDiffing={props.subscribeIdeDiffing}
@@ -457,7 +457,7 @@ function TranscriptScroll({ data }: { data: ScrollableMainContentItem[] }) {
 }
 
 function StaticHeader({
-  props: { slashCommandRuntime, settings, version, nightly },
+  props: { layoutRuntime, settings, version, nightly },
   terminalWidth,
 }: {
   props: TranscriptProps;
@@ -465,7 +465,7 @@ function StaticHeader({
 }): React.ReactNode {
   return (
     <AppHeader
-      config={slashCommandRuntime}
+      config={layoutRuntime}
       settings={settings}
       version={version}
       nightly={nightly}

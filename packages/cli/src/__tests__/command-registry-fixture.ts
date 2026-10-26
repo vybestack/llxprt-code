@@ -16,7 +16,7 @@ import type { UseSlashCommandProcessorCoreArgs } from '../ui/hooks/useSlashComma
 import { createWorkspaceCommandOwners } from '../ui/hooks/workspaceCommandOwners.js';
 import { resolveEmojiFilterMode } from '../ui/utils/iContentToHistoryItems.js';
 import { CommandKind, type SlashCommand } from '../ui/commands/types.js';
-import type { CliUiRuntime } from '../ui/cliUiRuntime.js';
+import type { FixtureCommandRuntime } from './slash-command-runtime-fixture.js';
 import {
   createBuiltinCommandLoaderFactory,
   createRegisteredCommandLoader,
@@ -28,7 +28,7 @@ import { FileCommandLoader } from '../services/FileCommandLoader.js';
 import { bindShellPromptOperations } from '../services/prompt-processors/shellPromptHost.js';
 
 export function createCommandRegistryFixture(
-  config: CliUiRuntime | null,
+  config: FixtureCommandRuntime | null,
   agent: Agent | null = null,
 ) {
   const createBuiltin = createBuiltinCommandLoaderFactory(

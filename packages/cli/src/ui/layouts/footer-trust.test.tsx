@@ -66,7 +66,7 @@ async function mountFooter(trustedFolder = true) {
   const dialogs = createDialogOpeners(store);
   const owner = await createUiSessionOwner(config);
   const uiRuntime = buildUiRuntimeFromSource(config, owner);
-  const slashCommandRuntime = buildSlashCommandRuntimeForTest(config, owner);
+  const layoutRuntime = buildSlashCommandRuntimeForTest(config, owner);
   const trustRuntime = {
     getWorkingDir: () => config.getWorkingDir(),
     isTrustedFolder: () => owner.ide.isTrustedFolder(),
@@ -100,7 +100,7 @@ async function mountFooter(trustedFolder = true) {
           uiRuntime.app.getAccessibility().disableLoadingPhrases === true
         }
         debugMode={uiRuntime.app.getDebugMode()}
-        slashCommandRuntime={slashCommandRuntime}
+        layoutRuntime={layoutRuntime}
         settings={settings}
         startupWarnings={[]}
         version="test"

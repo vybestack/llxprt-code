@@ -208,7 +208,7 @@ async function withLayout(
               uiRuntime.app.getAccessibility().disableLoadingPhrases === true
             }
             debugMode={uiRuntime.app.getDebugMode()}
-            slashCommandRuntime={buildSlashCommandRuntimeForTest(config, owner)}
+            layoutRuntime={buildSlashCommandRuntimeForTest(config, owner)}
             settings={settings}
             startupWarnings={[]}
             version="test"

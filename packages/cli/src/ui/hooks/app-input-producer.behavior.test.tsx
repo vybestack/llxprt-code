@@ -17,7 +17,7 @@ import { createMockCommandContext } from '../../__tests__/mockCommandContext.js'
 import { SettingsContext } from '../contexts/SettingsContext.js';
 import { AppWrapper } from '../App.js';
 import { buildUiRuntimeFromSource } from '../cliUiRuntime.js';
-import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
+import { buildUiPortsForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 
 describe('application input producer', () => {
   const makeOwner = useCommandOwners();
@@ -148,7 +148,7 @@ function renderApplication(
     undefined,
     selectedSettings,
   );
-  const slashCommandRuntime = buildSlashCommandRuntimeForTest(
+  const ports = buildUiPortsForTest(
     config,
     owner,
     undefined,
@@ -167,7 +167,7 @@ function renderApplication(
       <AppWrapper
         agent={owner}
         uiRuntime={uiRuntime}
-        slashCommandRuntime={slashCommandRuntime}
+        {...ports}
         settings={createMockSettings({
           folderTrust: false,
           ui: { theme: 'Default' },

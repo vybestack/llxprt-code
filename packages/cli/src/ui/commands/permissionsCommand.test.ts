@@ -21,7 +21,7 @@ import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-mo
 import { CommandKind } from './types.js';
 import * as trustedFolders from '../../config/trustedFolders.js';
 import { createMockCommandContext as createBaseMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { FixtureCommandRuntime } from '../../__tests__/slash-command-runtime-fixture.js';
 
 const realTrustedFoldersModule = {
   ...(await import('../../config/trustedFolders.js')),
@@ -140,7 +140,7 @@ describe('permissionsCommand', () => {
           getFolderTrust: () => true,
           isTrustedFolder: () => false,
         } satisfies Pick<
-          CliUiRuntime,
+          FixtureCommandRuntime,
           | 'setTrustedFolderLive'
           | 'getWorkingDir'
           | 'getFolderTrust'
@@ -149,7 +149,7 @@ describe('permissionsCommand', () => {
       : null;
     return createBaseMockCommandContext({
       services: {
-        config: config as CliUiRuntime | null,
+        config: config as FixtureCommandRuntime | null,
         settings: { merged: { folderTrust: true } },
       },
     });

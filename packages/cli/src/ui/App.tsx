@@ -31,15 +31,9 @@ import type {
   ResumeOwnedCommand,
 } from './hooks/commandSessionOperations.js';
 import {
-  createBuiltinCommandLoaderFactory,
-  createRegisteredCommandLoader,
-  createCommandChangeSubscription,
-  type ReadBuiltinCommands,
-  type LoadRegisteredCommands,
-  type SubscribeCommandChanges,
-} from '../services/commandRegistryOperations.js';
-import { McpPromptLoader } from '../services/McpPromptLoader.js';
-import { createHeadlessCommandLoader } from '../nonInteractiveBindings.js';
+  type AppCommandRegistry,
+  createAppCommandRegistry,
+} from './appCommandRegistry.js';
 
 import type { RegisteredHistoryReads } from './hooks/useRegisteredHistoryCommands.js';
 
@@ -69,11 +63,24 @@ import { AppProviders, AppWithState } from './app-providers.js';
 import { Component, type ReactNode } from 'react';
 import {
   getProjectHash,
+  type ApprovalMode,
   type IContent,
   type RecordingIntegration,
   type SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
-import type { CliUiRuntime, UiRuntime } from './cliUiRuntime.js';
+import type { UiRuntime } from './cliUiRuntime.js';
+import type {
+  BrowserResumeRuntime,
+  ChatCommandReads,
+  CommandRegistryReads,
+  ContainerRuntimeReads,
+  FileCommandReads,
+  KeyCommandReads,
+} from './cliCommandPorts.js';
+import type { SlashCommandProcessorPorts } from './hooks/useSlashCommandProcessorCore.js';
+import type { LayoutRuntime } from './layouts/DefaultAppLayoutHelpers.js';
+import type { AppDialogsRuntime } from './containers/AppContainer/hooks/useAppDialogs.js';
+import type { EmojiFilterSettingsSource } from './utils/iContentToHistoryItems.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
 import type { OperationLifecycleRegistry } from './hooks/agentStream/operationLifecycle.js';
@@ -103,10 +110,25 @@ import {
   createCliModelIdentityRuntime,
   resolveContentPrefixIdentity,
 } from './utils/modelIdentity.js';
+import {
+  COMMAND_REGISTRATION_KEYS,
+  commandRegistrationInputsChanged,
+} from './appCommandRegistrationKeys.js';
 
 interface AppProps {
   uiRuntime: UiRuntime;
-  slashCommandRuntime: CliUiRuntime;
+  commandRegistry: CommandRegistryReads;
+  fileCommands: FileCommandReads;
+  workspaceCommands: WorkspaceCommandRuntime;
+  chatCommands: ChatCommandReads;
+  keyCommands: KeyCommandReads;
+  approval: { getApprovalMode(): ApprovalMode };
+  browserSession: BrowserResumeRuntime;
+  emojiFilter: EmojiFilterSettingsSource;
+  containerRuntime: ContainerRuntimeReads;
+  slashCommandPorts: SlashCommandProcessorPorts;
+  layoutRuntime: LayoutRuntime;
+  dialogsRuntime: AppDialogsRuntime;
   /**
    * The single interactive Agent created at the CLI composition root.
    */
@@ -174,19 +196,19 @@ export class AppWrapper extends Component<AppProps> {
       this.props.agent.session.connectRecordingHistory(() => recording.current);
   private readonly readRawBrowserCatalog: AppContainerProps['readRawBrowserCatalog'] =
     async () => {
-      const persistence = this.props.slashCommandRuntime.sessionPersistence;
+      const persistence = this.props.browserSession.sessionPersistence;
       if (!persistence)
         throw new Error('CLI session persistence is unavailable');
       const listing = await persistence.listBrowserTargetsDetailed();
       return {
         ...listing,
         skippedCount: listing.unreadableRecordings.length,
-        currentSessionId: this.props.slashCommandRuntime.getSessionId(),
+        currentSessionId: this.props.browserSession.getSessionId(),
       };
     };
   private readonly deleteRawBrowserTarget: AppContainerProps['deleteRawBrowserTarget'] =
     (target, recording) => {
-      const persistence = this.props.slashCommandRuntime.sessionPersistence;
+      const persistence = this.props.browserSession.sessionPersistence;
       if (!persistence)
         throw new Error('CLI session persistence is unavailable');
       return persistence.deleteBrowserTarget(target, recording);
@@ -194,13 +216,7 @@ export class AppWrapper extends Component<AppProps> {
   private readonly bindRawBrowserSession: AppContainerProps['bindRawBrowserSession'] =
     (config, swaps, logger) =>
       bindRawBrowserSession(config, this.props.agent.session, swaps, logger);
-  #registry:
-    | {
-        readBuiltinCommands: ReadBuiltinCommands;
-        loadRegisteredCommands: LoadRegisteredCommands;
-        subscribeCommandChanges: SubscribeCommandChanges;
-      }
-    | undefined;
+  #registry: AppCommandRegistry | undefined;
   #sessionCommands:
     | ReturnType<AppWrapper['registerSessionCommands']>
     | undefined;
@@ -249,7 +265,7 @@ export class AppWrapper extends Component<AppProps> {
     () => this.props.agent.providerReads.getSessionTokenUsage();
   private readonly readPolicyRules: AppContainerProps['readPolicyRules'] = () =>
     bindPolicyRulesReader(this.props.agent.policy, () =>
-      this.props.slashCommandRuntime.getApprovalMode(),
+      this.props.approval.getApprovalMode(),
     )();
   private readonly getContentPrefixIdentity: AppContainerProps['getContentPrefixIdentity'] =
     () => {
@@ -286,43 +302,28 @@ export class AppWrapper extends Component<AppProps> {
 
   private capture() {
     const props = this.props;
-    if (
-      this.#captured?.agent !== props.agent ||
-      this.#captured.slashCommandRuntime !== props.slashCommandRuntime
-    )
-      this.#registry = this.registerRegistry();
-    if (this.#captured?.agent !== props.agent) {
-      this.#history = this.bindHistory();
-    }
-    if (
-      this.#captured?.agent !== props.agent ||
-      this.#captured.slashCommandRuntime !== props.slashCommandRuntime
-    )
+    const previous = this.#captured;
+    const agentChanged = previous?.agent !== props.agent;
+    const registryChanged =
+      previous === undefined ||
+      previous.commandRegistry !== props.commandRegistry ||
+      previous.fileCommands !== props.fileCommands;
+    if (registryChanged) this.#registry = this.registerRegistry();
+    if (agentChanged) this.#history = this.bindHistory();
+    const sessionCommandsChanged =
+      previous === undefined ||
+      previous.workspaceCommands !== props.workspaceCommands ||
+      previous.chatCommands !== props.chatCommands ||
+      previous.emojiFilter !== props.emojiFilter;
+    if (sessionCommandsChanged)
       this.#sessionCommands = this.registerSessionCommands();
-    const keys = [
-      'agent',
-      'slashCommandRuntime',
-      'oauthControl',
-      'settings',
-      'providerAliasRefresh',
-      'renderRuntime',
-      'detectProviderQuota',
-      'fetch',
-      'getActiveModelName',
-      'getActiveProviderAliasConfig',
-      'getActiveProviderName',
-      'getActiveToolFormatState',
-      'getEphemeralSetting',
-      'getEphemeralSettings',
-      'listSavedProfiles',
-      'providerStatus',
-      'saveLoadBalancerProfile',
-      'setActiveModel',
-      'setActiveToolFormatOverride',
-      'setEphemeralSetting',
-      'updateActiveProviderApiKey',
-    ] satisfies Array<keyof AppProps>;
-    if (keys.some((key) => this.#captured?.[key] !== props[key])) {
+    if (
+      commandRegistrationInputsChanged(
+        previous,
+        props,
+        COMMAND_REGISTRATION_KEYS,
+      )
+    ) {
       this.#registration = this.register();
       this.#captured = props;
     }
@@ -332,65 +333,20 @@ export class AppWrapper extends Component<AppProps> {
   }
 
   private registerRegistry() {
-    const c = this.props.slashCommandRuntime;
-    const createBuiltin = createBuiltinCommandLoaderFactory(
-      () => c.getEnableHooksUI() === true,
-      () => c.isSkillsSupportEnabled() === true,
-      () => c.isAdminSkillsEnabled() !== false,
-      () => {
-        const manager = c.extensionEnablementManager;
-        return manager ? (name, path) => manager.isEnabled(name, path) : null;
-      },
-    );
-    return {
-      readBuiltinCommands: (owners: Parameters<ReadBuiltinCommands>[0]) =>
-        createBuiltin(owners).loadCommandsSync(),
-      loadRegisteredCommands: createRegisteredCommandLoader(
-        createBuiltin,
-        () =>
-          new McpPromptLoader({
-            getMcpServers: () => c.getMcpServers(),
-            listPrompts: (server) => c.listPrompts(server),
-          }),
-        this.registryFiles(),
-      ),
-      subscribeCommandChanges: this.registrySubscription(),
-    };
-  }
-
-  private registryFiles() {
-    const c = this.props.slashCommandRuntime;
-    return createHeadlessCommandLoader(
-      () => c.userCommandsDir,
-      () => c.projectCommandsDir,
-      () => c.getProjectRoot(),
-      () => c.getExtensions(),
-      () => c.getFolderTrust(),
-      () => () => c.isTrustedFolder(),
-      () => c.getShellReplacement(),
-      () => c.getExcludeTools(),
-      () => c.getCoreTools(),
-      () => c.getApprovalMode(),
-      () => c.getShellExecutionConfig(),
-      () => c.getTargetDir(),
-      () => c.getShouldUseNodePtyShell(),
-    );
-  }
-
-  private registrySubscription() {
-    const mcp = this.props.agent.mcp;
-    return createCommandChangeSubscription(
-      (listener) => this.props.agent.ide.subscribeConnection(() => listener()),
-      (listener) => mcp.subscribeStatus(listener),
+    return createAppCommandRegistry(
+      this.props.commandRegistry,
+      this.props.fileCommands,
+      this.props.agent.ide,
+      this.props.agent.mcp,
     );
   }
 
   private registerSessionCommands() {
     const a = this.props.agent;
-    const c = this.props.slashCommandRuntime;
+    const emojiFilter = this.props.emojiFilter;
     const session = a.session;
     const resumeOwnedCommand: ResumeOwnedCommand = (action) => {
-      const mode = resolveEmojiFilterMode(c);
+      const mode = resolveEmojiFilterMode(emojiFilter);
       return action.sessionPackage === undefined
         ? resumeOwnerSession(
             session.resume.bind(session),
@@ -482,13 +438,7 @@ export class AppWrapper extends Component<AppProps> {
 
   private registerWorkspaceCommands(): RegisterWorkspaceCommands {
     const a = this.props.agent;
-    const c = this.props.slashCommandRuntime;
-    const workspaceRuntime: WorkspaceCommandRuntime = {
-      memory: c,
-      bug: c,
-      directory: c,
-      getTargetDir: () => c.getTargetDir(),
-    };
+    const workspaceRuntime = this.props.workspaceCommands;
     return (add, setMemory, owner, raw) =>
       createWorkspaceCommandOwners(
         workspaceRuntime,
@@ -524,7 +474,8 @@ export class AppWrapper extends Component<AppProps> {
   }
   private registerChatCommands(): RegisterChatCommands {
     const a = this.props.agent;
-    const c = this.props.slashCommandRuntime;
+    const c = this.props.chatCommands;
+    const emojiFilter = this.props.emojiFilter;
     const s = a.session;
     const owner = bindChatOwnerOperations(
       s.listCheckpoints.bind(s),
@@ -538,7 +489,7 @@ export class AppWrapper extends Component<AppProps> {
       s.nameCurrentSession.bind(s),
       () => s.getRecording().path,
       () => a.getModel(),
-      () => resolveEmojiFilterMode(c),
+      () => resolveEmojiFilterMode(emojiFilter),
     );
     const persistence = () => {
       if (!c.sessionPersistence)
@@ -701,7 +652,7 @@ export class AppWrapper extends Component<AppProps> {
   private register(): CredentialCommandRegistration {
     const {
       agent: a,
-      slashCommandRuntime: c,
+      keyCommands: c,
       oauthControl: oauth,
       settings,
     } = this.props;

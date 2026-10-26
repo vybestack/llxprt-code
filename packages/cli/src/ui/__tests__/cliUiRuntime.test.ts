@@ -12,7 +12,7 @@ import {
   buildUiRuntimeFromSource,
   type UiRuntimeBareSource,
 } from '../cliUiRuntime.js';
-import { buildSlashCommandRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
+import { buildUiPortsForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AppEvent, appEvents } from '../../utils/events.js';
@@ -37,47 +37,43 @@ function createProxySource(
   }) as unknown as UiRuntimeBareSource;
 }
 
-describe('buildSlashCommandRuntime', () => {
-  it('breaks identity: the adapter is not the same object as the source', async () => {
+describe('the interactive command ports', () => {
+  it('builds the ports from the runtime instead of returning it', async () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntimeForTest(
-      source,
-      await createUiSessionOwner(),
-    );
+    const ports = buildUiPortsForTest(source, await createUiSessionOwner());
 
-    expect(adapter).not.toBe(source);
+    for (const port of Object.values(ports)) {
+      expect(port).not.toBe(source);
+    }
   });
 
-  it('produces a plain object (not a Config subclass instance)', async () => {
+  it('produces plain objects (not a Config subclass instance)', async () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntimeForTest(
-      source,
-      await createUiSessionOwner(),
-    );
+    const ports = buildUiPortsForTest(source, await createUiSessionOwner());
 
-    expect(Object.getPrototypeOf(adapter)).toBe(Object.prototype);
+    for (const port of Object.values(ports)) {
+      expect(Object.getPrototypeOf(port)).toBe(Object.prototype);
+    }
   });
 
-  it('delegates method calls through to the source across capability slices', async () => {
+  it('delegates each read through to the source it was built from', async () => {
     const source = createProxySource();
     const owner = await createUiSessionOwner();
-    const adapter = buildSlashCommandRuntimeForTest(source, owner);
+    const ports = buildUiPortsForTest(source, owner);
 
-    expect((adapter.getSessionId as () => string)()).toBe(
-      'delegated:getSessionId',
+    expect(
+      (ports.commandRegistry.getEnableHooksUI as unknown as () => string)(),
+    ).toBe('delegated:getEnableHooksUI');
+    expect(ports.fileCommands.getTargetDir()).toBe('delegated:getTargetDir');
+    expect(ports.chatCommands.getProjectRoot()).toBe(
+      'delegated:getProjectRoot',
     );
-    expect((adapter.getModel as () => string)()).toBe(owner.getModel());
-    expect((adapter.getProvider as () => string)()).toBe(owner.getProvider());
+    expect(ports.containerRuntime.getModel()).toBe(owner.getModel());
+    expect(ports.slashCommandPorts.about?.getProvider()).toBe(
+      owner.getProvider(),
+    );
     owner.setApprovalMode(ApprovalMode.YOLO);
-    expect(adapter.getApprovalMode()).toBe(ApprovalMode.YOLO);
-    adapter.setApprovalMode(ApprovalMode.DEFAULT);
-    expect(owner.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
-    expect((adapter.getMaxSessionTurns as unknown as () => string)()).toBe(
-      'delegated:getMaxSessionTurns',
-    );
-    expect((adapter.isInteractive as unknown as () => string)()).toBe(
-      'delegated:isInteractive',
-    );
+    expect(ports.approval.getApprovalMode()).toBe(ApprovalMode.YOLO);
   });
 
   it('writes the UI logger in the selected project directory without publishing a storage resource', async () => {
@@ -89,8 +85,11 @@ describe('buildSlashCommandRuntime', () => {
       model: 'test',
     });
     const owner = await createUiSessionOwner(config);
-    const adapter = buildSlashCommandRuntimeForTest(config, owner);
-    const logger = new Logger(adapter.getSessionId(), adapter.projectTempDir);
+    const ports = buildUiPortsForTest(config, owner);
+    const logger = new Logger(
+      ports.browserSession.getSessionId(),
+      ports.chatCommands.projectTempDir,
+    );
     try {
       await logger.logMessage(MessageSenderType.USER, 'selected-ui-path');
       expect(
@@ -99,42 +98,38 @@ describe('buildSlashCommandRuntime', () => {
     } finally {
       await logger.close();
     }
-    expect('storage' in adapter).toBe(false);
+    for (const port of Object.values(ports)) {
+      expect('storage' in port).toBe(false);
+    }
   });
 
   it('preserves the extensionEnablementManager property reference', async () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntimeForTest(
-      source,
-      await createUiSessionOwner(),
-    );
+    const ports = buildUiPortsForTest(source, await createUiSessionOwner());
 
     expect(
-      (adapter as unknown as Record<string, unknown>)
-        .extensionEnablementManager,
+      ports.commandRegistry.extensionEnablementManager as unknown,
     ).toStrictEqual({ id: 'mock-eem' });
   });
 
-  it('does not expose a client factory from workspace capabilities', async () => {
+  it('does not expose a client factory from the workspace reads', async () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntimeForTest(
-      source,
-      await createUiSessionOwner(),
-    );
+    const ports = buildUiPortsForTest(source, await createUiSessionOwner());
 
-    expect('getAgentClientFactory' in adapter).toBe(false);
+    for (const port of Object.values(ports)) {
+      expect('getAgentClientFactory' in port).toBe(false);
+    }
   });
 });
 
-describe('buildSlashCommandRuntime image authority', () => {
-  it('does not publish executable image capability on the flattened configuration runtime', async () => {
+describe('the interactive command ports image authority', () => {
+  it('does not publish executable image capability on any port', async () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntimeForTest(
-      source,
-      await createUiSessionOwner(),
-    );
-    expect('getRunImageOperation' in adapter).toBe(false);
-    expect('imageBackendResolver' in adapter).toBe(false);
+    const ports = buildUiPortsForTest(source, await createUiSessionOwner());
+    for (const port of Object.values(ports)) {
+      expect('getRunImageOperation' in port).toBe(false);
+      expect('imageBackendResolver' in port).toBe(false);
+    }
   });
 });
 

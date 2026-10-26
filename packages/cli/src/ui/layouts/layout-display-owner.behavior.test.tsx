@@ -31,7 +31,7 @@ describe('layout display inputs', () => {
     });
     const owner = await createUiSessionOwner(config);
     const uiRuntime = buildUiRuntimeFromSource(config, owner);
-    const slashCommandRuntime = buildSlashCommandRuntimeForTest(config, owner);
+    const layoutRuntime = buildSlashCommandRuntimeForTest(config, owner);
     const settings = createMockSettings({ ui: { hideContextSummary: true } });
     const tree = (disabled: boolean) =>
       wrapWithProviders(
@@ -53,7 +53,7 @@ describe('layout display inputs', () => {
             screenReaderEnabled={false}
             disableLoadingPhrases={disabled}
             debugMode={false}
-            slashCommandRuntime={slashCommandRuntime}
+            layoutRuntime={layoutRuntime}
             settings={settings}
             startupWarnings={[]}
             version="test"

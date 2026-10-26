@@ -231,7 +231,7 @@ async function renderLayout({
                 uiRuntime.app.getAccessibility().disableLoadingPhrases === true
               }
               debugMode={uiRuntime.app.getDebugMode()}
-              slashCommandRuntime={buildSlashCommandRuntimeForTest(
+              layoutRuntime={buildSlashCommandRuntimeForTest(
                 configSource as never,
                 await createUiSessionOwner(),
               )}
