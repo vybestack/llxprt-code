@@ -5,6 +5,7 @@ import {
 import {
   createUnconfiguredCredentialRegistry,
   createUnconfiguredHistoryReaders,
+  createUnconfiguredSlashCommandPorts,
 } from '../../__tests__/unconfigured-model-command.js';
 const commandRegistry = createCommandRegistryFixture(null);
 import { openRouteAAgent } from '../../../../agents/src/api/__tests__/helpers/route-a-agent.js';
@@ -146,7 +147,7 @@ function slashInputs(
     ...commandRegistry,
     ...createCommandRegistrationFixture(_agent),
     ...createUnconfiguredHistoryReaders(),
-    config: null,
+    ports: createUnconfiguredSlashCommandPorts(),
     settings: createMockSettings({}),
     addItem: () => 0,
     clearItems: () => {},

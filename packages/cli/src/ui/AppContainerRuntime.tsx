@@ -119,6 +119,7 @@ import type {
   SlashCommandProcessorCoreResult,
   UseSlashCommandProcessorCoreArgs,
 } from './hooks/useSlashCommandProcessorCore.js';
+import { bindSlashCommandRuntimePorts } from './slashCommandRuntimePorts.js';
 import { useSlashCommandProcessorCore } from './hooks/useSlashCommandProcessorCore.js';
 import type { HistoryItem } from './types.js';
 import {
@@ -436,7 +437,7 @@ function useAppInputRuntime(
     loadRegisteredCommands: props.loadRegisteredCommands,
     subscribeCommandChanges: props.subscribeCommandChanges,
     ...props.historyReads,
-    config: props.slashCommandRuntime,
+    ports: bindSlashCommandRuntimePorts(props.slashCommandRuntime),
     registerIdeCommand: props.registerIdeCommand,
     readIdeMode: props.readIdeMode,
     readIdeAvailable: props.readIdeAvailable,

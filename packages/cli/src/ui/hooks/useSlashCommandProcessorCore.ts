@@ -11,6 +11,7 @@ import type {
 
 import {
   useHistoryRegistration,
+  type HistoryRegistrationRuntime,
   type RegisteredHistoryReads,
 } from './useRegisteredHistoryCommands.js';
 
@@ -43,7 +44,10 @@ import {
   bindCommandHistoryLoader,
   bindResumedHistoryReplay,
 } from './commandHistoryLoaderHost.js';
-import type { bindCommandRawResume } from './commandRawResumeHost.js';
+import type {
+  ResumeSessionReads,
+  bindCommandRawResume,
+} from './commandRawResumeHost.js';
 import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
 import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
 import type { useHistoryCommandOwners } from './useHistoryCommandOwners.js';
@@ -57,7 +61,14 @@ import { usePresentationCommands } from './usePresentationCommands.js';
 import { bindDiagnosticsReads } from '../commands/diagnosticsCommandHost.js';
 
 import { bindAboutDetails } from '../commands/aboutCommandHost.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { ExtensionsCommandRuntime } from '../commands/extensionsCommandHost.js';
+import type { HostCommandsRuntime } from './useHostCommands.js';
+import type { PermissionsTrustRuntime } from '../commands/permissionsCommandHost.js';
+import type { LoggingCommandRuntime } from '../commands/loggingCommandHost.js';
+import type { SkillsCommandRuntime } from './useResourceCommands.js';
+import type { DiagnosticsCommandRuntime } from '../commands/diagnosticsCommandHost.js';
+import type { EmojiFilterSettingsSource } from '../utils/iContentToHistoryItems.js';
+import type { CliSessionPersistencePort } from '../../cliSessionPersistence.js';
 import { useCallback, useMemo, useState } from 'react';
 import { useSetCommand } from './useSetCommand.js';
 import type { CredentialCommandRegistration } from './credentialCommandRegistration.js';
@@ -125,9 +136,58 @@ export type SlashCommandProcessorCoreResult = {
   cancelActiveSlashCommand: () => boolean;
 };
 
+/** Provider and model identity the about view prints. */
+export interface AboutDetailsRuntime {
+  getModel(): string;
+  getProvider(): string | undefined;
+  getEphemeralSetting(key: string): unknown;
+}
+
+/** Session identity plus the persistence a raw-recording resume binds. */
+export interface CommandResumeRuntime extends ResumeSessionReads {
+  readonly sessionPersistence?: Pick<
+    CliSessionPersistencePort,
+    'resumeRecording'
+  >;
+}
+
+/**
+ * The collaborators this processor binds, one field per command family it
+ * registers. Each field is the port that family reads; the processor never
+ * receives the CLI runtime itself.
+ */
+export interface SlashCommandProcessorPorts {
+  /** Extension state /extensions lists and restarts. */
+  readonly extensions: ExtensionsCommandRuntime | null;
+  /** Working directory and proxy the host commands print. */
+  readonly hosts: HostCommandsRuntime | null;
+  /** Folder trust the permissions commands read and update. */
+  readonly trust: PermissionsTrustRuntime | null;
+  /** Telemetry and logging settings /logging reads and writes. */
+  readonly logging: LoggingCommandRuntime | null;
+  /** Skill operations /skills reads; undefined without a skill manager. */
+  readonly skills: SkillsCommandRuntime | undefined;
+  /** Emoji filter mode history replay resolves. */
+  readonly emojiFilter: EmojiFilterSettingsSource | null;
+  /** Per-command telemetry logging; its presence means logging is wired. */
+  readonly commandLogging: SlashCommandHandlerDeps['config'];
+  /** Provider/model identity the about view prints. */
+  readonly about: AboutDetailsRuntime | null;
+  /** Runtime diagnostics /diagnostics prints. */
+  readonly diagnostics: DiagnosticsCommandRuntime | null;
+  /** Perf snapshot, token directory and checkpoint state for the history owners. */
+  readonly history: HistoryRegistrationRuntime | null;
+  /** Screen-reader flag guarding the alternate buffer. */
+  readonly readScreenReader: () => boolean;
+  /** Directory the presentation commands name. */
+  readonly readTargetDir: () => string | undefined;
+  /** Session identity and persistence for raw-recording resume. */
+  readonly resumeSession: CommandResumeRuntime | null;
+}
+
 export interface UseSlashCommandProcessorCoreArgs
   extends RegisteredHistoryReads {
-  config: CliUiRuntime | null;
+  ports: SlashCommandProcessorPorts;
   registerIdeCommand: Parameters<typeof useHostCommands>[3];
   readIdeDisplayName: () => string;
   readIdeMode: () => boolean;
@@ -138,7 +198,7 @@ export interface UseSlashCommandProcessorCoreArgs
   resumeOwnedCommand: ResumeOwnedCommand;
   replaceCommandHistory: Agent['setHistory'];
   bindRawCommandResume: (
-    config: CliUiRuntime | null,
+    config: CommandResumeRuntime | null,
     callbacks: RecordingSwapCallbacks | undefined,
   ) => ReturnType<typeof bindCommandRawResume>;
   recordCommandEvent: Agent['session']['recordRecordingEvent'] | null;
@@ -249,7 +309,7 @@ function buildHandlerDeps(
     resumeOwnedSession: bindOwnedCommandResume(args),
     loadCommandHistory: bindCommandHistoryLoader(
       args.replaceCommandHistory,
-      () => resolveEmojiFilterMode(args.config),
+      () => resolveEmojiFilterMode(args.ports.emojiFilter),
       commandContext.ui.clear,
       args.addItem,
     ),
@@ -260,7 +320,7 @@ function buildHandlerDeps(
     ),
     isMcpDiscoveryPending: args.isMcpDiscoveryPending,
     commands: state.commands,
-    config: args.config,
+    config: args.ports.commandLogging,
     commandContext,
     actions: args.actions,
     addItem: args.addItem,
@@ -274,11 +334,11 @@ function buildHandlerDeps(
     },
     recordingIntegration: args.recordingIntegration,
     resumeRawSession: args.bindRawCommandResume(
-      args.config,
+      args.ports.resumeSession,
       args.recordingSwapCallbacks,
     ),
     replayResumedHistory: bindResumedHistoryReplay(
-      () => resolveEmojiFilterMode(args.config),
+      () => resolveEmojiFilterMode(args.ports.emojiFilter),
       commandContext.ui.clear,
       args.addItem,
     ),
@@ -290,7 +350,7 @@ function buildHandlerDeps(
 }
 
 function useStaticBuiltinCommands(
-  config: CliUiRuntime | null,
+  ports: SlashCommandProcessorPorts,
   settings: LoadedSettings,
   addItem: UseHistoryManagerReturn['addItem'],
   setPendingItem: ReturnType<typeof usePendingHistory>['setPendingItem'],
@@ -300,25 +360,20 @@ function useStaticBuiltinCommands(
 ) {
   return {
     extensionsCommand: useExtensionCommand(
-      config,
+      ports.extensions,
       addItem,
       setPendingItem,
       dispatchExtensionStateUpdate,
     ),
     ...useHostCommands(
-      config,
-      config,
+      ports.hosts,
+      ports.trust,
       addItem,
       registerIdeCommand,
       subscribeCommandChanges,
     ),
-    ...useUtilityCommands(config, settings, addItem),
-    ...useResourceCommands(
-      config?.skillOperations,
-      settings,
-      addItem,
-      setPendingItem,
-    ),
+    ...useUtilityCommands(ports.logging, settings, addItem),
+    ...useResourceCommands(ports.skills, settings, addItem, setPendingItem),
   };
 }
 
@@ -341,7 +396,7 @@ function useRegisteredCommands(
   reloadCommandsRef: React.MutableRefObject<() => void>,
 ): SlashCommandProcessorState {
   const {
-    config,
+    ports,
     settings,
     recordingOwner,
     registerWorkspaceCommands,
@@ -355,7 +410,7 @@ function useRegisteredCommands(
   } = args;
   const fuzzy = useFuzzyPreference(settings);
   const { extensionsCommand, ...staticCommands } = useStaticBuiltinCommands(
-    config,
+    ports,
     settings,
     args.addItem,
     setPendingItem,
@@ -415,7 +470,7 @@ function useRegisteredCommands(
 }
 
 function useAboutDetails(
-  config: CliUiRuntime | null,
+  about: AboutDetailsRuntime | null,
   settings: LoadedSettings,
   readIdeDisplayName: () => string,
 ) {
@@ -431,9 +486,9 @@ function useAboutDetails(
         readProviderName,
         readProviderDetails,
         readEphemeral,
-        () => config?.getModel(),
-        (key) => config?.getEphemeralSetting(key),
-        () => config?.getProvider(),
+        () => about?.getModel(),
+        (key) => about?.getEphemeralSetting(key),
+        () => about?.getProvider(),
         readIdeDisplayName,
         readProviderStatus,
         settings.getProviderKeyfile.bind(settings),
@@ -445,7 +500,7 @@ function useAboutDetails(
       readEphemeral,
       readDiagnostics,
       readProviderStatus,
-      config,
+      about,
       settings,
     ],
   );
@@ -455,7 +510,7 @@ export function useSlashCommandProcessorCore(
   args: UseSlashCommandProcessorCoreArgs,
 ): SlashCommandProcessorCoreResult {
   const {
-    config,
+    ports,
     settings,
     recordingIntegration: _recordingIntegration,
     recordingOwner: _recordingOwner,
@@ -472,14 +527,13 @@ export function useSlashCommandProcessorCore(
   const writeSessionSetting = useSetSessionSetting();
   const oauth = useOAuthControl();
   const alternateBuffer =
-    settings.merged.ui.useAlternateBuffer === true &&
-    !(config?.getScreenReader() ?? false);
+    settings.merged.ui.useAlternateBuffer === true && !ports.readScreenReader();
   const { cancellation, pending, session } = useCommandRuntimeState(
     args.addItem,
   );
   const presentationCommands = usePresentationCommands(
-    useAboutDetails(config, settings, args.readIdeDisplayName),
-    config?.getTargetDir(),
+    useAboutDetails(ports.about, settings, args.readIdeDisplayName),
+    ports.readTargetDir(),
     args.endCommandSession,
     args.startNewCommandSession,
     args.startCommandSession,
@@ -551,7 +605,7 @@ function useProcessorRegistration(
   setPendingItem: ReturnType<typeof usePendingHistory>['setPendingItem'],
 ): SlashCommandProcessorState {
   const {
-    config,
+    ports,
     settings,
     recordingIntegration,
     recordingOwner,
@@ -568,7 +622,7 @@ function useProcessorRegistration(
     useHistoryRegistration(
       useDiagnosticsRegistration(
         listTools,
-        config,
+        ports.diagnostics,
         settings,
         readBalancerStats,
         readBalancerTokens,
@@ -579,7 +633,7 @@ function useProcessorRegistration(
         args.readIdeMode,
         args.readIdeAvailable,
       ),
-      config,
+      ports.history,
       settings,
       args.loadHistory,
       args.addItem,
@@ -620,7 +674,7 @@ function useCredentialRegistry(
 
 function useDiagnosticsRegistration(
   listTools: Agent['tools']['list'],
-  config: CliUiRuntime | null,
+  config: DiagnosticsCommandRuntime | null,
   settings: LoadedSettings,
   readBalancerStats: GetLoadBalancerStatsOperation,
   readBalancerTokens: GetLoadBalancerTokenAccountingOperation,

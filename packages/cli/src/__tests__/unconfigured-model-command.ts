@@ -5,6 +5,7 @@
  */
 import type { RegisteredHistoryReads } from '../ui/hooks/useRegisteredHistoryCommands.js';
 import type { CredentialCommands } from '../ui/hooks/credentialCommandTypes.js';
+import type { SlashCommandProcessorPorts } from '../ui/hooks/useSlashCommandProcessorCore.js';
 
 import { createDocsCommand } from '../ui/commands/docsCommand.js';
 import { createHelpCommand } from '../ui/commands/helpCommand.js';
@@ -613,5 +614,24 @@ export function createUnconfiguredHistoryReaders(): RegisteredHistoryReads {
       throw new Error('Session agent is unavailable');
     },
     readDumpHistory: () => null,
+  };
+}
+
+/** Slash-command ports for a registry fixture with no CLI runtime behind it. */
+export function createUnconfiguredSlashCommandPorts(): SlashCommandProcessorPorts {
+  return {
+    extensions: null,
+    hosts: null,
+    trust: null,
+    logging: null,
+    skills: undefined,
+    emojiFilter: null,
+    commandLogging: null,
+    about: null,
+    diagnostics: null,
+    history: null,
+    readScreenReader: () => false,
+    readTargetDir: () => undefined,
+    resumeSession: null,
   };
 }
