@@ -6,7 +6,10 @@ import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
  */
 
 import { encoding_for_model } from '@dqbd/tiktoken';
-import { countLongNeutralText } from './neutral-long-piece.js';
+import {
+  countLongNeutralText,
+  encodingLongTextCounter,
+} from './neutral-long-piece.js';
 import { TextDecoder } from 'node:util';
 
 import {
@@ -96,6 +99,20 @@ export function estimateTokens(text: string): number {
 
 export function getEffectiveTokenLimit(maxTokens: number): number {
   return Math.floor(maxTokens * ESCAPE_BUFFER_PERCENTAGE);
+}
+/** The caller owns this cache for one unit's single/repeated projections only. */
+export function createUnitTokenCounter(): (text: string) => number {
+  const cache = new Map<string, number>();
+  return (text) => {
+    const encoder = getEncoder();
+    if (encoder === null || text.includes('<|endof'))
+      return estimateTokens(text);
+    return encodingLongTextCounter('o200k_base')(
+      text,
+      (piece) => encoder.encode(piece).length,
+      cache,
+    );
+  };
 }
 
 export interface OutputLimitConfig {

@@ -7,6 +7,7 @@ import { NeutralMergeQueue } from './neutral-merge-queue.js';
 export type LongTextCounter = (
   text: string,
   countShort: (text: string) => number,
+  unitCache?: Map<string, number>,
 ) => number;
 
 /** Reuse the exact rank-ordered merge algorithm with each codec's own assets. */
@@ -24,8 +25,17 @@ export function createLongTextCounter(
     );
   const pieces = new RegExp(pattern, pattern.includes('&&') ? 'vy' : 'uy');
   let ranks: ReadonlyMap<string, number> | undefined;
-  return (text, countShort) => {
-    if (text.length <= 512) return countShort(text);
+  return (text, countShort, unitCache) => {
+    const counted = (value: string, measure: () => number): number => {
+      const cached = unitCache?.get(value);
+      if (cached !== undefined) return cached;
+      const tokens = measure();
+      unitCache?.set(value, tokens);
+      return tokens;
+    };
+    const short = (value: string): number =>
+      counted(value, () => countShort(value));
+    if (text.length <= 512) return short(text);
     const matcher = new RegExp(pieces);
     let count = 0;
     let start = 0;
@@ -36,17 +46,25 @@ export function createLongTextCounter(
       match = matcher.exec(text)
     ) {
       position = matcher.lastIndex;
-      if (match[0].length > 512) {
-        ranks ??= parseRanks(bpeRanks);
-        if (match.index > start)
-          count += countShort(text.slice(start, match.index));
-        count += countBpePiece(Buffer.from(match[0]), ranks);
+      // Quote-containing pieces delimit JSON string values. Splitting only at
+      // these exact codec boundaries makes repeated unit payloads reusable.
+      if (
+        match[0].length > 512 ||
+        (unitCache !== undefined && match[0].includes('"'))
+      ) {
+        if (match.index > start) count += short(text.slice(start, match.index));
+        const piece = match[0];
+        count += counted(piece, () => {
+          if (piece.length <= 512) return countShort(piece);
+          ranks ??= parseRanks(bpeRanks);
+          return countBpePiece(Buffer.from(piece), ranks);
+        });
         start = position;
       }
     }
     if (position !== text.length)
       throw new Error('Tokenizer pattern did not cover input');
-    return start < text.length ? count + countShort(text.slice(start)) : count;
+    return start < text.length ? count + short(text.slice(start)) : count;
   };
 }
 

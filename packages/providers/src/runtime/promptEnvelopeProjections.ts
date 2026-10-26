@@ -59,6 +59,7 @@ const PROMPT_KEYS = {
 export interface ProjectionOptions {
   readonly unsupportedMedia?: readonly UnsupportedMediaEntry[];
   readonly transportToken?: object;
+  readonly legacyTokenCounter?: (text: string) => number;
 }
 
 export interface OpenAIResponsesProjectionContext {
@@ -93,6 +94,7 @@ function buildEstimationProjection(
   requestBody: unknown,
   promptKeys: readonly string[],
   protocol: PromptEnvelopeProjection['protocol'],
+  countTokens: (text: string) => number = countPromptTokens,
 ): PromptEnvelopeEstimationProjection {
   const imageEntries: ProjectionImageEntry[] = [];
   const canonicalEntries = canonicalPromptEntries(
@@ -115,7 +117,7 @@ function buildEstimationProjection(
   return Object.freeze({
     finalizedProjection,
     legacyEstimate: () => {
-      legacyTokens ??= countPromptTokens(promptText);
+      legacyTokens ??= countTokens(promptText);
       return Promise.resolve(legacyTokens);
     },
   });
@@ -131,6 +133,7 @@ function buildProjection(
     requestBody,
     promptKeys,
     identity.protocol,
+    options?.legacyTokenCounter,
   );
   const unsupportedMedia = freezeUnsupportedMedia(options?.unsupportedMedia);
   // PromptEnvelopeProjection declares every member readonly. Freezing enforces

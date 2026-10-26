@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { createUnitTokenCounter } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type {
   RuntimePromptEstimateRequest,
   RuntimePromptEstimateResult,
@@ -42,13 +43,17 @@ function unitEstimator(
 ): (
   messages: readonly unknown[],
   tools?: unknown,
+  legacyTokenCounter?: (text: string) => number,
 ) => Promise<RuntimePromptEstimateResult> {
-  return (messages, tools) => {
-    const projection = projectOpenAIChatPromptEnvelope({
-      model: identity.canonicalModel,
-      messages,
-      tools,
-    });
+  return (messages, tools, legacyTokenCounter) => {
+    const projection = projectOpenAIChatPromptEnvelope(
+      {
+        model: identity.canonicalModel,
+        messages,
+        tools,
+      },
+      { legacyTokenCounter },
+    );
     return factory.estimatePrompt({
       ...identity,
       finalizedProjection: projection.finalizedProjection,
@@ -62,8 +67,13 @@ function unitCounter(
 ): ChatUnitTokenMeasurer {
   return async (messages) => {
     if (messages.length === 0) return 0;
-    const single = await estimate(messages);
-    const repeated = await estimate([...messages, ...messages]);
+    const countTokens = createUnitTokenCounter();
+    const single = await estimate(messages, undefined, countTokens);
+    const repeated = await estimate(
+      [...messages, ...messages],
+      undefined,
+      countTokens,
+    );
     const tokens = repeated.count - single.count;
     if (!Number.isSafeInteger(tokens) || tokens < 0)
       throw new Error(
