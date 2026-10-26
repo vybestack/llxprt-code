@@ -697,6 +697,7 @@ export class SubagentOrchestrator {
         params.runtimeState.provider,
         params.runtimeState.model,
       );
+      await loaderOptions.overrides?.historyService?.waitForCommit();
       const loaded = await this.runtimeLoader(loaderOptions);
       loaded.history.setTokenizerFactory({
         getTokenizer: (provider, model) =>
