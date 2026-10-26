@@ -35,6 +35,7 @@ import {
   type RuntimeServiceShapeOptions,
 } from './tests/runtime-service-shape-guard.js';
 import { scanState, workspacePath } from './runtime-state-scan.js';
+import { type StateRootDiscovery } from './runtime-state-roots.js';
 import {
   scanAmbientDelegation,
   type AmbientSource,
@@ -48,8 +49,14 @@ export interface AuditPolicy {
   readonly compilerProjects?: readonly string[];
   readonly sourceRoots: readonly string[];
   readonly entryManifest?: EntryManifest;
-  readonly mutableRoots: readonly string[];
-  readonly alsRoots: readonly string[];
+  /**
+   * Explicit runtime state roots. Fixtures declare these; production leaves
+   * them unset and lets `stateRootDiscovery` derive them from the workspace, so
+   * no hand-maintained list can go stale after a module moves.
+   */
+  readonly mutableRoots?: readonly string[];
+  readonly alsRoots?: readonly string[];
+  readonly stateRootDiscovery?: StateRootDiscovery;
   readonly services: readonly RuntimeDeclarationRoot[];
   readonly configs: readonly RuntimeDeclarationRoot[];
   readonly runtimeObjects?: readonly RuntimeDeclarationRoot[];
@@ -113,12 +120,10 @@ export const productionPolicy: AuditPolicy = {
     ].map((name) => `packages/${name}/src`),
     ...productionPlugins.map((pkg) => `${pkg}/src`),
   ],
-  mutableRoots: [
-    'packages/providers/src/runtime',
-    'packages/core/src/runtime',
-    cliContext,
-  ],
-  alsRoots: ['packages/providers/src', 'packages/core/src'],
+  stateRootDiscovery: {
+    directoryNames: ['runtime', 'api', 'settings'],
+    files: [cliContext],
+  },
   services: [
     {
       file: 'packages/settings/src/settings/SettingsService.ts',
