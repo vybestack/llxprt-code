@@ -76,6 +76,18 @@ import { bindToolOutputSummary } from './session-tool-catalog-owner.js';
 
 import { SessionHookComposition } from './session-hook-composition.js';
 
+/**
+ * Everything a child task launch reads: the workspace bound to this session,
+ * the policy owner that supplies its bus, and the definition readers the child
+ * inherits.
+ */
+interface ChildTaskComposition {
+  readonly workspace: McpRuntimeOwner;
+  readonly policy: SessionPolicyOwner;
+  readonly profiles: ProfileDefinitionReads;
+  readonly subagents: SubagentDefinitionReads;
+}
+
 export class SessionClientOwner extends SessionClientAcquisitionOwner {
   readonly subscribeBucketConsent = (
     listener: (request: BucketAuthConsentRequest) => void,
@@ -368,7 +380,12 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
         },
         {
           bus: policy.messageBus,
-          registration: this.bindTaskRegistration(profiles, subagents),
+          registration: this.bindTaskRegistration({
+            workspace,
+            policy,
+            profiles,
+            subagents,
+          }),
           summarize: bindToolOutputSummary(
             () => {
               this.assertConversationOpen();
@@ -395,13 +412,10 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
   }
 
   private bindTaskRegistration(
-    profiles: ProfileDefinitionReads,
-    subagents: SubagentDefinitionReads,
+    composition: ChildTaskComposition,
   ): TaskToolRegistration {
-    const workspace = this.boundWorkspace;
-    if (workspace === undefined)
-      throw new Error('Child launch requires its acquired workspace');
-    const bus = requireSessionPolicy(this.sessionPolicy).messageBus;
+    const { workspace, policy, profiles, subagents } = composition;
+    const bus = policy.messageBus;
     const orchestrator = new SubagentOrchestrator({
       sessionId: this.config.getSessionId(),
       profileManager: profiles,
