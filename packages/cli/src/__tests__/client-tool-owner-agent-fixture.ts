@@ -4,15 +4,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { expect } from 'bun:test';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import {
+  createAgent,
+  fromConfig,
+  type Agent,
+  type AgentConfig,
+} from '@vybestack/llxprt-code-agents';
 import {
   PolicyDecision,
   type CompletedToolCall,
   type ToolCallRequestInfo,
 } from '@vybestack/llxprt-code-core';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { createGatedRecordingMcp } from '../../../agents/src/api/__tests__/helpers/gated-recording-mcp.js';
+import {
+  createGatedRecordingMcp,
+  type GatedRecordingMcp,
+} from '../../../agents/src/api/__tests__/helpers/gated-recording-mcp.js';
+import type { RecordingProvider } from '../../../agents/src/api/__tests__/helpers/recording-provider.js';
 import {
   openRouteAAgent,
   type RouteAAgent,
@@ -35,13 +47,6 @@ const REPLAYS = {
       import.meta.url,
     ),
   ),
-  /** A `model-call` tool call to the owner's tool, then `Finished`. */
-  'model-then-finished': fileURLToPath(
-    new URL(
-      './fixtures/client-tool-model-then-finished.jsonl',
-      import.meta.url,
-    ),
-  ),
 } as const;
 
 type SchedulerHook = ReturnType<
@@ -55,12 +60,13 @@ export interface ClientToolOwnerOptions {
    */
   readonly decision?: PolicyDecision;
   /**
-   * The model's turns, through the fake-responses replay seam. Defaults to
-   * `plain-text`: the owner starts the chat with one setup turn so client
-   * channel completions are persisted. `model-then-finished` leaves the chat
-   * to the scenario, whose first turn calls the owner's tool and then ends.
+   * A contributed provider that scripts the model's turns and counts its
+   * requests. The agent is then built through `createAgent` (Route C) and the
+   * chat is left to the scenario; `borrow` is unavailable. Without it the
+   * agent is Route A with the fake-responses replay, and the owner starts the
+   * chat with one setup turn so client channel completions are persisted.
    */
-  readonly replay?: keyof typeof REPLAYS;
+  readonly modelProvider?: RecordingProvider;
   /** When false the mounted scheduler hook is unmounted right away. */
   readonly awaitReady?: boolean;
 }
@@ -87,7 +93,8 @@ export interface ClientToolOwner {
   readonly request: (callId: string) => ToolCallRequestInfo;
   /**
    * A second agent built through `fromConfig` on this owner's `Config`,
-   * settings and credential authority, closed with the owner.
+   * settings and credential authority, closed with the owner. Rejects for an
+   * owner built with a `modelProvider`.
    */
   readonly borrow: () => Promise<Agent>;
 }
@@ -136,6 +143,71 @@ function borrowRouteAAgent(
   );
 }
 
+interface OwnerAgent {
+  readonly agent: Agent;
+  readonly borrow: () => Promise<Agent>;
+}
+
+type OwnerConfig = Pick<
+  AgentConfig,
+  | 'sessionId'
+  | 'folderTrust'
+  | 'telemetry'
+  | 'recording'
+  | 'interactive'
+  | 'mcpServers'
+  | 'policy'
+>;
+
+async function openRouteCAgent(
+  config: OwnerConfig,
+  provider: RecordingProvider,
+  steps: Array<() => void | Promise<void>>,
+  mcp: GatedRecordingMcp,
+): Promise<OwnerAgent> {
+  const directory = await realpath(
+    await mkdtemp(join(tmpdir(), 'client-tool-owner-')),
+  );
+  steps.push(() => rm(directory, { recursive: true, force: true }));
+  const agent = await createAgent({
+    ...config,
+    provider: provider.alias,
+    model: 'recording-default',
+    workingDir: directory,
+    providerContributions: provider.contributions,
+  });
+  steps.push(
+    () => agent.dispose(),
+    () => mcp.release(),
+  );
+  return {
+    agent,
+    borrow: () =>
+      Promise.reject(new Error('A Route C owner has no borrowable Config')),
+  };
+}
+
+async function openRouteAOwnerAgent(
+  config: OwnerConfig,
+  steps: Array<() => void | Promise<void>>,
+  mcp: GatedRecordingMcp,
+): Promise<OwnerAgent> {
+  const route = await openRouteAAgent({ config });
+  steps.push(
+    () => route.close(),
+    () => mcp.release(),
+  );
+  return {
+    agent: route.agent,
+    borrow: async () => {
+      const borrowed = await borrowRouteAAgent(route);
+      steps.push(() => borrowed.dispose());
+      await mcp.tool(borrowed);
+      return borrowed;
+    },
+  };
+}
+
 export async function openClientToolOwner(
   name: string,
   options: ClientToolOwnerOptions = {},
@@ -144,8 +216,10 @@ export async function openClientToolOwner(
   readonly close: () => Promise<void>;
 }> {
   const decision = options.decision ?? PolicyDecision.ALLOW;
-  const replay = options.replay ?? 'plain-text';
-  const restoreReplay = enterReplay(replay);
+  const restoreReplay =
+    options.modelProvider === undefined
+      ? enterReplay('plain-text')
+      : (): void => {};
   const steps: Array<() => void | Promise<void>> = [];
   const close = (): Promise<void> =>
     runCleanupSteps(steps.splice(0).reverse()).finally(restoreReplay);
@@ -155,31 +229,29 @@ export async function openClientToolOwner(
       gated: true,
     });
     steps.push(() => mcp.close());
-    const route = await openRouteAAgent({
-      config: {
-        sessionId: 'client-tool-equal-label',
-        folderTrust: true,
-        telemetry: { enabled: false },
-        recording: { enabled: false },
-        interactive: true,
-        mcpServers: mcp.mcpServers,
-        policy: {
-          rules: [
-            {
-              toolName: `${mcp.serverName}__${mcp.toolName}`,
-              decision,
-              priority: 1000,
-            },
-          ],
-        },
+    const config: OwnerConfig = {
+      sessionId: 'client-tool-equal-label',
+      folderTrust: true,
+      telemetry: { enabled: false },
+      recording: { enabled: false },
+      interactive: true,
+      mcpServers: mcp.mcpServers,
+      policy: {
+        rules: [
+          {
+            toolName: `${mcp.serverName}__${mcp.toolName}`,
+            decision,
+            priority: 1000,
+          },
+        ],
       },
-    });
-    steps.push(
-      () => route.close(),
-      () => mcp.release(),
-    );
-    const agent = route.agent;
-    if (replay === 'plain-text') await agent.chat('Start the conversation');
+    };
+    const { agent, borrow } =
+      options.modelProvider === undefined
+        ? await openRouteAOwnerAgent(config, steps, mcp)
+        : await openRouteCAgent(config, options.modelProvider, steps, mcp);
+    if (options.modelProvider === undefined)
+      await agent.chat('Start the conversation');
     const toolName = (await mcp.tool(agent)).name;
     const completed: CompletedToolCall[][] = [];
     const hook = mountScheduler(agent, completed);
@@ -204,12 +276,7 @@ export async function openClientToolOwner(
         isClientInitiated: true,
         prompt_id: callId,
       }),
-      borrow: async () => {
-        const borrowed = await borrowRouteAAgent(route);
-        steps.push(() => borrowed.dispose());
-        await mcp.tool(borrowed);
-        return borrowed;
-      },
+      borrow,
     };
     return { owner, close };
   } catch (primary) {

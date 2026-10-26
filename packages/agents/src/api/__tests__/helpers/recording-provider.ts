@@ -18,6 +18,12 @@ export interface RecordingProviderOptions {
   readonly alias?: string;
   /** Text every answered request streams back. Defaults to `recorded`. */
   readonly responseText?: string;
+  /**
+   * Blocks the nth answered request streams back, in arrival order (for a
+   * model that calls a tool and then finishes). Requests past the end of the
+   * list answer with `responseText`.
+   */
+  readonly responses?: ReadonlyArray<IContent['blocks']>;
 }
 
 /** The request a model would have received: contents, tools and invocation. */
@@ -55,8 +61,9 @@ interface Gate {
 
 class RecordingOpenAIProvider extends OpenAIProvider {
   constructor(
-    private readonly record: (request: RecordedRequest) => Promise<void>,
+    private readonly record: (request: RecordedRequest) => Promise<number>,
     private readonly responseText: string,
+    private readonly responses: ReadonlyArray<IContent['blocks']>,
   ) {
     super('test-key', 'http://recording-provider.invalid/v1');
   }
@@ -64,10 +71,12 @@ class RecordingOpenAIProvider extends OpenAIProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    await this.record(options);
+    const index = await this.record(options);
     yield {
       speaker: 'ai',
-      blocks: [{ type: 'text', text: this.responseText }],
+      blocks: this.responses[index] ?? [
+        { type: 'text', text: this.responseText },
+      ],
     };
   }
 }
@@ -111,12 +120,14 @@ function createRecordingPlugin(options: RecordingProviderOptions): {
   const requests: RecordedRequest[] = [];
   let gate: Gate | undefined;
 
-  const record = async (request: RecordedRequest): Promise<void> => {
+  const record = async (request: RecordedRequest): Promise<number> => {
+    const index = requests.length;
     requests.push(request);
     const current = gate;
-    if (current === undefined) return;
+    if (current === undefined) return index;
     current.onEntered(request);
     await waitFor(current.open, request.invocation.signal);
+    return index;
   };
 
   const hold = (): RequestHold => {
@@ -141,7 +152,11 @@ function createRecordingPlugin(options: RecordingProviderOptions): {
         {
           providerId,
           createProvider: (entry) => {
-            const provider = new RecordingOpenAIProvider(record, responseText);
+            const provider = new RecordingOpenAIProvider(
+              record,
+              responseText,
+              options.responses ?? [],
+            );
             bindProviderAliasIdentity(provider, entry.alias);
             return provider;
           },

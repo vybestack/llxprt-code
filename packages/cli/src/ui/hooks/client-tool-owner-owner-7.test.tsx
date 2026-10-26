@@ -5,8 +5,8 @@
  */
 import { afterEach, describe, expect, it } from 'bun:test';
 import { act } from 'react';
-import { type Agent } from '@vybestack/llxprt-code-agents';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { createRecordingProvider } from '../../../../agents/src/api/__tests__/helpers/recording-provider.js';
 import {
   openClientToolOwner,
   type ClientToolOwner,
@@ -17,10 +17,6 @@ import { agentStreamOperations } from './agentStream/__tests__/helpers/agentStre
 
 const noop = (): void => {};
 
-async function historyText(agent: Agent): Promise<string> {
-  return JSON.stringify(await agent.getHistory());
-}
-
 describe('Agent-owned CLI client tools', () => {
   const closes: Array<() => Promise<void>> = [];
 
@@ -29,16 +25,35 @@ describe('Agent-owned CLI client tools', () => {
     for (const close of closes.splice(0)) await close();
   });
 
-  async function owner(name: string): Promise<ClientToolOwner> {
-    const opened = await openClientToolOwner(name, {
-      replay: 'model-then-finished',
+  // The model's first turn calls the owner's tool; its second turn ends.
+  const modelTurns = () =>
+    createRecordingProvider({
+      alias: 'client-tool-model',
+      responses: [
+        [
+          {
+            type: 'tool_call',
+            id: 'model-call',
+            name: 'mcp__recording__external_record',
+            parameters: {},
+          },
+        ],
+        [{ type: 'text', text: 'Finished' }],
+      ],
     });
+
+  async function owner(
+    name: string,
+    modelProvider: ReturnType<typeof modelTurns>,
+  ): Promise<ClientToolOwner> {
+    const opened = await openClientToolOwner(name, { modelProvider });
     closes.push(opened.close);
     return opened.owner;
   }
 
   it('renders real model tools without rescheduling them through the client channel', async () => {
-    const a = await owner('model');
+    const model = modelTurns();
+    const a = await owner('model', model);
     const display: unknown[] = [];
     const operations = agentStreamOperations(a.agent);
     const stream = renderHook(() =>
@@ -73,7 +88,7 @@ describe('Agent-owned CLI client tools', () => {
       expect(await a.effects()).toStrictEqual(['model']);
       expect(a.completed).toStrictEqual([]);
       expect(JSON.stringify(display)).toContain('model-call');
-      expect(await historyText(a.agent)).toContain('Finished');
+      expect(model.requests).toHaveLength(2);
     } finally {
       stream.unmount();
     }
