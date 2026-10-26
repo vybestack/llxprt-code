@@ -52,3 +52,11 @@ Passing subsets are being committed separately; the full suite is not green. The
 - Coalesced edits still admit transcript rows in final context order and omit pending rows removed within the group. Slice 1 is not complete.
 
 The detailed inherited handoff is `tmp/r4b-transcript/remaining.txt`; current verification logs are under `tmp/r4c-transcript/`. Review skipped per Andrew 2026-10-09.
+
+### Bounded transcript append progress (2026-10-26)
+
+The transcript append builder now holds the unfinished right spine and emits completed nodes once. The 4,129-row regression reduced transcript-index writes from 11,187,936 bytes (2,709.6 bytes/row) to 276,224 bytes (66.9 bytes/row). The 40,000-row id-fact memory proof passes its unchanged 1 MiB and 512 KiB flatness limits: the completed run measured 834,901 bytes for 4,000 ids and 788,643 bytes for 8,000 ids, with files of 139,949,683 and 151,165,591 bytes. The memory fixture now discards its I/O event log rather than retaining a growing array of write events. Its assertions, sampling cadence, row count and warm-up remain unchanged.
+
+Membership spills now feed group-local caches, and trie merges preserve newly written encoded paths in those caches. Prepared append improves from 72,733 to 68,941 reads at 8,192 rows, but still fails the unchanged 68,201 limit. The format-13 header and digest proof preserves trailer placement, self-offset, durable-end and all three zero filled-through assertions; it no longer rewrites bytes into a retired format. Both new digests match. This does not constitute a passing prepared-append suite.
+
+Cold restored-version reads remain 30 at 512 rows and 43 at 8,192 rows, against 32. The physical-read trace in `tmp/r4c-transcript/restore-diagnostic.log` identifies paired frame-head/header reads for cold map nodes, four reads for each small uncached map value, three transcript right-spine reads, and additional state-path reads for the required operation marker. No read limit was raised, and the old root-equality assertion remains unresolved. Compaction accounting, relocation-coverage test repair, disposal failure retention, remaining memory harnesses and caller admission order still require work. The full suite has not been rerun or declared green.

@@ -181,6 +181,7 @@ export class KeyedMapBatch {
   constructor(
     private reader: KeyedMapReader,
     private root: number,
+    private readonly written?: IdNodeCache,
   ) {}
 
   async spillWhenFull(
@@ -232,6 +233,12 @@ export class KeyedMapBatch {
       entries.push({ hash, value: encodeMapRef(offset) });
     }
     entries.sort((left, right) => compareIdHashes(left.hash, right.hash));
-    return mergeIdTrie(appender, this.reader.nodeReader, this.root, entries);
+    return mergeIdTrie(
+      appender,
+      this.reader.nodeReader,
+      this.root,
+      entries,
+      this.written,
+    );
   }
 }

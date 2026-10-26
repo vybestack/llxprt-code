@@ -2,6 +2,7 @@
 import { getU64, getU64Big, putU64, putU64Big, viewOf } from './bytes.js';
 import { BoundedIdNodeCache, type IdNodeCache } from './idTrieCache.js';
 import { JournalFormatError } from './errors.js';
+import { TranscriptAppend } from './transcript-append.js';
 import type { RecordAppender } from './groupAppender.js';
 import type { RecordAccess } from './recordAccess.js';
 
@@ -149,6 +150,14 @@ export class TranscriptTreeWriter {
     private readonly mode: TranscriptTreeMode,
     private readonly committedCache?: IdNodeCache,
   ) {}
+
+  appendGroup(root: number): TranscriptAppend {
+    return new TranscriptAppend(
+      root,
+      (ref) => this.read(ref),
+      (node) => this.write(node),
+    );
+  }
 
   private async read(ref: number): Promise<TranscriptNode> {
     const cached = this.cache.get(ref);

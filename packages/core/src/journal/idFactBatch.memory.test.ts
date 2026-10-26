@@ -12,6 +12,7 @@ import {
 } from './__tests__/support/compactionMemory.js';
 import { draftRow, storeDeps } from './__tests__/support/storeFixtures.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
+import { testJournalSeams } from './__tests__/support/journalFixtures.js';
 
 const ROWS = 40_000;
 const SAMPLES = 4;
@@ -58,7 +59,10 @@ describe('id fact batch memory over a 40,000-row rebuild (design 4.6)', () => {
     rows: Iterable<RowDraft> | AsyncIterable<RowDraft>,
   ): Promise<string> {
     const file = path.join(directory(), name);
-    const store = await JournalStore.create(file, storeDeps());
+    const store = await JournalStore.create(
+      file,
+      storeDeps({ seams: testJournalSeams({}, 1, false) }),
+    );
     open.push(store);
     await store.commit([{ kind: 'replace', rows }]);
     return file;

@@ -7,19 +7,15 @@ import { JournalStore } from './journalStore.js';
 import { draftRow, storeDeps } from './__tests__/support/storeFixtures.js';
 import { testJournalSeams } from './__tests__/support/journalFixtures.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
-import { crc32 } from './bytes.js';
 import { decodeJournalHeader, JOURNAL_HEADER_BYTES } from './fileHeader.js';
-import { decodeFrameStart, encodeBodylessFrame } from './frame.js';
+import { decodeFrameStart } from './frame.js';
 import { RECORD_KIND } from './recordKinds.js';
 import { decodeTrailerHeader } from './trailerRecord.js';
 
-/** Preserve the v11 frozen digest across v12's three added filledThrough words. */
+/** Format 13 includes transcript references; freeze its actual durable bytes. */
 function frozenAppendBytes(bytes: Buffer): Uint8Array {
   decodeJournalHeader(bytes.subarray(0, JOURNAL_HEADER_BYTES));
-  const header = Buffer.from(bytes.subarray(0, JOURNAL_HEADER_BYTES));
-  expect(header.readUInt32LE(8)).toBe(12);
-  header.writeUInt32LE(11, 8);
-  header.writeUInt32LE(crc32(header.subarray(0, 60)), 60);
+  expect(bytes.readUInt32LE(8)).toBe(13);
   let offset = JOURNAL_HEADER_BYTES;
   while (offset < bytes.length) {
     const frame = decodeFrameStart(bytes.subarray(offset), offset);
@@ -30,20 +26,7 @@ function frozenAppendBytes(bytes: Buffer): Uint8Array {
       expect(trailer.durableEnd).toBe(bytes.length);
       for (const slot of trailer.slots.formatSlots)
         expect(slot.filledThrough).toBe(0);
-      const current = Buffer.from(frame.kindHeader);
-      const old = Buffer.concat([
-        current.subarray(0, 1368),
-        ...[0, 1, 2].map((slot) =>
-          current.subarray(1368 + slot * 40, 1400 + slot * 40),
-        ),
-        current.subarray(1488),
-      ]);
-      old.writeBigUInt64LE(BigInt(bytes.length - 24), 1528);
-      return Buffer.concat([
-        header,
-        bytes.subarray(JOURNAL_HEADER_BYTES, offset),
-        encodeBodylessFrame(RECORD_KIND.TRAILER, old),
-      ]);
+      return bytes;
     }
     offset = frame.endOffset;
   }
@@ -54,12 +37,12 @@ const cases = [
   {
     count: 4096,
     reads: 31066,
-    digest: '6ca6a3be344776b5b0feef86f31bb3da898c4d38c4bdb74a89fb5ddc9a7a8763',
+    digest: '9eb2fc8d8d7c3c0186749c9df9c3a9e6fdc29ed96b942f923ebda23381915a15',
   },
   {
     count: 8192,
     reads: 68201,
-    digest: '4208bb94aab3e9d37f036554b2f76d5a93fc428f757e182a28cfb69f81f890eb',
+    digest: 'd86a915cae1043c18b09af00e32a5b92aaa3f187267957b321f996547fd9f1ac',
   },
 ];
 

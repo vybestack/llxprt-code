@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionEdit } from './groupEdits.js';
+import type { TranscriptAppend } from './transcript-append.js';
 import { prepareBuild, type PreparedBuild } from './preparedGroup.js';
 import type { GroupPlan } from './groupPlanTypes.js';
 import type { GroupRecord, RecordAppender } from './groupAppender.js';
@@ -29,7 +30,7 @@ import {
 
 /** One group owns a bounded path cache; payload stays in its original ROW. */
 export class TranscriptGroup {
-  private readonly tree: TranscriptTreeWriter;
+  private readonly admissions: TranscriptAppend;
   private head: TranscriptHead;
   private readonly initialRoot: number;
   private readonly identities = new Map<number, bigint>();
@@ -44,12 +45,12 @@ export class TranscriptGroup {
     this.metaCache = new TranscriptMapCache(ctx.metaCache);
     this.head = head;
     this.initialRoot = head.root;
-    this.tree = new TranscriptTreeWriter(
+    this.admissions = new TranscriptTreeWriter(
       () => ctx.readGroup(target.nextOffset),
       target,
       'transcript',
       ctx.stateCache,
-    );
+    ).appendGroup(head.root);
   }
   static async start(
     ctx: BuildContext,
@@ -147,7 +148,7 @@ export class TranscriptGroup {
     return rowRef;
   }
   private async admit(entry: TranscriptEntry): Promise<void> {
-    const root = await this.tree.insert(this.head.root, entry);
+    await this.admissions.append(entry);
     if (entry.rowRef !== 0) {
       if (this.identities.size >= 64)
         this.identities.delete(this.identities.keys().next().value ?? 0);
@@ -155,7 +156,6 @@ export class TranscriptGroup {
     }
     this.head = {
       ...this.head,
-      root,
       nextId: entry.transcriptId + 1n,
       count: this.head.count + 1,
       reachableBytes: this.head.reachableBytes + entry.recordLength + 64,
@@ -182,9 +182,11 @@ export class TranscriptGroup {
       edits.some((edit) => edit.kind === 'density' && edit.removed.length > 0)
     )
       await this.marker(built);
+    this.head = { ...this.head, root: await this.admissions.finish() };
     const state = new KeyedMapBatch(
       this.reader('state'),
       built.state.stateRoot,
+      this.stateCache,
     );
     if (this.head.root !== this.initialRoot)
       state.set(TRANSCRIPT_HEAD_KEY, encodeTranscriptHead(this.head));
@@ -229,7 +231,11 @@ export class TranscriptGroup {
     )
       return built.state.metaRoot;
     if (built.changedRows === undefined) await this.target.drain();
-    const meta = new KeyedMapBatch(this.reader('meta'), built.state.metaRoot);
+    const meta = new KeyedMapBatch(
+      this.reader('meta'),
+      built.state.metaRoot,
+      this.metaCache,
+    );
     const access = () => this.ctx.readGroup(this.target.nextOffset);
     const occurrences = new TranscriptTreeWriter(
       access,
@@ -289,7 +295,7 @@ export class TranscriptGroup {
           }),
         );
       }
-      await meta.spillWhenFull(this.target, this.ctx.readGroup);
+      await meta.spillWhenFull(this.appender(), this.ctx.readGroup);
     }
     return meta.commit(this.appender());
   }
