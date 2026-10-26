@@ -9,44 +9,27 @@ import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { GenerateOptions } from '@vybestack/llxprt-code-agents';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import type {
   AgentClientContract,
   AgentClientFactory,
 } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeContentGeneratorFactory } from '@vybestack/llxprt-code-providers/composition.js';
 import {
   cleanupAfterFailure,
   runCleanupSteps,
 } from '../../../core/subagent-cleanup.js';
 import type { SessionClientOwner } from '../../../session/session-client-owner.js';
-import type { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
-import { releaseAdoptedFileScope } from '../../adoption-release.js';
-import { toConfigParameters } from '../../agentConfig.adapter.js';
 import { buildAgentClientFactory } from '../../agentBootstrap.js';
-import { assembleModelSelection } from '../../model-selection.js';
-import {
-  acquirePreferredOAuth,
-  acquirePreferredProviderManager,
-  preparePreferredProviderCompletion,
-} from '../../preferred-provider-acquisition.js';
-import { executeProviderActivation } from '../../providerActivationExecutor.js';
-import { assembleProviderSwitch } from '../../providerSwitchAssembly.js';
+import type { AgentConfig } from '../../config-types.js';
 import type { GenerationProvider } from './generation-provider.js';
-import { buildTestMcpRuntime } from './mcp-owner-fixture.js';
-import { createCapturedSessionOwner } from './session-client-capture.js';
+import {
+  openProductionClientOwner,
+  type ProductionClientOwner,
+  type ProviderTokenizer,
+} from './production-client-owner.js';
 
 export function generationGate(): { promise: Promise<void>; release(): void } {
   let release!: () => void;
@@ -134,178 +117,47 @@ export interface GenerationClientOwner {
   readonly closeStack: () => Promise<void>;
 }
 
-interface ProviderStack {
-  readonly directory: string;
-  readonly config: Config;
-  readonly settings: SettingsService;
-  readonly settingsOwner: SessionSettingsOwner;
-  readonly policy: RuntimePolicyOwner;
-  readonly mcp: McpRuntimeOwner;
-  readonly runtimeId: string;
-  readonly release: AcquisitionRelease;
-  readonly files: ProviderFileLifecycle;
-  readonly manager: ReturnType<typeof acquirePreferredProviderManager>;
-  readonly oauth: ReturnType<typeof acquirePreferredOAuth>;
-  readonly tokenizer: ReturnType<typeof configureProviderTokenizer>;
-  /** Routes tokenizer readiness to the scenario's hook from now on. */
-  readonly admit: () => void;
+function selectionFor(directory: string, alias: string): AgentConfig {
+  return {
+    provider: alias,
+    model: 'primary-model',
+    sessionId: randomUUID(),
+    workingDir: directory,
+    telemetry: { enabled: false },
+    recording: { enabled: false },
+    mcpEnabled: false,
+    skillsSupport: false,
+    harness: { includeProcessCwd: false },
+  };
 }
 
-function createConfig(directory: string, alias: string): Config {
-  return new Config(
-    toConfigParameters({
-      provider: alias,
-      model: 'primary-model',
-      sessionId: randomUUID(),
-      workingDir: directory,
-      telemetry: { enabled: false },
-      recording: { enabled: false },
-      mcpEnabled: false,
-      skillsSupport: false,
-      harness: { includeProcessCwd: false },
-    }),
-  );
-}
-
-function gateTokenizer(
-  base: ReturnType<typeof configureProviderTokenizer>,
-  hook: (() => Promise<void>) | undefined,
-): { tokenizer: typeof base; admit: () => void } {
+function gateTokenizer(hook: (() => Promise<void>) | undefined): {
+  tokenizer: (base: ProviderTokenizer) => ProviderTokenizer;
+  admit: () => void;
+} {
   let admitted = false;
   return {
-    tokenizer: {
+    tokenizer: (base) => ({
       ...base,
       prepareTokenizer: async (provider, model) => {
         if (admitted && hook !== undefined) await hook();
         else await base.prepareTokenizer?.(provider, model);
       },
-    },
+    }),
     admit: () => {
       admitted = true;
     },
   };
 }
 
-async function acquireProviderStack(
-  options: GenerationClientOwnerOptions,
-): Promise<ProviderStack> {
-  const directory = await realpath(
-    await mkdtemp(join(tmpdir(), 'generation-client-owner-')),
-  );
-  const config = createConfig(directory, options.provider.alias);
-  const settings = new SettingsService();
-  for (const [key, value] of Object.entries(config.getInitialSettings()))
-    settings.set(key, value);
-  const policy = new RuntimePolicyOwner(config);
-  const mcp = await buildTestMcpRuntime(
-    config,
-    policy.session.messageBus,
-    {},
-    undefined,
-    policy,
-  );
-  const runtimeId = 'generation-client-owner-' + randomUUID();
-  const release = new AcquisitionRelease();
-  const settingsOwner = new SessionSettingsOwner(settings);
-  release.acquire('settings', () => settingsOwner.dispose());
-  settingsOwner.initializeProviderSelection(
-    config.getProvider(),
-    config.getModel(),
-  );
-  settingsOwner.bindTelemetry(config);
-  const files = new ProviderFileLifecycle({
-    maxFiles: 100,
-    maxBytes: 512 * 1024 * 1024,
-  });
-  for (const scope of [runtimeId, config.getSessionId()])
-    release.acquire('files', () => releaseAdoptedFileScope(files, scope));
-  const manager = acquirePreferredProviderManager(
-    config,
-    settings,
-    settingsOwner,
-    files,
-    runtimeId,
-    options.authority,
-    release,
-  );
-  const oauth = acquirePreferredOAuth(
-    undefined,
-    policy.session.messageBus,
-    config,
-    settings,
-    manager,
-    runtimeId,
-    mcp.profileDefinitions,
-    options.authority,
-    release,
-    undefined,
-  );
-  const { tokenizer, admit } = gateTokenizer(
-    configureProviderTokenizer(manager),
-    options.prepareTokenizer,
-  );
-  return {
-    directory,
-    config,
-    settings,
-    settingsOwner,
-    policy,
-    mcp,
-    runtimeId,
-    release,
-    files,
-    manager,
-    oauth,
-    tokenizer,
-    admit,
-  };
-}
-
-async function activateProvider(
-  stack: ProviderStack,
-  owner: SessionClientOwner,
-  provider: GenerationProvider,
-): Promise<void> {
-  const { config, settings, settingsOwner, manager, oauth, mcp } = stack;
-  await preparePreferredProviderCompletion(
-    config,
-    settings,
-    settingsOwner,
-    manager,
-    oauth,
-    stack.runtimeId,
-    stack.tokenizer,
-    provider.contributions,
-  );
-  await mcp.initialize();
-  const result = await executeProviderActivation(
-    config,
-    { provider: provider.alias, model: 'primary-model' },
-    assembleProviderSwitch(
-      config,
-      settings,
-      manager,
-      oauth,
-      () => 'agent',
-      () => owner.refreshAuth(),
-      settingsOwner,
-    ),
-    settings,
-    manager,
-    (method) => owner.refreshAuth(method),
-    assembleModelSelection(settingsOwner),
-  );
-  if (result.authFailed) throw result.authError;
-  await owner.initializeTools();
-  stack.admit();
-}
-
 async function openGenerationClientOwner(
   options: GenerationClientOwnerOptions,
 ): Promise<GenerationClientOwner> {
-  const stack = await acquireProviderStack(options);
-  const { config, settings, mcp, manager } = stack;
-  const media = new SessionMediaOwner(config.projectTempDir, 1024 * 1024);
+  const directory = await realpath(
+    await mkdtemp(join(tmpdir(), 'generation-client-owner-')),
+  );
+  const removeDirectory = (): Promise<void> =>
+    rm(directory, { recursive: true, force: true });
   const production = buildAgentClientFactory();
   const observed: ObservedClient[] = [];
   const factory: AgentClientFactory = (...operands) => {
@@ -314,44 +166,27 @@ async function openGenerationClientOwner(
     options.acquired?.(client, observed.length - 1);
     return client;
   };
-  const owner = await createCapturedSessionOwner(
-    config,
-    assembleTaskSchemaPolicy(settings),
-    manager,
-    factory,
-    media.store,
-    mcp.readInstructions,
-    mcp.workspacePaths,
-    stack.settingsOwner,
-    createRuntimeContentGeneratorFactory(),
-    stack.tokenizer,
-  );
-  owner.bindMcpRuntime(mcp);
-  owner.bindProviderFiles(stack.files, (provider) =>
-    stack.oauth.composeRetryOperations(provider),
-  );
-  owner.bindHooks();
-  const closeStack = (): Promise<void> =>
-    runCleanupSteps([
-      () => stack.release.close(),
-      () => media.dispose(),
-      () => mcp.dispose(),
-      () => stack.policy.dispose(),
-      () => config.dispose(),
-      () => rm(stack.directory, { recursive: true, force: true }),
-    ]);
+  const gate = gateTokenizer(options.prepareTokenizer);
+  let opened: ProductionClientOwner;
   try {
-    await activateProvider(stack, owner, options.provider);
+    opened = await openProductionClientOwner({
+      authority: options.authority,
+      selection: selectionFor(directory, options.provider.alias),
+      activation: { provider: options.provider.alias, model: 'primary-model' },
+      providerContributions: options.provider.contributions,
+      clientFactory: factory,
+      contentGeneratorFactory: createRuntimeContentGeneratorFactory(),
+      tokenizer: gate.tokenizer,
+    });
   } catch (primary) {
-    return cleanupAfterFailure(primary, () =>
-      runCleanupSteps([() => owner.dispose(), closeStack]),
-    );
+    return cleanupAfterFailure(primary, removeDirectory);
   }
+  gate.admit();
   return {
-    owner,
-    settingsOwner: stack.settingsOwner,
+    owner: opened.owner,
+    settingsOwner: opened.settingsOwner,
     clients: observed,
-    closeStack,
+    closeStack: () => runCleanupSteps([opened.closeResources, removeDirectory]),
   };
 }
 
