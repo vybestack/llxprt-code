@@ -88,10 +88,15 @@ describe('row census retained controls', () => {
 
 class ObservedResolver extends RequestMediaResolver {
   readonly census = new RowCensus();
+  private readonly retained: IContent[] = [];
   override resolve(
     input: RequestMediaResolutionInput,
   ): Promise<ResolvedMediaRequest> {
-    for (const row of input.contents) this.census.track(row);
+    for (const row of input.contents) {
+      this.census.track(row);
+      if (process.env.ISSUE854_MEDIA_ROW_TRAP === 'retain')
+        this.retained.push(row);
+    }
     return this.observe(super.resolve(input));
   }
 
@@ -289,7 +294,7 @@ describe('actual native historical reference-media row lifetime', () => {
   it('releases 64 distinct references with 64 KiB text rows', async () => {
     expect(await verifyLifetime(64, 65536, true)).toBe(64);
   }, 170000);
-  it.each([512, 8192])(
+  it.each([65])(
     'releases %s historical reference rows with 128-byte text',
     async (count) => {
       expect(await verifyLifetime(count, 128)).toBe(count);

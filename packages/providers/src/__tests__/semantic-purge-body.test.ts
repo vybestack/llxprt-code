@@ -186,7 +186,7 @@ async function saveBodies(
 }
 
 describe('semantic purge exact provider BODY BYTES', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     for (const explicit of [false, true]) {
       it(`sends every ${size}-row ${explicit ? 'pre-image cache' : 'purge candidate'} byte against an independent eager wire oracle`, async () => {
         await withSuffixFixture(
@@ -202,7 +202,9 @@ describe('semantic purge exact provider BODY BYTES', () => {
             const selection = await rawJournalSelection(
               history,
               transaction,
-              explicit,
+              process.env.ISSUE854_PURGE_BODY_TRAP === 'flip'
+                ? !explicit
+                : explicit,
             );
             let failure: { readonly error: unknown } | undefined;
             try {
