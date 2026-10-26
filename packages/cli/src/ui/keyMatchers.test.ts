@@ -501,4 +501,12 @@ describe('keyMatchers', () => {
       );
     });
   });
+  it('keeps Shift+Ctrl+C separate from default quit and clear bindings', () => {
+    const shiftedCopy = createKey('c', { ctrl: true, shift: true });
+    const bareInterrupt = createKey('c', { ctrl: true });
+    expect(keyMatchers[Command.QUIT](shiftedCopy)).toBe(false);
+    expect(keyMatchers[Command.CLEAR_INPUT](shiftedCopy)).toBe(false);
+    expect(keyMatchers[Command.QUIT](bareInterrupt)).toBe(true);
+    expect(keyMatchers[Command.CLEAR_INPUT](bareInterrupt)).toBe(true);
+  });
 });

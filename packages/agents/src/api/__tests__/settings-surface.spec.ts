@@ -34,7 +34,10 @@
 import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
+import {
+  buildCliStyleConfig,
+  createTerminalOnlyIdePort,
+} from './helpers/buildCliStyleConfig.js';
 
 describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirement:REQ-INT-003', () => {
   it('T8a numeric normalize: agent.setEphemeralSetting("context-limit","1000") yields the Config-normalized number 1000 and parity with the Config (REQ-INT-003)', async () => {
@@ -163,7 +166,9 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         fc.constantFrom('alpha', 'beta', 'gamma', 'my-key', 'x1'),
         fc.oneof(fc.string({ maxLength: 40 }), fc.integer(), fc.boolean()),
         async (key, value) => {
-          const built = await buildCliStyleConfig('plain-text.jsonl');
+          const built = await buildCliStyleConfig('plain-text.jsonl', {
+            idePort: createTerminalOnlyIdePort(),
+          });
           try {
             const agent: Agent = await fromConfig({
               settingsOwner: built.settingsOwner,
@@ -194,7 +199,9 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
   it('PROP streaming enum parity: for streaming in {enabled, disabled}, agent and Config normalize identically (REQ-INT-003)', async () => {
     await fc.assert(
       fc.asyncProperty(fc.constantFrom('enabled', 'disabled'), async (mode) => {
-        const built = await buildCliStyleConfig('plain-text.jsonl');
+        const built = await buildCliStyleConfig('plain-text.jsonl', {
+          idePort: createTerminalOnlyIdePort(),
+        });
         try {
           const agent: Agent = await fromConfig({
             settingsOwner: built.settingsOwner,

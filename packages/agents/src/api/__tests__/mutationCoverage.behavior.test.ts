@@ -48,6 +48,7 @@ import {
   internalConfig,
   ASYNC_PROPERTY_TIMEOUT_MS,
 } from './helpers/agentHarness.js';
+import { createTerminalOnlyIdePort } from './helpers/buildCliStyleConfig.js';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
@@ -280,7 +281,9 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
       fc.string({ minLength: 1, maxLength: 60 }).map((s) => s.trim()),
       async (prompt) => {
         if (prompt.length === 0) return true;
-        const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+        const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+          idePort: createTerminalOnlyIdePort(),
+        });
         try {
           const events: AgentEvent[] = await drain(agent.stream(prompt));
           return (
@@ -311,6 +314,7 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
   function createPROPTarget4ForAnyNonEmptyKeyNameStringGetProviderStatusSurfacesItProperty() {
     return fc.asyncProperty(nonBlankStringArbitrary, async (keyName) => {
       const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+        idePort: createTerminalOnlyIdePort(),
         auth: { keyName },
       });
       try {
@@ -344,6 +348,7 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
       async (model) => {
         const { agent, cleanup } = await buildAgent(
           'provider-switch-two-turn.jsonl',
+          { idePort: createTerminalOnlyIdePort() },
         );
         try {
           await agent.setProvider('p', model);
@@ -370,6 +375,7 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
   function createPROPTarget4bForAnyNonEmptyApiKeyGetProviderStatusReportsAuthenticatedAndProperty() {
     return fc.asyncProperty(nonBlankStringArbitrary, async (apiKey) => {
       const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+        idePort: createTerminalOnlyIdePort(),
         auth: { apiKey },
       });
       try {
@@ -399,6 +405,7 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
     return fc.asyncProperty(fc.integer({ min: 1, max: 5 }), async (seed) => {
       // The WITH-handler agent drives a tool fixture to a real result.
       const withHandler = await buildAgent('tool-call-then-answer.jsonl', {
+        idePort: createTerminalOnlyIdePort(),
         onApproval: () => ToolConfirmationOutcome.ProceedOnce,
       });
       try {
@@ -407,7 +414,9 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
         );
         const withResults = withEvents.filter(isToolResultEvent).length >= 1;
         // The WITHOUT-handler agent on a plain fixture yields no tools.
-        const without = await buildAgent('plain-text.jsonl');
+        const without = await buildAgent('plain-text.jsonl', {
+          idePort: createTerminalOnlyIdePort(),
+        });
         try {
           const withoutEvents: AgentEvent[] = await drain(
             without.agent.stream(`seed-${seed}`),
@@ -462,7 +471,9 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
       // relying on arbitrary strings that widen the env-var race window.
       fc.constantFrom('openai', 'anthropic', 'gemini', 'ollama', 'fake'),
       async (providerName) => {
-        const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+        const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+          idePort: createTerminalOnlyIdePort(),
+        });
         try {
           const beforeModel = agent.getModel();
           await agent.setProvider(providerName);
@@ -605,7 +616,9 @@ describe('mutation P23 — target 7: rebuild propagates approvalHandler (agentIm
         fc.asyncProperty(
           fc.string({ minLength: 1, maxLength: 20 }),
           async (prompt) => {
-            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+              idePort: createTerminalOnlyIdePort(),
+            });
             try {
               await drain(agent.stream(prompt));
               await agent.dispose();

@@ -14,8 +14,6 @@ Default keyboard shortcuts for editing, navigation, and UI control.
 
 <!-- KEYBINDINGS-AUTOGEN:START -->
 
-## Basic Controls
-
 | Action                                                          | Keys       |
 | --------------------------------------------------------------- | ---------- |
 | Confirm the current selection or choice.                        | `Enter`    |
@@ -137,6 +135,14 @@ Default keyboard shortcuts for editing, navigation, and UI control.
 | Toggle mouse event tracking. | `Ctrl + \` |
 
 <!-- KEYBINDINGS-AUTOGEN:END -->
+
+### Clipboard and Linux mouse paste
+
+`Ctrl+V` (or `Cmd+V` on macOS) pastes clipboard images first, then text. Text paste follows the same newline normalization and large-paste placeholder behavior as terminal paste. If clipboard access fails, LLxprt displays an error; terminal paste remains available.
+
+On Linux, middle-click pastes the PRIMARY selection into the focused LLxprt prompt while mouse-event tracking is enabled. Install `wl-clipboard` for Wayland, or `xclip`/`xsel` for X11. When both display environments are present, LLxprt uses Wayland without falling back to a different display server. LLxprt reads only PRIMARY for this gesture and does not substitute the regular clipboard. Empty selections do nothing. This reads the selection available to the LLxprt process, so a remote SSH session or other isolated environment may not have access to the local desktop selection.
+
+When the terminal preserves the Shift modifier, `Ctrl+Shift+C` does not trigger LLxprt's Ctrl+C cancel/clear bindings. A terminal or wrapper that sends both chords as the same Ctrl+C byte prevents LLxprt from distinguishing them. Bare `Ctrl+C` retains its existing behavior.
 
 ## Context-Specific Shortcuts
 

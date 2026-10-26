@@ -39,6 +39,11 @@ export interface MouseEvent {
 export type MouseHandler = (event: MouseEvent) => void | boolean;
 
 let mouseEventsActive = false;
+let mouseEventsGeneration = 0;
+
+export function getMouseEventsGeneration(): number {
+  return mouseEventsGeneration;
+}
 
 export const ENABLE_MOUSE_EVENTS = '\u001b[?1002h\u001b[?1006h';
 export const DISABLE_MOUSE_EVENTS = '\u001b[?1006l\u001b[?1002l';
@@ -249,11 +254,13 @@ export function enableMouseEvents() {
   // Use writeToStdout to bypass patchStdio — terminal escape sequences
   // must reach the real stdout, not the event system.
   writeToStdout(ENABLE_MOUSE_EVENTS);
+  if (!mouseEventsActive) mouseEventsGeneration++;
   mouseEventsActive = true;
 }
 
 export function disableMouseEvents() {
   // Disable mouse tracking with SGR format
   writeToStdout(DISABLE_MOUSE_EVENTS);
+  if (mouseEventsActive) mouseEventsGeneration++;
   mouseEventsActive = false;
 }

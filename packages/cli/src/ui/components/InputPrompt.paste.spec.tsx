@@ -26,13 +26,6 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
   unescapePath: (path: string) => path,
 }));
 
-// Mock clipboardy
-void vi.mock('clipboardy', () => ({
-  default: {
-    read: vi.fn(),
-  },
-}));
-
 // Mock the required hooks
 void vi.mock('../hooks/useShellHistory.js', () => ({
   useShellHistory: () => ({
@@ -80,11 +73,6 @@ void vi.mock('../hooks/useInputHistory.js', () => ({
   }),
 }));
 
-void vi.mock('../utils/clipboardUtils.js', () => ({
-  pasteClipboardImage: vi.fn(),
-  clipboardHasImage: vi.fn(),
-}));
-
 // Mocks for '../hooks/usePromptEnhancement.js' and
 // '../hooks/useProviderModelDialog.js' were removed: neither module exists
 // anywhere in the workspace any more, so both mocks targeted nothing.
@@ -120,9 +108,6 @@ import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
 import type { TextBuffer } from './shared/text-buffer.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-import clipboardy from 'clipboardy';
-import * as clipboardUtils from '../utils/clipboardUtils.js';
-import { useMouse, type MouseEvent } from '../hooks/useMouse.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 import { testRegex } from '../../__tests__/regex.js';
 import { pasteConfig } from './InputPrompt.paste.fixture.js';
@@ -463,90 +448,6 @@ describe('InputPrompt paste functionality', () => {
     });
 
     expect(mockOnSubmit).toHaveBeenCalledWith(firstPaste + secondPaste);
-  });
-
-  it('should paste clipboard text on right-click release (mouse event)', async () => {
-    const mockDispatch = vi.fn();
-
-    // Mock clipboardUtils to return false for image check
-    (
-      clipboardUtils.clipboardHasImage as Mock<
-        typeof clipboardUtils.clipboardHasImage
-      >
-    ).mockResolvedValue(false);
-    // Mock clipboardy to return test text
-    (clipboardy.read as Mock<typeof clipboardy.read>).mockResolvedValue(
-      'pasted text from mouse',
-    );
-
-    // Set up useMouse to capture the handler and allow us to trigger it
-    let mouseHandler: ((event: MouseEvent) => void) | null = null;
-    (useMouse as Mock<typeof useMouse>).mockImplementation((handler) => {
-      mouseHandler = handler;
-    });
-
-    mockBuffer.text = 'hello';
-    mockBuffer.lines = ['hello'];
-
-    render(
-      <AppDispatchProvider value={mockDispatch}>
-        <InputPrompt
-          buffer={mockBuffer}
-          onSubmit={mockOnSubmit}
-          userMessages={[]}
-          onClearScreen={mockOnClearScreen}
-          config={composeFixtureRuntime(mockConfig)}
-          slashCommands={[]}
-          commandContext={createMockCommandContext()}
-          placeholder="Type a message..."
-          focus={true}
-          inputWidth={80}
-          suggestionsWidth={0}
-          shellModeActive={false}
-          setShellModeActive={mockSetShellModeActive}
-        />
-      </AppDispatchProvider>,
-    );
-
-    // Wait for component to mount and useMouse to be called
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    // Clear any initial calls
-    (
-      mockBuffer.replaceRangeByOffset as unknown as Mock<
-        (...args: never[]) => unknown
-      >
-    ).mockClear();
-
-    // Verify useMouse was set up
-    expect(mouseHandler).not.toBeNull();
-
-    // Simulate right mouse release event
-    await act(async () => {
-      mouseHandler!({
-        name: 'right-release',
-        col: 5,
-        row: 2,
-        shift: false,
-        meta: false,
-        ctrl: false,
-        button: 'right',
-      });
-    });
-
-    // Wait for async clipboard operations
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Verify clipboard functions were called
-    expect(clipboardUtils.clipboardHasImage).toHaveBeenCalled();
-    expect(clipboardy.read).toHaveBeenCalled();
-
-    // Verify paste was inserted into buffer
-    expect(mockBuffer.replaceRangeByOffset).toHaveBeenCalledWith(
-      expect.any(Number),
-      expect.any(Number),
-      'pasted text from mouse',
-    );
   });
 
   it('should expand a single large paste before steering', async () => {

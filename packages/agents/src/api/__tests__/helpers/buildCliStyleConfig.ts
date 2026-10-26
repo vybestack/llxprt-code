@@ -1,4 +1,6 @@
 import type { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
+import type { WorkspaceIdePort } from '@vybestack/llxprt-code-core';
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -115,6 +117,17 @@ export function projectEvents(
 }
 
 // ─── Config construction (mirrors createAgent's Config-build path) ──────────
+
+export function createTerminalOnlyIdePort(): WorkspaceIdePort {
+  return {
+    getClient: () => undefined,
+    isEnabled: () => false,
+    setEnabled: (enabled) => {
+      if (enabled)
+        throw new Error('Terminal-only fixture does not support IDE mode');
+    },
+  };
+}
 
 export interface BuiltCliConfig {
   readonly runtime: IsolatedRuntimeContextHandle;
@@ -594,7 +607,7 @@ export async function buildTestMcpRuntime(
       ? 'runtime'
       : 'caller',
     undefined,
-    undefined,
+    overrides.idePort,
     undefined,
     skillOperations,
   );
