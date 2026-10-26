@@ -6,6 +6,7 @@ import { createJournalHeader, encodeJournalHeader } from './fileHeader.js';
 import { JOURNAL_HEADER_BYTES } from './fileHeader.js';
 import { loadFlushRecords, type FlushRecords } from './flushRecords.js';
 import { JournalGroupWriter } from './groupWriter.js';
+import { journalCommitPublisher } from './journal-watermarks.js';
 import {
   createFileHandleReader,
   createFileHandleSink,
@@ -58,7 +59,7 @@ export async function createJournal(
       writeOffset: JOURNAL_HEADER_BYTES,
       published: undefined,
     },
-    dependencies,
+    { ...dependencies, notifyCommit: journalCommitPublisher(path) },
   );
 }
 
@@ -136,7 +137,7 @@ export async function openJournalForOwner(
         writeOffset: recovery.truncated ? durableEnd : size,
         published: trailer,
       },
-      dependencies,
+      { ...dependencies, notifyCommit: journalCommitPublisher(path) },
     );
     return { writer, recovery };
   } catch (error) {

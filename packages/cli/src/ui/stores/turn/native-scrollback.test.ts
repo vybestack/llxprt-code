@@ -46,7 +46,7 @@ describe('native journal scrollback', () => {
       });
       try {
         expect((await pager.resumeFromJournal()).seededRows).toBe(2);
-        expect(decoded.snapshot().rowsDecoded).toBe(7);
+        expect(decoded.snapshot().rowsDecoded).toBe(2);
         expect(ownership.snapshot().liveRows).toBe(2);
         expect(
           pager

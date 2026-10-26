@@ -10,11 +10,14 @@ export interface NativeJournalOptions {
   readonly counters?: JournalReadCounters;
   readonly signal?: AbortSignal;
   readonly journal?: NativeJournalReadDependencies;
+  readonly publishedEnd?: number;
 }
 
 export type NativeDisplayEntry =
   | {
       readonly kind: 'boundary';
+      readonly contextState?: 'in-context' | 'purged' | 'n/a';
+      readonly transcriptId?: string;
       readonly offset: number;
       readonly length: number;
       readonly seq: number;
@@ -28,6 +31,8 @@ export type NativeDisplayEntry =
     }
   | {
       readonly kind: 'projected';
+      readonly contextState?: 'in-context' | 'purged' | 'n/a';
+      readonly transcriptId?: string;
       readonly offset: number;
       readonly length: number;
       readonly seq: number | null;

@@ -132,6 +132,7 @@ async function initialJournalProjection(): Promise<{
       sourceFor: (_row, index) => ({
         kind: 'journal',
         offset: offsets[index],
+        transcriptId: String(index + 1),
       }),
     },
   ))

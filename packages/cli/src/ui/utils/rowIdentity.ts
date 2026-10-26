@@ -31,6 +31,7 @@ export interface JournalRowIdentity {
   readonly toolOffset?: number;
   readonly kind: 'journal';
   readonly offset: number;
+  readonly transcriptId?: string;
   readonly discriminator: RowDiscriminator;
 }
 
@@ -62,7 +63,11 @@ export type RowIdentity =
 
 /** Where a projected row came from: a journal offset or a legacy batch index. */
 export type RowSource =
-  | { readonly kind: 'journal'; readonly offset: number }
+  | {
+      readonly kind: 'journal';
+      readonly offset: number;
+      readonly transcriptId?: string;
+    }
   | { readonly kind: 'legacy'; readonly index: number };
 
 const DISCRIMINATOR_PREFIX: Readonly<Record<RowDiscriminator, string>> = {
@@ -79,6 +84,9 @@ export function rowIdentity(
     return {
       kind: 'journal',
       offset: source.offset,
+      ...(source.transcriptId === undefined
+        ? {}
+        : { transcriptId: source.transcriptId }),
       discriminator,
     };
   }
@@ -97,7 +105,7 @@ export function pendingRowIdentity(pendingKey: string): PendingRowIdentity {
 export function rowIdentityKey(identity: RowIdentity): string {
   switch (identity.kind) {
     case 'journal':
-      return `journal:${identity.offset}:${DISCRIMINATOR_PREFIX[identity.discriminator]}${identity.toolOffset === undefined ? '' : `:tools:${identity.toolOffset}`}`;
+      return `${identity.transcriptId === undefined ? `journal:${identity.offset}` : `transcript:${identity.transcriptId}`}:${DISCRIMINATOR_PREFIX[identity.discriminator]}${identity.toolOffset === undefined ? '' : `:tools:${identity.toolOffset}`}`;
     case 'legacy':
       return `legacy:${identity.index}:${DISCRIMINATOR_PREFIX[identity.discriminator]}${identity.toolOffset === undefined ? '' : `:tools:${identity.toolOffset}`}`;
     case 'pending':

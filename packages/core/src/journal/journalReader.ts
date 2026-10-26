@@ -39,12 +39,21 @@ function noCommittedState(): never {
 export async function openJournalReadOnly(
   path: string,
   dependencies: JournalReaderDependencies = defaultDependencies,
+  publishedEnd?: number,
 ): Promise<JournalReader> {
   const handle = await dependencies.open(path, 'r');
   try {
     const { size } = await handle.stat();
     const reader = createFileHandleReader(handle);
-    const { header, trailer } = await locateCommittedState(path, reader, size);
+    if (publishedEnd !== undefined && publishedEnd > size)
+      throw new Error('Published journal watermark exceeds file size');
+    const { header, trailer } = await locateCommittedState(
+      path,
+      reader,
+      publishedEnd ?? size,
+    );
+    if (publishedEnd !== undefined && trailer?.durableEnd !== publishedEnd)
+      throw new Error('Published journal watermark is no longer available');
     const access: RecordAccess =
       trailer === undefined
         ? {

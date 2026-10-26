@@ -6,8 +6,8 @@ import {
   type JournalReader,
   type JournalReaderDependencies,
 } from './journalReader.js';
-import { entryAt, iterateRowEntries, rowTreeRootOf } from './rowTreeReader.js';
-import { entryByLabel } from './rowTreeQueries.js';
+import { NativeTranscriptIndex } from './native-transcript-index.js';
+import { readChunkToolPage } from './native-chunk-tool-page.js';
 import { readRowIds, readStoredRow, type RowIds } from './rowReads.js';
 import {
   decodeRowHeader,
@@ -20,9 +20,7 @@ import { JournalFormatError } from './errors.js';
 import { readStoredMetadata } from './rowRangeReads.js';
 import { checkedRowPiece, ROW_PIECE_CRC_BYTES } from './rowPiece.js';
 import { ROW_ENTRY_NO_CHRONOLOGY_SEQ, type RowEntry } from './rowEntry.js';
-import { readVersionAt } from './trailerAccess.js';
-import { versionOf } from './version.js';
-import { MUTATION, RECORD_KIND } from './recordKinds.js';
+import { RECORD_KIND } from './recordKinds.js';
 import { NativeResponseIndex } from './native-response-index.js';
 import type { FrameHead } from './frame.js';
 
@@ -37,27 +35,38 @@ export class NativeJournalPageReader {
     | { readonly offset: number; readonly ids: ToolPageHeader }
     | undefined;
 
+  private readonly transcript: NativeTranscriptIndex;
+
   private constructor(private readonly reader: JournalReader) {
     this.responses = new NativeResponseIndex(reader);
+    this.transcript = new NativeTranscriptIndex(reader);
   }
 
   static async open(
     path: string,
     dependencies?: NativeJournalReadDependencies,
+    publishedEnd?: number,
   ): Promise<NativeJournalPageReader> {
-    return new NativeJournalPageReader(
-      await openJournalReadOnly(path, dependencies),
+    const reader = new NativeJournalPageReader(
+      await openJournalReadOnly(path, dependencies, publishedEnd),
     );
+    try {
+      await reader.transcript.initialize();
+      return reader;
+    } catch (error) {
+      await reader.close();
+      throw error;
+    }
   }
 
   get path(): string {
     return this.reader.path;
   }
   get rows(): number {
-    return this.reader.trailer?.rootAggregate.rows ?? 0;
+    return this.transcript.rows;
   }
   get curated(): boolean {
-    return this.reader.trailer?.rootAggregate.curated === this.rows;
+    return false;
   }
   get groupTag(): bigint | undefined {
     return this.reader.trailer?.groupTag;
@@ -66,38 +75,41 @@ export class NativeJournalPageReader {
     return this.reader.trailer?.durableEnd ?? this.reader.fileSize;
   }
 
-  private root(): NonNullable<ReturnType<typeof rowTreeRootOf>> {
-    const root = rowTreeRootOf(this.reader.trailer);
-    if (root === undefined) throw new Error('Empty journal has no row tree');
-    return root;
-  }
-
   entryAt(ordinal: number): Promise<NativeJournalEntry> {
-    return entryAt(this.reader, this.root(), ordinal);
+    return this.transcript.entryAt(ordinal);
   }
 
-  entryByLabel(label: bigint): Promise<NativeJournalEntry | undefined> {
-    return entryByLabel(this.reader, this.root(), label);
+  async entryByLabel(label: bigint): Promise<NativeJournalEntry | undefined> {
+    for await (const entry of this.entries())
+      if (entry.label === label) return entry;
+    return undefined;
   }
 
   async *entries(from = 0): AsyncGenerator<NativeJournalEntry> {
-    const root = rowTreeRootOf(this.reader.trailer);
-    if (root !== undefined) yield* iterateRowEntries(this.reader, root, from);
+    for (let ordinal = from; ordinal < this.rows; ordinal++)
+      yield await this.entryAt(ordinal);
+  }
+
+  inContext(entry: NativeJournalEntry): Promise<boolean> {
+    return this.transcript.member(entry);
   }
 
   async readContent(entry: NativeJournalEntry): Promise<IContent> {
-    return decodeStoredRow(await readStoredRow(this.reader, entry));
+    const head = await this.reader.readRecordHead(entry.recordOffset, 'ROW');
+    if (head.kind === RECORD_KIND.VALUE)
+      return this.transcript.marker(entry.recordOffset);
+    return decodeStoredRow(await readStoredRow(this.reader, entry, head));
   }
 
   private async toolPageHeader(
     entry: NativeJournalEntry,
+    head: FrameHead,
   ): Promise<ToolPageHeader> {
     if (
       this.pageHeader?.offset === entry.recordOffset &&
       this.pageHeader.ids.header.label === entry.label
     )
       return this.pageHeader.ids;
-    const head = await this.reader.readRecordHead(entry.recordOffset, 'ROW');
     if (head.kind !== RECORD_KIND.ROW)
       throw new JournalFormatError('Tool page source is not a row');
     const header = decodeRowHeader(head.kindHeader);
@@ -114,7 +126,15 @@ export class NativeJournalPageReader {
     start: number,
     count: number,
   ): Promise<IContent> {
-    const ids = await this.toolPageHeader(entry);
+    const source =
+      this.pageHeader?.offset === entry.recordOffset
+        ? this.pageHeader.ids.head
+        : await this.reader.readRecordHead(entry.recordOffset, 'ROW');
+    if (source.kind === RECORD_KIND.VALUE)
+      return this.transcript.marker(entry.recordOffset);
+    if (decodeRowHeader(source.kindHeader).chunk !== undefined)
+      return readChunkToolPage(this.reader, entry, start, count);
+    const ids = await this.toolPageHeader(entry, source);
     const head = ids.head;
     const metadata = await readStoredMetadata(this.reader, entry, ids);
     let call = 0;
@@ -191,18 +211,7 @@ export class NativeJournalPageReader {
   }
 
   async clearBoundaryOffset(): Promise<number | null> {
-    const trailer = this.reader.trailer;
-    if (trailer === undefined) return null;
-    let first = versionOf(trailer);
-    while (first.parent !== 0) {
-      const offset =
-        [...first.skip].reverse().find((value) => value !== 0) ?? first.parent;
-      first = await readVersionAt(this.reader, offset);
-    }
-    return first.mutation === MUTATION.replace ||
-      (first.mutation === MUTATION.pop && first.rows === 0)
-      ? first.selfOffset
-      : null;
+    return null;
   }
 
   close(): Promise<void> {

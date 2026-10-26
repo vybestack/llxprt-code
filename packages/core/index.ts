@@ -56,3 +56,7 @@ export {
   type NativeJournalReadDependencies,
 } from './src/journal/native-journal-page-reader.js';
 export { JournalSession } from './src/services/history/journalSession.js';
+export {
+  subscribeJournalCommits,
+  type JournalCommitWatermark,
+} from './src/journal/journal-watermarks.js';

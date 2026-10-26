@@ -30,12 +30,16 @@ interface ProjectionGroup {
   readonly rows: number;
   readonly calls: number;
   readonly spanEnd: number | undefined;
+  readonly inContext: boolean;
 }
 
 export class NativeJournalCursor {
   private start: Position;
   private end: Position;
-  private readonly positions = new Map<string, LocatedEntry>();
+  private readonly positions = new Map<
+    string,
+    Pick<LocatedEntry, 'before' | 'after'>
+  >();
   private retained: HistoryItem[] = [];
   private firstOffset: number | null = null;
   private boundaryOffset: number | null = null;
@@ -45,6 +49,7 @@ export class NativeJournalCursor {
   private closing: Promise<void> | undefined;
   private responseIndex: NativeResponseIndex;
   private group: { readonly start: number; readonly end: number } | undefined;
+  private publishedEnd: number | undefined;
 
   private constructor(
     private reader: NativeJournalPageReader,
@@ -56,6 +61,7 @@ export class NativeJournalCursor {
         ? AbortSignal.any([options.signal, this.controller.signal])
         : this.controller.signal,
     };
+    this.publishedEnd = options.publishedEnd;
     this.start = { row: this.rows, item: 0 };
     this.end = this.start;
     this.responseIndex = new NativeResponseIndex(reader);
@@ -66,7 +72,11 @@ export class NativeJournalCursor {
     pageRows = 16,
   ): Promise<NativeJournalCursor> {
     options.signal?.throwIfAborted();
-    const reader = await NativeJournalPageReader.open(path, options.journal);
+    const reader = await NativeJournalPageReader.open(
+      path,
+      options.journal,
+      options.publishedEnd,
+    );
     const cursor = new NativeJournalCursor(reader, options);
     try {
       options.signal?.throwIfAborted();
@@ -89,23 +99,24 @@ export class NativeJournalCursor {
     if (entry.kind === 'projected')
       this.options.counters?.ownership?.retain(entry.item);
   }
-  private trimSeed(page: LocatedEntry[], count: number): void {
-    if (page.length <= count) return;
-    const dropped = page.shift();
-    if (dropped?.entry.kind === 'projected')
-      this.options.counters?.ownership?.release(dropped.entry.item);
-  }
   private async seed(count: number): Promise<void> {
     const page: LocatedEntry[] = [];
     try {
-      let row = 0;
-      while (row < this.rows) {
-        for await (const located of this.projectGroup(row)) {
-          page.push(located);
+      let end = this.rows;
+      while (end > 0 && page.length < count) {
+        const row = await this.groupStart(end - 1);
+        const group: LocatedEntry[] = [];
+        for await (const located of this.projectGroup(
+          row,
+          0,
+          Number.POSITIVE_INFINITY,
+          count - page.length,
+        )) {
+          group.push(located);
           this.retainEntry(located.entry);
-          this.trimSeed(page, count);
         }
-        row = await this.groupEnd(row);
+        page.unshift(...group);
+        end = row;
       }
       this.initialPage = page;
     } catch (error) {
@@ -151,12 +162,21 @@ export class NativeJournalCursor {
     opener: IContent,
     item: HistoryItem,
     rows: number,
+    inContext: boolean,
   ): DisplayJournalEntry {
     const seq = opener.metadata?.chronology?.seq ?? Number(first.label);
     const common = {
+      transcriptId: first.transcriptId.toString(),
       offset: first.recordOffset,
       length: first.recordLength,
       seq,
+      contextState: inContext ? 'in-context' : 'purged',
+    } satisfies {
+      transcriptId: string;
+      offset: number;
+      length: number;
+      seq: number;
+      contextState: 'in-context' | 'purged';
     };
     return opener.metadata?.isSummary === true
       ? {
@@ -253,6 +273,7 @@ export class NativeJournalCursor {
               rowIdentity: {
                 kind: 'journal',
                 offset: first.recordOffset,
+                transcriptId: first.transcriptId.toString(),
                 discriminator: identity.discriminator,
                 ...(callStart > 0 ? { toolOffset: callStart } : {}),
               },
@@ -269,7 +290,13 @@ export class NativeJournalCursor {
           : {}),
       };
       return {
-        entry: this.displayEntry(first, opener, projected, group.rows),
+        entry: this.displayEntry(
+          first,
+          opener,
+          projected,
+          group.rows,
+          group.inContext,
+        ),
         before: { row: from, item: firstItem + index },
         after: { row: from, item: firstItem + index + 1 },
       };
@@ -284,6 +311,28 @@ export class NativeJournalCursor {
   > {
     const page = start === 0 ? opener : await this.read(first, start);
     return page.blocks.filter((block) => block.type === 'tool_call');
+  }
+  private async projectItems(
+    first: RowEntry,
+    opener: IContent,
+    callStart: number,
+    responseEntries: ReadonlyMap<string, RowEntry>,
+  ): Promise<HistoryItem[]> {
+    const selected = await this.readToolCalls(first, opener, callStart);
+    const responses = await this.responsesFor(
+      new Set(selected.map((call) => call.id)),
+      responseEntries,
+    );
+    const page: IContent = {
+      ...opener,
+      blocks: [
+        ...(callStart === 0
+          ? opener.blocks.filter((block) => block.type !== 'tool_call')
+          : []),
+        ...selected,
+      ],
+    };
+    return iContentToHistoryItems([page, ...responses.values()]);
   }
   private async *projectGroup(
     from: number,
@@ -307,26 +356,18 @@ export class NativeJournalCursor {
         end,
       );
       const spanEnd = this.responseSpan(responseEntries);
+      const inContext = await this.reader.inContext(first);
       for (
         let callStart = 0;
         callStart === 0 || callStart < callCount;
         callStart += 16
       ) {
-        const selected = await this.readToolCalls(first, opener, callStart);
-        const responses = await this.responsesFor(
-          new Set(selected.map((call) => call.id)),
+        const items = await this.projectItems(
+          first,
+          opener,
+          callStart,
           responseEntries,
         );
-        const page: IContent = {
-          ...opener,
-          blocks: [
-            ...(callStart === 0
-              ? opener.blocks.filter((block) => block.type !== 'tool_call')
-              : []),
-            ...selected,
-          ],
-        };
-        const items = iContentToHistoryItems([page, ...responses.values()]);
         if (callStart === 0) {
           const total =
             items.length + Math.max(0, Math.ceil(callCount / 16) - 1);
@@ -343,6 +384,7 @@ export class NativeJournalCursor {
             rows: end - from,
             calls: callCount,
             spanEnd,
+            inContext,
           },
           items,
           itemIndex,
@@ -380,8 +422,11 @@ export class NativeJournalCursor {
   pageForward(count: number): Promise<{ entries: DisplayJournalEntry[] }> {
     return this.enqueue(() => this.readForward(count));
   }
-  refreshFileEnd(): Promise<void> {
-    return this.enqueue(() => this.refreshReader());
+  refreshFileEnd(publishedEnd?: number): Promise<void> {
+    return this.enqueue(() => {
+      this.publishedEnd = publishedEnd;
+      return this.refreshReader();
+    });
   }
   private async readBack(
     count: number,
@@ -426,7 +471,7 @@ export class NativeJournalCursor {
     count: number,
   ): Promise<{ entries: DisplayJournalEntry[] }> {
     this.releasePage();
-    if (this.end.row >= this.rows) await this.refreshReader();
+    await this.refreshReader();
     const selected: LocatedEntry[] = [];
     let position = this.end;
     while (selected.length < count && position.row < this.rows) {
@@ -457,7 +502,10 @@ export class NativeJournalCursor {
       this.options.counters?.ownership?.retain(item);
       this.retained.push(item);
       if (item.rowIdentity)
-        this.positions.set(rowIdentityKey(item.rowIdentity), located);
+        this.positions.set(rowIdentityKey(item.rowIdentity), {
+          before: located.before,
+          after: located.after,
+        });
     }
     return { entries: selected.map(({ entry }) => entry) };
   }
@@ -482,12 +530,18 @@ export class NativeJournalCursor {
     const next = await NativeJournalPageReader.open(
       this.reader.path,
       this.options.journal,
+      this.publishedEnd,
     );
     if (this.options.signal?.aborted === true) {
       await next.close();
       this.options.signal.throwIfAborted();
     }
-    if (next.rows > this.rows && this.rows > 0 && this.end.row === this.rows) {
+    if (
+      next.groupTag !== this.reader.groupTag &&
+      this.rows > 0 &&
+      (this.end.row >= this.rows ||
+        (await this.groupEnd(this.end.row)) === this.rows)
+    ) {
       const tail = await this.reader.entryAt(this.rows - 1);
       if (!this.reader.isHuman(tail))
         this.end = { row: await this.groupStart(this.rows - 1), item: 0 };

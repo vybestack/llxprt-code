@@ -4,153 +4,42 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * @plan PLAN-20260917-ISSUE854.P02c
- * @requirement G1,G2
- *
- * ScrollbackPager store (issue-854-design.md §3): bounded scrollback over the
- * append-only session journal. Rows are paged through a JournalCursor whose
- * two read heads mirror the resident window — pageBack consumes older records
- * from the backward head, pageForward picks up appends at the forward head,
- * and the resident rows always span exactly the records between the heads.
- *
- * Every async read is guarded by a generation counter: invalidate() and
- * close() bump the generation and drop the cursor, and any read that finishes
- * under a stale generation is discarded whole, so rows are never torn across
- * generations and a closed cursor can never mutate state. Page calls are
- * serialized per store so concurrent callers page distinct records instead of
- * walking the same cursor page twice.
- *
- * A rewind is applied as membership by the cursor: a cut removes the suffix
- * rows and leaves the surviving prefix pageable, and a cut that leaves nothing
- * is a full clear whose offset is the floor scalar.
- * Compressed records page through as summary rows and do not stop paging.
- *
- * Residency (issue-854-design.md §3): visible rows and the pending live tail
- * are never evicted (oversized-visible-row guarantee). pageOut schedules a
- * reset-debounced flush that evicts beyond-window rows — sub-context rows
- * (seq < contextWindow.firstSeq) first, then the far off-screen end — down
- * to the byte floor; reportViewport and setContextWindow evict sub-context
- * rows immediately at bottom.
- *
- * Resume (PLAN-20260917-ISSUE854.P04b): resumeFromJournal() seeds the
- * resident window with the journal's last page plus the floor/tail scalars.
- * A generation-guarded probe cursor walks to the visibility floor for the
- * scalars while the store cursor seeds through the ordinary collectBack
- * path; the recorded oldest-display-row offset lets pageBack recognize the
- * floor without consuming the non-display header line below it.
- */
-
 import { Buffer } from 'node:buffer';
 import {
   type IContent,
   type JournalReadCounters,
+  type JournalCommitWatermark,
 } from '@vybestack/llxprt-code-core';
+import type {
+  ScrollbackViewportReporter,
+  ScrollbackPagerSettings,
+  ScrollbackPagerOptions,
+  ScrollbackRow,
+  ScrollbackPagerState,
+  ScrollbackPagerMetrics,
+  ScrollbackResumeSummary,
+  ScrollbackPagerStore,
+} from './scrollback-pager-types.js';
+export type {
+  ScrollbackViewportReporter,
+  ScrollbackPagerSettings,
+  ScrollbackPagerOptions,
+  ScrollbackRow,
+  ScrollbackPagerState,
+  ScrollbackPagerMetrics,
+  ScrollbackResumeSummary,
+  ScrollbackPagerStore,
+} from './scrollback-pager-types.js';
 import { NativeJournalCursor } from './native-journal-cursor.js';
+import { JournalPagerSubscription } from './journal-pager-subscription.js';
 import type { NativeDisplayEntry as JournalEntry } from './native-journal-types.js';
 import type { HistoryItem } from '../../types.js';
 
 import {
   pendingRowIdentity,
-  rowIdentity,
   rowIdentityKey,
   type RowIdentity,
 } from '../../utils/rowIdentity.js';
-
-/** Viewport metrics the pager reads to size its residency margins. */
-export interface ScrollbackViewportReporter {
-  visibleKeys: readonly string[];
-  viewportLines: number;
-  rowHeightLines(): number;
-}
-
-export interface ScrollbackPagerSettings {
-  readonly marginViewports: number;
-  readonly byteFloorBytes: number;
-  readonly purgeDebounceMs: number;
-}
-
-export interface ScrollbackPagerOptions {
-  readonly filePath: string;
-  readonly viewport: ScrollbackViewportReporter;
-  readonly pageRows: number;
-  readonly settings: ScrollbackPagerSettings;
-  /** JournalCursor read chunk size; defaults to the cursor's own default. */
-  readonly chunkBytes?: number;
-  readonly counters?: JournalReadCounters;
-}
-
-/** One display row: a projected journal record or a live-tail item. */
-export interface ScrollbackRow {
-  readonly key: string;
-  readonly seq: number | null;
-  readonly identity: RowIdentity;
-  /** Journal byte offset, or null for rows with no journal record. */
-  readonly offset: number | null;
-  readonly item: HistoryItem;
-}
-
-export interface ScrollbackPagerState {
-  readonly rows: readonly ScrollbackRow[];
-  readonly loadingOlder: boolean;
-  readonly atVisibilityFloor: boolean;
-  readonly atFileEnd: boolean;
-  readonly generation: number;
-  readonly error: string | null;
-}
-
-export interface ScrollbackPagerMetrics {
-  readonly residentBytes: number;
-  readonly residentRows: number;
-}
-
-/** Scalars captured while seeding the resident window from the journal. */
-export interface ScrollbackResumeSummary {
-  /** Display rows seeded into the resident window (journal-backed only). */
-  readonly seededRows: number;
-  /**
-   * Backward head after seeding: the start offset of the newest full-clear
-   * rewind line, or the file data start (0) when no boundary
-   * exists.
-   */
-  readonly floorOffset: number;
-  /**
-   * Forward head after seeding: the byte offset just past the last complete
-   * line — the journal data end. A crash-torn tail beyond it is excluded.
-   */
-  readonly tailOffset: number;
-  /** Lowest seq among resident rows; null when nothing was seeded. */
-  readonly headSeq: number | null;
-  /** Highest seq observed while seeding; null when nothing was seeded. */
-  readonly tailSeq: number | null;
-  /** True when the floor is a full clear rather than the file start. */
-  readonly atClearBoundary: boolean;
-}
-
-export interface ScrollbackPagerStore {
-  getState(): ScrollbackPagerState;
-  pageBack(): Promise<void>;
-  pageForward(): Promise<void>;
-  /**
-   * Seeds the resident window from the journal at boot (P04b): resident rows
-   * become the last page under the pageRows budget, older rows stay
-   * unmaterialized until pageBack pulls them, and the floor/tail scalars
-   * are captured. Serialized through the page queue; rejects on failure.
-   */
-  resumeFromJournal(): Promise<ScrollbackResumeSummary>;
-  invalidate(): Promise<void>;
-  reportViewport(): void;
-  pageOut(direction: 'older' | 'newer'): void;
-  setContextWindow(window: { firstSeq: number; lastSeq: number }): void;
-  setLiveTail(items: readonly HistoryItem[]): void;
-  commitPendingRow(
-    pendingKey: string,
-    committedIdentity: RowIdentity,
-    item: HistoryItem,
-  ): boolean;
-  metrics(): ScrollbackPagerMetrics;
-  close(): Promise<void>;
-}
 
 type BoundaryEntry = Extract<JournalEntry, { kind: 'boundary' }>;
 
@@ -246,6 +135,7 @@ function entryToRow(entry: JournalEntry): ScrollbackRow {
   return {
     key: rowIdentityKey(identity),
     seq: entry.seq,
+    contextState: entry.contextState,
     identity,
     offset: entry.offset,
     item: entry.item,
@@ -253,13 +143,16 @@ function entryToRow(entry: JournalEntry): ScrollbackRow {
 }
 
 function compressedBoundaryRow(entry: BoundaryEntry): ScrollbackRow {
-  const identity = rowIdentity(
-    { kind: 'journal', offset: entry.offset },
-    'summaryRow',
-  );
+  const identity: RowIdentity = {
+    kind: 'journal',
+    offset: entry.offset,
+    transcriptId: entry.transcriptId,
+    discriminator: 'summaryRow',
+  };
   return {
     key: rowIdentityKey(identity),
     seq: entry.seq,
+    contextState: entry.contextState,
     identity,
     offset: entry.offset,
     item: {
@@ -305,6 +198,10 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   private readonly chunkBytes: number | undefined;
   private readonly counters: JournalReadCounters | undefined;
 
+  private readonly subscription: JournalPagerSubscription;
+  private publishedEnd: number | undefined;
+  private watermark: JournalCommitWatermark | undefined;
+  private resumed = false;
   private cursor: NativeJournalCursor | null = null;
   private openPromise: Promise<NativeJournalCursor | null> | null = null;
   private openGeneration = -1;
@@ -350,7 +247,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
    */
   private resumeFirstDisplayOffset: number | null = null;
 
-  constructor(options: ScrollbackPagerOptions) {
+  constructor(private readonly options: ScrollbackPagerOptions) {
     if (!options.filePath.endsWith('.llxj'))
       throw new Error('Scrollback requires a .llxj session journal');
     this.filePath = options.filePath;
@@ -359,6 +256,38 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     this.settings = options.settings;
     this.chunkBytes = options.chunkBytes;
     this.counters = options.counters;
+    this.subscription = new JournalPagerSubscription(
+      this.filePath,
+      (watermark) => this.refreshCommitted(watermark),
+      (error) => {
+        this.error = errorMessage(error);
+      },
+    );
+  }
+
+  private async refreshCommitted(
+    watermark: JournalCommitWatermark,
+  ): Promise<void> {
+    this.publishedEnd = watermark.durableEnd;
+    this.watermark = watermark;
+    if (!this.resumed) return;
+    const tail = this.pagedRows.at(-1);
+    const following =
+      this.visibleKeys.length === 0 || this.visibleKeys.at(-1) === tail?.key;
+    this.atFileEnd = false;
+    if (!following) return;
+    const gen = this.generation;
+    const run = this.pageQueue.then(async () => {
+      const cursor = await this.ensureCursor(gen);
+      if (cursor === null || this.isStale(gen)) return;
+      await cursor.refreshFileEnd(watermark.durableEnd);
+      await this.runPageForward(gen);
+    });
+    this.pageQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    await run;
   }
 
   getState(): ScrollbackPagerState {
@@ -419,7 +348,11 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       () => undefined,
     );
     try {
-      return await run;
+      const summary = await run;
+      this.resumed = true;
+      if (this.watermark !== undefined)
+        await this.refreshCommitted(this.watermark);
+      return summary;
     } catch (error) {
       if (!this.isStale(gen)) {
         this.error = errorMessage(error);
@@ -437,7 +370,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       if (cursor === null || this.isStale(gen)) return;
       const { collected, exhausted } = await this.collectBack(cursor, gen);
       if (this.isStale(gen)) return;
-      await cursor.refreshFileEnd();
+      await cursor.refreshFileEnd(this.publishedEnd);
       if (this.isStale(gen)) return;
       this.absorbBack(collected);
       if (exhausted || this.isResumeFloor(cursor)) {
@@ -558,6 +491,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    this.subscription.close();
     this.generation += 1;
     this.controller.abort();
     this.controller = new AbortController();
@@ -790,6 +724,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       rows.push(row);
     }
     this.pagedRows = [...rows, ...this.pagedRows];
+    this.retainCursorWindow('older');
   }
 
   private absorbForward(entries: readonly JournalEntry[]): void {
@@ -801,6 +736,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     const merged = new Map(this.pagedRows.map((row) => [row.key, row]));
     for (const row of rows) merged.set(row.key, row);
     this.pagedRows = [...merged.values()];
+    this.retainCursorWindow('newer');
   }
 
   /**
@@ -817,6 +753,8 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
         chunkBytes: this.chunkBytes,
         counters: this.counters,
         signal: this.controller.signal,
+        publishedEnd: this.publishedEnd,
+        journal: this.options.journal,
       };
       const opening = NativeJournalCursor.open(
         this.filePath,

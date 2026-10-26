@@ -52,6 +52,7 @@ export interface PublishedState extends CommitAck {
 }
 
 export interface GroupWriterDependencies {
+  readonly notifyCommit?: (ack: CommitAck, swapped?: boolean) => void;
   readonly flush: FlushRecords;
   readonly random: (length: number) => Uint8Array;
 }
@@ -277,6 +278,8 @@ export class JournalGroupWriter {
     this.writeOffset = next.writeOffset;
     this.publishedTrailer = next.published;
     this.detached = false;
+    if (next.published !== undefined)
+      this.dependencies.notifyCommit?.(next.published, true);
   }
 
   /** The writer accepts nothing more; every later commit throws with `error` as its cause. */
@@ -386,6 +389,7 @@ export class JournalGroupWriter {
   private acknowledge(trailer: TrailerHeader): CommitAck {
     this.publishedTrailer = trailer;
     this.writeOffset = Math.max(this.writeOffset, trailer.durableEnd);
+    this.dependencies.notifyCommit?.(trailer);
     return {
       commitSeq: trailer.commitSeq,
       durableEnd: trailer.durableEnd,

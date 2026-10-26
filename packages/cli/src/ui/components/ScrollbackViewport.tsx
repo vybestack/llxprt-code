@@ -254,7 +254,7 @@ function WiredScrollbackRow({
       terminalWidth={terminalWidth}
       isPending={false}
       config={config}
-      contextState={contextStateForRow(row.seq, range)}
+      contextState={row.contextState ?? contextStateForRow(row.seq, range)}
     />
   );
 }
