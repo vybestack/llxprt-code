@@ -98,6 +98,21 @@
       "types": "./dist/src/core/settled-heap.d.ts",
       "bun": "./src/core/settled-heap.ts",
       "import": "./dist/src/core/settled-heap.js"
+    },
+    "./core/scale-test-lane.js": {
+      "types": "./dist/src/core/scale-test-lane.d.ts",
+      "bun": "./src/core/scale-test-lane.ts",
+      "import": "./dist/src/core/scale-test-lane.js"
+    },
+    "./core/realistic-session.js": {
+      "types": "./dist/src/core/realistic-session.d.ts",
+      "bun": "./src/core/realistic-session.ts",
+      "import": "./dist/src/core/realistic-session.js"
+    },
+    "./core/session-memory-protocol.js": {
+      "types": "./dist/src/core/session-memory-protocol.d.ts",
+      "bun": "./src/core/session-memory-protocol.ts",
+      "import": "./dist/src/core/session-memory-protocol.js"
     }
   },
   "license": "Apache-2.0",
