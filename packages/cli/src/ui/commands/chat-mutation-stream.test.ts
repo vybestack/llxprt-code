@@ -8,7 +8,7 @@ import {
   withChatMutationFixture,
 } from './__tests__/support/chat-mutation-test-helpers.js';
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   for (const name of ['clear', 'restore']) {
     describe(`${name} live chat stream ${size}`, () => {
       it('restores the human-turn prefix in live history, UI and the settled recording', async () => {

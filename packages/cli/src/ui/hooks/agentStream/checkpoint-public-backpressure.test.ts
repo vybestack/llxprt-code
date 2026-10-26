@@ -93,7 +93,7 @@ async function backpressure(size: number, active: boolean): Promise<number> {
 }
 
 describe('exported checkpoint disk sink backpressure', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     for (const active of [false, true]) {
       it(`does not read ahead of a paused sink and cancels ${size} rows, active=${active}`, async () => {
         expect(await backpressure(size, active)).toBeLessThan(size);

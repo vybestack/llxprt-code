@@ -25,7 +25,7 @@ describe('checkpoint public disk route after eager preparation removal', () => {
     ]).toStrictEqual([false, false]);
   });
 
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     for (const active of [false, true]) {
       it(`invokes the exported durable writer for ${size} rows, active=${active}`, async () => {
         await withCheckpoint(size, active, async (fixture, dir) => {

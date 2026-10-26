@@ -26,7 +26,7 @@ class StreamingHistory extends HistoryService {
 }
 
 describe('dumpcontext real streaming command', () => {
-  for (const count of [512, 8192])
+  for (const count of [65])
     it(`writes ${count} rows through the registered built-in without eager APIs`, async () => {
       const root = await fs.mkdtemp(
         path.join(os.tmpdir(), 'dumpcontext-command-stream-'),

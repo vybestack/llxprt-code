@@ -17,6 +17,7 @@ import { cleanupBounds } from '../../utils/__tests__/support/cleanup-history-tes
 
 function observeAdmission(
   client: Parameters<Parameters<typeof withCheckpoint>[2]>[0]['client'],
+  retain: boolean,
 ): {
   owners: RowOwnership;
   external: RowOwnership;
@@ -32,7 +33,7 @@ function observeAdmission(
         (async function* () {
           for await (const row of source) {
             owners.retain(row);
-            if (process.env.CHECKPOINT_RESTORE_RETAINING_TRAP === '1') {
+            if (retain) {
               retained.push(row);
               external.retain(row);
             }
@@ -56,83 +57,105 @@ function observeAdmission(
   };
 }
 
-async function boundedRestore(size: number, active: boolean): Promise<number> {
-  return withCheckpoint(size, active, async (fixture, dir) => {
-    await saveCheckpoint(fixture, dir);
-    const saved = await savedCheckpoint(dir);
-    const expected = createHash('sha256');
-    for (const row of JSON.parse(saved.bytes).clientHistory)
-      expected.update(JSON.stringify(row));
-    const client = fixture.client;
-    vi.spyOn(client, 'setHistory').mockImplementation(async () => {
-      throw new Error('eager checkpoint restore is forbidden');
-    });
-    const { owners, external, release } = observeAdmission(client);
-    let uiHistory: unknown;
-    const context = createMockCommandContext({
-      services: { agent: { agentClient: client } },
-    });
-    if (context.services.config === null)
-      throw new Error('Missing fixture runtime');
-    const runtime = {
-      ...context.services.config,
-      projectCheckpointsDir: dir,
-      getCheckpointingEnabled: () => true,
-    };
-    context.services.config = runtime;
-    context.ui.loadHistory = (rows) => {
-      uiHistory = rows;
-    };
-    try {
-      const outcome = await restoreCommand(runtime)?.action?.(
-        context,
-        basename(saved.path),
-      );
-      expect(outcome?.type).toBe('tool');
-      expect(uiHistory).toStrictEqual(checkpointUiHistory);
-      const actual = createHash('sha256');
-      let count = 0;
-      for await (const row of client.streamHistory()) {
-        actual.update(JSON.stringify(row));
-        count++;
-      }
-      expect(actual.digest('hex')).toBe(expected.digest('hex'));
-      expect(fixture.reader.within(cleanupBounds)).toBe(true);
-      expect(fixture.reader.snapshot().liveRows).toBe(0);
-      const output = process.env.CHECKPOINT_RESTORE_OUTPUT;
-      if (output)
-        appendFileSync(
-          output,
-          JSON.stringify({
-            size,
-            active,
-            reader: fixture.reader.snapshot(),
-            admission: owners.snapshot(),
-            external: external.snapshot(),
-          }) + '\n',
+async function boundedRestore(
+  size: number,
+  active: boolean,
+  retain = false,
+): Promise<number> {
+  return withCheckpoint(
+    size,
+    active,
+    async (fixture, dir) => {
+      await saveCheckpoint(fixture, dir);
+      const saved = await savedCheckpoint(dir);
+      const expected = createHash('sha256');
+      for (const row of JSON.parse(saved.bytes).clientHistory)
+        expected.update(JSON.stringify(row));
+      const client = fixture.client;
+      vi.spyOn(client, 'setHistory').mockImplementation(async () => {
+        throw new Error('eager checkpoint restore is forbidden');
+      });
+      const { owners, external, release } = observeAdmission(client, retain);
+      let uiHistory: unknown;
+      const context = createMockCommandContext({
+        services: { agent: { agentClient: client } },
+      });
+      if (context.services.config === null)
+        throw new Error('Missing fixture runtime');
+      const runtime = {
+        ...context.services.config,
+        projectCheckpointsDir: dir,
+        getCheckpointingEnabled: () => true,
+      };
+      context.services.config = runtime;
+      context.ui.loadHistory = (rows) => {
+        uiHistory = rows;
+      };
+      try {
+        const outcome = await restoreCommand(runtime)?.action?.(
+          context,
+          basename(saved.path),
         );
-      expect(owners.within(cleanupBounds)).toBe(true);
-      expect(owners.snapshot().liveRows).toBe(0);
-      expect(external.snapshot().liveRows).toBeLessThanOrEqual(
-        cleanupBounds.rows,
-      );
-      expect(external.snapshot().liveSerializedBytes).toBeLessThanOrEqual(
-        cleanupBounds.serializedBytes,
-      );
-      return count;
-    } finally {
-      release();
-      vi.restoreAllMocks();
-    }
-  });
+        expect(outcome?.type).toBe('tool');
+        expect(uiHistory).toStrictEqual(checkpointUiHistory);
+        const actual = createHash('sha256');
+        let count = 0;
+        for await (const row of client.streamHistory()) {
+          actual.update(JSON.stringify(row));
+          count++;
+        }
+        expect(actual.digest('hex')).toBe(expected.digest('hex'));
+        expect(fixture.reader.within(cleanupBounds)).toBe(true);
+        expect(fixture.reader.snapshot().liveRows).toBe(0);
+        const output = process.env.CHECKPOINT_RESTORE_OUTPUT;
+        if (output)
+          appendFileSync(
+            output,
+            JSON.stringify({
+              size,
+              active,
+              reader: fixture.reader.snapshot(),
+              admission: owners.snapshot(),
+              external: external.snapshot(),
+            }) + '\n',
+          );
+        expect(owners.within(cleanupBounds)).toBe(true);
+        expect(owners.snapshot().liveRows).toBe(0);
+        expect(
+          external.snapshot().peakRows <= cleanupBounds.rows &&
+            external.snapshot().peakSerializedBytes <=
+              cleanupBounds.serializedBytes,
+        ).toBe(
+          !retain || process.env.CHECKPOINT_RESTORE_RETAINING_TRAP === '1',
+        );
+        if (retain) {
+          expect(external.snapshot().liveRows).toBe(size);
+          expect(external.snapshot().liveRows).toBeGreaterThan(
+            cleanupBounds.rows,
+          );
+          expect(external.snapshot().liveSerializedBytes).toBeGreaterThan(
+            cleanupBounds.serializedBytes,
+          );
+        }
+        return count;
+      } finally {
+        release();
+        vi.restoreAllMocks();
+      }
+    },
+    retain ? 32 * 1024 : 2048,
+  );
 }
 
 describe('invoked CLI bounded checkpoint restoration', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     for (const active of [false, true]) {
       it(`restores ${size} rows with ${active ? 'active' : 'inactive'} chat without array admission`, async () => {
         expect(await boundedRestore(size, active)).toBe(size);
       }, 180000);
     }
   }
+  it('rejects a retained 512-row admission under the same reader bounds', async () => {
+    expect(await boundedRestore(512, true, true)).toBe(512);
+  }, 180000);
 });

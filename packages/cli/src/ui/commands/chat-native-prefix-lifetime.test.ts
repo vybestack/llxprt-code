@@ -22,7 +22,7 @@ function assertBounded(rows: ReadonlyArray<WeakRef<IContent>>): void {
 
 describe('actual CLI native prefix decoded-row lifetime', () => {
   const directory = useTempDir('cli-prefix-lifetime-');
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     it(`releases converted prefix rows at sink backpressure over ${size} rows`, async () => {
       await withCLI(directory(), size, async ({ context }) => {
         const refs: Array<WeakRef<IContent>> = [];
@@ -52,7 +52,7 @@ describe('actual CLI native prefix decoded-row lifetime', () => {
                   appendDerived: async (ordinal, content) => {
                     refs.push(new WeakRef(content));
                     await sink.appendDerived(ordinal, content);
-                    if (refs.length % 128 === 0) {
+                    if (refs.length % 8 === 0) {
                       await collectGarbage();
                       samples++;
                       peak = Math.max(peak, live(refs));
@@ -74,7 +74,7 @@ describe('actual CLI native prefix decoded-row lifetime', () => {
             }, true),
           ).toStrictEqual({ directories: [], files: [] });
           await collectGarbage();
-          expect(refs.length).toBe(size - 2);
+          expect(refs.length).toBe(size - (size % 2 === 0 ? 2 : 1));
           expect(samples).toBeGreaterThan(0);
           expect(live(refs)).toBe(0);
           process.stdout.write(

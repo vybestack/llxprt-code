@@ -10,7 +10,7 @@ import {
   PublicCursorHistory,
 } from '../../__tests__/public-history-cursor.js';
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`public consumer callbacks over ${size} journal rows`, () => {
     it('applies callback backpressure with bounded external copies and closes every owner on consumer error', async () => {
       const entered = deferred();

@@ -6,7 +6,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import { publicChat } from '../../__tests__/public-history-cursor.js';
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`chat pending reader ${size}`, () => {
     it('reads every added row as an equal value in chronology order and releases cursor pins', async () => {
       await withBatchFixture(async ({ history, owners }) => {

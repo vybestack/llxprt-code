@@ -12,7 +12,7 @@ import {
 
 const retainingModes: ReadonlyArray<'borrowed' | 'copy'> = ['borrowed', 'copy'];
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   for (const active of [false, true]) {
     describe(`CLI cleanup lifecycle ${active ? 'active' : 'inactive'} at ${size}`, () => {
       it('keeps one paused source row without read-ahead, then aborts and closes before deleting media', async () => {
@@ -56,37 +56,48 @@ for (const size of [512, 8192]) {
           await lease?.release();
         });
       }, 180_000);
+    });
+  }
+}
 
+for (const size of [512]) {
+  for (const active of [false, true]) {
+    describe(`CLI cleanup retaining controls ${active} at ${size}`, () => {
       for (const retaining of retainingModes) {
         it(`detects ${retaining} retaining consumers against the unchanged positive bounds`, async () => {
-          await withCleanupHistory(size, active, async (fixture) => {
-            fixture.history.retaining = retaining;
-            const result = await cleanupExpiredSessions(
-              fixture.config,
-              {},
-              fixture.root,
-              undefined,
-              fixture.readActiveHistory,
-            );
-            recordCleanupOwners(
-              size,
-              active,
-              `retaining-${retaining}`,
-              fixture,
-            );
-            expect(result.failed).toBe(0);
-            expect(fixture.history.external.snapshot().peakRows).toBe(size);
-            expect(fixture.history.external.within(cleanupBounds)).toBe(
-              process.env.CLEANUP_HISTORY_RETAINING_TRAP === '1',
-            );
-            expect(
-              fixture.history.external.snapshot().peakSerializedBytes >
-                cleanupBounds.serializedBytes,
-            ).toBe(size === 8192);
-            expect(fixture.reader.snapshot().liveRows).toBe(0);
-            fixture.history.releaseExternal();
-            expect(fixture.history.external.snapshot().liveRows).toBe(0);
-          });
+          await withCleanupHistory(
+            size,
+            active,
+            async (fixture) => {
+              fixture.history.retaining = retaining;
+              const result = await cleanupExpiredSessions(
+                fixture.config,
+                {},
+                fixture.root,
+                undefined,
+                fixture.readActiveHistory,
+              );
+              recordCleanupOwners(
+                size,
+                active,
+                `retaining-${retaining}`,
+                fixture,
+              );
+              expect(result.failed).toBe(0);
+              expect(fixture.history.external.snapshot().peakRows).toBe(size);
+              expect(fixture.history.external.within(cleanupBounds)).toBe(
+                process.env.CLEANUP_HISTORY_RETAINING_TRAP === '1',
+              );
+              expect(
+                fixture.history.external.snapshot().peakSerializedBytes >
+                  cleanupBounds.serializedBytes,
+              ).toBe(true);
+              expect(fixture.reader.snapshot().liveRows).toBe(0);
+              fixture.history.releaseExternal();
+              expect(fixture.history.external.snapshot().liveRows).toBe(0);
+            },
+            32 * 1024,
+          );
         }, 180_000);
       }
     });

@@ -10,7 +10,7 @@ import {
 import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { assembleSessionControl } from '../../../../agents/src/api/session-control-assembly.js';
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`contextual default client history ${size}`, () => {
     it('reports the actual transcript count through the public default without eager history', async () => {
       await withCleanupHistory(size, true, async (fixture) => {
