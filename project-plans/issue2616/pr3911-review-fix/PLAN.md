@@ -1482,7 +1482,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T7.6 B3 edge AdoptedSessionAssembly removed
 - [x] T7.7a B3 preflight transfer record
 - [x] T7.7b B3 edge to AgentActivationBootstrap, preflight drops bootstrap references
-- [ ] T7.8 B3 last edge, foreground base concrete and private, all reachability cases green
+- [x] T7.8 B3 last edge, foreground base concrete and private, all reachability cases green
 - [ ] T8.0-list B4 consumer file list and slices
 - [ ] T8.0-Sxx B4 consumer inventory slices (ids added by T8.0-list)
 - [ ] T8.0-agg B4 consumer inventory aggregation and producer tasks

@@ -44,26 +44,16 @@ import {
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { type SettingsService } from '@vybestack/llxprt-code-settings';
 import { admittedEndpoint } from '../core/admittedRouteSecurity.js';
-import { CoreToolScheduler } from '../core/coreToolScheduler.js';
-import { type SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
-import { withChildToolDisplay } from '../session/childToolAssembly.js';
-import { ChildToolDisplay } from '../session/childToolDisplay.js';
 import { cleanupProviderScope } from '../session/session-client-cleanup.js';
 import { acquireSessionClient } from '../session/session-client-binding.js';
 import { type SessionClientOwner } from '../session/session-client-owner.js';
 import { releaseAdoptedFileScope } from './adoption-release.js';
-import {
-  assembleTaskOwner,
-  cleanupFailedShellBootstrap,
-} from './agent-shell-assembly.js';
 import { type Agent } from './agent.js';
 import {
   AgentBootstrapError,
-  createStableDisplayCallbacks,
   generateRuntimeId,
   recordOwnership,
   validateAgentRuntimeId,
-  type StableDisplayCallbacksHolder,
 } from './agentBootstrap.js';
 import {
   FromConfigValidatableSchema,
@@ -72,8 +62,6 @@ import {
 } from './config-types.js';
 import { resolveSchedulerFactory } from '../session/assembleSchedulerOwner.js';
 import {
-  assembleShellOwner,
-  publishLeafFacade,
   type FacadeParsedConfig,
   type LeafFacadeValues,
 } from './agent-facade.js';
@@ -129,10 +117,12 @@ export interface ForegroundAdoptionView {
   finishForeground(): Promise<Agent>;
 }
 
-export class AdoptedAgentAssembly
-  extends ForegroundAssembly
-  implements ForegroundAdoptionView
-{
+/**
+ * Adopts the caller's session. It acquires the adopted owners, hands them to the
+ * concrete foreground it holds, and keeps nothing of its own after publication.
+ */
+export class AdoptedAgentAssembly implements ForegroundAdoptionView {
+  readonly #config: Config;
   #adoption: AdoptionSessionInput | undefined;
   #lifecycle: AdoptionLifecyclePort | undefined;
   #settingsService!: SettingsService;
@@ -148,12 +138,13 @@ export class AdoptedAgentAssembly
   #oAuthBus!: MessageBus;
   #providers!: AdoptedProviderResources;
   #client!: SessionClientOwner;
+  #foreground: ForegroundAssembly | undefined;
   #agent!: Agent;
   readonly #release = new AcquisitionRelease();
+  readonly #construction = new AbortController();
 
   private constructor(config: Config) {
-    super();
-    this.config = config;
+    this.#config = config;
   }
 
   /** The `fromConfig` path: the assembly acquires and publishes the adopted agent. */
@@ -173,24 +164,31 @@ export class AdoptedAgentAssembly
   }
 
   assertOpen(): void {
-    this.assertConstructionOpen();
+    this.#construction.signal.throwIfAborted();
   }
 
-  override closeConstructionAdmission(): void {
-    super.closeConstructionAdmission();
+  closeConstructionAdmission(): void {
+    this.#construction.abort();
   }
 
-  override acceptPreflightTransfer(
+  acceptPreflightTransfer(
     transfer: ForegroundPreflightTransfer,
     settings: ForegroundPreflightSettings,
     providers: PreflightProviderInput,
     auth: PreflightAuthInput,
   ): void {
-    super.acceptPreflightTransfer(transfer, settings, providers, auth);
+    this.#foreground = new ForegroundAssembly(
+      this.#config,
+      transfer,
+      settings,
+      providers,
+      auth,
+      this.#construction.signal,
+    );
   }
 
-  override finishForeground(): Promise<Agent> {
-    return super.finishForeground();
+  finishForeground(): Promise<Agent> {
+    return this.#requireForeground().finishForeground();
   }
 
   async assembleAdoption(): Promise<Agent> {
@@ -214,6 +212,13 @@ export class AdoptedAgentAssembly
     }
   }
 
+  #requireForeground(): ForegroundAssembly {
+    const foreground = this.#foreground;
+    if (foreground === undefined)
+      throw new AgentBootstrapError('Foreground is not acquired');
+    return foreground;
+  }
+
   #adoptValidateIntent(): string {
     FromConfigValidatableSchema.parse({
       sessionId: this.#intent.sessionId,
@@ -235,7 +240,7 @@ export class AdoptedAgentAssembly
           ),
           openBrowser: openBrowserSecurely,
         },
-        config: this.config,
+        config: this.#config,
         managerFactory: McpClientManager,
         extensionLoader: undefined,
         policy: undefined,
@@ -267,7 +272,7 @@ export class AdoptedAgentAssembly
     this.#authority = authority;
     this.#mcp = await this.#adoptConstructMcp();
     try {
-      this.#media = acquireAdoptedMedia(this.config);
+      this.#media = acquireAdoptedMedia(this.#config);
       const manager = this.#adoptAcquireProviders();
       const oauth = this.#adoptAcquireOAuth(manager);
       this.#providers = { manager, oauth };
@@ -289,20 +294,20 @@ export class AdoptedAgentAssembly
     const settingsOwner = new SessionSettingsOwner(this.#settingsService);
     this.#selectedSettings = settingsOwner;
     this.#release.acquire('settings', () => settingsOwner.dispose());
-    settingsOwner.bindTelemetry(this.config);
+    settingsOwner.bindTelemetry(this.#config);
     const files = new ProviderFileLifecycle({
       maxFiles: 100,
       maxBytes: 512 * 1024 * 1024,
-      proxy: this.config.getProxy(),
+      proxy: this.#config.getProxy(),
     });
     this.#files = files;
-    const scope = this.config.getSessionId();
+    const scope = this.#config.getSessionId();
     for (const id of this.#runtimeId === scope
       ? [scope]
       : [this.#runtimeId, scope])
       this.#release.acquire('files', () => releaseAdoptedFileScope(files, id));
     return acquireAdoptedProviderManager(
-      this.config,
+      this.#config,
       this.#release,
       files,
       this.#settingsService,
@@ -317,7 +322,7 @@ export class AdoptedAgentAssembly
     this.#content = createRuntimeContentGeneratorFactory();
     this.#oAuthBus = this.#mcp.messageBus;
     return acquireAdoptedOAuth(
-      this.config,
+      this.#config,
       this.#release,
       manager,
       this.#authority,
@@ -331,7 +336,7 @@ export class AdoptedAgentAssembly
     let client: SessionClientOwner | undefined;
     try {
       this.#client = await acquireAdoptedSession(
-        this.config,
+        this.#config,
         this.#intent,
         this.#selectedSettings,
         this.#media,
@@ -365,7 +370,7 @@ export class AdoptedAgentAssembly
     const bindings = adoptedClientBindings(
       this.#files,
       this.#providers.oauth,
-      this.config.getSessionId(),
+      this.#config.getSessionId(),
     );
     client.bindProviderFiles(
       bindings.files,
@@ -380,7 +385,7 @@ export class AdoptedAgentAssembly
     );
     if (!client.hasHookComposition()) client.bindHooks();
     await activateAdoptedProviders(
-      this.config,
+      this.#config,
       this.#selectedSettings,
       this.#providers.manager,
       this.#providers.oauth,
@@ -394,7 +399,7 @@ export class AdoptedAgentAssembly
 
   async #adoptFinalize(): Promise<void> {
     await activateAdoptedSession(
-      this.config,
+      this.#config,
       this.#intent,
       this.#client,
       this.#settingsService,
@@ -402,84 +407,49 @@ export class AdoptedAgentAssembly
       this.#providers.oauth,
       this.#selectedSettings,
     );
-    const parsed = {
+    const parsed: FacadeParsedConfig = {
       provider:
         this.#providers.manager.getActiveProviderName() ??
-        this.config.getProvider() ??
+        this.#config.getProvider() ??
         '',
       model:
-        this.#selectedSettings.readSelectedModel() ?? this.config.getModel(),
+        this.#selectedSettings.readSelectedModel() ?? this.#config.getModel(),
       ...(this.#intent.sessionId === undefined
         ? {}
         : { sessionId: this.#intent.sessionId }),
     };
     await this.#tokenizer.prepareTokenizer?.(parsed.provider, parsed.model);
     const handles: AgentSchedulerHandle[] = [];
-    const scheduler = resolveSchedulerFactory(false, undefined, handles);
-    this.assertConstructionOpen();
-    this.#agent = await this.#adoptAcquireFacade(
+    this.#foreground = this.#createForeground();
+    this.assertOpen();
+    this.#agent = await this.#foreground.publish({
       parsed,
-      { baseUrl: admittedEndpoint(this.#settingsService, parsed.provider) }
-        .baseUrl,
+      baseUrl: admittedEndpoint(this.#settingsService, parsed.provider),
       handles,
-      scheduler,
-    );
+      scheduler: resolveSchedulerFactory(false, undefined, handles),
+      leaf: facadeInputsForAdopted(
+        this.#mcp,
+        this.#release,
+        this.#runtimeId,
+        handles,
+      ),
+    });
   }
 
-  async #adoptAcquireFacade(
-    parsed: FacadeParsedConfig,
-    baseUrl: string | undefined,
-    handles: AgentSchedulerHandle[],
-    scheduler: SchedulerConstruction | undefined,
-  ): Promise<Agent> {
-    const tasks = assembleTaskOwner(this.#settingsService, undefined);
-    const shell = assembleShellOwner(this.#settingsService);
-    const child = new ChildToolDisplay();
-    const display: StableDisplayCallbacksHolder = {};
-    try {
-      const editors = { editorCallbacks: {} };
-      this.#client.toolCatalog.bindChildExecution(child, tasks, shell);
-      this.#client.initializeExecution(
-        withChildToolDisplay(
-          scheduler ?? ((options) => new CoreToolScheduler(options)),
-          child,
-          tasks,
-          shell,
-        ),
-        undefined,
-        createStableDisplayCallbacks(editors, display),
-      );
-      this.#client.initializeConversation();
-      const construction = {
-        parsed,
-        baseUrl,
-        handles,
-        tasks,
-        shell,
-        child,
-        editors,
-        display,
-      };
-      return publishLeafFacade(
-        this.#mcp,
-        this.config,
-        this.#client,
-        this.#selectedSettings,
-        this.#media,
-        this.#settingsService,
-        this.#providers.manager,
-        this.#providers.oauth,
-        construction,
-        facadeInputsForAdopted(
-          this.#mcp,
-          this.#release,
-          this.#runtimeId,
-          handles,
-        ),
-      );
-    } catch (primary) {
-      return cleanupFailedShellBootstrap(primary, tasks, shell);
-    }
+  #createForeground(): ForegroundAssembly {
+    return new ForegroundAssembly(
+      this.#config,
+      {
+        mcp: this.#mcp,
+        mediaOwner: this.#media,
+        sessionClient: this.#client,
+        release: closeReleaseScope(this.#release),
+      },
+      { settingsOwner: this.#selectedSettings },
+      { settings: this.#settingsService, manager: this.#providers.manager },
+      { oauth: this.#providers.oauth },
+      this.#construction.signal,
+    );
   }
 }
 
@@ -509,6 +479,11 @@ function adoptedClientBindings(
         : cleanupProviderScope(files, scope),
     interactiveAuth: (prompt) => oauth.requestInteractiveAuth(prompt),
   };
+}
+
+/** The one close capability for a release scope, created outside any asset. */
+function closeReleaseScope(release: AcquisitionRelease): () => Promise<void> {
+  return () => release.close();
 }
 
 function acquireAdoptedProviderManager(

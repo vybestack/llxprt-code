@@ -1,19 +1,14 @@
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { ChildToolDisplay } from '../session/childToolDisplay.js';
-import type { SessionClientOwner } from '../session/session-client-owner.js';
-
-import {
-  type Config,
-  type RuntimeProviderManager,
-} from '@vybestack/llxprt-code-core';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { ChildToolDisplay } from '../session/childToolDisplay.js';
+import type { SessionClientOwner } from '../session/session-client-owner.js';
+
+import { type Config } from '@vybestack/llxprt-code-core';
 
 import { admittedEndpoint } from '../core/admittedRouteSecurity.js';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
@@ -33,7 +28,6 @@ import {
 import {
   assembleShellOwner,
   publishLeafFacade,
-  type FacadeConstruction,
   type FacadeParsedConfig,
   type LeafFacadeValues,
 } from './agent-facade.js';
@@ -47,7 +41,7 @@ import type {
   PreflightProviderInput,
 } from './activationPreflightState.js';
 
-/** The preflight's runtime owners, handed to the foreground once. */
+/** The runtime owners the foreground is handed once, exactly. */
 export interface ForegroundPreflightTransfer {
   mcp: McpRuntimeOwner;
   mediaOwner: SessionMediaOwner | undefined;
@@ -55,84 +49,89 @@ export interface ForegroundPreflightTransfer {
   release(): Promise<void>;
 }
 
-/** The preflight's session settings owner, handed to the foreground once. */
+/** The session settings owner the foreground is handed once. */
 export interface ForegroundPreflightSettings {
   settingsOwner: SessionSettingsOwner;
 }
 
-export class ForegroundAssembly {
-  protected config!: Config;
-  readonly #constructionCancellation = new AbortController();
+/** The values a publication reads once, prepared by the construction path. */
+export interface ForegroundPublication {
+  parsed: FacadeParsedConfig;
+  baseUrl: string | undefined;
+  handles: AgentSchedulerHandle[];
+  scheduler: SchedulerConstruction | undefined;
+  leaf: LeafFacadeValues;
+}
 
-  protected closeConstructionAdmission(): void {
-    this.#constructionCancellation.abort();
-  }
-  protected mediaOwner: SessionMediaOwner | undefined;
-  protected ownedSessionClient!: SessionClientOwner;
-  protected settingsOwner!: SessionSettingsOwner;
-  protected foregroundMcp: McpRuntimeOwner | undefined;
-  protected foregroundSettings!: SettingsService;
-  protected foregroundManager!: RuntimeProviderManager;
-  protected foregroundOAuth!: OAuthManager;
-  protected releaseForegroundProviders!: () => Promise<void>;
-  protected acceptPreflightTransfer(
+/**
+ * The concrete foreground: it acquires nothing of its own, publishes the agent
+ * from the owners it is handed, and keeps no live control afterwards.
+ */
+export class ForegroundAssembly {
+  readonly #config: Config;
+  readonly #transfer: ForegroundPreflightTransfer;
+  readonly #settings: ForegroundPreflightSettings;
+  readonly #providers: PreflightProviderInput;
+  readonly #auth: PreflightAuthInput;
+  readonly #construction: AbortSignal;
+
+  constructor(
+    config: Config,
     transfer: ForegroundPreflightTransfer,
     settings: ForegroundPreflightSettings,
     providers: PreflightProviderInput,
     auth: PreflightAuthInput,
-  ): void {
-    this.foregroundMcp = transfer.mcp;
-    this.mediaOwner = transfer.mediaOwner;
-    this.ownedSessionClient = transfer.sessionClient;
-    this.settingsOwner = settings.settingsOwner;
-    this.foregroundSettings = providers.settings;
-    this.foregroundManager = providers.manager;
-    this.foregroundOAuth = auth.oauth;
-    this.releaseForegroundProviders = () => transfer.release();
+    construction: AbortSignal,
+  ) {
+    this.#config = config;
+    this.#transfer = transfer;
+    this.#settings = settings;
+    this.#providers = providers;
+    this.#auth = auth;
+    this.#construction = construction;
   }
-  protected assertConstructionOpen(): void {
-    this.#constructionCancellation.signal.throwIfAborted();
-  }
-  protected async finishForeground(): Promise<Agent> {
+
+  async finishForeground(): Promise<Agent> {
     const handles: AgentSchedulerHandle[] = [];
     const provider =
-      this.foregroundManager.getActiveProviderName() ??
-      this.config.getProvider() ??
+      this.#providers.manager.getActiveProviderName() ??
+      this.#config.getProvider() ??
       '';
     const model =
-      this.settingsOwner.readSelectedModel() ?? this.config.getModel();
-    await this.ownedSessionClient.tokenizerFactory.prepareTokenizer?.(
+      this.#settings.settingsOwner.readSelectedModel() ??
+      this.#config.getModel();
+    await this.#transfer.sessionClient.tokenizerFactory.prepareTokenizer?.(
       provider,
       model,
     );
-    this.assertConstructionOpen();
-    return this.#acquireFacade(
-      { provider, model },
-      admittedEndpoint(this.foregroundSettings, provider),
+    this.#construction.throwIfAborted();
+    return this.publish({
+      parsed: { provider, model },
+      baseUrl: admittedEndpoint(this.#providers.settings, provider),
       handles,
-      resolveSchedulerFactory(false, undefined, handles),
-    );
+      scheduler: resolveSchedulerFactory(false, undefined, handles),
+      leaf: facadeInputsForForeground(
+        this.#transfer.mcp,
+        this.#config,
+        this.#transfer.release,
+        handles,
+      ),
+    });
   }
-  async #acquireFacade(
-    parsed: FacadeParsedConfig,
-    baseUrl: string | undefined,
-    handles: AgentSchedulerHandle[],
-    scheduler: SchedulerConstruction | undefined,
-  ): Promise<Agent> {
-    const tasks = assembleTaskOwner(this.foregroundSettings, undefined);
-    const shell = assembleShellOwner(this.foregroundSettings);
+
+  async publish(publication: ForegroundPublication): Promise<Agent> {
+    const { mcp, mediaOwner, sessionClient } = this.#transfer;
+    const tasks = assembleTaskOwner(this.#providers.settings, undefined);
+    const shell = assembleShellOwner(this.#providers.settings);
     const child = new ChildToolDisplay();
     const display: StableDisplayCallbacksHolder = {};
     try {
       const editors = { editorCallbacks: {} };
-      this.ownedSessionClient.toolCatalog.bindChildExecution(
-        child,
-        tasks,
-        shell,
-      );
-      this.ownedSessionClient.initializeExecution(
+      sessionClient.toolCatalog.bindChildExecution(child, tasks, shell);
+      sessionClient.initializeExecution(
         withChildToolDisplay(
-          scheduler ?? ((options) => new CoreToolScheduler(options)),
+          publication.scheduler ??
+            ((options) => new CoreToolScheduler(options)),
           child,
           tasks,
           shell,
@@ -140,41 +139,31 @@ export class ForegroundAssembly {
         undefined,
         createStableDisplayCallbacks(editors, display),
       );
-      return this.#publish({
-        parsed,
-        baseUrl,
-        handles,
-        tasks,
-        shell,
-        child,
-        editors,
-        display,
-      });
+      sessionClient.initializeConversation();
+      return publishLeafFacade(
+        mcp,
+        this.#config,
+        sessionClient,
+        this.#settings.settingsOwner,
+        mediaOwner,
+        this.#providers.settings,
+        this.#providers.manager,
+        this.#auth.oauth,
+        {
+          parsed: publication.parsed,
+          baseUrl: publication.baseUrl,
+          handles: publication.handles,
+          tasks,
+          shell,
+          child,
+          editors,
+          display,
+        },
+        publication.leaf,
+      );
     } catch (primary) {
       return cleanupFailedShellBootstrap(primary, tasks, shell);
     }
-  }
-  #publish(construction: FacadeConstruction): Agent {
-    if (this.foregroundMcp === undefined)
-      throw new Error('Foreground facade is not acquired');
-    this.ownedSessionClient.initializeConversation();
-    return publishLeafFacade(
-      this.foregroundMcp,
-      this.config,
-      this.ownedSessionClient,
-      this.settingsOwner,
-      this.mediaOwner,
-      this.foregroundSettings,
-      this.foregroundManager,
-      this.foregroundOAuth,
-      construction,
-      facadeInputsForForeground(
-        this.foregroundMcp,
-        this.config,
-        this.releaseForegroundProviders,
-        construction.handles,
-      ),
-    );
   }
 }
 
