@@ -14,6 +14,7 @@ export type LongTextCounter = (
 export function createLongTextCounter(
   bpeRanks: string,
   patStr: string,
+  loadRanks: () => ReadonlyMap<string, number> = () => parseRanks(bpeRanks),
 ): LongTextCounter {
   const pattern = patStr
     .replaceAll('\\s', '\\p{White_Space}')
@@ -80,7 +81,7 @@ export function createLongTextCounter(
         const piece = match[0];
         count += counted(piece, () => {
           if (piece.length <= 512) return countShort(piece);
-          ranks ??= parseRanks(bpeRanks);
+          ranks ??= loadRanks();
           return countBpePiece(Buffer.from(piece), ranks);
         });
         start = position;
@@ -108,6 +109,23 @@ function parseRanks(bpeRanks: string): ReadonlyMap<string, number> {
   return result;
 }
 
+const encodingRanks = new Map<string, ReadonlyMap<string, number>>();
+export function encodingBpeRanks(
+  encoding: string,
+): ReadonlyMap<string, number> {
+  const cached = encodingRanks.get(encoding);
+  if (cached !== undefined) return cached;
+  const path = createRequire(import.meta.url).resolve(
+    `@dqbd/tiktoken/encoders/${encoding}.json`,
+  );
+  const vocabulary = z
+    .object({ bpe_ranks: z.string() })
+    .parse(JSON.parse(readFileSync(path, 'utf8')));
+  const ranks = parseRanks(vocabulary.bpe_ranks);
+  encodingRanks.set(encoding, ranks);
+  return ranks;
+}
+
 const encodings = new Map<string, LongTextCounter>();
 export function encodingLongTextCounter(encoding: string): LongTextCounter {
   const cached = encodings.get(encoding);
@@ -121,6 +139,7 @@ export function encodingLongTextCounter(encoding: string): LongTextCounter {
   const counter = createLongTextCounter(
     vocabulary.bpe_ranks,
     vocabulary.pat_str,
+    () => encodingBpeRanks(encoding),
   );
   encodings.set(encoding, counter);
   return counter;
@@ -129,9 +148,13 @@ export function encodingLongTextCounter(encoding: string): LongTextCounter {
 export function countBpePiece(
   input: Buffer,
   dictionary: ReadonlyMap<string, number>,
+  visit?: (start: number, end: number) => void,
 ): number {
   const bytes = input.toString('latin1');
-  if (dictionary.has(bytes)) return 1;
+  if (dictionary.has(bytes)) {
+    visit?.(0, bytes.length);
+    return 1;
+  }
   const next = new Int32Array(bytes.length + 1);
   const previous = new Int32Array(bytes.length + 1);
   const symbols = new Uint32Array(bytes.length);
@@ -175,6 +198,8 @@ export function countBpePiece(
     if (previous[at] >= 0) enqueue(previous[at]);
     enqueue(at);
   }
+  if (visit !== undefined)
+    for (let at = 0; at < bytes.length; at = next[at]) visit(at, next[at]);
   return count;
 }
 
