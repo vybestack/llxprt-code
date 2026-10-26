@@ -72,6 +72,29 @@ function handoffOf<Owner>(
   };
 }
 
+/**
+ * A host that states caller ownership has named nothing for the caller to
+ * release unless it also supplies the owner.
+ */
+function requireCallerWorkspaceRoots(options: McpAssemblyOptions): void {
+  if (options.lspOwnership === 'caller' && options.lspOwner === undefined)
+    throw new Error('Caller-owned LSP requires an explicit workspace root');
+  if (
+    options.filesystemOwnership === 'caller' &&
+    options.filesystemOwner === undefined
+  )
+    throw new Error(
+      'Caller-owned filesystem requires an explicit workspace root',
+    );
+  if (
+    options.definitionOwnership === 'caller' &&
+    options.definitionOwner === undefined
+  )
+    throw new Error(
+      'Caller-owned definitions require an explicit workspace root',
+    );
+}
+
 export async function assembleMcpRuntime(
   config: Config,
   options: McpAssemblyOptions &
@@ -79,6 +102,7 @@ export async function assembleMcpRuntime(
   policy: McpPolicyHandoff,
   settingsOwner?: SessionSettingsOwner,
 ): Promise<McpRuntimeOwner> {
+  requireCallerWorkspaceRoots(options);
   const feedback = options.mcpHost?.emitFeedback ?? defaultFeedbackSink;
   const trust: McpTrustHandoff =
     options.trustPort === undefined
@@ -129,10 +153,9 @@ export async function assembleMcpRuntime(
               kind: 'supplied',
               owner: options.memoryOwner.owner,
               ownership:
-                options.memoryOwner.ownership === 'agent' ||
-                options.memoryOwner.ownership === undefined
+                options.memoryOwner.ownership === 'agent'
                   ? 'runtime'
-                  : options.memoryOwner.ownership,
+                  : 'caller',
             },
       definitions: handoffOf(
         options.definitionOwner,
