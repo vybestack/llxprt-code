@@ -27,8 +27,15 @@ async function nativeEstimate(
   large: boolean,
 ) {
   const projection = await setup.provider.projectPromptEnvelope({
-    contents: {
-      async *[Symbol.asyncIterator]() {
+    contents: { async *[Symbol.asyncIterator]() {} },
+    contentCount: 65,
+    requestRows: {
+      callerOwned: true,
+      count: 65,
+      close: async () => {},
+      readAt: (index) =>
+        index === 64 ? sourcePending : diskTextRow(index, large),
+      async *openReader() {
         for (let index = 0; index < 64; index++)
           yield diskTextRow(index, large);
         yield sourcePending;

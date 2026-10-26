@@ -1,5 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { UnsupportedMediaSummary } from '../utils/unsupported-media-summary.js';
+import {
+  isTextResponsePlan,
+  nativeTextResponsePieces,
+} from './native-responses-text-pieces.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { PDF_AGGREGATE_MAX_BYTES } from '../utils/mediaUtils.js';
 import { CallerOwnedToolQuery } from '../utils/caller-owned-tool-query.js';
@@ -156,12 +160,17 @@ export class NativeResponsesPrompt {
   private async *selectedRows(
     skipRows: number,
     estimation: boolean,
+    endRows: number,
   ): AsyncGenerator<IContent> {
-    if (skipRows === 0 && this.rows.native !== undefined) {
+    if (
+      skipRows === 0 &&
+      endRows === this.rows.count &&
+      this.rows.native !== undefined
+    ) {
       yield* this.streamRows(estimation);
       return;
     }
-    for (let index = skipRows; index < this.rows.count; index++) {
+    for (let index = skipRows; index < endRows; index++) {
       this.requireOpen();
       const row = await this.rows.readAt(index, this.options.invocation.signal);
       yield estimation ? toEstimationContents([row])[0] : row;
@@ -171,14 +180,16 @@ export class NativeResponsesPrompt {
   async *items(
     skipRows = this.selection.skipRows,
     estimation = false,
+    endRows = this.rows.count,
+    counter = { value: 0 },
+    pairSkipRows = skipRows,
   ): AsyncGenerator<ResponsesInputItem> {
     this.requireOpen();
     const indexed =
       this.rows.index ??
       this.rows.native?.indexed ??
       (await CallerOwnedToolQuery.create(this.rows));
-    let counter = 0;
-    const selected = this.selectedRows(skipRows, estimation);
+    const selected = this.selectedRows(skipRows, estimation, endRows);
     const source = estimation
       ? selected
       : resolveRowsMedia(
@@ -201,13 +212,13 @@ export class NativeResponsesPrompt {
         const pairs = await responsesUnitPairs(
           current.value,
           indexed,
-          skipRows,
+          pairSkipRows,
         );
         yield* buildOpenAIResponsesUnit(
           current.value,
           this.context,
           pairs,
-          () => `rs_${this.context.reasoningIdTime}_${counter++}`,
+          () => `rs_${this.context.reasoningIdTime}_${counter.value++}`,
         );
         current = undefined;
       }
@@ -217,17 +228,56 @@ export class NativeResponsesPrompt {
     }
   }
 
+  private async *nativeInputPieces(): AsyncGenerator<NativeDumpPiece> {
+    const indexed = this.rows.native?.indexed;
+    if (indexed === undefined) throw new Error('Missing native request index');
+    let separator = '';
+    const counter = { value: 0 };
+    for (
+      let index = this.selection.skipRows;
+      index < this.rows.count;
+      index++
+    ) {
+      this.requireOpen();
+      const plan = await indexed.planAt(index, this.options.invocation.signal);
+      if (isTextResponsePlan(plan)) {
+        let emitted = false;
+        for await (const piece of nativeTextResponsePieces(plan, separator)) {
+          this.requireOpen();
+          yield piece;
+          emitted = true;
+        }
+        if (emitted) separator = ',';
+        continue;
+      }
+      for await (const item of this.items(
+        index,
+        false,
+        index + 1,
+        counter,
+        this.selection.skipRows,
+      )) {
+        yield nativeDumpLiteral(separator);
+        yield* nativeDumpValue(item);
+        separator = ',';
+      }
+    }
+  }
+
   private async *inputPieces(): AsyncGenerator<NativeDumpPiece> {
     if (this.selection.inputOverride !== undefined) {
       yield* nativeDumpValue(this.selection.inputOverride.value);
       return;
     }
     yield nativeDumpLiteral('[');
-    let separator = '';
-    for await (const item of this.items()) {
-      yield nativeDumpLiteral(separator);
-      yield* nativeDumpValue(item);
-      separator = ',';
+    if (this.rows.native !== undefined) yield* this.nativeInputPieces();
+    else {
+      let separator = '';
+      for await (const item of this.items()) {
+        yield nativeDumpLiteral(separator);
+        yield* nativeDumpValue(item);
+        separator = ',';
+      }
     }
     yield nativeDumpLiteral(']');
   }
