@@ -54,3 +54,37 @@ export async function readRowPiece(
   );
   return checkedRowPiece(access, head, bytes, offset, length);
 }
+
+/** Consume to the end to verify the piece CRC without allocating the piece. */
+export async function* streamRowPiece(
+  access: RecordAccess,
+  head: FrameHead,
+  offset: number,
+  length: number,
+): AsyncGenerator<Uint8Array> {
+  let actual = 0;
+  for (let at = 0; at < length; at += 65536) {
+    const bytes = await access.readRecordRange(
+      head,
+      offset + at,
+      Math.min(65536, length - at),
+    );
+    actual = crc32(bytes, actual);
+    yield bytes;
+  }
+  const suffix = await access.readRecordRange(
+    head,
+    offset + length,
+    ROW_PIECE_CRC_BYTES,
+  );
+  const stored = viewOf(suffix).getUint32(0, true);
+  if (stored !== actual)
+    throw access.recordError(
+      head,
+      new JournalFrameError(
+        'body-crc-mismatch',
+        head.offset,
+        `ROW piece at body offset ${offset}: CRC ${stored.toString(16)} does not match ${actual.toString(16)}`,
+      ),
+    );
+}

@@ -4,7 +4,7 @@ import { namedBlockLength } from './chunk-fields.js';
 import type { RecordAccess } from './recordAccess.js';
 import { decodeRowHeader } from './rowRecord.js';
 import { transcriptEntries } from './transcript-tree.js';
-import { readRowPiece } from './rowPiece.js';
+import { streamRowPiece } from './rowPiece.js';
 
 export interface DirectoryBlock {
   readonly ordinal: number;
@@ -49,16 +49,7 @@ export async function* rowDirectory(
       ordinal,
       type: block.type,
       length: block.length,
-      async *parts() {
-        const bytes = await readRowPiece(
-          access,
-          head,
-          block.offset,
-          block.length,
-        );
-        for (let at = 0; at < bytes.length; at += 65536)
-          yield bytes.subarray(at, at + 65536);
-      },
+      parts: () => streamRowPiece(access, head, block.offset, block.length),
     };
   }
 }

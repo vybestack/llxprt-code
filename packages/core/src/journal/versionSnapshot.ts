@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { LabelSorter } from './ordered-labels.js';
+import { rowDirectory, type DirectoryBlock } from './row-directory.js';
 import { ToolRankingTree, TOOL_RANKING_READY } from './tool-ranking-tree.js';
 import {
   DensityFileFacts,
@@ -583,6 +584,27 @@ export class VersionSnapshot {
   /** The whole row an entry of this snapshot points at. */
   readRow(entry: RowEntry): Promise<StoredRow> {
     return readStoredRow(this.read.access, entry);
+  }
+
+  async *blocks(entry: RowEntry): AsyncGenerator<DirectoryBlock> {
+    this.requireOpen();
+    const requireOpen = (): void => this.requireOpen();
+    for await (const block of rowDirectory(
+      this.read.access,
+      entry.recordOffset,
+    )) {
+      requireOpen();
+      yield {
+        ...block,
+        async *parts() {
+          requireOpen();
+          for await (const part of block.parts()) {
+            requireOpen();
+            yield part;
+          }
+        },
+      };
+    }
   }
 
   readBlock(entry: RowEntry, index: number, ids?: RowIds): Promise<Uint8Array> {
