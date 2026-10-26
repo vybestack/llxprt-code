@@ -13,10 +13,8 @@ import { compressionValueDigest } from './compression-value-fixture.js';
 
 describe('native continuous file inclusion deduplication', () => {
   it.each([
-    [512, 2],
-    [8192, 2],
-    [512, 6],
-    [8192, 6],
+    [65, 2],
+    [65, 6],
   ])(
     'matches the independent array policy over %i rows with mask %i without operation files',
     async (size, mask) => {

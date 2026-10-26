@@ -69,14 +69,14 @@ async function verification(size: number, fail: boolean): Promise<number> {
 }
 
 describe('one-shot disk verification lifetime', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'verifies a summary of the %i-row request without owning more than one row at a time',
     async (size) => {
       expect(await verification(size, false)).toBe(1);
     },
     180_000,
   );
-  it.each([512, 8192])(
+  it.each([65])(
     'keeps best-effort verification semantics and releases %i-row owners on failure',
     async (size) => {
       expect(await verification(size, true)).toBe(1);

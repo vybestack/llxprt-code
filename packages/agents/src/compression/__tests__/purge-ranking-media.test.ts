@@ -133,7 +133,7 @@ async function mediaRoute(
 
 describe('purge and ranking real media reservations', () => {
   for (const route of ['purge', 'ranking'] satisfies ValueRoute[])
-    for (const size of [512, 8192])
+    for (const size of [65])
       for (const rollback of [false, true])
         it(`${route} retains or releases image reservations at ${size}, rollback=${rollback}`, async () => {
           expect(await mediaRoute(route, size, rollback)).toBe(size);

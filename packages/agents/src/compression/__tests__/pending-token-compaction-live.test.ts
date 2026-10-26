@@ -6,28 +6,45 @@ import { openNativeToolRanking } from '../native-tool-ranking.js';
 import { pendingTokenDeps } from './pending-token-native-helpers.js';
 
 describe('pending-token parity with persistent compaction', () => {
-  it('matches all 8192 array and disk values across the exact persistent compactor swap without observer pins', async () => {
-    await pendingCompactionParity(async ({ history, recording, operation }) => {
-      const files = await observePendingCompaction(recording, operation);
-      const ranking = await openNativeToolRanking({
-        ...pendingTokenDeps(history),
-        rankingRevision: history.toolRankingRevision('pending-token-native'),
-        pendingContents: [],
-      });
-      if (ranking === undefined)
-        throw new Error('Missing post-compaction ranking');
-      try {
-        const tree = await ranking.toolRanking(
-          history.toolRankingRevision('pending-token-native'),
+  const size = 65;
+  it('matches all 65 array and disk values across the exact persistent compactor swap without observer pins', async () => {
+    await pendingCompactionParity(
+      size,
+      async ({
+        history,
+        recording,
+        operation,
+        armCompaction,
+        stopCompaction,
+        compactionDue,
+      }) => {
+        armCompaction();
+        const files = await observePendingCompaction(
+          recording,
+          operation,
+          compactionDue,
+          stopCompaction,
         );
-        const header = await tree.header();
-        expect(header.count).toBe(8190);
-        expect((await tree.at(header.root, 0)).ordinal).toBe(8189);
-        expect((await tree.at(header.root, 0)).score).toBeGreaterThan(4096);
-      } finally {
-        await ranking.close();
-      }
-      return files;
-    });
+        const ranking = await openNativeToolRanking({
+          ...pendingTokenDeps(history),
+          rankingRevision: history.toolRankingRevision('pending-token-native'),
+          pendingContents: [],
+        });
+        if (ranking === undefined)
+          throw new Error('Missing post-compaction ranking');
+        try {
+          const tree = await ranking.toolRanking(
+            history.toolRankingRevision('pending-token-native'),
+          );
+          const header = await tree.header();
+          expect(header.count).toBe(size - 2);
+          expect((await tree.at(header.root, 0)).ordinal).toBe(size - 3);
+          expect((await tree.at(header.root, 0)).score).toBeGreaterThan(4096);
+        } finally {
+          await ranking.close();
+        }
+        return files;
+      },
+    );
   }, 180_000);
 });

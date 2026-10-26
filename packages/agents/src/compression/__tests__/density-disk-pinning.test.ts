@@ -78,7 +78,7 @@ async function pinnedAppend(
 }
 
 describe('pinned density membership and hard context window', () => {
-  for (const size of [512, 8192])
+  for (const size of [65])
     it(`keeps ${size}-row decisions pinned while appends wait and publishes their original order`, async () => {
       const owners = await pinnedAppend(size);
       expect(owners.liveRows).toBe(0);

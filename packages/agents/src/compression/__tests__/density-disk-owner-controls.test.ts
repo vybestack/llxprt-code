@@ -46,7 +46,7 @@ async function observeControl(
       await densityHandler(history).ensureDensityOptimized();
       result = history.retainingOwner.snapshot();
     },
-    2048,
+    32 * 1024,
     densityRow,
     undefined,
     (options) => new RetainingDensityHistory(options),
@@ -69,15 +69,14 @@ function assertRetained(
 ): void {
   expect(stats.peakRows).toBe(size);
   expect(stats.peakRows).toBeGreaterThan(440);
-  if (size === 8192)
-    expect(stats.peakSerializedBytes).toBeGreaterThan(8 * 1024 * 1024);
+  expect(stats.peakSerializedBytes).toBeGreaterThan(8 * 1024 * 1024);
 }
 
 const check =
   process.env.DENSITY_RETAINING_TRAP === '1' ? assertBounded : assertRetained;
 
 describe('density borrowed and distinct-copy retaining controls', () => {
-  for (const size of [512, 8192])
+  for (const size of [512])
     for (const copy of [false, true]) {
       it(`detects ${size} retained ${copy ? 'copied' : 'borrowed'} source rows using unchanged fixture bounds`, async () => {
         const stats = await observeControl(size, copy);

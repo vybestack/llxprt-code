@@ -14,7 +14,7 @@ import {
 const legacyOwners = /history-density-|density-decision-index-/;
 
 describe('native continuous recency decision', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'matches the independent array policy across %i rows without input, replacement or decision files',
     async (size) => {
       await withNativeFallbackFixture(async ({ history, seed, durable }) => {

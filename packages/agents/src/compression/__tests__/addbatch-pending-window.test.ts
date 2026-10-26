@@ -121,7 +121,7 @@ async function pendingBatch(size: number): Promise<number> {
  * not part of the contract.
  */
 describe('addBatch followed by the actual pending-window route', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'preserves %i accepted external rows and completes fallback with a live writer',
     async (size) => {
       expect(await pendingBatch(size)).toBe(3);

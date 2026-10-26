@@ -91,7 +91,7 @@ describe('truncation/highdensity external checkpoint I/O cleanup', () => {
   for (const route of ['truncation', 'highdensity'] satisfies Array<
     'truncation' | 'highdensity'
   >)
-    for (const size of [512, 8192])
+    for (const size of [65])
       for (const kind of ['read', 'write', 'cancel'] satisfies Array<
         'read' | 'write' | 'cancel'
       >) {

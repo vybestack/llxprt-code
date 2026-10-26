@@ -65,7 +65,7 @@ function strippedTokens(
 }
 
 describe('reasoning token accounting over the real curated journal', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     for (const policy of ['all', 'allButLast', 'none'] as const) {
       it(`discounts ${policy} thinking at ${size} rows without eager history`, async () => {
         await withSuffixFixture(

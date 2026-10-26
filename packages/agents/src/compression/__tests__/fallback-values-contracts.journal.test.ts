@@ -161,7 +161,7 @@ async function pendingQueued(size: number): Promise<void> {
 }
 
 describe('native fallback partial admission and queued chronology', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     it(`restores ${size} complete rows after one admitted row fails, then retries`, async () => {
       await expect(partialAdmission(size)).resolves.toBeUndefined();
     }, 180_000);

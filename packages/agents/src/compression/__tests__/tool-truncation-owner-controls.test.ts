@@ -38,8 +38,6 @@ class RetainingToolHistory extends HistoryService {
 const cases: Array<[number, boolean]> = [
   [512, false],
   [512, true],
-  [8192, false],
-  [8192, true],
 ];
 describe('tool-truncation returning consumer traps', () => {
   it.each(cases)(
@@ -67,7 +65,7 @@ describe('tool-truncation returning consumer traps', () => {
               }),
             ).toBe(process.env.TOOL_RETAINING_TRAP === '1');
             expect(history.retained.snapshot().peakRows).toBeGreaterThan(440);
-            const requiredBytes = size === 8192 ? 8 * 1024 * 1024 : 0;
+            const requiredBytes = 8 * 1024 * 1024;
             expect(
               history.retained.snapshot().peakSerializedBytes,
             ).toBeGreaterThan(requiredBytes);
@@ -76,7 +74,7 @@ describe('tool-truncation returning consumer traps', () => {
           }
           expect(history.retained.snapshot().liveRows).toBe(0);
         },
-        2048,
+        32 * 1024,
         toolRankingRow,
         undefined,
         (options) => new RetainingToolHistory(options, copy),

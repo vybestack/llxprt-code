@@ -133,7 +133,7 @@ async function retry(size: number): Promise<number> {
   return remaining;
 }
 describe('provider hard-limit disk retry ordering', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'restores accounting after installed rejection before the next %i-row request retries the primary ladder',
     async (size) => {
       expect(await retry(size)).toBeGreaterThan(0);

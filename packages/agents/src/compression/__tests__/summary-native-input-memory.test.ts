@@ -30,7 +30,7 @@ class StreamingSummaryTransport extends SummaryTransport {
     for await (const row of options.contents) {
       if (count > 0) hash.update(',');
       hash.update(JSON.stringify(row));
-      if (++count % 128 === 0) await this.sample();
+      if (++count % 8 === 0) await this.sample();
     }
     this.requests.push(hash.update(']').digest('hex'));
     await this.sample();
@@ -48,7 +48,7 @@ class StreamingSummaryTransport extends SummaryTransport {
 
 describe('native summary input loaded rows', () => {
   for (const strategy of ['middle-out', 'one-shot'] as const) {
-    it.each([512, 8192])(
+    it.each([65, 400])(
       `${strategy} releases actual decoded rows while its %i-row input stays pinned without a third-party hook`,
       async (size) => {
         await withNativeFallbackFixture(async ({ history, seed }) => {

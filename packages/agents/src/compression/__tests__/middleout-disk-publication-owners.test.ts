@@ -7,7 +7,7 @@ async function publication(size: number): Promise<number> {
   return nativeSummaryPublication(size, 'middle-out');
 }
 describe('invoked middle-out publication owners', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'pauses the real %i-row transaction with bounded owners and restores all membership after failure',
     async (size) => {
       expect(await publication(size)).toBeGreaterThan(0);

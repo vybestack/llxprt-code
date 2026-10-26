@@ -196,7 +196,7 @@ describe('native continuous recency through the live journal consumer', () => {
     });
   }, 180_000);
 
-  it.each([512, 8192])(
+  it.each([65])(
     'holds at most the current converted output during %i-row publication',
     async (size) => {
       await withNativeFallbackFixture(async (fixture) => {
@@ -230,7 +230,7 @@ describe('native continuous recency through the live journal consumer', () => {
                   references.push(new WeakRef(row));
                   if (replacement) await sink.appendReplacement(ordinal, row);
                   else await sink.appendDerived(ordinal, row);
-                  if (references.length % 128 === 0) {
+                  if (references.length % 8 === 0) {
                     await gc();
                     samples++;
                     peak = Math.max(peak, live(references));

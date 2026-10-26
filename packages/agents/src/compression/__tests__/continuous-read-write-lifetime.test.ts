@@ -30,7 +30,7 @@ function current(rows: ReadonlyArray<WeakRef<IContent>>): void {
 }
 
 describe('native read/write consumer lifetime', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'releases converted outputs at awaited backpressure over %i original rows',
     async (size) => {
       await withNativeFallbackFixture(async ({ history, seed }) => {
@@ -69,7 +69,7 @@ describe('native read/write consumer lifetime', () => {
                   refs.push(new WeakRef(row));
                   if (replacement) await sink.appendReplacement(ordinal, row);
                   else await sink.appendDerived(ordinal, row);
-                  if (refs.length % 128 === 0) {
+                  if (refs.length % 8 === 0) {
                     await gc();
                     samples++;
                     peak = Math.max(peak, live(refs));

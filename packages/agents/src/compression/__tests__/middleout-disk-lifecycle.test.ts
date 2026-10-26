@@ -110,21 +110,21 @@ async function pinned(size: number): Promise<number> {
 }
 
 describe('disk middle-out summary and publication lifetimes', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'preserves %i rows through model error and cancellation before successful retry',
     async (size) => {
       expect(await failures(size)).toBe(3);
     },
     180_000,
   );
-  it.each([512, 8192])(
+  it.each([65])(
     'restores all %i rows, chronology and caller markers after partial admission',
     async (size) => {
       expect(await rollback(size)).toBe(2);
     },
     180_000,
   );
-  it.each([512, 8192])(
+  it.each([65])(
     'pins %i rows during summary and flushes a queued append after hook failure',
     async (size) => {
       expect(await pinned(size)).toBeGreaterThan(0);

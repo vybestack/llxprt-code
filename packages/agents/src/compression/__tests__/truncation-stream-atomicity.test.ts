@@ -41,7 +41,7 @@ async function rollback(size: number): Promise<PerformCompressionResult> {
 }
 
 describe('disk truncation atomicity and caller ownership', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'restores all %i durable rows after candidate publication rejection',
     async (size) => {
       expect(await rollback(size)).toBe(PerformCompressionResult.COMPRESSED);

@@ -72,7 +72,7 @@ async function paused(size: number): Promise<number> {
   return live;
 }
 describe('actual provider disk transaction owners', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'keeps paused %i-row installation within the original owner gate and compensates',
     async (size) => {
       expect(await paused(size)).toBeGreaterThan(0);

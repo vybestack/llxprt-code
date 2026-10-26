@@ -40,7 +40,7 @@ async function collectCalls(
 }
 
 describe('native high-density source-call block lifetime', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'releases addressed call blocks during real %i-row output backpressure',
     async (size) => {
       await withNativeFallbackFixture(async ({ history, seed }) => {
@@ -75,7 +75,7 @@ describe('native high-density source-call block lifetime', () => {
                 ...sink,
                 appendDerived: async (ordinal, row) => {
                   await sink.appendDerived(ordinal, row);
-                  if (++outputs % 128 === 0) await sample();
+                  if (++outputs % 8 === 0) await sample();
                 },
               }),
             model,

@@ -102,7 +102,7 @@ async function ratio(size: number): Promise<number> {
 }
 
 describe('high-density disk high preservation and headroom ratios', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'matches the legacy %i-row boundary and token decisions at 90-percent preservation and 99-percent headroom',
     async (size) => {
       expect(await ratio(size)).toBeGreaterThan(0);

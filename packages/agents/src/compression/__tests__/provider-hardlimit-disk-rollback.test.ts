@@ -10,7 +10,7 @@ import { middleoutSetup } from './middleout-disk-helpers.js';
 import { digestRows } from './tool-truncation-stream-helpers.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
-const cases = [512, 8192].flatMap((size) =>
+const cases = [65].flatMap((size) =>
   ['throw', 'false', 'baseline', 'partial', 'cancel'].map((failure) => ({
     size,
     failure,

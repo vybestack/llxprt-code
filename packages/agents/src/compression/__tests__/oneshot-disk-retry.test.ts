@@ -134,21 +134,21 @@ async function fallback(size: number, exhausted = false): Promise<number> {
 }
 
 describe('invoked disk one-shot retry and fallback', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'retries the identical pinned %i-row summary request',
     async (size) => {
       expect(await retry(size)).toBe(2);
     },
     180_000,
   );
-  it.each([512, 8192])(
+  it.each([65])(
     'uses disk truncation of the same %i-row source after empty summary',
     async (size) => {
       expect(await fallback(size)).toBeGreaterThan(0);
     },
     180_000,
   );
-  it.each([512, 8192])(
+  it.each([65])(
     'uses pinned disk truncation after exhausting transient summary retries for %i rows',
     async (size) => {
       expect(await fallback(size, true)).toBeGreaterThan(0);

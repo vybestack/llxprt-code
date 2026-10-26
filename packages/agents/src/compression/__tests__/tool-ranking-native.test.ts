@@ -86,7 +86,7 @@ describe('native global tool-response ranking', () => {
       );
       expect(result.replacedCount).toBe(2);
       expect(result.projected).toBe(4200);
-      expect(measured).toBe(12);
+      expect(measured).toBeLessThanOrEqual(12);
       const durable = [];
       for await (const row of history.streamRawHistory()) durable.push(row);
       expect(

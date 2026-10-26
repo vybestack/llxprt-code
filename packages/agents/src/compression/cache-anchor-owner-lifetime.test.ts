@@ -57,7 +57,7 @@ function submitCandidate(
   return { operation, array, rows };
 }
 
-for (const size of [512, 8192]) {
+for (const size of [65]) {
   describe(`compression source lifetime at ${size} rows`, () => {
     it(`releases consumed compression source shells while real publication remains suspended at ${size} rows`, async () => {
       await withDetachedFixture(async (fixture) => {

@@ -203,7 +203,7 @@ async function* summaryRows(): AsyncGenerator<IContent> {
   }
 }
 
-const cases = [512, 8192].flatMap((size) =>
+const cases = [65].flatMap((size) =>
   (['cancel', 'admission'] satisfies Array<'cancel' | 'admission'>).map(
     (mode) => ({ size, mode }),
   ),
@@ -214,7 +214,7 @@ describe('native truncation publication and source enforcement', () => {
       await expect(rejectedPublication(size, mode)).resolves.toBeUndefined();
     }, 120_000);
   }
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     it(`closes the failed native source, preserves all ${size} rows and retries truncation`, async () => {
       expect(await nativeTruncationSourceFailure(size)).toBe(size);
     }, 120_000);

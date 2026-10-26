@@ -31,7 +31,7 @@ async function sessionDigest(session: JournalSession): Promise<string> {
 describe('compression journal group writes', () => {
   const directory = useTempDir('compression-group-writes-');
 
-  for (const size of [512, 8192])
+  for (const size of [65])
     it(`streams ${size} normalized rows without a descriptor write per row`, async () => {
       let writes = 0;
       const session = await JournalSession.create(`${directory()}/group.llxj`, {

@@ -34,7 +34,7 @@ async function seedRows(
 }
 
 describe('native high-density pinned input and output lifetime', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'releases decoded and transformed rows during a real %i-row native operation',
     async (size) => {
       await withNativeFallbackFixture(async (fixture) => {
@@ -85,7 +85,7 @@ describe('native high-density pinned input and output lifetime', () => {
                 ...sink,
                 appendDerived: async (ordinal, row) => {
                   await sink.appendDerived(ordinal, row);
-                  if (transformed.length % 128 === 0) await sample();
+                  if (transformed.length % 8 === 0) await sample();
                 },
               }),
             model,

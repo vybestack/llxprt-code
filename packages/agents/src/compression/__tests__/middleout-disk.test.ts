@@ -63,7 +63,7 @@ async function parity(size: number): Promise<number> {
 }
 
 describe('invoked disk middle-out', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'preserves exact split, summary request and rejoin for %i mixed rows',
     async (size) => {
       expect(await parity(size)).toBeGreaterThan(0);

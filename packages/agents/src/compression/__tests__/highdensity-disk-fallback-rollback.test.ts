@@ -29,9 +29,7 @@ function admissionRow(index: number): IContent {
 
 async function rollback(size: number): Promise<number> {
   return withFaultRollback(async (history, recorder) => {
-    const { handler } = highdensitySetup(history, undefined, undefined, {
-      contextLimit: 1000,
-    });
+    const { handler, runtime } = highdensitySetup(history);
     const callers = Array.from({ length: size }, (_, index) =>
       admissionRow(index),
     );
@@ -41,6 +39,10 @@ async function rollback(size: number): Promise<number> {
     await recorder.flush();
     const before = await recorder.durable();
     const tokens = history.getTotalTokens();
+    runtime.ephemerals.contextLimit = () =>
+      Math.floor(
+        tokens / (runtime.ephemerals.compressionThreshold() * 0.6) / 2,
+      );
     const offset = history.getBaseTokenOffset();
     history.setCacheAnchorSeq(2);
     let failures = 3;
@@ -176,21 +178,21 @@ async function admittedFallback(size: number): Promise<number> {
 }
 
 describe('high-density disk fallback outcomes and compensation', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'restores %i rows and caller markers after partial fallback admission',
     async (size) => {
       expect(await rollback(size)).toBe(size);
     },
     180_000,
   );
-  it.each([512, 8192])(
+  it.each([65])(
     'keeps %i rows unchanged on fallback no-op and failed estimation',
     async (size) => {
       expect(await failedOrNoop(size)).toBe(size);
     },
     180_000,
   );
-  it.each([512, 8192])(
+  it.each([65])(
     'preserves %i admitted rows across under-budget fallback no-op and over-budget estimation failure',
     async (size) => {
       expect(await admittedFallback(size)).toBe(size);

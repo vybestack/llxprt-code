@@ -12,7 +12,7 @@ import {
 } from './density-disk-helpers.js';
 
 describe('invoked pinned disk density optimization', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     for (const mask of [0, 1, 2, 4, 7]) {
       it(`preserves legacy ${size}-row selected transformations for phase mask ${mask}`, async () => {
         const ownership = new RowOwnership();

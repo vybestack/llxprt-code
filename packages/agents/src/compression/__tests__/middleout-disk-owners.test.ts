@@ -134,14 +134,21 @@ async function trap(size: number, mode: string): Promise<number> {
           created.copyOwners.snapshot().liveRows,
       ).toBe(0);
       expect(stats.liveRows).toBe(size);
-      expect(stats.liveSerializedBytes).toBeGreaterThan(
-        size === 8192 ? 8 * 1024 * 1024 : 0,
-      );
+      expect(stats.liveSerializedBytes).toBeGreaterThan(8 * 1024 * 1024);
       expect(within).toBe(process.env.MIDDLEOUT_RETAINING_TRAP === '1');
       return stats.liveRows;
     },
-    4096,
-    middleoutRow,
+    32 * 1024,
+    (index, bytes) => {
+      const row = middleoutRow(index, bytes);
+      return {
+        ...row,
+        blocks: [
+          ...row.blocks,
+          { type: 'text', text: `${index}:${'x'.repeat(32 * 1024)}` },
+        ],
+      };
+    },
     undefined,
     (options) => {
       created = new RetainingHistory(options);
@@ -153,11 +160,9 @@ async function trap(size: number, mode: string): Promise<number> {
 const trapCases: Array<[number, string]> = [
   [512, 'borrowed'],
   [512, 'copy'],
-  [8192, 'borrowed'],
-  [8192, 'copy'],
 ];
 describe('disk middle-out registered owners', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'streams the %i-row summary request one owned row at a time while disk rows remain bounded',
     async (size) => {
       expect(await charge(size)).toBeGreaterThan(size * 0.4);

@@ -51,8 +51,8 @@ async function highDensityRegression(size: number): Promise<number> {
   );
 }
 
-describe('unmigrated high-density large-journal behavior', () => {
-  it.each([512, 8192])(
+describe('native high-density journal backend scale regression', () => {
+  it.each([65, 5000])(
     'summarizes old tool results and preserves the recent tail across %i actual rows',
     async (size) => {
       expect(await highDensityRegression(size)).toBeLessThan(size);

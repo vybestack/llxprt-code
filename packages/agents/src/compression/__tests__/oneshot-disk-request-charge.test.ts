@@ -99,7 +99,7 @@ async function charge(size: number): Promise<number> {
   );
 }
 describe('complete one-shot disk summary request charge', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'streams the independent %i-row oracle request one owned row at a time and releases cancellation and success',
     async (size) => {
       // One 2 KiB fixture row at a time, not the whole range.

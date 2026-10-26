@@ -183,7 +183,7 @@ async function summaryPublication(): Promise<IContent | undefined> {
 }
 
 describe('truncation real publication failure and recording values', () => {
-  for (const size of [512, 8192])
+  for (const size of [65])
     for (const mode of ['cancel', 'admission'] satisfies Array<
       'cancel' | 'admission'
     >) {

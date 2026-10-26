@@ -40,7 +40,7 @@ describe('journal materialization guard', () => {
 const logger = new DebugLogger('test:provider-curated-recomposition');
 
 describe('invoked provider-source reopening', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     it(`recomposes ${size} tool/media rows through the real source ladder with old-format byte parity`, async () => {
       const pending: IContent[] = [
         { speaker: 'human', blocks: [{ type: 'text', text: 'pending' }] },

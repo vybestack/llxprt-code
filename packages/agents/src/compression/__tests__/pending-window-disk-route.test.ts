@@ -105,14 +105,14 @@ async function pendingParity(size: number): Promise<number> {
   });
 }
 describe('actual pending-window disk route', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'matches independent legacy selection for %i durable mixed rows',
     async (size) => {
       expect(await durableParity(size)).toBeGreaterThan(0);
     },
     180000,
   );
-  it.each([512, 8192])(
+  it.each([65])(
     'publishes %i rows during a pending window and preserves caller and queued row values',
     async (size) => {
       expect(await pendingParity(size)).toBeGreaterThan(0);

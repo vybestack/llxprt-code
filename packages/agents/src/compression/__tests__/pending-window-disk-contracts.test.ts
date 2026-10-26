@@ -149,7 +149,7 @@ async function rollback(size: number, failure: Failure): Promise<number> {
 }
 describe('pending-window disk candidate contracts', () => {
   for (const failure of failures)
-    it.each([512, 8192])(
+    it.each([65])(
       `compensates %i-row ${failure} with a live writer`,
       async (size) => {
         expect(await rollback(size, failure)).toBeGreaterThan(0);

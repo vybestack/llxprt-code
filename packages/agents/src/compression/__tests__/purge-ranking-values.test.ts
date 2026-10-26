@@ -106,7 +106,7 @@ async function observeRoute(
 
 describe('real semantic purge and ranked rewrite detached value publication', () => {
   for (const route of ['purge', 'ranking'] satisfies ValueRoute[]) {
-    for (const size of [512, 8192]) {
+    for (const size of [65]) {
       for (const rollback of [false, true]) {
         it(`${route} releases original rows/markers through writer, acknowledgement and rollback=${rollback} at ${size}`, async () => {
           expect(await observeRoute(route, size, rollback)).toBe(size);

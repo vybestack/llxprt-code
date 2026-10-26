@@ -75,7 +75,7 @@ async function partialSourceFailure(size: number): Promise<void> {
 }
 
 describe('native source enforcement partial fallback admission', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     it(`restores ${size} complete rows and baseline after partial admission with the post-truncation cause intact`, async () => {
       await expect(partialSourceFailure(size)).resolves.toBeUndefined();
     }, 180_000);

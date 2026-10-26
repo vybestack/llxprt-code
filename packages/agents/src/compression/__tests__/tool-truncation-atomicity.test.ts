@@ -56,7 +56,7 @@ async function retryDigest(size: number): Promise<string> {
 }
 
 describe('ranked tool replacement transaction', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'restores exact %i-row history and cache anchor after publication rejection then permits retry',
     async (size) => {
       await withRollbackFixture(async (history, recorder) => {

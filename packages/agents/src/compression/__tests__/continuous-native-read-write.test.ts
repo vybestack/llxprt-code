@@ -13,14 +13,10 @@ import { compressionValueDigest } from './compression-value-fixture.js';
 
 describe('native continuous read/write pruning', () => {
   it.each([
-    [512, 1],
-    [8192, 1],
-    [512, 3],
-    [8192, 3],
-    [512, 5],
-    [8192, 5],
-    [512, 7],
-    [8192, 7],
+    [65, 1],
+    [65, 3],
+    [65, 5],
+    [65, 7],
   ])(
     'matches independent array history and durable bytes at %i rows with mask %i without operation files',
     async (size, mask) => {

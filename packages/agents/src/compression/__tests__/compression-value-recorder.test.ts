@@ -10,7 +10,7 @@ import { middleoutSetup } from './middleout-disk-helpers.js';
 import { withCompressionValueRecorder } from './support/compression-value-recorder-fixture.js';
 
 describe('production compression value recorder admissions', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'charges complete rows before actual %i-row publication acknowledgment and releases them only when its blocked writer commits',
     async (size) => {
       await withCompressionValueRecorder(
@@ -21,7 +21,7 @@ describe('production compression value recorder admissions', () => {
             new StreamingSummaryTransport(),
           );
           history.setCacheAnchorSeq(1);
-          arm();
+          arm(() => owners.snapshot().liveRows > 0);
           const operation = handler.performCompression('blocked-value-writer');
           await Promise.race([
             ready.promise,
@@ -50,6 +50,7 @@ describe('production compression value recorder admissions', () => {
           expect(owners.snapshot().liveRows).toBe(0);
           expect(history.compressionLocked).toBe(false);
         },
+        (index) => suffixRow(index, 32 * 1024),
       );
     },
     180_000,
@@ -57,7 +58,7 @@ describe('production compression value recorder admissions', () => {
 });
 
 describe('production compression value recorder compensation', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'restores durable %i-row values after partial admission failure and retries without old publication',
     async (size) => {
       await withCompressionValueRecorder(

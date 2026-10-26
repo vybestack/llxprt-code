@@ -78,7 +78,10 @@ export function expectedPurgeRankingRow(
     metadata.semanticMediaPurgeFrontier = { contentIndex: 0, blockIndex: 2 };
   if (route === 'purge' && index === 0)
     return { ...original, blocks: original.blocks.slice(0, 3), metadata };
-  if (route === 'ranking' && index === Math.max(0, size - 2))
+  if (
+    route === 'ranking' &&
+    index === Math.max(0, 2 * Math.floor((size - 2) / 2))
+  )
     return {
       ...original,
       blocks: original.blocks.map((block, blockIndex) =>
@@ -128,7 +131,7 @@ export async function prepareValueRoute(
       close: () => transaction.close(),
     };
   }
-  const entryIndex = Math.max(0, size - 2);
+  const entryIndex = Math.max(0, 2 * Math.floor((size - 2) / 2));
   return {
     execute: () =>
       withToolResponseRanking(

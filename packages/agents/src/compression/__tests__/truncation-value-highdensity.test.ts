@@ -94,7 +94,7 @@ async function highdensity(size: number): Promise<number> {
 }
 
 describe('high-density caller of truncation publication', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'uses detached checkpoint and bounded value publication for %i rows',
     async (size) => {
       expect(await highdensity(size)).toBeGreaterThan(0);

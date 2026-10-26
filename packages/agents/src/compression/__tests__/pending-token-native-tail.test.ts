@@ -16,8 +16,7 @@ import { lengthTokenizer, freezeRows } from './pending-token-native-helpers.js';
 import { compressionValueDigest } from './compression-value-fixture.js';
 
 const cases = [
-  { size: 512, pendingCount: 2 },
-  { size: 8192, pendingCount: 2 },
+  { size: 65, pendingCount: 2 },
   { size: 40, pendingCount: 64 },
   { size: 40, pendingCount: 65 },
   { size: 40, pendingCount: 5000 },

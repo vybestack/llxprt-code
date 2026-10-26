@@ -63,7 +63,7 @@ async function pinned(size: number): Promise<number> {
 }
 
 describe('disk high-density atomicity and queued append', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'pins %i rows during estimation and flushes queued appends after hook failure',
     async (size) => {
       expect(await pinned(size)).toBeGreaterThan(0);

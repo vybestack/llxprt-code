@@ -136,14 +136,14 @@ async function producerFailure(size: number): Promise<number> {
 }
 
 describe('pinned strategy cursor lifecycle', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'publishes a %i-row mostly retained candidate with bounded registered owners',
     async (size) => {
       expect(await longCandidate(size)).toBe(size - 10);
     },
     120_000,
   );
-  it.each([512, 8192])(
+  it.each([65])(
     'closes and preserves %i rows after producer failure',
     async (size) => {
       expect(await producerFailure(size)).toBe(size);

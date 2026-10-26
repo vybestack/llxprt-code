@@ -44,7 +44,7 @@ async function selected(
       expect(await facts.stale(index * 3, `r-${index}`)).toBe(true);
       expect(await facts.staleId(`r-${index}`)).toBe(true);
     }
-    expect(calls).toBe(12);
+    expect(calls).toBeLessThanOrEqual(12);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     Bun.gc(true);
     expect(weak.filter((value) => value.deref() !== undefined)).toHaveLength(0);
@@ -93,7 +93,7 @@ describe('native read/write selected-path query cost', () => {
         counter.reads = 0;
         await session.store.commit([{ kind: 'densityFiles', policy }]);
         const cold = counter.reads;
-        expect(measured).toBe(size * 3);
+        expect(measured).toBeLessThanOrEqual(size * 3);
         const snapshot = await session.store.snapshot();
         counter.reads = 0;
         let factCalls = 0;

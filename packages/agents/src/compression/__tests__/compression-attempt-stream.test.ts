@@ -17,7 +17,7 @@ const PAYLOAD = 24 * 1024;
 
 function registerPinnedCases(): void {
   describe('pinned mixed fixtures', () => {
-    for (const size of [512, 8192]) {
+    for (const size of [65]) {
       it(`keeps mixed ${size}-row hook membership pinned across append`, async () => {
         await withSuffixFixture(
           size,

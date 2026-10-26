@@ -66,7 +66,7 @@ async function bounded(size: number): Promise<number> {
 }
 
 describe('combined optimizer and compressor bounded journal publication', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'keeps actual source and transaction owners within the unchanged fixture bounds for %i rows',
     async (size) => {
       expect(await bounded(size)).toBe(0);

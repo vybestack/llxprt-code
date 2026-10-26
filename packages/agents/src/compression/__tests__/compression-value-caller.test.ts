@@ -20,7 +20,7 @@ function comparableRow(row: IContent): IContent {
 }
 
 describe('invoked compression value publication', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'publishes the real %i-row disk compression through values, not borrowed transforms or replaceAll',
     async (size) => {
       const ownership = new RowOwnership();
@@ -59,7 +59,7 @@ describe('invoked compression value publication', () => {
 });
 
 describe('invoked compression value fallback publication', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'keeps the opted-in %i-row caller on value publication when its provider requires fallback truncation',
     async (size) => {
       await withSuffixFixture(

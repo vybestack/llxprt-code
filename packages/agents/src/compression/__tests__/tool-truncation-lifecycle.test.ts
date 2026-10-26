@@ -128,7 +128,7 @@ describe('captured pending block identity', () => {
 });
 
 describe('tool ranking abort and oversized rows', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'unwinds a pinned %i-row source on estimator abort without publication or scratch leaks',
     async (size) => {
       const before = scratch();

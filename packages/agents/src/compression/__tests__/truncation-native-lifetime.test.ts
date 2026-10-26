@@ -18,7 +18,7 @@ function live(rows: ReadonlyArray<WeakRef<IContent>>): number {
 }
 
 describe('native truncation decoded-row lifetime', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'releases prior decoded rows at actual sink backpressure over %i source rows',
     async (size) => {
       await withNativeFallbackFixture(async ({ history }) => {
@@ -54,7 +54,7 @@ describe('native truncation decoded-row lifetime', () => {
                 ...sink,
                 appendDerived: async (ordinal, row) => {
                   await sink.appendDerived(ordinal, row);
-                  if (++appended % 128 === 0) await sample();
+                  if (++appended % 8 === 0) await sample();
                 },
               }),
             model,

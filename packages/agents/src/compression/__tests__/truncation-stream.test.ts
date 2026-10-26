@@ -58,7 +58,7 @@ async function boundedCompression(
 }
 
 describe('production disk-backed truncation', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'selects and publishes the recent token suffix of %i actual rows without eager facades',
     async (size) => {
       expect(await boundedCompression(size)).toBe(

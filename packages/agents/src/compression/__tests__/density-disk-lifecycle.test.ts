@@ -57,7 +57,7 @@ async function admissionRollback(
 }
 
 describe('disk density publication and lifetime', () => {
-  for (const size of [512, 8192])
+  for (const size of [65])
     it(`restores ${size} native rows after partial density admission and permits retry`, async () => {
       const surviving = await nativeDensityRollback(size);
       expect(surviving).toBeGreaterThan(0);
@@ -66,7 +66,7 @@ describe('disk density publication and lifetime', () => {
   it('restores native rows and caller chronology after rejected density publication', async () => {
     expect(await nativeDensityPublication()).toBe(12);
   });
-  for (const size of [512, 8192])
+  for (const size of [65])
     it(`restores the entire pinned ${size}-row journal after partial admission and permits retry`, async () => {
       const result = await admissionRollback(size);
       expect(result.after).not.toBe(result.before);

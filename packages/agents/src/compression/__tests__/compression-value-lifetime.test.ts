@@ -209,7 +209,7 @@ function lifetime(size: number, bytes: number): Promise<number> {
 }
 
 describe('production compression value source and publication lifetime', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'releases %i-row upstream source frames and submission shells during real acknowledged publication failure and retries under the real lock',
     async (size) => {
       expect(await lifetime(size, 2048)).toBeGreaterThan(0);

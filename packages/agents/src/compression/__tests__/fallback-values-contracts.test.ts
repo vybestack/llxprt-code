@@ -186,7 +186,7 @@ async function pendingQueued(size: number): Promise<number> {
 }
 
 describe('fallback value compensation and pending chronology', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     for (const failure of failures)
       it(`restores ${size} complete media/tool/provider rows after ${failure}`, async () => {
         expect(await enforceRollback(size, failure)).toBe(size);

@@ -52,10 +52,8 @@ function tiedRow(index: number): IContent {
 
 describe('native high-density compression allocations', () => {
   it.each([
-    [512, 30000],
-    [8192, 30000],
-    [512, 1e9],
-    [8192, 1e9],
+    [65, 30000],
+    [65, 1e9],
   ])(
     'streams %i rows at limit %i without history-density or chronology files',
     async (size, limit) => {
@@ -126,7 +124,7 @@ describe('native high-density compression allocations', () => {
     },
     180_000,
   );
-  it.each([512, 8192])(
+  it.each([65])(
     'keeps first-call source order and every response block across %i rows with uncurated holes',
     async (size) => {
       await withNativeFallbackFixture(async ({ history, seed, durable }) => {

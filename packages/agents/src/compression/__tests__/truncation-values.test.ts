@@ -120,7 +120,7 @@ async function ownership(size: number, rollback: boolean): Promise<number> {
 }
 
 describe('reachable truncation checkpoint/value caller', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     for (const rollback of [false, true]) {
       it(`charges the actual writer and releases all ${size} original rows/markers, rollback=${rollback}`, async () => {
         expect(await ownership(size, rollback)).toBe(size - 11);

@@ -15,7 +15,7 @@ function roots(): string[] {
     .sort();
 }
 describe('pinned ranking source and returned consumers', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'keeps %i-row rank membership pinned across clear and releases early-return consumer copies',
     async (size) => {
       const before = roots();

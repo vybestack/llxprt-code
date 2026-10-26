@@ -133,14 +133,14 @@ async function fallback(size: number): Promise<number> {
 }
 
 describe('disk high-density estimate failures', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'keeps %i pinned rows on permanent failure and abort, then retries transient estimation',
     async (size) => {
       expect(await retry(size)).toBeLessThan(0);
     },
     180_000,
   );
-  it.each([512, 8192])(
+  it.each([65])(
     'uses disk top-down fallback over the same %i-row source after transient exhaustion',
     async (size) => {
       expect(await fallback(size)).toBeGreaterThan(0);

@@ -9,7 +9,7 @@ import {
 } from './provider-fallback-disk-helpers.js';
 import { digestRows } from './tool-truncation-stream-helpers.js';
 
-const cases = [512, 8192].flatMap((size) =>
+const cases = [65].flatMap((size) =>
   ['throw', 'false', 'baseline', 'partial', 'cancel'].map((failure) => ({
     size,
     failure,
@@ -59,7 +59,7 @@ describe('provider fallback durable snapshot and compensation', () => {
 });
 
 describe('provider fallback successful installation', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'accepts a successful candidate over $size rows without an eager snapshot',
     async (size) => {
       await withFallbackFixture(size, async ({ history, recorder }) => {

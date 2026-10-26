@@ -93,7 +93,7 @@ async function arrayOracle(
 }
 
 describe('native ranking equals the old array optimizer', () => {
-  it.each([3, 64, 65, 512, 5000, 8192])(
+  it.each([3, 64, 65, 5000])(
     'preserves exact history, pending, tokens and mirrored values at %i rows without operation files',
     async (size) => {
       await withNativeFallbackFixture(

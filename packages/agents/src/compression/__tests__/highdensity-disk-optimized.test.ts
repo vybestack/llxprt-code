@@ -80,7 +80,7 @@ async function optimized(size: number): Promise<number> {
 }
 
 describe('continuous density decisions followed by primary disk high-density compression', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'matches independent legacy optimization and compression for %i mixed rows with addressed density indexes',
     async (size) => {
       expect(await optimized(size)).toBeGreaterThan(0);

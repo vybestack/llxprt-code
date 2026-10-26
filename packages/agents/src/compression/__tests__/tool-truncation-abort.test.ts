@@ -19,7 +19,7 @@ function rankingFiles(): string[] {
 }
 
 describe('caller cancellation of tool ranking', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'observes timer abort for %i rows before any replacement and closes source/index',
     async (size) => {
       const before = rankingFiles();

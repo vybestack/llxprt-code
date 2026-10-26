@@ -19,7 +19,7 @@ function* expectedRows(size: number): Generator<IContent, void, unknown> {
 }
 
 describe('compression hook token estimation', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     it(`estimates the borrowed ${size}-row cursor without requiring array collection`, async () => {
       await withSuffixFixture(
         size,

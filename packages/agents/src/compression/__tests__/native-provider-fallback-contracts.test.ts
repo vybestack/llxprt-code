@@ -26,7 +26,7 @@ function snapshot(index: number, reason?: string): IContent {
 }
 
 describe('indexed native fallback value and summary contracts', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     it(`matches independent old fallback and eager surviving rows at ${size}`, async () => {
       await withNativeValueFixture(async ({ history, durable }) => {
         await withRollbackFixture(async (old, recorder) => {
@@ -37,26 +37,28 @@ describe('indexed native fallback value and summary contracts', () => {
           await old.detachedValues.replace(input);
           await history.waitForCommit();
           await recorder.flush();
-          const oldResult = await nativeFallback(old, size / 2);
+          const oldResult = await nativeFallback(old, Math.floor(size / 2));
           const creates = await operationFileCreates(async () => {
-            expect(await nativeFallback(history, size / 2)).toStrictEqual(
-              oldResult,
-            );
+            expect(
+              await nativeFallback(history, Math.floor(size / 2)),
+            ).toStrictEqual(oldResult);
           }, true);
           expect(creates).toStrictEqual({ directories: [], files: [] });
           const actual = await Array.fromAsync(history.streamRawHistory());
           const oldRows = await Array.fromAsync(old.streamRawHistory());
-          const expected = input.slice(size / 2).map((content) => ({
-            ...content,
-            metadata: Object.fromEntries(
-              Object.entries(content.metadata ?? {}).filter(
-                ([key]) => key !== 'responsesStored',
+          const expected = input
+            .slice(size - Math.floor(size / 2))
+            .map((content) => ({
+              ...content,
+              metadata: Object.fromEntries(
+                Object.entries(content.metadata ?? {}).filter(
+                  ([key]) => key !== 'responsesStored',
+                ),
               ),
-            ),
-          }));
+            }));
           expect(actual).toStrictEqual(expected);
           expect(actual).toStrictEqual(oldRows);
-          expect(history.getTotalTokens()).toBe(size / 2);
+          expect(history.getTotalTokens()).toBe(Math.floor(size / 2));
           expect(history.getTotalTokens()).toBe(old.getTotalTokens());
           expect(history.getContextRange()).toStrictEqual(
             old.getContextRange(),

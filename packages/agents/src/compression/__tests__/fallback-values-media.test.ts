@@ -134,7 +134,7 @@ async function run(size: number, rollback: boolean): Promise<number> {
 }
 
 describe('fallback value serialization and media', () => {
-  for (const size of [512, 8192])
+  for (const size of [65])
     for (const rollback of [false, true])
       it(`preserves real media reservations across ${size}-row fallback, rollback=${rollback}`, async () => {
         expect(await run(size, rollback)).toBe(size);

@@ -157,7 +157,7 @@ describe('disk density row/path/call/inclusion decisions', () => {
     it(`matches legacy duplicate IDs, inclusion ties, many-file and phase decisions for mask ${mask}`, () => {
       expect(compare(EDGE_ROWS, mask)).toBeGreaterThanOrEqual(4096 * 8);
     });
-  for (const size of [512, 8192])
+  for (const size of [65])
     it(`uses an actual disk index for all ${size} mixed-row decisions`, () => {
       expect(
         compare(

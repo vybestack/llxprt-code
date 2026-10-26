@@ -94,7 +94,7 @@ async function decisions(size: number): Promise<number> {
 }
 
 describe('high-density disk addressed decisions', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'preserves first duplicate call lookup, parameter aliases, error status and old summary spans for %i rows',
     async (size) => {
       expect(await decisions(size)).toBeGreaterThan(0);

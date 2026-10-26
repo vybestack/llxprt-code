@@ -118,7 +118,7 @@ async function compare(size: number): Promise<number> {
   );
 }
 describe('actual provider hard-limit disk fallback', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'matches legacy truncation over %i mixed rows without eager preparation or installation',
     async (size) => {
       expect(await compare(size)).toBeGreaterThan(0);

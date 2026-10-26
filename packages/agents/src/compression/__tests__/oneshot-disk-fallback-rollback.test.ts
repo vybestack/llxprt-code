@@ -74,7 +74,7 @@ async function rollback(size: number): Promise<number> {
   });
 }
 describe('one-shot disk eligible fallback compensation', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'restores %i rows and caller marker identity after fallback publication rejection before successful retry',
     async (size) => {
       expect(await rollback(size)).toBe(2);

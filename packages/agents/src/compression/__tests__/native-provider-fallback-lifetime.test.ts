@@ -22,7 +22,7 @@ function assertBounded(refs: ReadonlyArray<WeakRef<IContent>>): void {
 }
 
 describe('native fallback indexed source lifetime', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'releases source conversions under awaited backpressure at %i rows',
     async (size) => {
       await withNativeValueFixture(async ({ history }) => {
@@ -39,7 +39,7 @@ describe('native fallback indexed source lifetime', () => {
           this: JournalDumpSnapshot,
           index: number,
         ): Promise<IContent> {
-          if (refs.length > 0 && refs.length % 128 === 0) {
+          if (refs.length > 0 && refs.length % 8 === 0) {
             await collect();
             samples++;
             peak = Math.max(peak, live(refs));

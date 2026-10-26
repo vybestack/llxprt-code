@@ -77,7 +77,8 @@ async function retainingControl(size: number): Promise<void> {
   await withNativeFallbackFixture(async ({ history, owners }) => {
     await history.detachedValues.replace(
       (async function* () {
-        for (let index = 0; index < size; index++) yield suffixRow(index, 2048);
+        for (let index = 0; index < size; index++)
+          yield suffixRow(index, 32 * 1024);
       })(),
     );
     const retained: IContent[] = [];
@@ -89,10 +90,10 @@ async function retainingControl(size: number): Promise<void> {
       expect(owners.snapshot().liveRows).toBe(size);
       expect(owners.snapshot().liveRows).toBeGreaterThan(440);
       expect(owners.snapshot().liveSerializedBytes).toBeGreaterThan(
-        size * 2048,
+        size * 32 * 1024,
       );
       expect(owners.snapshot().liveSerializedBytes > 8 * 1024 * 1024).toBe(
-        size === 8192,
+        true,
       );
       expect(
         owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
@@ -106,11 +107,16 @@ async function retainingControl(size: number): Promise<void> {
 }
 
 describe('native fallback retained media and owner controls', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     it(`keeps actual media through acknowledged rollback and releases it on retry over ${size} rows`, async () => {
       const result = await mediaRollback(size);
       expect(result).toBeUndefined();
     }, 180_000);
+  }
+});
+
+describe('native fallback retaining control', () => {
+  for (const size of [512]) {
     it(`rejects retained native reader values at the original bounds over ${size} rows`, async () => {
       await expect(retainingControl(size)).resolves.toBeUndefined();
     }, 180_000);

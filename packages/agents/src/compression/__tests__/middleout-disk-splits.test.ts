@@ -107,7 +107,7 @@ async function compare(size: number, mode: string): Promise<number> {
   );
 }
 const cases: Array<[number, string]> = [];
-for (const size of [512, 8192])
+for (const size of [65])
   for (const mode of ['pair', 'small', 'large']) cases.push([size, mode]);
 describe('disk middle-out split and last-user semantics', () => {
   it.each(cases)(

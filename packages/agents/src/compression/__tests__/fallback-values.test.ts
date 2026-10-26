@@ -212,7 +212,7 @@ async function pending(size: number, rollback: boolean): Promise<number> {
 }
 
 describe('fallback disk value callers', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     for (const rollback of [false, true]) {
       it(`publishes complete candidate at ${size}, rollback=${rollback}`, async () => {
         expect(await candidate(size, rollback)).toBe(size);

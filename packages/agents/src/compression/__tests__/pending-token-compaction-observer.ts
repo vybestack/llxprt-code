@@ -1,11 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fs from 'node:fs/promises';
 import { expect, spyOn } from 'bun:test';
-import {
-  compactionCandidatePath,
-  compactionDue,
-} from '@vybestack/llxprt-code-core/journal/compaction.js';
+import { compactionCandidatePath } from '@vybestack/llxprt-code-core/journal/compaction.js';
 import { versionOf } from '@vybestack/llxprt-code-core/journal/version.js';
+import type { Version } from '@vybestack/llxprt-code-core/journal/version.js';
 import type { JournalStore } from '@vybestack/llxprt-code-core/journal/journalStore.js';
 import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
 import { decodeStoredRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
@@ -20,6 +18,8 @@ import {
 export async function observePendingCompaction(
   recording: JournalStore,
   operation: () => Promise<void>,
+  compactionDue: (version: Version) => boolean,
+  stopCompaction: () => void,
 ): Promise<OperationFileCreates> {
   const path = recording.path;
   const candidate = compactionCandidatePath(path);
@@ -55,6 +55,7 @@ export async function observePendingCompaction(
       process.stdout.write(
         `PENDING_COMPACTION_SWAP ${JSON.stringify({ path, candidate, beforeBytes: before.fileSize, afterBytes: copied.fileSize, commitSeq: copied.trailer?.commitSeq, groupTag: String(copied.trailer?.groupTag), beforeFileId: Buffer.from(before.header.fileId).toString('hex'), afterFileId: Buffer.from(copied.header.fileId).toString('hex') })}\n`,
       );
+      stopCompaction();
       await rename(from, to);
       swaps++;
     } finally {

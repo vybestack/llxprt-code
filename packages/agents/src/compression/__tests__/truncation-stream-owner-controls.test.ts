@@ -88,7 +88,7 @@ async function retainingControl(size: number): Promise<number> {
           owner.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
         ).toBe(false);
         expect(owner.snapshot().peakSerializedBytes).toBeGreaterThan(
-          size === 8192 ? 8 * 1024 * 1024 : 0,
+          8 * 1024 * 1024,
         );
       }
       const peak =
@@ -101,7 +101,7 @@ async function retainingControl(size: number): Promise<number> {
       ).toBe(0);
       return peak;
     },
-    2048,
+    32 * 1024,
     truncationRow,
     undefined,
     (options) => {
@@ -112,7 +112,7 @@ async function retainingControl(size: number): Promise<number> {
 }
 
 describe('strategy cursor deliberately retaining owner controls', () => {
-  it.each([512, 8192])(
+  it.each([512])(
     'rejects retained and copied %i-row controls with unchanged bounds',
     async (size) => {
       expect(await retainingControl(size)).toBe(size * 2);

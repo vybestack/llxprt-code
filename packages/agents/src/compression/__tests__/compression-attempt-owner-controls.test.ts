@@ -13,7 +13,7 @@ import {
   attemptHandler,
 } from './compression-attempt-stream-helpers.js';
 
-const cases = [512, 8192].flatMap((size) =>
+const cases = [512].flatMap((size) =>
   [false, true].map((copy) => ({ size, copy })),
 );
 
@@ -29,7 +29,7 @@ describe('compression hook retaining controls', () => {
           const actual = createHash('sha256');
           const expected = createHash('sha256');
           for (let index = 0; index < size; index++)
-            expected.update(JSON.stringify(suffixRow(index, 24 * 1024)));
+            expected.update(JSON.stringify(suffixRow(index, 32 * 1024)));
           const handler = attemptHandler(history, async (context) => {
             for await (const row of context.history) {
               const held = copy ? structuredClone(row) : row;
@@ -62,7 +62,7 @@ describe('compression hook retaining controls', () => {
             8 * 1024 * 1024,
           );
         },
-        24 * 1024,
+        32 * 1024,
         suffixRow,
         undefined,
         (options) => new AttemptHistory(options),

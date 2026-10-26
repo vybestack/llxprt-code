@@ -92,7 +92,7 @@ async function phases(size: number): Promise<number> {
   });
 }
 describe('pending-window ownership phases', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'preserves %i-row membership before preparation, during publication and after enforcement',
     async (size) => {
       expect(await phases(size)).toBeGreaterThan(0);

@@ -141,7 +141,7 @@ async function split(size: number): Promise<number> {
 }
 
 describe('one-shot disk tool boundary and snapshot recording', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'summarizes old pairs and preserves the protected boundary in %i rows',
     async (size) => {
       expect(await split(size)).toBeGreaterThan(4);

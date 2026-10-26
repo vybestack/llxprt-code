@@ -31,7 +31,7 @@ export interface CompressionValueRecorderFixture {
   readonly owners: RowOwnership;
   readonly failure: Error;
   readonly ready: ReturnType<typeof valueGate>;
-  arm(): void;
+  arm(pauseWhen?: () => boolean): void;
   release(): void;
   failAdmissionAfter(successes: number): void;
   durable(): ReturnType<typeof compressionValueDigest>;
@@ -44,7 +44,7 @@ function valueWriter(): {
   readonly failure: Error;
   readonly ready: ReturnType<typeof valueGate>;
   admit(): void;
-  arm(): void;
+  arm(pauseWhen?: () => boolean): void;
   release(): void;
   failAfter(successes: number): void;
   wait(): Promise<void>;
@@ -53,6 +53,7 @@ function valueWriter(): {
   const ready = valueGate();
   const gate = valueGate();
   let armed = false;
+  let pauseWhen = (): boolean => true;
   let remaining: number | undefined;
   return {
     failure,
@@ -64,15 +65,16 @@ function valueWriter(): {
       }
       if (remaining !== undefined) remaining--;
     },
-    arm: () => {
+    arm: (predicate = () => true) => {
       armed = true;
+      pauseWhen = predicate;
     },
     release: () => gate.resolve(),
     failAfter: (successes) => {
       remaining = successes;
     },
     wait: async () => {
-      if (!armed) return;
+      if (!armed || !pauseWhen()) return;
       armed = false;
       ready.resolve();
       await gate.promise;

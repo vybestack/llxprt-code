@@ -255,7 +255,7 @@ export async function nativePublication(
       semanticMetadata: {},
     });
     const rowAt = (index: number): IContent => {
-      const row = highdensityRow(index);
+      const row = highdensityRow(index, trap ? 64 * 1024 : 2048);
       return index === 0 || index === size - 1
         ? { ...row, blocks: [...row.blocks, reference] }
         : row;

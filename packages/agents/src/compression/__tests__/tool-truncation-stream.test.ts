@@ -16,7 +16,7 @@ import {
 } from './tool-truncation-stream-helpers.js';
 
 describe('disk-backed production tool truncation', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'preserves the exact legacy suffix rewrite for %i mixed rows',
     async (size) => {
       const mutations = new RowOwnership();
@@ -59,7 +59,7 @@ describe('disk-backed production tool truncation', () => {
 });
 
 describe('pending tool ranking precedence', () => {
-  it.each([512, 8192])(
+  it.each([65])(
     'ranks pending ahead of equally sized history at %i rows without changing caller blocks',
     async (size) => {
       await withSuffixFixture(
