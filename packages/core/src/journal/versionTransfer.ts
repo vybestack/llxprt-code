@@ -157,6 +157,11 @@ class CopySession {
       stats: this.stats,
       sourceCache: new BoundedIdNodeCache(),
       readCopiedNode: (offset) => this.readCopiedNode(offset),
+      copiedAccess: (end) =>
+        createRecordAccess(this.path, this.writer.reader, {
+          selfOffset: 0,
+          durableEnd: end,
+        }),
     };
   }
 

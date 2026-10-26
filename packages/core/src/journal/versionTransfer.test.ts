@@ -132,6 +132,10 @@ describe('clone of one version (design 4.8)', () => {
       .map((entry) => `${entry.record}.${entry.field}`);
     expect(unmet.sort()).toStrictEqual(
       [
+        'TranscriptHead.openRoot',
+        'TranscriptChild.ref',
+        'TranscriptEntry.attemptRef',
+        'TranscriptEntry.presentationRef',
         'CheckpointDescriptor.trailerOffset',
         'IdFact.mappedRef',
         'RelocationValue.newOffset',

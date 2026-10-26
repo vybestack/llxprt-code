@@ -72,6 +72,11 @@ describe('compaction ID-node read cost', () => {
     try {
       const copier = new GroupCopier(
         {
+          copiedAccess: (end) =>
+            createRecordAccess(path, target, {
+              selfOffset: 0,
+              durableEnd: end,
+            }),
           source,
           relocation: new RelocationIndex(path, target, sha256KeyHash),
           stats: emptyCopyStats(),

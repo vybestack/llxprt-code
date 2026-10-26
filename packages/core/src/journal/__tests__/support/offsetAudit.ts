@@ -1,5 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect } from 'bun:test';
+import { readValueBody } from '../../mapEntries.js';
+import {
+  decodeTranscriptHead,
+  decodeMembership,
+  TRANSCRIPT_HEAD_KEY,
+} from '../../transcript-head.js';
+import {
+  readTranscriptNode,
+  type TranscriptTreeMode,
+} from '../../transcript-tree.js';
 import { listCheckpoints } from '../../checkpointList.js';
 import { decodeIdFact, ID_FACT_MIN_BYTES } from '../../idFactCodec.js';
 import { BoundedIdNodeCache } from '../../idTrieCache.js';
@@ -20,6 +30,7 @@ import { readVersionAt } from '../../trailerAccess.js';
 import type { Version } from '../../version.js';
 
 const KIND_OF: Record<PointsAt, number> = {
+  TNODE: RECORD_KIND.TNODE,
   ROW: RECORD_KIND.ROW,
   RTNODE: RECORD_KIND.RTNODE,
   ITNODE: RECORD_KIND.ITNODE,
@@ -185,8 +196,10 @@ export class OffsetAudit {
   ): Promise<void> {
     if (values === 'meta') {
       await this.check(OFFSET.metaValue, decodeMapRef(value), node);
+      await this.walkTranscriptValue(decodeMapRef(value));
     } else if (values === 'state') {
       await this.check(OFFSET.stateValue, decodeMapRef(value), node);
+      await this.walkTranscriptValue(decodeMapRef(value));
     } else if (
       !isNeutralRowFact(value) &&
       value.length >= ID_FACT_MIN_BYTES &&
@@ -196,6 +209,53 @@ export class OffsetAudit {
       if (fact.mappedRef !== 0) {
         await this.check(OFFSET.idFactMapped, fact.mappedRef, node);
       }
+    }
+  }
+
+  private async walkTranscriptValue(offset: number): Promise<void> {
+    const head = await this.access.readRecordHead(offset, 'VALUE');
+    const key = new TextDecoder().decode(head.kindHeader);
+    if (key === TRANSCRIPT_HEAD_KEY) {
+      const value = decodeTranscriptHead(
+        await readValueBody(this.access, head),
+      );
+      if (value.root !== 0) {
+        await this.check(OFFSET.transcriptRoot, value.root, offset);
+        await this.walkTranscript(value.root, 'transcript');
+      }
+    } else if (key.startsWith('member:')) {
+      const value = decodeMembership(await readValueBody(this.access, head));
+      if (value.rowRef !== 0)
+        await this.check(OFFSET.membershipRow, value.rowRef, offset);
+      if (value.occurrencesRoot !== 0) {
+        await this.check(OFFSET.membershipRoot, value.occurrencesRoot, offset);
+        await this.walkTranscript(value.occurrencesRoot, 'membership');
+      }
+    }
+  }
+
+  private async walkTranscript(
+    offset: number,
+    mode: TranscriptTreeMode,
+  ): Promise<void> {
+    if (this.visited.has(offset)) return;
+    this.visited.add(offset);
+    const node = await readTranscriptNode(this.access, offset, mode);
+    for (const child of node.children) {
+      await this.check(OFFSET.transcriptChild, child.ref, offset);
+      await this.walkTranscript(child.ref, mode);
+    }
+    for (const entry of node.entries) {
+      if (entry.rowRef !== 0)
+        await this.check(OFFSET.transcriptRow, entry.rowRef, offset);
+      if (entry.attemptRef !== 0)
+        await this.check(OFFSET.transcriptAttempt, entry.attemptRef, offset);
+      if (entry.presentationRef !== 0)
+        await this.check(
+          OFFSET.transcriptPresentation,
+          entry.presentationRef,
+          offset,
+        );
     }
   }
 

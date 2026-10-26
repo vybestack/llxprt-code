@@ -1,4 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  readTranscriptNode,
+  type TranscriptTreeMode,
+  type TranscriptNode,
+} from './transcript-tree.js';
+import { copyTranscriptValue } from './transcript-transfer.js';
 import { isNeutralRowFact } from './neutral-row-fact-codec.js';
 import { JournalFormatError } from './errors.js';
 import { frameLength, type FrameHead } from './frame.js';
@@ -44,6 +50,7 @@ export interface CopyShared {
   readonly sourceCache: IdNodeCache;
   /** A node an earlier version wrote to the new file, read back from it. */
   readonly readCopiedNode: (offset: number) => Promise<IdTrieNode>;
+  readonly copiedAccess: (end: number) => RecordAccess;
 }
 
 /**
@@ -81,6 +88,18 @@ export class GroupCopier {
     return this.shared.readCopiedNode(offset);
   }
 
+  async readCopiedTranscript(
+    offset: number,
+    mode: TranscriptTreeMode,
+  ): Promise<TranscriptNode> {
+    await this.appender.drain();
+    return readTranscriptNode(
+      this.shared.copiedAccess(this.appender.nextOffset),
+      offset,
+      mode,
+    );
+  }
+
   /** Looks `oldOffset` up in the index; a hit is counted. */
   async known(oldOffset: number): Promise<number | undefined> {
     const next = await this.shared.relocation.lookup(oldOffset);
@@ -100,10 +119,8 @@ export class GroupCopier {
   }
 
   async remember(oldOffset: number, newOffset: number): Promise<void> {
-    if (this.recording) {
-      this.shared.relocation.attach(this.appender);
-      await this.shared.relocation.record(oldOffset, newOffset);
-    }
+    this.shared.relocation.attach(this.appender);
+    await this.shared.relocation.record(oldOffset, newOffset);
   }
 
   /** The record at `oldOffset` (a `ROW`, `LENS` or `VALUE`), copied unless an earlier version did. */
@@ -119,6 +136,10 @@ export class GroupCopier {
     if (earlier !== undefined) return earlier;
     const head =
       knownHead ?? (await readSourceHead(this.source, oldOffset, points));
+    if (points === 'VALUE') {
+      const transcript = await copyTranscriptValue(this, oldOffset, head);
+      if (transcript !== undefined) return transcript;
+    }
     const written = await appendSourceRecord(
       this.source,
       this.appender,

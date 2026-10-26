@@ -1,4 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  decodeTranscriptHead,
+  encodeTranscriptHead,
+  decodeMembership,
+  encodeMembership,
+  TRANSCRIPT_HEAD_KEY,
+} from '../../transcript-head.js';
 import * as fsp from 'node:fs/promises';
 import { sha256KeyHash } from '../../idKeys.js';
 import { BoundedIdNodeCache } from '../../idTrieCache.js';
@@ -65,10 +72,21 @@ export async function mapContentsAt(
     new BoundedIdNodeCache(),
     root,
   )) {
-    found.set(
-      entry.key,
-      UTF8_DECODER.decode(await readValueBody(access, entry.head)),
-    );
+    const body = await readValueBody(access, entry.head);
+    let normalized = body;
+    if (entry.key === TRANSCRIPT_HEAD_KEY)
+      normalized = encodeTranscriptHead({
+        ...decodeTranscriptHead(body),
+        root: 0,
+        openRoot: 0,
+      });
+    else if (entry.key.startsWith('member:'))
+      normalized = encodeMembership({
+        ...decodeMembership(body),
+        rowRef: 0,
+        occurrencesRoot: 0,
+      });
+    found.set(entry.key, UTF8_DECODER.decode(normalized));
   }
   return found;
 }

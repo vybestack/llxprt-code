@@ -18,7 +18,15 @@ export interface CopyStats {
 
 export function emptyCopyStats(): CopyStats {
   return {
-    copied: { ROW: 0, RTNODE: 0, ITNODE: 0, LENS: 0, VALUE: 0, TRAILER: 0 },
+    copied: {
+      TNODE: 0,
+      ROW: 0,
+      RTNODE: 0,
+      ITNODE: 0,
+      LENS: 0,
+      VALUE: 0,
+      TRAILER: 0,
+    },
     memoHits: 0,
     bytes: 0,
   };
