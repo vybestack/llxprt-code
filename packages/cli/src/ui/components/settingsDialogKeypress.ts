@@ -16,6 +16,7 @@ import {
   setPendingSettingValue,
   setPendingSettingValueAny,
 } from '../../utils/settingsUtils.js';
+import type { DynamicToolSettingsSource } from '../../utils/dynamicSettings.js';
 import type { Key } from '../hooks/useKeypress.js';
 import { Command, keyMatchers } from '../keyMatchers.js';
 import { cpLen, cpSlice, stripUnsafeCharacters } from '../utils/textUtils.js';
@@ -28,7 +29,6 @@ import { matchesScalarSettingType } from './settingsDialogHelpers.js';
 import type { PendingValue, SettingItem } from './settingsDialogTypes.js';
 
 import type React from 'react';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 // --- Keypress handler sub-handlers ---
 
@@ -262,7 +262,7 @@ function handleReturnKeypress(
     editingKey: string | null;
     activeSettingIndex: number;
     scrollOffset: number;
-    config?: CliUiRuntime;
+    config?: DynamicToolSettingsSource;
     pendingSettings: Settings;
     settings: LoadedSettings;
     selectedScope: SettingScope;
@@ -395,7 +395,7 @@ export interface KeypressCtx {
   activeSettingIndex: number;
   scrollOffset: number;
   effectiveMaxItemsToShow: number;
-  config?: CliUiRuntime;
+  config?: DynamicToolSettingsSource;
   pendingSettings: Settings;
   settings: LoadedSettings;
   selectedScope: SettingScope;
@@ -446,7 +446,7 @@ interface SettingsFocusCtx {
   activeSettingIndex: number;
   scrollOffset: number;
   effectiveMaxItemsToShow: number;
-  config?: CliUiRuntime;
+  config?: DynamicToolSettingsSource;
   pendingSettings: Settings;
   settings: LoadedSettings;
   selectedScope: SettingScope;

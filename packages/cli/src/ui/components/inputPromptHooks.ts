@@ -39,7 +39,6 @@ import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import clipboardy from 'clipboardy';
-import type { SessionIdentity } from '../cliUiRuntime.js';
 
 // ---------------------------------------------------------------------------
 // Custom hooks
@@ -152,7 +151,7 @@ const useSubmitHandlers = (
 
 const useClipboardPasteHandler = (
   buffer: TextBuffer,
-  session: SessionIdentity,
+  session: { getTargetDir(): string },
 ) =>
   useCallback(async () => {
     try {

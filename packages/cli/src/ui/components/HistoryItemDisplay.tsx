@@ -34,7 +34,7 @@ import { ChatList } from './views/ChatList.js';
 import { ExtensionsList } from './views/ExtensionsList.js';
 import { HooksList } from './views/HooksList.js';
 import { SkillsList } from './views/SkillsList.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { ToolGroupRuntime } from './messages/ToolGroupMessage.js';
 
 interface HistoryItemDisplayProps {
   readIdeMode: () => boolean;
@@ -48,7 +48,7 @@ interface HistoryItemDisplayProps {
   availableTerminalHeight?: number;
   terminalWidth: number;
   isPending: boolean;
-  config: CliUiRuntime;
+  config: ToolGroupRuntime;
   isFocused?: boolean;
   slashCommands?: readonly SlashCommand[]; // For help display
   showTodoPanel?: boolean;
@@ -228,7 +228,7 @@ function renderToolGroupMessage(
   itemForDisplay: HistoryItem,
   availableTerminalHeight: number | undefined,
   terminalWidth: number,
-  config: CliUiRuntime,
+  config: ToolGroupRuntime,
   isFocused: boolean,
   showTodoPanel: boolean,
   _activeShellPtyId: number | null | undefined,

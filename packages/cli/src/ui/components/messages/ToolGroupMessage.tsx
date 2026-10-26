@@ -10,7 +10,7 @@ import { Box, Text } from 'ink';
 import type { IndividualToolCallDisplay } from '../../types.js';
 import { ToolCallStatus } from '../../types.js';
 import type { TextEmphasis } from './ToolShared.js';
-import { ToolMessage } from './ToolMessage.js';
+import { ToolMessage, type ShellSessionRuntime } from './ToolMessage.js';
 import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
 import { Colors } from '../../colors.js';
 import { theme } from '../../semantic-colors.js';
@@ -22,8 +22,12 @@ import {
 import { canonicalizeToolName } from '@vybestack/llxprt-code-tools';
 import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
 import { useTodoContext } from '../../contexts/TodoContext.js';
-import type { CliUiRuntime } from '../../cliUiRuntime.js';
 import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
+
+/** Runtime reads the tool group makes: the embedded shell and folder trust. */
+export type ToolGroupRuntime = ShellSessionRuntime & {
+  isTrustedFolder(): boolean;
+};
 
 interface ToolGroupMessageProps {
   readIdeMode: () => boolean;
@@ -38,7 +42,7 @@ interface ToolGroupMessageProps {
   agentId?: string;
   availableTerminalHeight?: number;
   terminalWidth: number;
-  config: CliUiRuntime;
+  config: ToolGroupRuntime;
   isFocused?: boolean;
   showTodoPanel?: boolean;
   activeShellPtyId?: number | null;
@@ -201,7 +205,7 @@ function renderToolCallItem(
     filePath: string,
     outcome: 'accepted' | 'rejected',
   ) => Promise<void>,
-  config: CliUiRuntime,
+  config: ToolGroupRuntime,
   borderColor: string,
   borderDimColor: boolean,
 ): React.ReactNode {

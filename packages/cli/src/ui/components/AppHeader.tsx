@@ -12,10 +12,15 @@ import type { LoadedSettings } from '../../config/settings.js';
 import { Header } from './Header.js';
 import { Tips } from './Tips.js';
 import { useBanner, type BannerData } from '../hooks/useBanner.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+
+/** Runtime reads the header makes: the screen-reader flag and memory tip count. */
+export type AppHeaderRuntime = {
+  getLlxprtMdFileCount(): number;
+  getScreenReader(): boolean;
+};
 
 interface AppHeaderProps {
-  config: CliUiRuntime;
+  config: AppHeaderRuntime;
   settings: LoadedSettings;
   version: string;
   nightly: boolean;
