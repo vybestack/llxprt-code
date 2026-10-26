@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { observeRequestRepresentation } from '../utils/requestScopedBody.js';
 import type { ModelMessage } from 'ai';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
@@ -61,9 +62,13 @@ export async function* transportMessages(
         count === lastThinking ? 'none' : rowStrip,
       );
       const mapper = await mapping.rowIds?.(row, count);
-      yield* convertToVercelMessages(contents, mapper?.(), {
-        includeReasoningInContext: reasoning.includeInContext,
-      });
+      observeRequestRepresentation('neutral', row);
+      yield* observeRequestRepresentation(
+        'converted',
+        convertToVercelMessages(contents, mapper?.(), {
+          includeReasoningInContext: reasoning.includeInContext,
+        }),
+      );
       count++;
     }
     if (count !== rows.count)

@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { observeRequestRepresentation } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import type { Content, Part } from './geminiWireTypes.js';
 
 type FetchFunction = typeof globalThis.fetch;
@@ -118,7 +119,11 @@ export function createStreamedGeminiFetch(
     async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       if (typeof init?.body !== 'string')
         throw new Error('Expected Gemini SDK envelope');
-      const envelope = record(JSON.parse(init.body));
+      observeRequestRepresentation('serialized', init.body);
+      const envelope = observeRequestRepresentation(
+        'envelope',
+        record(JSON.parse(init.body)),
+      );
       let bytes = 0;
       const pieces = async function* (): AsyncGenerator<Uint8Array> {
         yield Buffer.from('{');
@@ -144,7 +149,13 @@ export function createStreamedGeminiFetch(
                 wire.parts?.unshift({ text: systemInstruction + '\n\n' });
               if (comma) yield Buffer.from(',');
               comma = true;
-              yield Buffer.from(JSON.stringify(wire));
+              observeRequestRepresentation('wire', wire);
+              yield Buffer.from(
+                observeRequestRepresentation(
+                  'serialized',
+                  JSON.stringify(wire),
+                ),
+              );
             }
           }
           yield Buffer.from(']');
@@ -162,7 +173,9 @@ export function createStreamedGeminiFetch(
                 return;
               }
               bytes += next.value.byteLength;
-              controller.enqueue(next.value);
+              controller.enqueue(
+                observeRequestRepresentation('buffer', next.value),
+              );
             } catch (error) {
               controller.error(error);
             }

@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { observeRequestRepresentation } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { DEFAULT_REQUEST_MEDIA_BUDGET_BYTES } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { NormalizedGenerateChatOptions } from '@vybestack/llxprt-code-providers/BaseProvider.js';
@@ -46,6 +47,7 @@ export async function* transportContents(
   let count = 0;
   for await (const row of rows.openReader(signal)) {
     signal?.throwIfAborted();
+    observeRequestRepresentation('neutral', row);
     const resolved = await resolveRequestMedia(
       {
         ...media,
@@ -79,7 +81,7 @@ export async function* transportContents(
           if (first !== undefined && !first.thoughtSignature)
             first.thoughtSignature = SYNTHETIC_THOUGHT_SIGNATURE;
         }
-        yield content;
+        yield observeRequestRepresentation('converted', content);
       }
     } finally {
       await resolved.release();

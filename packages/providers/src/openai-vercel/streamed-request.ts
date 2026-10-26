@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { observeRequestRepresentation } from '../utils/requestScopedBody.js';
 import type { ModelMessage, ToolResultPart } from 'ai';
 import {
   ProgressiveJsonBody,
@@ -126,7 +127,7 @@ async function* envelopeBytes(
     for await (const wire of wireMessages(initial, messages)) {
       if (comma) yield Buffer.from(',');
       comma = true;
-      yield* jsonValueBytes(wire);
+      yield* jsonValueBytes(observeRequestRepresentation('wire', wire));
     }
     yield Buffer.from(']');
   }
@@ -143,12 +144,16 @@ export function createStreamedVercelFetch(
     async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       if (typeof init?.body !== 'string')
         throw new Error('Expected SDK request envelope');
-      const envelope = record(JSON.parse(init.body));
+      observeRequestRepresentation('serialized', init.body);
+      const envelope = observeRequestRepresentation(
+        'envelope',
+        record(JSON.parse(init.body)),
+      );
       let bytes = 0;
       const body = new ProgressiveJsonBody(async function* () {
         for await (const chunk of envelopeBytes(envelope, messages)) {
           bytes += chunk.byteLength;
-          yield chunk;
+          yield observeRequestRepresentation('buffer', chunk);
         }
       });
       const handle = body.createStreamHandle();
