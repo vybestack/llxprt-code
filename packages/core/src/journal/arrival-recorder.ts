@@ -19,11 +19,13 @@ import {
   type ArrivalStore,
 } from './arrival-group.js';
 import { MAX_ARRIVAL_PIECE_BYTES } from './chunk-row.js';
+import { ArrivalTextBuffer } from './arrival-text-buffer.js';
 
 export const RECORDING_QUEUE_BYTES = 256 * 1024;
 const WRITE_BUFFER_CHARGE = 96 * 1024;
 const PIECE_CHARGE = 256;
 export class JournalArrivalRecorder {
+  private readonly textBuffer = new ArrivalTextBuffer();
   private pending: ArrivalPiece[] = [];
   private pendingBytes = 0;
   private chargedBytes = 0;
@@ -40,11 +42,16 @@ export class JournalArrivalRecorder {
   get census() {
     return {
       chargedBytes:
-        this.chargedBytes + (this.chargedPieces > 0 ? WRITE_BUFFER_CHARGE : 0),
+        this.chargedBytes +
+        this.textBuffer.bytes +
+        (this.chargedPieces > 0 || this.textBuffer.bytes > 0
+          ? WRITE_BUFFER_CHARGE
+          : 0),
       chargedPieces: this.chargedPieces,
       peakBytes: this.peakBytes,
       peakPieces: this.peakPieces,
       payloadBytes: this.payloadBytes,
+      textEncodes: this.textBuffer.encodes,
     };
   }
   private check(): void {
@@ -83,6 +90,42 @@ export class JournalArrivalRecorder {
   async beginNamedBlock(row: ArrivalRow, type: number): Promise<ArrivalBlock> {
     await this.flush();
     return this.mutate((group) => group.beginBlock(row, type, true));
+  }
+  appendTextDelta(block: ArrivalBlock, value: string): void | Promise<void> {
+    this.check();
+    const escaped = JSON.stringify(value).slice(1, -1);
+    if (!this.textBuffer.accepts(block, escaped)) {
+      const pending = this.drainTextBuffer();
+      if (pending !== undefined)
+        return pending.then(() => this.appendTextDelta(block, value));
+    }
+    const charge =
+      Math.max(Buffer.byteLength(escaped), escaped.length * 2) + 32;
+    if (charge > MAX_ARRIVAL_PIECE_BYTES)
+      return this.appendText(block, 'text', value);
+    if (
+      this.chargedBytes + this.textBuffer.bytes + charge + WRITE_BUFFER_CHARGE >
+      RECORDING_QUEUE_BYTES
+    )
+      return this.flush().then(() => this.appendTextDelta(block, value));
+    this.textBuffer.append(block, escaped);
+    this.peakBytes = Math.max(
+      this.peakBytes,
+      this.chargedBytes + this.textBuffer.bytes + WRITE_BUFFER_CHARGE,
+    );
+    this.armTimer();
+  }
+  private drainTextBuffer(): void | Promise<void> {
+    const piece = this.textBuffer.take();
+    if (piece !== undefined) return this.enqueuePiece(piece);
+  }
+  private armTimer(): void {
+    this.timer ??= setTimeout(() => {
+      this.timer = undefined;
+      void this.flush().catch((error: unknown) => {
+        this.failure = { error };
+      });
+    }, 50);
   }
   async appendText(
     block: ArrivalBlock,
@@ -126,6 +169,29 @@ export class JournalArrivalRecorder {
       throw error;
     }
   }
+  async replaceField(
+    block: ArrivalBlock,
+    name: ArrivalFieldName,
+    value: string,
+  ): Promise<void> {
+    await this.flush();
+    let replace = true;
+    for (const bytes of encodeTextSuffix(
+      value,
+      0,
+      name === 'isHidden' || name === 'providerMetadata',
+    )) {
+      await this.enqueuePiece({ block, name, bytes, replace });
+      replace = false;
+    }
+    if (replace)
+      await this.enqueuePiece({
+        block,
+        name,
+        bytes: new Uint8Array(),
+        replace,
+      });
+  }
   async appendMedia(
     block: ArrivalBlock,
     source: AsyncIterable<Uint8Array>,
@@ -154,7 +220,7 @@ export class JournalArrivalRecorder {
     if (bytes.length === 0) return;
     await this.enqueuePiece({ block, bytes });
   }
-  private async enqueuePiece(piece: ArrivalPiece): Promise<void> {
+  private enqueuePiece(piece: ArrivalPiece): void | Promise<void> {
     this.check();
     const { bytes } = piece;
     if (bytes.length > MAX_ARRIVAL_PIECE_BYTES)
@@ -164,14 +230,7 @@ export class JournalArrivalRecorder {
         RECORDING_QUEUE_BYTES ||
       this.chargedPieces >= 256
     )
-      await this.flush();
-    this.check();
-    if (
-      this.chargedBytes + bytes.length + PIECE_CHARGE + WRITE_BUFFER_CHARGE >
-        RECORDING_QUEUE_BYTES ||
-      this.chargedPieces >= 256
-    )
-      throw new Error('Concurrent recording push exceeded queue capacity');
+      return this.flush().then(() => this.enqueuePiece(piece));
     this.pending.push({ ...piece, bytes: bytes.slice() });
     this.pendingBytes += bytes.length;
     this.chargedBytes += bytes.length + PIECE_CHARGE;
@@ -182,12 +241,7 @@ export class JournalArrivalRecorder {
       this.chargedBytes + WRITE_BUFFER_CHARGE,
     );
     this.peakPieces = Math.max(this.peakPieces, this.chargedPieces);
-    this.timer ??= setTimeout(() => {
-      this.timer = undefined;
-      void this.flush().catch((error: unknown) => {
-        this.failure = { error };
-      });
-    }, 50);
+    this.armTimer();
     if (this.pendingBytes >= MAX_ARRIVAL_PIECE_BYTES) this.schedule();
   }
   private schedule(): void {
@@ -209,6 +263,7 @@ export class JournalArrivalRecorder {
                 piece.name,
                 piece.bytes,
                 piece.snapshot,
+                piece.replace,
               );
           }
         });
@@ -224,18 +279,23 @@ export class JournalArrivalRecorder {
   }
   async flush(): Promise<void> {
     this.check();
+    const pending = this.drainTextBuffer();
+    if (pending !== undefined) await pending;
     this.schedule();
     await this.running;
     this.check();
   }
   async endBlock(block: ArrivalBlock): Promise<void> {
     await this.flush();
-    const error = await this.mutate((group) => group.blockError(block));
+    const error = await this.mutate(async (group) => {
+      const failure = await group.blockError(block);
+      if (failure === undefined) await group.endBlock(block);
+      return failure;
+    });
     if (error !== undefined) {
       await this.finishAttempt(block, 'error');
       throw new Error(error);
     }
-    await this.mutate((group) => group.endBlock(block));
   }
   async sealRow(
     row: ArrivalRow,

@@ -84,12 +84,17 @@ describe('arrival recording', () => {
       expect(store.published?.rows).toBe(1);
       expect(recorder.census.payloadBytes).toBe(before);
       expect(await payloadBytesOnDisk(path)).toBe(physicalPayload);
-      const entry = await store.rows().next();
-      expect(entry.value).toBeDefined();
-      if (entry.value === undefined) throw new Error('Missing sealed entry');
-      expect((await store.readRow(entry.value)).blocks[0]).toStrictEqual(
-        progress.rows[0].blocks[0],
-      );
+      const rows = store.rows();
+      try {
+        const entry = await rows.next();
+        expect(entry.value).toBeDefined();
+        if (entry.value === undefined) throw new Error('Missing sealed entry');
+        expect((await store.readRow(entry.value)).blocks[0]).toStrictEqual(
+          progress.rows[0].blocks[0],
+        );
+      } finally {
+        await rows.return(undefined);
+      }
     } finally {
       await recorder.close();
       await store.close();

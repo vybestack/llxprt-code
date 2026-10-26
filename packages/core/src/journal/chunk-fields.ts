@@ -30,6 +30,8 @@ export const ARRIVAL_FIELDS = [
   'streamId',
   'streamStatus',
   'encryptedContent',
+  'isHidden',
+  'providerMetadata',
 ] satisfies readonly string[];
 export type ArrivalFieldName =
   | 'text'
@@ -48,7 +50,9 @@ export type ArrivalFieldName =
   | 'sourceField'
   | 'streamId'
   | 'streamStatus'
-  | 'encryptedContent';
+  | 'encryptedContent'
+  | 'isHidden'
+  | 'providerMetadata';
 export type ArrivalFieldMode = 'delta' | 'snapshot';
 const encoder = new TextEncoder();
 
@@ -68,9 +72,14 @@ export function blockPrefix(type: number): string {
     throw new JournalFormatError('Unknown named block type');
   return `{"type":${JSON.stringify(found[0])}`;
 }
+function rawField(code: number): boolean {
+  return ['parameters', 'isHidden', 'providerMetadata'].includes(
+    fieldName(code),
+  );
+}
 function fieldPrefix(code: number): string {
   const name = fieldName(code);
-  return `,${JSON.stringify(name)}:${name === 'parameters' ? '' : '"'}`;
+  return `,${JSON.stringify(name)}:${rawField(code) ? '' : '"'}`;
 }
 export async function* namedBlockParts(
   access: RecordAccess,
@@ -90,7 +99,7 @@ export async function* namedBlockParts(
     yield encoder.encode(fieldPrefix(code));
     const field = decodeChunkBlock(await chunkValue(access, entry.rowRef));
     yield* chunkFieldParts(access, manifest, ordinal, field, code);
-    if (fieldName(code) !== 'parameters') yield encoder.encode('"');
+    if (!rawField(code)) yield encoder.encode('"');
   }
   yield encoder.encode('}');
 }
@@ -111,7 +120,7 @@ export async function namedBlockLength(
     length +=
       encoder.encode(fieldPrefix(code)).length +
       field.length +
-      Number(fieldName(code) !== 'parameters');
+      Number(!rawField(code));
   }
   return length;
 }

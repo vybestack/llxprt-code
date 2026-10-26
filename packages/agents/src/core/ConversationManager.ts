@@ -82,6 +82,7 @@ interface RecordHistoryOptions {
   userInputWasFunctionResponse?: boolean;
   responseId?: string | null;
   responsesStored?: boolean | null;
+  responseAlreadyRecorded?: boolean;
 }
 
 function mergeTurnMetadata(
@@ -256,17 +257,19 @@ export class ConversationManager {
     );
 
     // Record model turn
-    this._recordModelTurn(
-      modelOutput,
-      usageMetadata,
-      options,
-      newHistoryEntries,
-      userInputWasArray,
-      userInputWasFunctionResponse,
-      hasAfc,
-      generatingModel,
-      this.baseURL,
-    );
+    if (options?.responseAlreadyRecorded !== true) {
+      this._recordModelTurn(
+        modelOutput,
+        usageMetadata,
+        options,
+        newHistoryEntries,
+        userInputWasArray,
+        userInputWasFunctionResponse,
+        hasAfc,
+        generatingModel,
+        this.baseURL,
+      );
+    }
 
     await this.historyService.addBatch(newHistoryEntries, generatingModel, {
       streamPublication: true,

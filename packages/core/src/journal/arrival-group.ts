@@ -59,6 +59,7 @@ export interface ArrivalPiece {
   readonly block: ArrivalBlock;
   readonly bytes: Uint8Array;
   readonly name?: ArrivalFieldName;
+  readonly replace?: boolean;
   readonly snapshot?: ChunkBlock['snapshot'];
 }
 export type ArrivalOutcome =
@@ -235,12 +236,14 @@ export class ArrivalGroup {
     name: ArrivalFieldName,
     bytes: Uint8Array,
     snapshot?: ChunkBlock['snapshot'],
+    replace = false,
   ): Promise<void> {
     const { entry, header } = await this.find(handle);
     if (header.chunk === undefined) throw new Error('Missing manifest');
     const block = await chunkBlock(this.access(), header.chunk, handle.ordinal);
     const code = fieldCode(name);
-    const field = (await this.namedField(handle, name)) ?? {
+    const previous = await this.namedField(handle, name);
+    const field = (replace ? undefined : previous) ?? {
       piecesRoot: 0,
       length: 0,
       type: code,
@@ -283,7 +286,8 @@ export class ArrivalGroup {
       encodeChunkBlock({
         ...block,
         piecesRoot: fieldsRoot,
-        length: block.length + bytes.length,
+        length:
+          block.length + bytes.length - (replace ? (previous?.length ?? 0) : 0),
       }),
     );
     const blocksRoot = await this.tree('blocks').insert(
@@ -292,7 +296,10 @@ export class ArrivalGroup {
     );
     this.head = {
       ...this.head,
-      reachableBytes: this.head.reachableBytes + bytes.length,
+      reachableBytes:
+        this.head.reachableBytes +
+        bytes.length -
+        (replace ? (previous?.length ?? 0) : 0),
     };
     await this.publish(entry, {
       ...header,

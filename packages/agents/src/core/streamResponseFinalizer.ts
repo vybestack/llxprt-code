@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ResponseArrival } from '@vybestack/llxprt-code-core/services/history/history-response-arrival.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { MediaAdmissionRelease } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
@@ -30,6 +31,7 @@ import {
 } from './streamResponseHelpers.js';
 
 interface FinalizeStreamResponseOptions {
+  readonly arrival?: ResponseArrival;
   readonly origin?: object;
   readonly logger: DebugLogger;
   readonly conversationManager: ConversationManager;
@@ -91,6 +93,7 @@ async function commitFinalizedStreamHistory(
   acc: ModelOutput,
   preparedHistoryUserInput: ReturnType<typeof prepareHistoryUserInput>,
 ): Promise<void> {
+  const arrival = options.arrival;
   const historyOptions = {
     ...preparedHistoryUserInput.userInputFlags,
     responseId: acc.responseId ?? acc.content.metadata?.id ?? null,
@@ -108,6 +111,14 @@ async function commitFinalizedStreamHistory(
       historyOptions,
       () => settlePublishedStreamAdmissions(options),
       options.origin,
+      arrival === undefined
+        ? undefined
+        : () =>
+            arrival.seal({
+              ...acc.content.metadata,
+              ...(acc.responseId === undefined ? {} : { id: acc.responseId }),
+              ...(acc.usage === undefined ? {} : { usage: acc.usage }),
+            }),
     );
   } finally {
     clearMatchedEagerToolResponseCallIds(

@@ -83,7 +83,16 @@ describe('production prompt submission barrier', () => {
             limit: 10,
           });
           const rows = entries.filter((entry) => entry.rowRef !== 0);
-          expect(rows).toHaveLength(1);
+          expect(rows).toHaveLength(mode === 'stream' ? 2 : 1);
+          expect(rows[1]?.status).toBe(mode === 'stream' ? 0 : undefined);
+          const opened =
+            mode === 'stream'
+              ? decodeStoredRow(await transcript.readRow(rows[1]))
+              : undefined;
+          expect(opened?.speaker).toBe(mode === 'stream' ? 'ai' : undefined);
+          expect(opened?.blocks).toStrictEqual(
+            mode === 'stream' ? [] : undefined,
+          );
           const content = decodeStoredRow(await transcript.readRow(rows[0]));
           expect(content.speaker).toBe('human');
           expect(content.blocks).toStrictEqual(sourcePending.blocks);

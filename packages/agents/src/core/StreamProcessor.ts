@@ -12,13 +12,21 @@ import type {
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
+import { cancellableResponseStream } from './cancellableResponseStream.js';
+import {
+  openResponseArrival,
+  responseArrivalFor,
+  appendResponseBlocks,
+  prefetchResponseArrival,
+  takePrefetchedArrival,
+} from './responseArrival.js';
+import type { ResponseArrival } from '@vybestack/llxprt-code-core/services/history/history-response-arrival.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { MediaAdmissionRelease } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import {
   isRetryableError,
   retryWithBackoff,
 } from '@vybestack/llxprt-code-core/utils/retry.js';
-import { prependAsyncGenerator } from '@vybestack/llxprt-code-core/utils/asyncIterator.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
@@ -246,60 +254,16 @@ export class StreamProcessor {
     turnId: string,
     origin?: object,
   ): AsyncGenerator<ModelStreamChunk> {
-    let processedStream: AsyncGenerator<ModelStreamChunk> | undefined;
-    const ensureProcessedStream = (): AsyncGenerator<ModelStreamChunk> => {
-      processedStream ??= this.processStreamResponse(
+    return cancellableResponseStream(streamResponse, () =>
+      this.processStreamResponse(
         streamResponse,
         userContent,
         semanticMediaPurge,
         turnId,
         prepared,
         origin,
-      );
-      return processedStream;
-    };
-
-    const cancellableStream = {
-      async next(value?: unknown): Promise<IteratorResult<ModelStreamChunk>> {
-        return ensureProcessedStream().next(value);
-      },
-      async return(value?: unknown): Promise<IteratorResult<ModelStreamChunk>> {
-        if (processedStream) {
-          return typeof processedStream.return === 'function'
-            ? processedStream.return(value)
-            : { done: true, value: undefined };
-        }
-
-        if (typeof streamResponse.return === 'function') {
-          await streamResponse.return(value);
-        }
-
-        return { done: true, value: undefined };
-      },
-      async throw(error?: unknown): Promise<IteratorResult<ModelStreamChunk>> {
-        if (processedStream) {
-          if (typeof processedStream.throw === 'function') {
-            return processedStream.throw(error);
-          }
-          throw error;
-        }
-
-        if (typeof streamResponse.throw === 'function') {
-          return streamResponse.throw(error);
-        }
-
-        if (typeof streamResponse.return === 'function') {
-          await streamResponse.return(undefined);
-        }
-
-        throw error;
-      },
-      [Symbol.asyncIterator](): AsyncGenerator<ModelStreamChunk> {
-        return this as AsyncGenerator<ModelStreamChunk>;
-      },
-    };
-
-    return cancellableStream as AsyncGenerator<ModelStreamChunk>;
+      ),
+    );
   }
 
   /**
@@ -396,6 +360,7 @@ export class StreamProcessor {
           this.currentRawTokenDeltaBridge,
           afterModel,
           params.hookOwner ?? params.recordingExecution?.hookOwner,
+          params.recordingExecution?.historyOrigin,
         ),
       setEstimate: (estimate) => {
         this.currentPromptEnvelopeEstimate = estimate;
@@ -466,7 +431,16 @@ export class StreamProcessor {
     rawTokenDeltaBridge: RawTokenDeltaBridge | null,
     sourceRequest?: SourceAfterModelRequest,
     owner?: HookExecutionOwner,
+    origin?: object,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
+    const arrival = await openResponseArrival(
+      this.historyService,
+      this.runtimeContext,
+      promptId,
+      this.turnIdByPromptId.get(promptId) ??
+        this.historyService.generateTurnKey(),
+      origin,
+    );
     const convertedStream = this._convertIContentStream(
       streamResponse,
       requestPayload,
@@ -477,15 +451,11 @@ export class StreamProcessor {
       owner,
     );
 
-    const firstChunk = await convertedStream.next();
-
-    if (firstChunk.done === true) {
-      throw new EmptyStreamError(
-        'Model stream ended immediately with no content.',
-      );
-    }
-
-    return prependAsyncGenerator(firstChunk.value, convertedStream);
+    return prefetchResponseArrival(
+      convertedStream,
+      arrival,
+      this.runtimeContext.ephemerals.reasoning.includeInContext(),
+    );
   }
   private async _handleBucketFailover(
     signal: AbortSignal | undefined,
@@ -729,6 +699,15 @@ export class StreamProcessor {
       this.runtimeContext.ephemerals.reasoning.includeInContext();
     const turnId = capturedTurnId ?? this.historyService.generateTurnKey();
 
+    const arrival =
+      responseArrivalFor(streamResponse) ??
+      (await openResponseArrival(
+        this.historyService,
+        this.runtimeContext,
+        turnId,
+        turnId,
+        origin,
+      ));
     const accumulator = new StreamOutputAccumulator();
     const admissions: MediaAdmissionRelease[] = [];
     let finalized = false;
@@ -750,6 +729,14 @@ export class StreamProcessor {
           turnId,
         );
         admissions.push(...streamMediaAdmissions(historyChunk, turnId));
+        const pendingArrival = takePrefetchedArrival(chunk)
+          ? undefined
+          : appendResponseBlocks(
+              arrival,
+              historyChunk.content.blocks,
+              includeThoughts,
+            );
+        if (pendingArrival !== undefined) await pendingArrival;
         accumulator.add(historyChunk);
         yield { ...chunk, content: filteredContent };
       }
@@ -761,12 +748,15 @@ export class StreamProcessor {
         preparedUserTurn,
         admissions,
         origin,
+        arrival,
       );
       finalized = true;
     } catch (error: unknown) {
       failureCleanupStarted = true;
       await failStreamProcessing(error, admissions, this.runtimeContext);
     } finally {
+      if (!finalized)
+        await arrival.interrupt(failureCleanupStarted ? 'error' : 'cancelled');
       if (!finalized && !failureCleanupStarted) {
         await this.runtimeContext.mediaAdmission?.releaseAdmissions(admissions);
       }
@@ -781,8 +771,10 @@ export class StreamProcessor {
     preparedUserTurn: PreparedUserTurn | undefined,
     mediaAdmissions: readonly MediaAdmissionRelease[],
     origin?: object,
+    arrival?: ResponseArrival,
   ): Promise<void> {
     return finalizeStreamResponse({
+      arrival,
       origin,
       logger: this.logger,
       conversationManager: this.conversationManager,

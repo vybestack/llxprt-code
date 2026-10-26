@@ -14,6 +14,14 @@ import {
 import type { PendingRecorderWrites } from './pendingRecorderWrites.js';
 import { JournalSession } from './journalSession.js';
 
+function containsAppend(edits: readonly VersionEdit[]): boolean {
+  return edits.some(
+    (edit) =>
+      edit.kind === 'append' ||
+      (edit.kind === 'prepared' && containsAppend(edit.admission)),
+  );
+}
+
 interface RecordingOwner {
   readonly recorder: JournalRecordingService;
   readonly origin: string | undefined;
@@ -135,7 +143,6 @@ export class RecordingPrimary {
       this.selected = undefined;
     }
     const pending = this.pending;
-    this.pending = undefined;
     if (
       pending === undefined ||
       !state.mirrors.isOnlyRecorder(pending.recorder)
@@ -145,10 +152,11 @@ export class RecordingPrimary {
     const owner = registration.id;
     prepared = [...registration.edits, ...prepared];
     if (
-      !prepared.some((edit) => edit.kind === 'append') ||
+      !containsAppend(prepared) ||
       !recordingAcceptsEdits(prepared, owner, pending.origin, false)
     )
       return prepared;
+    this.pending = undefined;
     await state.mirrors.materializeRecorders();
     const adoption = await adoptAttachedRecorder(this.host, pending.recorder);
     this.selected = { ...pending, owner };

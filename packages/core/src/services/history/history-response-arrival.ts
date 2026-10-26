@@ -12,7 +12,7 @@ import { encodeContentRow } from './journalRowCodec.js';
 import type { ContentBlock, ContentMetadata, IContent } from './IContent.js';
 
 export interface ResponseArrival {
-  append(block: ContentBlock): Promise<void>;
+  append(block: ContentBlock): void | Promise<void>;
   seal(metadata: ContentMetadata): Promise<void>;
   interrupt(outcome?: Exclude<ArrivalOutcome, 'completed'>): Promise<void>;
 }
@@ -36,8 +36,13 @@ class JournalResponseArrival implements ResponseArrival {
     await this.recorder.endBlock(this.current.block);
     this.current = undefined;
   }
-  async append(block: ContentBlock): Promise<void> {
+  append(block: ContentBlock): void | Promise<void> {
     if (this.finished) throw new Error('Response arrival is finished');
+    if (block.type === 'text' && this.current?.type === 'text')
+      return this.recorder.appendTextDelta(this.current.block, block.text);
+    return this.appendSlow(block);
+  }
+  private async appendSlow(block: ContentBlock): Promise<void> {
     if (block.type !== 'text' && block.type !== 'thinking') {
       await this.appendComplete(block);
       return;
@@ -45,7 +50,8 @@ class JournalResponseArrival implements ResponseArrival {
     const streamId = block.type === 'thinking' ? block.streamId : undefined;
     if (
       this.current?.type !== block.type ||
-      this.current.streamId !== streamId
+      this.current.streamId !== streamId ||
+      (block.type === 'thinking' && streamId === undefined)
     ) {
       await this.end();
       this.current = {
@@ -58,7 +64,7 @@ class JournalResponseArrival implements ResponseArrival {
       };
     }
     if (block.type === 'text')
-      await this.recorder.appendText(this.current.block, 'text', block.text);
+      await this.recorder.appendTextDelta(this.current.block, block.text);
     else {
       await this.recorder.appendText(
         this.current.block,
@@ -66,20 +72,43 @@ class JournalResponseArrival implements ResponseArrival {
         block.thought,
         streamId === undefined ? 'delta' : 'snapshot',
       );
-      const fields: ReadonlyArray<
-        'signature' | 'sourceField' | 'streamId' | 'encryptedContent'
-      > = ['signature', 'sourceField', 'streamId', 'encryptedContent'];
-      for (const name of fields) {
-        const value = block[name];
-        if (typeof value === 'string')
-          await this.recorder.appendText(
-            this.current.block,
-            name,
-            value,
-            'snapshot',
-          );
-      }
+      await this.appendThinkingMetadata(block, this.current.block);
     }
+  }
+  private async appendThinkingMetadata(
+    block: Extract<ContentBlock, { type: 'thinking' }>,
+    handle: ArrivalBlock,
+  ): Promise<void> {
+    const fields: ReadonlyArray<
+      | 'signature'
+      | 'sourceField'
+      | 'streamId'
+      | 'encryptedContent'
+      | 'streamStatus'
+    > = [
+      'signature',
+      'sourceField',
+      'streamId',
+      'encryptedContent',
+      'streamStatus',
+    ];
+    for (const name of fields) {
+      const value = block[name];
+      if (value !== undefined)
+        await this.recorder.replaceField(handle, name, value);
+    }
+    if (block.isHidden !== undefined)
+      await this.recorder.replaceField(
+        handle,
+        'isHidden',
+        JSON.stringify(block.isHidden),
+      );
+    if (block.providerMetadata !== undefined)
+      await this.recorder.replaceField(
+        handle,
+        'providerMetadata',
+        JSON.stringify(block.providerMetadata),
+      );
   }
   private async appendComplete(block: ContentBlock): Promise<void> {
     await this.end();

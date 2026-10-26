@@ -21,6 +21,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
+import { arrivalHistoryFixture } from './__tests__/support/arrival-history-fixture.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -28,6 +29,7 @@ import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.
 
 function createMockRuntimeContext() {
   return {
+    state: { model: 'test' },
     ephemerals: {
       reasoning: {
         includeInContext: () => false,
@@ -49,13 +51,7 @@ function createMockConversationManager() {
   };
 }
 
-function createMockHistoryService() {
-  return {
-    add: vi.fn(),
-    generateTurnKey: () => `turn-${crypto.randomUUID()}`,
-    waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
-  };
-}
+const createMockHistoryService = arrivalHistoryFixture();
 
 function makeChunk(text: string): ModelStreamChunk {
   return toModelStreamChunk({
@@ -240,6 +236,7 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
     processor = Object.create(StreamProcessor.prototype);
     Object.assign(processor, {
       runtimeContext: {
+        state: { model: 'test' },
         ephemerals: {
           reasoning: {
             includeInContext: () => true,

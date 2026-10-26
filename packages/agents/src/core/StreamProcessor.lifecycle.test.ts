@@ -14,6 +14,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
+import { arrivalHistoryFixture } from './__tests__/support/arrival-history-fixture.js';
+const createHistory = arrivalHistoryFixture();
 import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -57,6 +59,7 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
     processor = Object.create(StreamProcessor.prototype);
     Object.assign(processor, {
       runtimeContext: {
+        state: { model: 'test' },
         ephemerals: { reasoning: { includeInContext: () => false } },
       },
       compressionHandler: { lastPromptTokenCount: 0 },
@@ -64,11 +67,7 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
         recordHistory: vi.fn(),
         recordStreamingHistory: vi.fn(),
       },
-      historyService: {
-        add: vi.fn(),
-        generateTurnKey: () => `turn-${crypto.randomUUID()}`,
-        waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
-      },
+      historyService: createHistory(),
       logger: new DebugLogger('test'),
       eagerlyRecordedToolResponseCallIds: new Set<string>(),
     });
@@ -187,6 +186,7 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
   it('threads each concurrent stream immutable turn identity through media admission', async () => {
     const admittedTurnByText = new Map<string, string>();
     Reflect.set(processor, 'runtimeContext', {
+      state: { model: 'test' },
       ephemerals: { reasoning: { includeInContext: () => false } },
       mediaAdmission: {
         admitContent: (
