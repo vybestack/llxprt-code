@@ -31,6 +31,7 @@
  */
 
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { openSendPeakSampleLog } from './send-peak-sample-log.js';
 import { join } from 'node:path';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -74,6 +75,9 @@ import {
   type SendPeakSource,
   type ShapeCounts,
 } from './sendPeakMeasurement.js';
+
+const sampleLog = openSendPeakSampleLog(process.env.SEND_PEAK_LOG);
+if (sampleLog !== undefined) process.once('exit', () => sampleLog.close());
 
 /** Rows whose liveness is watched; only the newest are still expected alive. */
 const RECENT_ROW_WINDOW = 64;
@@ -191,13 +195,12 @@ class MemorySampler {
   /** Records one in-flight sample against the baseline. */
   async sample(phase = 'rows'): Promise<void> {
     const now = await settledReading();
-    if (process.env.SEND_PEAK_LOG !== undefined) {
-      appendFileSync(
-        `${process.env.SEND_PEAK_LOG}.samples.jsonl`,
-        `${JSON.stringify({ phase, baseline: this.baseline, now, heapDelta: now.heap - this.baseline.heap })}
-`,
-      );
-    }
+    sampleLog?.write({
+      phase,
+      baseline: this.baseline,
+      now,
+      heapDelta: now.heap - this.baseline.heap,
+    });
     this.samples += 1;
     this.peakHeap = Math.max(this.peakHeap, now.heap - this.baseline.heap);
     this.peakArrayBuffers = Math.max(
