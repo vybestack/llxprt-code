@@ -22,6 +22,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 
 /**
  * Extracts visible (non-thinking) text from a neutral ModelOutput's content
@@ -113,7 +114,7 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
     });
 
     new ChatSession(
-      view,
+      chatSessionPorts(view),
       config,
       undefined,
       undefined,

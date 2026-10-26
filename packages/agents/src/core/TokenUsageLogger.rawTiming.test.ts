@@ -30,6 +30,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createTokenSyncTestFixture } from './__tests__/helpers/tokenSyncTestFixture.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import {
   TokenUsageLogger,
   type SerializedTokenUsageRecord,
@@ -278,7 +279,7 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
     );
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       fixture.mockConfig,
       undefined,
       undefined,
@@ -368,7 +369,7 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
     );
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       fixture.mockConfig,
       undefined,
       undefined,
@@ -456,7 +457,7 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
     );
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       fixture.mockConfig,
       undefined,
       undefined,
@@ -505,7 +506,7 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
     const fixture = createTokenSyncTestFixture();
     const view = buildTokenSyncView(fixture, mockProvider, sessionId);
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       fixture.mockConfig,
       undefined,
       undefined,

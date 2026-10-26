@@ -23,6 +23,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ChatSession } from '../../core/chatSession.js';
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 import { PerformCompressionResult } from '../../core/turn.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 
@@ -98,7 +99,7 @@ function makeChatSession(
   };
 
   return new ChatSession(
-    view,
+    chatSessionPorts(view),
     runtimeSetup.config,
     undefined,
     undefined,

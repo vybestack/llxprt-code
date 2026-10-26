@@ -25,6 +25,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createTokenSyncTestFixture } from './__tests__/helpers/tokenSyncTestFixture.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import { TokenUsageLogger } from './TokenUsageLogger.js';
 
 describe('ChatSession Token Count Sync - Non-streaming responses', () => {
@@ -132,7 +133,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
       });
 
       chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         mockConfig,
         undefined,
         undefined,
@@ -247,7 +248,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
       });
 
       chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         mockConfig,
         undefined,
         undefined,
@@ -350,7 +351,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
       });
 
       chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         mockConfig,
         undefined,
         undefined,
@@ -443,7 +444,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
       };
 
       chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         mockConfig,
         undefined,
         undefined,
@@ -525,7 +526,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
       };
 
       chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         mockConfig,
         undefined,
         undefined,

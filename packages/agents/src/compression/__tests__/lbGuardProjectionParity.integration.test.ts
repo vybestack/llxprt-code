@@ -53,6 +53,7 @@ import {
   buildRuntimeContext,
 } from '../../core/__tests__/chatSession-density-helpers.js';
 import { ChatSession } from '../../core/chatSession.js';
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 import { preparePromptEnvelopeAfterEnforcement } from '../../core/promptEnvelopeSendSeam.js';
 import { makeLoadBalancerInvocation } from '../../../../providers/src/__tests__/loadBalancerTestHelpers.js';
 import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
@@ -298,7 +299,7 @@ function createEnforcementSession(options: {
     compressionThreshold: 0.8,
   });
   const chat = new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
     undefined,
     undefined,
     undefined,

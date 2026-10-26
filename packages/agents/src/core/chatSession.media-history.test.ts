@@ -35,7 +35,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import {
+  mediaEncodings,
   mediaHistory,
   mediaHistoryShape,
   prefixedMediaHistory,
@@ -43,14 +45,6 @@ import {
 
 const requestFetch = (): Promise<never> =>
   Promise.reject(new Error('This test must not make network requests'));
-
-function mediaEncodings(history: readonly IContent[]): readonly string[] {
-  return history.flatMap((content) =>
-    content.blocks.flatMap((block) =>
-      block.type === 'media' ? [block.encoding] : [],
-    ),
-  );
-}
 
 describe('ChatSession media history boundaries', () => {
   afterEach(async () => {
@@ -478,7 +472,7 @@ describe('ChatSession media history boundaries', () => {
     };
     return {
       chat: new ChatSession(
-        runtime,
+        chatSessionPorts(runtime),
         setup.config,
         undefined,
         undefined,

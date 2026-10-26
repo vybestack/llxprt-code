@@ -25,6 +25,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
 
 function createUserMessage(text: string): IContent {
   return {
@@ -189,7 +190,7 @@ describe('Sandwich Compression (Issue #1011)', () => {
         const messageCountBefore = historyService.getCurated().length;
 
         const chat = new ChatSession(
-          runtimeContext,
+          chatSessionPorts(runtimeContext),
           undefined,
           undefined,
           undefined,
@@ -247,7 +248,7 @@ describe('Sandwich Compression (Issue #1011)', () => {
       const messageCountBefore = historyService.getCurated().length;
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -293,7 +294,7 @@ describe('Sandwich Compression (Issue #1011)', () => {
       historyService.add(createUserMessage('End'));
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -362,7 +363,7 @@ describe('Sandwich Compression (Issue #1011)', () => {
       }
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -428,7 +429,7 @@ describe('Sandwich Compression (Issue #1011)', () => {
       }
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,

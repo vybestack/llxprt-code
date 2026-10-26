@@ -24,6 +24,7 @@ import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 import { ChatSession, StreamEventType } from './chatSession.js';
+import { chatSessionPorts, type ChatSessionPorts } from './chatSessionPorts.js';
 
 describe('ChatSession hook execution control', () => {
   let mockHookSystem: {
@@ -40,6 +41,7 @@ describe('ChatSession hook execution control', () => {
   let hookOwner: HookExecutionOwner;
   let mockProvider: IProvider;
   let chat: ChatSession;
+  let chatPorts: ChatSessionPorts;
   let mockContentGenerator: {
     generateContent: ReturnType<typeof vi.fn>;
     generateContentStream: ReturnType<typeof vi.fn>;
@@ -150,8 +152,9 @@ describe('ChatSession hook execution control', () => {
       providerRuntime: providerRuntimeSnapshot,
     });
 
+    chatPorts = chatSessionPorts(view);
     chat = new ChatSession(
-      view,
+      chatPorts,
       mockConfig,
       undefined,
       undefined,
@@ -380,11 +383,7 @@ describe('ChatSession hook execution control', () => {
       beforeModelOutput,
     );
     const chatWithTools = new ChatSession(
-      (
-        chat as unknown as {
-          runtimeContext: ConstructorParameters<typeof ChatSession>[0];
-        }
-      ).runtimeContext,
+      chatPorts,
       chat.getConfig(),
       undefined,
       undefined,

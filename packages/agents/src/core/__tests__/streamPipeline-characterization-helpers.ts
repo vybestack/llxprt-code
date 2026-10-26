@@ -52,6 +52,7 @@ import { vi, type Mock } from 'bun:test';
 import { TestRuntimeProviderManager } from '../../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from '../chatSession-runtime-helpers.js';
 import { ChatSession } from '../chatSession.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
 import type { ServerAgentStreamEvent, ServerFinishedEvent } from '../turn.js';
 import { AgentEventType, DEFAULT_AGENT_ID, Turn } from '../turn.js';
 import type { PrepareProviderInvocation } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -228,7 +229,7 @@ export function createFullLoopHarness(
   });
 
   const chat = new ChatSession(
-    view,
+    chatSessionPorts(view),
     options?.hookConfig ?? config,
     undefined,
     undefined,

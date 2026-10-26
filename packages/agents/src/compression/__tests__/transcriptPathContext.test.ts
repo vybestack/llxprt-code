@@ -30,6 +30,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
 import { ChatSession } from '../../core/chatSession.js';
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 import { CompressionHandler } from '../CompressionHandler.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 
@@ -233,7 +234,7 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
       historyService.add(textContent(text));
     }
     const chat = new ChatSession(
-      runtimeContext,
+      chatSessionPorts(runtimeContext),
       undefined,
       undefined,
       undefined,
@@ -285,7 +286,7 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
       history.add(textContent(text));
     }
     const chat = new ChatSession(
-      runtime,
+      chatSessionPorts(runtime),
       undefined,
       undefined,
       undefined,

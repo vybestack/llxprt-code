@@ -31,6 +31,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
 
 // Mock the lifecycle hook triggers
 void vi.mock(
@@ -185,7 +186,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
         const messageCountBefore = historyService.getCurated().length;
 
         const chat = new ChatSession(
-          runtimeContext,
+          chatSessionPorts(runtimeContext),
           undefined,
           undefined,
           undefined,
@@ -250,7 +251,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
         populateHistory(historyService);
 
         const chat = new ChatSession(
-          runtimeContext,
+          chatSessionPorts(runtimeContext),
           undefined,
           undefined,
           undefined,
@@ -308,7 +309,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
       populateHistory(historyService);
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -362,7 +363,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
         populateHistory(historyService);
 
         const chat = new ChatSession(
-          runtimeContext,
+          chatSessionPorts(runtimeContext),
           undefined,
           undefined,
           undefined,
@@ -417,7 +418,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
       populateHistory(historyService);
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -467,7 +468,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
       populateHistory(historyService);
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -517,7 +518,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
       populateHistory(historyService);
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -601,7 +602,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
       });
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -642,7 +643,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
       });
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -686,7 +687,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
       });
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,

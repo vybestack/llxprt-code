@@ -41,6 +41,7 @@ import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import type { ChatSessionConfig } from './chatSession.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -173,7 +174,7 @@ describe('ChatSession runtime context', () => {
     });
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       config,
       undefined,
       undefined,
@@ -325,7 +326,7 @@ describe('ChatSession runtime context', () => {
     });
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       config,
       undefined,
       undefined,
@@ -460,7 +461,7 @@ describe('ChatSession runtime context', () => {
     });
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       config,
       undefined,
       undefined,

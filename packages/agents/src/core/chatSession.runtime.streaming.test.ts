@@ -44,6 +44,7 @@ import { waitForCondition } from '../test-utils/eventLoop.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -160,7 +161,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
     });
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       config,
       undefined,
       undefined,
@@ -274,7 +275,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       });
 
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         config,
         undefined,
         undefined,
@@ -399,7 +400,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       });
 
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         config,
         undefined,
         undefined,

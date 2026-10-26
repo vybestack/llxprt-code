@@ -18,6 +18,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { TestRuntimeProviderManager } from '../../test-utils/runtimeProviderManager.js';
 import { ChatSession } from '../chatSession.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -91,7 +92,7 @@ function createChatSession(options: {
   });
 
   return new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
     undefined,
     undefined,
     undefined,

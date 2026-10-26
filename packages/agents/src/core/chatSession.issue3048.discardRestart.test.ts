@@ -55,6 +55,7 @@ import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import type { StreamEvent } from './chatSession.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -127,7 +128,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     });
 
     return new ChatSession(
-      view,
+      chatSessionPorts(view),
       config,
       undefined,
       undefined,

@@ -36,6 +36,7 @@ import { TestRuntimeProviderManager } from '../../test-utils/runtimeProviderMana
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 import { createConfigParams } from '../chatSession-runtime-helpers.js';
 import { ChatSession } from '../chatSession.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
 import { installModelToolFixture } from './model-tool-fixture.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
@@ -163,7 +164,7 @@ function createLifecycleChatSession(
   config: Config,
 ): ChatSession {
   return new ChatSession(
-    runtime,
+    chatSessionPorts(runtime),
     config,
     undefined,
     undefined,

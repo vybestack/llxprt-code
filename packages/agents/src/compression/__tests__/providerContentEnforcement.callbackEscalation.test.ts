@@ -30,6 +30,7 @@ import {
   buildRuntimeContext,
 } from '../../core/__tests__/chatSession-density-helpers.js';
 import { ChatSession } from '../../core/chatSession.js';
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 import { buildCompressionContext } from '../compressionContextBuilder.js';
 import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
 import {
@@ -247,7 +248,7 @@ describe('ProviderContentEnforcer compression-callback escalation (issue #3499)'
     seedHistory(historyService);
     const pending = makePending();
     const chat = new ChatSession(
-      runtimeContext,
+      chatSessionPorts(runtimeContext),
       undefined,
       undefined,
       undefined,

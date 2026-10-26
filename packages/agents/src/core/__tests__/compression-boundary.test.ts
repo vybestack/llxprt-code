@@ -30,6 +30,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { adjustForToolCallBoundary } from '../../compression/utils.js';
 import { ChatSession } from '../chatSession.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
 
 function createToolCallAiMessage(callIds: string[]): IContent {
   return {
@@ -266,7 +267,7 @@ describe('Compression Boundary Logic (Issue #982)', () => {
       }
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -313,7 +314,7 @@ describe('Compression Boundary Logic (Issue #982)', () => {
       }
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -388,7 +389,7 @@ describe('Compression Boundary Logic (Issue #982)', () => {
       }
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -438,7 +439,7 @@ describe('Compression Boundary Logic (Issue #982)', () => {
         const curated = historyService.getCurated();
 
         const chat = new ChatSession(
-          runtimeContext,
+          chatSessionPorts(runtimeContext),
           undefined,
           undefined,
           undefined,
@@ -485,7 +486,7 @@ describe('Compression Boundary Logic (Issue #982)', () => {
       expect(curated.length).toBe(202);
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -522,7 +523,7 @@ describe('Compression Boundary Logic (Issue #982)', () => {
       }
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,

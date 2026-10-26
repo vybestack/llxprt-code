@@ -23,6 +23,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 
 describe('ChatSession Context Limit Enforcement', () => {
   let chat: ChatSession;
@@ -149,7 +150,7 @@ describe('ChatSession Context Limit Enforcement', () => {
     });
 
     chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       mockConfig,
       undefined,
       undefined,
@@ -222,7 +223,7 @@ describe('ChatSession Context Limit Enforcement', () => {
     });
 
     chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       mockConfig,
       undefined,
       undefined,
@@ -297,7 +298,7 @@ describe('ChatSession Context Limit Enforcement', () => {
     };
 
     chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       mockConfig,
       undefined,
       undefined,

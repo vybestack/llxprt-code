@@ -2,6 +2,7 @@ import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/Ag
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import type { ProviderInvocationData } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 /**
@@ -68,7 +69,7 @@ export function createHistoryChat(
   config: Config,
 ): ChatSession {
   return new ChatSession(
-    view,
+    chatSessionPorts(view),
     config,
     undefined,
     undefined,

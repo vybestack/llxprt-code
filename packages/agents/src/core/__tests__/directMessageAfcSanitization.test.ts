@@ -53,6 +53,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { TestRuntimeProviderManager } from '../../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from '../chatSession-runtime-helpers.js';
 import { ChatSession } from '../chatSession.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -157,7 +158,7 @@ function createDirectHarness(
   }
 
   const chat = new ChatSession(
-    view,
+    chatSessionPorts(view),
     config,
     undefined,
     undefined,

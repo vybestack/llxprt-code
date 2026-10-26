@@ -25,6 +25,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createTokenSyncTestFixture } from './__tests__/helpers/tokenSyncTestFixture.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 
 describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
   let chat: ChatSession;
@@ -135,7 +136,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       });
 
       chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         mockConfig,
         undefined,
         undefined,
@@ -237,7 +238,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       });
 
       chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         mockConfig,
         undefined,
         undefined,
@@ -339,7 +340,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       });
 
       chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         mockConfig,
         undefined,
         undefined,
@@ -448,7 +449,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       });
 
       chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         mockConfig,
         undefined,
         undefined,
@@ -542,7 +543,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       };
 
       chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         mockConfig,
         undefined,
         undefined,
@@ -637,7 +638,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       };
 
       chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         mockConfig,
         undefined,
         undefined,

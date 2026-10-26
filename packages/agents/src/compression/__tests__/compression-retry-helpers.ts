@@ -36,6 +36,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { vi } from 'bun:test';
 import { ChatSession } from '../../core/chatSession.js';
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
@@ -175,7 +176,7 @@ export function makeChatSession(
   });
 
   return new ChatSession(
-    view,
+    chatSessionPorts(view),
     runtimeSetup.config,
     undefined,
     undefined,

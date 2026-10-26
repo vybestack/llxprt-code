@@ -20,6 +20,7 @@ import {
   makeUserMessage,
 } from '../../core/__tests__/chatSession-density-helpers.js';
 import { ChatSession } from '../../core/chatSession.js';
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 
 function expectCapturedCallback(
   callback: CompressionCallback | null,
@@ -91,7 +92,7 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     historyService.add(makeAiText('response'));
 
     const chat = new ChatSession(
-      runtimeContext,
+      chatSessionPorts(runtimeContext),
       undefined,
       undefined,
       undefined,
@@ -158,7 +159,7 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
 
       historyService.add(makeUserMessage('test'));
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -193,7 +194,7 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     historyService.add(makeUserMessage('test'));
 
     const chat = new ChatSession(
-      runtimeContext,
+      chatSessionPorts(runtimeContext),
       undefined,
       undefined,
       undefined,
@@ -230,7 +231,7 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     historyService.add(makeUserMessage('test'));
 
     const chat = new ChatSession(
-      runtimeContext,
+      chatSessionPorts(runtimeContext),
       undefined,
       undefined,
       undefined,
@@ -288,7 +289,7 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
       }
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -382,7 +383,7 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
       });
       const pending = makeUserMessage('latest user request after tool result');
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -437,7 +438,7 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     });
     historyService.add(makeUserMessage('previous assistant context'));
     const chat = new ChatSession(
-      runtimeContext,
+      chatSessionPorts(runtimeContext),
       undefined,
       undefined,
       undefined,
@@ -510,7 +511,7 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
         ],
       };
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,

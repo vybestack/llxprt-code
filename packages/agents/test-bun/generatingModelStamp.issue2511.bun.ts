@@ -48,6 +48,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { ConversationManager } from '../src/core/ConversationManager.js';
 import { createConfigParams } from '../src/core/chatSession-runtime-helpers.js';
 import { ChatSession } from '../src/core/chatSession.js';
+import { chatSessionPorts } from '../src/core/chatSessionPorts.js';
 import { TestRuntimeProviderManager } from '../src/test-utils/runtimeProviderManager.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
@@ -334,7 +335,7 @@ function buildChatSessionWithLiveProvider(
   });
 
   const chat = new ChatSession(
-    view,
+    chatSessionPorts(view),
     config,
     undefined,
     undefined,

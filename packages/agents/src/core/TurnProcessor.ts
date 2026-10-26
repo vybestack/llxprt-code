@@ -14,7 +14,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { TurnProcessorRuntime } from './chatSessionPorts.js';
 import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -122,10 +122,7 @@ function wrapChunk(chunk: ModelStreamChunk): StreamEvent {
  */
 export class TurnProcessor {
   private loggingPorts() {
-    return turnTelemetryPorts(
-      this.runtimeContext.state,
-      this.runtimeContext.telemetry,
-    );
+    return turnTelemetryPorts(this.ports.state, this.ports.telemetry);
   }
 
   private logger = new DebugLogger('llxprt:turn-processor');
@@ -150,16 +147,16 @@ export class TurnProcessor {
   }
 
   rebindHistory(
-    runtimeContext: AgentRuntimeContext,
+    ports: TurnProcessorRuntime,
     providerFileBindings: ProviderFileBindingStore,
   ): void {
-    this.runtimeContext = runtimeContext;
-    this.historyService = runtimeContext.history;
+    this.ports = ports;
+    this.historyService = ports.history;
     this.providerFileBindings = providerFileBindings;
   }
 
   constructor(
-    private runtimeContext: AgentRuntimeContext,
+    private ports: TurnProcessorRuntime,
     private readonly config: Config | undefined,
     private readonly mediaResolver: RequestMediaResolutionService | undefined,
     private readonly requestMediaBudgetBytes: number | undefined,
@@ -193,7 +190,7 @@ export class TurnProcessor {
     this._resetPerTurnState();
 
     const prepared = await prepareAdmittedUserTurn(
-      this.runtimeContext,
+      this.ports,
       this.historyService,
       this._normalizeUserContent(params),
       prompt_id,
@@ -256,7 +253,7 @@ export class TurnProcessor {
     this._resetPerTurnState();
 
     const prepared = await prepareAdmittedUserTurn(
-      this.runtimeContext,
+      this.ports,
       this.historyService,
       this._normalizeUserContent(params),
       prompt_id,
@@ -547,11 +544,8 @@ export class TurnProcessor {
   }
 
   private _validateProvider(provider: IProvider): void {
-    validateProviderForSend(
-      provider,
-      this.logger,
-      this.runtimeContext.state.model,
-      () => this.resolveProviderBaseUrl(provider),
+    validateProviderForSend(provider, this.logger, this.ports.state.model, () =>
+      this.resolveProviderBaseUrl(provider),
     );
   }
 
@@ -595,7 +589,7 @@ export class TurnProcessor {
     );
     return enforceAndSendWithPromptEnvelopeRetries({
       provider,
-      tokenizerFactory: this.runtimeContext.promptEstimator,
+      tokenizerFactory: this.ports.promptEstimator,
       contents: userIContents,
       buildOptions: (contents) =>
         this._buildProviderChatOptions(
@@ -681,14 +675,14 @@ export class TurnProcessor {
             params.config?.providerRequestContext,
             provider.name,
           ),
-          this.runtimeContext.promptEstimator,
+          this.ports.promptEstimator,
         ));
       this.currentPromptEnvelopeEstimate = prepared.estimate;
       recordSendSeamTelemetry({
         usageLogger: this.compressionHandler.tokenUsageLogger,
         promptId,
         estimate: prepared.estimate,
-        runtimeState: this.runtimeContext.state,
+        runtimeState: this.ports.state,
         historyService: this.historyService,
         requestContents,
         tools,
@@ -757,7 +751,7 @@ export class TurnProcessor {
       requestContents,
       tools,
       runtimeContext.metadata,
-      this.runtimeContext.prepareProviderInvocation(
+      this.ports.prepareProviderInvocation(
         providerName,
         undefined,
         timeoutSignal,
@@ -782,7 +776,7 @@ export class TurnProcessor {
     const blocks: IContent['blocks'] = [];
     const iterator = streamResponse[Symbol.asyncIterator]();
     const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(
-      this.runtimeContext.readStreamTimeoutPolicy(),
+      this.ports.readStreamTimeoutPolicy(),
     );
 
     let nextResponse = await readProviderStreamResponse(
@@ -842,7 +836,7 @@ export class TurnProcessor {
       return { tools: toolsFromConfig, allowedFunctionNames: undefined };
     const toolSelectionResult = await hookOwner.beforeToolSelection(
       {
-        model: this.runtimeContext.state.model,
+        model: this.ports.state.model,
         contents: [],
         tools: toolsFromConfig,
       },
@@ -885,7 +879,7 @@ export class TurnProcessor {
       () => '[TurnProcessor] Calling provider.generateChatCompletion',
       {
         providerName: provider.name,
-        model: this.runtimeContext.state.model,
+        model: this.ports.state.model,
         toolCount: Array.isArray(tools) ? tools.length : 0,
         baseUrl,
       },
@@ -902,12 +896,12 @@ export class TurnProcessor {
     provider: IProvider,
     origin?: object,
   ): Promise<void> {
-    const currentModel = resolveGeneratingModel(this.runtimeContext, provider);
+    const currentModel = resolveGeneratingModel(this.ports, provider);
     this.stampingBaseUrl = this.resolveProviderBaseUrl(provider);
     return commitTurnHistory({
       origin,
-      mediaRuntime: { mediaAdmission: this.runtimeContext.mediaAdmission },
-      reasoningInclusion: reasoningInclusionPolicy(this.runtimeContext),
+      mediaRuntime: { mediaAdmission: this.ports.mediaAdmission },
+      reasoningInclusion: reasoningInclusionPolicy(this.ports),
       historyService: this.historyService,
       compressionHandler: this.compressionHandler,
       response,

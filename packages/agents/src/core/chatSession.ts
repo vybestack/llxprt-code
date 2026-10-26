@@ -38,7 +38,6 @@ import type {
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type {
-  AgentRuntimeContext,
   AgentRuntimeProviderAdapter,
   ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -120,7 +119,10 @@ import { createCompressionHookTrigger } from './compressionHookWiring.js';
 import { resolveCompressionProvider } from './CompressionProfileResolver.js';
 import { ConversationManager } from './ConversationManager.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
-import { directMessagePorts } from './directMessagePorts.js';
+import {
+  rebindChatSessionPorts,
+  type ChatSessionPorts,
+} from './chatSessionPorts.js';
 import {
   convertPartListUnionToIContent,
   validateHistory,
@@ -255,7 +257,7 @@ export class ChatSession {
   private removeDensityWrapper?: () => void;
 
   constructor(
-    private runtimeContext: AgentRuntimeContext,
+    private ports: ChatSessionPorts,
     private readonly config: Config | undefined,
     private readonly mediaResolver: RequestMediaResolutionService | undefined,
     private readonly requestMediaBudgetBytes: number | undefined,
@@ -269,11 +271,11 @@ export class ChatSession {
     triggerCompressionHook: typeof triggerPreCompressHook = triggerPreCompressHook,
     private readonly systemPromptAssembler?: SystemPromptAssembler,
   ) {
-    this.runtimeState = this.runtimeContext.state;
-    this.historyService = this.runtimeContext.history;
+    this.runtimeState = this.ports.runtime.state;
+    this.historyService = this.ports.runtime.history;
     this.generationConfig = generationConfig;
     this.semanticMediaPurge = createSemanticMediaPurgeSession(
-      () => this.runtimeContext.ephemerals.semanticMediaPurge(),
+      () => this.ports.runtime.ephemerals.semanticMediaPurge(),
       this.historyService,
     );
     // Carry the assembler onto the generation config so the three send seams
@@ -312,14 +314,14 @@ export class ChatSession {
 
     this.conversationManager = new ConversationManager(
       this.historyService,
-      this.runtimeContext,
+      this.ports.conversation,
       initialBaseUrl,
     );
 
     this.conversationManager.importInitialHistory(initialHistory, model);
 
     this.streamProcessor = new StreamProcessor(
-      this.runtimeContext,
+      this.ports.stream,
       this.config,
       this.mediaResolver,
       this.requestMediaBudgetBytes,
@@ -336,7 +338,7 @@ export class ChatSession {
     );
 
     this.turnProcessor = new TurnProcessor(
-      this.runtimeContext,
+      this.ports.turn,
       this.config,
       this.mediaResolver,
       this.requestMediaBudgetBytes,
@@ -355,15 +357,15 @@ export class ChatSession {
 
   private createTokenUsageLogger(): TokenUsageLogger {
     return createTokenUsageLogger(
-      this.runtimeContext.tokenUsageLoggingEnabled,
-      this.runtimeContext.state.sessionId,
+      this.ports.runtime.tokenUsageLoggingEnabled,
+      this.ports.runtime.state.sessionId,
       this.config,
     );
   }
 
   private createDirectMessageProcessor(): DirectMessageProcessor {
     return new DirectMessageProcessor(
-      directMessagePorts(this.runtimeContext),
+      this.ports.direct,
       this.config,
       this.mediaResolver,
       this.requestMediaBudgetBytes,
@@ -388,12 +390,9 @@ export class ChatSession {
     previousChat?: Pick<ChatSession, 'takeHistoryAdmissions'>,
   ): () => void {
     const providerFileBindings = createHistoryProviderFileBindingStore(history);
-    const runtimeContext: AgentRuntimeContext = Object.freeze({
-      ...this.runtimeContext,
-      history,
-    });
+    const ports = rebindChatSessionPorts(this.ports, history);
     const semanticMediaPurge = createSemanticMediaPurgeSession(
-      () => runtimeContext.ephemerals.semanticMediaPurge(),
+      () => ports.runtime.ephemerals.semanticMediaPurge(),
       history,
     );
     return () => {
@@ -403,20 +402,17 @@ export class ChatSession {
       ];
       this.removeDensityWrapper?.();
       this.removeDensityWrapper = undefined;
-      this.runtimeContext = runtimeContext;
+      this.ports = ports;
       this.historyService = history;
       this.providerFileBindings = providerFileBindings;
       this.compressionHandler.rebindHistory(
-        runtimeContext,
+        ports.compression,
         providerFileBindings,
       );
-      this.conversationManager.rebindHistory(runtimeContext);
-      this.streamProcessor.rebindHistory(runtimeContext, providerFileBindings);
-      this.turnProcessor.rebindHistory(runtimeContext, providerFileBindings);
-      this.directProcessor.rebindHistory(
-        directMessagePorts(runtimeContext),
-        providerFileBindings,
-      );
+      this.conversationManager.rebindHistory(ports.conversation);
+      this.streamProcessor.rebindHistory(ports.stream, providerFileBindings);
+      this.turnProcessor.rebindHistory(ports.turn, providerFileBindings);
+      this.directProcessor.rebindHistory(ports.direct, providerFileBindings);
       this.semanticMediaPurge = semanticMediaPurge;
       this._installDensityWrapper();
     };
@@ -426,7 +422,7 @@ export class ChatSession {
     triggerCompressionHook: typeof triggerPreCompressHook,
   ): CompressionHandler {
     return new CompressionHandler(
-      this.runtimeContext,
+      this.ports.compression,
       this.config,
       this.historyService,
       this.mediaResolver,
@@ -455,7 +451,7 @@ export class ChatSession {
 
   private getActiveProvider = (): IProvider | undefined =>
     tryReadActiveProvider(() =>
-      this.runtimeContext.provider.getActiveProvider(),
+      this.ports.runtime.provider.getActiveProvider(),
     );
 
   private lookupProviderByName(
@@ -489,7 +485,7 @@ export class ChatSession {
 
   resolveProviderForRuntime(compressionProfileName: string): IProvider {
     const desiredProviderName = this.runtimeState.provider.trim();
-    const adapter = this.runtimeContext.provider;
+    const adapter = this.ports.runtime.provider;
 
     if (desiredProviderName) {
       const candidate = this.lookupProviderByName(
@@ -532,7 +528,7 @@ export class ChatSession {
     providerName: string,
     lookupProviderName: string = providerName,
   ): IProvider {
-    const adapter = this.runtimeContext.provider;
+    const adapter = this.ports.runtime.provider;
     const lookupResult = this.lookupProviderByName(
       adapter,
       lookupProviderName,
@@ -567,12 +563,11 @@ export class ChatSession {
   ): Promise<CompressionProviderResult> {
     return resolveCompressionProvider(
       {
-        profileDefinitions: this.runtimeContext.profileDefinitions,
-        providerRuntime: this.runtimeContext.providerRuntime,
-        prepareProviderInvocation:
-          this.runtimeContext.prepareProviderInvocation,
+        profileDefinitions: this.ports.runtime.profileDefinitions,
+        providerRuntime: this.ports.runtime.providerRuntime,
+        prepareProviderInvocation: this.ports.runtime.prepareProviderInvocation,
         runtimeState: this.runtimeState,
-        readProviderKeys: () => this.runtimeContext.provider.getProviderKeys(),
+        readProviderKeys: () => this.ports.runtime.provider.getProviderKeys(),
         resolveExplicitCompressionProvider:
           this.resolveExplicitCompressionProvider.bind(this),
         roundRobinIndexes: this.compressionLoadBalancerRoundRobinIndexes,
@@ -595,7 +590,7 @@ export class ChatSession {
     metadata: Record<string, unknown> = {},
   ): ProviderRequestCollaborators {
     return buildChatProviderRuntime(
-      this.runtimeContext.providerRuntime,
+      this.ports.runtime.providerRuntime,
       this.runtimeState.runtimeId,
       source,
       metadata,
@@ -609,7 +604,7 @@ export class ChatSession {
   ): ReturnType<SemanticMediaPurgeSession['begin']> {
     return beginSemanticMediaPurge(
       this.semanticMediaPurge,
-      semanticPurgeRuntime(this.runtimeContext),
+      semanticPurgeRuntime(this.ports.runtime),
       this.runtimeState.provider,
       execution,
     );
@@ -746,7 +741,7 @@ export class ChatSession {
   }
 
   getToolsView(): ToolRegistryView {
-    return this.runtimeContext.tools;
+    return this.ports.runtime.tools;
   }
 
   setTools(tools: ToolDeclaration[]): void {
@@ -766,7 +761,7 @@ export class ChatSession {
   ): Promise<SessionHistoryAdmission | undefined> {
     return this.historyAdmissions.admit(
       history,
-      this.runtimeContext.mediaAdmission,
+      this.ports.runtime.mediaAdmission,
     );
   }
 
@@ -818,7 +813,7 @@ export class ChatSession {
   }
 
   async admitAndAddHistory(content: IContent): Promise<void> {
-    const mediaAdmission = this.runtimeContext.mediaAdmission;
+    const mediaAdmission = this.ports.runtime.mediaAdmission;
     const admitted =
       mediaAdmission === undefined
         ? content
@@ -831,7 +826,7 @@ export class ChatSession {
   }
 
   async verifyHistoryMedia(history: readonly IContent[]): Promise<void> {
-    await this.runtimeContext.mediaAdmission?.verifyHistory(history);
+    await this.ports.runtime.mediaAdmission?.verifyHistory(history);
   }
 
   async setHistory(
@@ -1012,7 +1007,7 @@ export class ChatSession {
    * through Config.getContentGeneratorConfig().providerManager (issue #2815).
    */
   getContextLimit(): number {
-    return this.runtimeContext.ephemerals.contextLimit();
+    return this.ports.runtime.ephemerals.contextLimit();
   }
 
   /**
@@ -1037,11 +1032,11 @@ export class ChatSession {
    * Used by Turn and other consumers to access ephemeral settings.
    */
   getStreamTimeoutPolicy() {
-    return this.runtimeContext.readStreamTimeoutPolicy();
+    return this.ports.runtime.readStreamTimeoutPolicy();
   }
 
   shouldShowCitations(): boolean {
-    return this.runtimeContext.showCitations();
+    return this.ports.runtime.showCitations();
   }
 
   getConfig(): Config | undefined {

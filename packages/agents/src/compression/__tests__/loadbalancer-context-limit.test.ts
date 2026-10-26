@@ -29,6 +29,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { buildMockContentGenerator } from '../../core/__tests__/chatSession-density-helpers.js';
 import { ChatSession } from '../../core/chatSession.js';
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 
 /**
  * Build a real AgentRuntimeContext whose provider adapter's active provider
@@ -112,7 +113,7 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
     });
 
     const chat = new ChatSession(
-      runtimeContext,
+      chatSessionPorts(runtimeContext),
       undefined,
       undefined,
       undefined,
@@ -138,7 +139,7 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
     });
 
     const chat = new ChatSession(
-      runtimeContext,
+      chatSessionPorts(runtimeContext),
       undefined,
       undefined,
       undefined,
@@ -163,7 +164,7 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
     });
 
     const chat = new ChatSession(
-      runtimeContext,
+      chatSessionPorts(runtimeContext),
       undefined,
       undefined,
       undefined,

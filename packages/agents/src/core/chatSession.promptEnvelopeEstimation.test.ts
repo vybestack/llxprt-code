@@ -56,6 +56,7 @@ import {
 } from 'bun:test';
 import { waitForCondition } from '../test-utils/eventLoop.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 
 /**
  * A fake provider that implements projectPromptEnvelope by serializing the
@@ -251,7 +252,7 @@ function buildChatSession(fixture: TestFixture): ChatSession {
   });
 
   return new ChatSession(
-    view,
+    chatSessionPorts(view),
     fixture.mockConfig,
     undefined,
     undefined,

@@ -5,7 +5,6 @@
  */
 
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
@@ -29,11 +28,14 @@ export interface SemanticPurgeRuntime {
   readonly readPromptCachingPolicy: () => unknown;
 }
 
+/** The session runtime members the purge start projects. */
+export type SemanticPurgeSource = SemanticPurgeRuntime;
+
 /**
  * Projects the two runtime members the purge start reads.
  */
 export function semanticPurgeRuntime(
-  context: AgentRuntimeContext,
+  context: SemanticPurgeSource,
 ): SemanticPurgeRuntime {
   return {
     provider: context.provider,

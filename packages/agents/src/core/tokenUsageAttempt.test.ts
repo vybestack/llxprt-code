@@ -49,6 +49,7 @@ import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import type { StreamEvent } from './chatSession.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import { TokenUsageLogger } from './TokenUsageLogger.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
@@ -151,7 +152,7 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
     });
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       config,
       undefined,
       undefined,

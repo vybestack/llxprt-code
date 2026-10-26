@@ -32,6 +32,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -150,7 +151,7 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
     });
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       config,
       undefined,
       undefined,

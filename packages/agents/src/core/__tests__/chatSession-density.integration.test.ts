@@ -16,6 +16,7 @@
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
 import {
   addPrunableReadWritePair,
   buildMockContentGenerator,
@@ -73,7 +74,7 @@ describe('Density Optimization Integration (P19)', () => {
         historyService.add(makeAiText('File updated'));
 
         const chat = new ChatSession(
-          runtimeContext,
+          chatSessionPorts(runtimeContext),
           undefined,
           undefined,
           undefined,
@@ -139,7 +140,7 @@ describe('Density Optimization Integration (P19)', () => {
       const historyBefore = historyService.getRawHistory().length;
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -196,7 +197,7 @@ describe('Density Optimization Integration (P19)', () => {
       historyService.add(makeAiText('Done'));
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -270,7 +271,7 @@ describe('Density Optimization Integration (P19)', () => {
       historyService.add(makeAiText('Done'));
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -342,7 +343,7 @@ describe('Density Optimization Integration (P19)', () => {
       const rawBefore = historyService.getRawHistory().length;
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,

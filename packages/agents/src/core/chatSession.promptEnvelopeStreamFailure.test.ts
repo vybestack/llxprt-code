@@ -40,6 +40,7 @@ import type {
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 
 /**
  * Provider whose stream yields one chunk and then throws, simulating a
@@ -183,7 +184,7 @@ function buildChatSession(fixture: TestFixture): ChatSession {
   });
 
   return new ChatSession(
-    view,
+    chatSessionPorts(view),
     fixture.mockConfig,
     undefined,
     undefined,

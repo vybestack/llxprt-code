@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { MediaAdmissionRelease } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 
 /**
@@ -24,10 +23,24 @@ export interface ReasoningInclusionPolicy {
   includeInContext(): boolean;
 }
 
+/** The runtime member the media-admission port projects. */
+export interface MediaAdmissionSource {
+  readonly mediaAdmission?: {
+    releaseAdmissions(
+      admissions: readonly MediaAdmissionRelease[],
+    ): Promise<unknown>;
+  };
+}
+
+/** The runtime member the reasoning-inclusion port projects. */
+export interface ReasoningSettingsSource {
+  readonly ephemerals: { readonly reasoning: ReasoningInclusionPolicy };
+}
+
 export function mediaAdmissionPort(
-  context: AgentRuntimeContext,
+  source: MediaAdmissionSource,
 ): MediaAdmissionPort | undefined {
-  const mediaAdmission = context.mediaAdmission;
+  const mediaAdmission = source.mediaAdmission;
   if (mediaAdmission === undefined) return undefined;
   return {
     releaseAdmissions: async (admissions) => {
@@ -37,9 +50,9 @@ export function mediaAdmissionPort(
 }
 
 export function reasoningInclusionPolicy(
-  context: AgentRuntimeContext,
+  source: ReasoningSettingsSource,
 ): ReasoningInclusionPolicy {
   return {
-    includeInContext: () => context.ephemerals.reasoning.includeInContext(),
+    includeInContext: () => source.ephemerals.reasoning.includeInContext(),
   };
 }

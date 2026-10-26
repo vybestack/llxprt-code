@@ -34,6 +34,7 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -309,7 +310,7 @@ async function createFixture(
   };
   return {
     chat: new ChatSession(
-      runtime,
+      chatSessionPorts(runtime),
       setup.config,
       undefined,
       undefined,

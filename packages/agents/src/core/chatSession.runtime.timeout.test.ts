@@ -22,6 +22,7 @@ import {
 } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
@@ -136,36 +137,38 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
 
       const contentGenerator = {} as ContentGenerator;
       const chat = new ChatSession(
-        createAgentRuntimeContext({
-          promptEstimator,
-          readRuntimeSettings: fixtureRuntimePolicyReader(
-            localConfig,
-            localSettingsService,
-          ),
-          prepareProviderInvocation: (name, parameters, signal) =>
-            captureProviderInvocation(
-              {
-                fetch: requestFetch,
-                runtimeId: localProviderRuntime.runtimeId,
-                metadata: localProviderRuntime.metadata,
-                globalSettings: localSettingsService.getAllGlobalSettings(),
-                providerSettings:
-                  localSettingsService.getProviderSettings(name),
-              },
-              name,
-              parameters,
-              signal,
+        chatSessionPorts(
+          createAgentRuntimeContext({
+            promptEstimator,
+            readRuntimeSettings: fixtureRuntimePolicyReader(
+              localConfig,
+              localSettingsService,
             ),
-          state: createAgentRuntimeStateFromConfig(localConfig),
-          settings: { compressionThreshold: 0.8 },
-          provider: createProviderAdapterFromManager(localManager),
-          telemetry: createTelemetryAdapter(
-            localConfig,
-            createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
-          ),
-          tools: createToolRegistryViewFromRegistry(modelTools()),
-          providerRuntime: localProviderRuntime,
-        }),
+            prepareProviderInvocation: (name, parameters, signal) =>
+              captureProviderInvocation(
+                {
+                  fetch: requestFetch,
+                  runtimeId: localProviderRuntime.runtimeId,
+                  metadata: localProviderRuntime.metadata,
+                  globalSettings: localSettingsService.getAllGlobalSettings(),
+                  providerSettings:
+                    localSettingsService.getProviderSettings(name),
+                },
+                name,
+                parameters,
+                signal,
+              ),
+            state: createAgentRuntimeStateFromConfig(localConfig),
+            settings: { compressionThreshold: 0.8 },
+            provider: createProviderAdapterFromManager(localManager),
+            telemetry: createTelemetryAdapter(
+              localConfig,
+              createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
+            ),
+            tools: createToolRegistryViewFromRegistry(modelTools()),
+            providerRuntime: localProviderRuntime,
+          }),
+        ),
         localConfig,
         undefined,
         undefined,
@@ -209,36 +212,38 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
 
       const contentGenerator = {} as ContentGenerator;
       const chat = new ChatSession(
-        createAgentRuntimeContext({
-          promptEstimator,
-          readRuntimeSettings: fixtureRuntimePolicyReader(
-            localConfig,
-            localSettingsService,
-          ),
-          prepareProviderInvocation: (name, parameters, signal) =>
-            captureProviderInvocation(
-              {
-                fetch: requestFetch,
-                runtimeId: localProviderRuntime.runtimeId,
-                metadata: localProviderRuntime.metadata,
-                globalSettings: localSettingsService.getAllGlobalSettings(),
-                providerSettings:
-                  localSettingsService.getProviderSettings(name),
-              },
-              name,
-              parameters,
-              signal,
+        chatSessionPorts(
+          createAgentRuntimeContext({
+            promptEstimator,
+            readRuntimeSettings: fixtureRuntimePolicyReader(
+              localConfig,
+              localSettingsService,
             ),
-          state: createAgentRuntimeStateFromConfig(localConfig),
-          settings: { compressionThreshold: 0.8 },
-          provider: createProviderAdapterFromManager(localManager),
-          telemetry: createTelemetryAdapter(
-            localConfig,
-            createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
-          ),
-          tools: createToolRegistryViewFromRegistry(modelTools()),
-          providerRuntime: localProviderRuntime,
-        }),
+            prepareProviderInvocation: (name, parameters, signal) =>
+              captureProviderInvocation(
+                {
+                  fetch: requestFetch,
+                  runtimeId: localProviderRuntime.runtimeId,
+                  metadata: localProviderRuntime.metadata,
+                  globalSettings: localSettingsService.getAllGlobalSettings(),
+                  providerSettings:
+                    localSettingsService.getProviderSettings(name),
+                },
+                name,
+                parameters,
+                signal,
+              ),
+            state: createAgentRuntimeStateFromConfig(localConfig),
+            settings: { compressionThreshold: 0.8 },
+            provider: createProviderAdapterFromManager(localManager),
+            telemetry: createTelemetryAdapter(
+              localConfig,
+              createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
+            ),
+            tools: createToolRegistryViewFromRegistry(modelTools()),
+            providerRuntime: localProviderRuntime,
+          }),
+        ),
         localConfig,
         undefined,
         undefined,
@@ -342,42 +347,44 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       localManager.registerProvider(provider);
       localManager.setActiveProvider('stub');
       const chat = new ChatSession(
-        createAgentRuntimeContext({
-          promptEstimator,
-          readRuntimeSettings: fixtureRuntimePolicyReader(
-            localConfig,
-            localSettingsService,
-          ),
-          prepareProviderInvocation: (name, parameters, signal) =>
-            captureProviderInvocation(
-              {
-                fetch: requestFetch,
-                runtimeId: localProviderRuntime.runtimeId,
-                metadata: localProviderRuntime.metadata,
-                globalSettings: localSettingsService.getAllGlobalSettings(),
-                providerSettings:
-                  localSettingsService.getProviderSettings(name),
-              },
-              name,
-              parameters,
-              signal,
+        chatSessionPorts(
+          createAgentRuntimeContext({
+            promptEstimator,
+            readRuntimeSettings: fixtureRuntimePolicyReader(
+              localConfig,
+              localSettingsService,
             ),
-          state: createAgentRuntimeState({
-            runtimeId: 'test.runtime.deadlock',
-            provider: 'stub',
-            model: 'stub-model',
-            sessionId: localConfig.getSessionId(),
+            prepareProviderInvocation: (name, parameters, signal) =>
+              captureProviderInvocation(
+                {
+                  fetch: requestFetch,
+                  runtimeId: localProviderRuntime.runtimeId,
+                  metadata: localProviderRuntime.metadata,
+                  globalSettings: localSettingsService.getAllGlobalSettings(),
+                  providerSettings:
+                    localSettingsService.getProviderSettings(name),
+                },
+                name,
+                parameters,
+                signal,
+              ),
+            state: createAgentRuntimeState({
+              runtimeId: 'test.runtime.deadlock',
+              provider: 'stub',
+              model: 'stub-model',
+              sessionId: localConfig.getSessionId(),
+            }),
+            history: new HistoryService(),
+            settings: { compressionThreshold: 0.8 },
+            provider: createProviderAdapterFromManager(localManager),
+            telemetry: createTelemetryAdapter(
+              localConfig,
+              createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
+            ),
+            tools: createToolRegistryViewFromRegistry(modelTools()),
+            providerRuntime: localProviderRuntime,
           }),
-          history: new HistoryService(),
-          settings: { compressionThreshold: 0.8 },
-          provider: createProviderAdapterFromManager(localManager),
-          telemetry: createTelemetryAdapter(
-            localConfig,
-            createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
-          ),
-          tools: createToolRegistryViewFromRegistry(modelTools()),
-          providerRuntime: localProviderRuntime,
-        }),
+        ),
         localConfig,
         undefined,
         undefined,
@@ -495,42 +502,44 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       localManager.setActiveProvider('stub');
 
       const chat = new ChatSession(
-        createAgentRuntimeContext({
-          promptEstimator,
-          readRuntimeSettings: fixtureRuntimePolicyReader(
-            localConfig,
-            localSettingsService,
-          ),
-          prepareProviderInvocation: (name, parameters, signal) =>
-            captureProviderInvocation(
-              {
-                fetch: requestFetch,
-                runtimeId: localProviderRuntime.runtimeId,
-                metadata: localProviderRuntime.metadata,
-                globalSettings: localSettingsService.getAllGlobalSettings(),
-                providerSettings:
-                  localSettingsService.getProviderSettings(name),
-              },
-              name,
-              parameters,
-              signal,
+        chatSessionPorts(
+          createAgentRuntimeContext({
+            promptEstimator,
+            readRuntimeSettings: fixtureRuntimePolicyReader(
+              localConfig,
+              localSettingsService,
             ),
-          state: createAgentRuntimeState({
-            runtimeId: 'test.runtime.concurrent',
-            provider: 'stub',
-            model: 'stub-model',
-            sessionId: localConfig.getSessionId(),
+            prepareProviderInvocation: (name, parameters, signal) =>
+              captureProviderInvocation(
+                {
+                  fetch: requestFetch,
+                  runtimeId: localProviderRuntime.runtimeId,
+                  metadata: localProviderRuntime.metadata,
+                  globalSettings: localSettingsService.getAllGlobalSettings(),
+                  providerSettings:
+                    localSettingsService.getProviderSettings(name),
+                },
+                name,
+                parameters,
+                signal,
+              ),
+            state: createAgentRuntimeState({
+              runtimeId: 'test.runtime.concurrent',
+              provider: 'stub',
+              model: 'stub-model',
+              sessionId: localConfig.getSessionId(),
+            }),
+            history: new HistoryService(),
+            settings: { compressionThreshold: 0.8 },
+            provider: createProviderAdapterFromManager(localManager),
+            telemetry: createTelemetryAdapter(
+              localConfig,
+              createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
+            ),
+            tools: createToolRegistryViewFromRegistry(modelTools()),
+            providerRuntime: localProviderRuntime,
           }),
-          history: new HistoryService(),
-          settings: { compressionThreshold: 0.8 },
-          provider: createProviderAdapterFromManager(localManager),
-          telemetry: createTelemetryAdapter(
-            localConfig,
-            createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
-          ),
-          tools: createToolRegistryViewFromRegistry(modelTools()),
-          providerRuntime: localProviderRuntime,
-        }),
+        ),
         localConfig,
         undefined,
         undefined,

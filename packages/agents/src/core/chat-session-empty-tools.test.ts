@@ -41,6 +41,7 @@ import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager
 import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -201,7 +202,7 @@ async function send(
     providerRuntime: runtime,
   });
   const chat = new ChatSession(
-    view,
+    chatSessionPorts(view),
     config,
     undefined,
     undefined,

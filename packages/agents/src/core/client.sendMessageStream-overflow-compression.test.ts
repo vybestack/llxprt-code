@@ -39,6 +39,7 @@ import {
   type MockResponseShape,
 } from './__tests__/client-test-helpers.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import { AgentClient } from './client.js';
 import { AgentEventType, PerformCompressionResult } from './turn.js';
 
@@ -430,7 +431,7 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
       });
 
       const realChat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,

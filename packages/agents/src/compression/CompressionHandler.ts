@@ -16,7 +16,7 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import { annotateCompressionSpan } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { CompressionHandlerRuntime } from '../core/chatSessionPorts.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
@@ -119,16 +119,16 @@ export class CompressionHandler {
   }
 
   rebindHistory(
-    runtimeContext: AgentRuntimeContext,
+    ports: CompressionHandlerRuntime,
     providerFileBindings: ProviderFileBindingStore | undefined,
   ): void {
     this.providerFileBindings = providerFileBindings;
-    this.runtimeContext = runtimeContext;
-    this.historyService = runtimeContext.history;
+    this.ports = ports;
+    this.historyService = ports.history;
   }
 
   constructor(
-    private runtimeContext: AgentRuntimeContext,
+    private ports: CompressionHandlerRuntime,
     private readonly config: Config | undefined,
     private historyService: HistoryService,
     private readonly mediaResolver: RequestMediaResolutionService | undefined,
@@ -152,7 +152,7 @@ export class CompressionHandler {
    * @requirement REQ-THINK-005.1, REQ-THINK-005.2
    */
   getEffectiveTokenCount(): number {
-    const reasoning = this.runtimeContext.ephemerals.reasoning;
+    const reasoning = this.ports.ephemerals.reasoning;
     return computeEffectiveTokenCount(this.historyService, reasoning);
   }
 
@@ -172,7 +172,7 @@ export class CompressionHandler {
     try {
       // Step 1: Resolve the active compression strategy
       const strategyName = parseCompressionStrategyName(
-        this.runtimeContext.ephemerals.compressionStrategy(),
+        this.ports.ephemerals.compressionStrategy(),
       );
       const strategy = this.strategy(strategyName);
 
@@ -182,9 +182,9 @@ export class CompressionHandler {
       }
 
       // Check threshold: use ephemeral override or strategy's defaultThreshold
-      const contextLimit = this.runtimeContext.ephemerals.contextLimit();
+      const contextLimit = this.ports.ephemerals.contextLimit();
       const optimizeThreshold =
-        this.runtimeContext.ephemerals.densityOptimizeThreshold() ??
+        this.ports.ephemerals.densityOptimizeThreshold() ??
         strategy.trigger.defaultThreshold;
       const currentTokens = this.historyService.getTotalTokens();
       const currentUsage = currentTokens / contextLimit;
@@ -199,12 +199,10 @@ export class CompressionHandler {
 
       // Step 2: Build DensityConfig from ephemerals
       const config: DensityConfig = {
-        readWritePruning:
-          this.runtimeContext.ephemerals.densityReadWritePruning(),
-        fileDedupe: this.runtimeContext.ephemerals.densityFileDedupe(),
-        recencyPruning: this.runtimeContext.ephemerals.densityRecencyPruning(),
-        recencyRetention:
-          this.runtimeContext.ephemerals.densityRecencyRetention(),
+        readWritePruning: this.ports.ephemerals.densityReadWritePruning(),
+        fileDedupe: this.ports.ephemerals.densityFileDedupe(),
+        recencyPruning: this.ports.ephemerals.densityRecencyPruning(),
+        recencyRetention: this.ports.ephemerals.densityRecencyRetention(),
         workspaceRoot: process.cwd(),
       };
 
@@ -249,13 +247,13 @@ export class CompressionHandler {
    */
   shouldCompress(pendingTokens: number = 0): boolean {
     // Calculate fresh each time to respect runtime setting changes
-    const threshold = this.runtimeContext.ephemerals.compressionThreshold();
-    const contextLimit = this.runtimeContext.ephemerals.contextLimit();
+    const threshold = this.ports.ephemerals.compressionThreshold();
+    const contextLimit = this.ports.ephemerals.contextLimit();
     const completionBudget = getCompletionBudget(
       this.generationConfig,
-      this.runtimeContext.state.model,
+      this.ports.state.model,
       undefined,
-      this.runtimeContext.readCompletionBudgetSetting(),
+      this.ports.readCompletionBudgetSetting(),
       contextLimit,
     );
     const effectiveLimit = contextLimit - completionBudget;
@@ -375,13 +373,13 @@ export class CompressionHandler {
     limit: number;
     marginAdjustedLimit: number;
   } {
-    const userContextLimit = this.runtimeContext.ephemerals.contextLimit();
-    const limit = tokenLimit(this.runtimeContext.state.model, userContextLimit);
+    const userContextLimit = this.ports.ephemerals.contextLimit();
+    const limit = tokenLimit(this.ports.state.model, userContextLimit);
     const completionBudget = getCompletionBudget(
       this.generationConfig,
-      this.runtimeContext.state.model,
+      this.ports.state.model,
       provider,
-      this.runtimeContext.readCompletionBudgetSetting(),
+      this.ports.readCompletionBudgetSetting(),
       limit,
     );
     const marginAdjustedLimit = computeMarginAdjustedLimit(limit);
@@ -433,10 +431,10 @@ export class CompressionHandler {
     return new ProviderContentEnforcer({
       historyService: this.historyService,
       historyOrigin,
-      runtimeContext: this.runtimeContext,
+      runtimeContext: this.ports,
       generationConfig: this.generationConfig,
       readCompletionBudgetSetting: () =>
-        this.runtimeContext.readCompletionBudgetSetting(),
+        this.ports.readCompletionBudgetSetting(),
       logger: this.logger,
       ensureDensityOptimized: () => this.ensureDensityOptimized(),
       performCompression: (promptId, options) =>
@@ -565,9 +563,9 @@ export class CompressionHandler {
       resetLastPromptTokenCount: () => {
         this.lastPromptTokenCount = null;
       },
-      getRuntimeModel: () => this.runtimeContext.state.model,
+      getRuntimeModel: () => this.ports.state.model,
       estimateBlockTokensAsync: async (block: ContentBlock) => {
-        const model = this.runtimeContext.state.model;
+        const model = this.ports.state.model;
         const wrapped: IContent = { speaker: 'tool', blocks: [block] };
         return this.historyService.estimateTokensForContents([wrapped], model);
       },
@@ -672,7 +670,7 @@ export class CompressionHandler {
       await recordCompressionTelemetry(
         this.logger,
         this.tokenUsageLogger,
-        this.runtimeContext,
+        this.ports,
         this.historyService,
         (profileName) => this.providerResolver(profileName),
         tokensBefore,
@@ -709,7 +707,7 @@ export class CompressionHandler {
         this.historyService,
         newHistory,
         topPreserved,
-        this.runtimeContext.state.model,
+        this.ports.state.model,
         annotateCompressionSpan,
         historyOrigin,
       );
@@ -796,7 +794,7 @@ export class CompressionHandler {
       transcriptPathProvider,
     );
     const configuredStrategyName = parseCompressionStrategyName(
-      this.runtimeContext.ephemerals.compressionStrategy(),
+      this.ports.ephemerals.compressionStrategy(),
     );
 
     const attemptPrimary = async (): Promise<StrategyCompressionResult> => {
@@ -1033,7 +1031,7 @@ export class CompressionHandler {
   ): Promise<CompressionContext> {
     return buildContext(
       promptId,
-      this.runtimeContext,
+      this.ports,
       this.config,
       this.historyService,
       (profileName?) => Promise.resolve(this.providerResolver(profileName)),
@@ -1105,7 +1103,7 @@ export class CompressionHandler {
     return estimatePendingTokens(
       contents,
       this.historyService,
-      this.runtimeContext.state.model,
+      this.ports.state.model,
     );
   }
 }

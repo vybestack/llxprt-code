@@ -24,6 +24,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createTokenSyncTestFixture } from './__tests__/helpers/tokenSyncTestFixture.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import {
   TokenUsageLogger,
   type SerializedTokenUsageRecord,
@@ -220,7 +221,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     const view = buildTokenSyncView(fixture, mockProvider, 'int-test-session');
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       fixture.mockConfig,
       undefined,
       undefined,
@@ -314,7 +315,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     );
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       fixture.mockConfig,
       undefined,
       undefined,
@@ -395,7 +396,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     const view = buildTokenSyncView(fixture, mockProvider, 'ac12-join-session');
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       fixture.mockConfig,
       undefined,
       undefined,
@@ -509,7 +510,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     );
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       fixture.mockConfig,
       undefined,
       undefined,
@@ -608,7 +609,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     );
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       fixture.mockConfig,
       undefined,
       undefined,
@@ -688,7 +689,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     );
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       fixture.mockConfig,
       undefined,
       undefined,
@@ -795,7 +796,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     );
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       fixture.mockConfig,
       undefined,
       undefined,
@@ -896,7 +897,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       'empty-stream-session',
     );
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       fixture.mockConfig,
       undefined,
       undefined,

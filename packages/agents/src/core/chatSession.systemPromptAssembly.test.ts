@@ -52,6 +52,7 @@ import type {
   SystemPromptAssembler,
 } from './chatSession.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -187,7 +188,7 @@ function buildFixture(
   };
 
   const chat = new ChatSession(
-    view,
+    chatSessionPorts(view),
     config,
     undefined,
     undefined,
@@ -456,7 +457,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
     });
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       config,
       undefined,
       undefined,

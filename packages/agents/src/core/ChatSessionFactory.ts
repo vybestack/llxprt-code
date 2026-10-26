@@ -35,6 +35,7 @@ import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import type { SystemPromptAssembler } from './chatSession.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import { buildToolDeclarationsFromView } from './clientToolGovernance.js';
 export { resolveModelForSystemPrompt } from './systemPromptModel.js';
 
@@ -267,11 +268,11 @@ async function buildChatFromRuntime(
 
   return bindActiveTodos(
     createChatSessionInstance(
-      {
+      chatSessionPorts({
         ...runtimeBundle.runtimeContext,
         prepareProviderInvocation,
         profileDefinitions,
-      },
+      }),
       config,
       runtimeBundle.runtimeContext.mediaResolver,
       config.getImagePayloadBudgetBytes(),

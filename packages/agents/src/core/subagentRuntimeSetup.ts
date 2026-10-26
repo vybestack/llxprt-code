@@ -61,6 +61,7 @@ import {
   type ChatSessionConfig,
   type SystemPromptAssembler,
 } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import { resolvePromptMemory } from './promptMemoryPolicy.js';
 import {
@@ -781,7 +782,7 @@ function instantiateChat(
     };
 
     return new ChatSession(
-      runtimeContext,
+      chatSessionPorts(runtimeContext),
       config,
       runtimeContext.mediaResolver,
       requestMediaBudgetBytes,

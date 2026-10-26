@@ -30,6 +30,7 @@ import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core
 import { vi } from 'bun:test';
 import { join } from 'node:path';
 import { ChatSession } from '../chatSession.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -151,7 +152,7 @@ export function createMediaHistoryChat(
     embedContent: vi.fn(),
   };
   return new ChatSession(
-    runtime,
+    chatSessionPorts(runtime),
     setup.config,
     new RequestMediaResolver(store),
     1024 * 1024,

@@ -21,6 +21,7 @@
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
 import {
   addPrunableReadWritePair,
   buildMockContentGenerator,
@@ -71,7 +72,7 @@ describe('Density Optimization Orchestration (P19)', () => {
       const historyBefore = historyService.getRawHistory().length;
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -109,7 +110,7 @@ describe('Density Optimization Orchestration (P19)', () => {
       const historyBefore = [...historyService.getRawHistory()];
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -149,7 +150,7 @@ describe('Density Optimization Orchestration (P19)', () => {
       const historyBefore = historyService.getRawHistory().length;
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -189,7 +190,7 @@ describe('Density Optimization Orchestration (P19)', () => {
       historyService.add(makeAiText('Bug fixed'));
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -235,7 +236,7 @@ describe('Density Optimization Orchestration (P19)', () => {
       historyService.add(makeAiText('Updated'));
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -285,7 +286,7 @@ describe('Density Optimization Orchestration (P19)', () => {
       }));
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -323,7 +324,7 @@ describe('Density Optimization Orchestration (P19)', () => {
       historyService.add(makeAiText('Hi'));
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -361,7 +362,7 @@ describe('Density Optimization Orchestration (P19)', () => {
       historyService.add(makeAiText('Hi'));
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -402,7 +403,7 @@ describe('Density Optimization Orchestration (P19)', () => {
       historyService.add(makeAiText('Hi'));
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -447,7 +448,7 @@ describe('Density Optimization Orchestration (P19)', () => {
       }
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,
@@ -501,7 +502,7 @@ describe('Density Optimization Orchestration (P19)', () => {
       historyService.add(makeAiText('Response'));
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
         undefined,
         undefined,
         undefined,

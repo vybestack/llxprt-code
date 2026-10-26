@@ -19,6 +19,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import { describe, it } from 'bun:test';
 import * as fc from 'fast-check';
 import { ChatSession } from '../chatSession.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
 import {
   addPrunableReadWritePair,
   buildMockContentGenerator,
@@ -83,7 +84,7 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
             });
             const gen = buildMockContentGenerator();
             const chat = new ChatSession(
-              ctx,
+              chatSessionPorts(ctx),
               undefined,
               undefined,
               undefined,
@@ -133,7 +134,7 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
             });
             const gen = buildMockContentGenerator();
             const chat = new ChatSession(
-              ctx,
+              chatSessionPorts(ctx),
               undefined,
               undefined,
               undefined,
@@ -190,7 +191,7 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
           });
           const gen = buildMockContentGenerator();
           const chat = new ChatSession(
-            ctx,
+            chatSessionPorts(ctx),
             undefined,
             undefined,
             undefined,
@@ -250,7 +251,7 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
         });
         const gen = buildMockContentGenerator();
         const chat = new ChatSession(
-          ctx,
+          chatSessionPorts(ctx),
           undefined,
           undefined,
           undefined,
@@ -310,7 +311,7 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
           });
           const gen = buildMockContentGenerator();
           const chat = new ChatSession(
-            ctx,
+            chatSessionPorts(ctx),
             undefined,
             undefined,
             undefined,
@@ -362,7 +363,7 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
             });
             const gen = buildMockContentGenerator();
             const chat = new ChatSession(
-              ctx,
+              chatSessionPorts(ctx),
               undefined,
               undefined,
               undefined,
@@ -429,7 +430,7 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
           });
           const gen = buildMockContentGenerator();
           const chat = new ChatSession(
-            ctx,
+            chatSessionPorts(ctx),
             undefined,
             undefined,
             undefined,
@@ -492,7 +493,7 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
         });
         const gen = buildMockContentGenerator();
         const chat = new ChatSession(
-          ctx,
+          chatSessionPorts(ctx),
           undefined,
           undefined,
           undefined,

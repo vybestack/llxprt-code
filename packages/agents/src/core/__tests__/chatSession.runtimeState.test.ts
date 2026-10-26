@@ -39,6 +39,7 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -190,7 +191,7 @@ describe('ChatSession - Runtime State Integration', () => {
       // Phase 6: Use AgentRuntimeContext constructor
       expect(() => {
         new ChatSession(
-          view,
+          chatSessionPorts(view),
           undefined,
           undefined,
           undefined,
@@ -218,7 +219,7 @@ describe('ChatSession - Runtime State Integration', () => {
       // Phase 7: Constructor relies solely on AgentRuntimeContext
       expect(() => {
         new ChatSession(
-          view,
+          chatSessionPorts(view),
           undefined,
           undefined,
           undefined,
@@ -255,7 +256,7 @@ describe('ChatSession - Runtime State Integration', () => {
       const view = createTestRuntimeContext(runtimeState, root, historyService);
 
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         undefined,
         undefined,
         undefined,
@@ -287,7 +288,7 @@ describe('ChatSession - Runtime State Integration', () => {
       const view = createTestRuntimeContext(runtimeState, root, historyService);
 
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         undefined,
         undefined,
         undefined,
@@ -319,7 +320,7 @@ describe('ChatSession - Runtime State Integration', () => {
       const view = createTestRuntimeContext(runtimeState, root, historyService);
 
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         undefined,
         undefined,
         undefined,
@@ -352,7 +353,7 @@ describe('ChatSession - Runtime State Integration', () => {
       const view = createTestRuntimeContext(runtimeState, root, historyService);
 
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         undefined,
         undefined,
         undefined,
@@ -393,7 +394,7 @@ describe('ChatSession - Runtime State Integration', () => {
       const view = createTestRuntimeContext(runtimeState, root, historyService);
 
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         undefined,
         undefined,
         undefined,
@@ -421,7 +422,7 @@ describe('ChatSession - Runtime State Integration', () => {
       const view = createTestRuntimeContext(runtimeState, root, historyService);
 
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         undefined,
         undefined,
         undefined,
@@ -458,7 +459,7 @@ describe('ChatSession - Runtime State Integration', () => {
       const historyService = createMockHistoryService();
       const view = createTestRuntimeContext(runtimeState, root, historyService);
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         undefined,
         undefined,
         undefined,
@@ -487,7 +488,7 @@ describe('ChatSession - Runtime State Integration', () => {
       const historyService = createMockHistoryService();
       const view = createTestRuntimeContext(runtimeState, root, historyService);
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
         undefined,
         undefined,
         undefined,
@@ -527,7 +528,7 @@ describe('ChatSession - Runtime State Integration', () => {
       const getProviderSpy = vi.spyOn(root.config, 'getProvider');
 
       new ChatSession(
-        view,
+        chatSessionPorts(view),
         undefined,
         undefined,
         undefined,
@@ -560,7 +561,7 @@ describe('ChatSession - Runtime State Integration', () => {
       root.settingsOwner.writeUserParameter('temperature', 0.4);
 
       new ChatSession(
-        view,
+        chatSessionPorts(view),
         undefined,
         undefined,
         undefined,

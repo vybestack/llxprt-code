@@ -39,6 +39,7 @@ import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-thinking-helpers.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -185,7 +186,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
     });
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       config,
       undefined,
       undefined,
@@ -323,7 +324,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
     });
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       config,
       undefined,
       undefined,
@@ -455,7 +456,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
     });
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       config,
       undefined,
       undefined,
@@ -598,7 +599,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
     });
 
     const chat = new ChatSession(
-      view,
+      chatSessionPorts(view),
       config,
       undefined,
       undefined,

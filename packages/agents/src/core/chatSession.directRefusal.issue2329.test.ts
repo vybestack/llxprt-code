@@ -41,6 +41,7 @@ import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -130,7 +131,7 @@ describe('Issue 2329: direct-path refusal preservation @issue:2329', () => {
       providerRuntime: { ...providerRuntime },
     });
     return new ChatSession(
-      view,
+      chatSessionPorts(view),
       config,
       undefined,
       undefined,
