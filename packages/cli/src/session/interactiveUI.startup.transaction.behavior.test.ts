@@ -105,10 +105,14 @@ function noopPorts(): InteractiveStartupPorts {
       incrementalRendering: false,
       stdout: { columns: 80, rows: 24 },
     })) as never,
-    buildUiRuntime: (() => ({
-      shell: { getTerminalBackground: () => '' },
+    buildUiRuntime: (() => ({})) as never,
+    // The terminal background is read while the render element is built,
+    // before `render` runs. Every other command port is read only when React
+    // renders that element, and these tests stub `render`, so the element is
+    // never mounted.
+    buildCommandPorts: (() => ({
+      containerTerminal: { getTerminalBackground: () => '' },
     })) as never,
-    buildCommandPorts: (() => ({})) as never,
     debugAppend: () => {},
     setupTerminal: () => {},
     isMouseEnabled: () => false,
