@@ -110,6 +110,7 @@ export interface ChildAgentAcquisition {
 export interface ChildAgentRuntimeFactories {
   readonly runtimeLoader: ToolSelectedRuntimeLoader;
   readonly scopeFactory: SubAgentScopeFactory;
+  readonly clientFactory: AgentClientFactory;
 }
 
 export interface ChildAgentOperations {
@@ -150,7 +151,6 @@ export class ChildAgentAssembly {
     private readonly data: ChildAgentLaunch,
     private readonly acquisition: ChildAgentAcquisition,
     private readonly factories: ChildAgentRuntimeFactories,
-    private readonly clientFactory: AgentClientFactory,
     private readonly operations: ChildAgentOperations,
   ) {}
 
@@ -291,7 +291,7 @@ export class ChildAgentAssembly {
       this.tokenizer,
       this.files,
       this.media.store,
-      this.clientFactory,
+      this.factories.clientFactory,
       this.operations.readMcpInstructions,
       this.operations.workspacePaths,
       this.acquisition.authority,
