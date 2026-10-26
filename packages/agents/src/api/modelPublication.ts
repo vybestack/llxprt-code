@@ -100,12 +100,21 @@ export async function publishProviderSwitch<
   if (result.changed) {
     const model = owner.readSelectedModel() ?? result.nextProvider;
     const profileName = readProfileName();
-    coreEvents.emitModelProfileChanged({
-      model,
-      providerName: result.nextProvider,
-      profileName,
-      displayLabel: profileName ?? model,
-    });
+    try {
+      coreEvents.emitModelProfileChanged({
+        model,
+        providerName: result.nextProvider,
+        profileName,
+        displayLabel: profileName ?? model,
+      });
+    } catch (error) {
+      publicationLogger.warn(
+        () =>
+          `Provider switch completed but a ModelProfileChanged listener failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+    }
   }
   return result;
 }

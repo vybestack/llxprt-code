@@ -402,6 +402,24 @@ describe('Agent.setModel model publication (#3954)', () => {
       expect(changes.models).toStrictEqual(['fake-model-next']);
     });
 
+    it('keeps a completed provider switch successful when a ModelProfileChanged listener throws', async () => {
+      const throwing = (): void => {
+        throw new Error('profile listener exploded');
+      };
+      coreEvents.on(CoreEvent.ModelProfileChanged, throwing);
+      try {
+        await expect(
+          agent.setProvider('openai', 'gpt-4o'),
+        ).resolves.toBeDefined();
+
+        expect(agent.getProvider()).toBe('openai');
+        expect(agent.getModel()).toBe('gpt-4o');
+        expect(changes.models).toStrictEqual(['gpt-4o']);
+      } finally {
+        coreEvents.off(CoreEvent.ModelProfileChanged, throwing);
+      }
+    });
+
     it('publishes nothing when applying the requested model fails after the provider switched', async () => {
       const failure = new Error('credential refresh failed');
       const owner = clientOwner(agent);
