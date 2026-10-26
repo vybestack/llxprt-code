@@ -71,6 +71,10 @@ export async function fillNativeFacts(
   const changed = edits.some(changesNativeSource);
   if (registration === undefined || (!explicit && !changed))
     return advanceCoverage(ctx, built, appender, changed);
+  // Keep the last complete prefix available for catch-up while its format
+  // writer is detached. Coverage stays behind the published version, so
+  // readers cannot mistake those prefix facts for a filled current index.
+  if (!explicit && !refillAllowed) return { built, invalidated: false };
   await appender.drain();
   const batch = new IdFactBatch(
     new IdTrieReader(ctx.readGroup(appender.nextOffset), ctx.idCache),

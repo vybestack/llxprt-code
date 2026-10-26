@@ -54,7 +54,12 @@ describe('cold native resume', () => {
       } finally {
         await original.close();
       }
-      const resumed = (await JournalSession.open(path, deps)).store;
+      const resumed = (
+        await JournalSession.open(path, {
+          ...deps,
+          nativeFacts: registration.nativeFacts,
+        })
+      ).store;
       const cold = (
         await JournalSession.create(
           join(directory(), `cold-${size}.llxj`),

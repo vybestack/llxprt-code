@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { NativeFactIndexRegistration } from '../../journal/nativeFactIndex.js';
 import { NEUTRAL_ROW_FACTS_THROUGH } from '../../journal/neutralRowFacts.js';
 import { tokenUsageFactRegistration } from './token-usage-facts.js';
 import { estimateTokens } from '../../utils/toolOutputLimiter.js';
@@ -44,6 +45,7 @@ export interface JournalSessionOptions {
   readonly journal?: Partial<JournalOpenDependencies>;
   readonly tokenUsageCountTokens?: (text: string) => number;
   readonly eagerTokenUsageFacts?: boolean;
+  readonly nativeFacts?: NativeFactIndexRegistration;
   readonly planOccurrences?: OccurrencePlanner;
   /** Where the bare store's nameless file is created; the system temp directory by default. */
   readonly unlinkedDirectory?: string;
@@ -128,6 +130,10 @@ export class JournalSession {
       await storeDependencies(options),
     );
     try {
+      if (options.nativeFacts !== undefined)
+        await store.commit([
+          { kind: 'factIndex', registration: options.nativeFacts },
+        ]);
       if (
         (store.published?.rows ?? 0) > 0 &&
         (await store.getMeta(CHRONOLOGY_INDEX_READY)) === undefined
