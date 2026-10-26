@@ -1474,7 +1474,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T7.0b B3 replace nested PreparedActivation with AgentActivationBootstrap.forPreflight
 - [x] T7.1 B3 edge SessionProviderOwner to SessionProviderControl
 - [x] T7.2a B3 AgentOperations turn operations
-- [ ] T7.2b B3 AgentOperations approval and provider list
+- [x] T7.2b B3 AgentOperations approval and provider list
 - [ ] T7.2c B3 AgentOperations disposal
 - [ ] T7.3 E1 one workspace and facade builder
 - [ ] T7.4 B3 publishAgentFacade outside the assembly, reachability tests

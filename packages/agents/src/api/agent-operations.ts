@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import {
+  ApprovalMode,
+  type Config,
+  type RuntimeProviderManager,
+} from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { SessionClientOwner } from '../session/session-client-owner.js';
 import type {
@@ -17,6 +21,7 @@ import type {
 import type { AgentExecutionCoordinator } from './agentExecutionCoordinator.js';
 import type { ProfilesControl } from './control/profilesControl.js';
 import type { SessionControl } from './control/sessionControl.js';
+import type { IdeControl } from './control/ideControl.js';
 import type { ToolControl } from './control/toolControl.js';
 import {
   assembleDirectProviderAdmission,
@@ -27,10 +32,10 @@ import { ForegroundRunLifecycle } from './foregroundRunLifecycle.js';
 import type { AgentMcpOperations } from './mcpRuntimeAssembly.js';
 import { createRecordingExecution } from './recordingExecution.js';
 import { resetIdleChat } from './session-control-assembly.js';
-import type { SessionProviderControl } from './session-provider-reads.js';
-
-const UNCONFIGURED_AGENT_MESSAGE =
-  'No provider is configured. Run /setup to choose a hosted provider, configure a local model, set up a custom compatible endpoint, or select an existing profile before using the agent.';
+import {
+  UNCONFIGURED_AGENT_MESSAGE,
+  type SessionProviderControl,
+} from './session-provider-reads.js';
 
 export interface AgentTurnOwners {
   readonly session: SessionClientOwner;
@@ -44,6 +49,23 @@ export interface AgentTurnOwners {
   >;
   readonly awaitMcpDiscovery: AgentMcpOperations['awaitDiscovery'];
   readonly tools: Pick<ToolControl, 'notifyConfirmation' | 'notifyToolUpdate'>;
+}
+
+export interface AgentApprovalOwner {
+  isTrustedFolder(): boolean;
+  readApprovalMode(): ApprovalMode;
+  writeApprovalMode(mode: ApprovalMode): void;
+}
+
+export function createAgentApprovalOwner(
+  ide: IdeControl,
+  config: Config,
+): AgentApprovalOwner {
+  return {
+    isTrustedFolder: () => ide.isTrustedFolder(),
+    readApprovalMode: () => config.getApprovalMode(),
+    writeApprovalMode: (mode) => config.setApprovalMode(mode),
+  };
 }
 
 export function createAgentTurnOwners(
@@ -73,9 +95,11 @@ export function createAgentTurnOwners(
 
 export class AgentOperations {
   readonly #turns: AgentTurnOwners;
+  readonly #approval: AgentApprovalOwner;
 
-  constructor(turns: AgentTurnOwners) {
+  constructor(turns: AgentTurnOwners, approval: AgentApprovalOwner) {
     this.#turns = turns;
+    this.#approval = approval;
   }
 
   readonly #readHookSessionId = (): string =>
@@ -108,6 +132,20 @@ export class AgentOperations {
       turns.tools.notifyConfirmation.bind(turns.tools),
       turns.tools.notifyToolUpdate.bind(turns.tools),
     ).stream(input, opts);
+  }
+
+  getApprovalMode(): ApprovalMode {
+    return this.#approval.isTrustedFolder()
+      ? this.#approval.readApprovalMode()
+      : ApprovalMode.DEFAULT;
+  }
+
+  setApprovalMode(mode: ApprovalMode): void {
+    if (!this.#approval.isTrustedFolder() && mode !== ApprovalMode.DEFAULT)
+      throw new Error(
+        'Cannot enable privileged approval modes in an untrusted folder.',
+      );
+    this.#approval.writeApprovalMode(mode);
   }
 
   /**

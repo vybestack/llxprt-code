@@ -8,7 +8,6 @@ import { ShellJobOwner } from '../session/shell-job-owner.js';
 import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
 
 import {
-  ApprovalMode,
   type Config,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
@@ -17,12 +16,11 @@ import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { WorkspaceControl } from './control/workspaceControl.js';
-import type { Agent, AgentMemoryControl, ProviderInfo } from './agent.js';
+import type { Agent, AgentMemoryControl } from './agent.js';
 import type {
   OwnershipRecord,
   StableDisplayCallbacksHolder,
 } from './agentBootstrap.js';
-import { buildProviderInfos } from './agentBootstrap.js';
 import {
   assembleAgentShutdown,
   collectDisposalError,
@@ -92,7 +90,11 @@ import {
   recordOwnership,
   type StableEditorCallbacksHolder,
 } from './agentBootstrap.js';
-import { AgentOperations, createAgentTurnOwners } from './agent-operations.js';
+import {
+  AgentOperations,
+  createAgentApprovalOwner,
+  createAgentTurnOwners,
+} from './agent-operations.js';
 import { AgentImpl } from './agentImpl.js';
 import { type AgentSchedulerHandle } from './config-types.js';
 import { createAgentAuthState } from './control/authState.js';
@@ -429,40 +431,6 @@ export abstract class ForegroundAgentAssembly {
    */
 
   /**
-   * @plan:PLAN-20260622-COREAPIGAP.P04
-   * @requirement:REQ-001
-   * @pseudocode lines 1-4
-   */
-  getApprovalMode(): ApprovalMode {
-    return this.ide.isTrustedFolder()
-      ? this.config.getApprovalMode()
-      : ApprovalMode.DEFAULT;
-  }
-
-  /**
-   * @plan:PLAN-20260622-COREAPIGAP.P04
-   * @requirement:REQ-001
-   * @pseudocode lines 10-17
-   */
-  setApprovalMode(mode: ApprovalMode): void {
-    if (!this.ide.isTrustedFolder() && mode !== ApprovalMode.DEFAULT)
-      throw new Error(
-        'Cannot enable privileged approval modes in an untrusted folder.',
-      );
-    this.config.setApprovalMode(mode);
-  }
-
-  /**
-   * Returns a concrete ProviderInfo[] from the runtime provider manager.
-   * @plan:PLAN-20260617-COREAPI.P15
-   * @requirement:REQ-017
-   */
-  listProviders(): readonly ProviderInfo[] {
-    const names = this.facadeProviderManager.listProviders();
-    return buildProviderInfos(names, new Set(names));
-  }
-
-  /**
    * Rebuilds the cached AgenticLoop bound to the CURRENT client (AgenticLoop
    * caches its constructor client and never re-resolves).
    * @plan:PLAN-20260617-COREAPI.P16
@@ -644,6 +612,7 @@ export abstract class ForegroundAgentAssembly {
         this.facadeProviderManager,
         this.awaitMcpDiscovery,
       ),
+      createAgentApprovalOwner(this.ide, this.config),
     );
     return new AgentImpl(
       this.facadeSessionOwner.createProviderFileOperations(() =>
@@ -691,15 +660,15 @@ export abstract class ForegroundAgentAssembly {
         getProviderStatus: this.providerControl.getProviderStatus,
         getModel: this.providerControl.getModel,
         setModel: this.providerControl.setModel,
-        getApprovalMode: this.getApprovalMode.bind(this),
-        setApprovalMode: this.setApprovalMode.bind(this),
+        getApprovalMode: operations.getApprovalMode.bind(operations),
+        setApprovalMode: operations.setApprovalMode.bind(operations),
         getModelParams: this.providerControl.getModelParams,
         resetChat: operations.resetChat.bind(operations),
         compress: operations.compress.bind(operations),
         generate: operations.generate.bind(operations),
         generateJson: operations.generateJson.bind(operations),
         generateEmbedding: operations.generateEmbedding.bind(operations),
-        listProviders: this.listProviders.bind(this),
+        listProviders: this.providerControl.listProviders,
         dispose: this.disposeAgent.bind(this),
       },
     );

@@ -28,7 +28,7 @@ import type {
   AgentProviderSwitchResult,
   ProviderStatus,
 } from './agent.js';
-import { type OwnershipRecord } from './agentBootstrap.js';
+import { buildProviderInfos, type OwnershipRecord } from './agentBootstrap.js';
 import { AgentExecutionCoordinator } from './agentExecutionCoordinator.js';
 import type { AgentAuth } from './config-types.js';
 import { AuthControl, isOAuthPromptHandler } from './control/authControl.js';
@@ -107,7 +107,7 @@ export interface SessionProviderReads {
   providerStatus(): SessionProviderStatus;
 }
 
-const UNCONFIGURED_AGENT_MESSAGE =
+export const UNCONFIGURED_AGENT_MESSAGE =
   'No provider is configured. Run /setup to choose a hosted provider, configure a local model, set up a custom compatible endpoint, or select an existing profile before using the agent.';
 
 function requireProviderOwner<T>(owner: T | undefined): void {
@@ -316,6 +316,7 @@ export class SessionProviderControl {
   readonly hasActiveProvider: Agent['hasActiveProvider'];
   readonly getProviderContextLimit: Agent['getProviderContextLimit'];
   readonly listAvailableModels: Agent['listAvailableModels'];
+  readonly listProviders: Agent['listProviders'];
   readonly getProvider: Agent['getProvider'];
   readonly getProviderStatus: Agent['getProviderStatus'];
   readonly getModel: Agent['getModel'];
@@ -369,6 +370,10 @@ export class SessionProviderControl {
     this.hasActiveProvider = () => providers.hasActiveProvider();
     this.getProviderContextLimit = () =>
       providers.getActiveProvider()?.getContextLimit?.();
+    this.listProviders = () => {
+      const names = providers.listProviders();
+      return buildProviderInfos(names, new Set(names));
+    };
     this.getProvider = () => this.#providerState.provider;
     this.getModel = () => this.providerReads.getActiveModelName();
     this.getModelParams = () =>
