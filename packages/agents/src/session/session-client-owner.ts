@@ -367,7 +367,6 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
           subagents,
         },
         {
-          readMcpInstructions: workspace.readInstructions,
           bus: policy.messageBus,
           registration: this.bindTaskRegistration(profiles, subagents),
           summarize: bindToolOutputSummary(

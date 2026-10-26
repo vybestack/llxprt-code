@@ -182,7 +182,6 @@ describe('session executable tool ownership', () => {
           subagents: mcpRuntime.subagentDefinitions,
         },
         {
-          readMcpInstructions: mcpRuntime.readInstructions,
           bus: policy.messageBus,
           registration: createTaskRegistration(config, {
             messageBus: policy.messageBus,

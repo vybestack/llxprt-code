@@ -92,26 +92,26 @@ describe('P01 construction inversion contracts', () => {
       settingsOwner,
       policy.session.messageBus,
     );
-    const result = await createToolRegistry(
+    const result = await createToolRegistry({
       config,
-      config,
-      policy.session.messageBus,
-      () => settingsOwner.readRegistryPolicy(config.getExcludeTools() ?? []),
-      () => settingsOwner.readToolExecutionPolicy(),
-      filesystem.paths,
-      filesystem.files,
-      filesystem.ignore,
-      filesystem.scans,
-      undefined,
-      undefined,
-      sessionRegistration,
-      undefined,
-      true,
-      definitions.profileReads,
-      definitions.subagentReads,
-      undefined,
-      policy.trust,
-    );
+      host: config,
+      messageBus: policy.session.messageBus,
+      readTaskSchemaPolicy: () =>
+        settingsOwner.readRegistryPolicy(config.getExcludeTools() ?? []),
+      readExecution: () => settingsOwner.readToolExecutionPolicy(),
+      workspace: {
+        paths: filesystem.paths,
+        files: filesystem.files,
+        ignore: filesystem.ignore,
+        scans: filesystem.scans,
+        trust: policy.trust,
+      },
+      definitions: {
+        profiles: definitions.profileReads,
+        subagents: definitions.subagentReads,
+      },
+      registration: sessionRegistration,
+    });
     return { ...result, messageBus: policy.session.messageBus };
   }
 

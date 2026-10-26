@@ -601,7 +601,7 @@ describe('tool registry assembly', () => {
   async function assembleFixtureToolRegistry(
     host: ReturnType<typeof createHost>,
     config: Config,
-    messageBus: Parameters<typeof createToolRegistry>[2],
+    messageBus: MessageBus,
     registration?: (
       config: Config,
       settings: SessionSettingsOwner,
@@ -627,28 +627,27 @@ describe('tool registry assembly', () => {
       isTrusted: () => trust.isTrustedFolder(),
     });
     return {
-      ...(await createToolRegistry(
-        host,
+      ...(await createToolRegistry({
         config,
+        host,
         messageBus,
-        () => settingsOwner.readRegistryPolicy(config.getExcludeTools() ?? []),
-        () => settingsOwner.readToolExecutionPolicy(),
-        root.paths,
-        root.files,
-        root.ignore,
-        root.scans,
-        undefined,
-        undefined,
-        registration?.(config, settingsOwner, messageBus),
-        undefined,
-        true,
-        host.profileDefinitions,
-        host.subagentDefinitions,
-        undefined,
-        trust,
-        undefined,
+        readTaskSchemaPolicy: () =>
+          settingsOwner.readRegistryPolicy(config.getExcludeTools() ?? []),
+        readExecution: () => settingsOwner.readToolExecutionPolicy(),
+        workspace: {
+          paths: root.paths,
+          files: root.files,
+          ignore: root.ignore,
+          scans: root.scans,
+          trust,
+        },
+        definitions: {
+          profiles: host.profileDefinitions,
+          subagents: host.subagentDefinitions,
+        },
+        registration: registration?.(config, settingsOwner, messageBus),
         imageOperation,
-      )),
+      })),
       workspacePaths: root.paths,
     };
   }

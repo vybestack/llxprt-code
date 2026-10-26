@@ -85,7 +85,6 @@ export interface WorkspaceToolPorts {
 }
 
 export interface SessionToolPorts {
-  readonly readMcpInstructions: () => string | undefined;
   readonly bus: MessageBus;
   readonly registration: TaskToolRegistration;
   readonly summarize: ToolOutputSummarizer;
@@ -227,30 +226,33 @@ export class SessionToolCatalogOwner {
     this.workspaceStopped = workspace.isWorkspaceStopped;
     this.sessionApproval = session.approval;
     this.sessionBus = new CoreMessageBusAdapter(session.bus);
-    this.initialization ??= createToolRegistry(
-      this.config,
-      this.config,
-      session.bus,
-      this.readTaskSchemaPolicy,
-      this.readExecutionPolicy,
-      workspace.paths,
-      workspace.files,
-      workspace.ignore,
-      workspace.scans,
-      session.summarize,
-      workspace.diagnostics,
-      session.registration,
-      session.readMcpInstructions,
-      false,
-      workspace.profiles,
-      workspace.subagents,
-      workspace.ide,
-      workspace.trust,
-      this.githubReports,
-      this.imageOperation,
-      session.telemetry,
-      this.requestFetch,
-    ).then(({ registry, allPotentialTools }) => {
+    this.initialization ??= createToolRegistry({
+      config: this.config,
+      host: this.config,
+      messageBus: session.bus,
+      readTaskSchemaPolicy: this.readTaskSchemaPolicy,
+      readExecution: this.readExecutionPolicy,
+      workspace: {
+        paths: workspace.paths,
+        files: workspace.files,
+        ignore: workspace.ignore,
+        scans: workspace.scans,
+        trust: workspace.trust,
+      },
+      definitions: {
+        profiles: workspace.profiles,
+        subagents: workspace.subagents,
+      },
+      registration: session.registration,
+      lspDiagnostics: workspace.diagnostics,
+      ide: workspace.ide,
+      summarizeOutput: session.summarize,
+      githubReports: this.githubReports,
+      imageOperation: this.imageOperation,
+      telemetry: session.telemetry,
+      discover: false,
+      requestFetch: this.requestFetch,
+    }).then(({ registry, allPotentialTools }) => {
       this.bindHostShell(registry, workspace.paths, session.summarize);
       this.publishRegistry(
         registry,

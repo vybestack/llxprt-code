@@ -133,6 +133,48 @@ export interface ToolRegistryHost {
    */
 }
 
+/** Workspace filesystem, trust and definition readers tool construction needs. */
+export interface ToolRegistryWorkspace {
+  readonly paths: WorkspacePathOperations;
+  readonly files: WorkspaceTextOperations;
+  readonly ignore: WorkspaceIgnoreOperations;
+  readonly scans: WorkspaceScanOperations;
+  readonly trust: WorkspaceTrustReadPort;
+}
+
+/** Profile and subagent definition readers tool construction needs. */
+export interface ToolRegistryDefinitions {
+  readonly profiles: ProfileDefinitionReads;
+  readonly subagents: SubagentDefinitionReads;
+}
+
+/**
+ * Everything one registry construction needs.
+ *
+ * Required keys are the ones construction cannot proceed without; the
+ * optional keys describe capabilities a host may legitimately not have (no
+ * IDE, no image backend, no GitHub broker), or defaults.
+ */
+export interface ToolRegistryCreation {
+  readonly config: Config;
+  readonly host: ToolRegistryHost;
+  readonly messageBus: MessageBus;
+  readonly readTaskSchemaPolicy: () => RegistryPolicy;
+  readonly readExecution: () => ToolExecutionPolicy;
+  readonly workspace: ToolRegistryWorkspace;
+  readonly definitions: ToolRegistryDefinitions;
+  /** Absent registration records a disabled task-tool diagnostic; never throws. */
+  readonly registration: TaskToolRegistration | undefined;
+  readonly lspDiagnostics?: ILspService;
+  readonly ide?: WorkspaceIdePort;
+  readonly summarizeOutput?: ToolOutputSummarizer;
+  readonly githubReports?: GitHubReportOperations;
+  readonly imageOperation?: ImageOperationRunner;
+  readonly telemetry?: RootTelemetry;
+  readonly discover?: boolean;
+  readonly requestFetch?: NetworkFetch;
+}
+
 function getTaskToolMissingReason(
   profileManager: ProfileDefinitionReads | undefined,
   subagentManager: SubagentDefinitionReads | undefined,
@@ -348,25 +390,68 @@ function registerMemoryTool(
   });
 }
 
+/** Shell and memory tools share the file-backed workspace and execution policy. */
+interface ShellAndMemoryRegistration {
+  readonly config: Config;
+  readonly paths: WorkspacePathOperations;
+  readonly readExecution: () => ToolExecutionPolicy;
+  readonly summarizeOutput?: ToolOutputSummarizer;
+  readonly messageBusAdapter: CoreMessageBusAdapter;
+}
+
+function registerShellAndMemoryTools(
+  registerCoreTool: RegisterCoreToolFn,
+  input: ShellAndMemoryRegistration,
+): void {
+  const { config, paths, readExecution, summarizeOutput, messageBusAdapter } =
+    input;
+  registerCoreTool(
+    ShellTool,
+    new CoreShellToolHostAdapter(config, paths, readExecution, summarizeOutput),
+    messageBusAdapter,
+  );
+  registerMemoryTool(
+    registerCoreTool,
+    config,
+    readExecution,
+    messageBusAdapter,
+  );
+}
+
+/** Inputs that shape every standard (non-agent) tool registration. */
+interface StandardToolRegistration {
+  readonly config: Config;
+  readonly host: ToolRegistryHost;
+  readonly messageBus: MessageBus;
+  readonly workspace: ToolRegistryWorkspace;
+  readonly toolHostAdapter: CoreToolHostAdapter;
+  readonly readExecution: () => ToolExecutionPolicy;
+  readonly summarizeOutput?: ToolOutputSummarizer;
+  readonly lspDiagnostics?: ILspService;
+  readonly ide?: WorkspaceIdePort;
+  readonly githubReports?: GitHubReportOperations;
+  readonly imageOperation?: ImageOperationRunner;
+  readonly requestFetch: NetworkFetch;
+}
+
 function registerStandardTools(
   registerCoreTool: RegisterCoreToolFn,
-  config: Config,
-  host: ToolRegistryHost,
-  messageBus: MessageBus,
-  paths: WorkspacePathOperations,
-  toolHostAdapter: CoreToolHostAdapter,
-  readExecution: () => ToolExecutionPolicy,
-  summarizeOutput?: (
-    content: string,
-    signal: AbortSignal,
-    tokenBudget?: number,
-  ) => Promise<string>,
-  lspDiagnostics?: ILspService,
-  ide?: WorkspaceIdePort,
-  githubReports?: GitHubReportOperations,
-  imageOperation?: ImageOperationRunner,
-  requestFetch: NetworkFetch = globalThis.fetch,
+  input: StandardToolRegistration,
 ): void {
+  const {
+    config,
+    host,
+    messageBus,
+    workspace,
+    toolHostAdapter,
+    readExecution,
+    summarizeOutput,
+    lspDiagnostics,
+    ide,
+    githubReports,
+    imageOperation,
+    requestFetch,
+  } = input;
   const ideServiceAdapter = new CoreIdeServiceAdapter(
     ide?.openDiff.bind(ide),
     ide?.readConnection.bind(ide),
@@ -410,17 +495,13 @@ function registerStandardTools(
   registerIdeLspTool(DeleteLineRangeTool);
   registerIdeLspTool(InsertAtLineTool);
   registerIdeLspTool(ApplyPatchTool);
-  registerCoreTool(
-    ShellTool,
-    new CoreShellToolHostAdapter(config, paths, readExecution, summarizeOutput),
-    messageBusAdapter,
-  );
-  registerMemoryTool(
-    registerCoreTool,
+  registerShellAndMemoryTools(registerCoreTool, {
     config,
+    paths: workspace.paths,
     readExecution,
+    summarizeOutput,
     messageBusAdapter,
-  );
+  });
 
   // Registered only when the CLI layer supplied a broker transport, so a
   // host without the wiring does not advertise a tool it cannot serve.
@@ -472,19 +553,29 @@ function registerImageTool(
   });
 }
 
+/** Inputs that shape the agent-owned tool registrations. */
+interface AgentToolRegistration {
+  readonly host: ToolRegistryHost;
+  readonly allPotentialTools: ToolRecord[];
+  readonly registry: ToolRegistry;
+  readonly effectiveCoreTools: string[] | undefined;
+  readonly definitions: ToolRegistryDefinitions;
+  /** Absent registration records a disabled task-tool diagnostic; never throws. */
+  readonly registration: TaskToolRegistration | undefined;
+}
+
 function registerAgentTools(
   registerCoreTool: RegisterCoreToolFn,
-  config: Config,
-  profileManager: ProfileDefinitionReads,
-  subagentManager: SubagentDefinitionReads,
-  host: ToolRegistryHost,
-  allPotentialTools: ToolRecord[],
-  registry: ToolRegistry,
-  effectiveCoreTools: string[] | undefined,
-  messageBus: MessageBus,
-  paths: WorkspacePathOperations,
-  registration: TaskToolRegistration | undefined,
+  input: AgentToolRegistration,
 ): void {
+  const {
+    host,
+    allPotentialTools,
+    registry,
+    effectiveCoreTools,
+    definitions,
+    registration,
+  } = input;
   // @plan PLAN-20260610-ISSUE1592.P03
   // @requirement REQ-INV-003
   // Resolve registration from the composition root. If absent, core records a
@@ -495,8 +586,8 @@ function registerAgentTools(
       allPotentialTools,
       effectiveCoreTools,
       host.getExcludeTools(),
-      profileManager,
-      subagentManager,
+      definitions.profiles,
+      definitions.subagents,
     );
   } else {
     registerTaskTool(
@@ -508,7 +599,10 @@ function registerAgentTools(
     );
   }
 
-  registerCoreTool(ListSubagentsTool, new SubagentCatalog(subagentManager));
+  registerCoreTool(
+    ListSubagentsTool,
+    new SubagentCatalog(definitions.subagents),
+  );
 
   const checkAsyncTasksArgs = new CoreAsyncTaskServiceAdapter();
   registerCoreTool(CheckAsyncTasksTool, checkAsyncTasksArgs);
@@ -547,36 +641,15 @@ export type ToolOutputSummarizer = (
 ) => Promise<string>;
 
 export async function createToolRegistry(
-  host: ToolRegistryHost,
-  config: Config,
-  messageBus: MessageBus,
-  readTaskSchemaPolicy: () => RegistryPolicy,
-  readExecution: () => ToolExecutionPolicy,
-  paths: WorkspacePathOperations,
-  files: WorkspaceTextOperations,
-  ignore: WorkspaceIgnoreOperations,
-  scans: WorkspaceScanOperations,
-  summarizeOutput?: ToolOutputSummarizer,
-  lspDiagnostics?: ILspService,
-  registration?: TaskToolRegistration,
-  readMcpInstructions?: () => string | undefined,
-  discover = true,
-  profileManager?: ProfileDefinitionReads,
-  subagentManager?: SubagentDefinitionReads,
-  ide?: WorkspaceIdePort,
-  trust?: WorkspaceTrustReadPort,
-  githubReports?: GitHubReportOperations,
-  imageOperation?: ImageOperationRunner,
-  telemetry?: RootTelemetry,
-  requestFetch: NetworkFetch = globalThis.fetch,
+  input: ToolRegistryCreation,
 ): Promise<{ registry: ToolRegistry; allPotentialTools: ToolRecord[] }> {
-  const selected = requireRegistryAssembly(
-    profileManager,
-    subagentManager,
-    trust,
-  );
+  const { config, host, messageBus, readTaskSchemaPolicy, readExecution } =
+    input;
+  const { workspace, definitions } = input;
+  const discover = input.discover ?? true;
+  const requestFetch = input.requestFetch ?? globalThis.fetch;
   const registry = new ToolRegistry(
-    new CoreToolRegistryHostAdapter(config, selected[2]),
+    new CoreToolRegistryHostAdapter(config, workspace.trust),
     new CoreMessageBusAdapter(messageBus),
     readTaskSchemaPolicy,
   );
@@ -588,44 +661,38 @@ export async function createToolRegistry(
     allPotentialTools,
   );
 
-  registerStandardTools(
-    registerCoreTool,
+  registerStandardTools(registerCoreTool, {
     config,
     host,
     messageBus,
-    paths,
-    new CoreToolHostAdapter(
+    workspace,
+    toolHostAdapter: new CoreToolHostAdapter(
       config,
-      paths,
-      files,
-      ignore,
-      scans,
+      workspace.paths,
+      workspace.files,
+      workspace.ignore,
+      workspace.scans,
       readExecution,
-      selected[2],
-      telemetry,
+      workspace.trust,
+      input.telemetry,
     ),
     readExecution,
-    summarizeOutput,
-    lspDiagnostics,
-    ide,
-    githubReports,
-    imageOperation,
+    lspDiagnostics: input.lspDiagnostics,
+    ide: input.ide,
+    summarizeOutput: input.summarizeOutput,
+    githubReports: input.githubReports,
+    imageOperation: input.imageOperation,
     requestFetch,
-  );
+  });
 
-  registerAgentTools(
-    registerCoreTool,
-    config,
-    selected[0],
-    selected[1],
+  registerAgentTools(registerCoreTool, {
     host,
     allPotentialTools,
     registry,
-    effectiveRegistryCoreTools(host.getCoreTools()),
-    messageBus,
-    paths,
-    registration,
-  );
+    effectiveCoreTools: effectiveRegistryCoreTools(host.getCoreTools()),
+    definitions,
+    registration: input.registration,
+  });
 
   return finishToolRegistry(registry, allPotentialTools, discover);
 }
@@ -647,29 +714,11 @@ function effectiveRegistryCoreTools(
   return effectiveCoreTools;
 }
 
-function requireRegistryAssembly(
-  profiles: ProfileDefinitionReads | undefined,
-  subagents: SubagentDefinitionReads | undefined,
-  trust: WorkspaceTrustReadPort | undefined,
-): readonly [
-  ProfileDefinitionReads,
-  SubagentDefinitionReads,
-  WorkspaceTrustReadPort,
-] {
-  if (profiles === undefined || subagents === undefined)
-    throw new Error(
-      'Tool construction requires explicit workspace definition readers',
-    );
-  if (trust === undefined)
-    throw new Error('Tool construction requires explicit workspace trust');
-  return [profiles, subagents, trust];
-}
-
 function registerNetworkTools(
   registerCoreTool: RegisterCoreToolFn,
   toolKeyStorageAdapter: CoreToolKeyStorageAdapter,
   toolHostAdapter: CoreToolHostAdapter,
-  readExecution: Parameters<typeof registerStandardTools>[6],
+  readExecution: () => ToolExecutionPolicy,
   requestFetch: NetworkFetch,
 ): void {
   registerCoreTool(ExaWebSearchTool, {
