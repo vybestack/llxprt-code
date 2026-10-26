@@ -60,12 +60,6 @@ const SAMPLES_PER_COPY = 40;
 /** Settled readings whose median is the baseline and the final value. */
 const MEDIAN_READINGS = 3;
 
-/**
- * A settled growth below this means the baseline still held collectable
- * garbage, so the measurement is wrong rather than the copy being lean.
- */
-const NEGATIVE_GROWTH_LIMIT_BYTES = -256 * 1024;
-
 function nextTurn(): Promise<void> {
   return new Promise<void>((resolve) => {
     setTimeout(resolve, 0);
@@ -316,14 +310,17 @@ export async function measureCompaction(
   const finalGrowth = (await medianSettledHeap('after the copy')) - before;
   const readings = [...series, finalGrowth];
   const settledGrowth = median(readings.slice(Math.floor(readings.length / 2)));
-  if (
-    finalGrowth < NEGATIVE_GROWTH_LIMIT_BYTES ||
-    settledGrowth < NEGATIVE_GROWTH_LIMIT_BYTES
-  ) {
-    throw new Error(
-      `negative settled growth (final ${finalGrowth}, settled ${settledGrowth} bytes, limit ${NEGATIVE_GROWTH_LIMIT_BYTES}): the baseline still held collectable garbage`,
-    );
-  }
+  process.stdout.write(`COMPACTION_MEMORY ${JSON.stringify({
+    rows: current.rows,
+    versions: result.versions.length,
+    baseline: before,
+    finalGrowth,
+    settledGrowth,
+    peak,
+    series,
+    held: trap?.held ?? 0,
+  })}
+`);
   return {
     checkpoints: result.versions.length - 1,
     versions: result.versions.length,

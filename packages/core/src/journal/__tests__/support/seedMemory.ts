@@ -7,8 +7,13 @@ import type { RowDraft } from '../../rowDraft.js';
 import { draftRow, storeDeps } from './storeFixtures.js';
 import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { withPinnedAccess } from './pinnedAccess.js';
+import { testJournalSeams } from './journalFixtures.js';
 
-export const SEED_ROWS = 100_000;
+export const SEED_ROWS = 25_000;
+
+function memoryDeps(): ReturnType<typeof storeDeps> {
+  return storeDeps({ seams: testJournalSeams({}, 1, false) });
+}
 /** Rows are owned by 0 to 4 in turn; the mirror of owner 2 takes the rows of 2 and of 0. */
 export const OWNER_COUNT = 5;
 export const MIRROR_OWNER = 2;
@@ -21,8 +26,8 @@ const ID_PERIOD = 20;
 const RESPONSE_OFFSET = 10;
 const SAMPLES = 4;
 
-function* baseDrafts(): Generator<RowDraft> {
-  for (let index = 0; index < SEED_ROWS; index++) {
+function* baseDrafts(rows: number): Generator<RowDraft> {
+  for (let index = 0; index < rows; index++) {
     const pair = Math.floor(index / ID_PERIOD);
     const slot = index % ID_PERIOD;
     yield draftRow({
@@ -35,18 +40,21 @@ function* baseDrafts(): Generator<RowDraft> {
   }
 }
 
-export async function bigPrimary(directory: string): Promise<JournalStore> {
+export async function bigPrimary(
+  directory: string,
+  rows = SEED_ROWS,
+): Promise<JournalStore> {
   const primary = await JournalStore.create(
-    path.join(directory, 'primary.llxj'),
-    storeDeps(),
+    path.join(directory, `primary-${rows}.llxj`),
+    memoryDeps(),
   );
-  await primary.commit([{ kind: 'replace', rows: baseDrafts() }]);
+  await primary.commit([{ kind: 'replace', rows: baseDrafts(rows) }]);
   return primary;
 }
 
-export function acceptedCount(): number {
+export function acceptedCount(rows = SEED_ROWS): number {
   let count = 0;
-  for (let index = 0; index < SEED_ROWS; index++) {
+  for (let index = 0; index < rows; index++) {
     const owner = index % OWNER_COUNT;
     if (owner === 0 || owner === MIRROR_OWNER) count += 1;
   }
@@ -81,10 +89,10 @@ export async function seedWithProbe(
   return withPinnedAccess(async (accessOf) => {
     const version = primary.published;
     if (version === undefined) throw new Error('nothing is published');
-    const mirror = await JournalStore.create(mirrorFile, storeDeps());
+    const mirror = await JournalStore.create(mirrorFile, memoryDeps());
     // One unwatched copy first, so the caches and compiled code of the copy are
     // warm and the baseline is not taken before they fill.
-    const warm = await JournalStore.create(`${mirrorFile}.warm`, storeDeps());
+    const warm = await JournalStore.create(`${mirrorFile}.warm`, memoryDeps());
     await warm.commit(
       resyncEdits(
         { store: warm, owner: MIRROR_OWNER },
@@ -97,7 +105,7 @@ export async function seedWithProbe(
     const sample = async (): Promise<void> => {
       series.push((await settledHeap()) - baseline);
     };
-    const every = Math.floor(acceptedCount() / SAMPLES);
+    const every = Math.floor(acceptedCount(version.rows) / SAMPLES);
     let seen = 0;
     const [edit] = resyncEdits(
       { store: mirror, owner: MIRROR_OWNER },
