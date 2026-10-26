@@ -14,7 +14,10 @@ import {
 } from './runtime-service-shape-analysis.js';
 import {
   classStoredDeclarations,
-  storedServiceBundle,
+  mergesServiceSurfaces,
+  storedServiceVerdict,
+  type ServiceAnalyses,
+  type StoredVerdict,
 } from './runtime-service-shape-holders.js';
 
 export interface RuntimeDeclarationRoot {
@@ -260,6 +263,17 @@ function isConfigLocator(
  * type alias is judged by what it exposes, and an intersection, object-literal
  * type, `Object.assign` result or spread of several services groups them all.
  * Union branches stay alternatives.
+ * A flattened aggregate is a second, independent reading: an intersection whose
+ * parts each expose operations and each reach a distinct configured runtime
+ * capability is a whole-bag carrier, because one object then hands a consumer
+ * several unrelated capabilities. Service counting alone misses it whenever the
+ * parts expose capabilities behind their operations instead of handing services
+ * out, which is exactly how capability read-models are written. The aggregate
+ * reading uses services and separately configured runtime objects together. One
+ * capable part is a port and stays allowed; two parts reaching the same single
+ * capability are one capability read two ways and stay allowed; a part with no
+ * operations is data and carries no capability. Interface heritage is
+ * composition, not flattening, so it adds no finding of its own.
  * Generic domain
  * objects expose their instantiated public members, not phantom type arguments.
  * Config locators additionally recognize separately configured runtime objects.
@@ -307,6 +321,39 @@ export function scanRuntimeServiceProgram(
     checker,
     program,
   );
+  const analyses: ServiceAnalyses = {
+    services: analyze,
+    merged: analyzeRuntimeObject,
+  };
+  /**
+   * Judges one declared position. A stored bag and a flattened aggregate are
+   * both findings; a position the analysis could not finish is reported as a
+   * limit so an undecided scan never passes silently.
+   */
+  function declaredVerdict(type: ts.Type, node: ts.Node): StoredVerdict {
+    const merged = mergesServiceSurfaces(type, checker, analyses, node);
+    if (merged.bundle) return merged;
+    const stored = storedServiceVerdict(type, checker, analyze, node);
+    return {
+      bundle: stored.bundle,
+      incomplete: merged.incomplete || stored.incomplete,
+    };
+  }
+  /**
+   * Judges one value or exposed surface by what it exposes. The exposure
+   * reading stays the one the guard has always used, so an owner that hands out
+   * a service through a field, an accessor or a return is a finding exactly as
+   * before; the flattened aggregate rule is added on top.
+   */
+  function exposureVerdict(type: ts.Type, node: ts.Node): StoredVerdict {
+    const merged = mergesServiceSurfaces(type, checker, analyses, node);
+    if (merged.bundle) return merged;
+    const exposed = analyze(type, node);
+    return {
+      bundle: exposed.bundle,
+      incomplete: merged.incomplete || exposed.incomplete,
+    };
+  }
   const findings: RuntimeServiceShapeFinding[] = [];
   for (const file of files) {
     const source = program.getSourceFile(compilerSourcePath(file));
@@ -332,10 +379,10 @@ export function scanRuntimeServiceProgram(
     }
     function reportTypes(node: ts.Node, types: readonly ts.Type[]): void {
       if (isAssemblyNode(node, options, program)) return;
-      const summaries = types.map((type) => analyze(type, node));
-      if (summaries.some((summary) => summary.bundle)) {
+      const verdicts = types.map((type) => exposureVerdict(type, node));
+      if (verdicts.some((verdict) => verdict.bundle)) {
         report(node, 'runtime-service-bundle');
-      } else if (summaries.some((summary) => summary.incomplete)) {
+      } else if (verdicts.some((verdict) => verdict.incomplete)) {
         report(node, 'runtime-service-analysis-resource-limit');
       }
     }
@@ -387,27 +434,26 @@ export function scanRuntimeServiceProgram(
       if (isAssemblyNode(node, options, program)) return;
       for (const stored of classStoredDeclarations(node, checker)) {
         if (isAssemblyNode(stored.node, options, program)) continue;
-        if (storedServiceBundle(stored.type, checker, analyze, stored.node)) {
-          report(stored.node, 'runtime-service-bundle');
-        } else if (analyze(stored.type, stored.node).incomplete) {
+        const verdict = declaredVerdict(stored.type, stored.node);
+        if (verdict.bundle) report(stored.node, 'runtime-service-bundle');
+        else if (verdict.incomplete)
           report(stored.node, 'runtime-service-analysis-resource-limit');
-        }
       }
     }
     /**
-     * An interface or type alias is a bundle when the shape it names groups
-     * runtime services, and a parameter is a bag when the type it declares
-     * groups them.
+     * An interface or type alias is a bundle when the shape it names exposes
+     * runtime services or flattens several capability surfaces, and a parameter
+     * is a bag when the type it declares does either.
      */
     function reportNamedShape(node: ts.Node, bag: boolean): void {
       if (isAssemblyNode(node, options, program)) return;
-      const summary = analyze(checker.getTypeAtLocation(node), node);
-      if (summary.bundle) {
+      const verdict = exposureVerdict(checker.getTypeAtLocation(node), node);
+      if (verdict.bundle) {
         report(
           node,
           bag ? 'runtime-service-bag-parameter' : 'runtime-service-bundle',
         );
-      } else if (summary.incomplete) {
+      } else if (verdict.incomplete) {
         report(node, 'runtime-service-analysis-resource-limit');
       }
     }
