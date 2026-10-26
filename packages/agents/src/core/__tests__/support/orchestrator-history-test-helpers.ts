@@ -36,16 +36,26 @@ export class ControlledOrchestratorHistory extends HistoryService {
     );
   }
 
-  override prepareCuratedForProviderSnapshot(
+  override async prepareCuratedForProviderSnapshot(
     ...[tail, options, override]: Parameters<
       HistoryService['prepareCuratedForProviderSnapshot']
     >
   ): ReturnType<HistoryService['prepareCuratedForProviderSnapshot']> {
-    return super.prepareCuratedForProviderSnapshot(
+    const snapshot = await super.prepareCuratedForProviderSnapshot(
       tail,
       options,
-      override ?? this.streamRawHistory(options?.signal),
+      override,
     );
+    try {
+      if (override === undefined)
+        for await (const _row of this.streamRawHistory(options?.signal)) {
+          options?.signal?.throwIfAborted();
+        }
+      return snapshot;
+    } catch (error) {
+      await snapshot.close();
+      throw error;
+    }
   }
 
   override async *streamRawHistory(
