@@ -34,6 +34,7 @@ const PORT_METHODS = [
   'settleFanout',
   'waitForCommit',
   'hasPromptSubmission',
+  'openResponseArrival',
   'flushCommitted',
   'getLength',
   'materialize',

@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+import { withArrivalPublication } from './history-arrival-publication.js';
+import { historyOriginId } from './historyOriginId.js';
+import { firstEntryContextRange } from './contextRange.js';
+import type { ArrivalAttempt } from '../../journal/arrival-group.js';
+import type { ResponseArrival } from './history-response-arrival.js';
+import type { ContentMetadata } from './IContent.js';
 import { isDeepStrictEqual } from 'node:util';
 import { HistoryMediaOwnership } from '../../storage/history-media-ownership.js';
 import type { LocalMediaStore } from '../../storage/local-media-store.js';
@@ -86,6 +92,43 @@ export type PreparedProfileAdoption = (() => void) & {
 };
 
 export class HistoryService extends HistoryServiceReads {
+  async openResponseArrival(
+    attempt: ArrivalAttempt,
+    metadata: ContentMetadata = {},
+    origin?: object,
+  ): Promise<ResponseArrival> {
+    const content: IContent = { speaker: 'ai', blocks: [], metadata };
+    this.chronology.stamp(content);
+    const originId = origin === undefined ? undefined : historyOriginId(origin);
+    const arrival = await this.journal.openResponseArrival(
+      content,
+      attempt,
+      originId,
+    );
+    return withArrivalPublication(arrival, {
+      journal: this.journal,
+      origin: originId,
+      enqueue: (run) => this.enqueueAsynchronousHistoryMutation(run),
+      assertAdmission: () => this.tokenTickets.assertAdmission(),
+      prepare: () =>
+        this.tokenTickets.prepare(
+          this.captureTokenRow(),
+          undefined,
+          this.syncGeneration,
+        ),
+      publish: (ticket) => this.tokenTickets.publish(ticket),
+      cancel: (ticket) => this.tokenTickets.cancel(ticket),
+      added: (sealed) => {
+        this.emit('contentAdded', sealed, origin);
+        this.mediaOwner?.adopt([sealed]);
+      },
+      first: (sealed) => {
+        this.spanWindow.set([]);
+        this.emit('contextRangeChanged', firstEntryContextRange(sealed));
+      },
+    });
+  }
+
   private disposal: Promise<void> | undefined;
   private readonly providerReadCounters: HistoryServiceJournalOptions['attachmentCounters'];
   private runtimeMediaOwner:

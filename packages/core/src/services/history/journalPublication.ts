@@ -21,6 +21,14 @@ import type { JournalHistoryStore } from './journalHistoryStore.js';
 import type { JournalOwners, ResolvedOwner } from './journalOwners.js';
 import { encodeContentRow } from './journalRowCodec.js';
 
+export function replacementEditBuilder(
+  owners: () => JournalOwners,
+): (
+  rows: Iterable<IContent> | AsyncIterable<IContent>,
+  origin: string | undefined,
+) => EditBuilder {
+  return (rows, origin) => replacementEdits(owners(), rows, origin);
+}
 export function preparedDetachedEdit(
   prepare: GroupPreparation,
   ownerEdits: readonly VersionEdit[],
@@ -214,5 +222,19 @@ export function syntheticInsertEdits(
     throw new Error(
       `Synthetic insert anchor: no row has chronology number ${afterSeq}`,
     );
+  };
+}
+
+export function replacementEdits(
+  owners: JournalOwners,
+  rows: Iterable<IContent> | AsyncIterable<IContent>,
+  origin: string | undefined,
+): EditBuilder {
+  return async () => {
+    const owner = await owners.resolve(origin);
+    return [
+      ...owner.edits,
+      { kind: 'replace', rows: encodedRows(rows, owner.id) },
+    ];
   };
 }

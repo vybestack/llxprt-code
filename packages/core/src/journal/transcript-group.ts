@@ -351,8 +351,13 @@ export async function prepareTranscriptBuild(
     transcript.metadataAppender(appender),
     transcript.appender(),
     register,
+    rowAppender,
   );
-  if (prepared.built === undefined || prepared.plan === undefined)
+  if (
+    prepared.recording === true ||
+    prepared.built === undefined ||
+    prepared.plan === undefined
+  )
     return prepared;
   const plan = prepared.plan;
   return {

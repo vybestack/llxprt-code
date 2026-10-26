@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import type { ArrivalAttempt } from '../../journal/arrival-group.js';
+import type { ResponseArrival } from './history-response-arrival.js';
 import type { NativeDensityPolicy } from './nativeDensityPolicy.js';
 import type { DebugLogger } from '../../debug/index.js';
 import type { ProviderCuratedStreamOptions } from './provider-request-options.js';
@@ -263,6 +265,11 @@ export interface HistoryCompensationMark {
  * the only implementation until the journal-backed store lands (#854 phase 4).
  */
 export interface HistoryStorePort {
+  openResponseArrival(
+    content: IContent,
+    attempt: ArrivalAttempt,
+    origin?: string,
+  ): Promise<ResponseArrival>;
   hasPromptSubmission(id: string): Promise<boolean>;
   flushCommitted(): Promise<void>;
   prepareCurated(

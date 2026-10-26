@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
+import { copyForeignChunkRow } from './foreign-chunk-row.js';
+import { decodeRowHeader } from './rowRecord.js';
 import type { RecordAppender } from './groupAppender.js';
 import type { SourceRow } from './groupEdits.js';
 import { appendSourceRecord, readSourceHead } from './recordTransfer.js';
@@ -26,9 +28,21 @@ export async function copyForeignRow(
   const head =
     read.head ?? (await readSourceHead(source, entry.recordOffset, 'ROW'));
   const shared = appender.retainsSource?.(source) === true;
+  const copy = async (): Promise<{ offset: number; bytes: number }> => {
+    if (read.header.chunk === undefined)
+      return appendSourceRecord(source, appender, head, 'ROW');
+    return {
+      offset: await copyForeignChunkRow(
+        source,
+        appender,
+        decodeRowHeader(head.kindHeader),
+      ),
+      bytes: entry.recordLength,
+    };
+  };
   const written = shared
     ? { offset: entry.recordOffset, bytes: entry.recordLength }
-    : await appendSourceRecord(source, appender, head, 'ROW');
+    : await copy();
   if (written.bytes !== entry.recordLength) {
     throw new JournalFormatError(
       `Row ${entry.label} is ${written.bytes} bytes at offset ${entry.recordOffset}, its entry says ${entry.recordLength}`,

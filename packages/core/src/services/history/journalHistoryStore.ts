@@ -1,5 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
+  responseArrivalOpener,
+  assertArrivalRowDelta,
+  assertHistorySettled,
+} from './journal-arrival-adapter.js';
+import {
   commitAdmittedAppend,
   decodeTokenDraft,
   releaseUnclaimedTokenDraft,
@@ -74,7 +79,7 @@ import type {
 } from './detachedHistoryMutation.js';
 import type { JournalSession } from './journalSession.js';
 import {
-  encodedRows,
+  replacementEditBuilder,
   JournalPublication,
   type EditBuilder,
   JournalCompensationMark,
@@ -117,6 +122,17 @@ export class JournalHistoryStore
   extends JournalHistoryStoreReads
   implements HistoryStorePort
 {
+  readonly openResponseArrival = responseArrivalOpener({
+    store: () => this.session.store,
+    owners: () => this.owners,
+    exclusive: (run) => this.exclusive(run),
+    commit: (build) => {
+      this.publication.accepted();
+      this.tokenDraft = undefined;
+      return this.commitStep(undefined, build, undefined, true);
+    },
+  });
+
   prepareCurated = prepareJournalProviderRequest(
     this,
     () => this.session.store.mediaPins.mediaStore,
@@ -909,18 +925,7 @@ export class JournalHistoryStore
   }
 
   /** The builder of the single `replace` edit of `rows`, every row written under `origin`. */
-  private replaceEdits(
-    rows: Iterable<IContent> | AsyncIterable<IContent>,
-    origin: string | undefined,
-  ): EditBuilder {
-    return async () => {
-      const owner = await this.owners.resolve(origin);
-      return [
-        ...owner.edits,
-        { kind: 'replace', rows: encodedRows(rows, owner.id) },
-      ];
-    };
-  }
+  private readonly replaceEdits = replacementEditBuilder(() => this.owners);
 
   /** Puts the version of `saved` back as the current one (design 4.5) and waits for its ack. */
   private async restoreTo(
@@ -958,6 +963,7 @@ export class JournalHistoryStore
     rowsAfter: number | undefined,
     build: EditBuilder,
     mirrors?: MirrorCheckpoint,
+    arrival = false,
   ): Promise<CommitAck> {
     const snapshot = await this.session.store.snapshot();
     try {
@@ -967,7 +973,11 @@ export class JournalHistoryStore
       const group = await this.mirrors.commit(prepared, mirrors);
       if (owners !== this.owners) this.owners.invalidate();
       try {
-        if (rowsAfter === undefined) {
+        if (arrival) {
+          const added = group.after.rows - snapshot.rows;
+          assertArrivalRowDelta(added);
+          this.tentativeRows += added;
+        } else if (rowsAfter === undefined) {
           this.tentativeRows = group.after.rows;
         } else if (group.after.rows !== rowsAfter) {
           throw new Error(
@@ -986,9 +996,7 @@ export class JournalHistoryStore
 
   /** The mutation FIFO keeps the queue empty around a whole operation; a count that differs means it did not. */
   private assertSettled(snapshot: VersionSnapshot, doing: string): void {
-    if (snapshot.rows !== this.tentativeRows) {
-      throw new Error(`History changed while it was being ${doing}`);
-    }
+    assertHistorySettled(snapshot.rows, this.tentativeRows, doing);
   }
 
   protected assertUsable(): void {

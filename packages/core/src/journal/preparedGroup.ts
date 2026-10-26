@@ -20,9 +20,15 @@ import type { MapKind } from './keyedMap.js';
 import { buildStreamedAppend } from './streamed-append-build.js';
 import type { AppendInput } from './streamed-append-pass.js';
 
+export type ArrivalPreparation = (
+  context: BuildContext,
+  appender: RecordAppender,
+) => Promise<BuiltGroup>;
+
 export interface PreparedGroup {
   readonly appender: RecordAppender;
   readonly read: ReadGroup;
+  recordArrival(build: ArrivalPreparation): Promise<void>;
   build(edits: readonly VersionEdit[]): Promise<void>;
   append(
     rows: AsyncIterable<RowDraft>,
@@ -44,6 +50,7 @@ type RegisterFacts = (
 ) => Promise<NativeFactIndexRegistration | undefined>;
 
 export interface PreparedBuild {
+  readonly recording?: boolean;
   readonly plan: GroupPlan | undefined;
   readonly built: BuiltGroup | undefined;
   readonly edits: readonly VersionEdit[];
@@ -120,6 +127,25 @@ class PreparedBuilder {
     this.started = true;
   }
 
+  async recordArrival(
+    build: ArrivalPreparation,
+    appender: RecordAppender,
+  ): Promise<void> {
+    const edits: readonly VersionEdit[] = [{ kind: 'append', rows: [] }];
+    this.start(edits);
+    const plan = await planGroup(this.planning, edits);
+    const built = await build(this.ctx, appender);
+    this.result = {
+      plan,
+      built,
+      edits,
+      facts: await this.register(edits),
+      recording: true,
+      streamedAppend:
+        built.state.rootAggregate.rows > (this.ctx.published?.rows ?? 0),
+    };
+  }
+
   async build(actual: readonly VersionEdit[]): Promise<void> {
     this.start(actual);
     try {
@@ -194,8 +220,19 @@ class PreparedBuilder {
     );
     if (this.result.built === undefined) {
       this.started = false;
-      await this.build([edit]);
+      await this.build([{ kind: 'append', rows: [] }]);
+      const built = this.completedBuild();
+      this.result = {
+        ...this.result,
+        built: { ...built, state: { ...built.state, nextLabel } },
+      };
     }
+  }
+
+  private completedBuild(): BuiltGroup {
+    if (this.result.built === undefined)
+      throw new Error('Prepared group left no build');
+    return this.result.built;
   }
 
   private async stream(
@@ -293,6 +330,7 @@ export async function prepareBuild(
   appender: RecordAppender,
   rowAppender: RecordAppender,
   register: RegisterFacts,
+  recordingAppender: RecordAppender = appender,
 ): Promise<PreparedBuild> {
   const preparation = edits.find((edit) => edit.kind === 'prepared');
   if (
@@ -318,6 +356,7 @@ export async function prepareBuild(
     await preparation.prepare({
       appender: writes.appender,
       read: ctx.readGroup,
+      recordArrival: (build) => builder.recordArrival(build, recordingAppender),
       build: (actual) => builder.build(actual),
       append: (rows, ownerEdits) => builder.append(rows, ownerEdits),
       adopt: (rows, nextLabel) => builder.adopt(rows, nextLabel),

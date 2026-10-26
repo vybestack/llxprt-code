@@ -147,7 +147,7 @@ export abstract class HistoryServiceCore
    * @plan PLAN-20260917-ISSUE854.P05b3
    */
   protected readonly journal: HistoryStorePort;
-  private readonly captureTokenRow: () => TokenRowSource;
+  protected readonly captureTokenRow: () => TokenRowSource;
   readonly detachedValues: DetachedHistoryAPI;
 
   /**
@@ -191,7 +191,7 @@ export abstract class HistoryServiceCore
     },
   );
   protected pendingTokenizerFailure: { error: unknown } | undefined;
-  private syncGeneration: number = 0;
+  protected syncGeneration: number = 0;
   protected mediaOwner: HistoryMediaOwner | undefined;
   private ownershipSettlement: Promise<void> = Promise.resolve();
   private ownershipFailure: unknown;

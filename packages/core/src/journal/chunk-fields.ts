@@ -26,6 +26,10 @@ export const ARRIVAL_FIELDS = [
   'reasoningId',
   'redactedData',
   'encoding',
+  'sourceField',
+  'streamId',
+  'streamStatus',
+  'encryptedContent',
 ] satisfies readonly string[];
 export type ArrivalFieldName =
   | 'text'
@@ -40,7 +44,11 @@ export type ArrivalFieldName =
   | 'language'
   | 'reasoningId'
   | 'redactedData'
-  | 'encoding';
+  | 'encoding'
+  | 'sourceField'
+  | 'streamId'
+  | 'streamStatus'
+  | 'encryptedContent';
 export type ArrivalFieldMode = 'delta' | 'snapshot';
 const encoder = new TextEncoder();
 
