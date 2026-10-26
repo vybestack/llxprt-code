@@ -493,8 +493,8 @@ function responseBodyStreams(
 
 /**
  * The request skeleton of a disk text send: everything but the prompt keys
- * (`input`, `instructions`, `tools`), which the caller streams from scratch
- * files. The stateful decision is made by the caller while it reads the rows.
+ * (`input`, `instructions`, `tools`), which the caller converts lazily from
+ * its row selection. The caller selects the stateful parent from that view.
  */
 export type ResponsesRequestShell = Omit<
   PreparedResponsesRequestContext,

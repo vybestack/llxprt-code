@@ -833,12 +833,11 @@ export class AnthropicProvider extends BaseProvider {
   /**
    * Project the finalized Anthropic Messages envelope (issue #2817).
    *
-   * Runs the SAME spooled preparation the transport uses, so the estimate is
-   * derived from the exact body that will be sent: the rows are converted one
-   * at a time and the estimator form of `system`, `messages` and `tools` is
-   * written in the same pass. The projection and the later send share the one
-   * spool. Request preparation still resolves prompt-bearing inputs such as
-   * memory and tools, but no client is constructed and no credential is
+   * Uses the transport's native preparation, so the estimate and later send
+   * share a pinned row selection. Each reads the rows one at a time in its
+   * required form; neither retains a request-sized messages array. Preparation
+   * still resolves prompt inputs such as memory and tools, but no client is
+   * constructed and no credential is
    * exchanged. The OAuth flavor only selects tool-name prefixing and cache
    * formatting, so it is derived from the already-resolved token when one is
    * present.
@@ -884,7 +883,7 @@ export class AnthropicProvider extends BaseProvider {
       await registerAnthropicRequestCleanup(mediaRequest, spooled);
       const { estimate } = spooled;
       if (estimate === undefined) {
-        throw new Error('A projected request carries its estimator files');
+        throw new Error('A projected request carries its estimate projection');
       }
       const transportToken = Object.freeze({});
       const projection = projectAnthropicPromptEnvelopeFromSource(

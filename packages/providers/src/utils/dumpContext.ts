@@ -155,7 +155,7 @@ export function shouldDump(
 
 /**
  * Whether `dumpcontext` writes a request dump on success or on failure, so a
- * request that is spooled has to keep a dump form of its body.
+ * prepared request must retain a lazy diagnostic view of its body.
  */
 export function wantsRequestDump(mode: unknown): boolean {
   return (

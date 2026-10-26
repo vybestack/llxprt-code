@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { providerRowsOf } from '../utils/providerRows.js';
 import type OpenAI from 'openai';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
@@ -21,7 +22,6 @@ import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { type DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { convertToolsToOpenAI, type OpenAITool } from './schemaConverter.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
-import type { ChatBodyOptions } from './OpenAIChatBodyBuilder.js';
 import type { ChatContinuation } from './OpenAIChatContinuation.js';
 import { extractModelParamsFromOptions } from './OpenAIClientFactory.js';
 import { sanitizePromptCacheKey } from '../openai-responses/sanitizePromptCacheKey.js';
@@ -76,7 +76,9 @@ export interface RequestContext {
  * uploaded blocks with their references.
  */
 export interface ChatRowInput {
-  readonly mediaStage?: ChatBodyOptions['mediaStage'];
+  readonly mediaStage?: (
+    rows: AsyncIterable<IContent>,
+  ) => AsyncIterable<IContent>;
   /** Media blocks the Kimi pre-pass replaced with provider file references. */
   readonly uploadedMedia?: number;
 }
