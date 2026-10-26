@@ -113,10 +113,9 @@ import {
 import type { EditorCallbacks } from './config-types.js';
 import { createAgentAuthState } from './control/authState.js';
 import type { AgentAuthState, AuthWinner } from './control/authState.js';
-import { computeAuthWinner } from './control/authState.js';
+import { computeAuthWinner, seedAgentAuthState } from './control/authState.js';
 import type { AgentSchedulerHandle } from './config-types.js';
 import { toRuntimeSwitchOptions } from './providerSwitchOptionsAdapter.js';
-import type { RebuildLoopDeps } from './loop/rebuildLoop.js';
 import {
   applyModelWithPublication,
   type ModelTransitionSteps,
@@ -324,7 +323,8 @@ export class AgentImpl implements Agent {
       baseUrl: rs.baseUrl,
     };
     // @plan:PLAN-20260617-COREAPI.P18 @requirement:REQ-008
-    this.seedAuthState(rs.provider);
+    const { authState, providerState } = this;
+    seedAgentAuthState(authState, providerState, deps.initialAuth, rs.provider);
     // Shared mutable holders threaded from finalizeAgent.
     this.editorCallbacksHolder = deps.editorCallbacksHolder;
     this.tools = assembleAgentTools(deps, this.coordinator);
@@ -379,7 +379,21 @@ export class AgentImpl implements Agent {
     signal: AbortSignal,
   ) =>
     assembleProfileReplacement(
-      this.loopDeps(),
+      {
+        telemetry: this.deps.settingsOwner.telemetry,
+        loopHolder: this.deps.loopHolder,
+        toolSelection: this.deps.sessionClient.toolCatalog.selection,
+        readApprovalMode: () => this.getApprovalMode(),
+        readExecutionPolicy: () =>
+          this.deps.settingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          this.deps.sessionClient.toolCatalog.readGovernance(),
+        config: this.deps.config,
+        messageBus: this.deps.messageBus,
+        resolveClient: this.deps.resolveClient,
+        approvalHandler: this.deps.approvalHandler,
+        displayCallbacks: this.deps.displayCallbacks,
+      },
       () => this.deps.sessionClient.prepareProfileClientReplacement(),
       () => this.activeRun,
     )(changed, signal);
@@ -456,31 +470,6 @@ export class AgentImpl implements Agent {
       () => this.deps.config.getTargetDir(),
       () => currentRecordingPath(this.session),
     );
-  }
-
-  /**
-   * Seeds the per-agent auth state from the threaded initial auth config.
-   * inlineKeyPresent from auth.apiKey, keyFile from auth.apiKeyFile, baseUrl
-   * from auth.baseUrl, oauthEnabled add(provider) if auth.oauth, keyName seed
-   * onto providerState.keyName from auth.keyName. The secret value is NEVER
-   * stored on authState or providerState.
-   * @plan:PLAN-20260617-COREAPI.P18
-   * @requirement:REQ-008
-   */
-  private seedAuthState(provider: string): void {
-    const initialAuth = this.deps.initialAuth;
-    if (initialAuth === undefined) {
-      return;
-    }
-    this.authState.inlineKeyPresent = initialAuth.apiKey !== undefined;
-    this.authState.keyFile = initialAuth.apiKeyFile;
-    this.authState.baseUrl = initialAuth.baseUrl;
-    if (initialAuth.oauth === true) {
-      this.authState.oauthEnabled.add(provider);
-    }
-    if (initialAuth.keyName !== undefined) {
-      this.providerState.keyName = initialAuth.keyName;
-    }
   }
 
   /**
@@ -1147,9 +1136,12 @@ export class AgentImpl implements Agent {
     // Under the fake seam (providerChanged === false), the client is unchanged;
     // history/HistoryService identity is trivially preserved (same client).
     this.providerState.provider = provider;
-    if (model !== undefined) {
-      this.providerState.model = model;
-    }
+    // A real switch without an explicit model leaves the target provider's
+    // default in force; the applied model must describe what the runtime uses.
+    const inForce = providerChanged
+      ? this.deps.settingsOwner.readSelectedModel()
+      : undefined;
+    this.providerState.model = model ?? inForce ?? this.providerState.model;
     this.rebuild();
     return {
       changed: providerChanged,
@@ -1201,11 +1193,7 @@ export class AgentImpl implements Agent {
    * @pseudocode switch-rebind.md steps 10-26 (rebuildLoop call)
    */
   private rebuild(): void {
-    this.deps.rebuildLoop(this.loopDeps());
-  }
-
-  private loopDeps(): RebuildLoopDeps {
-    return {
+    this.deps.rebuildLoop({
       telemetry: this.deps.settingsOwner.telemetry,
       loopHolder: this.deps.loopHolder,
       toolSelection: this.deps.sessionClient.toolCatalog.selection,
@@ -1219,7 +1207,7 @@ export class AgentImpl implements Agent {
       messageBus: this.deps.messageBus,
       approvalHandler: this.deps.approvalHandler,
       displayCallbacks: this.deps.displayCallbacks,
-    };
+    });
   }
 
   /**

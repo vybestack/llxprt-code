@@ -323,6 +323,33 @@ describe('Agent.setModel model publication (#3954)', () => {
     });
   });
 
+  describe('after a provider switch without an explicit model', () => {
+    it('publishes a change back to the previous provider model, which is no longer the model in force', async () => {
+      await agent.setProvider('openai');
+      const switchedModel = agent.getModel();
+      expect(switchedModel).not.toBe('fake-model');
+      const publishedBySwitch = changes.models.length;
+
+      await agent.setModel('fake-model');
+
+      expect(changes.models.slice(publishedBySwitch)).toStrictEqual([
+        'fake-model',
+      ]);
+      expect(changes.models[changes.models.length - 1]).toBe(agent.getModel());
+    });
+
+    it('publishes nothing when the model is set to the default model the switch applied', async () => {
+      await agent.setProvider('openai');
+      const switchedModel = agent.getModel();
+      const publishedBySwitch = changes.models.length;
+
+      await agent.setModel(switchedModel);
+
+      expect(changes.models.slice(publishedBySwitch)).toStrictEqual([]);
+      expect(agent.getModel()).toBe(switchedModel);
+    });
+  });
+
   it('keeps a completed model change successful when a ModelChanged listener throws', async () => {
     const listenerFailure = new Error('listener exploded');
     const throwing = (): void => {
