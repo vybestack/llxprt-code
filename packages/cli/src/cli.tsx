@@ -4,11 +4,12 @@ import {
 } from './config/profileBootstrap.js';
 import { resolveProxy } from './config/configBuilder.js';
 import type {
+  AgentActivationOperation,
   AgentForegroundHost,
+  AgentProfileApplication,
   AgentProfilePreflight,
   Agent,
-} from '@vybestack/llxprt-code-agents';
-/**
+} from '@vybestack/llxprt-code-agents'; /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
@@ -25,7 +26,9 @@ import {
   patchStdio,
   ExitCodes,
   type LlxprtExtension,
+  type ProfileDefinitionReads,
   type WorkspaceSkillOperations,
+  type WorkspaceTrustControlPort,
   type Config,
   type IContent,
 } from '@vybestack/llxprt-code-core';
@@ -667,10 +670,20 @@ async function handleSandboxHop(
   });
 }
 
+/**
+ * The preflight reads the foreground activation step makes: the unconfigured
+ * gate's active-provider probe and the declarative activation itself.
+ */
+interface ForegroundActivationReads {
+  hasActiveProvider(): boolean;
+  getActiveProviderName(): string | undefined;
+  preflight: AgentActivationOperation['preflight'];
+}
+
 async function activateForegroundProvider(
   config: Config,
   argv: ParsedCliArgs,
-  preflight: AgentProfilePreflight,
+  preflight: ForegroundActivationReads,
 ): Promise<ConfiguredProviderActivationResult> {
   await stopIfUnconfigured(config, preflight.hasActiveProvider.bind(preflight));
   return activateConfiguredProvider(config, preflight, argv, preflight);
@@ -681,7 +694,7 @@ async function prepareConfiguredTerminalSession(
   settings: LoadedSettings,
   argv: ParsedCliArgs,
   readProfile: () => string | null,
-  loadProfile: AgentProfilePreflight['load'],
+  loadProfile: AgentProfileApplication['load'],
 ): Promise<void> {
   await exitAfterSessionListOrDelete(argv, config, () => config.dispose());
   await rejectPromptInteractiveWithPipedStdin(argv);
@@ -791,7 +804,7 @@ export async function main() {
 function cleanupForegroundSessions(
   config: Config,
   settings: LoadedSettings,
-  preflight: AgentProfilePreflight,
+  preflight: Pick<AgentProfilePreflight, 'captureHistory'>,
 ): ReturnType<typeof cleanupExpiredSessions> {
   return cleanupExpiredSessions(config, settings.merged, undefined, () =>
     preflight.captureHistory(),
@@ -820,10 +833,27 @@ async function prepareValidatedStartup(
   return startup;
 }
 
+/**
+ * The preflight reads the Zed/ACP integration makes: profile application for
+ * the ACP sessions, the trust control it hands the connection owner, the
+ * profile catalog it lists, the settings snapshot each session starts from, and
+ * the activation probe.
+ */
+interface ZedIntegrationReads
+  extends AgentProfileApplication,
+    WorkspaceTrustControlPort {
+  hasActiveProvider(): boolean;
+  setActiveProvider(provider: string): void | Promise<void>;
+  listProfiles(): ReturnType<ProfileDefinitionReads['listProfiles']>;
+  captureSettingsSnapshot(): ReturnType<
+    SettingsService['exportForStateSnapshot']
+  >;
+}
+
 async function handleActivatedZedIntegration(
   config: Config,
   cleanupStdio: () => void,
-  preflight: AgentProfilePreflight,
+  preflight: ZedIntegrationReads,
   providerContributions: ProviderContributionRegistry,
   credentialAuthority: CredentialAuthority,
 ): Promise<boolean> {
