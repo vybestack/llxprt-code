@@ -139,7 +139,7 @@ export function createCommandRegistrationFixture(
           memory: null,
           bug: null,
           directory: null,
-          getTargetDir: unavailableOwner,
+          getTargetDir: () => '',
         },
         null,
         unavailableOwner,
