@@ -30,6 +30,7 @@ export function sourcePendingMembership(
       async *openReader(
         signal?: AbortSignal,
       ): AsyncGenerator<IContent, void, unknown> {
+        if (count === 0) return;
         let index = 0;
         for await (const row of snapshot.openReader(signal)) {
           if (snapshot.isPending(index++)) yield row;

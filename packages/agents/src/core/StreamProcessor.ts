@@ -52,6 +52,7 @@ import {
 } from './streamRequestHelpers.js';
 import { buildAndSendStreamRequest } from './streamprocessor-request.js';
 import { trackPromptTokens } from './streamResponseHelpers.js';
+import { submitUserPrompt } from './prompt-submission.js';
 import {
   afterModelModifiedToChunk,
   afterModelBlockingToModelOutput,
@@ -133,6 +134,20 @@ export class StreamProcessor {
     }
   }
 
+  async submitUserPrompt(
+    userInput: IContent | IContent[],
+    promptId: string,
+    origin?: object,
+  ): Promise<void> {
+    await submitUserPrompt(
+      this.runtimeContext,
+      userInput,
+      promptId,
+      this.eagerlyRecordedToolResponseCallIds,
+      origin,
+    );
+  }
+
   releasePromptTurnIdentity(promptId: string): void {
     this.turnIdByPromptId.delete(promptId);
   }
@@ -200,6 +215,11 @@ export class StreamProcessor {
       );
     }
 
+    await this.submitUserPrompt(
+      stampedUserContent,
+      promptId,
+      params.recordingExecution?.historyOrigin,
+    );
     const streamResponse = await this._executeStreamApiCall(
       params,
       promptId,
@@ -210,7 +230,7 @@ export class StreamProcessor {
 
     return this._createCancellableStream(
       streamResponse,
-      historyUserContent,
+      stampTurnIdentityOnInput(historyUserContent, { promptId, turnId }),
       prepared,
       semanticMediaPurge,
       turnId,

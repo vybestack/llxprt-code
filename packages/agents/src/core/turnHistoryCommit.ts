@@ -118,9 +118,13 @@ export async function commitTurnHistory(
       options.response,
       options.preparedUserTurn.turnId,
     );
+    const submitted = await options.historyService.hasPromptSubmission(
+      options.promptId,
+    );
+    const userEntries = submitted ? [] : options.preparedUserTurn.userContents;
     const inputEntries =
       admitted.afcHistory === undefined
-        ? options.preparedUserTurn.userContents
+        ? userEntries
         : await afcHistoryEntries(
             options.historyService,
             admitted.afcHistory,

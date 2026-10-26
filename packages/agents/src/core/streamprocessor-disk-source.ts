@@ -100,6 +100,18 @@ function sourceFallbackEstimate(input: StreamDiskSourceInput) {
     );
 }
 
+async function submitSourcePrompt(
+  input: StreamDiskSourceInput,
+  rows: IContent[],
+): Promise<void> {
+  await input.history.submitPrompt(
+    input.promptId,
+    rows,
+    input.runtime.state.model,
+    input.recordingExecution?.historyOrigin,
+  );
+}
+
 /** The product send. No request-wide content graph is fabricated or retained. */
 export async function streamDiskSource(
   input: StreamDiskSourceInput,
@@ -111,9 +123,11 @@ export async function streamDiskSource(
     input.userContent,
     input.history,
   );
+  await submitSourcePrompt(input, preparedPending);
+  const requestPending: IContent[] = [];
   const snapshot = await input.history
     .prepareCuratedForProviderSnapshot(
-      preparedPending,
+      requestPending,
       { signal: input.signal },
       input.historyOverride,
     )
@@ -129,11 +143,7 @@ export async function streamDiskSource(
     log: input.log,
     signal: input.signal,
   });
-  const pending = recomposablePendingRows(
-    source,
-    preparedPending,
-    input.signal,
-  );
+  const pending = recomposablePendingRows(source, [], input.signal);
   const reopen = async (): Promise<PendingAwareRequestSelection> => {
     const rebuilt = await input.history.prepareCuratedForProviderSnapshot(
       await pending.read(),

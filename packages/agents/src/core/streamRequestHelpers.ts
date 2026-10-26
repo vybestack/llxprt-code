@@ -142,7 +142,8 @@ export function preparePendingContents(
     ? userContents
     : [userContents];
   return inputArray.map((content) => {
-    const turnKey = historyService.generateTurnKey();
+    const turnKey =
+      content.metadata?.turnId ?? historyService.generateTurnKey();
     const idGen = historyService.getIdGeneratorCallback(turnKey);
     return {
       ...content,

@@ -308,6 +308,12 @@ export class ConversationManager {
     } else {
       const contents = Array.isArray(userInput) ? userInput : [userInput];
       for (const content of contents) {
+        const promptId = content.metadata?.promptId;
+        if (
+          promptId !== undefined &&
+          (await this.historyService.hasPromptSubmission(promptId))
+        )
+          continue;
         const turnKey = this.historyService.generateTurnKey();
         newHistoryEntries.push(this.stampHistoryIds(content, turnKey));
       }

@@ -693,19 +693,20 @@ async function facadeCallback9(): Promise<void> {
     generateChatCompletion: vi.fn(),
   };
 
+  const history = new HistoryService();
   const processor = Object.create(StreamProcessor.prototype) as StreamProcessor;
   Object.assign(processor, {
     runtimeContext: {
       ...createSessionPolicyFixture(),
+      history,
       state: {
         model: 'test-model',
         baseUrl: 'https://test.example.com',
       },
     },
+    eagerlyRecordedToolResponseCallIds: new Set<string>(),
     compressionHandler: {},
-    historyService: {
-      generateTurnKey: () => 'turn-test',
-    },
+    historyService: history,
     providerResolver: vi.fn(() => provider),
     _executeStreamApiCall: executeStreamApiCall,
     processStreamResponse,

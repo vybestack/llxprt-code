@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { TurnAdmission } from './turn-admission.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { withRetryRequestState } from './retry-request-state.js';
 import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
@@ -156,11 +157,34 @@ export class TurnProcessor {
     ) => string | undefined,
   ) {}
 
+  private readonly turnAdmission = new TurnAdmission();
+
+  async sendMessage(
+    params: SendMessageParams,
+    promptId: string,
+    factory?: SemanticMediaPurgeFactory,
+  ): Promise<ModelOutput> {
+    return this.turnAdmission.run(() =>
+      this.sendAdmittedMessage(params, promptId, factory),
+    );
+  }
+
+  async sendMessageStream(
+    params: SendMessageParams,
+    promptId: string,
+    factory?: SemanticMediaPurgeFactory,
+  ): Promise<AsyncGenerator<StreamEvent>> {
+    return this.turnAdmission.stream(
+      () => this.sendAdmittedMessageStream(params, promptId, factory),
+      () => this.sendPromise,
+    );
+  }
+
   /**
    * Sends a non-streaming message to the provider.
    * Waits for previous send, prepares message, calls provider, commits result to history.
    */
-  async sendMessage(
+  private async sendAdmittedMessage(
     params: SendMessageParams,
     prompt_id: string,
     semanticMediaPurgeFactory?: SemanticMediaPurgeFactory,
@@ -187,6 +211,11 @@ export class TurnProcessor {
 
     let semanticMediaPurge: SemanticMediaPurgeAttempt | undefined;
     try {
+      await this.streamProcessor.submitUserPrompt(
+        prepared.userIContents,
+        prompt_id,
+        params.recordingExecution?.historyOrigin,
+      );
       semanticMediaPurge = await semanticMediaPurgeFactory?.();
       const provider = this.providerResolver('sendMessage');
       const response = await this._executeSendWithRetry(
@@ -224,7 +253,7 @@ export class TurnProcessor {
    * Sends a streaming message to the provider.
    * Waits for previous send, prepares message, delegates to StreamProcessor.
    */
-  async sendMessageStream(
+  private async sendAdmittedMessageStream(
     params: SendMessageParams,
     prompt_id: string,
     semanticMediaPurgeFactory?: SemanticMediaPurgeFactory,
@@ -242,6 +271,11 @@ export class TurnProcessor {
 
     let semanticMediaPurge: SemanticMediaPurgeAttempt | undefined;
     try {
+      await this.streamProcessor.submitUserPrompt(
+        prepared.userIContents,
+        prompt_id,
+        params.recordingExecution?.historyOrigin,
+      );
       semanticMediaPurge = await semanticMediaPurgeFactory?.();
     } catch (error: unknown) {
       return throwAfterFailedTurnCleanup(error, prepared, undefined);

@@ -447,8 +447,9 @@ async function testMediaHistory13(): Promise<void> {
     providerName: 'purge-before-turn-failure',
   });
   await fixture.chat.setHistory(mediaHistory());
+  let publications = 0;
   fixture.chat.getHistoryService().on('contentBatchAdded', () => {
-    throw new Error('turn history commit failed');
+    if (++publications === 2) throw new Error('turn history commit failed');
   });
 
   await expect(
@@ -457,7 +458,7 @@ async function testMediaHistory13(): Promise<void> {
 
   expect(
     mediaHistoryShape(await collectHistoryFixture(fixture.chat.getHistory())),
-  ).toStrictEqual(['reference', 'url']);
+  ).toStrictEqual(['reference', 'url', 'text']);
   await fixture.recording.dispose();
 }
 
@@ -467,8 +468,10 @@ async function testMediaHistory14(): Promise<void> {
     providerName: 'stream-purge-before-turn-failure',
   });
   await fixture.chat.setHistory(mediaHistory());
+  let publications = 0;
   fixture.chat.getHistoryService().on('contentBatchAdded', () => {
-    throw new Error('stream turn history commit failed');
+    if (++publications === 2)
+      throw new Error('stream turn history commit failed');
   });
 
   const stream = await streamOwned(
@@ -487,7 +490,7 @@ async function testMediaHistory14(): Promise<void> {
 
   expect(
     mediaHistoryShape(await collectHistoryFixture(fixture.chat.getHistory())),
-  ).toStrictEqual(['reference', 'url']);
+  ).toStrictEqual(['reference', 'url', 'text']);
   await fixture.recording.dispose();
 }
 
@@ -509,7 +512,7 @@ async function testMediaHistory15(): Promise<void> {
 
   expect(
     mediaHistoryShape(await collectHistoryFixture(fixture.chat.getHistory())),
-  ).toStrictEqual(['reference', 'url']);
+  ).toStrictEqual(['reference', 'url', 'text']);
   await fixture.recording.dispose();
 }
 
@@ -686,7 +689,7 @@ async function testMediaHistory19(): Promise<void> {
 
   expect(
     mediaHistoryShape(await collectHistoryFixture(fixture.chat.getHistory())),
-  ).toStrictEqual(['reference', 'url']);
+  ).toStrictEqual(['reference', 'url', 'text']);
   expect(fixture.requests).toHaveLength(1);
   await fixture.recording.dispose();
 }
