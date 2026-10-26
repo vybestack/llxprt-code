@@ -101,21 +101,32 @@ export class RecordingPrimary {
     edits: readonly VersionEdit[],
   ): Promise<readonly VersionEdit[]> {
     const state = this.host.state();
+    let prepared = edits;
     if (this.selected !== undefined && state.adopted !== this.selected.recorder)
       this.selected = undefined;
     if (this.selected === undefined && state.adopted !== undefined) {
       const origin = state.mirrors.primaryOriginId();
-      if (origin === undefined) return edits;
-      const { id: owner } = await state.owners.resolve(origin);
-      this.selected = { recorder: state.adopted, origin, owner };
+      if (origin === undefined) return prepared;
+      const registration = await state.owners.resolve(origin);
+      prepared = [...registration.edits, ...prepared];
+      this.selected = {
+        recorder: state.adopted,
+        origin,
+        owner: registration.id,
+      };
     }
     const selected = this.selected;
     if (selected !== undefined) {
       const streams = await state.owners.hasOnly(selected.origin);
       if (
-        recordingAcceptsEdits(edits, selected.owner, selected.origin, streams)
+        recordingAcceptsEdits(
+          prepared,
+          selected.owner,
+          selected.origin,
+          streams,
+        )
       )
-        return checkedRecordingEdits(edits, selected.owner);
+        return checkedRecordingEdits(prepared, selected.owner);
       await releaseAdoptedPrimary(this.host, {
         recorder: selected.recorder,
         session: state.session,
@@ -129,17 +140,19 @@ export class RecordingPrimary {
       pending === undefined ||
       !state.mirrors.isOnlyRecorder(pending.recorder)
     )
-      return edits;
-    const { id: owner } = await state.owners.resolve(pending.origin);
+      return prepared;
+    const registration = await state.owners.resolve(pending.origin);
+    const owner = registration.id;
+    prepared = [...registration.edits, ...prepared];
     if (
-      !edits.some((edit) => edit.kind === 'append') ||
-      !recordingAcceptsEdits(edits, owner, pending.origin, false)
+      !prepared.some((edit) => edit.kind === 'append') ||
+      !recordingAcceptsEdits(prepared, owner, pending.origin, false)
     )
-      return edits;
+      return prepared;
     await state.mirrors.materializeRecorders();
     const adoption = await adoptAttachedRecorder(this.host, pending.recorder);
     this.selected = { ...pending, owner };
     await adoption.commit();
-    return edits;
+    return prepared;
   }
 }

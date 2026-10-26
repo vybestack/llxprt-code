@@ -17,6 +17,13 @@ describe('native tool crash front-door resume', () => {
     try {
       const ready = await rig.wait('ready');
       const files = z.array(z.string()).length(1).parse(ready.details.files);
+      const initial = await diskToolState(files[0]);
+      expect(initial.rows).toHaveLength(2);
+      const owner = z.string().parse(ready.details.owner);
+      expect(initial.rows.map((row) => row.owner)).toStrictEqual([
+        owner,
+        owner,
+      ]);
       rig.send('next');
       const entry = await rig.wait('transport-entry');
       await rig.wait('transport-request');
