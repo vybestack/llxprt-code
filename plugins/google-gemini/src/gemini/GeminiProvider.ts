@@ -52,10 +52,9 @@ import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOu
 import {
   finishMediaRequest,
   type MediaRequestOutcome,
-  resolveRequestMedia,
   captureRequestMediaInput,
 } from '@vybestack/llxprt-code-providers/utils/request-media-resolution.js';
-import { readsRequestRowsAtTransport } from '@vybestack/llxprt-code-providers/BaseProviderNormalization.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { reportRequestSize } from '@vybestack/llxprt-code-providers/logging/requestSizeReport.js';
 import { acquireRequestScopedBody } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { openTransportRowsMedia, transportContents } from './transportRows.js';
@@ -358,24 +357,21 @@ export class GeminiProvider extends BaseProvider {
     // silently transported as an empty prompt.
     requireAssembledSystemInstruction(options.systemInstruction);
 
-    const sourceRoute = readsRequestRowsAtTransport(options);
+    const requestRows = options.requestRows ?? {
+      ...inMemoryRequestSelection(options.contents),
+      callerOwned: true,
+    };
+    const effectiveOptions = { ...options, contents: [], requestRows };
     const mediaInput = captureRequestMediaInput(
       options.metadata?.['logicalRequestId'],
       options.invocation.runtimeId,
       this.requestMediaBudgetBytes,
       this.requestMediaResolver,
     );
-    const mediaRequest = sourceRoute
-      ? await openTransportRowsMedia(options, mediaInput)
-      : await resolveRequestMedia(
-          mediaInput,
-          options.contents,
-          options.invocation.signal,
-        );
-    const effectiveOptions = {
-      ...options,
-      contents: mediaRequest.withContents((contents) => contents),
-    };
+    const mediaRequest = await openTransportRowsMedia(
+      effectiveOptions,
+      mediaInput,
+    );
     let outcome: MediaRequestOutcome = { status: 'succeeded' };
     try {
       const streamingEnabled = this.getStreamingPreference(effectiveOptions);
@@ -386,9 +382,8 @@ export class GeminiProvider extends BaseProvider {
         () => this.getBaseURL(),
         this.getLogger(),
       );
-      if (sourceRoute)
-        setup.requestContents = () =>
-          transportContents(effectiveOptions, mediaInput, mediaRequest);
+      setup.requestContents = () =>
+        transportContents(effectiveOptions, mediaInput, mediaRequest);
       // The SDK `Content[]` is the one body this request needs; it is
       // released once the call settles on any outcome (issue #854 WP09).
       const sdkBody = acquireRequestScopedBody('gemini', {

@@ -5,6 +5,37 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { GeminiProvider } from './GeminiProvider.js';
 import { createProviderCallOptions } from '../test/testSupport.js';
 
+import { createGeminiApiClient } from './geminiApiClientFactory.js';
+
+it('streams direct-client caller-owned contents through the same body builder', async () => {
+  let body = '';
+  globalThis.fetch = Object.assign(
+    async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      if (!(init?.body instanceof ReadableStream))
+        throw new Error('Expected streamed direct-client body');
+      body = await new Response(init.body).text();
+      return Response.json({
+        candidates: [
+          {
+            content: { role: 'model', parts: [{ text: 'ok' }] },
+            finishReason: 'STOP',
+          },
+        ],
+      });
+    },
+    { preconnect() {} },
+  );
+  const client = await createGeminiApiClient({ apiKey: 'test' });
+  const response = await client.models.generateContent({
+    model: 'gemini-3.7-flash',
+    contents: [{ role: 'user', parts: [{ text: 'direct caller' }] }],
+  });
+  expect(body).toContain('direct caller');
+  expect(response.candidates?.[0]?.content?.parts?.[0]?.text).toBe('ok');
+});
 const originalFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = originalFetch;

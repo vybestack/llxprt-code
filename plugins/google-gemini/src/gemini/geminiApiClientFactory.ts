@@ -13,6 +13,7 @@ import { createPatternPreservingFetch } from './gemini-pattern-fetch.js';
 import { createStreamedGeminiFetch } from './streamed-request.js';
 import {
   toCallOptions,
+  normaliseContents,
   toFinishReason,
   toGenerateContentResponse,
   toParts,
@@ -72,19 +73,18 @@ export async function createGeminiApiClient(
         : {}),
       fetch: createPatternPreservingFetch(
         tools,
-        options.requestContents === undefined
-          ? options.onRequestBytes
-          : undefined,
-        options.requestContents === undefined
-          ? globalThis.fetch
-          : createStreamedGeminiFetch(
-              options.requestContents,
-              params.model,
-              typeof params['systemInstruction'] === 'string'
-                ? params['systemInstruction']
-                : undefined,
-              options.onRequestBytes,
-            ),
+        undefined,
+        createStreamedGeminiFetch(
+          options.requestContents ??
+            async function* () {
+              yield* normaliseContents(params.contents);
+            },
+          params.model,
+          typeof params['systemInstruction'] === 'string'
+            ? params['systemInstruction']
+            : undefined,
+          options.onRequestBytes,
+        ),
       ),
     }).languageModel(params.model);
 
@@ -93,7 +93,7 @@ export async function createGeminiApiClient(
       async generateContent(
         params: GenerateContentParameters,
       ): Promise<GenerateContentResponse> {
-        const callOptions = toCallOptions(params);
+        const callOptions = toCallOptions({ ...params, contents: [] });
         const model = modelFor(params, callOptions.tools);
         const result = await model.doGenerate(callOptions);
         return toGenerateContentResponse({
@@ -110,7 +110,7 @@ export async function createGeminiApiClient(
       async generateContentStream(
         params: GenerateContentParameters,
       ): Promise<AsyncIterable<GenerateContentResponse>> {
-        const callOptions = toCallOptions(params);
+        const callOptions = toCallOptions({ ...params, contents: [] });
         const model = modelFor(params, callOptions.tools);
         const { stream } = await model.doStream(callOptions);
         return streamToGeminiChunks(stream);
