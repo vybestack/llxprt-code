@@ -35,8 +35,8 @@ describe('journal file header', () => {
     expect(Array.from(JOURNAL_MAGIC)).toStrictEqual(
       Array.from(bytes.subarray(0, 8)),
     );
-    expect(view.getUint32(8, true)).toBe(12);
-    expect(JOURNAL_FORMAT_VERSION).toBe(12);
+    expect(view.getUint32(8, true)).toBe(13);
+    expect(JOURNAL_FORMAT_VERSION).toBe(13);
     expect(view.getUint32(12, true)).toBe(0);
     expect(Array.from(bytes.subarray(16, 32))).toStrictEqual(
       Array.from(header.fileId),
