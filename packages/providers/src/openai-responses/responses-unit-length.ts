@@ -9,6 +9,7 @@ import {
   buildOpenAIResponsesUnit,
   type ResponsesToolPairs,
 } from './OpenAIResponsesInputBuilder.js';
+import { jsonValueByteLength } from '../utils/progressive-json-body.js';
 import {
   inlineBase64ByteLength,
   classifyMediaBlock,
@@ -82,9 +83,9 @@ export function responsesUnitLength(
   for (const item of items) {
     if ('type' in item && item.type === 'reasoning' && item.id === '') {
       const { id: _id, ...withoutId } = item;
-      bytes += Buffer.byteLength(JSON.stringify(withoutId));
+      bytes += jsonValueByteLength(withoutId);
       generatedIds++;
-    } else bytes += Buffer.byteLength(JSON.stringify(item));
+    } else bytes += jsonValueByteLength(item);
     pdfBytes += emittedPdfBytes(item);
   }
   const emittedMedia = items.some(

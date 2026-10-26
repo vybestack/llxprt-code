@@ -71,7 +71,9 @@ async function measure(
       const unit = { ...plan.header, blocks };
       const pairs = await responsesUnitPairs(unit, query);
       const kept = responsesUnitLength(unit, settings, true, pairs);
-      const removed = responsesUnitLength(unit, settings, false, pairs);
+      const removed = unit.blocks.some((block) => block.type === 'thinking')
+        ? responsesUnitLength(unit, settings, false, pairs)
+        : kept;
       units.push([kept, removed]);
       pdfBytes += kept.pdfBytes;
       summary = composeSlotSummaries(summary, {
