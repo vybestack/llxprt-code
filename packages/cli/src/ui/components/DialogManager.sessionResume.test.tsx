@@ -95,8 +95,7 @@ describe('session browser resume with an unreadable recording present (issue #37
     const turnStore = createTurnStore();
     const { commands } = turnStore;
     const config = {
-      getEphemeralSetting: () => 'auto',
-      getProjectTempDir: () => root,
+      projectTempDir: root,
       getProjectRoot: () => projectRoot,
       getSessionId: () => 'current-session',
       getProvider: () => 'test-provider',

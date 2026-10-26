@@ -7,19 +7,21 @@
 import {
   checkCommandPermissions,
   ShellExecutionService,
+  type ApprovalMode,
+  type ShellExecutionConfig,
   type ShellPermissionConfig,
 } from '@vybestack/llxprt-code-core';
-import type { CliUiRuntime } from '../../ui/cliUiRuntime.js';
 import type { ShellPromptOperations } from './shellProcessor.js';
 
-type ShellPromptOwner = ShellPermissionConfig &
-  Pick<
-    CliUiRuntime,
-    | 'getApprovalMode'
-    | 'getShellExecutionConfig'
-    | 'getTargetDir'
-    | 'getShouldUseNodePtyShell'
-  >;
+/**
+ * The shell execution state that permission checks and command execution read.
+ */
+export interface ShellPromptOwner extends ShellPermissionConfig {
+  getApprovalMode(): ApprovalMode;
+  getShellExecutionConfig(): ShellExecutionConfig;
+  getTargetDir(): string;
+  getShouldUseNodePtyShell(): boolean;
+}
 
 export function bindShellPromptOperations(
   owner: ShellPromptOwner | null,

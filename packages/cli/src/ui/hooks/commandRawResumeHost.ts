@@ -6,7 +6,6 @@
 import { join } from 'node:path';
 import { getProjectHash } from '@vybestack/llxprt-code-core';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { CliSessionPersistencePort } from '../../cliSessionPersistence.js';
 import type { PerformResumeActionReturn } from '../commands/types.js';
 import type {
@@ -16,17 +15,19 @@ import type {
   ResumeContext,
 } from '../../services/performResume.js';
 
-type ResumeSessionReads = Pick<
-  CliUiRuntime,
-  | 'projectTempDir'
-  | 'getProjectRoot'
-  | 'getSessionId'
-  | 'getProvider'
-  | 'getModel'
-  | 'directories'
-  | 'getSessionRecordingQueueByteLimit'
-  | 'adoptSessionId'
->;
+/**
+ * Session identity and workspace reads needed to build a raw-resume context.
+ */
+export interface ResumeSessionReads {
+  readonly projectTempDir: string;
+  getProjectRoot(): string;
+  getSessionId(): string;
+  getProvider(): string | undefined;
+  getModel(): string;
+  directories(): readonly string[];
+  getSessionRecordingQueueByteLimit(): number;
+  adoptSessionId(sessionId: string): void;
+}
 
 export function bindCommandRawResume(
   config: ResumeSessionReads | null,

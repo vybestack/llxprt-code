@@ -9,7 +9,8 @@ import {
   type ContinueTarget,
 } from '@vybestack/llxprt-code-core';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { CliSessionPersistencePort } from '../../cliSessionPersistence.js';
+import type { ResumeSessionReads } from '../hooks/commandRawResumeHost.js';
 import type { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
 import { iContentToHistoryItems } from '../utils/iContentToHistoryItems.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
@@ -78,17 +79,9 @@ export function bindRawBrowserResume(
   };
 }
 
-type BrowserSessionReads = Pick<
-  CliUiRuntime,
-  | 'getProjectTempDir'
-  | 'getProjectRoot'
-  | 'getSessionId'
-  | 'getProvider'
-  | 'getModel'
-  | 'directories'
-  | 'adoptSessionId'
-  | 'sessionPersistence'
->;
+type BrowserSessionReads = ResumeSessionReads & {
+  readonly sessionPersistence?: CliSessionPersistencePort;
+};
 
 export function bindRawBrowserSession(
   config: BrowserSessionReads,
@@ -109,7 +102,7 @@ export function bindRawBrowserSession(
             : target.checkpointId,
       },
       {
-        chatsDir: join(config.getProjectTempDir(), 'chats'),
+        chatsDir: join(config.projectTempDir, 'chats'),
         projectHash: getProjectHash(config.getProjectRoot()),
         currentSessionId: config.getSessionId(),
         currentProvider: config.getProvider() ?? 'unknown',
