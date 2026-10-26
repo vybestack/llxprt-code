@@ -90,8 +90,9 @@ export class JournalArrivalRecorder {
     value: string,
     mode: ArrivalFieldMode = 'delta',
   ): Promise<void> {
-    await this.flush();
-    const field = await this.mutate((group) => group.namedField(block, name));
+    this.check();
+    if (mode === 'snapshot') await this.flush();
+    const field = await this.store.readRecordingField(block, name);
     try {
       if (
         field !== undefined &&
@@ -106,16 +107,20 @@ export class JournalArrivalRecorder {
         start,
         name === 'parameters',
       )) {
-        await this.mutate((group) => group.appendNamed(block, name, bytes));
-        this.payloadBytes += bytes.length;
+        await this.enqueuePiece({ block, name, bytes });
       }
       const snapshot =
         mode === 'snapshot'
           ? { units: value.length, digest: utf16Digest(value) }
           : undefined;
-      await this.mutate((group) =>
-        group.appendNamed(block, name, new Uint8Array(), snapshot),
-      );
+      if (snapshot !== undefined || value.length === 0)
+        await this.enqueuePiece({
+          block,
+          name,
+          bytes: new Uint8Array(),
+          snapshot,
+        });
+      if (mode === 'snapshot') await this.flush();
     } catch (error) {
       await this.finishAttempt(block, 'error');
       throw error;
@@ -146,8 +151,12 @@ export class JournalArrivalRecorder {
     await this.appendText(block, 'data', Buffer.from(carry).toString('base64'));
   }
   async appendField(block: ArrivalBlock, bytes: Uint8Array): Promise<void> {
-    this.check();
     if (bytes.length === 0) return;
+    await this.enqueuePiece({ block, bytes });
+  }
+  private async enqueuePiece(piece: ArrivalPiece): Promise<void> {
+    this.check();
+    const { bytes } = piece;
     if (bytes.length > MAX_ARRIVAL_PIECE_BYTES)
       throw new Error('Arrival piece exceeds 64 KiB');
     if (
@@ -163,7 +172,7 @@ export class JournalArrivalRecorder {
       this.chargedPieces >= 256
     )
       throw new Error('Concurrent recording push exceeded queue capacity');
-    this.pending.push({ block, bytes: bytes.slice() });
+    this.pending.push({ ...piece, bytes: bytes.slice() });
     this.pendingBytes += bytes.length;
     this.chargedBytes += bytes.length + PIECE_CHARGE;
     this.chargedPieces++;
@@ -192,7 +201,16 @@ export class JournalArrivalRecorder {
     const turn = this.running
       .then(async () => {
         await this.mutate(async (group) => {
-          for (const piece of pieces) await group.append(piece);
+          for (const piece of pieces) {
+            if (piece.name === undefined) await group.append(piece);
+            else
+              await group.appendNamed(
+                piece.block,
+                piece.name,
+                piece.bytes,
+                piece.snapshot,
+              );
+          }
         });
       })
       .finally(() => {

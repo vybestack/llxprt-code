@@ -58,6 +58,8 @@ export interface ArrivalAttempt {
 export interface ArrivalPiece {
   readonly block: ArrivalBlock;
   readonly bytes: Uint8Array;
+  readonly name?: ArrivalFieldName;
+  readonly snapshot?: ChunkBlock['snapshot'];
 }
 export type ArrivalOutcome =
   | 'completed'
@@ -77,6 +79,10 @@ export interface RecordingMutation<T> {
   readonly value: T;
 }
 export interface ArrivalStore {
+  readRecordingField(
+    block: ArrivalBlock,
+    name: ArrivalFieldName,
+  ): Promise<ChunkBlock | undefined>;
   mutateRecording<T>(
     build: (
       ctx: BuildContext,
@@ -87,6 +93,10 @@ export interface ArrivalStore {
 }
 
 export class ArrivalGroup {
+  private readonly manifests = new Map<
+    bigint,
+    { entry: TranscriptEntry; header: RowHeader }
+  >();
   private outcome:
     | { readonly key: string; readonly bytes: Uint8Array }
     | undefined;
@@ -134,6 +144,8 @@ export class ArrivalGroup {
     row: ArrivalRow,
   ): Promise<{ entry: TranscriptEntry; header: RowHeader }> {
     await this.target.drain();
+    const staged = this.manifests.get(row.transcriptId);
+    if (staged !== undefined) return staged;
     const entry = await findChunkEntry(
       this.access(),
       this.head.root,
@@ -432,7 +444,10 @@ export class ArrivalGroup {
       { ...entry, status: ARRIVAL_STATUS[outcome] },
       header,
     );
-    if (outcome === 'completed') await this.admit(entry, header);
+    if (outcome === 'completed') {
+      entry = await this.writeManifest(entry.transcriptId);
+      await this.admit(entry, header);
+    }
   }
   private async admit(
     entry: TranscriptEntry,
@@ -505,6 +520,14 @@ export class ArrivalGroup {
     entry: TranscriptEntry,
     header: RowHeader,
   ): Promise<TranscriptEntry> {
+    this.manifests.set(entry.transcriptId, { entry, header });
+    return entry;
+  }
+  private async writeManifest(id: bigint): Promise<TranscriptEntry> {
+    const staged = this.manifests.get(id);
+    if (staged === undefined) throw new Error('Missing staged manifest');
+    const { entry, header } = staged;
+    this.manifests.delete(id);
     const kindHeader = encodeRowHeader(header);
     const rowRef = await this.target.append({
       kind: RECORD_KIND.ROW,
@@ -529,6 +552,7 @@ export class ArrivalGroup {
     return updated;
   }
   async complete<T>(value: T): Promise<RecordingMutation<T>> {
+    for (const id of this.manifests.keys()) await this.writeManifest(id);
     const state = new KeyedMapBatch(
       mapReader(this.ctx, 'state'),
       this.built.state.stateRoot,

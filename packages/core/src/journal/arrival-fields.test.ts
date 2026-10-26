@@ -81,6 +81,7 @@ describe('arrival named fields', () => {
         'quote"\n\ud800\udc00tail',
         'snapshot',
       );
+      await recorder.flush();
       expect(await tail(path)).toStrictEqual({
         type: 'thinking',
         thought: 'quote"\n\ud800\udc00tail',
@@ -159,6 +160,7 @@ describe('arrival named fields', () => {
       const block = await recorder.beginNamedBlock(row, 0);
       for (let index = 0; index < 64; index++)
         await recorder.appendText(block, 'text', 'x'.repeat(8192));
+      await recorder.flush();
       const file = await openJournalReadOnly(path);
       try {
         const reader = new TranscriptReader(file, sha256KeyHash);

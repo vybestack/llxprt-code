@@ -14,6 +14,57 @@ import {
 import { transcriptEntries } from './transcript-tree.js';
 import type { RecordAccess } from './recordAccess.js';
 
+import type { ArrivalBlock } from './arrival-group.js';
+import { fieldCode, type ArrivalFieldName } from './chunk-fields.js';
+import {
+  chunkBlock,
+  chunkValue,
+  decodeChunkBlock,
+  findChunkEntry,
+  type ChunkBlock,
+} from './chunk-row.js';
+import { decodeRowHeader } from './rowRecord.js';
+import { mapReader } from './groupBuildShared.js';
+
+export async function readRecordingField(
+  ctx: BuildContext,
+  handle: ArrivalBlock,
+  name: ArrivalFieldName,
+): Promise<ChunkBlock | undefined> {
+  if (ctx.access === undefined)
+    throw new Error('Recording has no committed state');
+  const head = decodeTranscriptHead(
+    await mapReader(ctx, 'state').get(
+      ctx.published?.roots.stateRoot ?? 0,
+      TRANSCRIPT_HEAD_KEY,
+    ),
+  );
+  const entry = await findChunkEntry(
+    ctx.access,
+    head.root,
+    'transcript',
+    handle.transcriptId,
+  );
+  if (entry.status !== 0) throw new Error('Recording row is not in progress');
+  const header = decodeRowHeader(
+    (await ctx.access.readRecordHead(entry.rowRef, 'ROW')).kindHeader,
+  );
+  if (header.chunk === undefined) throw new Error('Missing manifest');
+  const block = await chunkBlock(ctx.access, header.chunk, handle.ordinal);
+  if (block.named !== true || block.ended)
+    throw new Error('Named block is not open');
+  const code = BigInt(fieldCode(name));
+  const field = await transcriptEntries(
+    ctx.access,
+    block.piecesRoot,
+    'blocks',
+    code,
+    false,
+  ).next();
+  return field.value?.transcriptId === code
+    ? decodeChunkBlock(await chunkValue(ctx.access, field.value.rowRef))
+    : undefined;
+}
 export function recordingMutations(seams: {
   readonly enqueue: <T>(run: () => Promise<T>) => Promise<T>;
   readonly writer: () => JournalGroupWriter;

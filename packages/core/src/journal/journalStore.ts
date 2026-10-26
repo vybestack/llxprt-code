@@ -1,8 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { setImmediate } from 'node:timers/promises';
+import type { ArrivalStore } from './arrival-group.js';
 import {
   recordingMutations,
   interruptRecordingOrphans,
+  readRecordingField,
 } from './store-recording.js';
 import { compactStoreFile } from './store-compaction-run.js';
 import { openStoreIdFacts } from './store-id-facts.js';
@@ -340,6 +342,10 @@ export class JournalStore {
   commitDetailed(edits: readonly VersionEdit[]): Promise<CommittedGroup> {
     return this.enqueueCommit(() => this.runCommit(edits));
   }
+
+  readonly readRecordingField = (
+    ...args: Parameters<ArrivalStore['readRecordingField']>
+  ) => this.whilePinned(() => readRecordingField(this.buildContext(), ...args));
 
   readonly mutateRecording = recordingMutations({
     enqueue: (run) => this.enqueueCommit(run),
