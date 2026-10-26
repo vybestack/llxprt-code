@@ -1,6 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
-import { compactionCandidatePath, requireSameHistory } from './compaction.js';
+import {
+  compactionCandidatePath,
+  compactionDue,
+  COMPACTION_FLOOR_BYTES,
+  requireSameHistory,
+} from './compaction.js';
+import {
+  decodeTranscriptHead,
+  TRANSCRIPT_HEAD_KEY,
+} from './transcript-head.js';
 import {
   readCommittedFile,
   type CommittedFile,
@@ -19,6 +28,20 @@ import {
   compactionCopyUnlinked,
   type CopyResult,
 } from './versionTransfer.js';
+
+export async function transcriptCompactionDue(
+  version: Version,
+  notBefore: number,
+  readState: (key: string) => Promise<Uint8Array | undefined>,
+): Promise<boolean> {
+  if (
+    version.durableEnd <= COMPACTION_FLOOR_BYTES ||
+    version.durableEnd < notBefore
+  )
+    return false;
+  const head = decodeTranscriptHead(await readState(TRANSCRIPT_HEAD_KEY));
+  return compactionDue(version, notBefore, head.reachableBytes);
+}
 
 /**
  * Step 6 of design 4.11: the copy is flushed, read back through `handle` and

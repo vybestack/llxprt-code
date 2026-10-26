@@ -105,6 +105,10 @@ export class RelocationIndex {
     }
   }
 
+  async flushPending(appender: VectoredRecordAppender): Promise<void> {
+    if (this.pending.size > 0) await this.flushBatch(appender);
+  }
+
   private hashOf(oldOffset: number): Uint8Array {
     return this.hasher(ID_NS.relocation, relocationKey(oldOffset));
   }

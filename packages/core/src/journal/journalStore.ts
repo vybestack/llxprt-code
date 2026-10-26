@@ -37,11 +37,7 @@ import {
   rollbackEffect,
   type CommitEffectFactory,
 } from './commitEffect.js';
-import {
-  COMPACTION_REARM_BYTES,
-  compactionDue,
-  removeStaleCompaction,
-} from './compaction.js';
+import { COMPACTION_REARM_BYTES, removeStaleCompaction } from './compaction.js';
 import {
   CompactionSwap,
   realFileOperations,
@@ -98,6 +94,7 @@ import { VersionSnapshot } from './versionSnapshot.js';
 import {
   writeCompactionCandidate,
   writeUnlinkedCompactionCandidate,
+  transcriptCompactionDue,
 } from './storeCompaction.js';
 import type { SlotKinds } from './aggregateComposition.js';
 import {
@@ -617,8 +614,11 @@ export class JournalStore {
     ) {
       return;
     }
-    const due = this.deps.compactionDue ?? compactionDue;
-    if (!due(version, this.rearmAt)) return;
+    const readState = this.getStateUnpinned.bind(this);
+    const due =
+      this.deps.compactionDue?.(version, this.rearmAt) ??
+      (await transcriptCompactionDue(version, this.rearmAt, readState));
+    if (!due || this.queued > 0) return;
     if (
       this.pins > 0 ||
       this.admissions.pending ||

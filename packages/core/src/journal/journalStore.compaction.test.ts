@@ -218,7 +218,7 @@ describe('compaction of a live store (design 4.11)', () => {
     await store.close();
   });
 
-  it('runs the real trigger: a 70 MiB row that was popped leaves a file that compacts to a few KiB', async () => {
+  it('retains a popped 70 MiB transcript body without repeatedly compacting its live bytes', async () => {
     const target = file('real.llxj');
     const store = await JournalStore.create(target, storeDeps());
     await store.commit([
@@ -226,11 +226,15 @@ describe('compaction of a live store (design 4.11)', () => {
     ]);
     const [label] = await labelsOf(store);
     expect((await fsp.stat(target)).size).toBeGreaterThan(64 * MIB);
+    const originalFileId = await fileIdOf(target);
     await store.commit([{ kind: 'pop', cutLabel: label, expectedRemoved: 1 }]);
     await store.idle();
 
-    expect((await fsp.stat(target)).size).toBeLessThan(MIB);
+    expect(await fileIdOf(target)).toBe(originalFileId);
+    expect((await fsp.stat(target)).size).toBeGreaterThan(70 * MIB);
     expect(await labelsOf(store)).toStrictEqual([]);
+    expect(await store.compact()).toBe('swapped');
+    expect((await fsp.stat(target)).size).toBeGreaterThan(70 * MIB);
     await store.close();
   });
 

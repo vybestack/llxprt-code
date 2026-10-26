@@ -187,13 +187,16 @@ class CopySession {
     const ack: CommitAck = await this.writer.commitStreamedGroup(
       async (appender) => {
         const copier = new GroupCopier(this.shared, appender, job.recording);
-        return copyTrailerState(
+        const state = await copyTrailerState(
           copier,
           version,
           job.policy,
           this.shared,
           job.keepIdentity ? version : undefined,
         );
+        if (!job.recording && this.versions.length > 0)
+          await this.shared.relocation.flushPending(appender);
+        return state;
       },
     );
     this.shared.relocation.detach();

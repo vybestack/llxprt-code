@@ -20,10 +20,14 @@ const ROW_ESTIMATE_BYTES = 1550;
  * 4.11), computed from the last trailer alone. `notBefore` is the file size
  * below which the answer is no, set after a refused swap.
  */
-export function compactionDue(version: Version, notBefore = 0): boolean {
+export function compactionDue(
+  version: Version,
+  notBefore = 0,
+  transcriptReachableBytes = version.aggregate.liveBytes,
+): boolean {
   if (version.durableEnd < notBefore) return false;
   const live =
-    version.aggregate.liveBytes +
+    Math.max(transcriptReachableBytes, version.aggregate.liveBytes) +
     version.ckptBytes +
     version.aggregate.rows * ROW_ESTIMATE_BYTES;
   return version.durableEnd > COMPACTION_FACTOR * live + COMPACTION_FLOOR_BYTES;

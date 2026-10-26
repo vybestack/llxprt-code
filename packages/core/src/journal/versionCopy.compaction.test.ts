@@ -6,7 +6,8 @@ import {
   checkpointKey,
   parseCheckpointDescriptor,
 } from './checkpointDescriptor.js';
-import { MUTATION } from './recordKinds.js';
+import { MUTATION, RECORD_KIND } from './recordKinds.js';
+import { decodeRelocationValue } from './idEntryCodecs.js';
 import type { JournalStore } from './journalStore.js';
 import { IdFactQueries } from './idFactQueries.js';
 import { BoundedIdNodeCache } from './idTrieCache.js';
@@ -410,7 +411,8 @@ describe('memoization of shared records (design 4.8, several versions)', () => {
       let found = 0;
       for (const [label, oldOffset] of sourceRows) {
         const relocated = await queries.relocation(oldOffset);
-        if (relocated === undefined) continue;
+        if (relocated === undefined)
+          throw new Error(`Missing relocation for ROW at ${oldOffset}`);
         found += 1;
         const copiedOffset = copiedRows.get(label);
         if (copiedOffset === undefined) {
@@ -418,8 +420,31 @@ describe('memoization of shared records (design 4.8, several versions)', () => {
         }
         expect(relocated).toBe(copiedOffset);
       }
-      expect(found).toBeGreaterThan(result.relocation.entries / 4);
+      expect(found).toBe(sourceRows.size);
       expect(found).toBeGreaterThan(100);
+      const access = await accessOf(store);
+      const relocatedOffsets = new Set<number>();
+      const kinds = new Set<number>();
+      for await (const entry of reader.entries(result.relocation.root)) {
+        const offset = decodeRelocationValue(entry.value);
+        expect(relocatedOffsets.has(offset)).toBe(false);
+        relocatedOffsets.add(offset);
+        const head = await access.readRecordHead(offset);
+        kinds.add(head.kind);
+        expect(head.endOffset).toBeLessThanOrEqual(
+          result.relocation.readableEnd,
+        );
+      }
+      expect(relocatedOffsets.size).toBe(result.relocation.entries);
+      for (const kind of [
+        RECORD_KIND.ROW,
+        RECORD_KIND.RTNODE,
+        RECORD_KIND.ITNODE,
+        RECORD_KIND.VALUE,
+        RECORD_KIND.TNODE,
+        RECORD_KIND.TRAILER,
+      ])
+        expect(kinds.has(kind)).toBe(true);
       await handle.close();
       await store.close();
     }));
