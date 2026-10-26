@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import {
   diskTextRow,
   type DiskTextTail,
@@ -60,13 +61,10 @@ async function nativeOracle(
   large: DiskTextTail,
 ) {
   const projected = await setup.provider.projectPromptEnvelope({
-    contents: {
-      async *[Symbol.asyncIterator]() {
-        for (let index = 0; index < count; index++)
-          yield diskTextRow(index, large);
-        if (count !== 0) yield sourcePending;
-      },
-    },
+    contents: callerOwnedRawProviderSource([
+      ...Array.from({ length: count }, (_, index) => diskTextRow(index, large)),
+      ...(count === 0 ? [] : [sourcePending]),
+    ]),
     invocation: setup.runtime.prepareProviderInvocation(setup.provider.name),
     resolved: { model: 'gpt-5.6' },
     systemInstruction: projectionInstructions,
@@ -104,7 +102,6 @@ export async function retainedSetup(
   const count = 64;
   await warmSourceProcessor(root);
   const census = new RetainedOwnerCensus();
-  const restoreOwners = observeSourceOwners(census);
   const http = projectionEndpoint(true);
   const setup = await processorFixture(
     root,
@@ -112,6 +109,10 @@ export async function retainedSetup(
     large,
     count,
   );
+  const restoreOwners = observeSourceOwners(census, (row) => {
+    setup.history.references.push(new WeakRef(row));
+    if (setup.history.retainRows) setup.history.retained.push(row);
+  });
   observePreparation(setup, census);
   const restoreLogging = observeRetainedLogging(setup.runtime, census);
   const oracle = await nativeOracle(setup, count, large);

@@ -32,12 +32,13 @@ const largeTail = { mixedChunks: 128 };
 // the one the collector has not yet drained.
 const ROW_WINDOW = 2;
 const ROW_CATEGORIES = [
-  'progressive.row-copy',
-  'progressive.row-copy.blocks',
-  'progressive.row-copy.metadata',
+  'native.row',
+  'native.row.blocks',
+  'native.row.metadata',
   'snapshot.row',
 ] as const;
-// The two prompt segments of the scenario and its one snapshot reader.
+// The native prompts across the retry and the one active serialization reader.
+const PROMPT_WINDOW = 2;
 const SEGMENT_WINDOW = 2;
 const READER_WINDOW = 1;
 
@@ -46,6 +47,9 @@ type ScalingFacts = Awaited<ReturnType<typeof runRetainedScaling>>['large'];
 function expectInFlightWithinWindow(facts: ScalingFacts): void {
   for (const category of ROW_CATEGORIES)
     expect(inFlightPeakLive(facts, category)).toBeLessThanOrEqual(ROW_WINDOW);
+  expect(inFlightPeakLive(facts, 'native.prompt')).toBeLessThanOrEqual(
+    PROMPT_WINDOW,
+  );
   expect(inFlightPeakLive(facts, 'source.segment')).toBeLessThanOrEqual(
     SEGMENT_WINDOW,
   );
@@ -79,10 +83,10 @@ describe('actual StreamProcessor source retained owner census', () => {
     ).toBe(true);
     expect(facts.largestRowBytes).toBeGreaterThanOrEqual(0);
     for (const category of [
-      'progressive.row-copy',
-      'progressive.row-copy.blocks',
-      'progressive.row-copy.block',
-      'writer.derived-item',
+      'native.row',
+      'native.row.blocks',
+      'native.row.block',
+      'native.item',
     ]) {
       const observed = facts.final.survivors[category];
       expect(
@@ -95,10 +99,11 @@ describe('actual StreamProcessor source retained owner census', () => {
       'source.preparer',
       'request.snapshot',
       'snapshot.reader',
-      'source.projection',
-      'source.segments',
-      'source.segment',
-      'source.lease-closure',
+      'native.prompt',
+      'native.item',
+      'native.row',
+      'native.row.blocks',
+      'snapshot.row',
       'source.prepared',
       'source.options',
       'source.contents-closure',
@@ -119,16 +124,12 @@ describe('actual StreamProcessor source retained owner census', () => {
   }, 600000);
   it('trap: derived rows held by the test survive the census', async () => {
     const facts = await runRetainedCensus('held', largeTail);
-    expect(facts.final.survivors['progressive.row-copy']?.live).toBeGreaterThan(
-      0,
-    );
+    expect(facts.final.survivors['native.row']?.live).toBeGreaterThan(0);
   }, 600000);
   it('trap: derived rows held only until the call returns exceed the in-flight window at both sizes', async () => {
     const scaling = await runRetainedScaling('in-flight', smallTail, largeTail);
     for (const facts of [scaling.small, scaling.large]) {
-      expect(inFlightPeakLive(facts, 'progressive.row-copy')).toBeGreaterThan(
-        ROW_WINDOW,
-      );
+      expect(inFlightPeakLive(facts, 'native.row')).toBeGreaterThan(ROW_WINDOW);
       expect(() => expectInFlightWithinWindow(facts)).toThrow(
         /toBeLessThanOrEqual/,
       );

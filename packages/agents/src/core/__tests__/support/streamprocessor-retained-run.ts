@@ -71,7 +71,7 @@ function requestFacts(input: RetainedSetup) {
     segmentsRemaining: [...census.segmentPaths].filter((path) =>
       existsSync(path),
     ),
-    rows: setup.history.references.length,
+    rows: census.survivors()['native.row']?.observed ?? 0,
     originalSurvivors: setup.history.references.filter(
       (ref) => ref.deref() !== undefined,
     ).length,

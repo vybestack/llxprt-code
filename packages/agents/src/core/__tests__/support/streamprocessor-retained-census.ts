@@ -1,14 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { observeNativeSendRows } from './streamprocessor-native-census.js';
 import { heapSize, heapStats } from 'bun:jsc';
 import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
-import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
-import { JournalProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/journal-provider-request.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  requestScopedContents,
-  type RequestScopedContents,
-} from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
-import { PromptKeyDiskWriter } from '@vybestack/llxprt-code-providers/runtime/prompt-key-disk-writer.js';
 import { Gpt56SourceProjection } from '@vybestack/llxprt-code-providers/tokenizers/gpt56-source-projection.js';
 import { SourcePromptEnvelopePreparer } from '../../prompt-envelope-source-send.js';
 
@@ -151,93 +145,16 @@ export function inFlightPeakLive(
   );
 }
 
-function observeRowOwners(census: RetainedOwnerCensus): () => void {
-  const snapshot = JournalProviderRequestSnapshot.prototype;
-  const indexed = IndexedJournalRequestSnapshot.prototype;
-  const writer = PromptKeyDiskWriter.prototype;
-  const empty: AsyncIterable<IContent> = { async *[Symbol.asyncIterator]() {} };
-  const progressive: RequestScopedContents = Object.getPrototypeOf(
-    requestScopedContents(empty),
-  );
-  const original = {
-    snapshotRead: indexed.readAt,
-    snapshotOpen: snapshot.openReader,
-    progressiveStream: progressive.stream,
-    progressiveDispose: progressive.dispose,
-    writerValue: writer.value,
-    writerString: writer.string,
-    writerClose: writer.close,
-  };
-  indexed.readAt = async function (index, signal) {
-    const row = await original.snapshotRead.call(this, index, signal);
-    census.row('snapshot.row', row);
-    return row;
-  };
-  snapshot.openReader = function (signal) {
-    census.observe('request.snapshot', this);
-    const reader = original.snapshotOpen.call(this, signal);
-    census.observe('snapshot.reader', reader);
-    return reader;
-  };
-  progressive.stream = async function* () {
-    census.observe('progressive.owner', this);
-    for await (const row of original.progressiveStream.call(this)) {
-      census.row('progressive.row-copy', row);
-      if (census.rowRetention !== 'none') census.trap.push(row);
-      yield row;
-    }
-  };
-  progressive.dispose = function () {
-    census.cleanup.progressive++;
-    return original.progressiveDispose.call(this);
-  };
-  writer.value = function (value) {
-    census.observe('writer', this);
-    census.observe('writer.derived-item', value);
-    return original.writerValue.call(this, value);
-  };
-  writer.string = function (text, quoted) {
-    census.sampleActive(text);
-    return original.writerString.call(this, text, quoted);
-  };
-  writer.close = function () {
-    census.cleanup.writers++;
-    return original.writerClose.call(this);
-  };
-  return () => {
-    indexed.readAt = original.snapshotRead;
-    snapshot.openReader = original.snapshotOpen;
-    progressive.stream = original.progressiveStream;
-    progressive.dispose = original.progressiveDispose;
-    writer.value = original.writerValue;
-    writer.string = original.writerString;
-    writer.close = original.writerClose;
-  };
-}
-
 function observeEnvelopeOwners(census: RetainedOwnerCensus): () => void {
-  const projection = Gpt56SourceProjection.prototype;
   const preparer = SourcePromptEnvelopePreparer.prototype;
-  const original = {
-    acquire: projection.acquire,
-    dispose: projection.dispose,
-    prepare: preparer.prepare,
-  };
+  const projection = Gpt56SourceProjection.prototype;
+  const original = { prepare: preparer.prepare, acquire: projection.acquire };
   projection.acquire = function () {
-    census.observe('source.projection', this);
-    census.observe('source.segments', this.promptSegments);
     for (const segment of this.promptSegments) {
       census.observe('source.segment', segment);
-      census.observe('source.segment-descriptor', segment.source);
       census.segmentPaths.add(segment.source.path);
     }
-    const lease = original.acquire.call(this);
-    census.observe('source.lease-closure', lease);
-    return lease;
-  };
-  projection.dispose = function () {
-    census.cleanup.projections++;
-    return original.dispose.call(this);
+    return original.acquire.call(this);
   };
   preparer.prepare = async function (source) {
     census.observe('source.preparer', this);
@@ -261,16 +178,18 @@ function observeEnvelopeOwners(census: RetainedOwnerCensus): () => void {
   };
   return () => {
     projection.acquire = original.acquire;
-    projection.dispose = original.dispose;
     preparer.prepare = original.prepare;
   };
 }
 
-export function observeSourceOwners(census: RetainedOwnerCensus): () => void {
-  const rows = observeRowOwners(census);
+export function observeSourceOwners(
+  census: RetainedOwnerCensus,
+  onRow: (row: IContent) => void,
+): () => void {
+  const native = observeNativeSendRows(census, onRow);
   const envelope = observeEnvelopeOwners(census);
   return () => {
-    rows();
+    native();
     envelope();
   };
 }
