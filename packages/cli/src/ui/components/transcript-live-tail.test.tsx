@@ -20,6 +20,26 @@ const { createScrollbackPagerStore } = await import(
   '../stores/turn/scrollbackPager.js'
 );
 
+const { JournalDisplayWriter } = await import(
+  '@vybestack/llxprt-code-core/journal/display-recording.js'
+);
+
+async function assertDisplayNotices(
+  session: Awaited<ReturnType<typeof JournalSession.create>>,
+  mounted: ReturnType<typeof render>,
+): Promise<void> {
+  const writer = new JournalDisplayWriter(session.store);
+  await act(async () => {
+    await writer.append({ type: 'slash' }, 'persisted slash output');
+    await writer.append({ type: 'error' }, 'persisted error notice');
+    await Bun.sleep(25);
+  });
+  await waitFor(() => {
+    expect(mounted.lastFrame()).toContain('persisted slash output');
+    expect(mounted.lastFrame()).toContain('persisted error notice');
+  });
+}
+
 describe('journal-driven Ink transcript', () => {
   it('renders acknowledged partial output and later committed rows without a live-tail overlay', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'ink-transcript-tail-'));
@@ -93,6 +113,7 @@ describe('journal-driven Ink transcript', () => {
           .rows.filter((item) => item.item.text === 'visible partial response'),
       ).toHaveLength(1);
       expect(pager.getState().error).toBeNull();
+      await assertDisplayNotices(session, mounted);
     } finally {
       view?.unmount();
       await pager.close();

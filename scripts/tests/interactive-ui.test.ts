@@ -34,6 +34,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'bun:test';
 import { parseSamples } from '../memory/sample.ts';
 import { assertBoundedPostClearRetention } from './memory/retention-checkpoints.ts';
+import { withShortUiWorkspace } from '../short-ui-workspace.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../..');
@@ -78,6 +79,7 @@ function runHarness(
   extraEnv: NodeJS.ProcessEnv = {},
   timeoutMs = 300_000,
   welcomeState: WelcomeState = 'completed',
+  workingDirectory = projectRoot,
 ): HarnessResult {
   const scriptPath = path.join(projectRoot, 'scripts', scriptName);
   const harnessPath = path.join(projectRoot, 'scripts/tmux-harness.ts');
@@ -106,7 +108,7 @@ function runHarness(
     ],
     {
       encoding: 'utf8',
-      cwd: projectRoot,
+      cwd: workingDirectory,
       timeout: timeoutMs,
       env: {
         ...process.env,
@@ -173,11 +175,18 @@ describe('Interactive UI (tmux harness)', () => {
   runTmuxE2E(
     'slash autocomplete opens, navigates, and dismisses',
     () => {
-      const result = runHarness(
-        'tmux-script.slash-autocomplete.json',
-        'slash-autocomplete',
-      );
-      assertHarnessSuccess(result);
+      withShortUiWorkspace(projectRoot, (directory) => {
+        const result = runHarness(
+          'tmux-script.slash-autocomplete.json',
+          'slash-autocomplete',
+          [],
+          {},
+          300_000,
+          'completed',
+          directory,
+        );
+        assertHarnessSuccess(result);
+      });
     },
     300_000,
   );

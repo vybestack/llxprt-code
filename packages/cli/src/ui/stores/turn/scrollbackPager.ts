@@ -273,7 +273,8 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     if (!this.resumed) return;
     const tail = this.pagedRows.at(-1);
     const following =
-      this.visibleKeys.length === 0 || this.visibleKeys.at(-1) === tail?.key;
+      this.viewport.followingTail ??
+      (this.visibleKeys.length === 0 || this.visibleKeys.at(-1) === tail?.key);
     this.atFileEnd = false;
     if (!following) return;
     const gen = this.generation;

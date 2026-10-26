@@ -9,6 +9,8 @@ import type { HistoryContextState } from '../../utils/historyContextState.js';
 
 export interface ScrollbackViewportReporter {
   visibleKeys: readonly string[];
+  /** Explicit scroll intent remains stable while React catches up to commits. */
+  followingTail?: boolean;
   viewportLines: number;
   rowHeightLines(): number;
 }

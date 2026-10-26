@@ -299,13 +299,15 @@ function useViewportReport(
   viewport: ScrollbackViewportReporter,
   viewportLines: number,
   visibleKeysSig: string,
+  followingTail: boolean,
 ): void {
   useEffect(() => {
+    viewport.followingTail = followingTail;
     viewport.viewportLines = viewportLines;
     viewport.visibleKeys =
       visibleKeysSig === '' ? [] : visibleKeysSig.split(KEY_SEPARATOR);
     store.reportViewport();
-  }, [store, viewport, viewportLines, visibleKeysSig]);
+  }, [store, viewport, viewportLines, visibleKeysSig, followingTail]);
 }
 
 /**
@@ -394,6 +396,7 @@ function useResizeReport(
         viewportLines,
         rowHeightLines,
       );
+      viewport.followingTail = next.hiddenBelow === 0;
       viewport.viewportLines = viewportLines;
       viewport.visibleKeys = next.rows.map((row) => row.key);
       store.reportViewport();
@@ -600,7 +603,13 @@ export function ScrollbackViewport({
   const visibleKeysSig = frame.rows.map((row) => row.key).join(KEY_SEPARATOR);
   const spanKeysSig = windowSpanKeys(frame.rows, range).join(KEY_SEPARATOR);
 
-  useViewportReport(store, viewport, viewportLines, visibleKeysSig);
+  useViewportReport(
+    store,
+    viewport,
+    viewportLines,
+    visibleKeysSig,
+    frame.hiddenBelow === 0,
+  );
 
   const [expandedSpans, toggleVisibleBoundaries] =
     useBoundaryExpansion(spanKeysSig);

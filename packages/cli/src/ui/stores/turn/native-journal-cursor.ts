@@ -12,6 +12,10 @@ import type {
   NativeJournalOptions,
 } from './native-journal-types.js';
 import { NativeResponseIndex } from './native-response-index.js';
+import {
+  displayText,
+  withToolPresentations,
+} from './journal-display-projection.js';
 
 interface Position {
   readonly row: number;
@@ -298,7 +302,10 @@ export class NativeJournalCursor {
           group.inContext,
         ),
         before: { row: from, item: firstItem + index },
-        after: { row: from, item: firstItem + index + 1 },
+        after:
+          index === items.length - 1 && callStart + 16 >= group.calls
+            ? { row: from + group.rows, item: 0 }
+            : { row: from, item: firstItem + index + 1 },
       };
     });
   }
@@ -332,7 +339,11 @@ export class NativeJournalCursor {
         ...selected,
       ],
     };
-    return iContentToHistoryItems([page, ...responses.values()]);
+    return withToolPresentations(
+      this.reader,
+      first,
+      iContentToHistoryItems([page, ...responses.values()]),
+    );
   }
   private async *projectGroup(
     from: number,
@@ -341,6 +352,61 @@ export class NativeJournalCursor {
     tailCount = Number.POSITIVE_INFINITY,
   ): AsyncGenerator<LocatedEntry> {
     const first = await this.reader.entryAt(from);
+    const presentation = await this.reader.presentation(first);
+    if (presentation !== undefined) {
+      const display = await this.projectNotice(from, first, presentation);
+      if (display !== undefined) yield display;
+      return;
+    }
+    yield* this.projectModelGroup(
+      from,
+      first,
+      minimumItem,
+      maximumItem,
+      tailCount,
+    );
+  }
+  private async projectNotice(
+    from: number,
+    first: RowEntry,
+    presentation: NonNullable<
+      Awaited<ReturnType<NativeJournalPageReader['presentation']>>
+    >,
+  ): Promise<LocatedEntry | undefined> {
+    if (
+      presentation.status === 6 ||
+      presentation.descriptor.type === 'tool-result'
+    )
+      return undefined;
+    const opener = await this.read(first);
+    const type = presentation.descriptor.type;
+    const item: HistoryItem = {
+      id: -1,
+      type: type === 'slash' || type === 'shell' ? 'info' : type,
+      text: displayText(opener),
+      rowIdentity: {
+        kind: 'journal',
+        offset: first.recordOffset,
+        transcriptId: first.transcriptId.toString(),
+        discriminator: 'text',
+      },
+    };
+    return {
+      entry: {
+        ...this.displayEntry(first, opener, item, 1, false),
+        contextState: 'n/a',
+      },
+      before: { row: from, item: 0 },
+      after: { row: from + 1, item: 0 },
+    };
+  }
+  private async *projectModelGroup(
+    from: number,
+    first: RowEntry,
+    minimumItem: number,
+    maximumItem: number,
+    tailCount: number,
+  ): AsyncGenerator<LocatedEntry> {
     const end = await this.groupEnd(from);
     const opener = await this.read(first, 0);
     this.options.counters?.ownership?.retain(opener);

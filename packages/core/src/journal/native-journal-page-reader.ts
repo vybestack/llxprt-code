@@ -23,6 +23,7 @@ import { ROW_ENTRY_NO_CHRONOLOGY_SEQ, type RowEntry } from './rowEntry.js';
 import { RECORD_KIND } from './recordKinds.js';
 import { NativeResponseIndex } from './native-response-index.js';
 import type { FrameHead } from './frame.js';
+import { NativeDisplayReader } from './native-display-reader.js';
 
 type ToolPageHeader = RowIds & { readonly head: FrameHead };
 
@@ -36,8 +37,10 @@ export class NativeJournalPageReader {
     | undefined;
 
   private readonly transcript: NativeTranscriptIndex;
+  private readonly display: NativeDisplayReader;
 
   private constructor(private readonly reader: JournalReader) {
+    this.display = new NativeDisplayReader(reader);
     this.responses = new NativeResponseIndex(reader);
     this.transcript = new NativeTranscriptIndex(reader);
   }
@@ -92,6 +95,14 @@ export class NativeJournalPageReader {
 
   inContext(entry: NativeJournalEntry): Promise<boolean> {
     return this.transcript.member(entry);
+  }
+
+  presentation(entry: NativeJournalEntry) {
+    return this.display.presentation(entry);
+  }
+
+  toolPresentation(entry: NativeJournalEntry, callId: string) {
+    return this.display.toolPresentation(entry, callId);
   }
 
   async readContent(entry: NativeJournalEntry): Promise<IContent> {
