@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import { settleInducedExportFailure } from './induced-export-failure.js';
 import { mkdirSync } from 'node:fs';
 import { appendFile, readFile, readdir } from 'node:fs/promises';
@@ -136,13 +137,14 @@ async function sendSource(input: Input): Promise<Result> {
     return failure(error);
   }
 }
-function sendEager(
+async function sendEager(
   input: Input,
   disk: Awaited<ReturnType<typeof preflightDisk>>,
 ): Promise<Result> {
+  const contents = await Array.fromAsync(disk.source.openReader());
   return consume(
     input.wrapper.generateChatCompletion({
-      contents: { [Symbol.asyncIterator]: () => disk.source.openReader() },
+      contents: callerOwnedRawProviderSource(contents),
       invocation: input.setup.invocation,
       systemInstruction: preflightInstructions,
       resolved: { model: 'gpt-5.6' },
