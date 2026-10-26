@@ -862,7 +862,7 @@ describe('ShellExecutionService', () => {
       expect(ShellExecutionService.isActivePty(mockPtyProcess.pid)).toBe(true);
       expect(ShellExecutionService.isActivePty(secondMockPty.pid)).toBe(true);
 
-      ShellExecutionService.destroyAllPtys();
+      await ShellExecutionService.destroyAllPtys();
 
       expect(mockPtyProcess.kill).toHaveBeenCalled();
       expect(secondMockPty.kill).toHaveBeenCalled();
@@ -874,8 +874,10 @@ describe('ShellExecutionService', () => {
       await Promise.all([handle1.result, handle2.result]);
     });
 
-    it('should be safe to call when no PTYs are active', () => {
-      expect(() => ShellExecutionService.destroyAllPtys()).not.toThrow();
+    it('should be safe to call when no PTYs are active', async () => {
+      await expect(
+        ShellExecutionService.destroyAllPtys(),
+      ).resolves.toBeUndefined();
     });
 
     it('should prefer destroy() over kill() when destroy is available', async () => {
@@ -904,7 +906,7 @@ describe('ShellExecutionService', () => {
 
       expect(ShellExecutionService.isActivePty(77777)).toBe(true);
 
-      ShellExecutionService.destroyAllPtys();
+      await ShellExecutionService.destroyAllPtys();
 
       expect(destroyMock).toHaveBeenCalled();
       expect(ptyWithDestroy.kill).not.toHaveBeenCalled();
@@ -928,7 +930,7 @@ describe('ShellExecutionService', () => {
       );
       await new Promise((resolve) => setImmediate(resolve));
 
-      ShellExecutionService.destroyAllPtys();
+      await ShellExecutionService.destroyAllPtys();
 
       expect(mockPtyProcess.kill).toHaveBeenCalled();
 

@@ -1,7 +1,3 @@
-import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
-import type { AgentProviderState } from './control/authState.js';
-import type { AgentProviderSwitchResult } from './agent.js';
-import { UNCONFIGURED_PROVIDER } from './constants.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -17,7 +13,11 @@ import { UNCONFIGURED_PROVIDER } from './constants.js';
  */
 
 import type { OAuthUIEvent } from '@vybestack/llxprt-code-auth';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 import type { AgentProviderSwitchOptions } from './agent.js';
+import type { AgentProviderSwitchResult } from './agent.js';
+import { UNCONFIGURED_PROVIDER } from './constants.js';
+import type { AgentProviderState } from './control/authState.js';
 
 /**
  * The runtime ProviderSwitchOptions subset we forward. The runtime
@@ -35,6 +35,7 @@ export interface RuntimeSwitchOptions {
     event: OAuthUIEvent,
     timestamp?: number,
   ) => number | undefined;
+  readonly publication?: 'deferred';
 }
 
 /**
@@ -47,22 +48,31 @@ export interface RuntimeSwitchOptions {
  * union; the public callback accepts the wider {@link AgentOAuthUIEvent} shape
  * (every OAuthUIEvent variant is structurally assignable to AgentOAuthUIEvent),
  * so the event is forwarded without coercion.
+ *
+ * `publication: 'deferred'` makes the switch leave model publication to its
+ * caller, which runs the whole switch inside one publication window and
+ * announces the model actually in force afterwards.
  */
 export function toRuntimeSwitchOptions(
   options: AgentProviderSwitchOptions | undefined,
+  publication?: 'deferred',
 ): RuntimeSwitchOptions {
   if (options === undefined) {
-    return {};
+    return publication === undefined ? {} : { publication };
   }
   const adapted: {
     preserveEphemerals?: string[];
     skipModelDefaults?: boolean;
     autoOAuth?: boolean;
     addItem?: (event: OAuthUIEvent, timestamp?: number) => number | undefined;
+    publication?: 'deferred';
   } = {
     preserveEphemerals: options.preserveEphemerals,
     skipModelDefaults: options.skipModelDefaults,
   };
+  if (publication !== undefined) {
+    adapted.publication = publication;
+  }
   if (options.autoOAuth !== undefined) {
     adapted.autoOAuth = options.autoOAuth;
   }
@@ -79,50 +89,65 @@ export function toRuntimeSwitchOptions(
   return adapted;
 }
 
+/**
+ * The facade operations a provider switch drives, in order. `readAppliedModel`
+ * reads the model the runtime actually has in force, which after a successful
+ * switch without an explicit model is the target provider's default rather
+ * than the facade's previous name.
+ */
+export interface FacadeSwitchOperations {
+  readonly selectModel: (model: string) => Promise<void>;
+  readonly refreshAuth: () => Promise<void>;
+  readonly restoreVisibility: () => Promise<void>;
+  readonly rebuild: () => void;
+  readonly readAppliedModel: () => string;
+}
+
 export async function applyFacadeProviderSwitch(
   provider: string,
   model: string | undefined,
   options: AgentProviderSwitchOptions | undefined,
   state: AgentProviderState,
   switchProvider: ProviderSwitcher,
-  selectModel: (model: string) => Promise<void>,
-  refreshAuth: () => Promise<void>,
-  restoreVisibility: () => Promise<void>,
-  rebuild: () => void,
+  operations: FacadeSwitchOperations,
+  publication?: 'deferred',
 ): Promise<AgentProviderSwitchResult> {
   const previousProvider = state.provider;
   // switchActiveProvider rebuilds the content generator internally. A failure
   // propagates and leaves the facade state below untouched.
   const switchResult = await switchProvider(
     provider,
-    toRuntimeSwitchOptions(options),
+    toRuntimeSwitchOptions(options, publication),
   );
   const providerChanged = switchResult.changed;
   const infoMessages = switchResult.infoMessages;
   const defaultModel = switchResult.defaultModel;
   if (providerChanged) {
     // Real provider switch succeeded; apply the requested model (if any) via
-    // setActiveModel + the explicit model-only rebuild.
-    if (model !== undefined && model !== state.model) {
-      await selectModel(model);
-      await refreshAuth();
+    // setActiveModel + the explicit model-only rebuild. The comparison is
+    // against the model in force, so a request equal to the previous provider's
+    // model is still applied instead of silently keeping the new default.
+    if (model !== undefined && model !== operations.readAppliedModel()) {
+      await operations.selectModel(model);
+      await operations.refreshAuth();
     }
-    await restoreVisibility();
-  } else if (model !== undefined && model !== state.model) {
+    await operations.restoreVisibility();
+  } else if (model !== undefined && model !== operations.readAppliedModel()) {
     // Same provider, different model — apply the model to the runtime
     // without reinitializing the content generator (the provider did not
     // change, so the client/HistoryService identity is preserved).
     // setActiveModel updates the model on the existing provider; the
     // rebuild() below propagates it to the loop (#2374 deepthinker finding).
-    await selectModel(model);
+    await operations.selectModel(model);
   }
   // When providerChanged is false the client is unchanged, so its
   // history/HistoryService identity is trivially preserved.
   state.provider = provider;
-  if (model !== undefined) {
-    state.model = model;
-  }
-  rebuild();
+  // A real switch without an explicit model leaves the target provider's
+  // default in force; the applied model must describe what the runtime uses.
+  if (providerChanged || model !== undefined)
+    state.model = operations.readAppliedModel();
+  operations.rebuild();
   return {
     changed: providerChanged,
     previousProvider:

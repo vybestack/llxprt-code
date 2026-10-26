@@ -110,11 +110,12 @@ export class AgentExecutionCoordinator implements SchedulerBoundaryPort {
     });
   }
 
-  async withIdleBoundary(operation: () => Promise<void>): Promise<void> {
+  async withIdleBoundary<T>(operation: () => Promise<T>): Promise<T> {
     this.assertNoCommit();
     if (this.run !== undefined) throw new AgentBusyError();
     const outcome = await this.withSafeBoundary(operation);
     if (outcome.status === 'cancelled') throw new Error('Agent is closed');
+    return outcome.value;
   }
 
   executeCommand<T>(

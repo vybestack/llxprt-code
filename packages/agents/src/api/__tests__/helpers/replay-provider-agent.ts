@@ -33,6 +33,36 @@ export interface ReplayProviderSpec {
   /** Contributed alias the agent selects as its provider. */
   readonly alias: string;
   readonly script: ReplayScript;
+  /**
+   * The model this provider reports as its own and declares as its alias
+   * default. Defaults to `fake-model`, the model every replay fixture answers
+   * for; set it when a scenario needs a switch target whose default differs
+   * from the starting provider's.
+   */
+  readonly defaultModel?: string;
+}
+
+/**
+ * A replaying provider whose own model identity is the alias default it was
+ * contributed with. `FakeProvider` otherwise reports `fake-model` for every
+ * alias, which hides default-model transitions on a provider switch.
+ */
+class ReplayProvider extends FakeProvider {
+  constructor(
+    scriptFile: string,
+    cwd: string | undefined,
+    private readonly defaultModel: string,
+  ) {
+    super(scriptFile, cwd);
+  }
+
+  override getDefaultModel(): string {
+    return this.defaultModel;
+  }
+
+  override getCurrentModel(): string {
+    return this.defaultModel;
+  }
 }
 
 export interface ReplayProviderAgentOptions {
@@ -68,6 +98,7 @@ function contributeReplayProvider(
   cwd: string,
 ): LoadedRuntimePlugin {
   const providerId = `${spec.alias}-replay-provider`;
+  const defaultModel = spec.defaultModel ?? 'fake-model';
   return {
     specifier: `memory:${providerId}`,
     manifest: {
@@ -77,7 +108,7 @@ function contributeReplayProvider(
         {
           providerId,
           createProvider: (entry) => {
-            const provider = new FakeProvider(scriptFile, cwd);
+            const provider = new ReplayProvider(scriptFile, cwd, defaultModel);
             bindProviderAliasIdentity(provider, entry.alias);
             return provider;
           },
@@ -88,8 +119,8 @@ function contributeReplayProvider(
                 baseProvider: providerId,
                 'base-url': 'http://replay-provider.invalid/v1',
                 'requires-auth': false,
-                defaultModel: 'fake-model',
-                staticModels: [{ id: 'fake-model', name: 'fake-model' }],
+                defaultModel,
+                staticModels: [{ id: defaultModel, name: defaultModel }],
               },
             },
           ],

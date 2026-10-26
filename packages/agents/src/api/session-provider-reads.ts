@@ -58,7 +58,14 @@ import {
   selectOwnerModel,
   updateActiveProviderApiKey,
 } from './providerMutations.js';
-import { applyFacadeProviderSwitch } from './providerSwitchOptionsAdapter.js';
+import {
+  applyModelWithPublication,
+  publishProviderSwitch,
+} from './modelPublication.js';
+import {
+  applyFacadeProviderSwitch,
+  type FacadeSwitchOperations,
+} from './providerSwitchOptionsAdapter.js';
 import { initializeProviderState } from './session-control-assembly.js';
 
 type OpenAIProviderInfo = ReturnType<typeof getOpenAIProviderInfo>;
@@ -626,16 +633,26 @@ export class SessionProviderControl {
   ): Promise<AgentProviderSwitchResult> {
     this.assertProfileIdle();
     if (this.activeRun !== undefined) throw new AgentBusyError();
-    return applyFacadeProviderSwitch(
-      provider,
-      model,
-      options,
-      this.#providerState,
-      this.switchProvider,
-      this.#context.selectModel,
-      () => this.#session.refreshAuth(),
-      () => this.#session.restoreChatVisibility(),
-      () => this.#rebuild(),
+    // A requested model runs the switch deferred inside one publication
+    // window, so the target provider's default is never announced ahead of the
+    // model the caller asked for; the model in force is announced on commit.
+    return this.coordinator.withIdleBoundary(() =>
+      publishProviderSwitch(
+        this.#settings.settingsOwner,
+        this.#providerState.model,
+        model,
+        () => this.#settings.settingsService.getCurrentProfileName(),
+        (publication) =>
+          applyFacadeProviderSwitch(
+            provider,
+            model,
+            options,
+            this.#providerState,
+            this.switchProvider,
+            this.#facadeSwitchOperations(),
+            publication,
+          ),
+      ),
     );
   }
 
@@ -652,10 +669,31 @@ export class SessionProviderControl {
     if (!this.isProviderReady()) {
       throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     }
-    await this.#context.selectModel(model);
-    await this.#session.refreshAuth();
-    await this.#session.restoreChatVisibility();
-    this.#rebuild();
-    this.#providerState.model = model;
+    // The transition writes the selection before it can fail, so the window is
+    // opened against the model actually applied; a retry of the same target
+    // then still publishes.
+    await this.coordinator.withIdleBoundary(() =>
+      applyModelWithPublication(
+        this.#settings.settingsOwner,
+        this.#providerState,
+        model,
+        {
+          setOwnerModel: (next) => this.#context.selectModel(next),
+          refreshAuth: () => this.#session.refreshAuth(),
+          restoreChatVisibility: () => this.#session.restoreChatVisibility(),
+          rebuild: () => this.#rebuild(),
+        },
+      ),
+    );
+  }
+
+  #facadeSwitchOperations(): FacadeSwitchOperations {
+    return {
+      selectModel: this.#context.selectModel,
+      refreshAuth: () => this.#session.refreshAuth(),
+      restoreVisibility: () => this.#session.restoreChatVisibility(),
+      rebuild: () => this.#rebuild(),
+      readAppliedModel: () => this.getModel(),
+    };
   }
 }

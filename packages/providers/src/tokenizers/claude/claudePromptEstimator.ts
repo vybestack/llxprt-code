@@ -12,12 +12,17 @@ import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contr
 import type { PromptEnvelopeProtocol } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
 import type { ProviderFinalizedPromptProjection } from '../../runtime/promptEnvelopeProjections.js';
-import { ModelPromptEstimatorError } from '../ModelPromptEstimatorError.js';
+import {
+  ModelPromptEstimatorError,
+  type ModelPromptEstimatorErrorContext,
+} from '../ModelPromptEstimatorError.js';
 import type { ModelPromptEstimatorRegistration } from '../ModelPromptEstimatorRegistry.js';
 import {
   countO200kBaseTokens,
   getO200kBaseEncoder,
   loadTiktokenModule,
+  type O200kBaseEncoder,
+  type O200kBaseEncoderResolver,
   type TiktokenModuleLoader,
 } from '../o200kBaseCounter.js';
 import {
@@ -44,10 +49,13 @@ import {
  * calibrated rather than exact.
  */
 
+const BASE_COUNTER_ASSET_REMEDIATION =
+  'verify the local @dqbd/tiktoken o200k_base base-counter assets are installed and intact';
+
 function errorContext(
   request: RuntimePromptEstimateRequest,
   family: string,
-): ConstructorParameters<typeof ModelPromptEstimatorError>[1] {
+): ModelPromptEstimatorErrorContext {
   return {
     activeProvider: request.activeProvider,
     canonicalModel: request.canonicalModel,
@@ -134,7 +142,7 @@ export async function estimateClaude5Prompt(
     throw new ModelPromptEstimatorError(
       'asset-unavailable',
       errorContext(request, spec.family),
-      'verify the local @dqbd/tiktoken o200k_base base-counter assets are installed and intact',
+      BASE_COUNTER_ASSET_REMEDIATION,
       { cause: error },
     );
   }
@@ -197,6 +205,7 @@ function acceptsModelIdentity(
 export function createClaudeRuntimeTokenizer(
   activeProvider: string,
   canonicalModel: string,
+  resolveEncoder: O200kBaseEncoderResolver = () => getO200kBaseEncoder(),
 ): RuntimeTokenizer | undefined {
   const spec = CLAUDE_5_FAMILY_SPECS.find(
     (candidate) =>
@@ -206,31 +215,71 @@ export function createClaudeRuntimeTokenizer(
   );
   const calibration = spec?.calibration;
   if (spec === undefined || calibration === undefined) return undefined;
+  const context: ModelPromptEstimatorErrorContext = {
+    activeProvider,
+    canonicalModel,
+    protocol: 'anthropic-messages',
+    family: spec.family,
+  };
   return {
     fallbackPolicy: 'deny',
     async countTokens(content: unknown): Promise<number> {
-      const text =
-        typeof content === 'string' ? content : JSON.stringify(content);
-      if (typeof text !== 'string') {
+      const text = serializeRuntimeTokenizerInput(content, context);
+      let encoder: O200kBaseEncoder;
+      try {
+        encoder = await resolveEncoder();
+      } catch (error) {
         throw new ModelPromptEstimatorError(
-          'tokenization-failed',
-          {
-            activeProvider,
-            canonicalModel,
-            protocol: 'anthropic-messages',
-            family: spec.family,
-          },
-          'provide string or JSON-serializable content to the runtime tokenizer',
+          'asset-unavailable',
+          context,
+          BASE_COUNTER_ASSET_REMEDIATION,
+          { cause: error },
         );
       }
-      const encoder = await getO200kBaseEncoder();
-      return applyClaudeMarginalCalibration(
-        countO200kBaseTokens(encoder, text),
-        extractClaudeContentFeatures(text),
-        calibration,
-      );
+      try {
+        return applyClaudeMarginalCalibration(
+          countO200kBaseTokens(encoder, text),
+          extractClaudeContentFeatures(text),
+          calibration,
+        );
+      } catch (error) {
+        throw new ModelPromptEstimatorError(
+          'tokenization-failed',
+          context,
+          'verify the history entry and retry with intact local base-counter assets',
+          { cause: error },
+        );
+      }
     },
   };
+}
+
+function serializeRuntimeTokenizerInput(
+  content: unknown,
+  context: ModelPromptEstimatorErrorContext,
+): string {
+  const remediation =
+    'provide string or JSON-serializable content to the runtime tokenizer';
+  if (typeof content === 'string') return content;
+  let text: string | undefined;
+  try {
+    text = JSON.stringify(content);
+  } catch (error) {
+    throw new ModelPromptEstimatorError(
+      'tokenization-failed',
+      context,
+      remediation,
+      { cause: error },
+    );
+  }
+  if (typeof text !== 'string') {
+    throw new ModelPromptEstimatorError(
+      'tokenization-failed',
+      context,
+      remediation,
+    );
+  }
+  return text;
 }
 
 function toRegistration(

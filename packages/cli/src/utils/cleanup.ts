@@ -13,7 +13,7 @@ import {
   beginCleanup,
   drainAsyncCleanups,
   drainSyncCleanups,
-  isCleanupInProgress,
+  getCleanupCompletion,
   registerCleanupFn,
   registerSyncCleanupFn,
 } from './cleanup-state.js';
@@ -41,14 +41,25 @@ export function runBestEffortSyncCleanup(
   }
 }
 
-export async function runExitCleanup() {
-  // Guard against concurrent cleanup if signal handlers fire multiple times
-  if (isCleanupInProgress()) return;
-  beginCleanup();
+/**
+ * Runs exit cleanup once. Every caller, including one that arrives while the
+ * run is still in progress (a signal handler during a normal exit), receives
+ * the same completion promise, so none can proceed to `process.exit` before
+ * PTY process groups and registered cleanups have finished.
+ */
+export function runExitCleanup(): Promise<void> {
+  const inFlight = getCleanupCompletion();
+  if (inFlight !== undefined) return inFlight;
+  const completion = Promise.resolve().then(performExitCleanup);
+  beginCleanup(completion);
+  return completion;
+}
 
-  // Tear down any active PTYs first to release FDs/sockets promptly
+async function performExitCleanup(): Promise<void> {
+  // Tear down any active PTYs first to release FDs/sockets promptly, and wait
+  // for their process groups to be terminated before the process exits.
   try {
-    ShellExecutionService.destroyAllPtys();
+    await ShellExecutionService.destroyAllPtys();
   } catch {
     // Ignore errors during cleanup.
   }

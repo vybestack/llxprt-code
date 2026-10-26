@@ -13,6 +13,7 @@ import {
 } from './quotaErrorDetection.js';
 import type { StructuredError } from '../core/turn.js';
 import { getErrorStatus, STREAM_INTERRUPTED_ERROR_CODE } from './retry.js';
+import { LocalTokenizationError } from './errors.js';
 
 const QUOTA_DOC_URL =
   'https://github.com/vybestack/llxprt-code/blob/main/docs/getting-started.md';
@@ -279,11 +280,22 @@ function extractNestedApiErrorMessage(message: string): string {
   }
 }
 
+function formatLocalTokenizationError(message: string): string {
+  return `[Local Tokenization Error: ${message}]\nLLxprt Code failed while counting tokens locally; this is not a response from the provider API.`;
+}
+
 export function parseAndFormatApiError(
   error: unknown,
   currentModel?: string,
   providerName?: string,
 ): string {
+  if (
+    error instanceof LocalTokenizationError ||
+    (isStructuredError(error) && error.category === 'local_tokenization')
+  ) {
+    return formatLocalTokenizationError(error.message);
+  }
+
   const errorCode = getErrorCodeFromUnknown(error);
   if (errorCode === STREAM_INTERRUPTED_ERROR_CODE) {
     return formatStreamInterruptedError(error);

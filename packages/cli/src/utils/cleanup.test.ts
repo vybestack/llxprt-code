@@ -143,11 +143,11 @@ describe('cleanup', () => {
   it('should tolerate duplicate destroyAllPtys calls when also registered as manual cleanup', async () => {
     const destroyAllSpy = vi
       .spyOn(ShellExecutionService, 'destroyAllPtys')
-      .mockImplementation(() => {});
+      .mockResolvedValue(undefined);
 
     // Simulate legacy code that also registers destroyAllPtys manually
-    registerCleanup(() => {
-      ShellExecutionService.destroyAllPtys();
+    registerCleanup(async () => {
+      await ShellExecutionService.destroyAllPtys();
     });
 
     await runExitCleanup();
@@ -160,7 +160,7 @@ describe('cleanup', () => {
   it('should invoke ShellExecutionService.destroyAllPtys automatically without manual registration', async () => {
     const destroyAllSpy = vi
       .spyOn(ShellExecutionService, 'destroyAllPtys')
-      .mockImplementation(() => {});
+      .mockResolvedValue(undefined);
 
     // No registerCleanup call — runExitCleanup should invoke destroyAllPtys itself
     await runExitCleanup();

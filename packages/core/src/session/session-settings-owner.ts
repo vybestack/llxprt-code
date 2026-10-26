@@ -714,11 +714,20 @@ export class SessionSettingsOwner {
 
   private publicationPending = false;
 
-  beginModelPublication(): { commit: () => void; rollback: () => void } {
+  /**
+   * Opens a window that publishes the selected model on commit when it differs
+   * from `previousModel`. Callers whose transition can write the selection
+   * before failing pass the last successfully applied model so a retry of the
+   * same target still publishes; the default is the current selection.
+   */
+  beginModelPublication(previousModel?: string): {
+    commit: () => void;
+    rollback: () => void;
+  } {
     this.assertOpen();
     if (this.publicationPending)
       throw new Error('Model publication is already pending');
-    const previous = this.readSelectedModel();
+    const previous = previousModel ?? this.readSelectedModel();
     this.publicationPending = true;
     return {
       commit: () => {
