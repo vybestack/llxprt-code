@@ -295,6 +295,25 @@ function useAppDialogsRuntime(
   });
 }
 
+/** Stream operations the input path binds from the agent props. */
+function useInputStreamOperations(props: AppContainerRuntimeProps) {
+  return useInputAgentOperations(
+    props.readHistory,
+    props.stream,
+    props.appendHistory,
+    props.injectSteer,
+    props.getProviderContextLimit,
+    props.getContentPrefixIdentity,
+    props.tools,
+    props.mcp,
+    props.metrics,
+    props.tasks,
+    props.session,
+    props.recordingOwner,
+    props.recordingIntegration,
+  );
+}
+
 /** Input runtime: wiring only; every param is bootstrap/store-owned. */
 function useInputBindings(
   commands: SlashCommandProcessorCoreResult,
@@ -319,35 +338,21 @@ function useInputBindings(
     dialogStore,
     commands.commandContext.ui.clear,
   );
-  const stream = useInputAgentOperations(
-    props.readHistory,
-    props.stream,
-    props.appendHistory,
-    props.injectSteer,
-    props.getProviderContextLimit,
-    props.getContentPrefixIdentity,
-    props.tools,
-    props.mcp,
-    props.metrics,
-    props.tasks,
-    props.session,
-    props.recordingOwner,
-    props.recordingIntegration,
-  );
-  const policy = useInputStreamPolicy(
-    runtime.session,
-    runtime.events,
-    runtime.model,
-    runtime.ephemeral,
-    runtime.shell,
-    runtime.checkpoint,
-    runtime.files,
-    runtime.settings,
-    runtime.bucketFailover,
-    runtime.sessionLimits,
-    runtime.projectTempDir,
-    runtime.projectCheckpointsDir,
-  );
+  const stream = useInputStreamOperations(props);
+  const policy = useInputStreamPolicy({
+    session: runtime.session,
+    events: runtime.events,
+    model: runtime.model,
+    ephemeral: runtime.ephemeral,
+    shell: runtime.shell,
+    checkpoint: runtime.checkpoint,
+    files: runtime.files,
+    settings: runtime.settings,
+    bucketFailover: runtime.bucketFailover,
+    sessionLimits: runtime.sessionLimits,
+    projectTempDir: runtime.projectTempDir,
+    projectCheckpointsDir: runtime.projectCheckpointsDir,
+  });
   return useAppInput({
     ...stream,
     ...policy,
@@ -359,16 +364,22 @@ function useInputBindings(
     setApprovalMode: props.setApprovalMode,
     generatePromptContent: props.generatePromptContent,
     injectInputSteer: props.injectSteer,
-    ...useInputReadOperations(
-      runtime.hooks,
-      runtime.app,
-      props.isAgentClientPresent,
-      props.readIdeMode,
-      runtime.shell,
-      runtime.mcp,
-      useBound(props.containerRuntime, props.containerRuntime.refreshMemory),
-      useBound(props.containerRuntime, props.containerRuntime.getDebugMode),
-    ),
+    ...useInputReadOperations({
+      hooks: runtime.hooks,
+      app: runtime.app,
+      isAgentClientPresent: props.isAgentClientPresent,
+      readIdeMode: props.readIdeMode,
+      shell: runtime.shell,
+      mcp: runtime.mcp,
+      refreshMemory: useBound(
+        props.containerRuntime,
+        props.containerRuntime.refreshMemory,
+      ),
+      readDebugMode: useBound(
+        props.containerRuntime,
+        props.containerRuntime.getDebugMode,
+      ),
+    }),
     ...inputView,
   });
 }

@@ -8,7 +8,22 @@ import type { AgentStreamInputs } from './hooks/agentStream/useAgentStream.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
 import type { useContentIdentityReader } from './hooks/agentStream/useStreamOwnerCallbacks.js';
-import type { MemoryState, UiRuntime } from './cliUiRuntime.js';
+import type {
+  AppEventRuntime,
+  AppStateRuntime,
+  BucketFailoverRuntime,
+  CheckpointRuntime,
+  EphemeralSettingsRuntime,
+  HookSkillState,
+  McpState,
+  MemoryState,
+  ModelState,
+  SessionIdentity,
+  SessionLimitsRuntime,
+  SettingsTelemetryState,
+  ShellState,
+} from './cliUiRuntime.js';
+import type { AtCommandHelperRuntime } from './hooks/atCommandProcessorHelpers.js';
 import { resolveEmojiFilterMode } from './utils/iContentToHistoryItems.js';
 import {
   useBound,
@@ -79,20 +94,56 @@ export function useInputAgentOperations(
     flushRecording: useTurnFlush(session, recordingOwner, recorder),
   };
 }
-export function useInputStreamPolicy(
-  session: UiRuntime['session'],
-  events: UiRuntime['events'],
-  model: UiRuntime['model'],
-  ephemeral: UiRuntime['ephemeral'],
-  shell: UiRuntime['shell'],
-  checkpoint: UiRuntime['checkpoint'],
-  files: UiRuntime['files'],
-  prefs: UiRuntime['settings'],
-  buckets: UiRuntime['bucketFailover'],
-  limits: UiRuntime['sessionLimits'],
-  projectTempDir: string,
-  projectCheckpointsDir: string,
-) {
+/** Shell reads the stream policy and input path make. */
+export type InputShellReads = Pick<
+  ShellState,
+  | 'getShouldUseNodePtyShell'
+  | 'getShellExecutionConfig'
+  | 'getPtyTerminalWidth'
+  | 'getPtyTerminalHeight'
+  | 'getEnableInteractiveShell'
+>;
+
+/**
+ * The capabilities the stream-policy bindings read, each narrowed to the
+ * operations the bound callbacks actually call.
+ */
+export interface StreamPolicyReads {
+  readonly session: Pick<SessionIdentity, 'getSessionId' | 'getTargetDir'>;
+  readonly events: AppEventRuntime;
+  readonly model: ModelState;
+  readonly ephemeral: EphemeralSettingsRuntime;
+  readonly shell: InputShellReads;
+  readonly checkpoint: CheckpointRuntime;
+  readonly files: AtCommandHelperRuntime;
+  readonly settings: Pick<
+    SettingsTelemetryState,
+    | 'logUserPrompt'
+    | 'readSelectedProvider'
+    | 'readCitations'
+    | 'readProfileName'
+  >;
+  readonly bucketFailover: BucketFailoverRuntime;
+  readonly sessionLimits: SessionLimitsRuntime;
+  readonly projectTempDir: string;
+  readonly projectCheckpointsDir: string;
+}
+
+export function useInputStreamPolicy(reads: StreamPolicyReads) {
+  const {
+    session,
+    events,
+    model,
+    ephemeral,
+    shell,
+    checkpoint,
+    files,
+    settings: prefs,
+    bucketFailover: buckets,
+    sessionLimits: limits,
+    projectTempDir,
+    projectCheckpointsDir,
+  } = reads;
   return {
     isCheckpointingEnabled: useBound(
       checkpoint,
@@ -137,16 +188,29 @@ export function useInputStreamPolicy(
   };
 }
 
-export function useInputReadOperations(
-  hooks: UiRuntime['hooks'],
-  app: UiRuntime['app'],
-  isAgentClientPresent: () => boolean,
-  readIdeMode: () => boolean,
-  shell: UiRuntime['shell'],
-  mcp: UiRuntime['mcp'],
-  refreshMemory: MemoryState['refreshMemory'],
-  readDebugMode: () => boolean,
-) {
+/** The remaining runtime reads `useAppInput` takes. */
+export interface InputReadOperations {
+  readonly hooks: Pick<HookSkillState, 'endHookSession'>;
+  readonly app: Pick<AppStateRuntime, 'getQuestion'>;
+  readonly isAgentClientPresent: () => boolean;
+  readonly readIdeMode: () => boolean;
+  readonly shell: Pick<ShellState, 'getEnableInteractiveShell'>;
+  readonly mcp: Pick<McpState, 'getMcpServers'>;
+  readonly refreshMemory: MemoryState['refreshMemory'];
+  readonly readDebugMode: () => boolean;
+}
+
+export function useInputReadOperations(reads: InputReadOperations) {
+  const {
+    hooks,
+    app,
+    isAgentClientPresent,
+    readIdeMode,
+    shell,
+    mcp,
+    refreshMemory,
+    readDebugMode,
+  } = reads;
   return {
     refreshMemory,
     readDebugMode,
