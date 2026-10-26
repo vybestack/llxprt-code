@@ -46,6 +46,7 @@ export {
 export {
   assertCanonicalSettingKey,
   LEGACY_SETTING_KEY_MIGRATIONS,
+  legacySettingCanonicalKey,
   migrateLegacySettingKeys,
 } from './settings/legacyKeyMigration.js';
 export { isStrictNumericString } from './settings/numericString.js';

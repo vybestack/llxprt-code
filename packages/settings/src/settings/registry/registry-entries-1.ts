@@ -5,8 +5,9 @@
  */
 
 import type { SettingSpec, ValidationResult } from './registry-types.js';
+import { deepFreezeTable } from '../immutableTable.js';
 
-const REASONING_EFFORT_KEYS = new Set([
+const REASONING_EFFORT_KEYS: readonly string[] = Object.freeze([
   'minimal',
   'low',
   'medium',
@@ -15,7 +16,10 @@ const REASONING_EFFORT_KEYS = new Set([
   'max',
 ]);
 
-const REASONING_ENABLED_KEYS = new Set(['true', 'false']);
+const REASONING_ENABLED_KEYS: readonly string[] = Object.freeze([
+  'true',
+  'false',
+]);
 
 /** Numeric effort-map values are explicit budgets with a hard floor. */
 const MIN_MAPPED_BUDGET_TOKENS = 1024;
@@ -63,7 +67,7 @@ function validateReasoningEffortMap(value: unknown): ValidationResult {
   }
 
   for (const [key, mappedValue] of Object.entries(value)) {
-    if (!REASONING_EFFORT_KEYS.has(key)) {
+    if (!REASONING_EFFORT_KEYS.includes(key)) {
       return {
         success: false,
         message: `reasoning.effortMap contains unsupported key '${key}'`,
@@ -89,7 +93,7 @@ function validateReasoningEnabledMap(value: unknown): ValidationResult {
   }
 
   for (const [key, mappedValue] of Object.entries(value)) {
-    if (!REASONING_ENABLED_KEYS.has(key)) {
+    if (!REASONING_ENABLED_KEYS.includes(key)) {
       return {
         success: false,
         message: `reasoning.enabledMap contains unsupported key '${key}'`,
@@ -107,7 +111,9 @@ function validateReasoningEnabledMap(value: unknown): ValidationResult {
   return { success: true, value };
 }
 
-export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
+export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = deepFreezeTable<
+  readonly SettingSpec[]
+>([
   {
     key: 'auth-key',
     category: 'provider-config',
@@ -739,4 +745,4 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     enumValues: ['warn', 'truncate', 'sample'],
     persistToProfile: true,
   },
-];
+]);

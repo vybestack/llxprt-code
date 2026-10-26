@@ -20,38 +20,55 @@
  * aliases, and the tools_allowed spelling accepted by subagent ephemeral
  * population) map to their one canonical key here.
  */
-export const LEGACY_SETTING_KEY_MIGRATIONS: ReadonlyMap<string, string> =
-  new Map<string, string>([
+export const LEGACY_SETTING_KEY_MIGRATIONS: Readonly<Record<string, string>> =
+  Object.freeze({
     // model params
-    ['max-tokens', 'max_tokens'],
-    ['maxTokens', 'max_tokens'],
-    ['max-output-tokens', 'max_output_tokens'],
-    ['max-output', 'maxOutputTokens'],
-    ['response-format', 'response_format'],
-    ['responseFormat', 'response_format'],
-    ['tool-choice', 'tool_choice'],
-    ['toolChoice', 'tool_choice'],
+    'max-tokens': 'max_tokens',
+    maxTokens: 'max_tokens',
+    'max-output-tokens': 'max_output_tokens',
+    'max-output': 'maxOutputTokens',
+    'response-format': 'response_format',
+    responseFormat: 'response_format',
+    'tool-choice': 'tool_choice',
+    toolChoice: 'tool_choice',
     // provider config
-    ['apiKey', 'auth-key'],
-    ['api-key', 'auth-key'],
-    ['apiKeyfile', 'auth-keyfile'],
-    ['api-keyfile', 'auth-keyfile'],
-    ['baseUrl', 'base-url'],
-    ['baseurl', 'base-url'],
-    ['base_url', 'base-url'],
-    ['BaseUrl', 'base-url'],
-    ['BaseURL', 'base-url'],
-    ['tool-format', 'toolFormat'],
-    ['tool-format-override', 'toolFormatOverride'],
+    apiKey: 'auth-key',
+    'api-key': 'auth-key',
+    apiKeyfile: 'auth-keyfile',
+    'api-keyfile': 'auth-keyfile',
+    baseUrl: 'base-url',
+    baseurl: 'base-url',
+    base_url: 'base-url',
+    BaseUrl: 'base-url',
+    BaseURL: 'base-url',
+    'tool-format': 'toolFormat',
+    'tool-format-override': 'toolFormatOverride',
     // headers
-    ['User-Agent', 'user-agent'],
+    'User-Agent': 'user-agent',
     // tool governance (canonical keys are dotted)
-    ['disabled-tools', 'tools.disabled'],
-    ['tools_allowed', 'tools.allowed'],
+    'disabled-tools': 'tools.disabled',
+    tools_allowed: 'tools.allowed',
     // stream watchdogs (settings.json historically stored camelCase)
-    ['streamIdleTimeoutMs', 'stream-idle-timeout-ms'],
-    ['streamFirstResponseTimeoutMs', 'stream-first-response-timeout-ms'],
-  ]);
+    streamIdleTimeoutMs: 'stream-idle-timeout-ms',
+    streamFirstResponseTimeoutMs: 'stream-first-response-timeout-ms',
+  });
+
+/**
+ * Own keys of the migration table. Kept separately so a lookup can test
+ * ownership before reading the record: a bare `record[key]` would answer for
+ * inherited members such as `constructor` and turn a user-typed setting name
+ * into a function.
+ */
+const LEGACY_SETTING_KEYS: readonly string[] = Object.freeze(
+  Object.keys(LEGACY_SETTING_KEY_MIGRATIONS),
+);
+
+/** Canonical spelling for a legacy setting key, or undefined when none exists. */
+export function legacySettingCanonicalKey(key: string): string | undefined {
+  return LEGACY_SETTING_KEYS.includes(key)
+    ? LEGACY_SETTING_KEY_MIGRATIONS[key]
+    : undefined;
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -108,7 +125,7 @@ function writeCanonicalValue(
  * permitted while loading persisted state.
  */
 export function assertCanonicalSettingKey(key: string): void {
-  const canonicalKey = LEGACY_SETTING_KEY_MIGRATIONS.get(key);
+  const canonicalKey = legacySettingCanonicalKey(key);
   if (canonicalKey !== undefined) {
     throw new Error(
       `Setting '${key}' is not recognized; use the canonical '${canonicalKey}'.`,
@@ -134,10 +151,11 @@ export function migrateLegacySettingKeys(
   const result: Record<string, unknown> = { ...raw };
   let changed = false;
 
-  for (const [legacyKey, canonicalKey] of LEGACY_SETTING_KEY_MIGRATIONS) {
+  for (const legacyKey of LEGACY_SETTING_KEYS) {
     if (!(legacyKey in result)) {
       continue;
     }
+    const canonicalKey = LEGACY_SETTING_KEY_MIGRATIONS[legacyKey];
     const legacyValue = result[legacyKey];
     delete result[legacyKey];
     if (!hasCanonicalValue(result, canonicalKey)) {

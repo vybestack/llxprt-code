@@ -13,7 +13,7 @@ import {
 } from '@vybestack/llxprt-code-settings/settings/ephemeral-settings.js';
 import {
   isStrictNumericString,
-  LEGACY_SETTING_KEY_MIGRATIONS,
+  legacySettingCanonicalKey,
   validateSetting,
 } from '@vybestack/llxprt-code-settings';
 import { buildSetSchema } from './setCommandSchema.js';
@@ -40,7 +40,7 @@ export interface SetCommandOperations {
  * silently accept them, so reject with the canonical spelling instead.
  */
 function rejectLegacySettingKey(key: string): MessageActionReturn | null {
-  const canonicalKey = LEGACY_SETTING_KEY_MIGRATIONS.get(key);
+  const canonicalKey = legacySettingCanonicalKey(key);
   if (canonicalKey === undefined) {
     return null;
   }

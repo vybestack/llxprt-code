@@ -80,9 +80,9 @@ export interface SeparatedSettings {
   customHeaders: Record<string, string>;
 }
 
-export const COMPRESSION_STRATEGIES = [
+export const COMPRESSION_STRATEGIES = Object.freeze([
   'middle-out',
   'top-down-truncation',
   'one-shot',
   'high-density',
-] as const;
+] as const);
