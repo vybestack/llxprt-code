@@ -220,7 +220,7 @@ async function consumeUpload(
       actual.update(next.value);
       received += next.value.byteLength;
       if (progress.rows >= lastCollection + 256) {
-        await probe.checkpoint('conversion');
+        probe.sample('conversion');
         lastCollection = progress.rows;
       }
       if (progress.rows >= nextQuarter && nextQuarter <= 18750) {

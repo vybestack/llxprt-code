@@ -93,6 +93,27 @@ export function* realisticSessionRows(
   }
 }
 
+/** Reconstruct one default-corpus row for random-access reference converters. */
+export function realisticSessionRowAt(index: number): RealisticSessionRow {
+  if (
+    !Number.isSafeInteger(index) ||
+    index < 0 ||
+    index >= REALISTIC_SESSION_ROWS
+  )
+    throw new RangeError('Reference row is outside the realistic session');
+  const ordinaryCount = REALISTIC_SESSION_ROWS - LARGE_ROW_INDICES.length;
+  const ordinaryBytes =
+    REALISTIC_SESSION_PAYLOAD_BYTES -
+    LARGE_ROW_INDICES.length * LARGE_ROW_BYTES;
+  const ordinaryIndex =
+    index - LARGE_ROW_INDICES.filter((large) => large < index).length;
+  const bytes = LARGE_ROW_INDICES.includes(index)
+    ? LARGE_ROW_BYTES
+    : Math.floor(ordinaryBytes / ordinaryCount) +
+      Number(ordinaryIndex < ordinaryBytes % ordinaryCount);
+  return makeRow(index, bytes);
+}
+
 export function sessionRowPayload(row: RealisticSessionRow): string {
   return row.text;
 }

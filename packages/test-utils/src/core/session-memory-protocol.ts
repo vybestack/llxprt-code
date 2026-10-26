@@ -86,6 +86,8 @@ export interface SessionMeasurement extends SessionCorpus {
   readonly peakBufferGrowthBytes: number;
   readonly peakRssGrowthBytes: number;
   readonly boundBytes: number;
+  readonly peakRetainedGrowthBytes: number;
+  readonly allocationGrowthBytesPerRow: number;
 }
 
 const MIN_SESSION_BYTES = 60 * 1024 * 1024;
@@ -111,8 +113,8 @@ const RECORD_CHECKPOINTS: readonly SessionCheckpoint[] = [
 
 /**
  * JSC heap includes extra memory. external and arrayBuffers overlap, so take
- * their maximum, never their sum. Gate heap and buffers independently; RSS is
- * diagnostic. heapUsed supplements JSC's last-GC heap for uncollected samples.
+ * their maximum, never their sum. The retained predicate sums heap and external
+ * conservatively; RSS is diagnostic. heapUsed supplements JSC's last-GC heap for uncollected samples.
  */
 function memoryReading(): SessionMemoryReading {
   const usage = process.memoryUsage();
@@ -168,7 +170,7 @@ export async function measureRealisticSession(
     const denominator =
       adapter.operation === 'record'
         ? prepared.corpus.neutralPayloadBytes
-        : prepared.corpus.selectedPayloadBytes;
+        : prepared.reference.bytes;
     return {
       ...prepared.corpus,
       routeId: adapter.routeId,
@@ -193,7 +195,14 @@ export async function measureRealisticSession(
         sampler.baseline,
         'rssBytes',
       ),
-      boundBytes: Math.floor(denominator / 4),
+      boundBytes: Math.max(8 * 1024 * 1024, Math.floor(denominator / 8)),
+      peakRetainedGrowthBytes: retainedGrowth(
+        sampler.samples,
+        sampler.baseline,
+      ),
+      allocationGrowthBytesPerRow:
+        observedAllocationGrowth(sampler.samples, sampler.baseline) /
+        prepared.corpus.selectedRowCount,
     };
   } finally {
     sampler.stop();
@@ -212,6 +221,40 @@ function peakDelta(
   );
 }
 
+function retainedGrowth(
+  samples: readonly SessionMemorySample[],
+  baseline: SessionMemoryReading,
+): number {
+  return samples
+    .filter((sample) => sample.mode === 'settled')
+    .reduce(
+      (peak, sample) =>
+        Math.max(
+          peak,
+          sample.heapBytes +
+            sample.bufferBytes -
+            baseline.heapBytes -
+            baseline.bufferBytes,
+        ),
+      -Infinity,
+    );
+}
+
+/** Sampled positive increments provide an allocation-volume proxy, not a GC counter. */
+function observedAllocationGrowth(
+  samples: readonly SessionMemorySample[],
+  baseline: SessionMemoryReading,
+): number {
+  let previous = baseline.heapBytes + baseline.bufferBytes;
+  let growth = 0;
+  for (const sample of samples) {
+    const current = sample.heapBytes + sample.bufferBytes;
+    growth += Math.max(0, current - previous);
+    previous = current;
+  }
+  return growth;
+}
+
 function validReading(reading: SessionMemoryReading): boolean {
   return (
     [reading.heapBytes, reading.bufferBytes, reading.rssBytes].every(
@@ -227,8 +270,7 @@ export function sessionMemoryAccepted(
 ): boolean {
   return (
     validSessionProof(measurement) &&
-    measurement.peakHeapGrowthBytes < measurement.boundBytes &&
-    measurement.peakBufferGrowthBytes < measurement.boundBytes
+    measurement.peakRetainedGrowthBytes < measurement.boundBytes
   );
 }
 
@@ -238,8 +280,8 @@ function validSessionProof(measurement: SessionMeasurement): boolean {
   const denominator =
     measurement.operation === 'record'
       ? measurement.neutralPayloadBytes
-      : measurement.selectedPayloadBytes;
-  const bound = Math.floor(denominator / 4);
+      : measurement.reference.bytes;
+  const bound = Math.max(8 * 1024 * 1024, Math.floor(denominator / 8));
   const checks = [
     validCorpus(measurement),
     validReading(measurement.baseline),
@@ -253,6 +295,9 @@ function validSessionProof(measurement: SessionMeasurement): boolean {
       ),
     ),
     measurement.boundBytes === bound,
+    Number.isFinite(measurement.peakRetainedGrowthBytes),
+    Number.isFinite(measurement.allocationGrowthBytesPerRow),
+    measurement.allocationGrowthBytesPerRow >= 0,
     Number.isFinite(measurement.peakHeapGrowthBytes),
     Number.isFinite(measurement.peakBufferGrowthBytes),
     measurement.wireBytes === measurement.reference.bytes,
@@ -335,10 +380,7 @@ export function assertWholeHistoryControl(
   }
   if (
     sessionMemoryAccepted(measurement) ||
-    !(
-      measurement.peakHeapGrowthBytes >= measurement.boundBytes ||
-      measurement.peakBufferGrowthBytes >= measurement.boundBytes
-    )
+    measurement.peakRetainedGrowthBytes < measurement.boundBytes * 2
   ) {
     throw new Error(
       `Whole-history buffering escaped the memory predicate: ${JSON.stringify(measurement)}`,

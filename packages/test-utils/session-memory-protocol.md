@@ -30,7 +30,7 @@ Implement `SessionRouteAdapter` locally to the production route's package.
 journal using bounded batches and releases seed objects before returning.
 It returns corpus accounting, an independent wire reference, the measured
 `run()` operation, and `close()` cleanup. Run the measurement in an isolated
-process. A WebSocket receiver belongs in a separate process.
+process. HTTP and WebSocket receivers belong in separate processes.
 
 For send, `run()` must call the public provider with the journal pin and consume
 and hash the actual upload incrementally. Count selected rows independently,
@@ -53,19 +53,32 @@ release tests as well.
 
 ## Predicate and controls
 
-`assertSessionMemory()` requires both heap and buffer peak growth strictly below
-`floor(selectedPayloadBytes / 4)` for send. Record uses neutral payload bytes.
-It rejects small selections, missing checkpoints, invalid readings, and changed
-wire digests or lengths. RSS is reported but does not decide acceptance.
+`assertSessionMemory()` requires the maximum collected heap-plus-external growth
+strictly below `max(8 MiB, floor(wireBytes / 8))` for sends. Record uses neutral
+payload bytes instead. The 8 MiB floor allows current-row conversion, including
+the 2 MiB tool results, and fixed runtime bookkeeping. The one-eighth term stays
+far below a complete selected history. The control must exceed twice this bound.
+Small selections, missing checkpoints, invalid readings, and changed wire digests
+or lengths fail independently of memory. RSS remains diagnostic.
 
-JSC heap includes externally owned string and buffer storage. The buffer counter
-uses `max(external, arrayBuffers)` because those counters overlap. Heap and
-buffers are gated independently, never added together. Uncollected samples also
-read `process.memoryUsage().heapUsed` because JSC's heap counter describes its
-last collection. Deltas are not clamped, averaged, retried, or filtered.
+Each checkpoint uses the same full-collection settling procedure as the baseline
+while the operation is paused and its objects remain in scope. Use about eight evenly spaced checkpoints
+across conversion and upload, including mid-fill, mid-send and body admission
+before completion. A final post-return reading cannot replace them. The sampler
+never clears production holders or changes production code. Conversion observers
+can take cheap uncollected samples between collection checkpoints.
+
+JSC heap includes some externally owned storage. The sum with
+`max(external, arrayBuffers)` is a conservative upper bound: overlapping storage
+may be counted twice, never omitted. Baseline and checkpoint use the same sum.
+Uncollected heap and buffer peaks are reported diagnostics only. The
+`allocationGrowthBytesPerRow` diagnostic sums positive changes between sampled
+heap-plus-external readings and divides by selected rows. It is an allocation-volume proxy, not a total-allocation counter: automatic GC
+can occur between samples, and heap/external storage may overlap. No sample is discarded, retried or averaged.
 
 Pass the supplied owner each selected row's complete native-format payload during
-the same measured operation. For record pass each existing row's neutral payload
+the same measured operation. HTTP controls may instead retain every selected raw
+history row if that holds at least the complete history payload. For record pass each existing row's neutral payload
 during the record window. The ordinary owner retains nothing. Repeat with
 `createWholeHistoryBufferingControl()`, which makes fresh byte copies of every
 payload and holds them through sampling. `assertWholeHistoryControl()` checks
@@ -81,3 +94,22 @@ override, only scheduled or manually dispatched `Nightly Tests` runs select the
 extended lane. Other explicit values fail. Put selected sizes in registered test
 names so diagnostics expose the chosen cases. Construct large fixtures inside
 selected cases, not before selection. No runner or workflow edits are needed.
+
+## Native HTTP reference and control
+
+The native HTTP adapter independently enumerates the selected journal once inside
+the measured window to feed the supplied owner and count selected rows. This
+includes Anthropic, whose indexed transport bypasses the outer selection reader.
+The ordinary owner stores nothing; the control retains fresh raw-row byte copies
+through body admission and after-release. Native conversion and upload still run
+unchanged, with cold-fill collections through existing format registration
+callbacks and the existing file-I/O seam for Kimi fact filling. Receiver checkpoints wait for the sender to acknowledge collection,
+so the sender remains in flight during upload samples.
+
+Anthropic's caller-owned reference made 837,456 random row reads for this corpus,
+about 33.5 per row, versus zero random reads for the streaming Chat reference.
+Reading each reference row from the journal made setup dominate the hang guard.
+`realisticSessionRowAt()` reconstructs one deterministic reference row without
+I/O or a whole-history array. A streaming digest test compares every reconstructed
+row with the generator. This changes reference setup only; the measured native
+send reads its real journal and does not prefill format lengths.

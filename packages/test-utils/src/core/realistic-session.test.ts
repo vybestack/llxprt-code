@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { retainedAfterSettling } from './settled-heap.js';
 import {
   realisticSessionRows,
+  realisticSessionRowAt,
   realisticSessionSummary,
   sessionRowPayload,
   REALISTIC_SESSION_ROWS,
@@ -46,6 +47,23 @@ describe('realistic session fixture', () => {
       'tool-call': 6250,
       'tool-result': 6250,
     });
+  });
+
+  it('reconstructs arbitrary reference rows without reading or retaining the journal', () => {
+    const streamed = createHash('sha256');
+    const indexed = createHash('sha256');
+    let at = 0;
+    for (const row of realisticSessionRows()) {
+      streamed.update(JSON.stringify(row));
+      indexed.update(JSON.stringify(realisticSessionRowAt(at++)));
+    }
+    expect(indexed.digest('hex')).toBe(streamed.digest('hex'));
+    expect(() => realisticSessionRowAt(-1)).toThrow(
+      'outside the realistic session',
+    );
+    expect(() => realisticSessionRowAt(25_000)).toThrow(
+      'outside the realistic session',
+    );
   });
 
   it('pairs call ids and includes escaped UTF-8 content without shared identical rows', () => {

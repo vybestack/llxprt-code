@@ -57,7 +57,9 @@ describe('record measurement contract', () => {
   it('uses neutral bytes for recording even when route payload bytes differ', async () => {
     const result = await measureRealisticSession(recordRoute());
     expect(sessionMemoryAccepted(result)).toBe(true);
-    expect(result.boundBytes).toBe(Math.floor(result.neutralPayloadBytes / 4));
+    expect(result.boundBytes).toBe(
+      Math.max(8 * 1024 * 1024, Math.floor(result.neutralPayloadBytes / 8)),
+    );
     expect(result.boundBytes).toBeLessThan(result.selectedPayloadBytes / 4);
     expect(sessionMemoryAccepted({ ...result, wireSha256: 'corrupt' })).toBe(
       false,
@@ -65,7 +67,7 @@ describe('record measurement contract', () => {
     expect(
       sessionMemoryAccepted({
         ...result,
-        peakBufferGrowthBytes: result.boundBytes,
+        peakRetainedGrowthBytes: result.boundBytes,
       }),
     ).toBe(false);
     expect(

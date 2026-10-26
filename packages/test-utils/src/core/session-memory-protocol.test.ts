@@ -85,13 +85,24 @@ describe('realistic session memory protocol', () => {
     expect(
       streaming.samples.some((sample) => sample.checkpoint === 'interval'),
     ).toBe(true);
+    expect(streaming.allocationGrowthBytesPerRow).toBeGreaterThan(0);
+    expect(
+      streaming.samples.filter((sample) => sample.mode === 'settled').length,
+    ).toBeGreaterThanOrEqual(8);
+    expect(
+      sessionMemoryAccepted({
+        ...streaming,
+        peakHeapGrowthBytes: streaming.wireBytes * 2,
+        peakBufferGrowthBytes: streaming.wireBytes * 2,
+      }),
+    ).toBe(true);
     expect(streaming.baseline.rssBytes).toBeGreaterThan(0);
     const control = createWholeHistoryBufferingControl();
     const buffered = await measureRealisticSession(fakeRoute(), control);
     expect(control.rowCount).toBe(25_000);
     expect(control.payloadBytes).toBe(streaming.neutralPayloadBytes);
     expect(sessionMemoryAccepted(buffered)).toBe(false);
-    expect(buffered.peakBufferGrowthBytes).toBeGreaterThanOrEqual(
+    expect(buffered.peakRetainedGrowthBytes).toBeGreaterThanOrEqual(
       buffered.boundBytes,
     );
     expect(() => assertSessionMemory(buffered)).toThrow('streaming-fake');
@@ -127,7 +138,7 @@ describe('realistic session memory protocol', () => {
     expect(
       sessionMemoryAccepted({
         ...measurement,
-        peakHeapGrowthBytes: measurement.boundBytes,
+        peakRetainedGrowthBytes: measurement.boundBytes,
       }),
     ).toBe(false);
     const incomplete = createWholeHistoryBufferingControl();
