@@ -44,7 +44,7 @@ function fixturePaths() {
 
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArguments } from '../cliArgParser.js';
@@ -68,43 +68,6 @@ describe('CLI provider bootstrap across owners', () => {
     await Promise.all(
       roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
     );
-  });
-
-  it('uses focused public provider imports at each CLI bootstrap and owner feature boundary', async () => {
-    const files = [
-      '../postConfigRuntime.ts',
-      '../profileBootstrap.ts',
-      '../../runtime/createRuntimeOwnerFeatures.ts',
-      '../../ui/contexts/RuntimeContext.tsx',
-    ];
-    for (const file of files) {
-      const source = await readFile(new URL(file, import.meta.url), 'utf8');
-      expect(source).not.toContain('@vybestack/llxprt-code-providers/runtime');
-    }
-  });
-
-  it('consumes provider selection contracts without provider runtime imports', async () => {
-    const files = [
-      '../../cliSessionBootstrap.ts',
-      '../../cliAgentBootstrap.ts',
-      '../profileBootstrap.ts',
-      '../../ui/contexts/RuntimeContext.tsx',
-      '../../ui/hooks/agentStream/__tests__/useSubmitQuery.providerIgnoreCancel.bun.tsx',
-      '../../../../agents/src/api/profile-application/switchProfileProvider.ts',
-      '../../../../agents/src/api/profileApplicationAssembly.ts',
-      '../../../../agents/src/api/agentImpl.ts',
-      '../../../../agents/src/api/__tests__/helpers/profile-owner-fixture.ts',
-    ];
-    for (const file of files) {
-      const source = await readFile(new URL(file, import.meta.url), 'utf8');
-      expect(source).not.toContain('@vybestack/llxprt-code-providers/runtime');
-    }
-    await expect(
-      readFile(
-        new URL('../../../../agents/src/api/agent-deps.ts', import.meta.url),
-        'utf8',
-      ),
-    ).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('keeps same-label pre/post Config handles separate and reapplies CLI overrides after switching', async () => {

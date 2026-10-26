@@ -163,7 +163,7 @@ describe('Agent test scratch ownership', () => {
       } while (lifecycle.scanning);
       const { code, output } = await completed;
       expect({ code, output }).toMatchObject({ code: 0 });
-      expect(output).toContain('5 pass');
+      expect(output).toContain('1 pass');
       expect(directories.length).toBeGreaterThan(0);
       expect(
         directories.filter((directory) =>

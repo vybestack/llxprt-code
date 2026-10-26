@@ -209,10 +209,9 @@ only its intended API. There is no replacement subpath and no compatibility
 alias: former consumers construct clients and schedulers through the curated
 root factories (`createAgentClient`, `createToolScheduler`,
 `createTaskRegistration`) or drive turns through the `Agent` facade
-(`createAgent` / `fromConfig`). The removal is enforced by
-`packages/agents/src/api/__tests__/boundary.no-internals-subpath.test.ts`,
-which fails if the exports entry, the barrel file, or any repo reference to
-the subpath reappears.
+(`createAgent` / `fromConfig`). Importing the subpath must fail, which
+`packages/agents/src/api/__tests__/boundary.no-internals-subpath.test.ts`
+checks by resolving the specifier through a dynamic import.
 
 ## New public enums and projected types (`#2143`)
 
