@@ -653,7 +653,7 @@ describe('cli.tsx main function', () => {
     expect(
       createForegroundAgent as Mock<typeof createForegroundAgent>,
     ).toHaveBeenCalledWith(
-      configuredWorkspace.mock.contexts[0],
+      expect.objectContaining({ admitForegroundAgent: expect.any(Function) }),
       expect.any(Object),
       expect.objectContaining({ provider: mockConfig.getProvider() }),
       expect.any(Object),
