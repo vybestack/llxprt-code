@@ -65,7 +65,7 @@ async function probe(size: number, trap: boolean): Promise<void> {
   await withDetachedFixture((fixture) =>
     withRetainedClient(fixture, async ({ client }) => {
       const { history, recorder, owners } = fixture;
-      await seedClientArrayHistory(fixture, size);
+      await seedClientArrayHistory(fixture, size, 128);
       forbidClientArrayRollback(fixture);
       const ready = gate();
       const release = gate();

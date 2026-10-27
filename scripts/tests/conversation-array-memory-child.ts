@@ -82,7 +82,7 @@ function submit(
 async function probe(size: number, trap: boolean): Promise<void> {
   await withDetachedFixture(async (fixture) => {
     const { history, recorder, owners } = fixture;
-    await seedClientArrayHistory(fixture, size);
+    await seedClientArrayHistory(fixture, size, 128);
     const conversation = conversationFor(history);
     forbidArrayRollback(history);
     const ready = gate();
