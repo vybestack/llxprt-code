@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { sendThroughRoute, WIRE_ROUTES } from './support/wireBodyCapture.js';
@@ -129,7 +130,16 @@ describe('caller-owned Responses selection validation', () => {
         const creates = await operationFileCreates(async () => {
           await expect(
             sendThroughRoute(
-              route,
+              {
+                ...route,
+                // Exercise the PDF limit after passing the separate media budget.
+                createProvider: () =>
+                  bindProviderMedia(
+                    route.createProvider(),
+                    undefined,
+                    data.length * 2,
+                  ),
+              },
               {
                 id: 'caller-pdf',
                 description: 'aggregate PDF limit',
