@@ -252,10 +252,16 @@ describe('AnthropicProvider', () => {
       expect(chunks).toStrictEqual([
         {
           speaker: 'ai',
+          responseAttemptId: expect.stringMatching(
+            /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i,
+          ),
           blocks: [{ type: 'text', text: 'Hello' }],
         },
         {
           speaker: 'ai',
+          responseAttemptId: expect.stringMatching(
+            /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i,
+          ),
           blocks: [{ type: 'text', text: ' world' }],
         },
       ]);
@@ -337,6 +343,9 @@ describe('AnthropicProvider', () => {
       expect(collected).toStrictEqual([
         {
           speaker: 'ai',
+          responseAttemptId: expect.stringMatching(
+            /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i,
+          ),
           blocks: [{ type: 'text', text: 'Done' }],
         },
       ]);
@@ -541,9 +550,37 @@ describe('AnthropicProvider', () => {
         chunks.push(chunk);
       }
 
+      expect(new Set(chunks.map((chunk) => chunk.responseAttemptId)).size).toBe(
+        1,
+      );
       expect(chunks).toStrictEqual([
         {
           speaker: 'ai',
+          responseAttemptId: expect.stringMatching(
+            /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i,
+          ),
+          blocks: [],
+          toolArgumentDelta: {
+            arguments: '{"location":"San Francisco"}',
+            attemptId: expect.stringMatching(/^[a-f0-9-]{36}$/i),
+            id: expect.stringMatching(/^hist_tool_tool-123_seq\d+$/),
+            name: 'get_weather',
+            sourceId: 'tool-123',
+          },
+        },
+        {
+          speaker: 'ai',
+          responseAttemptId: expect.stringMatching(
+            /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i,
+          ),
+          toolArgumentDelta: {
+            arguments: '',
+            complete: true,
+            attemptId: expect.stringMatching(/^[a-f0-9-]{36}$/i),
+            id: expect.stringMatching(/^hist_tool_tool-123_seq\d+$/),
+            name: 'get_weather',
+            sourceId: 'tool-123',
+          },
           blocks: [
             {
               type: 'tool_call',
@@ -555,6 +592,9 @@ describe('AnthropicProvider', () => {
         },
         {
           speaker: 'ai',
+          responseAttemptId: expect.stringMatching(
+            /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i,
+          ),
           blocks: [{ type: 'text', text: 'Result' }],
         },
       ]);
