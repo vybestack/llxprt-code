@@ -32,7 +32,7 @@ export function useHostCommands(
   ) => SlashCommand | null,
   subscribeCommandChanges: (listener: () => void) => (() => void) | undefined,
 ) {
-  const [, refreshConnection] = useReducer(
+  const [connectionRevision, refreshConnection] = useReducer(
     (revision: number) => revision + 1,
     0,
   );
@@ -40,7 +40,10 @@ export function useHostCommands(
     () => subscribeCommandChanges(refreshConnection),
     [subscribeCommandChanges],
   );
-  const ideCommand = registerIdeCommand(addItem);
+  const ideCommand = useMemo(() => {
+    void connectionRevision;
+    return registerIdeCommand(addItem);
+  }, [registerIdeCommand, addItem, connectionRevision]);
   const permissionsCommand = useMemo(
     () =>
       createPermissionsCommand(

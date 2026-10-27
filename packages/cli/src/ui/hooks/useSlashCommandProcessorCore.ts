@@ -38,6 +38,7 @@ import {
 } from '../contexts/RuntimeContext.js';
 
 import { useCommandView } from './useCommandView.js';
+import { useShallowMemo } from './useShallowMemo.js';
 
 import { bindCommandOwnerResume } from './commandOwnerResumeHost.js';
 import {
@@ -396,21 +397,18 @@ function useRegisteredCommands(
   reloadCommandsRef: React.MutableRefObject<() => void>,
 ): SlashCommandProcessorState {
   const {
-    ports,
     settings,
     recordingOwner,
     registerWorkspaceCommands,
     registerChatCommands,
     registerSubagentCommand,
     addItem,
-    setLlxprtMdFileCount,
     recordingIntegration,
-    recordingSwapCallbacks,
     readBuiltinCommands,
   } = args;
   const fuzzy = useFuzzyPreference(settings);
   const { extensionsCommand, ...staticCommands } = useStaticBuiltinCommands(
-    ports,
+    args.ports,
     settings,
     args.addItem,
     setPendingItem,
@@ -418,19 +416,18 @@ function useRegisteredCommands(
     args.registerIdeCommand,
     args.subscribeCommandChanges,
   );
-
   const workspaceCommands = useMemo(
     () =>
       registerWorkspaceCommands(
         addItem,
-        setLlxprtMdFileCount,
+        args.setLlxprtMdFileCount,
         recordingOwner,
         recordingIntegration,
       ),
     [
       registerWorkspaceCommands,
       addItem,
-      setLlxprtMdFileCount,
+      args.setLlxprtMdFileCount,
       recordingOwner,
       recordingIntegration,
     ],
@@ -440,14 +437,14 @@ function useRegisteredCommands(
       registerChatCommands(
         recordingOwner,
         recordingIntegration,
-        recordingSwapCallbacks,
+        args.recordingSwapCallbacks,
         fuzzy,
       ),
     [
       registerChatCommands,
       recordingOwner,
       recordingIntegration,
-      recordingSwapCallbacks,
+      args.recordingSwapCallbacks,
       fuzzy,
     ],
   );
@@ -462,7 +459,10 @@ function useRegisteredCommands(
     todoCommand: useTodoCommandOwner(args.todoContext, args.addItem),
     subagentCommand,
     extensionsCommand,
-    presentationCommands: { ...staticCommands, ...presentationCommands },
+    presentationCommands: useShallowMemo(
+      () => ({ ...staticCommands, ...presentationCommands }),
+      { ...staticCommands, ...presentationCommands },
+    ),
     ...workspaceCommands,
     credentialCommands: providerCommands,
   });
