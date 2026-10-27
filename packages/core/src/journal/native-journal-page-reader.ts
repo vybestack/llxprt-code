@@ -24,6 +24,7 @@ import { RECORD_KIND } from './recordKinds.js';
 import { NativeResponseIndex } from './native-response-index.js';
 import type { FrameHead } from './frame.js';
 import { NativeDisplayReader } from './native-display-reader.js';
+import { nativeTextSlices } from './native-text-slices.js';
 
 type ToolPageHeader = RowIds & { readonly head: FrameHead };
 
@@ -115,6 +116,13 @@ export class NativeJournalPageReader {
 
   toolRequestIdentity(entry: NativeJournalEntry) {
     return this.display.toolRequestIdentity(entry);
+  }
+
+  textSlices(
+    entry: NativeJournalEntry,
+    size = 8192,
+  ): Promise<AsyncIterable<IContent> | undefined> {
+    return nativeTextSlices(this.reader, entry, size);
   }
 
   async readContent(entry: NativeJournalEntry): Promise<IContent> {

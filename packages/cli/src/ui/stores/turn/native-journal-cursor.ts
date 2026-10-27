@@ -376,6 +376,18 @@ export class NativeJournalCursor {
       if (display !== undefined) yield display;
       return;
     }
+    const slices = await this.reader.textSlices(first);
+    if (slices !== undefined) {
+      yield* this.projectTextSlices(
+        from,
+        first,
+        slices,
+        minimumItem,
+        maximumItem,
+        tailCount,
+      );
+      return;
+    }
     yield* this.projectModelGroup(
       from,
       first,
@@ -492,6 +504,64 @@ export class NativeJournalCursor {
       this.options.counters?.ownership?.release(opener);
     }
   }
+  private async *projectTextSlices(
+    from: number,
+    first: RowEntry,
+    slices: AsyncIterable<IContent>,
+    minimum: number,
+    maximum: number,
+    tailCount: number,
+  ): AsyncGenerator<LocatedEntry> {
+    const tail: LocatedEntry[] = [];
+    const inContext = await this.reader.inContext(first);
+    const iterator = slices[Symbol.asyncIterator]();
+    let current = await iterator.next();
+    let index = 0;
+    try {
+      while (current.done !== true && index < maximum) {
+        const next = await iterator.next();
+        const content = current.value;
+        const projected = iContentToHistoryItems(
+          [content],
+          this.options.emojiFilterMode,
+        );
+        const [original] = projected;
+        if (projected.length !== 1)
+          throw new Error('Text slice must project to one display item');
+        const sliced: HistoryItem =
+          index > 0 && original.type === 'gemini'
+            ? { ...original, type: 'gemini_content' }
+            : original;
+        const item: HistoryItem = {
+          ...sliced,
+          rowIdentity: {
+            kind: 'journal',
+            offset: first.recordOffset,
+            transcriptId: first.transcriptId.toString(),
+            discriminator: 'text',
+            textOffset: index,
+          },
+        };
+        const located: LocatedEntry = {
+          entry: this.displayEntry(first, content, item, 1, inContext),
+          before: { row: from, item: index },
+          after:
+            next.done === true
+              ? { row: from + 1, item: 0 }
+              : { row: from, item: index + 1 },
+        };
+        if (index >= minimum && !Number.isFinite(tailCount)) yield located;
+        if (index >= minimum && Number.isFinite(tailCount)) tail.push(located);
+        if (tail.length > tailCount) tail.shift();
+        index++;
+        current = next;
+      }
+      yield* tail;
+    } finally {
+      await iterator.return?.();
+    }
+  }
+
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.queue.then(async () => {
       this.options.signal?.throwIfAborted();
