@@ -104,3 +104,51 @@ Serial passes do not convert the failed full invocation into a pass or establish
 ## Remaining boundaries
 
 External holders exceeding the existing budget and abandoned locks younger than the stale threshold can still produce explicit contention errors. Their recovery policy requires separate safety work. macOS and Windows were not tested locally. Roadmap assignment remains blocked by GitHub authentication scope.
+
+## Bounded CI remediation and final review, 2026-10-27
+
+This section supersedes the pre-PR verification disposition above for the current uncommitted remediation. Final bounded review approves the code changes with no production-code blocker found. No further broad audit or review round was started. No commit, push, merge, or remote thread resolution was performed.
+
+### Original PR CI and review availability
+
+PR #3964 still points to `2650bae3d05fc23a8c02bbd04a4b13b845397265`. All original test shards (agents, three CLI shards, core, providers, rest), both Linux E2Es (Docker and unsandboxed), ACP conformance, and runtime-plugin checks passed. `Lint (Javascript)` and its aggregate `Lint` check failed. The recorded scanner finding is the new `storeQueueContext` ALS declaration in `local-media-store-persistence.ts` (`ci-lint-job.log`, lines 3460 onward).
+
+OpenCodeReview and Run LLxprt review display successful workflow checks but did not provide completed code reviews. The OCR PR comment records phase `llm-preflight`, exit 1, zero tokens, and provider response `401 Unauthorized`, `token expired or incorrect`; the LLxprt comment reports the review unavailable. These green workflow statuses provide no review approval. Evidence: PR comments `6442823894` and `6442834636`.
+
+CodeRabbit thread `PRRT_kwDOPB5qbc6ws0q1` requested a long-wait diagnostic without reintroducing a queue timeout. The implementation addresses that request locally. The thread remains unresolved on GitHub because this remediation has not been published.
+
+### Reviewed contracts
+
+- The ALS allowance matches only `packages/core/src/storage/local-media-store-persistence.ts` plus declaration `storeQueueContext`, with a documented reason. The existing scanner still requires exact file/declaration matching and a nonempty reason. No baseline, source roots, scanner implementation, or global enforcement rule changed. Queue ancestry carries canonical roots and active-turn flags, with turns deactivated in `finally`; it carries no runtime identity, settings, or services.
+- The added negative guard test exercises the real production audit API with real fixture files. It accepts the intended declaration while reporting another ALS declaration in the same file and the same declaration name in another file, retaining exit 1 for those violations.
+- A queued turn receives one warning after 30,000 ms through the existing `llxprt:storage:media` DebugLogger namespace, subject to normal debug configuration. Details contain canonical root, operation, and elapsed wait. The diagnostic neither rejects nor cancels the waiter and does not alter the filesystem acquisition deadline or close/drain contract.
+- The one-shot timer is unreferenced and cleared when the turn starts, before exclusive work. Predecessor tails are rejection-neutral, so predecessor failure still reaches that cleanup. A stalled predecessor produces one warning per queued turn; it can still keep queued operations and close pending indefinitely. No hard timeout or periodic warning was added.
+- The two diagnostic tests enter through public store operations, execute real filesystem/queue/close behavior, and control holders with public transaction callbacks. Fake time controls the diagnostic boundary; the logger spy captures emitted warning data without supplying queue results. Assertions cover threshold, single emission, pending waiter/close, eventual result, and cancellation when a turn starts even while its callback remains pending. These are behavioral tests without mock-return theater. Finally blocks release barriers, restore timers/logger, and settle operations; existing teardown closes stores and removes temporary directories.
+
+### Exact remediation evidence
+
+Existing logs are under `project-plans/.tmp-issue3963/`.
+
+| Evidence | Recorded result |
+| --- | --- |
+| `ci-remediation-diagnostic-red` | Exit 1; missing warning reproduced (1 fail, 1 pass) before implementation |
+| `ci-remediation-boundary-red` | Exit 1; missing exact allowance reproduced (1 fail) before implementation |
+| `ci-remediation-queue-green` | Exit 0; 19 pass, 0 fail, 50 assertions |
+| `ci-remediation-media-green` | Exit 0; 80 pass, 0 fail, 182 assertions across four files |
+| `ci-remediation-guards-green` | Exit 0; 143 pass, 0 fail, 204 assertions across three files |
+| `ci-remediation-scoped-lint` | Exit 0 |
+| Current full boundary scan | Exit 0; zero unratcheted findings, zero ratchet changes, zero compiler diagnostics; all three scanners complete |
+| Final five-file Prettier check | Exit 0; all remediation source/test files formatted |
+| Final `git diff --check` | Exit 0 |
+| Protected-file manifest | `sha256sum --status -c ci-remediation-protected.sha256` exit 0; all 11 entries preserved, including `.llxprt` files and existing issue3956 artifacts |
+
+### Existing job commands, limits, and pending verification
+
+Inspection found two distinct existing evidence streams. No duplicate verification was launched during finalization.
+
+1. `ci-remediation-round1/` records boundary exit 0 and lint exit **124**, with lint interrupted after its 420-second budget at package 10/18 (`packages/providers`). This is an incomplete lint run, without an established lint error. Its typecheck child used `timeout --kill-after=20s 600 bash -c 'npm run typecheck'`. That orphaned process was running at first inspection and had disappeared by 13:49:40 UTC. The log ends with workspace typechecking and contains no recorded final exit file. Its overall outcome is **unknown**, not a passing full typecheck; no timeout result can be inferred.
+2. Managed job `shell_929fc2204223`, launched 13:43:50 UTC, writes directly to `.tmp-issue3963/ci-remediation-*`. Its boundary step completed at 13:48:32 UTC with exit 0. Its lint step started at 13:48:32 UTC and remains running at the final snapshot. Its sequential commands and budgets are boundary `npm run check:runtime-boundary` (300 s), lint `npm run lint` (900 s), typecheck `npm run typecheck` (600 s), format `npm run format:check` (180 s), build `npm run build` (420 s), smoke `bun scripts/start.ts --profile-load luna "write me a haiku and nothing else"` (120 s), and test `npm run test` (1,200 s). Every step has a 20-second kill grace and records its own exit file. The loop continues after failures, so shell completion alone will not establish that all checks passed. It uses workspace Bun 1.4.4 and agents/CLI/core test concurrency 2.
+
+Current full lint is pending; typecheck, full format check, build, literal-luna smoke, and full test remain queued in that managed job. The earlier pre-PR full typecheck/build passes do not certify this remediation. Literal `luna` was absent in earlier local smoke evidence, so the queued smoke may reproduce that environment failure. No extra full verification, endless retry, or new provider review was started. The pre-existing managed verification job is intentionally left running for its existing owner; no process or disposable fixture was created by this final review.
+
+Disposition: code approved for the bounded remediation; complete local-cycle verification and publication remain pending. Original remote CI still reflects the pre-remediation commit and its scanner failure. This PR is not yet established ready to merge.

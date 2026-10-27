@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import {
   appendFile,
   mkdir,
@@ -22,6 +22,7 @@ import {
   MediaStoreError,
   type LocalMediaStoreOptions,
 } from './local-media-store.js';
+import { DebugLogger } from '../debug/index.js';
 import { publishRecordedMedia } from './recorded-media-transfer.js';
 import { RequestMediaResolver } from './request-media-resolver.js';
 
@@ -90,6 +91,119 @@ describe('LocalMediaStore local contention', () => {
     stores = [...stores, store];
     return store;
   }
+
+  it('warns once about a stalled local queue without rejecting the waiter or close', async (): Promise<void> => {
+    const holder = createStore();
+    const reader = createStore();
+    const independent = createStore(join(directory, 'independent'));
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const warnings: Array<{ message: string; details: readonly unknown[] }> =
+      [];
+    const warningSink = vi
+      .spyOn(DebugLogger.prototype, 'warn')
+      .mockImplementation((message, ...details): void => {
+        warnings.push({
+          message: typeof message === 'function' ? message() : message,
+          details,
+        });
+      });
+    vi.useFakeTimers();
+    const holding = holder.admitObjectsTransaction(
+      [],
+      async (): Promise<void> => {
+        entered.resolve();
+        await release.promise;
+      },
+    );
+    let reading: Promise<number> = Promise.resolve(-1);
+    let closing: Promise<void> = Promise.resolve();
+    try {
+      await entered.promise;
+      let readFinished = false;
+      reading = reader.getStoredByteLength().finally((): void => {
+        readFinished = true;
+      });
+      let closeFinished = false;
+      closing = reader.close().then((): void => {
+        closeFinished = true;
+      });
+      await independent.getStoredByteLength();
+
+      vi.advanceTimersByTime(29_999);
+      expect(warnings).toStrictEqual([]);
+      vi.advanceTimersByTime(1);
+      expect(warnings).toStrictEqual([
+        {
+          message: expect.stringContaining('Local media store queue wait'),
+          details: [
+            {
+              root: holder.rootDirectory,
+              operation: 'measure spool quota',
+              waitedMs: 30_000,
+            },
+          ],
+        },
+      ]);
+      vi.advanceTimersByTime(60_000);
+      expect(warnings).toHaveLength(1);
+      expect(readFinished).toBe(false);
+      expect(closeFinished).toBe(false);
+      release.resolve();
+      expect(await reading).toBe(0);
+      await closing;
+      expect(closeFinished).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      release.resolve();
+      await Promise.allSettled([holding, reading, closing]);
+      warningSink.mockRestore();
+    }
+  });
+
+  it('stops the wait warning when a queued callback starts, even if that callback remains pending', async (): Promise<void> => {
+    const store = createStore();
+    const independent = createStore(join(directory, 'independent'));
+    const firstEntered = Promise.withResolvers<void>();
+    const releaseFirst = Promise.withResolvers<void>();
+    const nextEntered = Promise.withResolvers<void>();
+    const releaseNext = Promise.withResolvers<void>();
+    const warnings: string[] = [];
+    const warningSink = vi
+      .spyOn(DebugLogger.prototype, 'warn')
+      .mockImplementation((message): void => {
+        warnings.push(typeof message === 'function' ? message() : message);
+      });
+    vi.useFakeTimers();
+    const first = store.admitObjectsTransaction([], async (): Promise<void> => {
+      firstEntered.resolve();
+      await releaseFirst.promise;
+    });
+    let next: Promise<void> = Promise.resolve();
+    try {
+      await firstEntered.promise;
+      next = store.admitObjectsTransaction([], async (): Promise<void> => {
+        nextEntered.resolve();
+        await releaseNext.promise;
+      });
+      await independent.getStoredByteLength();
+      vi.advanceTimersByTime(1_000);
+      releaseFirst.resolve();
+      await nextEntered.promise;
+      vi.advanceTimersByTime(30_000);
+      expect(warnings).toStrictEqual([]);
+      releaseNext.resolve();
+      await next;
+      vi.advanceTimersByTime(30_000);
+      expect(warnings).toStrictEqual([]);
+    } finally {
+      vi.useRealTimers();
+      releaseFirst.resolve();
+      releaseNext.resolve();
+      await Promise.allSettled([first, next]);
+      warningSink.mockRestore();
+    }
+  });
 
   it.each(['same instance', 'same root', 'parent alias'])(
     'reads verified bytes after a local wait longer than the acquisition budget: %s',

@@ -17,6 +17,7 @@ import {
 } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import { isAbsolute, join } from 'node:path';
+import { startMediaQueueWaitWarning } from './local-media-store-queue-diagnostics.js';
 import {
   isMediaReferenceBlock,
   type MediaReferenceBlock,
@@ -166,8 +167,12 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
           ),
         );
       }
-      const previous = storeQueueTails.get(root) ?? Promise.resolve();
-      const pending = previous.then(async () => {
+      const previous = storeQueueTails.get(root);
+      const stopWaitWarning = previous
+        ? startMediaQueueWaitWarning(root, operation)
+        : undefined;
+      const pending = (previous ?? Promise.resolve()).then(async () => {
+        stopWaitWarning?.();
         const turn: StoreQueueTurn = { root, active: true };
         try {
           return await storeQueueContext.run([...ancestors, turn], () =>
