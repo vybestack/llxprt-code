@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import { isBrowserLaunchDisabledDuringTests } from '@vybestack/llxprt-code-core';
 import open from 'open';
 import process from 'node:process';
@@ -98,7 +99,8 @@ async function appendHistoryExport(
       const { filePath } = await exportHistoryForBugReport(history);
       info += `* **Conversation Transcript:** Exported to \`${filePath}\` (please attach to your bug report)\n`;
 
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: MessageType.INFO,
           text: `Conversation history exported to: ${filePath}`,
@@ -108,7 +110,8 @@ async function appendHistoryExport(
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.WARNING,
         text: `Warning: Could not export conversation history: ${errorMessage}`,
@@ -143,7 +146,8 @@ async function openBugReport(
   bugReportUrl: string,
   dependencies: BugCommandDependencies,
 ): Promise<void> {
-  context.ui.addItem(
+  await writeCommandOutput(
+    context,
     {
       type: MessageType.INFO,
       text: `To submit your bug report, please open the following URL in your browser:\n${bugReportUrl}`,
@@ -159,7 +163,8 @@ async function openBugReport(
     await dependencies.openUrl(bugReportUrl);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: `Could not open URL in browser: ${errorMessage}`,

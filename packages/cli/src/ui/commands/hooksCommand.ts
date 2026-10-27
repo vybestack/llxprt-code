@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import {
   type CommandContext,
   type SlashCommand,
@@ -48,7 +49,8 @@ async function listHooks(context: CommandContext): Promise<void> {
   if (agent) {
     const agentHooks = agent.hooks.listHooks();
     if (agentHooks.length === 0) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: MessageType.INFO,
           text: 'No hooks registered.',
@@ -61,13 +63,14 @@ async function listHooks(context: CommandContext): Promise<void> {
       type: MessageType.HOOKS_LIST,
       hooks: mapHookInfoToEntries(agentHooks),
     };
-    context.ui.addItem(historyItem);
+    await writeCommandOutput(context, historyItem);
     return;
   }
 
   const { config } = context.services;
   if (!config) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Configuration not loaded.',
@@ -77,7 +80,8 @@ async function listHooks(context: CommandContext): Promise<void> {
     return;
   }
 
-  context.ui.addItem(
+  await writeCommandOutput(
+    context,
     {
       type: MessageType.INFO,
       text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
@@ -91,15 +95,16 @@ async function listHooks(context: CommandContext): Promise<void> {
  * Emits an error message via context.ui if not found.
  * Returns true if the hook exists, false otherwise.
  */
-function resolveAgentHook(
+async function resolveAgentHook(
   agent: NonNullable<CommandContext['services']['agent']>,
   hookName: string,
   context: CommandContext,
-): boolean {
+): Promise<boolean> {
   const allHooks = agent.hooks.listHooks();
   const found = allHooks.some((h) => h.name === hookName);
   if (!found) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: `Hook '${hookName}' not found.`,
@@ -122,11 +127,12 @@ async function enableHook(
   const agent = context.services.agent;
 
   if (agent) {
-    if (!resolveAgentHook(agent, hookName, context)) {
+    if (!(await resolveAgentHook(agent, hookName, context))) {
       return;
     }
     agent.hooks.enable(hookName);
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.INFO,
         text: `Enabled hook '${hookName}'.`,
@@ -137,7 +143,8 @@ async function enableHook(
   }
 
   if (!config) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Configuration not loaded.',
@@ -147,7 +154,8 @@ async function enableHook(
     return;
   }
 
-  context.ui.addItem(
+  await writeCommandOutput(
+    context,
     {
       type: MessageType.INFO,
       text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
@@ -167,11 +175,12 @@ async function disableHook(
   const agent = context.services.agent;
 
   if (agent) {
-    if (!resolveAgentHook(agent, hookName, context)) {
+    if (!(await resolveAgentHook(agent, hookName, context))) {
       return;
     }
     agent.hooks.disable(hookName);
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.INFO,
         text: `Disabled hook '${hookName}'.`,
@@ -182,7 +191,8 @@ async function disableHook(
   }
 
   if (!config) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Configuration not loaded.',
@@ -192,7 +202,8 @@ async function disableHook(
     return;
   }
 
-  context.ui.addItem(
+  await writeCommandOutput(
+    context,
     {
       type: MessageType.INFO,
       text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
@@ -211,7 +222,8 @@ async function enableAllHooks(context: CommandContext): Promise<void> {
   if (agent) {
     const allHooks = agent.hooks.listHooks();
     if (allHooks.length === 0) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: MessageType.INFO,
           text: 'No hooks registered.',
@@ -221,7 +233,8 @@ async function enableAllHooks(context: CommandContext): Promise<void> {
       return;
     }
     agent.hooks.setDisabledHooks([]);
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.INFO,
         text: `Enabled all ${allHooks.length} hook(s).`,
@@ -233,7 +246,8 @@ async function enableAllHooks(context: CommandContext): Promise<void> {
   }
 
   if (!config) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Configuration not loaded.',
@@ -243,7 +257,8 @@ async function enableAllHooks(context: CommandContext): Promise<void> {
     return;
   }
 
-  context.ui.addItem(
+  await writeCommandOutput(
+    context,
     {
       type: MessageType.INFO,
       text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
@@ -262,7 +277,8 @@ async function disableAllHooks(context: CommandContext): Promise<void> {
   if (agent) {
     const allHooks = agent.hooks.listHooks();
     if (allHooks.length === 0) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: MessageType.INFO,
           text: 'No hooks registered.',
@@ -273,7 +289,8 @@ async function disableAllHooks(context: CommandContext): Promise<void> {
     }
     const allHookNames = allHooks.map((h) => h.name);
     agent.hooks.setDisabledHooks(allHookNames);
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.INFO,
         text: `Disabled all ${allHooks.length} hook(s).`,
@@ -285,7 +302,8 @@ async function disableAllHooks(context: CommandContext): Promise<void> {
   }
 
   if (!config) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Configuration not loaded.',
@@ -295,7 +313,8 @@ async function disableAllHooks(context: CommandContext): Promise<void> {
     return;
   }
 
-  context.ui.addItem(
+  await writeCommandOutput(
+    context,
     {
       type: MessageType.INFO,
       text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
@@ -334,7 +353,8 @@ const enableCommand: SlashCommand = {
   action: async (context: CommandContext, args: string) => {
     const hookName = args.trim();
     if (!hookName) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: MessageType.ERROR,
           text: 'Usage: /hooks enable <hook-name>',
@@ -356,7 +376,8 @@ const disableCommand: SlashCommand = {
   action: async (context: CommandContext, args: string) => {
     const hookName = args.trim();
     if (!hookName) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: MessageType.ERROR,
           text: 'Usage: /hooks disable <hook-name>',

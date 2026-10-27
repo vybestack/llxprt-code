@@ -27,6 +27,7 @@ import { registerCleanup } from '../../utils/cleanup.js';
 import type { ConsoleMessageItem } from '../types.js';
 import type { UiRuntime } from '../cliUiRuntime.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import { appendJournalUiItem } from './command-journal-output.js';
 
 interface UseCoreEventHandlersOptions {
   handleNewMessage: (message: ConsoleMessageItem) => void;
@@ -54,37 +55,31 @@ export function useCoreEventHandlers({
       } else {
         messageType = 'info';
       }
+      if (recordingOwner === 'agent') {
+        if (!agent) throw new Error('Session agent is unavailable');
+        void appendJournalUiItem(agent, {
+          type: payload.severity,
+          text: payload.message,
+        }).catch((error: unknown) => {
+          const reason = error instanceof Error ? error.message : String(error);
+          handleNewMessage({
+            type: 'error',
+            content: `Failed to record session event: ${reason}`,
+            count: 1,
+          });
+        });
+        return;
+      }
       handleNewMessage({
         type: messageType,
         content: payload.message,
         count: 1,
       });
       if (payload.severity === 'error' || payload.severity === 'warning') {
-        if (recordingOwner === 'agent') {
-          if (!agent) throw new Error('Session agent is unavailable');
-          // The writer reports a failed flush once; surface it in the UI
-          // here rather than recording it, which would hit the same writer.
-          agent.session
-            .recordRecordingEvent({
-              type: 'session_event',
-              severity: payload.severity,
-              message: payload.message,
-            })
-            .catch((error: unknown) => {
-              const reason =
-                error instanceof Error ? error.message : String(error);
-              handleNewMessage({
-                type: 'error',
-                content: `Failed to record session event: ${reason}`,
-                count: 1,
-              });
-            });
-        } else {
-          recordingIntegrationRef?.current?.recordSessionEvent(
-            payload.severity,
-            payload.message,
-          );
-        }
+        recordingIntegrationRef?.current?.recordSessionEvent(
+          payload.severity,
+          payload.message,
+        );
       }
     };
 

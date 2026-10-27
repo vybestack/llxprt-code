@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import * as fs from 'fs/promises';
 import path from 'path';
 import {
@@ -177,7 +178,8 @@ async function applyCheckpointRestoration(
   }
   if (Array.isArray(data.history)) loadHistory?.(data.history);
   if (snapshot !== undefined)
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: 'info',
         text: 'Restored project to the state before the tool call.',

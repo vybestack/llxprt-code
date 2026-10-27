@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import type {
@@ -121,7 +122,8 @@ export const initCommand: SlashCommand = {
     // Create an empty LLXPRT.md file
     fs.writeFileSync(llxprtMdPath, '', 'utf8');
 
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: 'info',
         text: 'Empty LLXPRT.md created. Now analyzing the project to populate it.',

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import { isBrowserLaunchDisabledDuringTests } from '@vybestack/llxprt-code-core';
 import open from 'open';
 import process from 'node:process';
@@ -45,7 +46,8 @@ export function createDocsCommand(
         dependencies.isBrowserLaunchDisabledDuringTests();
 
       if (requiresManualOpen) {
-        context.ui.addItem(
+        await writeCommandOutput(
+          context,
           {
             type: MessageType.INFO,
             text: `Please open the following URL in your browser to view the documentation:\n${docsUrl}`,
@@ -53,7 +55,8 @@ export function createDocsCommand(
           Date.now(),
         );
       } else {
-        context.ui.addItem(
+        await writeCommandOutput(
+          context,
           {
             type: MessageType.INFO,
             text: `Opening documentation in your browser: ${docsUrl}`,

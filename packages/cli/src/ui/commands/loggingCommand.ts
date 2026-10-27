@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import type {
   SlashCommand,
   CommandContext,
@@ -391,7 +392,8 @@ const statusCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   action: async (context: CommandContext) => {
     if (!context.services.config) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: 'error',
           text: 'Configuration not available',
@@ -405,7 +407,8 @@ const statusCommand: SlashCommand = {
       settings: context.services.settings,
     });
     if (result.type === 'message') {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: result.messageType,
           text: result.content,
@@ -422,7 +425,8 @@ const enableCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   action: async (context: CommandContext, args: string) => {
     if (!context.services.config) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: 'error',
           text: 'Configuration not available',
@@ -437,7 +441,8 @@ const enableCommand: SlashCommand = {
       settings: context.services.settings,
     });
     if (result.type === 'message') {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: result.messageType,
           text: result.content,
@@ -454,7 +459,8 @@ const disableCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   action: async (context: CommandContext) => {
     if (!context.services.config) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: 'error',
           text: 'Configuration not available',
@@ -468,7 +474,8 @@ const disableCommand: SlashCommand = {
       settings: context.services.settings,
     });
     if (result.type === 'message') {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: result.messageType,
           text: result.content,
@@ -485,7 +492,8 @@ const redactionCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   action: async (context: CommandContext, args: string) => {
     if (!context.services.config) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: 'error',
           text: 'Configuration not available',
@@ -500,7 +508,8 @@ const redactionCommand: SlashCommand = {
       settings: context.services.settings,
     });
     if (result.type === 'message') {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: result.messageType,
           text: result.content,
@@ -517,7 +526,8 @@ const showCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   action: async (context: CommandContext, args: string) => {
     if (!context.services.config) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: 'error',
           text: 'Configuration not available',
@@ -532,7 +542,8 @@ const showCommand: SlashCommand = {
       settings: context.services.settings,
     });
     if (result.type === 'message') {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: result.messageType,
           text: result.content,
@@ -547,7 +558,8 @@ const showCommand: SlashCommand = {
       ? result.dialogData.entries
       : [];
     if (entries.length === 0) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: 'info',
           text: 'No log entries found',
@@ -562,7 +574,8 @@ const showCommand: SlashCommand = {
       .map(formatLogEntry)
       .join('\n');
 
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: 'info',
         text: `Conversation Logs (${entries.length} entries):\n${'─'.repeat(60)}\n${formattedEntries}\n${'─'.repeat(60)}`,
@@ -591,7 +604,8 @@ export const loggingCommand: SlashCommand = {
       return;
     }
     // If args provided but no subcommand matched, show help
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: 'info',
         text: 'Available logging commands:\n  status - show current status\n  enable - enable logging\n  disable - disable logging\n  redaction - configure redaction\n  show [N] - show last N lines from log (default 50)',

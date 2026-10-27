@@ -188,6 +188,7 @@ function useBootstrapHistory(props: AppBootstrapProps) {
   } = useSessionInitialization({
     uiRuntime,
     agent,
+    recordingOwner: props.recordingOwner,
     addItem,
     prependHistory,
     resumedBoot,

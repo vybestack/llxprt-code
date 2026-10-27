@@ -12,6 +12,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import type { HistoryItemStats } from '../types.js';
 import { MessageType } from '../types.js';
 import { formatDuration } from '../utils/formatters.js';
@@ -37,7 +38,8 @@ async function defaultSessionView(context: CommandContext): Promise<void> {
     | null
     | undefined;
   if (rawStartTime == null) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Session start time is unavailable, cannot calculate stats.',
@@ -58,7 +60,7 @@ async function defaultSessionView(context: CommandContext): Promise<void> {
     quotaLines: quotaLines.length > 0 ? quotaLines : undefined,
   };
 
-  context.ui.addItem(statsItem);
+  await writeCommandOutput(context, statsItem);
 
   // Session recording section (stub - result currently discarded)
   // @plan PLAN-20260214-SESSIONBROWSER.P24
@@ -76,7 +78,8 @@ async function quotaSubcommandAction(context: CommandContext): Promise<void> {
     );
 
     if (quotaLines.length === 0) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: MessageType.INFO,
           text: 'No quota information available. Supported providers: Claude Code (OAuth), Codex (OAuth), Z.ai, Synthetic, Chutes, Kimi.',
@@ -86,7 +89,8 @@ async function quotaSubcommandAction(context: CommandContext): Promise<void> {
       return;
     }
 
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.INFO,
         text: quotaLines.join('\n'),
@@ -96,7 +100,8 @@ async function quotaSubcommandAction(context: CommandContext): Promise<void> {
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error';
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: `Failed to retrieve quota information: ${errorMessage}`,
@@ -171,7 +176,8 @@ async function bucketsSubcommandAction(
   const oauthControl = context.oauthControl;
 
   if (!oauthControl.isAvailable()) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.INFO,
         text: 'OAuth is not available or configured',
@@ -185,7 +191,8 @@ async function bucketsSubcommandAction(
     const discovered = await oauthControl.discoverBuckets(logger);
 
     if (discovered.length === 0) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: MessageType.INFO,
           text: 'No OAuth buckets available',
@@ -196,7 +203,8 @@ async function bucketsSubcommandAction(
     }
 
     const output = formatDiscoveredProviders(discovered);
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.INFO,
         text: output.join('\n'),
@@ -206,7 +214,8 @@ async function bucketsSubcommandAction(
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error';
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: `Failed to retrieve bucket statistics: ${errorMessage}`,
@@ -240,8 +249,9 @@ export const statsCommand: SlashCommand = {
       description: 'Show model-specific usage statistics.',
       kind: CommandKind.BUILT_IN,
       autoExecute: true,
-      action: (context: CommandContext) => {
-        context.ui.addItem(
+      action: async (context: CommandContext) => {
+        await writeCommandOutput(
+          context,
           {
             type: MessageType.MODEL_STATS,
           },
@@ -254,8 +264,9 @@ export const statsCommand: SlashCommand = {
       description: 'Show tool-specific usage statistics.',
       kind: CommandKind.BUILT_IN,
       autoExecute: true,
-      action: (context: CommandContext) => {
-        context.ui.addItem(
+      action: async (context: CommandContext) => {
+        await writeCommandOutput(
+          context,
           {
             type: MessageType.TOOL_STATS,
           },
@@ -267,8 +278,9 @@ export const statsCommand: SlashCommand = {
       name: 'cache',
       description: 'Show cache usage statistics.',
       kind: CommandKind.BUILT_IN,
-      action: (context: CommandContext) => {
-        context.ui.addItem(
+      action: async (context: CommandContext) => {
+        await writeCommandOutput(
+          context,
           {
             type: MessageType.CACHE_STATS,
           },
@@ -294,8 +306,9 @@ export const statsCommand: SlashCommand = {
       altNames: ['loadbalancer'],
       description: 'Show load balancer usage statistics.',
       kind: CommandKind.BUILT_IN,
-      action: (context: CommandContext) => {
-        context.ui.addItem(
+      action: async (context: CommandContext) => {
+        await writeCommandOutput(
+          context,
           {
             type: MessageType.LB_STATS,
           },

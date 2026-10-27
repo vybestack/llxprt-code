@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import type {
   SlashCommand,
   SlashCommandActionReturn,
@@ -164,7 +165,8 @@ const reloadCommand: SlashCommand = {
         content: 'Could not retrieve tools from the agent.',
       };
     }
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: 'info',
         text: 'Reloading MCP configuration from disk...',
@@ -213,7 +215,8 @@ const refreshCommand: SlashCommand = {
       };
     }
 
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: 'info',
         text: 'Restarting MCP servers...',

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import {
   SessionEndReason,
   SessionStartSource,
@@ -43,7 +44,8 @@ export const clearCommand: SlashCommand = {
 
       // Display system message if provided
       if (sessionStartOutput.systemMessage) {
-        context.ui.addItem(
+        await writeCommandOutput(
+          context,
           {
             type: 'info',
             text: sessionStartOutput.systemMessage,

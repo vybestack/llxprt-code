@@ -4,17 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import {
   type CommandContext,
   type SlashCommand,
   type SlashCommandActionReturn,
   CommandKind,
 } from './types.js';
-import {
-  MessageType,
-  type HistoryItemSkillsList,
-  type HistoryItemInfo,
-} from '../types.js';
+import { MessageType, type HistoryItemSkillsList } from '../types.js';
 import { SettingScope } from '../../config/settings.js';
 import { enableSkill, disableSkill } from '../../utils/skillSettings.js';
 import { renderSkillActionFeedback } from '../../utils/skillUtils.js';
@@ -40,7 +37,8 @@ async function listAction(
 
   const skillManager = context.services.config?.skillOperations;
   if (!skillManager) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Could not retrieve skill manager.',
@@ -70,7 +68,7 @@ async function listAction(
     showDescriptions: useShowDescriptions,
   };
 
-  context.ui.addItem(skillsListItem);
+  await writeCommandOutput(context, skillsListItem);
 }
 
 async function disableAction(
@@ -79,7 +77,8 @@ async function disableAction(
 ): Promise<void | SlashCommandActionReturn> {
   const skillName = args.trim();
   if (!skillName) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Please provide a skill name to disable.',
@@ -90,7 +89,8 @@ async function disableAction(
   }
   const skillManager = context.services.config?.skillOperations;
   if (skillManager?.isAdminEnabled() === false) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Skills are disabled by your admin.',
@@ -102,7 +102,8 @@ async function disableAction(
 
   const skill = skillManager?.find(skillName);
   if (!skill) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: `Skill "${skillName}" not found.`,
@@ -126,7 +127,8 @@ async function disableAction(
     feedback += ' Use "/skills reload" for it to take effect.';
   }
 
-  context.ui.addItem(
+  await writeCommandOutput(
+    context,
     {
       type: MessageType.INFO,
       text: feedback,
@@ -141,7 +143,8 @@ async function enableAction(
 ): Promise<void | SlashCommandActionReturn> {
   const skillName = args.trim();
   if (!skillName) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Please provide a skill name to enable.',
@@ -153,7 +156,8 @@ async function enableAction(
 
   const skillManager = context.services.config?.skillOperations;
   if (skillManager?.isAdminEnabled() === false) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Skills are disabled by your admin.',
@@ -173,7 +177,8 @@ async function enableAction(
     feedback += ' Use "/skills reload" for it to take effect.';
   }
 
-  context.ui.addItem(
+  await writeCommandOutput(
+    context,
     {
       type: MessageType.INFO,
       text: feedback,
@@ -217,7 +222,8 @@ async function reloadAction(
 ): Promise<void | SlashCommandActionReturn> {
   const config = context.services.config;
   if (!config) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Could not retrieve configuration.',
@@ -259,13 +265,14 @@ async function reloadAction(
     const afterSkills = skillManager.list();
     const successText = buildReloadSummary(beforeNames, afterSkills);
 
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: 'info',
         text: successText,
         icon: '✓ ',
         color: 'green',
-      } as HistoryItemInfo,
+      },
       Date.now(),
     );
   } catch (error) {
@@ -273,7 +280,8 @@ async function reloadAction(
     if (pendingState.itemSet) {
       context.ui.setPendingItem(null);
     }
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: `Failed to reload skills: ${error instanceof Error ? error.message : String(error)}`,

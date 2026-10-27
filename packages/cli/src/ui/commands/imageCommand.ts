@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import { CommandKind, type SlashCommand } from './types.js';
 import { MessageType } from '../types.js';
 import {
@@ -42,7 +43,8 @@ export const imageCommand: SlashCommand = {
         error instanceof ImageCommandParseError
           ? error.message
           : `Failed to parse /image command: ${detail}`;
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: MessageType.ERROR,
           text: parseMessage,
@@ -54,7 +56,8 @@ export const imageCommand: SlashCommand = {
 
     const runner = context.services.agent?.sessionClient.runImageOperation;
     if (typeof runner !== 'function') {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: MessageType.ERROR,
           text:
@@ -85,7 +88,8 @@ export const imageCommand: SlashCommand = {
       // the framework's cancellation notice would contradict it.
       if (context.signal.aborted) return;
 
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: MessageType.INFO,
           text: `${verb} image.\nSaved to: ${result.absoluteOutputPath}`,
@@ -97,7 +101,8 @@ export const imageCommand: SlashCommand = {
       // pressed Esc"; the framework already reported it in history.
       if (context.signal.aborted) return;
       const message = error instanceof Error ? error.message : String(error);
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: MessageType.ERROR,
           text: `Image ${parsed.operation} failed: ${message}`,

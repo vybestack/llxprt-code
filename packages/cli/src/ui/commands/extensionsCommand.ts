@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
+
 import { listExtensions } from '@vybestack/llxprt-code-core';
 import type { ExtensionUpdateInfo } from '../../config/extension.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
@@ -16,12 +18,13 @@ import {
 } from './types.js';
 import { loadSettings } from '../../config/settings.js';
 
-function showMessageIfNoExtensions(
+async function showMessageIfNoExtensions(
   context: CommandContext,
   extensions: unknown[],
-): boolean {
+): Promise<boolean> {
   if (extensions.length === 0) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.INFO,
         text: 'No extensions installed. Run `/extensions explore` to check out the gallery.',
@@ -44,7 +47,8 @@ async function listAction(context: CommandContext) {
     const adminDisabled = settings.admin?.extensions?.enabled === false;
 
     if (adminDisabled) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: MessageType.INFO,
           text: 'Extensions are disabled by your administrator.',
@@ -55,7 +59,7 @@ async function listAction(context: CommandContext) {
     }
   }
 
-  if (showMessageIfNoExtensions(context, extensions)) {
+  if (await showMessageIfNoExtensions(context, extensions)) {
     return;
   }
 
@@ -64,13 +68,13 @@ async function listAction(context: CommandContext) {
     extensions,
   };
 
-  context.ui.addItem(historyItem);
+  await writeCommandOutput(context, historyItem);
 }
 
-function reportMissingExtensions(
+async function reportMissingExtensions(
   context: CommandContext,
   names: string[] | null,
-): void {
+): Promise<void> {
   if (names == null || names.length === 0) {
     return;
   }
@@ -79,7 +83,8 @@ function reportMissingExtensions(
   for (const name of names) {
     const extension = extensions.find((extension) => extension.name === name);
     if (!extension) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: MessageType.ERROR,
           text: `Extension ${name} not found.`,
@@ -90,13 +95,13 @@ function reportMissingExtensions(
   }
 }
 
-function dispatchUpdateAndReport(
+async function dispatchUpdateAndReport(
   context: CommandContext,
   all: boolean,
   names: string[] | null,
   historyItem: HistoryItemExtensionsList,
   resolveUpdateComplete: (updateInfo: ExtensionUpdateInfo[]) => void,
-): void {
+): Promise<void> {
   try {
     context.ui.setPendingItem(historyItem);
 
@@ -110,10 +115,11 @@ function dispatchUpdateAndReport(
         },
       },
     });
-    reportMissingExtensions(context, names);
+    await reportMissingExtensions(context, names);
   } catch (error) {
     resolveUpdateComplete([]);
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: getErrorMessage(error),
@@ -123,13 +129,14 @@ function dispatchUpdateAndReport(
   }
 }
 
-function handleUpdateComplete(
+async function handleUpdateComplete(
   context: CommandContext,
   updateInfos: ExtensionUpdateInfo[],
   historyItem: HistoryItemExtensionsList,
-): void {
+): Promise<void> {
   if (updateInfos.length === 0) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.INFO,
         text: 'No extensions to update.',
@@ -138,24 +145,28 @@ function handleUpdateComplete(
     );
   }
 
-  context.ui.addItem(historyItem);
+  await writeCommandOutput(context, historyItem);
   context.ui.setPendingItem(null);
 }
 
-function updateAction(context: CommandContext, args: string): Promise<void> {
+async function updateAction(
+  context: CommandContext,
+  args: string,
+): Promise<void> {
   const updateArgs = args.split(' ').filter((value) => value.length > 0);
   const all = updateArgs.length === 1 && updateArgs[0] === '--all';
   const names = all ? null : updateArgs;
 
   if (!all && names?.length === 0) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Usage: /extensions update <extension-names>|--all',
       },
       Date.now(),
     );
-    return Promise.resolve();
+    return;
   }
 
   let resolveUpdateComplete: (updateInfo: ExtensionUpdateInfo[]) => void;
@@ -167,8 +178,8 @@ function updateAction(context: CommandContext, args: string): Promise<void> {
     ? listExtensions(context.services.config)
     : [];
 
-  if (showMessageIfNoExtensions(context, extensions)) {
-    return Promise.resolve();
+  if (await showMessageIfNoExtensions(context, extensions)) {
+    return;
   }
 
   const historyItem: HistoryItemExtensionsList = {
@@ -176,18 +187,14 @@ function updateAction(context: CommandContext, args: string): Promise<void> {
     extensions,
   };
 
-  void updateComplete.then((updateInfos) =>
-    handleUpdateComplete(context, updateInfos, historyItem),
-  );
-
-  dispatchUpdateAndReport(
+  await dispatchUpdateAndReport(
     context,
     all,
     names,
     historyItem,
     resolveUpdateComplete!,
   );
-  return updateComplete.then((_) => {});
+  await handleUpdateComplete(context, await updateComplete, historyItem);
 }
 
 const listExtensionsCommand: SlashCommand = {
@@ -220,11 +227,11 @@ const updateExtensionsCommand: SlashCommand = {
   },
 };
 
-function filterExtensionsToRestart(
+async function filterExtensionsToRestart(
   extensions: LlxprtExtension[],
   names: string[] | null,
   context: CommandContext,
-): LlxprtExtension[] {
+): Promise<LlxprtExtension[]> {
   let extensionsToRestart = extensions.filter(
     (extension: LlxprtExtension) => extension.isActive,
   );
@@ -240,7 +247,8 @@ function filterExtensionsToRestart(
           ),
       );
       if (notFound.length > 0) {
-        context.ui.addItem(
+        await writeCommandOutput(
+          context,
           {
             type: MessageType.WARNING,
             text: `Extension(s) not found or not active: ${notFound.join(', ')}`,
@@ -260,7 +268,7 @@ async function performRestart(
 ): Promise<void> {
   const s = extensionsToRestart.length > 1 ? 's' : '';
 
-  context.ui.addItem({
+  await writeCommandOutput(context, {
     type: MessageType.INFO,
     text: `Restarting ${extensionsToRestart.length} extension${s}...`,
   });
@@ -289,7 +297,8 @@ async function performRestart(
 
   if (failureMessages.length > 0) {
     const errorMessages = failureMessages.join('\n  ');
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: `Failed to restart some extensions:\n  ${errorMessages}`,
@@ -297,7 +306,8 @@ async function performRestart(
       Date.now(),
     );
   } else {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.INFO,
         text: `${extensionsToRestart.length} extension${s} restarted successfully.`,
@@ -313,7 +323,8 @@ async function restartAction(
 ): Promise<void> {
   const restart = context.services.config?.restartExtension;
   if (!restart) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: "Extensions are not yet loaded, can't restart yet",
@@ -324,7 +335,7 @@ async function restartAction(
   }
 
   const extensions = context.services.config?.getExtensions() ?? [];
-  if (showMessageIfNoExtensions(context, extensions)) {
+  if (await showMessageIfNoExtensions(context, extensions)) {
     return;
   }
 
@@ -332,7 +343,8 @@ async function restartAction(
   const all = restartArgs.length === 1 && restartArgs[0] === '--all';
   const names = all ? null : restartArgs;
   if (!all && names?.length === 0) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Usage: /extensions restart <extension-names>|--all',
@@ -342,7 +354,7 @@ async function restartAction(
     return;
   }
 
-  const extensionsToRestart = filterExtensionsToRestart(
+  const extensionsToRestart = await filterExtensionsToRestart(
     extensions,
     names,
     context,
@@ -379,35 +391,22 @@ const restartCommand: SlashCommand = {
   completion: completeExtensions,
 };
 
-async function installAction(
+async function validateInstallSource(
   context: CommandContext,
   args: string,
-): Promise<void> {
-  const restart = context.services.config?.restartExtension;
-
-  // Check if extension reloading is enabled
-  if (!restart) {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: 'Extension reloading is not enabled. Use the CLI command instead.',
-      },
-      Date.now(),
-    );
-    return;
-  }
-
+): Promise<string | undefined> {
   const source = args.trim();
 
   if (!source) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Usage: /extensions install <source>',
       },
       Date.now(),
     );
-    return;
+    return undefined;
   }
 
   // Validate source for safety (check for shell injection)
@@ -418,17 +417,44 @@ async function installAction(
     source.startsWith('sso://');
 
   if (!isUrl && /[;&|`'"]/.test(source)) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Invalid characters in source path.',
       },
       Date.now(),
     );
+    return undefined;
+  }
+
+  return source;
+}
+
+async function installAction(
+  context: CommandContext,
+  args: string,
+): Promise<void> {
+  const restart = context.services.config?.restartExtension;
+
+  // Check if extension reloading is enabled
+  if (!restart) {
+    await writeCommandOutput(
+      context,
+      {
+        type: MessageType.ERROR,
+        text: 'Extension reloading is not enabled. Use the CLI command instead.',
+      },
+      Date.now(),
+    );
     return;
   }
 
-  context.ui.addItem(
+  const source = await validateInstallSource(context, args);
+  if (source === undefined) return;
+
+  await writeCommandOutput(
+    context,
     {
       type: MessageType.INFO,
       text: `Installing extension from ${source}...`,
@@ -451,7 +477,8 @@ async function installAction(
       requestConsentNonInteractive,
     );
 
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.INFO,
         text: `Extension installed successfully.`,
@@ -459,7 +486,8 @@ async function installAction(
       Date.now(),
     );
   } catch (error) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: getErrorMessage(error),
@@ -476,7 +504,8 @@ async function uninstallAction(
   const restart = context.services.config?.restartExtension;
 
   if (!restart) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Extension reloading is not enabled. Use the CLI command instead.',
@@ -489,7 +518,8 @@ async function uninstallAction(
   const name = args.trim();
 
   if (!name) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: 'Usage: /extensions uninstall <name>',
@@ -499,7 +529,8 @@ async function uninstallAction(
     return;
   }
 
-  context.ui.addItem(
+  await writeCommandOutput(
+    context,
     {
       type: MessageType.INFO,
       text: `Uninstalling extension ${name}...`,
@@ -511,7 +542,8 @@ async function uninstallAction(
     const { uninstallExtension } = await import('../../config/extension.js');
     await uninstallExtension(name, false);
 
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.INFO,
         text: `Extension ${name} uninstalled successfully.`,
@@ -519,7 +551,8 @@ async function uninstallAction(
       Date.now(),
     );
   } catch (error) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: getErrorMessage(error),

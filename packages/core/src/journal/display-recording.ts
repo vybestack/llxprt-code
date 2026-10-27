@@ -5,7 +5,16 @@ import { JournalArrivalRecorder } from './arrival-recorder.js';
 import { encodeContentRow } from '../services/history/journalRowCodec.js';
 
 export type JournalDisplayDescriptor =
-  | { readonly type: 'user' | 'info' | 'warning' | 'error' | 'slash' | 'shell' }
+  | {
+      readonly type:
+        | 'user'
+        | 'info'
+        | 'warning'
+        | 'error'
+        | 'slash'
+        | 'shell'
+        | 'ui-item';
+    }
   | {
       readonly type: 'tool-result';
       readonly attemptId: string;
@@ -31,6 +40,7 @@ export function decodeDisplayDescriptor(
     case 'error':
     case 'slash':
     case 'shell':
+    case 'ui-item':
       return { type };
     case 'tool-result':
       if (!('attemptId' in value) || typeof value.attemptId !== 'string')

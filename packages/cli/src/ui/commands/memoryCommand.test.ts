@@ -131,8 +131,8 @@ describe('memoryCommand', () => {
       mockContext = createMockCommandContext();
     });
 
-    it('should return an error message if no arguments are provided', () => {
-      const result = addCommand.action!(mockContext, '  ');
+    it('should return an error message if no arguments are provided', async () => {
+      const result = await addCommand.action!(mockContext, '  ');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
@@ -143,8 +143,8 @@ describe('memoryCommand', () => {
       expect(mockContext.ui.addItem).not.toHaveBeenCalled();
     });
 
-    it('should return an error message if only scope is provided without text', () => {
-      const result = addCommand.action!(mockContext, 'global');
+    it('should return an error message if only scope is provided without text', async () => {
+      const result = await addCommand.action!(mockContext, 'global');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
@@ -155,8 +155,8 @@ describe('memoryCommand', () => {
       expect(mockContext.ui.addItem).not.toHaveBeenCalled();
     });
 
-    it('should return an error message if only "project" is provided without text', () => {
-      const result = addCommand.action!(mockContext, 'project');
+    it('should return an error message if only "project" is provided without text', async () => {
+      const result = await addCommand.action!(mockContext, 'project');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
@@ -167,9 +167,9 @@ describe('memoryCommand', () => {
       expect(mockContext.ui.addItem).not.toHaveBeenCalled();
     });
 
-    it('should default to global scope when no scope keyword is provided', () => {
+    it('should default to global scope when no scope keyword is provided', async () => {
       const fact = 'remember this';
-      const result = addCommand.action!(mockContext, `  ${fact}  `);
+      const result = await addCommand.action!(mockContext, `  ${fact}  `);
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -186,9 +186,9 @@ describe('memoryCommand', () => {
       });
     });
 
-    it('should return a tool action with scope "global" when "global" is specified', () => {
+    it('should return a tool action with scope "global" when "global" is specified', async () => {
       const fact = 'remember this globally';
-      const result = addCommand.action!(mockContext, `global ${fact}`);
+      const result = await addCommand.action!(mockContext, `global ${fact}`);
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -205,9 +205,9 @@ describe('memoryCommand', () => {
       });
     });
 
-    it('should return a tool action with scope "project" when "project" is specified', () => {
+    it('should return a tool action with scope "project" when "project" is specified', async () => {
       const fact = 'remember this for the project';
-      const result = addCommand.action!(mockContext, `project ${fact}`);
+      const result = await addCommand.action!(mockContext, `project ${fact}`);
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -224,9 +224,9 @@ describe('memoryCommand', () => {
       });
     });
 
-    it('should handle uppercase scope keywords', () => {
+    it('should handle uppercase scope keywords', async () => {
       const fact = 'test fact';
-      const result = addCommand.action!(mockContext, `PROJECT ${fact}`);
+      const result = await addCommand.action!(mockContext, `PROJECT ${fact}`);
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -243,9 +243,9 @@ describe('memoryCommand', () => {
       });
     });
 
-    it('should handle mixed case scope keywords', () => {
+    it('should handle mixed case scope keywords', async () => {
       const fact = 'test fact';
-      const result = addCommand.action!(mockContext, `Global ${fact}`);
+      const result = await addCommand.action!(mockContext, `Global ${fact}`);
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -262,9 +262,9 @@ describe('memoryCommand', () => {
       });
     });
 
-    it('should treat non-scope first words as part of the fact', () => {
+    it('should treat non-scope first words as part of the fact', async () => {
       const fact = 'globally important fact';
-      const result = addCommand.action!(mockContext, fact);
+      const result = await addCommand.action!(mockContext, fact);
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -281,8 +281,8 @@ describe('memoryCommand', () => {
       });
     });
 
-    it('should return error when core.project is provided without content', () => {
-      const result = addCommand.action!(mockContext, 'core.project');
+    it('should return error when core.project is provided without content', async () => {
+      const result = await addCommand.action!(mockContext, 'core.project');
 
       expect(result).toStrictEqual({
         type: 'message',
@@ -291,8 +291,8 @@ describe('memoryCommand', () => {
       });
     });
 
-    it('should return error when core.global is provided without content', () => {
-      const result = addCommand.action!(mockContext, 'core.global');
+    it('should return error when core.global is provided without content', async () => {
+      const result = await addCommand.action!(mockContext, 'core.global');
 
       expect(result).toStrictEqual({
         type: 'message',
@@ -301,7 +301,7 @@ describe('memoryCommand', () => {
       });
     });
 
-    it('should handle core.project scope and write directly (async)', () => {
+    it('should handle core.project scope and write directly (async)', async () => {
       mockContext = createMockCommandContext({
         services: {
           config: {
@@ -311,7 +311,7 @@ describe('memoryCommand', () => {
       });
 
       // core.project scope returns void (writes directly)
-      const result = addCommand.action!(
+      const result = await addCommand.action!(
         mockContext,
         'core.project Always use strict mode',
       );
@@ -319,7 +319,7 @@ describe('memoryCommand', () => {
       expect(result).toBeUndefined();
     });
 
-    it('should handle core.global scope and write directly (async)', () => {
+    it('should handle core.global scope and write directly (async)', async () => {
       mockContext = createMockCommandContext({
         services: {
           config: {
@@ -328,7 +328,7 @@ describe('memoryCommand', () => {
         },
       });
 
-      const result = addCommand.action!(
+      const result = await addCommand.action!(
         mockContext,
         'core.global Prefer TypeScript',
       );

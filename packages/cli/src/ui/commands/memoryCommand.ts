@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
+
 import {
   coreStorageServiceAdapter,
   getErrorMessage,
@@ -39,11 +41,11 @@ async function refreshCoreMemory(config: CliUiRuntime): Promise<void> {
 const MEMORY_ADD_USAGE =
   'Usage: /memory add <global|project|core.global|core.project> <text to remember>';
 
-function handleCoreMemoryAdd(
+async function handleCoreMemoryAdd(
   context: Parameters<NonNullable<SlashCommand['action']>>[0],
   firstArg: string,
   remainingArgs: string,
-): SlashCommandActionReturn | void {
+): Promise<SlashCommandActionReturn | void> {
   if (remainingArgs === '') {
     return {
       type: 'message',
@@ -59,43 +61,43 @@ function handleCoreMemoryAdd(
       ? getProjectCoreMemoryFilePath(workingDir)
       : getGlobalCoreMemoryFilePath(coreStorageServiceAdapter);
 
-  void (async () => {
-    try {
-      await MemoryTool.performAddMemoryEntry(fact, filePath, {
-        readFile: fs.readFile,
-        writeFile: fs.writeFile,
-        mkdir: fs.mkdir,
-      });
-      await context.services.config?.refreshMemory();
-      await context.services.config?.updateSystemInstructionIfInitialized();
+  try {
+    await MemoryTool.performAddMemoryEntry(fact, filePath, {
+      readFile: fs.readFile,
+      writeFile: fs.writeFile,
+      mkdir: fs.mkdir,
+    });
+    await context.services.config?.refreshMemory();
+    await context.services.config?.updateSystemInstructionIfInitialized();
 
-      context.ui.addItem(
-        {
-          type: MessageType.INFO,
-          text: `Core memory saved to ${firstArg}: "${fact}"`,
-        },
-        Date.now(),
-      );
-    } catch (error) {
-      context.ui.addItem(
-        {
-          type: MessageType.ERROR,
-          text: `Error saving core memory: ${getErrorMessage(error)}`,
-        },
-        Date.now(),
-      );
-    }
-  })();
+    await writeCommandOutput(
+      context,
+      {
+        type: MessageType.INFO,
+        text: `Core memory saved to ${firstArg}: "${fact}"`,
+      },
+      Date.now(),
+    );
+  } catch (error) {
+    await writeCommandOutput(
+      context,
+      {
+        type: MessageType.ERROR,
+        text: `Error saving core memory: ${getErrorMessage(error)}`,
+      },
+      Date.now(),
+    );
+  }
 
-  return;
+  return undefined;
 }
 
-function handleScopedMemoryAdd(
+async function handleScopedMemoryAdd(
   context: Parameters<NonNullable<SlashCommand['action']>>[0],
   firstArg: string,
   remainingArgs: string,
   trimmedArgs: string,
-): SlashCommandActionReturn | void {
+): Promise<SlashCommandActionReturn | void> {
   let scope: 'global' | 'project' | undefined;
   let fact: string;
 
@@ -113,7 +115,8 @@ function handleScopedMemoryAdd(
     fact = trimmedArgs;
   }
 
-  context.ui.addItem(
+  await writeCommandOutput(
+    context,
     {
       type: MessageType.INFO,
       text: `Attempting to save to memory: "${fact}"`,
@@ -154,7 +157,8 @@ export const memoryCommand: SlashCommand = {
             ? `Current memory content from ${fileCount} file(s):\n\n---\n${memoryContent}\n---`
             : 'Memory is currently empty.';
 
-        context.ui.addItem(
+        await writeCommandOutput(
+          context,
           {
             type: MessageType.INFO,
             text: messageContent,
@@ -168,7 +172,10 @@ export const memoryCommand: SlashCommand = {
       description:
         'Add content to the memory. Usage: /memory add <global|project|core.global|core.project> <text>',
       kind: CommandKind.BUILT_IN,
-      action: (context, args): SlashCommandActionReturn | void => {
+      action: async (
+        context,
+        args,
+      ): Promise<SlashCommandActionReturn | void> => {
         if (!args || args.trim() === '') {
           return {
             type: 'message',
@@ -195,7 +202,8 @@ export const memoryCommand: SlashCommand = {
             };
           }
           const fact = trimmedArgs;
-          context.ui.addItem(
+          await writeCommandOutput(
+            context,
             {
               type: MessageType.INFO,
               text: `Attempting to save to memory: "${fact}"`,
@@ -233,7 +241,8 @@ export const memoryCommand: SlashCommand = {
       kind: CommandKind.BUILT_IN,
       autoExecute: true,
       action: async (context) => {
-        context.ui.addItem(
+        await writeCommandOutput(
+          context,
           {
             type: MessageType.INFO,
             text: 'Refreshing memory from source files...',
@@ -265,7 +274,8 @@ export const memoryCommand: SlashCommand = {
                 ? `Memory refreshed successfully. Loaded ${memoryContent.length} characters from ${fileCount} file(s).`
                 : 'Memory refreshed successfully. No memory content found.';
 
-            context.ui.addItem(
+            await writeCommandOutput(
+              context,
               {
                 type: MessageType.INFO,
                 text: successMessage,
@@ -275,7 +285,8 @@ export const memoryCommand: SlashCommand = {
           }
         } catch (error) {
           const errorMessage = getErrorMessage(error);
-          context.ui.addItem(
+          await writeCommandOutput(
+            context,
             {
               type: MessageType.ERROR,
               text: `Error refreshing memory: ${errorMessage}`,
@@ -299,7 +310,8 @@ export const memoryCommand: SlashCommand = {
             ? `There are ${fileCount} LLXPRT.md file(s) in use:\n\n${filePaths.join('\n')}`
             : 'No LLXPRT.md files in use.';
 
-        context.ui.addItem(
+        await writeCommandOutput(
+          context,
           {
             type: MessageType.INFO,
             text: messageContent,

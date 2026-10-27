@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { resumeHistoryWindow } from '../../../utils/streamHistoryItems.js';
+import { appendJournalUiItem } from '../../../hooks/command-journal-output.js';
 
 import { useEffect, useRef, useState } from 'react';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { HistoryItem } from '../../../types.js';
+import type { HistoryItem, HistoryItemWithoutId } from '../../../types.js';
 import { resolveEmojiFilterMode } from '../../../utils/iContentToHistoryItems.js';
 import type { UiRuntime } from '../../../cliUiRuntime.js';
 
@@ -38,6 +39,7 @@ import type { UiRuntime } from '../../../cliUiRuntime.js';
 export interface UseSessionInitializationParams {
   uiRuntime: UiRuntime;
   agent: Agent;
+  recordingOwner?: 'agent' | 'raw';
   addItem: (item: Omit<HistoryItem, 'id'>, baseTimestamp: number) => number;
   prependHistory: (leading: HistoryItem[]) => void;
   resumedBoot?: { streamRows(): AsyncIterable<IContent> };
@@ -59,21 +61,23 @@ async function runSessionStartHook(
   agent: Agent,
   addItem: UseSessionInitializationParams['addItem'],
   signal: AbortSignal,
+  recordingOwner: UseSessionInitializationParams['recordingOwner'],
 ): Promise<void> {
-  const sessionStartOutput = await agent.hooks.triggerSessionStart();
+  const sessionStartOutput = await agent.hooks
+    .triggerSessionStart()
+    .catch(() => ({ systemMessage: undefined, additionalContext: undefined }));
 
   if (signal.aborted) {
     return;
   }
 
   if (sessionStartOutput.systemMessage) {
-    addItem(
-      {
-        type: 'info',
-        text: sessionStartOutput.systemMessage,
-      },
-      Date.now(),
-    );
+    const item = {
+      type: 'info',
+      text: sessionStartOutput.systemMessage,
+    } satisfies HistoryItemWithoutId;
+    if (recordingOwner === 'agent') await appendJournalUiItem(agent, item);
+    else addItem(item, Date.now());
   }
 
   const additionalContext = sessionStartOutput.additionalContext;
@@ -90,28 +94,17 @@ async function runSessionStartHook(
   }
 }
 
-export function useSessionInitialization({
-  uiRuntime,
-  agent,
-  addItem,
-  prependHistory,
-  resumedBoot,
-}: UseSessionInitializationParams): UseSessionInitializationResult {
-  const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
-  const [coreMemoryFileCount, setCoreMemoryFileCount] = useState<number>(0);
-
-  // Guard refs for idempotency in StrictMode
-  const hasTriggeredSessionStart = useRef(false);
+function useResumedHistory(
+  {
+    uiRuntime,
+    addItem,
+    prependHistory,
+    resumedBoot,
+    recordingOwner,
+  }: UseSessionInitializationParams,
+  mounted: React.MutableRefObject<boolean>,
+): void {
   const hasSeededResumedHistory = useRef(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const mounted = useRef(false);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
   // Effect: Seed resumed history into history manager.
   // The restored rows load asynchronously, so the SessionStart message or the
   // first turn may already be in the history; they are prepended, never
@@ -119,7 +112,12 @@ export function useSessionInitialization({
   // across StrictMode double-mount while keeping resumedBoot as a static
   // mount-time prop.
   useEffect(() => {
-    if (hasSeededResumedHistory.current || !resumedBoot) return undefined;
+    if (
+      recordingOwner === 'agent' ||
+      hasSeededResumedHistory.current ||
+      !resumedBoot
+    )
+      return undefined;
     hasSeededResumedHistory.current = true;
     void resumeHistoryWindow(
       resumedBoot.streamRows(),
@@ -140,7 +138,43 @@ export function useSessionInitialization({
       },
     );
     return undefined;
-  }, [prependHistory, resumedBoot, uiRuntime, addItem]);
+  }, [
+    prependHistory,
+    resumedBoot,
+    uiRuntime,
+    addItem,
+    recordingOwner,
+    mounted,
+  ]);
+}
+
+export function useSessionInitialization({
+  uiRuntime,
+  agent,
+  recordingOwner,
+  addItem,
+  prependHistory,
+  resumedBoot,
+}: UseSessionInitializationParams): UseSessionInitializationResult {
+  const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
+  const [coreMemoryFileCount, setCoreMemoryFileCount] = useState<number>(0);
+  const [initializationError, setInitializationError] = useState<unknown>(null);
+
+  // Guard refs for idempotency in StrictMode
+  const hasTriggeredSessionStart = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useResumedHistory(
+    { uiRuntime, agent, recordingOwner, addItem, prependHistory, resumedBoot },
+    mounted,
+  );
 
   // Effect: Trigger SessionStart hook on initialization
   useEffect(() => {
@@ -152,8 +186,14 @@ export function useSessionInitialization({
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
 
-    void runSessionStartHook(uiRuntime, agent, addItem, signal).catch(() => {
-      // Hook failures should not block session initialization.
+    void runSessionStartHook(
+      uiRuntime,
+      agent,
+      addItem,
+      signal,
+      recordingOwner,
+    ).catch((error: unknown) => {
+      if (mounted.current) setInitializationError(() => error);
     });
 
     return () => {
@@ -161,7 +201,7 @@ export function useSessionInitialization({
         abortControllerRef.current.abort();
       }
     };
-  }, [uiRuntime, agent, addItem]);
+  }, [uiRuntime, agent, addItem, recordingOwner]);
 
   // Effect: Initialize memory file counts from uiRuntime.memory
   useEffect(() => {
@@ -169,6 +209,7 @@ export function useSessionInitialization({
     setCoreMemoryFileCount(uiRuntime.memory.getCoreMemoryFileCount());
   }, [uiRuntime]);
 
+  if (initializationError !== null) throw initializationError;
   return {
     llxprtMdFileCount,
     setLlxprtMdFileCount,

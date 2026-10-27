@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import * as path from 'node:path';
 import {
   IDEConnectionStatus,
@@ -130,7 +131,8 @@ function buildInstallCommand(
     action: async (context) => {
       const installer = getIdeInstaller(currentIDE);
       if (!installer) {
-        context.ui.addItem(
+        await writeCommandOutput(
+          context,
           {
             type: 'error',
             text: `No installer is available for ${ideClient.getDetectedIdeDisplayName()}. Please install the '${LLXPRT_CODE_COMPANION_EXTENSION_NAME}' extension manually from the marketplace.`,
@@ -140,7 +142,8 @@ function buildInstallCommand(
         return;
       }
 
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: 'info',
           text: `Installing IDE companion from marketplace...`,
@@ -149,7 +152,8 @@ function buildInstallCommand(
       );
 
       const result = await installer.install();
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: result.success ? 'info' : 'error',
           text: result.message,
@@ -167,7 +171,8 @@ function buildInstallCommand(
         const { messageType, content } =
           await getIdeStatusMessageWithFiles(ideClient);
         if (messageType === 'error') {
-          context.ui.addItem(
+          await writeCommandOutput(
+            context,
             {
               type: messageType,
               text: `Failed to automatically enable IDE integration. To fix this, run the CLI in a new terminal window.`,
@@ -175,7 +180,8 @@ function buildInstallCommand(
             Date.now(),
           );
         } else {
-          context.ui.addItem(
+          await writeCommandOutput(
+            context,
             {
               type: messageType,
               text: content,

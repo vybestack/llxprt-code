@@ -25,6 +25,7 @@ import { clearCommand } from './clearCommand.js';
 import { continueCommand } from './continueCommand.js';
 import type { HistoryItemWithoutId } from '../types.js';
 import type { CommandContext } from './types.js';
+import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 
@@ -122,6 +123,21 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
     await built.cleanup();
     await rm(directory, { recursive: true, force: true });
   });
+  async function expectJournaledStartNotice(): Promise<void> {
+    const path = agent.session.getRecording().path;
+    if (!path) throw new Error('Missing new session journal');
+    const cursor = await NativeJournalCursor.open(path, {}, 10);
+    try {
+      expect(
+        (await cursor.pageBack(10)).entries.flatMap((entry) =>
+          entry.kind === 'projected' ? [entry.item.text] : [],
+        ),
+      ).toStrictEqual(['SessionStart feedback']);
+    } finally {
+      await cursor.close();
+    }
+    expect(uiEvents).not.toContain('SessionStart feedback');
+  }
 
   async function inputs(): Promise<Array<z.infer<typeof hookInput>>> {
     return (await readFile(join(directory, 'hooks.jsonl'), 'utf8'))
@@ -207,7 +223,7 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
     expect(hooks[1].session_id).toBe(agent.session.getSessionId());
     expect(built.config.getSessionId()).toBe(hooks[1].session_id);
     expect(await agent.session.getHistory()).toStrictEqual([]);
-    expect(uiEvents).toContain('SessionStart feedback');
+    await expectJournaledStartNotice();
     expect(uiEvents.slice(-2)).toStrictEqual(['tokens:0', 'clear']);
   });
 
@@ -240,6 +256,8 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
 
   it('resumes the pre-clear session through startup --continue after an immediate exit', async () => {
     await clearAction(context, '');
+    await expectJournaledStartNotice();
+    const displayOnlySessionId = agent.session.getSessionId();
     await agent.session.setRecording({ enabled: false });
     const config = built.config;
     const request = new Proxy(config, {
@@ -255,7 +273,9 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
       { type: 'text', text: 'old question' },
       { type: 'text', text: 'old answer' },
     ]);
-    expect(await agent.session.listSessions()).toHaveLength(1);
+    expect(
+      (await agent.session.listSessions()).map((session) => session.id).sort(),
+    ).toStrictEqual([oldId, displayOnlySessionId].sort());
   });
 
   it.each(['SessionEnd', 'SessionStart'])(
@@ -284,12 +304,13 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
 
   it('uses the explicit Agent without needing Config on the command context', async () => {
     const explicit = createMockCommandContext({
+      recordingOwner: 'agent',
       services: { config: null, agent },
       ui: context.ui,
     });
     await clearAction(explicit, '');
     expect(agent.session.getSessionId()).not.toBe(oldId);
     expect(await agent.session.getHistory()).toStrictEqual([]);
-    expect(uiEvents).toContain('SessionStart feedback');
+    await expectJournaledStartNotice();
   });
 });

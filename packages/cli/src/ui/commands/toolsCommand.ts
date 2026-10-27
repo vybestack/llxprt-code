@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import {
   type CommandContext,
   type SlashCommand,
@@ -164,7 +165,8 @@ async function handleToggleTool(
 ): Promise<void> {
   const identifier = stripQuotes(remainder);
   if (!identifier) {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: `Usage: /tools ${subcommand} <tool name>`,
@@ -176,7 +178,8 @@ async function handleToggleTool(
 
   const target = resolveToolByName(identifier, tools);
   if (!target || target.source === 'mcp') {
-    context.ui.addItem(
+    await writeCommandOutput(
+      context,
       {
         type: MessageType.ERROR,
         text: `Tool "${identifier}" not found.`,
@@ -210,7 +213,8 @@ async function handleToggleTool(
     try {
       await agentClient.setTools();
     } catch (error) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: MessageType.INFO,
           text: `Warning: failed to refresh tool schema after ${
@@ -222,7 +226,11 @@ async function handleToggleTool(
     }
   }
 
-  context.ui.addItem({ type: MessageType.INFO, text: feedback }, Date.now());
+  await writeCommandOutput(
+    context,
+    { type: MessageType.INFO, text: feedback },
+    Date.now(),
+  );
 }
 
 export const toolsCommand: SlashCommand = {
@@ -233,7 +241,8 @@ export const toolsCommand: SlashCommand = {
   action: async (context: CommandContext, args = ''): Promise<void> => {
     const agent = context.services.agent;
     if (!agent) {
-      context.ui.addItem(
+      await writeCommandOutput(
+        context,
         {
           type: MessageType.ERROR,
           text: 'Could not retrieve tools from the agent.',
@@ -264,7 +273,10 @@ export const toolsCommand: SlashCommand = {
         allowed,
         showDescriptions,
       );
-      context.ui.addItem({ type: MessageType.INFO, text: message });
+      await writeCommandOutput(context, {
+        type: MessageType.INFO,
+        text: message,
+      });
       return;
     }
 
@@ -281,6 +293,9 @@ export const toolsCommand: SlashCommand = {
     }
 
     const message = formatListMessage(tools, disabled, allowed, false);
-    context.ui.addItem({ type: MessageType.INFO, text: message });
+    await writeCommandOutput(context, {
+      type: MessageType.INFO,
+      text: message,
+    });
   },
 };

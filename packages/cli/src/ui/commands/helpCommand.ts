@@ -4,9 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import type { SlashCommand } from './types.js';
 import { CommandKind } from './types.js';
-import { MessageType } from '../types.js';
+import { MessageType, type HistoryItemHelp } from '../types.js';
 
 export const helpCommand: SlashCommand = {
   name: 'help',
@@ -15,11 +16,11 @@ export const helpCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   action: async (context) => {
-    const helpItem = {
+    const helpItem: HistoryItemHelp = {
       type: MessageType.HELP,
       timestamp: new Date(),
     };
 
-    context.ui.addItem(helpItem);
+    await writeCommandOutput(context, helpItem);
   },
 };

@@ -12,6 +12,7 @@ import type {
   NativeJournalOptions,
 } from './native-journal-types.js';
 import { NativeResponseIndex } from './native-response-index.js';
+import { decodeJournalUiItem } from './journal-ui-item.js';
 import {
   displayText,
   withToolPresentations,
@@ -380,10 +381,12 @@ export class NativeJournalCursor {
       return undefined;
     const opener = await this.read(first);
     const type = presentation.descriptor.type;
+    const text = displayText(opener);
     const item: HistoryItem = {
+      ...(type === 'ui-item'
+        ? decodeJournalUiItem(text)
+        : { type: type === 'slash' || type === 'shell' ? 'info' : type, text }),
       id: -1,
-      type: type === 'slash' || type === 'shell' ? 'info' : type,
-      text: displayText(opener),
       rowIdentity: {
         kind: 'journal',
         offset: first.recordOffset,

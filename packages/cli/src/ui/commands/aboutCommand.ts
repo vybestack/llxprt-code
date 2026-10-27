@@ -10,6 +10,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import { getCliVersion } from '../../utils/version.js';
 import type { CommandContext, SlashCommand } from './types.js';
 import { CommandKind } from './types.js';
@@ -171,6 +172,6 @@ export const aboutCommand: SlashCommand = {
       baseURL,
     };
 
-    context.ui.addItem(aboutItem);
+    await writeCommandOutput(context, aboutItem);
   },
 };
