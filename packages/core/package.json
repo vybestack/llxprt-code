@@ -502,6 +502,10 @@
       "bun": "./src/scheduler/types.ts",
       "import": "./dist/src/scheduler/types.js"
     },
+    "./scheduler/approval-lifecycle.js": {
+      "bun": "./src/scheduler/approval-lifecycle.ts",
+      "import": "./dist/src/scheduler/approval-lifecycle.js"
+    },
     "./scheduler/liveOutput.js": {
       "bun": "./src/scheduler/liveOutput.ts",
       "import": "./dist/src/scheduler/liveOutput.js"
@@ -1029,6 +1033,11 @@
       "types": "./dist/src/journal/errors.d.ts",
       "bun": "./src/journal/errors.ts",
       "import": "./dist/src/journal/errors.js"
+    },
+    "./journal/nativeFactIndex.js": {
+      "types": "./dist/src/journal/nativeFactIndex.d.ts",
+      "bun": "./src/journal/nativeFactIndex.ts",
+      "import": "./dist/src/journal/nativeFactIndex.js"
     },
     "./journal/slotSummary.js": {
       "types": "./dist/src/journal/slotSummary.d.ts",
