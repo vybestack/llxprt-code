@@ -1,5 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { existsSync, mkdirSync, realpathSync, symlinkSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  realpathSync,
+  symlinkSync,
+} from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
 /** Stage installed externals without exposing the repository's tiktoken copy. */
@@ -8,6 +15,13 @@ export function stageBundleRuntimeExternals(
   directory: string,
   externals: readonly string[],
 ): void {
+  const encoder = '@dqbd/tiktoken/encoders/o200k_base.json';
+  const encoderDestination = join(directory, 'node_modules', encoder);
+  mkdirSync(dirname(encoderDestination), { recursive: true });
+  copyFileSync(
+    createRequire(join(repoRoot, 'package.json')).resolve(encoder),
+    encoderDestination,
+  );
   const packages = externals.filter(
     (name) => !name.startsWith('node:') && name !== '@dqbd/tiktoken',
   );
