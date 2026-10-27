@@ -28,6 +28,7 @@ export class HistoryReaderScope {
 
   open<T>(source: Reader<T>): Reader<T> {
     this.requireOpen();
+    let active: Reader<T> | undefined = source;
     const reader: Reader<T> = {
       [Symbol.asyncIterator]: () => reader,
       async [Symbol.asyncDispose]() {
@@ -35,21 +36,35 @@ export class HistoryReaderScope {
       },
       next: async (value) => {
         this.requireOpen();
-        const result = await source.next(value);
-        if (result.done === true) this.readers.delete(reader);
+        if (active === undefined) return { done: true, value: undefined };
+        const result = await active.next(value);
+        if (result.done === true) {
+          active = undefined;
+          this.readers.delete(reader);
+        }
         this.requireOpen();
         return result;
       },
       return: async (value) => {
+        const closing = active;
+        active = undefined;
         try {
-          return await source.return(value);
+          if (closing === undefined) return { done: true, value: await value };
+          const result = await closing.return(value);
+          if (result.done !== true) active = closing;
+          return result;
         } finally {
           this.readers.delete(reader);
         }
       },
       throw: async (error) => {
+        const closing = active;
+        active = undefined;
         try {
-          return await source.throw(error);
+          if (closing === undefined) throw error;
+          const result = await closing.throw(error);
+          if (result.done !== true) active = closing;
+          return result;
         } finally {
           this.readers.delete(reader);
         }
