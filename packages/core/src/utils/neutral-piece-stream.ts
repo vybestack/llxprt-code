@@ -24,6 +24,7 @@ export class NeutralPieceStream {
   private readonly counts = new Float64Array(this.width + 1);
   private readonly tails = Array.from({ length: this.width + 1 }, () => '');
   private readonly pairs = new Map<string, boolean>();
+  private readonly suffixes = new Map<string, readonly string[]>();
   private bytes = '';
   private length = 0;
   private total = 0;
@@ -46,15 +47,10 @@ export class NeutralPieceStream {
   private appendByte(byte: number): void {
     this.length++;
     this.bytes = (this.bytes + String.fromCharCode(byte)).slice(-this.width);
-    for (let size = this.bytes.length; size > 0; size--) {
-      const suffix = this.bytes.slice(-size);
-      const before = this.length - size;
+    for (const suffix of this.candidateSuffixes()) {
+      const before = this.length - suffix.length;
       const index = before % this.counts.length;
-      if (
-        !this.ranks.has(suffix) ||
-        (before > 0 && !this.compatible(this.tails[index], suffix))
-      )
-        continue;
+      if (before > 0 && !this.compatible(this.tails[index], suffix)) continue;
       const slot = this.length % this.counts.length;
       this.total = this.counts[index] + 1;
       this.counts[slot] = this.total;
@@ -62,6 +58,19 @@ export class NeutralPieceStream {
       return;
     }
     throw new Error('No consistent neutral BPE suffix');
+  }
+
+  private candidateSuffixes(): readonly string[] {
+    const saved = this.suffixes.get(this.bytes);
+    if (saved !== undefined) return saved;
+    const candidates: string[] = [];
+    for (let size = this.bytes.length; size > 0; size--) {
+      const suffix = this.bytes.slice(-size);
+      if (this.ranks.has(suffix)) candidates.push(suffix);
+    }
+    // Only vocabulary-width windows are retained, independently of row size.
+    if (this.suffixes.size < 256) this.suffixes.set(this.bytes, candidates);
+    return candidates;
   }
 
   private compatible(left: string, right: string): boolean {
