@@ -9,6 +9,7 @@ import {
   cpLen,
   cpSlice,
   getCachedStringWidth,
+  stripUnsafeCharacters,
   toCodePoints,
 } from '../utils/textUtils.js';
 import { logicalPosToOffset } from './shared/buffer-operations.js';
@@ -222,7 +223,7 @@ export const handleLargePaste = (
   nextPlaceholderIdRef: React.MutableRefObject<number>,
   pendingLargePastesRef: React.MutableRefObject<Map<string, string>>,
 ): void => {
-  const sanitized = key.sequence.replace(/\r\n?/g, '\n');
+  const sanitized = stripUnsafeCharacters(key.sequence.replace(/\r\n?/g, '\n'));
   const charCount = cpLen(sanitized);
   const lineCount = sanitized.length === 0 ? 0 : sanitized.split('\n').length;
 
@@ -234,24 +235,14 @@ export const handleLargePaste = (
     return;
   }
 
-  const existingText = buffer.text;
-  const cursorOffset = logicalPosToOffset(
-    buffer.lines,
-    buffer.cursor[0],
-    buffer.cursor[1],
-  );
-  const before = existingText.slice(0, cursorOffset);
-  const after = existingText.slice(cursorOffset);
   const placeholderId = nextPlaceholderIdRef.current++;
   const placeholderLabel = formatLargePastePlaceholder(
     lineCount,
     charCount,
     placeholderId,
   );
-  const placeholderText = `${before}${placeholderLabel}${after}`;
 
-  buffer.setText(placeholderText);
-  buffer.moveToOffset(cursorOffset + placeholderLabel.length);
+  buffer.insert(placeholderLabel, { paste: true });
   const nextPendingPastes = new Map(pendingLargePastesRef.current);
   nextPendingPastes.set(placeholderLabel, sanitized);
   pendingLargePastesRef.current = nextPendingPastes;

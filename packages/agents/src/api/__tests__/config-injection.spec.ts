@@ -158,47 +158,10 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
   // ─── Property-based (>=30% of total) ─────────────────────────────────────
 
   it('PROP runtime reuse: for any non-empty sessionId, the adopted Config provider/model are reflected on the agent (REQ-INT-001.2)', async () => {
-    await expect(
-      fc.assert(
-        createPROPRuntimeReuseForAnyNonEmptySessionIdTheAdoptedConfigProviderProperty(),
-      ),
-    ).resolves.toBeUndefined();
-  }, 30000);
-
-  function createPROPRuntimeReuseForAnyNonEmptySessionIdTheAdoptedConfigProviderProperty() {
-    return fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
-      const built = await buildCliStyleConfig('plain-text.jsonl');
-      try {
-        const agent: Agent = await fromConfig({
-          settingsOwner: built.settingsOwner,
-          settingsService: built.settingsService,
-          agentClient: built.agentClient,
-          providerManager: built.providerManager,
-          config: built.config,
-          mcpRuntime: built.mcpRuntime,
-          sessionId,
-        });
-        try {
-          return (
-            agent.getProvider() === 'fake' &&
-            agent.getModel() === 'fake-model' &&
-            agent.getProvider() === built.config.getProvider() &&
-            agent.getModel() === built.config.getModel()
-          );
-        } finally {
-          await agent.dispose();
-        }
-      } finally {
-        await built.cleanup();
-      }
-    });
-  }
-
-  it('PROP adoption identity: for any non-empty sessionId, internalConfig(agent) === the caller-supplied Config (REQ-INT-001)', async () => {
-    await fc.assert(
-      fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
-        const built = await buildCliStyleConfig('plain-text.jsonl');
-        try {
+    const built = await buildCliStyleConfig('plain-text.jsonl');
+    try {
+      await fc.assert(
+        fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
           const agent: Agent = await fromConfig({
             settingsOwner: built.settingsOwner,
             settingsService: built.settingsService,
@@ -209,14 +172,46 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
             sessionId,
           });
           try {
-            return internalConfig(agent) === built.config;
+            expect(agent.getRuntimeId()).toBe(sessionId);
+            expect(agent.providerManager).toBe(built.providerManager);
+            expect(agent.getProvider()).toBe('fake');
+            expect(agent.getModel()).toBe('fake-model');
+            expect(agent.getProvider()).toBe(built.config.getProvider());
+            expect(agent.getModel()).toBe(built.config.getModel());
           } finally {
             await agent.dispose();
           }
-        } finally {
-          await built.cleanup();
-        }
-      }),
-    );
+        }),
+      );
+    } finally {
+      await built.cleanup();
+    }
+  }, 30000);
+
+  it('PROP adoption identity: for any non-empty sessionId, internalConfig(agent) === the caller-supplied Config (REQ-INT-001)', async () => {
+    const built = await buildCliStyleConfig('plain-text.jsonl');
+    try {
+      await fc.assert(
+        fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
+          const agent: Agent = await fromConfig({
+            settingsOwner: built.settingsOwner,
+            settingsService: built.settingsService,
+            agentClient: built.agentClient,
+            providerManager: built.providerManager,
+            config: built.config,
+            mcpRuntime: built.mcpRuntime,
+            sessionId,
+          });
+          try {
+            expect(agent.getRuntimeId()).toBe(sessionId);
+            expect(internalConfig(agent)).toBe(built.config);
+          } finally {
+            await agent.dispose();
+          }
+        }),
+      );
+    } finally {
+      await built.cleanup();
+    }
   }, 30000);
 });

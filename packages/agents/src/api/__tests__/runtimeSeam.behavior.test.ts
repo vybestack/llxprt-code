@@ -29,7 +29,10 @@ import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
+import {
+  buildCliStyleConfig,
+  createTerminalOnlyIdePort,
+} from './helpers/buildCliStyleConfig.js';
 
 // ─── Structural identity probe (cast-free, mirrors fromConfig.behavior idiom) ─
 //
@@ -76,6 +79,20 @@ function asWithRuntimeId(agent: Agent): WithRuntimeId {
 }
 
 describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requirement:REQ-005,REQ-001', () => {
+  it('CLI fixture with a terminal-only IDE port initializes without acquiring a host IDE client', async () => {
+    const built = await buildCliStyleConfig('plain-text.jsonl', {
+      idePort: createTerminalOnlyIdePort(),
+    });
+    try {
+      expect(built.mcpRuntime.ide.getClient()).toBeUndefined();
+      expect(() => built.mcpRuntime.ide.setEnabled(true)).toThrow(
+        'Terminal-only fixture does not support IDE mode',
+      );
+    } finally {
+      await built.cleanup();
+    }
+  });
+
   it('T6a fromConfig with a known sessionId yields agent.getRuntimeId() === that sessionId @requirement:REQ-005.1 @scenario:runtime-id @given:a real CLI-style Config and sessionId "known-runtime-id-T6a" @when:fromConfig({ config, sessionId }) @then:agent.getRuntimeId() === "known-runtime-id-T6a"', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     let agent: Agent | undefined;
@@ -149,7 +166,9 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
   it('PROP-A for any valid non-empty sessionId R, fromConfig({ config, sessionId: R }) yields agent.getRuntimeId() === R @requirement:REQ-005.1 @scenario:property-runtime-id @given:any non-empty sessionId string R @when:fromConfig({ config, sessionId: R }) @then:agent.getRuntimeId() === R for every generated R', async () => {
     await fc.assert(
       fc.asyncProperty(nonBlankStringArbitrary, async (runtimeId) => {
-        const built = await buildCliStyleConfig('plain-text.jsonl');
+        const built = await buildCliStyleConfig('plain-text.jsonl', {
+          idePort: createTerminalOnlyIdePort(),
+        });
         let agent: Agent | undefined;
         try {
           agent = await fromConfig({
@@ -173,7 +192,9 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
   it('PROP-B for any valid non-empty sessionId R, the no-2nd-manager identity holds: captureProviderManager(agent) === the Config manager @requirement:REQ-001 @scenario:property-no-double-manager @given:any non-empty sessionId string R @when:fromConfig({ config, sessionId: R }) @then:captureProviderManager(agent) === the Config manager for every generated R', async () => {
     await fc.assert(
       fc.asyncProperty(nonBlankStringArbitrary, async (runtimeId) => {
-        const built = await buildCliStyleConfig('plain-text.jsonl');
+        const built = await buildCliStyleConfig('plain-text.jsonl', {
+          idePort: createTerminalOnlyIdePort(),
+        });
         let agent: Agent | undefined;
         try {
           agent = await fromConfig({
