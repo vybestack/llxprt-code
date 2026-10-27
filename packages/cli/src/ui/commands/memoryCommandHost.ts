@@ -28,21 +28,17 @@ export interface MemoryCommandRuntime {
 }
 
 export function bindMemoryCommand(
-  runtime: MemoryCommandRuntime | null,
+  runtime: MemoryCommandRuntime,
   addItem: UseHistoryManagerReturn['addItem'],
   setMemoryFileCount: (count: number) => void,
 ): MemoryCommandOperations {
   return {
-    isConfigured: runtime !== null,
-    getUserMemory: () => runtime?.getUserMemory() ?? '',
-    getLlxprtMdFileCount: () => runtime?.getLlxprtMdFileCount() ?? 0,
-    getLlxprtMdFilePaths: () => runtime?.getLlxprtMdFilePaths() ?? [],
-    refreshMemory: async () => {
-      if (!runtime) throw new Error('Memory runtime is unavailable');
-      return runtime.refreshMemory();
-    },
+    isConfigured: true,
+    getUserMemory: runtime.getUserMemory.bind(runtime),
+    getLlxprtMdFileCount: runtime.getLlxprtMdFileCount.bind(runtime),
+    getLlxprtMdFilePaths: runtime.getLlxprtMdFilePaths.bind(runtime),
+    refreshMemory: () => runtime.refreshMemory(),
     updateSystemInstruction: async () => {
-      if (!runtime) throw new Error('Memory runtime is unavailable');
       await runtime.updateSystemInstructionIfInitialized();
     },
     addItem,
@@ -50,9 +46,7 @@ export function bindMemoryCommand(
     saveCoreMemory: async (scope, fact) => {
       const filePath =
         scope === 'core.project'
-          ? getProjectCoreMemoryFilePath(
-              runtime?.getWorkingDir() ?? process.cwd(),
-            )
+          ? getProjectCoreMemoryFilePath(runtime.getWorkingDir())
           : getGlobalCoreMemoryFilePath(coreStorageServiceAdapter);
       await MemoryTool.performAddMemoryEntry(fact, filePath, {
         readFile: fs.readFile,

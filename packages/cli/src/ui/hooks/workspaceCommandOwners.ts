@@ -36,7 +36,7 @@ import type { UseHistoryManagerReturn } from './useHistoryManager.js';
  * command family, plus the workspace root used by /image.
  */
 export interface WorkspaceCommandRuntime {
-  readonly memory: MemoryCommandRuntime | null;
+  readonly memory: MemoryCommandRuntime;
   readonly bug: BugCommandRuntime | null;
   readonly directory: DirectoryCommandRuntime | null;
   getTargetDir(): string;

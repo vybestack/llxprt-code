@@ -66,9 +66,10 @@ describe('memoryCommand', () => {
     name: 'show' | 'add' | 'refresh' | 'list',
     context: CommandOwnerFixture = mockContext,
   ): SlashCommand => {
+    assertDefined(context.services.config);
     const memoryCommand = createMemoryCommand(
       bindMemoryCommand(
-        context.services.config ?? null,
+        context.services.config,
         context.ui.addItem,
         context.ui.setLlxprtMdFileCount,
       ),
@@ -466,19 +467,6 @@ describe('memoryCommand', () => {
       } finally {
         release();
       }
-    });
-    it('does not throw when the config service is unavailable', async () => {
-      const context = createMockCommandContext({ services: { config: null } });
-      await expect(
-        getSubCommand('refresh', context).action!(context, ''),
-      ).resolves.toBeUndefined();
-      expect(context.ui.addItem).toHaveBeenCalledWith(
-        {
-          type: MessageType.INFO,
-          text: 'Refreshing memory from source files...',
-        },
-        expect.any(Number),
-      );
     });
     it('reloads physical instructions through the same operation with JIT enabled', async () => {
       const jit = new SessionInstructionOwner(

@@ -9,7 +9,6 @@ import type { ProviderCommandOperations } from './providerCommand.js';
 
 export function bindProviderCommandOperations(
   readProvider: () => string,
-  readStatus: () => { providerName?: string | null },
   readModel: ProviderCommandOperations['getActiveModelName'],
   resolveAlias: ProviderCommandOperations['resolveActiveProviderAliasConfig'],
   switchProvider: ProviderCommandOperations['switchProvider'],
@@ -17,13 +16,7 @@ export function bindProviderCommandOperations(
   recordProviderSwitch: (provider: string, model: string) => Promise<void>,
 ): ProviderCommandOperations {
   return {
-    getActiveProviderName: () => {
-      try {
-        return readProvider();
-      } catch {
-        return readStatus().providerName ?? null;
-      }
-    },
+    getActiveProviderName: readProvider,
     getActiveModelName: readModel,
     switchProvider,
     recordProviderSwitch,

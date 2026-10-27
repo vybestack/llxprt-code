@@ -106,7 +106,6 @@ describe('provider registration ownership', () => {
           Object.assign(current.getProvider.bind(current), {
             setProvider: peer.setProvider.bind(peer),
           }),
-          () => ({ providerName: current.getProvider() }),
           current.getModel.bind(current),
           (name, options) => current.setProvider(name, undefined, options),
           unavailableAlias,

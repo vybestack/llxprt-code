@@ -546,7 +546,6 @@ export class InteractiveApplication {
       this.props.getActiveToolFormatState,
       this.props.setActiveToolFormatOverride,
       this.props.getActiveProviderName,
-      this.props.providerStatus,
       this.props.getActiveModelName,
       this.props.getActiveProviderAliasConfig,
       (name, options) => a.setProvider(name, undefined, options),

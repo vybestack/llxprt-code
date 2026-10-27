@@ -38,7 +38,16 @@ describe('workspace command registration operations', () => {
         });
         return createWorkspaceCommandOwners({
           workspace: {
-            memory: null,
+            memory: {
+              getUserMemory: () => actual.memory.getMemory(),
+              getLlxprtMdFileCount: () => actual.memory.getFileCount(),
+              getLlxprtMdFilePaths: () => [...actual.memory.getFilePaths()],
+              refreshMemory: async () => {
+                throw new Error('Not exercised');
+              },
+              updateSystemInstructionIfInitialized: () => {},
+              getWorkingDir: () => '',
+            },
             bug: null,
             directory: null,
             getTargetDir: () => '',

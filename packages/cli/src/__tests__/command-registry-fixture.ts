@@ -119,7 +119,14 @@ function createUnavailableWorkspaceOwners(
 ) {
   return createWorkspaceCommandOwners({
     workspace: {
-      memory: null,
+      memory: {
+        getUserMemory: unavailableOwner,
+        getLlxprtMdFileCount: unavailableOwner,
+        getLlxprtMdFilePaths: unavailableOwner,
+        refreshMemory: unavailableOwner,
+        updateSystemInstructionIfInitialized: unavailableOwner,
+        getWorkingDir: unavailableOwner,
+      },
       bug: null,
       directory: null,
       getTargetDir: () => '',

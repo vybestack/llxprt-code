@@ -93,7 +93,6 @@ function runProvider(context: CommandOwnerFixture, args: string) {
   const command = createProviderCommand(
     bindProviderCommandOperations(
       context.runtimeApi.getActiveProviderName.bind(context.runtimeApi),
-      context.runtimeApi.providerStatus.bind(context.runtimeApi),
       context.runtimeApi.getActiveModelName.bind(context.runtimeApi),
       context.runtimeApi.getActiveProviderAliasConfig.bind(context.runtimeApi),
       async (name, options) => {

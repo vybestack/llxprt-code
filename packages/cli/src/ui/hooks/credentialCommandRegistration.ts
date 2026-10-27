@@ -53,11 +53,10 @@ export function createModelRegistration(
   readFormat: Parameters<typeof createToolFormatCommand>[0],
   writeFormat: Parameters<typeof createToolFormatCommand>[1],
   readProvider: Parameters<typeof bindProviderCommandOperations>[0],
-  readStatus: Parameters<typeof bindProviderCommandOperations>[1],
-  readModel: Parameters<typeof bindProviderCommandOperations>[2],
-  resolveAlias: Parameters<typeof bindProviderCommandOperations>[3],
-  switchProvider: Parameters<typeof bindProviderCommandOperations>[4],
-  refreshAliases: Parameters<typeof bindProviderCommandOperations>[5],
+  readModel: Parameters<typeof bindProviderCommandOperations>[1],
+  resolveAlias: Parameters<typeof bindProviderCommandOperations>[2],
+  switchProvider: Parameters<typeof bindProviderCommandOperations>[3],
+  refreshAliases: Parameters<typeof bindProviderCommandOperations>[4],
 ) {
   return (record: RecordSwitch) => ({
     modelCommand: createModelCommand(selectModel, record),
@@ -65,7 +64,6 @@ export function createModelRegistration(
     providerCommand: createProviderCommand(
       bindProviderCommandOperations(
         readProvider,
-        readStatus,
         readModel,
         resolveAlias,
         switchProvider,

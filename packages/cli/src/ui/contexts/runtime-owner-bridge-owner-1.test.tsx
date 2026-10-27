@@ -209,7 +209,6 @@ describe('interactive runtime owner bridge', () => {
       const leftProviderCommand = createProviderCommand(
         bindProviderCommandOperations(
           leftApi.getActiveProviderName.bind(leftApi),
-          leftApi.providerStatus.bind(leftApi),
           leftApi.getActiveModelName.bind(leftApi),
           leftApi.getActiveProviderAliasConfig.bind(leftApi),
           (name, options) => a.setProvider(name, undefined, options),
@@ -220,7 +219,6 @@ describe('interactive runtime owner bridge', () => {
       const rightProviderCommand = createProviderCommand(
         bindProviderCommandOperations(
           rightApi.getActiveProviderName.bind(rightApi),
-          rightApi.providerStatus.bind(rightApi),
           rightApi.getActiveModelName.bind(rightApi),
           rightApi.getActiveProviderAliasConfig.bind(rightApi),
           (name, options) => b.setProvider(name, undefined, options),

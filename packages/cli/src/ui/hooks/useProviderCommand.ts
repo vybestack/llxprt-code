@@ -10,10 +10,9 @@ import { bindProviderCommandOperations } from '../commands/providerCommandHost.j
 
 export function useProviderCommand(
   readProvider: Parameters<typeof bindProviderCommandOperations>[0],
-  readStatus: Parameters<typeof bindProviderCommandOperations>[1],
-  readModel: Parameters<typeof bindProviderCommandOperations>[2],
-  switchProvider: Parameters<typeof bindProviderCommandOperations>[4],
-  resolveAlias: Parameters<typeof bindProviderCommandOperations>[3],
+  readModel: Parameters<typeof bindProviderCommandOperations>[1],
+  switchProvider: Parameters<typeof bindProviderCommandOperations>[3],
+  resolveAlias: Parameters<typeof bindProviderCommandOperations>[2],
   refreshProviderAliases: () => Promise<void>,
   recordProviderSwitch: (provider: string, model: string) => Promise<void>,
 ): SlashCommand {
@@ -22,7 +21,6 @@ export function useProviderCommand(
       createProviderCommand(
         bindProviderCommandOperations(
           readProvider,
-          readStatus,
           readModel,
           resolveAlias,
           switchProvider,
@@ -32,7 +30,6 @@ export function useProviderCommand(
       ),
     [
       readProvider,
-      readStatus,
       readModel,
       resolveAlias,
       switchProvider,
