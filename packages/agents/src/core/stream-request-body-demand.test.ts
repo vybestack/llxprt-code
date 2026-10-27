@@ -475,11 +475,12 @@ describe('issue854 real StreamProcessor Responses BODY demand', () => {
       expect(
         fixture.processor.getPromptEnvelopeEstimate()?.estimatedPromptTokens,
       ).toBe(await independentEstimate(fixture));
-      expect(observation.beforeBody).toBe(rowCount);
-      expect(observation.afterFirstPull).toBe(rowCount);
-      expect(fixture.history.pulled).toBe(rowCount);
+      const hookAndEstimationReads = 2 * (rowCount + 1);
+      expect(observation.beforeBody).toBe(hookAndEstimationReads);
+      expect(observation.afterFirstPull).toBe(hookAndEstimationReads);
+      expect(fixture.history.pulled).toBe(hookAndEstimationReads);
       expect(fixture.history.activeReaders).toBe(0);
-      expect(fixture.history.closedReaders).toBe(1);
+      expect(fixture.history.closedReaders).toBe(2);
     } finally {
       await fixture.dispose();
     }
