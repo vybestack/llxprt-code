@@ -286,6 +286,10 @@ export async function strictProbe(
   const { controller, faultPath, http, setup, fixture, wrapper } = input;
   let preflights = 0;
   let retries = 0;
+  const eagerContents = {
+    openProviderRequest: async () => fixture.source,
+    [Symbol.asyncIterator]: () => fixture.source.openReader(controller.signal),
+  };
   let output = '';
   let failure: unknown;
   try {
@@ -327,10 +331,7 @@ export async function strictProbe(
           tokenizerFactory: setup.tokenizerFactory,
         })
       : wrapper.generateChatCompletion({
-          contents: {
-            [Symbol.asyncIterator]: () =>
-              fixture.source.openReader(controller.signal),
-          },
+          contents: eagerContents,
           invocation: { ...setup.invocation, signal: controller.signal },
           systemInstruction: preflightInstructions,
           resolved: { model: 'gpt-5.6' },
@@ -342,7 +343,6 @@ export async function strictProbe(
   } catch (error: unknown) {
     failure = error;
   } finally {
-    if (!source) await fixture.source.close();
     await settleInducedExportFailure(input.faultPath !== undefined, () =>
       flushTelemetry(input.telemetry),
     );

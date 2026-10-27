@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { NativeProviderHistory } from '@vybestack/llxprt-code-core/services/history/native-purge-provider-request.js';
 import { ObservedHistory } from './__tests__/support/streamprocessor-source-fixture.js';
 import { openRequestContentsSnapshot } from './streamRequestHelpers.js';
 
@@ -38,11 +39,15 @@ describe('bounded request selection preserves semantic pending membership', () =
       },
       text('human', 'pending question'),
     ];
-    const override: AsyncIterable<IContent> = {
-      async *[Symbol.asyncIterator]() {
-        yield text('human', 'semantic selected history');
-        yield text('ai', 'selected reply');
-      },
+    const selectedHistory = new ObservedHistory();
+    await selectedHistory.addBatch([
+      text('human', 'semantic selected history'),
+      text('ai', 'selected reply'),
+    ]);
+    const override: NativeProviderHistory = {
+      prepareProviderSnapshot: (tail, options) =>
+        selectedHistory.prepareCuratedForProviderSnapshot(tail, options),
+      [Symbol.asyncIterator]: () => selectedHistory.streamRawHistory(),
     };
     const snapshot = await openRequestContentsSnapshot(
       pending,
@@ -75,6 +80,7 @@ describe('bounded request selection preserves semantic pending membership', () =
       expect(snapshot.pending.inputCount).toBe(3);
     } finally {
       await snapshot.close();
+      await selectedHistory.dispose();
       await history.dispose();
     }
     expect(history.owners.every((owner) => owner.closed)).toBe(true);

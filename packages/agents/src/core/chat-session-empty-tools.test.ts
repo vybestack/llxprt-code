@@ -300,7 +300,7 @@ describe.each<Path>(['direct', 'stream', 'turn'])(
             expect(request).not.toHaveProperty('conversationLogEmptyTools');
           }
           const logName = (await readdir(dir)).find((name) =>
-            name.endsWith('.jsonl'),
+            /^conversation-.*\.jsonl$/.test(name),
           );
           if (logName === undefined) throw new Error('No conversation log');
           const entries: unknown[] = (

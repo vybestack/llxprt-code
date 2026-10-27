@@ -67,14 +67,16 @@ function eagerStream(
   entered: ReturnType<typeof barrier>,
   prepared: ReturnType<typeof barrier>,
 ): AsyncIterableIterator<IContent> {
-  return input.wrapper.generateChatCompletion({
-    contents: {
-      async *[Symbol.asyncIterator](): AsyncGenerator<IContent> {
-        entered.release();
-        await prepared.wait;
-        yield* disk.source.openReader();
-      },
+  const contents = {
+    async openProviderRequest() {
+      entered.release();
+      await prepared.wait;
+      return disk.source;
     },
+    [Symbol.asyncIterator]: () => disk.source.openReader(),
+  };
+  return input.wrapper.generateChatCompletion({
+    contents,
     invocation: input.setup.invocation,
     systemInstruction: preflightInstructions,
     resolved: { model: 'gpt-5.6' },
@@ -154,12 +156,7 @@ export async function mixedPreSendProbe(
     const source = (): Promise<Result> =>
       sourceStream(input, entered, prepared, fault === 'abort');
     const tasks = eagerFirst ? [eager(), source()] : [source(), eager()];
-    let results: Result[];
-    try {
-      results = await Promise.all(tasks);
-    } finally {
-      await disk.source.close();
-    }
+    const results = await Promise.all(tasks);
     await settleInducedExportFailure(input.faultPath !== undefined, () =>
       flushTelemetry(input.telemetry),
     );

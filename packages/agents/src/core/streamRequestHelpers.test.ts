@@ -68,7 +68,7 @@ function snapshotPendingRows(): IContent[] {
           ],
     metadata: {
       id: `input-${index}`,
-      turnId: `input-turn-${index}`,
+      turnId: `turn_input-${index}`,
       cacheAnchor: index === 31,
       providerMetadata: { pendingIndex: index },
     },
@@ -83,7 +83,7 @@ function snapshotOracleBytes(row: IContent): string {
     metadata: {
       ...row.metadata,
       id: `input-${index}`,
-      turnId: `input-turn-${index}`,
+      turnId: `turn_input-${index}`,
     },
   });
 }
