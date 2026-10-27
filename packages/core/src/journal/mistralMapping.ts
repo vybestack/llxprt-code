@@ -132,7 +132,7 @@ export async function assignMapping(
   readGroup: (end: number) => RecordAccess,
   hasher: IdKeyHasher,
   candidate: MistralCandidate,
-): Promise<void> {
+): Promise<ReadonlyArray<MistralMapping | undefined>> {
   const fact = await facts.ids.queries.fact(rawId);
   if (fact === undefined)
     throw new JournalFormatError('Mistral call has no raw id fact');
@@ -170,7 +170,7 @@ export async function assignMapping(
     facts.ids.markMistralUsed(slot, id, rawId);
     changed = true;
   }
-  if (!changed) return;
+  if (!changed) return mappings;
   const body = encodeMappings(updated);
   const offset = await appender.append({
     kind: RECORD_KIND.VALUE,
@@ -179,6 +179,7 @@ export async function assignMapping(
   });
   await appender.drain();
   await facts.ids.setMappedRef(rawId, offset);
+  return updated;
 }
 
 async function isObservedCall(

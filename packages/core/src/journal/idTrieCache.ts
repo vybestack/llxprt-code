@@ -17,6 +17,7 @@ export const ID_NODE_CACHE_ENTRY_OVERHEAD = 48;
  * really keeps.
  */
 export interface IdNodeCache {
+  readonly lookupCacheIdentity?: object;
   selectRoot(root: number): void;
   get(offset: number): Uint8Array | undefined;
   put(offset: number, kindHeader: Uint8Array, shallow?: boolean): void;

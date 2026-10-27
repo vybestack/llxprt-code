@@ -4,7 +4,10 @@ import { BoundedIdNodeCache, type IdNodeCache } from './idTrieCache.js';
 /** Uncommitted nodes never enter a cache shared with the next group. */
 export class TranscriptMapCache implements IdNodeCache {
   private readonly local = new BoundedIdNodeCache();
-  constructor(private readonly committed: IdNodeCache) {}
+  readonly lookupCacheIdentity: object;
+  constructor(private readonly committed: IdNodeCache) {
+    this.lookupCacheIdentity = committed.lookupCacheIdentity ?? committed;
+  }
   selectRoot(root: number): void {
     this.local.selectRoot(root);
   }

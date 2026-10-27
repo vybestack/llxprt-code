@@ -1,7 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { bytesEqual } from './bytes.js';
+import {
+  advanceMapLookups,
+  mapLookups,
+  rememberMapLookup,
+} from './map-lookup-cache.js';
 import { JournalFormatError } from './errors.js';
-import type { FrameBody } from './frame.js';
+import { FRAME_HEAD_BYTES, type FrameBody } from './frame.js';
 import type { GroupRecord, RecordAppender } from './groupAppender.js';
 import type { IdKeyHasher } from './idKeys.js';
 import type { IdNodeCache } from './idTrieCache.js';
@@ -115,6 +120,25 @@ export class KeyedMapReader {
 
   /** The value stored under `key` in the map at `root`; `root` 0 is the empty map. */
   async get(root: number, key: string): Promise<Uint8Array | undefined> {
+    const lookups = mapLookups(this.cache, root);
+    if (lookups.values.has(key)) return lookups.values.get(key)?.slice();
+    const value = await this.read(root, key);
+    rememberMapLookup(lookups, key, value);
+    return value;
+  }
+
+  publishLookups(
+    previousRoot: number,
+    root: number,
+    changes: Iterable<PendingValue>,
+  ): void {
+    advanceMapLookups(this.cache, previousRoot, root, changes);
+  }
+
+  private async read(
+    root: number,
+    key: string,
+  ): Promise<Uint8Array | undefined> {
     if (root === 0) return undefined;
     if (this.trie === undefined || this.access === undefined) {
       throw new JournalFormatError(
@@ -137,7 +161,11 @@ export class KeyedMapReader {
     offset: number,
     key: Uint8Array,
   ): Promise<Uint8Array> {
-    const head = await access.readRecordHead(offset, 'VALUE');
+    const head = await access.readRecordHead(
+      offset,
+      'VALUE',
+      FRAME_HEAD_BYTES + key.length,
+    );
     if (head.kind !== RECORD_KIND.VALUE) {
       throw new JournalFormatError(
         `Record at offset ${offset} is not a value (kind ${head.kind})`,
@@ -233,12 +261,14 @@ export class KeyedMapBatch {
       entries.push({ hash, value: encodeMapRef(offset) });
     }
     entries.sort((left, right) => compareIdHashes(left.hash, right.hash));
-    return mergeIdTrie(
+    const root = await mergeIdTrie(
       appender,
       this.reader.nodeReader,
       this.root,
       entries,
       this.written,
     );
+    this.reader.publishLookups(this.root, root, this.pending.values());
+    return root;
   }
 }

@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { assignMapping, readMistralMapping } from './mistralMapping.js';
+import { assignMapping } from './mistralMapping.js';
 import { compareMistralClaims, writeMistralClaim } from './mistralClaims.js';
 import { JournalFormatError } from './errors.js';
 import type { PlannedRow } from './groupEdits.js';
@@ -419,7 +419,7 @@ export async function observeNormalizedMistralRow(
   );
   for (const { rawId, call } of calls) {
     if (rawId === '') continue;
-    await assignMapping(
+    const mappings = await assignMapping(
       facts,
       rawId,
       spill.appender,
@@ -430,13 +430,7 @@ export async function observeNormalizedMistralRow(
     await spill.appender.drain();
     for (let slot = 0; slot < 3; slot++) {
       if ((facts.mistralSlots & (1 << slot)) === 0) continue;
-      const mapping = await readMistralMapping(
-        spill.readGroup(spill.appender.nextOffset),
-        facts.ids.queries,
-        rawId,
-        slot,
-        deps.idDeps.hasher,
-      );
+      const mapping = mappings[slot];
       if (mapping === undefined)
         throw new JournalFormatError('Observed Mistral claim has no mapping');
       await writeMistralClaim(

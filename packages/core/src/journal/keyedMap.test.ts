@@ -92,6 +92,36 @@ function countingReader(inner: PositionalReader) {
 describe('meta map and state map', () => {
   const directory = useTempDir('keyed-map-');
 
+  it('keeps memoized metadata and absent keys isolated by published root', async () => {
+    const journal = await openMapJournal(path.join(directory(), 'memo.llxj'));
+    const cache = new BoundedIdNodeCache();
+    try {
+      const initial = journal.readerFor('meta', cache);
+      expect(await initial.get(0, 'flag')).toBeUndefined();
+      await journal.commit('meta', [['name', 'before']], cache);
+      const before = journal.roots.meta;
+      let reader = journal.readerFor('meta', cache);
+      const name = await reader.get(before, 'name');
+      name?.fill(0);
+      expect(DECODER.decode(await reader.get(before, 'name'))).toBe('before');
+      expect(await reader.get(before, 'flag')).toBeUndefined();
+      await journal.commit('meta', [['flag', 'enabled']], cache);
+      const after = journal.roots.meta;
+      reader = journal.readerFor('meta', cache);
+      expect(DECODER.decode(await reader.get(after, 'name'))).toBe('before');
+      expect(DECODER.decode(await reader.get(after, 'flag'))).toBe('enabled');
+      expect(await reader.get(before, 'flag')).toBeUndefined();
+      expect(DECODER.decode(await reader.get(after, 'flag'))).toBe('enabled');
+      await journal.commit('meta', [['flag', 'x'.repeat(512)]], cache);
+      reader = journal.readerFor('meta', cache);
+      expect(DECODER.decode(await reader.get(journal.roots.meta, 'flag'))).toBe(
+        'x'.repeat(512),
+      );
+    } finally {
+      await journal.close();
+    }
+  });
+
   it('bounds pending metadata while preserving same-group reads through spills', async () => {
     const file = path.join(directory(), 'spilled.llxj');
     const writer = await createJournal(file, testJournalSeams().dependencies);
