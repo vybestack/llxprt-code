@@ -3,6 +3,10 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type {
+  AmbientPolicySource,
+  AuditFinding,
+} from './check-runtime-state-boundary.js';
 import { existsSync } from 'node:fs';
 import ts from 'typescript';
 import { compilerConfiguration } from './runtime-source-discovery.js';
@@ -67,4 +71,36 @@ export function selectedSources(
     if (!source) throw new Error(`Missing production source: ${file}`);
     return source;
   });
+}
+
+export function retiredAmbientFindings(
+  program: ts.Program,
+  roots: readonly AmbientPolicySource[],
+): Array<Omit<AuditFinding, 'owner'>> {
+  const checker = program.getTypeChecker();
+  return roots
+    .filter((root) => root.absentReason !== undefined)
+    .map((root) => {
+      const source = program.getSourceFile(root.file);
+      const module = source && checker.getSymbolAtLocation(source);
+      const declaration =
+        module &&
+        checker
+          .getExportsOfModule(module)
+          .find((symbol) => symbol.name === root.exportName)?.declarations?.[0];
+      if (!source || !declaration)
+        throw new Error(
+          `Missing retired ambient export: ${root.file}#${root.exportName}`,
+        );
+      const position = source.getLineAndCharacterOfPosition(
+        declaration.getStart(),
+      );
+      return {
+        file: root.file,
+        rule: 'retired-ambient-source',
+        declaration: root.exportName,
+        line: position.line + 1,
+        column: position.character + 1,
+      };
+    });
 }

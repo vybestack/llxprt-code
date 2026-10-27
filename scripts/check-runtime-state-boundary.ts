@@ -14,6 +14,7 @@ import {
   exportedSymbol,
   declarationCandidates,
   selectedSources,
+  retiredAmbientFindings,
 } from './runtime-audit-declarations.js';
 import { verifyJavascriptModuleIdentities } from './tests/runtime-javascript-module-identity.js';
 import {
@@ -79,7 +80,7 @@ export interface AuditPolicy {
 const runtimeAccessors = 'packages/providers/src/runtime/runtimeAccessors.ts';
 const cliContext = 'packages/cli/src/ui/contexts/RuntimeContext.tsx';
 const deletionReason =
-  '#2616 migration removes ambient accessors; absence is recorded, present exports remain audited.';
+  '#2616 migration removes ambient accessors; absence is recorded, returning exports fail the audit.';
 export const productionPolicy: AuditPolicy = {
   compilerConfig: 'packages/cli/tsconfig.noemit.json',
   entryManifest: productionEntryManifest,
@@ -392,7 +393,7 @@ function resolvePolicy(
   services: readonly RuntimeDeclarationRoot[];
   configs: readonly RuntimeDeclarationRoot[];
   runtimeObjects: readonly RuntimeDeclarationRoot[];
-  ambientSources: readonly AmbientSource[];
+  ambientSources: readonly AmbientPolicySource[];
   unavailableRoots: ProgramAudit['unavailableRoots'];
   resolvedRoots: ProgramAudit['resolvedRoots'];
 } {
@@ -577,7 +578,10 @@ function scanPackage(
   const sources = selectedSources(program, selected);
   shapeFindings.push(...findAssemblyClosureViolations(program, sources));
   const ambient = roots.ambientSources;
-  const ambientFindings = scanAmbientDelegation(program, sources, ambient);
+  const ambientFindings = [
+    ...retiredAmbientFindings(program, ambient),
+    ...scanAmbientDelegation(program, sources, ambient),
+  ];
   onProgress?.({ ...progress, phase: 'scanners-complete' });
   return {
     shapeFindings,

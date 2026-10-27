@@ -24,6 +24,21 @@ import { join } from 'node:path';
 import ts from 'typescript';
 
 export const BANNED_AMBIENT_SYMBOLS = [
+  'getCliRuntimeServices',
+  'getCliRuntimeContext',
+  'getCliRuntimeConfig',
+  'getCliProviderManager',
+  'getCliOAuthManager',
+  'maybeGetCliOAuthManager',
+  'isCliRuntimeStatelessReady',
+  'ensureStatelessProviderReady',
+  'getActiveProviderStatus',
+  'resolveActiveRuntimeIdentity',
+  'defaultCliRuntimeId',
+  'singletonManager',
+  'singletonOAuthManager',
+  'registerProviderManagerSingleton',
+
   'ownershipByConfig',
   'peekActiveProviderRuntimeContext',
   'setActiveProviderRuntimeContext',

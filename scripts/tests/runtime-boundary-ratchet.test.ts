@@ -106,6 +106,32 @@ describe('strict runtime boundary enforcement after ratchet retirement', () => {
     );
   });
 
+  it('fails when a retired ambient export returns without any delegation', () => {
+    put(
+      'packages/demo/src/accessors.ts',
+      'export function getCliRuntimeServices(): number { return 1; }',
+    );
+    const result = auditRuntimeStateBoundary(workspace, {
+      ...policy,
+      ambientSources: [
+        {
+          file: 'packages/demo/src/accessors.ts',
+          exportName: 'getCliRuntimeServices',
+          absentReason: 'Retired ambient entry point',
+        },
+      ],
+    });
+    expect(result.compilerDiagnostics).toEqual([]);
+    expect(result.exitCode).toBe(1);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        rule: 'retired-ambient-source',
+        file: 'packages/demo/src/accessors.ts',
+        line: 1,
+      }),
+    );
+  });
+
   it('fails for an existing service bundle without an allowance', () => {
     put('packages/demo/src/bag.ts', bundleSource);
     const result = audit();
