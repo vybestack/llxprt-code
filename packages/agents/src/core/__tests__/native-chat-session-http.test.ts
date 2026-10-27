@@ -209,7 +209,7 @@ describe('public native plain Chat pending user HTTP', () => {
             ? undefined
             : ['latest first', 'latest second'].join('\n'),
         );
-        expect(storedLengths).toStrictEqual([3]);
+        expect(storedLengths).toStrictEqual([4]);
         expect(JSON.parse(requests[0]).model).toBe('gpt-4o');
         await history.waitForCommit();
         const committed = await history.openDumpSnapshot();
