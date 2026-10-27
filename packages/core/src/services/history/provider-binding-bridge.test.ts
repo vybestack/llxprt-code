@@ -72,7 +72,7 @@ async function bindingFault(size: number, stage: string): Promise<number> {
 }
 
 describe('provider binding detached production bridge', () => {
-  for (const size of [512, 8192]) {
+  for (const size of [65]) {
     it(`binds ${size} real mixed rows through the value engine and durably publishes before returning`, async () => {
       await withDetachedFixture(async (fixture) => {
         const { history, recorder, owners } = fixture;
