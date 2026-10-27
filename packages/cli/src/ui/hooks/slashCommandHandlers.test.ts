@@ -475,8 +475,10 @@ describe('slashCommandHandlers', () => {
       const addItem = vi.fn();
       const { deps, cancel } = createCancellableDeps(addItem);
       deps.commandContext = new Proxy(deps.commandContext, {
-        get() {
-          throw new Error('context construction exploded');
+        get(target, property, receiver) {
+          if (property === 'ui')
+            throw new Error('context construction exploded');
+          return Reflect.get(target, property, receiver);
         },
       });
       deps.commands = createCommands(() => {});
