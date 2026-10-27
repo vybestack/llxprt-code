@@ -421,6 +421,11 @@ export class HistoryService extends HistoryServiceReads {
     }));
   }
 
+  async releaseMediaForDisposal(): Promise<void> {
+    this.enqueueSynchronousOwnershipReleaseAll();
+    await this.waitForOwnershipSettlement();
+  }
+
   private async disposeInternal(): Promise<void> {
     this.invalidatePendingSyncs();
     this.removeAllListeners();

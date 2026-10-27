@@ -741,6 +741,7 @@ export class ChatSession {
    */
   async clearHistoryForDisposal(): Promise<void> {
     await this.releaseHistoryAdmissions();
+    await this.historyService.releaseMediaForDisposal();
     // Disposal retires the journal without publishing a clear into a recorder
     // that still owns it. The recorded conversation must remain resumable.
     await this.historyService.dispose();
