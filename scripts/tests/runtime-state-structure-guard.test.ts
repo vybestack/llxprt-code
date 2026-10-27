@@ -13,6 +13,49 @@ const filename = 'packages/providers/src/BaseProvider.ts';
 
 describe('runtime state structure scanner', () => {
   it.each([
+    'export default { current: undefined };',
+    'class Holder {} export default new Holder();',
+    'function* values() { yield 1; } const cursor = values();',
+    'async function* values() { yield 1; } const cursor = values();',
+    'const values = function* () { yield 1; }; const cursor = values();',
+  ])('rejects anonymous exports and module generator state in %s', (source) => {
+    expect(
+      scanRuntimeStateStructure(filename, source, [], undefined, {
+        allowlist: [],
+      }),
+    ).toContainEqual(expect.objectContaining({ kind: 'mutable-state' }));
+  });
+
+  it.each([
+    'globalThis.current = 1;',
+    'globalThis[Symbol.for("runtime")] = {};',
+    'function update() { globalThis.current = 1; }',
+    'delete globalThis.current;',
+    'Object.assign(globalThis, { current: 1 });',
+  ])('rejects global runtime writes in %s', (source) => {
+    expect(scanRuntimeStateStructure(filename, source)).toContainEqual(
+      expect.objectContaining({ kind: 'module-mutation' }),
+    );
+  });
+
+  it.each([
+    'export default Object.freeze({ current: 1 });',
+    'export default function create() { return { current: 1 }; }',
+    'function* values() { yield 1; } export function create() { return values(); }',
+    'export function read() { return globalThis.current; }',
+    'export function update(globalThis) { globalThis.current = 1; }',
+  ])(
+    'permits owned generators, frozen exports and global reads in %s',
+    (source) => {
+      expect(
+        scanRuntimeStateStructure(filename, source, [], undefined, {
+          allowlist: [],
+        }),
+      ).toEqual([]);
+    },
+  );
+
+  it.each([
     'class Writer { store(target) { target.current = 1; } } function run() { new Writer().store(sessions); }',
     'const writer = { store(target) { target.current = 1; } }; function run() { writer.store(sessions); }',
     'const writer = { store: (target) => { target.current = 1; } }; function run() { writer.store(sessions); }',

@@ -360,6 +360,12 @@ function callResultMatches(
     );
   const callable = localFunction(node.expression, checker);
   if (!callable?.body || path.includes(callable)) return false;
+  if (
+    kind === 'mutable' &&
+    'asteriskToken' in callable &&
+    callable.asteriskToken
+  )
+    return true;
   const callBindings = new Map(bindings);
   callable.parameters.forEach((parameter, index) => {
     const symbol = checker.getSymbolAtLocation(parameter.name);
@@ -601,6 +607,22 @@ function mutationTarget(node: ts.Node): ts.Expression | undefined {
   return undefined;
 }
 
+function targetsGlobalThis(node: ts.Node, checker: ts.TypeChecker): boolean {
+  const target = mutationTarget(node);
+  if (!target) return false;
+  let root = unwrap(target);
+  while (
+    ts.isPropertyAccessExpression(root) ||
+    ts.isElementAccessExpression(root)
+  )
+    root = unwrap(root.expression);
+  if (!ts.isIdentifier(root) || root.text !== 'globalThis') return false;
+  const declarations = checker.getSymbolAtLocation(root)?.declarations ?? [];
+  return declarations.every(
+    (declaration) => declaration.getSourceFile().isDeclarationFile,
+  );
+}
+
 function isolatedSource(
   filename: string,
   source: string,
@@ -760,6 +782,14 @@ export function scanRuntimeStateStructure(
       )
         report(node, 'async-local-storage', declaration);
     }
+    if (ts.isExportAssignment(node) && !node.isExportEquals) {
+      const mutable =
+        containsMutableConstruction(node.expression, checker) ||
+        (containerPolicy && containerLiteralStorage(node.expression));
+      if (mutable) report(node, 'mutable-state', 'default');
+    }
+    if (targetsGlobalThis(node, checker))
+      report(node, 'module-mutation', 'globalThis');
     if (ts.isVariableDeclaration(node) && isModuleOwned(node))
       checkModuleVariable(node);
     if (

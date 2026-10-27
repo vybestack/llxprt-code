@@ -251,6 +251,23 @@ describe('strict runtime boundary enforcement after ratchet retirement', () => {
     ).toEqual([]);
   });
 
+  it('fails for writes to globalThis runtime storage', () => {
+    put(
+      'packages/demo/src/runtime/platform.d.ts',
+      'declare var currentRuntime: unknown;',
+    );
+    put(
+      'packages/demo/src/runtime/global.ts',
+      'export function install(): void { globalThis.currentRuntime = {}; }',
+    );
+    const result = audit();
+    expect(result.compilerDiagnostics).toEqual([]);
+    expect(result.exitCode).toBe(1);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({ rule: 'module-mutation' }),
+    );
+  });
+
   it('fails when compiler diagnostics exist', () => {
     put('packages/demo/src/broken.ts', 'export const value: number = "bad";');
     const result = audit();
