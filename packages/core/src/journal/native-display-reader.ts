@@ -59,7 +59,7 @@ export class NativeDisplayReader {
       status: entry.status,
     };
   }
-  async toolPresentation(row: RowEntry, callId: string) {
+  async toolRequestIdentity(row: RowEntry) {
     const opener = await this.entry(row.transcriptId);
     let attemptId = '';
     if (opener.attemptRef !== 0) {
@@ -77,6 +77,10 @@ export class NativeDisplayReader {
         throw new Error('Invalid display attempt');
       attemptId = attempt.id;
     }
+    return { transcriptId: row.transcriptId.toString(), attemptId };
+  }
+  async toolPresentation(row: RowEntry, callId: string) {
+    const { attemptId } = await this.toolRequestIdentity(row);
     const bytes = await this.state.get(
       this.journal.trailer?.stateRoot ?? 0,
       displayRelationKey(attemptId, callId),

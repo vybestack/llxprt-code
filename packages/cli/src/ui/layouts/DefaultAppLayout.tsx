@@ -375,6 +375,11 @@ function PagerTranscript({
     (s) => s.availableTerminalHeight,
   );
   const contextRange = useContextRangeSnapshot(uiRuntime);
+  const turn = useTurnStore();
+  const pendingToolControls = useStoreSelector(
+    turn.store,
+    (s) => s.pendingHistoryItems,
+  );
   return (
     <ScrollbackViewport
       store={pager.store}
@@ -383,6 +388,7 @@ function PagerTranscript({
       pollMs={SCROLLBACK_VIEWPORT_POLL_MS}
       range={contextRange ?? undefined}
       config={slashCommandRuntime}
+      pendingToolControls={pendingToolControls}
     />
   );
 }

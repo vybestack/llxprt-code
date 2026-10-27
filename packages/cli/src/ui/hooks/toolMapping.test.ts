@@ -23,6 +23,7 @@ import {
   type CancelledToolCall,
 } from '@vybestack/llxprt-code-core';
 import { ToolCallStatus } from '../types.js';
+import { retainUiToolCalls } from './journal-control-state.js';
 import {
   RETENTION_TRUNCATION_MARKER,
   TOOL_RESULT_RETENTION_CAP_BYTES,
@@ -49,9 +50,8 @@ void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
 // Loaded with top-level await instead of a static import: toolMapping.ts
 // resolves its logger at module scope, so it must be evaluated AFTER the mock
 // above is registered.
-const { mapCoreStatusToDisplayStatus, mapToDisplay } = await import(
-  './toolMapping.js'
-);
+const { mapCoreStatusToDisplayStatus, mapToDisplay, mapPendingToDisplay } =
+  await import('./toolMapping.js');
 
 describe('toolMapping', () => {
   beforeEach(() => {
@@ -107,6 +107,42 @@ describe('toolMapping', () => {
       error: undefined,
       errorType: undefined,
     };
+
+    it('retains only active journal controls without live or completed output', () => {
+      const request = {
+        ...mockRequest,
+        journalIdentity: { transcriptId: '9', attemptId: 'attempt' },
+      };
+      const executing: ExecutingToolCall = {
+        status: 'executing',
+        request,
+        tool: mockTool,
+        invocation: mockInvocation,
+        liveOutput: 'unbounded live output',
+        pid: 123,
+      };
+      const completed: SuccessfulToolCall = {
+        status: 'success',
+        request: { ...request, callId: 'completed' },
+        tool: mockTool,
+        invocation: mockInvocation,
+        response: mockResponse,
+      };
+      const retained = retainUiToolCalls([executing, completed], true);
+      expect(retained).toHaveLength(1);
+      expect(
+        retained[0].status === 'executing' && retained[0].liveOutput,
+      ).toBeUndefined();
+      expect(executing.liveOutput).toBe('unbounded live output');
+      const pending = mapPendingToDisplay(retained);
+      expect(pending.tools).toHaveLength(1);
+      expect(pending.tools[0].resultDisplay).toBeUndefined();
+      expect(pending.tools[0].description).toBe('');
+      expect(pending.tools[0].ptyId).toBe(123);
+      expect(pending.tools[0].journalIdentity).toStrictEqual(
+        request.journalIdentity,
+      );
+    });
 
     it('handles a single tool call input', () => {
       const toolCall: ScheduledToolCall = {

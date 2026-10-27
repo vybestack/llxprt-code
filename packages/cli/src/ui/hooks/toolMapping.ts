@@ -220,6 +220,7 @@ function getBaseDisplayProperties(
   'status' | 'resultDisplay' | 'confirmationDetails'
 > {
   return {
+    journalIdentity: trackedCall.request.journalIdentity,
     callId: trackedCall.request.callId,
     name: getDisplayName(trackedCall),
     description: getDescription(trackedCall),
@@ -360,5 +361,44 @@ export function mapToDisplay(
     type: 'tool_group',
     agentId: groupAgentId,
     tools: toolDisplays,
+  };
+}
+
+function mapJournalControl(call: TrackedToolCall): IndividualToolCallDisplay[] {
+  if (
+    call.status === 'success' ||
+    call.status === 'error' ||
+    call.status === 'cancelled'
+  )
+    return [];
+  return [
+    {
+      callId: call.request.callId,
+      journalIdentity: call.request.journalIdentity,
+      name: call.request.name,
+      description: '',
+      status: mapCoreStatusToDisplayStatus(call.status),
+      resultDisplay: undefined,
+      confirmationDetails:
+        call.status === 'awaiting_approval' &&
+        'onConfirm' in call.confirmationDetails
+          ? call.confirmationDetails
+          : undefined,
+      ptyId: call.status === 'executing' ? call.pid : undefined,
+    },
+  ];
+}
+
+export function mapPendingToDisplay(
+  toolCalls: TrackedToolCall[],
+): HistoryItemToolGroup {
+  return {
+    type: 'tool_group',
+    agentId: determineGroupAgentId(toolCalls),
+    tools: toolCalls.flatMap((call) =>
+      call.request.journalIdentity === undefined
+        ? [mapTrackedCallToDisplay(call)]
+        : mapJournalControl(call),
+    ),
   };
 }

@@ -20,6 +20,7 @@ import {
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 
 import type { HistoryItemWithoutId } from '../types.js';
+import { retainUiToolCalls } from './journal-control-state.js';
 import { ToolCallStatus } from '../types.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
@@ -33,6 +34,7 @@ import {
 
 type ReactToolSchedulerRuntime = {
   readonly agent: Agent;
+  readonly journalControls?: boolean;
 };
 
 export type ScheduleFn = (
@@ -96,13 +98,16 @@ function updatePendingItemWithOutput(
   prevItem: HistoryItemWithoutId | null,
   toolCallId: string,
   update: LiveOutputUpdate,
+  journalControls: boolean,
 ): HistoryItemWithoutId | null {
   if (prevItem?.type !== 'tool_group') return prevItem;
   return {
     ...prevItem,
-    tools: prevItem.tools.map((toolDisplay) =>
-      toolDisplay.callId === toolCallId &&
-      toolDisplay.status === ToolCallStatus.Executing
+    tools: prevItem.tools.map((toolDisplay) => {
+      if (journalControls && toolDisplay.journalIdentity !== undefined)
+        return toolDisplay;
+      return toolDisplay.callId === toolCallId &&
+        toolDisplay.status === ToolCallStatus.Executing
         ? {
             ...toolDisplay,
             resultDisplay: accumulateLiveOutput(
@@ -110,8 +115,8 @@ function updatePendingItemWithOutput(
               update,
             ),
           }
-        : toolDisplay,
-    ),
+        : toolDisplay;
+    }),
   };
 }
 
@@ -140,15 +145,15 @@ function updateCallsWithLiveOutput(
   prevCalls: TrackedToolCall[],
   toolCallId: string,
   update: LiveOutputUpdate,
+  journalControls: boolean,
 ): TrackedToolCall[] {
-  return prevCalls.map((call) =>
-    call.request.callId === toolCallId && call.status === 'executing'
-      ? {
-          ...call,
-          liveOutput: accumulateLiveOutput(call.liveOutput, update),
-        }
-      : call,
-  );
+  return prevCalls.map((call) => {
+    if (journalControls && call.request.journalIdentity !== undefined)
+      return call;
+    return call.request.callId === toolCallId && call.status === 'executing'
+      ? { ...call, liveOutput: accumulateLiveOutput(call.liveOutput, update) }
+      : call;
+  });
 }
 
 /**
@@ -190,6 +195,7 @@ function markCallsAsDisplayCleared(
  * Hook that provides tool call update callbacks.
  */
 function useToolCallUpdaters(
+  journalControls: boolean,
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
@@ -224,10 +230,13 @@ function useToolCallUpdaters(
   const replaceToolCallsForScheduler = useCallback(
     (schedulerId: symbol, updatedCalls: ToolCall[]) => {
       updateToolCallsForScheduler(schedulerId, (prevCalls) =>
-        mapCallsWithDisplayClearedFlag(prevCalls, updatedCalls),
+        mapCallsWithDisplayClearedFlag(
+          prevCalls,
+          retainUiToolCalls(updatedCalls, journalControls),
+        ),
       );
     },
-    [updateToolCallsForScheduler],
+    [updateToolCallsForScheduler, journalControls],
   );
 
   const updateToolCallOutput = useCallback(
@@ -237,16 +246,17 @@ function useToolCallUpdaters(
           prevCalls,
           toolCallId,
           update,
+          journalControls,
         );
         return nextCalls.some((call, index) => call !== prevCalls[index])
           ? nextCalls
           : prevCalls;
       });
       setPendingHistoryItem((prev) =>
-        updatePendingItemWithOutput(prev, toolCallId, update),
+        updatePendingItemWithOutput(prev, toolCallId, update, journalControls),
       );
     },
-    [updateToolCallsForScheduler, setPendingHistoryItem],
+    [updateToolCallsForScheduler, setPendingHistoryItem, journalControls],
   );
 
   return { updateToolCallOutput, replaceToolCallsForScheduler };
@@ -494,6 +504,7 @@ export function useReactToolScheduler(
     onEditorOpen,
   );
   const toolCallUpdaters = useToolCallUpdaters(
+    runtime.journalControls === true,
     setPendingHistoryItem,
     setToolCallsByScheduler,
   );

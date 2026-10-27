@@ -68,10 +68,11 @@ export async function withToolPresentations(
       continue;
     }
     const tools = [];
+    const journalIdentity = await reader.toolRequestIdentity(row);
     for (const tool of item.tools) {
       const presentation = await reader.toolPresentation(row, tool.callId);
       if (presentation === undefined) {
-        tools.push(tool);
+        tools.push({ ...tool, journalIdentity });
         continue;
       }
       const text = displayText(presentation.content);
@@ -79,7 +80,12 @@ export async function withToolPresentations(
         presentation.descriptor.format === 'text'
           ? text
           : toolDisplay.parse(JSON.parse(text));
-      tools.push({ ...tool, resultDisplay, retention: undefined });
+      tools.push({
+        ...tool,
+        journalIdentity,
+        resultDisplay,
+        retention: undefined,
+      });
     }
     result.push({ ...item, tools });
   }

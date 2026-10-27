@@ -105,6 +105,10 @@ export class NativeJournalPageReader {
     return this.display.toolPresentation(entry, callId);
   }
 
+  toolRequestIdentity(entry: NativeJournalEntry) {
+    return this.display.toolRequestIdentity(entry);
+  }
+
   async readContent(entry: NativeJournalEntry): Promise<IContent> {
     const head = await this.reader.readRecordHead(entry.recordOffset, 'ROW');
     if (head.kind === RECORD_KIND.VALUE)

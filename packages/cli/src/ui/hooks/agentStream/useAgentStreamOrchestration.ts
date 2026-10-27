@@ -24,7 +24,10 @@ import {
   type UseHistoryManagerReturn,
 } from '../useHistoryManager.js';
 import { type TrackedToolCall } from '../useReactToolScheduler.js';
-import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
+import {
+  mapToDisplay as mapTrackedToolCallsToDisplay,
+  mapPendingToDisplay,
+} from '../toolMapping.js';
 import { useStreamState } from './useStreamState.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from './useSubmitQuery.js';
 import {
@@ -115,6 +118,7 @@ export function useAgentStreamOrchestration(
   const scheduler = useToolSchedulerState(args, st);
   const pendingToolCallGroupDisplay = usePendingToolGroupDisplay(
     scheduler.toolCalls,
+    args.settings.merged.ui.scrollbackPagerEnabled === true,
   );
   const shell = useShell(args, st);
   const streamingState = useStreamingState(
@@ -202,6 +206,7 @@ function useToolSchedulerState(
     args.onEditorOpen,
     args.addItem,
     args.agent,
+    args.settings.merged.ui.scrollbackPagerEnabled === true,
   );
   const [
     toolCalls,
@@ -303,14 +308,16 @@ function useEventStreamForAgent(
   });
 }
 
-function usePendingToolGroupDisplay(toolCalls: TrackedToolCall[]) {
-  return useMemo(
-    () =>
-      toolCalls.length > 0
-        ? mapTrackedToolCallsToDisplay(toolCalls)
-        : undefined,
-    [toolCalls],
-  );
+function usePendingToolGroupDisplay(
+  toolCalls: TrackedToolCall[],
+  journalControls: boolean,
+) {
+  return useMemo(() => {
+    const group = journalControls
+      ? mapPendingToDisplay(toolCalls)
+      : mapTrackedToolCallsToDisplay(toolCalls);
+    return group.tools.length > 0 ? group : undefined;
+  }, [toolCalls, journalControls]);
 }
 
 function useQueuedActions(

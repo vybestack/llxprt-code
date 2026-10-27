@@ -88,8 +88,12 @@ export function useToolSchedulerSetup(
   onEditorOpen: () => void,
   addItem: UseHistoryManagerReturn['addItem'],
   agent: Agent,
+  journalControls = false,
 ) {
-  const schedulerRuntime = useMemo(() => ({ agent }), [agent]);
+  const schedulerRuntime = useMemo(
+    () => ({ agent, journalControls }),
+    [agent, journalControls],
+  );
   const toolSchedulerResult = useReactToolScheduler(
     async (_schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
       if (completedToolCallsFromScheduler.length === 0) return;

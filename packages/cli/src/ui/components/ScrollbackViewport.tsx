@@ -52,6 +52,11 @@ import { Colors, SemanticColors } from '../colors.js';
 import { ESC } from '../utils/input.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { HistoryItemDisplay } from './HistoryItemDisplay.js';
+import type { HistoryItemWithoutId } from '../types.js';
+import {
+  withJournalToolControls,
+  hasJournalToolApproval,
+} from '../stores/turn/journal-tool-controls.js';
 import { HistoryBoundaryRow } from './HistoryBoundaryRow.js';
 import {
   classifyContextState,
@@ -76,6 +81,7 @@ export interface ScrollbackViewportProps {
   range?: ContextRange;
   /** CLI runtime handed to wired rows' HistoryItemDisplay. */
   config?: CliUiRuntime;
+  pendingToolControls?: readonly HistoryItemWithoutId[];
   onPageUp?: () => void;
   onPageDown?: () => void;
   onScrollUp?: () => void;
@@ -171,8 +177,9 @@ function BottomEdgeRow({
  */
 function pendingRowsBelow(
   rows: readonly ScrollbackRow[],
-  windowKeys: ReadonlySet<string>,
+  windowRows: readonly ScrollbackRow[],
 ): ScrollbackRow[] {
+  const windowKeys = new Set(windowRows.map((row) => row.key));
   return rows.filter(
     (row) => row.identity.kind === 'pending' && !windowKeys.has(row.key),
   );
@@ -242,17 +249,22 @@ function WiredScrollbackRow({
   config,
   range,
   terminalWidth,
+  pendingToolControls,
+  isFocused,
 }: {
   row: ScrollbackRow;
   config: CliUiRuntime;
   range: ContextRange | undefined;
   terminalWidth: number;
+  pendingToolControls: readonly HistoryItemWithoutId[];
+  isFocused: boolean;
 }): React.JSX.Element {
   return (
     <HistoryItemDisplay
-      item={row.item}
+      item={withJournalToolControls(row.item, pendingToolControls)}
       terminalWidth={terminalWidth}
       isPending={false}
+      isFocused={isFocused}
       config={config}
       contextState={row.contextState ?? contextStateForRow(row.seq, range)}
     />
@@ -278,7 +290,10 @@ function PendingTailSlots({
 }
 
 /** The store has no subscription API; poll it into renders. */
-function usePollTick(pollMs: number): void {
+function usePagerState(
+  store: ScrollbackPagerStore,
+  pollMs: number,
+): ScrollbackPagerState {
   const [, bumpTick] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => {
@@ -288,6 +303,7 @@ function usePollTick(pollMs: number): void {
       clearInterval(timer);
     };
   }, [pollMs]);
+  return store.getState();
 }
 
 /**
@@ -412,6 +428,7 @@ function useResizeReport(
 interface FrameWiring {
   readonly range: ContextRange | undefined;
   readonly config: CliUiRuntime | undefined;
+  readonly pendingToolControls: readonly HistoryItemWithoutId[];
   readonly terminalWidth: number;
   readonly expandedSpans: ReadonlySet<string>;
   readonly onToggleBoundary: () => void;
@@ -430,6 +447,9 @@ function ViewportFrame({
   wiring: FrameWiring;
 }): React.JSX.Element {
   const lines: React.JSX.Element[] = [];
+  const focusedApprovalKey = frame.rows.find((row) =>
+    hasJournalToolApproval(row.item, wiring.pendingToolControls),
+  )?.key;
   let olderSeq: number | null = null;
   for (const row of frame.rows) {
     if (wiring.range !== undefined && olderSeq !== null && row.seq !== null) {
@@ -457,6 +477,10 @@ function ViewportFrame({
           config={wiring.config}
           range={wiring.range}
           terminalWidth={wiring.terminalWidth}
+          pendingToolControls={wiring.pendingToolControls}
+          isFocused={
+            focusedApprovalKey === undefined || focusedApprovalKey === row.key
+          }
         />
       ),
     );
@@ -581,6 +605,7 @@ export function ScrollbackViewport({
   pollMs,
   range,
   config,
+  pendingToolControls = [],
   onPageUp,
   onPageDown,
   onScrollUp,
@@ -591,28 +616,24 @@ export function ScrollbackViewport({
   const { stdin } = useStdin();
   const rowHeightLines = Math.max(1, viewport.rowHeightLines());
   const windowRows = windowRowsFor(viewportLines, rowHeightLines);
-  usePollTick(pollMs);
-
-  const state = store.getState();
+  const state = usePagerState(store, pollMs);
   const frame = clipWindow(
     state.rows,
     pageOffset,
     viewportLines,
     rowHeightLines,
   );
-  const visibleKeysSig = frame.rows.map((row) => row.key).join(KEY_SEPARATOR);
-  const spanKeysSig = windowSpanKeys(frame.rows, range).join(KEY_SEPARATOR);
-
   useViewportReport(
     store,
     viewport,
     viewportLines,
-    visibleKeysSig,
+    frame.rows.map((row) => row.key).join(KEY_SEPARATOR),
     frame.hiddenBelow === 0,
   );
 
-  const [expandedSpans, toggleVisibleBoundaries] =
-    useBoundaryExpansion(spanKeysSig);
+  const [expandedSpans, toggleVisibleBoundaries] = useBoundaryExpansion(
+    windowSpanKeys(frame.rows, range).join(KEY_SEPARATOR),
+  );
 
   usePagingInput(
     store,
@@ -642,8 +663,7 @@ export function ScrollbackViewport({
     rowHeightLines,
   );
 
-  const windowKeys = new Set(frame.rows.map((row) => row.key));
-  const pendingBelow = pendingRowsBelow(state.rows, windowKeys);
+  const pendingBelow = pendingRowsBelow(state.rows, frame.rows);
 
   return (
     <ViewportFrame
@@ -653,6 +673,7 @@ export function ScrollbackViewport({
       wiring={{
         range,
         config,
+        pendingToolControls,
         terminalWidth: stdout.columns,
         expandedSpans,
         onToggleBoundary: toggleVisibleBoundaries,

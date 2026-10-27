@@ -74,6 +74,10 @@ export interface ToolResultRetention {
 }
 
 export interface IndividualToolCallDisplay {
+  journalIdentity?: {
+    readonly transcriptId: string;
+    readonly attemptId: string;
+  };
   callId: string;
   name: string;
   description: string;
