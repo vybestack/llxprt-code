@@ -8,7 +8,6 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 
 import { describe, it, expect, vi } from 'bun:test';
 import * as fc from 'fast-check';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { join } from 'node:path';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import * as fs from 'node:fs/promises';
@@ -78,11 +77,13 @@ describe('createAgent self-contained assembly', () => {
       sessionId,
     });
     sibling.agent.setModelParam('temperature', 0.37);
-    const disposed: Config[] = [];
-    const realDispose = Config.prototype.dispose;
+    const disposed: SessionMediaOwner[] = [];
+    const realDispose = SessionMediaOwner.prototype.dispose;
     const observation = vi
-      .spyOn(Config.prototype, 'dispose')
-      .mockImplementation(async function (this: Config): Promise<void> {
+      .spyOn(SessionMediaOwner.prototype, 'dispose')
+      .mockImplementation(async function (
+        this: SessionMediaOwner,
+      ): Promise<void> {
         await realDispose.call(this);
         disposed.push(this);
       });
@@ -97,7 +98,9 @@ describe('createAgent self-contained assembly', () => {
         }),
       ).rejects.toThrow('createAgent activation failed');
       expect(disposed).toHaveLength(1);
-      expect(disposed[0].getSessionId()).toBe(sessionId);
+      await expect(disposed[0].store.getStoredByteLength()).rejects.toThrow(
+        /closed/i,
+      );
       expect(credentials().snapshot()).toStrictEqual([0, 1]);
       expect(await credentials().listProviders(0)).toStrictEqual([]);
       await credentials().saveToken(0, 'codex', {
@@ -180,12 +183,14 @@ describe('createAgent self-contained assembly', () => {
     }
   });
 
-  it('disposes the failed Config exactly once without disposing a successful Config during construction', async () => {
-    const disposed: Config[] = [];
-    const realDispose = Config.prototype.dispose;
+  it('retires failed media once while successful media remains usable', async () => {
+    const disposed: SessionMediaOwner[] = [];
+    const realDispose = SessionMediaOwner.prototype.dispose;
     const disposer = vi
-      .spyOn(Config.prototype, 'dispose')
-      .mockImplementation(async function (this: Config): Promise<void> {
+      .spyOn(SessionMediaOwner.prototype, 'dispose')
+      .mockImplementation(async function (
+        this: SessionMediaOwner,
+      ): Promise<void> {
         await realDispose.call(this);
         disposed.push(this);
       });
@@ -197,19 +202,12 @@ describe('createAgent self-contained assembly', () => {
           activation: failingActivation,
         }),
       ).rejects.toThrow(failingActivation.provider);
-      expect(disposed.map((config) => config.getSessionId())).toStrictEqual([
-        'issue3222-disposed-owner',
-      ]);
       expect(disposed).toHaveLength(1);
       const failedConfig = disposed[0];
       const control = await buildAgent('plain-text.jsonl', {
         credentialAuthority: credentials().authority,
       });
-      const controlRuntimeId = control.agent.getRuntimeId();
       try {
-        expect(disposed.map((config) => config.getSessionId())).not.toContain(
-          controlRuntimeId,
-        );
         expect(disposed).toHaveLength(1);
         expect(credentials().snapshot()).toStrictEqual([1, 0]);
         expect(await control.agent.generate('Retain control owner')).toBe(
@@ -220,7 +218,9 @@ describe('createAgent self-contained assembly', () => {
       }
       expect(disposed).toHaveLength(2);
       expect(disposed[0]).toBe(failedConfig);
-      expect(disposed[1].getSessionId()).toBe(controlRuntimeId);
+      await expect(disposed[1].store.getStoredByteLength()).rejects.toThrow(
+        /closed/i,
+      );
       expect(credentials().snapshot()).toStrictEqual([1, 1]);
     } finally {
       disposer.mockRestore();
