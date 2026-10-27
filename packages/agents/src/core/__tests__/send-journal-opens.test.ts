@@ -32,7 +32,7 @@ async function countSend(workload: Workload, turn: number): Promise<number> {
     const { cost } = await measureJournalReadCost(() => workload.runTurn(turn));
     const snapshots = opens.mock.calls.length;
     if (snapshots === 1) {
-      expect(cost).toStrictEqual({ walks: 0, entries: 0, rows: 1 });
+      expect(cost).toStrictEqual({ walks: 0, entries: 0, rows: 0 });
       expect(workload.history.length()).toBe(before + 4);
     }
     return snapshots;

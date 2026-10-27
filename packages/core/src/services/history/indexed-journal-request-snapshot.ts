@@ -48,7 +48,7 @@ import {
 import { journalEntryPlans } from './journal-entry-plans.js';
 import type { JournalResponsePlan } from './journal-response-plan.js';
 import { assertRowIndex } from './provider-request-snapshot.js';
-import { streamResponsePlans } from './journal-response-units.js';
+
 import { JournalRequestKimi } from './journal-request-kimi.js';
 import { JournalRequestMistral } from './journal-request-mistral.js';
 import type { MistralMapping } from '../../journal/mistralMapping.js';
@@ -399,11 +399,8 @@ export class IndexedJournalRequestSnapshot {
 
   async *openPlans(signal?: AbortSignal): AsyncGenerator<JournalResponsePlan> {
     this.requireOpen();
-    for await (const plan of streamResponsePlans(this.source)) {
-      this.requireOpen();
-      signal?.throwIfAborted();
-      yield plan;
-    }
+    for (let index = 0; index < this.count; index++)
+      yield await this.planAt(index, signal);
   }
 
   async *openReader(signal?: AbortSignal): AsyncGenerator<IContent> {
