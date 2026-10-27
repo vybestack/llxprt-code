@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { assertToolInputComplete } from './vercelToolArguments.js';
 import { mapFinishReason } from '../openai/finishReasonMapping.js';
 import type { LanguageModelUsage } from 'ai';
 
@@ -130,6 +131,7 @@ export function* emitStreamToolCallsAndMetadata(
   state: StreamingState,
   captureBuffer: CaptureBuffer,
 ): IterableIterator<IContent> {
+  assertToolInputComplete(state);
   if (state.collectedToolCalls.length > 0) {
     const blocks = buildToolCallBlocks(state.collectedToolCalls);
     const usageMeta = mapUsageToMetadata(
@@ -137,11 +139,33 @@ export function* emitStreamToolCallsAndMetadata(
       captureBuffer.headers,
     );
     const metadata = buildMetadata(usageMeta, state.finishReason);
-    yield {
-      speaker: 'ai',
-      blocks,
-      ...(metadata ? { metadata } : {}),
-    } as IContent;
+    if (
+      !state.collectedToolCalls.some((call) => call.argumentsStarted === true)
+    ) {
+      yield {
+        speaker: 'ai',
+        blocks,
+        ...(metadata !== undefined ? { metadata } : {}),
+      };
+      return;
+    }
+    for (const [index, block] of blocks.entries()) {
+      yield {
+        speaker: 'ai',
+        blocks: [block],
+        toolArgumentDelta: {
+          sourceId: state.collectedToolCalls[index].toolCallId,
+          id: block.id,
+          name: block.name,
+          arguments: '',
+          complete: true,
+          replacementArguments: JSON.stringify(block.parameters),
+        },
+        ...(index === blocks.length - 1 && metadata !== undefined
+          ? { metadata }
+          : {}),
+      };
+    }
   } else {
     const usageMeta = mapUsageToMetadata(
       state.totalUsage,

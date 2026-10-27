@@ -46,6 +46,8 @@ export interface StreamingState {
     toolCallId: string;
     toolName: string;
     input: unknown;
+    argumentsStarted?: boolean;
+    argumentsComplete?: boolean;
   }>;
   totalUsage: LanguageModelUsage | undefined;
   finishReason: string | undefined;
