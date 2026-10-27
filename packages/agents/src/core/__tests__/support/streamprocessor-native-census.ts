@@ -6,6 +6,60 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { NativeResponsesPrompt } from '@vybestack/llxprt-code-providers/openai-responses/native-responses-body.js';
 import type { RetainedOwnerCensus } from './streamprocessor-retained-census.js';
 
+function observePlanSerialization(
+  census: RetainedOwnerCensus,
+  wire: AsyncLocalStorage<boolean>,
+  observe: (row: IContent) => void,
+): () => void {
+  const indexed = IndexedJournalRequestSnapshot.prototype;
+  const prompt = NativeResponsesPrompt.prototype;
+  const openPlans = indexed.openPlans;
+  const body = prompt.body;
+  indexed.openPlans = async function* (...args) {
+    const sending = wire.getStore() === true;
+    const reader = openPlans.call(this, ...args);
+    census.observe('request.snapshot', this);
+    if (sending) census.observe('snapshot.reader', reader);
+    for await (const plan of reader) {
+      if (!sending) {
+        yield plan;
+        continue;
+      }
+      observe(plan.header);
+      yield {
+        ...plan,
+        async *openBlocks() {
+          for await (const block of plan.openBlocks()) {
+            census.observe('native.row.block', block);
+            census.observe('native.item', block);
+            if (block.type === 'text') census.sampleActive(block.text);
+            if (census.rowRetention !== 'none') census.trap.push(block);
+            yield block;
+          }
+        },
+      };
+    }
+  };
+  prompt.body = async function* (...args) {
+    const reader = body.call(this, ...args);
+    const sending = args[1] !== 'dump';
+    if (sending) census.observe('native.prompt', this);
+    try {
+      for (;;) {
+        const next = await wire.run(sending, () => reader.next());
+        if (next.done === true) return;
+        yield next.value;
+      }
+    } finally {
+      await reader.return(undefined);
+    }
+  };
+  return () => {
+    indexed.openPlans = openPlans;
+    prompt.body = body;
+  };
+}
+
 /** Only wire serialization contributes to the two-attempt row census. */
 export function observeNativeSendRows(
   census: RetainedOwnerCensus,
@@ -29,6 +83,7 @@ export function observeNativeSendRows(
       if (census.rowRetention !== 'none') census.trap.push(row);
     }
   };
+  const restorePlans = observePlanSerialization(census, wire, observe);
   snapshot.readAt = async function (...args) {
     const row = await readAt.call(this, ...args);
     census.observe('request.snapshot', this);
@@ -68,6 +123,7 @@ export function observeNativeSendRows(
   return () => {
     snapshot.readAt = readAt;
     indexed.openReader = openReader;
+    restorePlans();
     prompt.items = items;
     prompt.dispose = dispose;
     wire.disable();
