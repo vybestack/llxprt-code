@@ -168,6 +168,7 @@ export class SecureStore {
   private readonly PROBE_TTL_MS = 60000;
   private consecutiveKeyringFailures = 0;
   private readonly KEYRING_FAILURE_THRESHOLD = 3;
+  private readonly KEYRING_NULL_CONFIRMATION_READS = 2;
 
   constructor(serviceName: string, options?: SecureStoreOptions) {
     this.serviceName = serviceName;
@@ -302,6 +303,34 @@ export class SecureStore {
       );
       return null;
     }
+  }
+
+  // ─── Keyring Reads ────────────────────────────────────────────────────────
+
+  /**
+   * Reads one keyring entry, re-reading a bounded number of times while the
+   * keyring reports null. The native binding converts backend read errors into
+   * null (issue #3067), so a null does not prove the entry is absent (issue
+   * #3965). A non-null value is returned from the first read with no extra
+   * work, and thrown errors propagate untouched. Confirming here, before the
+   * caller consults the fallback file, also keeps one or two consecutive
+   * transient nulls (within this read budget) from selecting an obsolete
+   * fallback over the authoritative keyring value. A longer run of nulls still
+   * falls through to the fallback file.
+   */
+  private async readKeyringConfirmingNull(
+    adapter: KeyringAdapter,
+    key: string,
+  ): Promise<string | null> {
+    let value = await adapter.getPassword(this.serviceName, key);
+    for (
+      let confirmation = 0;
+      value === null && confirmation < this.KEYRING_NULL_CONFIRMATION_READS;
+      confirmation += 1
+    ) {
+      value = await adapter.getPassword(this.serviceName, key);
+    }
+    return value;
   }
 
   // ─── Key Validation ──────────────────────────────────────────────────────
@@ -567,7 +596,7 @@ export class SecureStore {
     const adapter = await this.getKeyring();
     if (adapter !== null) {
       try {
-        const value = await adapter.getPassword(this.serviceName, key);
+        const value = await this.readKeyringConfirmingNull(adapter, key);
         if (value !== null) {
           this.recordKeyringSuccess();
           this.logger.debug(
@@ -757,7 +786,7 @@ export class SecureStore {
     const adapter = await this.getKeyring();
     if (adapter !== null) {
       try {
-        const value = await adapter.getPassword(this.serviceName, key);
+        const value = await this.readKeyringConfirmingNull(adapter, key);
         if (value !== null) {
           this.recordKeyringSuccess();
           return true;
