@@ -98,11 +98,7 @@ async function primaryWithoutMedia(
   return primary;
 }
 
-export async function occupyMistralFormats(history: HistoryService): Promise<{
-  verify(): Promise<void>;
-  close(): Promise<void>;
-}> {
-  const store = await primaryWithoutMedia(history);
+async function fillOccupiedFormats(store: JournalStore): Promise<void> {
   await store.commit([
     { kind: 'format', registration: plainChatLengthRegistration(plain) },
   ]);
@@ -115,6 +111,14 @@ export async function occupyMistralFormats(history: HistoryService): Promise<{
   await store.commit([
     { kind: 'format', registration: responsesLengthRegistration(responses) },
   ]);
+}
+
+export async function occupyMistralFormats(history: HistoryService): Promise<{
+  verify(): Promise<void>;
+  close(): Promise<void>;
+}> {
+  const store = await primaryWithoutMedia(history);
+  await fillOccupiedFormats(store);
   const old = await store.snapshot();
   const oldBytes = planStoredChatMessages(old, plain, 0, '').bytes;
   const otherBytes = await otherPlans(old);
@@ -122,14 +126,21 @@ export async function occupyMistralFormats(history: HistoryService): Promise<{
   expect(
     old.version?.slots.formatSlots.map((slot) => slot.summaryKind),
   ).toStrictEqual(['chat', 'anthropic', 'responses']);
-  const captured: Array<{ pin: VersionSnapshot; settings: RowFormatSettings }> =
-    [];
+  const captured: Array<{
+    pin: VersionSnapshot;
+    settings: RowFormatSettings;
+    otherBytes: readonly number[];
+  }> = [];
   const create = JournalProviderRequestSnapshot.create;
   const observer = spyOn(
     JournalProviderRequestSnapshot,
     'create',
   ).mockImplementation(async (...args) => {
     const selected = await create(...args);
+    const beforeEviction = await selected.native.withFormat(
+      anthropicLengthRegistration(anthropic),
+      otherPlans,
+    );
     const withFormat = selected.native.withFormat;
     selected.native.withFormat = <T>(
       registration: RowFormatRegistration,
@@ -140,11 +151,12 @@ export async function occupyMistralFormats(history: HistoryService): Promise<{
           if (captured.length === 0) {
             expect(requestFormatSlot(measured, registration.settings)).toBe(0);
             expect(measured.version?.slots.formatSlots[0].gen).toBe(2);
-            expect(await otherPlans(measured)).toStrictEqual(otherBytes);
+            expect(await otherPlans(measured)).toStrictEqual(beforeEviction);
           }
           captured.push({
             pin: measured.retain(),
             settings: registration.settings,
+            otherBytes: beforeEviction,
           });
         }
         return consume(measured);
@@ -165,7 +177,7 @@ export async function occupyMistralFormats(history: HistoryService): Promise<{
       expect(
         planStoredChatMessages(first.pin, first.settings, 0, '').generation,
       ).toBe(2);
-      expect(await otherPlans(first.pin)).toStrictEqual(otherBytes);
+      expect(await otherPlans(first.pin)).toStrictEqual(first.otherBytes);
       for (const { pin, settings } of captured)
         expect(
           planStoredChatMessages(pin, settings, 0, '').bytes,

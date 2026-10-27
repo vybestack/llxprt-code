@@ -358,9 +358,12 @@ describe('public native plain Chat automatic continuation HTTP', () => {
               item.reasoning_content === 'latest first\nlatest second',
           )?.reasoning_content,
         ).toBe(strip === 'all' ? undefined : 'latest first\nlatest second');
-        expect(storedLengths).toStrictEqual([prior.length, prior.length]);
+        expect(storedLengths).toStrictEqual([
+          prior.length + 1,
+          prior.length + 1,
+        ]);
         expect(requestOrdinals[1]).toStrictEqual(requestOrdinals[0]);
-        expect(requestOrdinals[0]).toHaveLength(prior.length);
+        expect(requestOrdinals[0]).toHaveLength(prior.length + 1);
         expect(JSON.parse(requests[0]).model).toBe(model);
         await history.waitForCommit();
         const committed = await history.openDumpSnapshot();
@@ -401,7 +404,7 @@ describe('public native plain Chat automatic continuation HTTP', () => {
           for await (const row of (await recording.session()).rows())
             ordinals.push(row.entry.chronologySeq);
           expect(ordinals).toHaveLength(prior.length + 2);
-          expect(ordinals.slice(0, prior.length)).toStrictEqual(
+          expect(ordinals.slice(0, prior.length + 1)).toStrictEqual(
             requestOrdinals[0],
           );
           expect(ordinals[prior.length]).toBeGreaterThan(
