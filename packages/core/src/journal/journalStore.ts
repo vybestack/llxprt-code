@@ -374,7 +374,10 @@ export class JournalStore {
     if (this.closing) throw new Error('The journal store is closed');
     this.queued += 1;
     const turn = this.tail.then(run);
-    this.tail = turn.then(noop, noop).then(() => this.afterCommit());
+    this.tail = turn.then(noop, noop).then(() => {
+      this.queued -= 1;
+      if (!this.closing) this.maintenance.request();
+    });
     return turn;
   }
 
@@ -384,6 +387,8 @@ export class JournalStore {
       assertCompactionUsable(this.compactionFailure);
       return this.writer.flushCommitted();
     });
+
+  settleCommitted = (): Promise<void> => this.tail;
 
   /** Resolves after queued commits and automatic maintenance, reporting maintenance failures. */
   async idle(): Promise<void> {
@@ -622,11 +627,6 @@ export class JournalStore {
 
   private readonly makeCache = (): IdNodeCache =>
     this.deps.createCache?.() ?? new BoundedIdNodeCache();
-
-  private afterCommit(): void {
-    this.queued -= 1;
-    if (!this.closing) this.maintenance.request();
-  }
 
   /** The idle point of design 4.11: nothing queued, no pin, the queue held by the caller. */
   private async compactWhenIdle(): Promise<void> {
