@@ -41,6 +41,7 @@ export interface ScrollbackPagerState {
   readonly loadingOlder: boolean;
   readonly atVisibilityFloor: boolean;
   readonly atFileEnd: boolean;
+  readonly hasNewOutput: boolean;
   readonly generation: number;
   readonly error: string | null;
 }
@@ -65,12 +66,6 @@ export interface ScrollbackPagerStore {
   reportViewport(): void;
   pageOut(direction: 'older' | 'newer'): void;
   setContextWindow(window: { firstSeq: number; lastSeq: number }): void;
-  setLiveTail(items: readonly HistoryItem[]): void;
-  commitPendingRow(
-    pendingKey: string,
-    committedIdentity: RowIdentity,
-    item: HistoryItem,
-  ): boolean;
   metrics(): ScrollbackPagerMetrics;
   close(): Promise<void>;
 }

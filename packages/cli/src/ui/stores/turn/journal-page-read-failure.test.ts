@@ -97,7 +97,7 @@ for (const reverse of [true, false]) {
       await withCursor(async (cursor, ownership, damage) => {
         if (!reverse) {
           await cursor.pageBack(3);
-          cursor.retainWindow(undefined, undefined, 'newer');
+          cursor.retainWindow([], 'newer');
         }
         const read = (
           count: number,
@@ -126,7 +126,7 @@ for (const reverse of [true, false]) {
       await withCursor(async (cursor, _ownership, damage, fileBytes) => {
         if (!reverse) {
           await cursor.pageBack(3);
-          cursor.retainWindow(undefined, undefined, 'newer');
+          cursor.retainWindow([], 'newer');
         }
         const read = (
           count: number,

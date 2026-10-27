@@ -56,7 +56,7 @@ describe('disk paging ownership', () => {
         }
         expect(ownership.snapshot().liveRows).toBe(1);
         expect(ownership.within(bound)).toBe(true);
-        cursor.retainWindow(undefined, undefined, 'newer');
+        cursor.retainWindow([], 'newer');
         for (let index = 0; index < 512; index += 1) {
           const { entries } = await cursor.pageForward(1);
           const item = groupPage(entries[0]);

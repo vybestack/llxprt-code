@@ -122,7 +122,7 @@ describe('native paging controlled cancellation', () => {
             throw new Error('Missing projected row');
           consumer = first.item;
           ownership.retain(consumer);
-          if (!reverse) cursor.retainWindow(undefined, undefined, 'newer');
+          if (!reverse) cursor.retainWindow([], 'newer');
           arm();
           const pending = reverse ? cursor.pageBack(1) : cursor.pageForward(1);
           const outcome = pending.then(

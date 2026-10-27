@@ -35,11 +35,7 @@ import { JournalPagerSubscription } from './journal-pager-subscription.js';
 import type { NativeDisplayEntry as JournalEntry } from './native-journal-types.js';
 import type { HistoryItem } from '../../types.js';
 
-import {
-  pendingRowIdentity,
-  rowIdentityKey,
-  type RowIdentity,
-} from '../../utils/rowIdentity.js';
+import { rowIdentityKey, type RowIdentity } from '../../utils/rowIdentity.js';
 
 type BoundaryEntry = Extract<JournalEntry, { kind: 'boundary' }>;
 
@@ -230,7 +226,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     this.residentPagedRows = next;
   }
 
-  private liveItems: readonly HistoryItem[] = [];
+  private hasNewOutput = false;
   private atVisibilityFloor = false;
   private atFileEnd = false;
   private error: string | null = null;
@@ -276,7 +272,10 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       this.viewport.followingTail ??
       (this.visibleKeys.length === 0 || this.visibleKeys.at(-1) === tail?.key);
     this.atFileEnd = false;
-    if (!following) return;
+    if (!following) {
+      this.hasNewOutput = true;
+      return;
+    }
     const gen = this.generation;
     const run = this.pageQueue.then(async () => {
       const cursor = await this.ensureCursor(gen);
@@ -293,10 +292,11 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
 
   getState(): ScrollbackPagerState {
     return {
-      rows: [...this.pagedRows, ...this.liveRows()],
+      rows: this.pagedRows,
       loadingOlder: this.inFlightBackReads > 0,
       atVisibilityFloor: this.atVisibilityFloor,
       atFileEnd: this.atFileEnd,
+      hasNewOutput: this.hasNewOutput,
       generation: this.generation,
       error: this.error,
     };
@@ -409,6 +409,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       if (stale || this.isStale(gen)) return;
       this.absorbForward(collected);
       this.atFileEnd = cursor.windowEnd() >= cursor.size();
+      if (this.atFileEnd) this.hasNewOutput = false;
       this.error = null;
     } catch (error) {
       if (!this.isStale(gen)) {
@@ -481,6 +482,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     this.controller.abort();
     this.controller = new AbortController();
     this.pagedRows = [];
+    this.hasNewOutput = false;
     this.atVisibilityFloor = false;
     this.atFileEnd = false;
     this.error = null;
@@ -526,31 +528,6 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   setContextWindow(window: { firstSeq: number; lastSeq: number }): void {
     this.contextWindow = { ...window };
     this.evictSubContext();
-  }
-
-  /** Replaces the live tail wholesale; rows merge by identity in liveRows. */
-  setLiveTail(items: readonly HistoryItem[]): void {
-    this.liveItems = [...items];
-  }
-
-  commitPendingRow(
-    pendingKey: string,
-    committedIdentity: RowIdentity,
-    item: HistoryItem,
-  ): boolean {
-    const pendingSlot = rowIdentityKey(pendingRowIdentity(pendingKey));
-    const index = this.liveItems.findIndex(
-      (live) =>
-        live.rowIdentity !== undefined &&
-        rowIdentityKey(live.rowIdentity) === pendingSlot,
-    );
-    if (index === -1) return false;
-    const committedKey = rowIdentityKey(committedIdentity);
-    this.pagedRows = this.pagedRows.filter((row) => row.key !== committedKey);
-    const next = this.liveItems.slice();
-    next[index] = { ...item, rowIdentity: committedIdentity };
-    this.liveItems = next;
-    return true;
   }
 
   metrics(): ScrollbackPagerMetrics {
@@ -658,8 +635,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
 
   private retainCursorWindow(direction: 'older' | 'newer'): void {
     this.cursor?.retainWindow(
-      this.pagedRows[0]?.key,
-      this.pagedRows[this.pagedRows.length - 1]?.key,
+      this.pagedRows.map((row) => row.key),
       direction,
     );
     this.atVisibilityFloor =
@@ -670,28 +646,6 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
 
   private isStale(gen: number): boolean {
     return this.closed || gen !== this.generation;
-  }
-
-  private liveRows(): ScrollbackRow[] {
-    const rows: ScrollbackRow[] = [];
-    const seen = new Set<string>();
-    for (const item of this.liveItems) {
-      const identity = item.rowIdentity;
-      if (identity !== undefined) {
-        const key = rowIdentityKey(identity);
-        if (!seen.has(key)) {
-          seen.add(key);
-          rows.push({
-            key,
-            seq: item.chronologySeq ?? null,
-            identity,
-            offset: identity.kind === 'journal' ? identity.offset : null,
-            item,
-          });
-        }
-      }
-    }
-    return rows;
   }
 
   /**

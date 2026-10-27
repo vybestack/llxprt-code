@@ -39,12 +39,7 @@ import {
   type ScrollbackPagerStore,
   type ScrollbackViewportReporter,
 } from './scrollbackPager.js';
-import {
-  pendingRowIdentity,
-  rowIdentity,
-  rowIdentityKey,
-} from '../../utils/rowIdentity.js';
-import type { HistoryItem } from '../../types.js';
+import { JournalArrivalRecorder } from '@vybestack/llxprt-code-core/journal/arrival-recorder.js';
 
 /**
  * Uniform row size: text is padded so every resident row's serialized size
@@ -459,64 +454,44 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
   beforeEach(() => setupPagerFixture());
   afterEach(() => cleanupPagerFixture());
 
-  it('merges a pending live row with its paged row by identity on commit, without duplicates', async () => {
-    for (let seq = 1; seq <= 8; seq += 1) {
-      await fixture.addUser(seq);
-    }
+  it('refreshes a partial row under its journal identity and seals it without duplicates', async () => {
+    const session = await JournalSession.open(fixture.filePath);
+    const recorder = new JournalArrivalRecorder(session.store);
     const store = makeStore();
-    await store.pageBack();
-
-    const pendingItem: HistoryItem = {
-      id: 4242,
-      type: 'gemini',
-      text: 'streaming-pending',
-      rowIdentity: pendingRowIdentity('turn-1:0'),
-    };
-    store.setLiveTail([pendingItem]);
-    expect(rowTexts(store)).toContain('streaming-pending');
-
-    const committedOffset = await fixture.add({
-      speaker: 'ai',
-      blocks: [{ type: 'text', text: 'journal-text' }],
-      metadata: { chronology: chronology(9) },
-    });
-    await store.pageForward();
-
-    const committedIdentity = store
-      .getState()
-      .rows.find((row) => row.offset === committedOffset)?.identity;
-    if (committedIdentity === undefined)
-      throw new Error('Missing paged committed row');
-    const resolved = store.commitPendingRow('turn-1:0', committedIdentity, {
-      ...pendingItem,
-      text: 'committed-live-text',
-      rowIdentity: committedIdentity,
-    });
-    expect(resolved).toBe(true);
-    await store.pageForward();
-
-    const rows = store.getState().rows;
-    const committedRows = rows.filter(
-      (row) => row.key === rowIdentityKey(committedIdentity),
-    );
-    expect(committedRows).toHaveLength(1);
-    expect(committedRows[0]?.item.text).toBe('committed-live-text');
-    expect(rowTexts(store)).not.toContain('journal-text');
-    expect(rows.some((row) => row.identity.kind === 'pending')).toBe(false);
+    try {
+      const row = await recorder.beginRow(
+        encodeContentRow({ speaker: 'ai', blocks: [] }, { owner: 0 }),
+        { id: 'a', submissionId: 's' },
+      );
+      const block = await recorder.beginNamedBlock(row, 0);
+      await recorder.appendText(block, 'text', 'prefix');
+      await recorder.flush();
+      await store.resumeFromJournal();
+      const key = `transcript:${row.transcriptId}:text`;
+      expect(rowTexts(store)).toStrictEqual(['prefix']);
+      await recorder.appendText(block, 'text', ' suffix');
+      await recorder.flush();
+      await store.pageForward();
+      expect(rowTexts(store)).toStrictEqual(['prefix suffix']);
+      expect(store.getState().rows[0]?.key).toBe(key);
+      await recorder.endBlock(block);
+      await recorder.sealRow(row);
+      await store.pageForward();
+      expect(store.getState().rows).toHaveLength(1);
+      expect(store.getState().rows[0]?.key).toBe(key);
+      expect(rowTexts(store)).toStrictEqual(['prefix suffix']);
+    } finally {
+      await recorder.close();
+      await session.close();
+    }
   });
 
-  it('refuses to commit a row that is not pending', async () => {
+  it('cannot publish a row through a pending-to-committed overlay API', async () => {
     const store = makeStore();
-    const committed = rowIdentity({ kind: 'journal', offset: 1 }, 'text');
-    const other = rowIdentity({ kind: 'journal', offset: 2 }, 'text');
-    expect(
-      store.commitPendingRow('nope', other, {
-        id: 1,
-        type: 'user',
-        text: 'x',
-        rowIdentity: committed,
-      }),
-    ).toBe(false);
+    expect('commitPendingRow' in store).toBe(false);
+    expect('setLiveTail' in store).toBe(false);
+    await store.pageBack();
+    expect(store.getState().rows).toHaveLength(0);
   });
 });
 
@@ -740,43 +715,16 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
     expect(metrics.residentRows).toBeLessThanOrEqual(12);
   });
 
-  it('merges legacy fallback rows by identity and keeps them distinct from paged rows', async () => {
-    for (let seq = 1; seq <= 10; seq += 1) {
-      await fixture.addUser(seq);
-    }
+  it('keeps identical journal payloads distinct by persisted identity without fallback rows', async () => {
+    await fixture.add(userText('same payload', 1));
+    await fixture.add(userText('same payload', 2));
     const store = makeStore();
-
-    const legacyOne = rowIdentity({ kind: 'legacy', index: 0 }, 'text');
-    const legacyTwo = rowIdentity({ kind: 'legacy', index: 1 }, 'text');
-    store.setLiveTail([
-      { id: 101, type: 'user', text: 'legacy-1', rowIdentity: legacyOne },
-      { id: 102, type: 'user', text: 'legacy-2', rowIdentity: legacyTwo },
-    ]);
     await store.pageBack();
-
-    store.setLiveTail([
-      {
-        id: 101,
-        type: 'user',
-        text: 'legacy-1-updated',
-        rowIdentity: legacyOne,
-      },
-      { id: 102, type: 'user', text: 'legacy-2', rowIdentity: legacyTwo },
-    ]);
-
-    const state = store.getState();
-    const texts = rowTexts(store);
-    expect(texts.filter((text) => text.startsWith('legacy-1'))).toHaveLength(1);
-    expect(texts).toContain('legacy-1-updated');
-    expect(texts).toContain('legacy-2');
-    expect(texts).toContain('r-7');
-    const keys = state.rows.map((row) => row.key);
-    expect(new Set(keys).size).toBe(keys.length);
-    expect(
-      state.rows
-        .filter((row) => row.offset === null)
-        .map((row) => row.item.text),
-    ).toStrictEqual(['legacy-1-updated', 'legacy-2']);
+    const rows = store.getState().rows;
+    expect(rowTexts(store)).toStrictEqual(['same payload', 'same payload']);
+    expect(new Set(rows.map((row) => row.key)).size).toBe(2);
+    expect(rows.every((row) => row.identity.kind === 'journal')).toBe(true);
+    expect('setLiveTail' in store).toBe(false);
   });
 });
 
@@ -784,27 +732,28 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
   beforeEach(() => setupPagerFixture());
   afterEach(() => cleanupPagerFixture());
 
-  it('keeps pending live rows resident regardless of eviction cycles', async () => {
+  it('evicts an offscreen response instead of pinning a live copy and can page it back', async () => {
     vi.useFakeTimers();
-    for (let seq = 1; seq <= 12; seq += 1) {
-      await fixture.addUser(seq);
-    }
-    const store = makeStore();
-    store.setLiveTail([
-      {
-        id: 900,
-        type: 'gemini',
-        text: 'live-pending-row',
-        rowIdentity: pendingRowIdentity('turn-2:0'),
-      },
-    ]);
+    for (let seq = 1; seq <= 12; seq++) await fixture.addUser(seq);
+    await fixture.add({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'disk-response' }],
+      metadata: { chronology: chronology(13) },
+    });
+    const store = makeStore({
+      settings: { marginViewports: 0, byteFloorBytes: 1, purgeDebounceMs: 0 },
+    });
     await store.pageBack();
     await store.pageBack();
     viewport.visibleKeys = visibleKeysOfSeqs(store, [9, 10]);
     store.reportViewport();
+    store.pageOut('newer');
+    vi.advanceTimersByTime(0);
     store.pageOut('older');
-    vi.advanceTimersByTime(1500);
-
-    expect(rowTexts(store)).toContain('live-pending-row');
+    vi.advanceTimersByTime(0);
+    expect(rowTexts(store)).not.toContain('disk-response');
+    expect(store.metrics().residentRows).toBe(2);
+    await store.pageForward();
+    expect(rowTexts(store)).toContain('disk-response');
   });
 });

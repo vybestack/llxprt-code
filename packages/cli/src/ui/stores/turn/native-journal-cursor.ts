@@ -567,33 +567,42 @@ export class NativeJournalCursor {
   } {
     this.options.signal?.throwIfAborted();
     for (const located of selected) {
-      if (located.entry.kind !== 'projected') continue;
-      const item = located.entry.item;
-      this.options.counters?.ownership?.retain(item);
-      this.retained.push(item);
-      if (item.rowIdentity)
-        this.positions.set(rowIdentityKey(item.rowIdentity), {
+      const entry = located.entry;
+      const identity =
+        entry.kind === 'boundary'
+          ? rowIdentityKey({
+              kind: 'journal',
+              offset: entry.offset,
+              transcriptId: entry.transcriptId,
+              discriminator: 'summaryRow',
+            })
+          : entry.item.rowIdentity && rowIdentityKey(entry.item.rowIdentity);
+      if (identity !== undefined)
+        this.positions.set(identity, {
           before: located.before,
           after: located.after,
         });
+      if (entry.kind !== 'projected') continue;
+      this.options.counters?.ownership?.retain(entry.item);
+      this.retained.push(entry.item);
     }
     return { entries: selected.map(({ entry }) => entry) };
   }
-  retainWindow(
-    first: string | undefined,
-    last: string | undefined,
-    direction: 'older' | 'newer',
-  ): void {
+  retainWindow(keys: readonly string[], direction: 'older' | 'newer'): void {
+    const first = keys.at(0);
+    const last = keys.at(-1);
     const head = first === undefined ? undefined : this.positions.get(first);
     const tail = last === undefined ? undefined : this.positions.get(last);
+    if (keys.length > 0 && (head === undefined || tail === undefined))
+      throw new Error('Resident journal window has no cursor positions');
     if (head && tail) {
       this.start = head.before;
       this.end = tail.after;
     } else if (direction === 'older') this.start = this.end;
     else this.end = this.start;
-    this.positions.clear();
-    if (head && first) this.positions.set(first, head);
-    if (tail && last) this.positions.set(last, tail);
+    const resident = new Set(keys);
+    for (const key of this.positions.keys())
+      if (!resident.has(key)) this.positions.delete(key);
   }
   private async refreshReader(): Promise<void> {
     this.options.signal?.throwIfAborted();

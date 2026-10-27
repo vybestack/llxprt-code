@@ -161,28 +161,19 @@ function TopEdgeRow({
 function BottomEdgeRow({
   hiddenBelow,
   atFileEnd,
+  hasNewOutput,
 }: {
   hiddenBelow: number;
   atFileEnd: boolean;
+  hasNewOutput: boolean;
 }): React.JSX.Element | null {
+  if (hasNewOutput) {
+    return <Text color={Colors.DimComment}>new output below</Text>;
+  }
   if (hiddenBelow > 0 || !atFileEnd) {
     return <Text color={Colors.DimComment}>more below</Text>;
   }
   return null;
-}
-
-/**
- * Pending live-tail rows the window does not cover render as independent
- * slots below it, so the live tail stays visible while scrolled away.
- */
-function pendingRowsBelow(
-  rows: readonly ScrollbackRow[],
-  windowRows: readonly ScrollbackRow[],
-): ScrollbackRow[] {
-  const windowKeys = new Set(windowRows.map((row) => row.key));
-  return rows.filter(
-    (row) => row.identity.kind === 'pending' && !windowKeys.has(row.key),
-  );
 }
 
 function boundarySpanKey(span: RemovedInteriorSpan): string {
@@ -268,24 +259,6 @@ function WiredScrollbackRow({
       config={config}
       contextState={row.contextState ?? contextStateForRow(row.seq, range)}
     />
-  );
-}
-
-function PendingTailSlots({
-  rows,
-}: {
-  rows: readonly ScrollbackRow[];
-}): React.JSX.Element | null {
-  if (rows.length === 0) return null;
-  return (
-    <>
-      <Text color={Colors.DimComment}>··· pending ···</Text>
-      {rows.map((row) => (
-        <Text key={row.key} color={Colors.Foreground}>
-          {row.item.text ?? ''}
-        </Text>
-      ))}
-    </>
   );
 }
 
@@ -438,12 +411,10 @@ interface FrameWiring {
 function ViewportFrame({
   state,
   frame,
-  pendingBelow,
   wiring,
 }: {
   state: ScrollbackPagerState;
   frame: WindowFrame;
-  pendingBelow: readonly ScrollbackRow[];
   wiring: FrameWiring;
 }): React.JSX.Element {
   const lines: React.JSX.Element[] = [];
@@ -503,8 +474,8 @@ function ViewportFrame({
       <BottomEdgeRow
         hiddenBelow={frame.hiddenBelow}
         atFileEnd={state.atFileEnd}
+        hasNewOutput={state.hasNewOutput}
       />
-      <PendingTailSlots rows={pendingBelow} />
     </Box>
   );
 }
@@ -663,13 +634,10 @@ export function ScrollbackViewport({
     rowHeightLines,
   );
 
-  const pendingBelow = pendingRowsBelow(state.rows, frame.rows);
-
   return (
     <ViewportFrame
       state={state}
       frame={frame}
-      pendingBelow={pendingBelow}
       wiring={{
         range,
         config,

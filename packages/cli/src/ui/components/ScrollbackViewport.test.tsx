@@ -71,7 +71,6 @@ const HOME_KEY = '\u001B[H';
 const END_KEY = '\u001B[F';
 
 /** Separator rendered above pending live-tail slots (addendum gap 6). */
-const PENDING_SEPARATOR = '··· pending ···';
 
 const ROW_PAD = 'x'.repeat(60);
 
@@ -154,6 +153,7 @@ function scriptedState(
     loadingOlder: false,
     atVisibilityFloor: false,
     atFileEnd: true,
+    hasNewOutput: false,
     generation: 0,
     error: null,
     ...overrides,
@@ -176,8 +176,6 @@ function scriptedStore(config: {
     reportViewport: () => config.onReportViewport?.(),
     pageOut: () => undefined,
     setContextWindow: () => undefined,
-    setLiveTail: () => undefined,
-    commitPendingRow: () => false,
     metrics: () => ({ residentRows: state.rows.length, residentBytes: 0 }),
     close: () => Promise.resolve(),
   };
@@ -787,47 +785,27 @@ describe('ScrollbackViewport @plan:PLAN-20260917-ISSUE854.P02d @requirement:G1,G
       }
     });
 
-    it('renders pending live-tail rows as slots below the window while scrolled away', async () => {
-      for (let seq = 1; seq <= 12; seq += 1) await fixture.addUser(seq);
+    it('does not pin newer journal payload below the window while scrolled away', async () => {
+      for (let seq = 1; seq <= 12; seq++) await fixture.addUser(seq);
       const reporter = makeReporter();
       const store = makeStore(reporter);
       const view = await mountViewport(store, reporter);
       try {
         await fillFromDisk(store);
-        await waitFor(() => {
-          expect(view.lastFrame()).toContain(rowLabel(12));
-        });
-        store.setLiveTail([
-          {
-            id: 424242,
-            type: 'user',
-            text: 'p-01',
-            rowIdentity: pendingRowIdentity('live:p-01'),
-          },
-        ]);
-        await waitFor(() => {
-          expect(view.lastFrame()).toContain('p-01');
-        });
-        expect(view.lastFrame() ?? '').not.toContain(PENDING_SEPARATOR);
-
+        await waitFor(() => expect(view.lastFrame()).toContain(rowLabel(12)));
         sendKey(view, PAGE_UP);
         await waitForResident(store, 8);
-        await waitFor(() => {
-          expect(view.lastFrame()).toContain(PENDING_SEPARATOR);
-        });
-        expect(view.lastFrame()).toContain('p-01');
-        expect(markerLabels(view.lastFrame() ?? '')).toStrictEqual(
-          labelRange(5, 10),
+        await waitFor(() =>
+          expect(markerLabels(view.lastFrame() ?? '')).toStrictEqual(
+            labelRange(5, 10),
+          ),
         );
-        expect(view.lastFrame() ?? '').not.toContain(rowLabel(11));
-        expect(view.lastFrame() ?? '').not.toContain(rowLabel(12));
-
+        expect(view.lastFrame()).not.toContain(rowLabel(11));
+        expect(view.lastFrame()).not.toContain(rowLabel(12));
+        expect(view.lastFrame()).toContain('more below');
         sendKey(view, PAGE_DOWN);
-        await waitFor(() => {
-          const frame = view.lastFrame() ?? '';
-          expect(frame).toContain('p-01');
-          expect(frame).not.toContain(PENDING_SEPARATOR);
-        });
+        await waitFor(() => expect(view.lastFrame()).toContain(rowLabel(12)));
+        expect(view.lastFrame()).not.toContain('more below');
       } finally {
         view.unmount();
       }
