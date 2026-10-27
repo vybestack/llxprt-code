@@ -37,6 +37,18 @@ async function origins(
   });
 }
 
+async function seedOwnedHistory(
+  history: HistoryService,
+  size: number,
+  owner: (index: number) => object | undefined,
+): Promise<void> {
+  for (let index = 0; index < size; index++) {
+    history.add(row(index), undefined, owner(index));
+    if ((index + 1) % 16 === 0) await history.waitForCommit();
+  }
+  await history.waitForCommit();
+}
+
 describe('native semantic purge current source ownership', () => {
   for (const size of [3, 64, 65, 5000]) {
     it(`preserves current owned and unowned source rows after a removed row at ${size}`, async () => {
@@ -49,9 +61,7 @@ describe('native semantic purge current source ownership', () => {
         return index % 3 === 1 ? a : b;
       };
       try {
-        for (let index = 0; index < size; index++)
-          history.add(row(index), undefined, owner(index));
-        await history.waitForCommit();
+        await seedOwnedHistory(history, size, owner);
         const before = Array.from({ length: size }, (_, index) => {
           const origin = owner(index);
           return origin === undefined ? undefined : historyOriginId(origin);
