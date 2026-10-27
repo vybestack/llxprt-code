@@ -638,7 +638,7 @@ function registerMediaCase11(directory: () => string): void {
   describe('releases admitted user and output media when history commit rejects', () => {
     it('releases admitted user and output media when history commit rejects', async () => {
       const fixture = await createFixture(directory(), 'success');
-      fixture.chat.getHistoryService().on('contentBatchAdded', () => {
+      fixture.chat.getHistoryService().on('contentSealed', () => {
         throw new Error('history commit rejected');
       });
       const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
@@ -673,7 +673,7 @@ function registerMediaCase12(directory: () => string): void {
   describe('rolls back streaming history before releasing rejected turn admissions', () => {
     it('rolls back streaming history before releasing rejected turn admissions', async () => {
       const fixture = await createFixture(directory(), 'success');
-      fixture.chat.getHistoryService().on('contentBatchAdded', () => {
+      fixture.chat.getHistoryService().on('contentSealed', () => {
         throw new Error('stream history commit rejected');
       });
       const stream = await fixture.chat.sendMessageStream(

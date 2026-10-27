@@ -76,6 +76,7 @@ type SemanticMediaPurgeFactory = () => Promise<
 >;
 import {
   prepareAdmittedUserTurn,
+  withPromptContextRollback,
   type PreparedUserTurn,
 } from './mediaAdmissionSeam.js';
 import {
@@ -179,11 +180,14 @@ export class TurnProcessor {
 
     this._resetPerTurnState();
 
-    const prepared = await prepareAdmittedUserTurn(
-      this.runtimeContext,
+    const prepared = withPromptContextRollback(
+      await prepareAdmittedUserTurn(
+        this.runtimeContext,
+        this.historyService,
+        this._normalizeUserContent(params),
+        prompt_id,
+      ),
       this.historyService,
-      this._normalizeUserContent(params),
-      prompt_id,
     );
     this.currentTurnId = prepared.turnId;
 
@@ -256,11 +260,14 @@ export class TurnProcessor {
     await this.sendPromise;
     this._resetPerTurnState();
 
-    const prepared = await prepareAdmittedUserTurn(
-      this.runtimeContext,
+    const prepared = withPromptContextRollback(
+      await prepareAdmittedUserTurn(
+        this.runtimeContext,
+        this.historyService,
+        this._normalizeUserContent(params),
+        prompt_id,
+      ),
       this.historyService,
-      this._normalizeUserContent(params),
-      prompt_id,
     );
     this.currentTurnId = prepared.turnId;
 

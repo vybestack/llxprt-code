@@ -14,12 +14,12 @@ export async function failedTurnCleanup(
 ): Promise<readonly unknown[]> {
   const failures: unknown[] = [];
   try {
-    await prepared.releaseIfUncommitted();
+    await semanticMediaPurge?.failAfterProcessingError();
   } catch (error: unknown) {
     failures.push(error);
   }
   try {
-    await semanticMediaPurge?.failAfterProcessingError();
+    await prepared.releaseIfUncommitted();
   } catch (error: unknown) {
     failures.push(error);
   }

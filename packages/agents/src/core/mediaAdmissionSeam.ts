@@ -10,6 +10,7 @@ import type {
   MediaAdmissionService,
 } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
   ModelOutput,
   ModelStreamChunk,
@@ -39,6 +40,42 @@ export interface PreparedUserTurn {
   readonly releaseIfUncommitted: () => Promise<void>;
   readonly transferToHistory: () => Promise<void>;
   readonly isTransferredToHistory: () => boolean;
+}
+
+export function withPromptContextRollback(
+  prepared: PreparedUserTurn,
+  history: HistoryService,
+): PreparedUserTurn {
+  return {
+    ...prepared,
+    releaseIfUncommitted: async () => {
+      if (prepared.isTransferredToHistory()) return;
+      const failures: unknown[] = [];
+      try {
+        for (
+          let index = prepared.userIContents.length - 1;
+          index >= 0;
+          index--
+        ) {
+          const expected = prepared.userIContents[index];
+          const tail = await history.getLastContent();
+          if (tail === undefined || tail.metadata?.id !== expected.metadata?.id)
+            break;
+          await history.removeLastIfMatches(tail);
+        }
+      } catch (error: unknown) {
+        failures.push(error);
+      }
+      try {
+        await prepared.releaseIfUncommitted();
+      } catch (error: unknown) {
+        failures.push(error);
+      }
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1)
+        throw new AggregateError(failures, 'Prompt context rollback failed');
+    },
+  };
 }
 
 interface AdmittedModelOutput {

@@ -44,6 +44,72 @@ async function directResult(
 }
 
 describe('production prompt submission barrier', () => {
+  describe('cancelled prompt context membership', () => {
+    it('keeps an unstarted turn in the transcript without exposing it to the next request', async () => {
+      const http = projectionEndpoint(false);
+      const setup = await processorFixture(
+        root(),
+        `http://127.0.0.1:${http.server.port}/v1`,
+        false,
+        0,
+      );
+      const recording = createSessionRecorder({
+        sessionId: 'cancelled-prompt',
+        projectHash: 'cancelled-prompt',
+        chatsDir: root(),
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'gpt-5.6',
+      });
+      await setup.history.attachJournal(recording);
+      try {
+        const stream = await directProcessor(setup).sendMessageStream(
+          { message: 'Keep this in the transcript.', config: {} },
+          'cancelled-prompt',
+        );
+        await stream.return(undefined);
+        expect(http.bodies).toHaveLength(0);
+        expect(await setup.history.countCuratedRows()).toBe(0);
+        const snapshot = await setup.history.prepareCuratedForProviderSnapshot(
+          [],
+        );
+        try {
+          expect(snapshot.count).toBe(0);
+        } finally {
+          await snapshot.close();
+        }
+        const path = recording.getFilePath();
+        if (path === null) throw new Error('Missing cancelled prompt journal');
+        const file = await openJournalReadOnly(path);
+        try {
+          const transcript = new TranscriptReader(file, sha256KeyHash);
+          const entries = await transcript.page({
+            direction: 'forward',
+            limit: 10,
+          });
+          const rows = entries.filter((entry) => entry.rowRef !== 0);
+          expect(rows).toHaveLength(1);
+          const content = decodeStoredRow(await transcript.readRow(rows[0]));
+          expect(content.speaker).toBe('human');
+          expect(content.blocks).toStrictEqual([
+            { type: 'text', text: 'Keep this in the transcript.' },
+          ]);
+          const membership = await transcript.membership([
+            rows[0].transcriptId,
+          ]);
+          expect(membership.map((member) => member.count)).toStrictEqual([0]);
+        } finally {
+          await file.close();
+        }
+      } finally {
+        await setup.history.dispose();
+        await recording.dispose();
+        await http.server.stop(true);
+        await setup.config.dispose();
+      }
+    });
+  });
+
   for (const mode of ['stream', 'direct'])
     it(`commits the ${mode} prompt before HTTP opens and reuses it across a transport retry`, async () => {
       const http = projectionEndpoint(true);
