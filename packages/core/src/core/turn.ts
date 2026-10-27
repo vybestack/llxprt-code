@@ -100,6 +100,7 @@ export const STRUCTURED_ERROR_CATEGORIES = [
   'server_error',
   'network',
   'client_error',
+  'local_tokenization',
 ] as const;
 
 export type StructuredErrorCategory =

@@ -55,6 +55,39 @@ function observe(promise: Promise<unknown>): {
     settled: () => settled,
   };
 }
+async function awaitFixtureHold(
+  entered: Promise<void>,
+  connection: Promise<unknown>,
+  label: string,
+): Promise<void> {
+  const first = await Promise.race([
+    entered.then(() => ({ kind: 'entered' as const })),
+    connection.then((outcome) => ({ kind: 'settled' as const, outcome })),
+  ]);
+  if (first.kind === 'settled') {
+    throw new Error(
+      `Fixture race in ${label}: the connection attempt settled before the held fetch was entered ` +
+        `(outcome: ${String(first.outcome)}). The mock must signal entry synchronously, before ` +
+        'awaiting the loopback round trip.',
+    );
+  }
+}
+async function awaitFixtureAbort(
+  aborted: Promise<void>,
+  connection: Promise<unknown>,
+  label: string,
+): Promise<void> {
+  const first = await Promise.race([
+    aborted.then(() => ({ kind: 'aborted' as const })),
+    connection.then((outcome) => ({ kind: 'settled' as const, outcome })),
+  ]);
+  if (first.kind === 'settled') {
+    throw new Error(
+      `Fixture race in ${label}: the connection attempt settled without observing an abort ` +
+        `(outcome: ${String(first.outcome)}).`,
+    );
+  }
+}
 class MemoryStore implements TokenStorage {
   credentials: OAuthCredentials = {
     serverName: 'same',
@@ -290,12 +323,25 @@ describe('actual MCP client auth cancellation', () => {
           init.signal?.addEventListener('abort', () => aborted.resolve(), {
             once: true,
           });
-          const response = await nativeFetch(input, init);
+          // The loopback endpoint ignores cancellation, so the handshake round
+          // trip must not inherit the connection signal. Otherwise an aborted
+          // request rejects before the hold below is entered and the join
+          // never runs.
           if (phase === 'handshake') {
+            const response = nativeFetch(input, {
+              ...init,
+              signal: undefined,
+            });
+            // Signal entry before awaiting the round trip: a slow loopback
+            // response must not let the real deadline expire first.
             entered.resolve();
             await release.promise;
             return response;
           }
+          const response = await nativeFetch(input, {
+            ...init,
+            signal: undefined,
+          });
           const text = await response.text();
           return new Response(
             new ReadableStream<Uint8Array>(
@@ -317,11 +363,12 @@ describe('actual MCP client auth cancellation', () => {
       const a = createClient(store, serverUrl, mode === 'timeout' ? 30 : 10000);
       const b = createClient(store, serverUrl);
       const connecting = observe(a.client.connect());
+      const label = `${mode} ${phase}`;
       try {
-        await entered.promise;
+        await awaitFixtureHold(entered.promise, connecting.result, label);
         const stopping =
           mode === 'disconnect' ? observe(a.client.disconnect()) : connecting;
-        await aborted.promise;
+        await awaitFixtureAbort(aborted.promise, connecting.result, label);
         await b.client.connect();
         expect(stopping.settled()).toBe(false);
         expect(connecting.settled()).toBe(false);

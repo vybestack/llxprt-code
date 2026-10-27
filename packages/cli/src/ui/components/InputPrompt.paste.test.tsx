@@ -4,291 +4,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
-const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import type { Mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { act } from 'react';
+import stripAnsi from 'strip-ansi';
+import { waitFor } from '../../__tests__/async.js';
+import { renderWithProviders } from '../../__tests__/render.js';
+import { FAST_RETURN_TIMEOUT } from '../contexts/KeypressContext.js';
+import { useReverseSearchCompletion } from '../hooks/useReverseSearchCompletion.js';
+import { useShellHistory } from '../hooks/useShellHistory.js';
+import { disableMouseEvents, enableMouseEvents } from '../utils/mouse.js';
+import * as primarySelection from '../utils/primarySelection.js';
+import { InputPrompt } from './InputPrompt.js';
 
 import {
-  advanceTimersByTimeAsync,
-  automock,
-} from '@vybestack/llxprt-code-test-utils';
-import { renderWithProviders } from '../../__tests__/render.js';
-import { waitFor } from '../../__tests__/async.js';
-import { act } from 'react';
-import { FAST_RETURN_TIMEOUT } from '../contexts/KeypressContext.js';
-import { InputPrompt, type InputPromptProps } from './InputPrompt.js';
-import { useTextBuffer, type TextBuffer } from './shared/text-buffer.js';
-import { ApprovalMode, type Config } from '@vybestack/llxprt-code-core';
-import * as path from 'node:path';
-import type { CommandContext, SlashCommand } from '../commands/types.js';
-import { CommandKind } from '../commands/types.js';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import type { Mock } from 'bun:test';
-import type { UseShellHistoryReturn } from '../hooks/useShellHistory.js';
-import { useShellHistory } from '../hooks/useShellHistory.js';
-import type { UseCommandCompletionReturn } from '../hooks/useCommandCompletion.js';
-import { useCommandCompletion } from '../hooks/useCommandCompletion.js';
-import { useInputHistory } from '../hooks/useInputHistory.js';
-import type { UseReverseSearchCompletionReturn } from '../hooks/useReverseSearchCompletion.js';
-import { useReverseSearchCompletion } from '../hooks/useReverseSearchCompletion.js';
-import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import stripAnsi from 'strip-ansi';
-import { StreamingState } from '../types.js';
-import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
-
-const realUseShellHistoryModule = {
-  ...(await import('../hooks/useShellHistory.js')),
-};
-const realUseCommandCompletionModule = {
-  ...(await import('../hooks/useCommandCompletion.js')),
-};
-const realUseInputHistoryModule = {
-  ...(await import('../hooks/useInputHistory.js')),
-};
-const realUseReverseSearchCompletionModule = {
-  ...(await import('../hooks/useReverseSearchCompletion.js')),
-};
-const realClipboardUtilsModule = {
-  ...(await import('../utils/clipboardUtils.js')),
-};
-
-void vi.mock('../hooks/useShellHistory.js', () =>
-  automock(realUseShellHistoryModule),
-);
-void vi.mock('../hooks/useCommandCompletion.js', () =>
-  automock(realUseCommandCompletionModule),
-);
-void vi.mock('../hooks/useInputHistory.js', () =>
-  automock(realUseInputHistoryModule),
-);
-void vi.mock('../hooks/useReverseSearchCompletion.js', () =>
-  automock(realUseReverseSearchCompletionModule),
-);
-void vi.mock('../utils/clipboardUtils.js', () =>
-  automock(realClipboardUtilsModule),
-);
-
-const mockSlashCommands: SlashCommand[] = [
-  {
-    name: 'clear',
-    kind: CommandKind.BUILT_IN,
-    description: 'Clear screen',
-    action: vi.fn(),
-  },
-  {
-    name: 'memory',
-    kind: CommandKind.BUILT_IN,
-    description: 'Manage memory',
-    subCommands: [
-      {
-        name: 'show',
-        kind: CommandKind.BUILT_IN,
-        description: 'Show memory',
-        action: vi.fn(),
-      },
-      {
-        name: 'add',
-        kind: CommandKind.BUILT_IN,
-        description: 'Add to memory',
-        action: vi.fn(),
-      },
-      {
-        name: 'refresh',
-        kind: CommandKind.BUILT_IN,
-        description: 'Refresh memory',
-        action: vi.fn(),
-      },
-    ],
-  },
-  {
-    name: 'chat',
-    description: 'Manage chats',
-    kind: CommandKind.BUILT_IN,
-    subCommands: [
-      {
-        name: 'resume',
-        description: 'Resume a chat',
-        kind: CommandKind.BUILT_IN,
-        action: vi.fn(),
-        completion: async () => ['fix-foo', 'fix-bar'],
-      },
-    ],
-  },
-];
-
-function InputPromptWithRealBuffer({
-  props,
-  initialText = '',
-}: {
-  readonly props: InputPromptProps;
-  readonly initialText?: string;
-}) {
-  const buffer = useTextBuffer({
-    initialText,
-    initialCursorOffset: initialText.length,
-    viewport: { width: 80, height: 24 },
-    isValidPath: () => false,
-  });
-
-  return <InputPrompt {...props} buffer={buffer} />;
-}
+  InputPromptWithRealBuffer,
+  usePasteTestHarness,
+} from '../../__tests__/input-prompt-paste-test-helpers.js';
 
 describe('InputPrompt', () => {
-  let props: InputPromptProps;
-  let mockShellHistory: UseShellHistoryReturn;
-  let mockCommandCompletion: UseCommandCompletionReturn;
-  let mockInputHistory: ReturnType<typeof useInputHistory>;
-  let mockReverseSearchCompletion: UseReverseSearchCompletionReturn;
-  let mockBuffer: TextBuffer;
-  let mockCommandContext: CommandContext;
-
-  const mockedUseShellHistory = useShellHistory as Mock<typeof useShellHistory>;
-  const mockedUseCommandCompletion = useCommandCompletion as Mock<
-    typeof useCommandCompletion
-  >;
-  const mockedUseInputHistory = useInputHistory as Mock<typeof useInputHistory>;
-  const mockedUseReverseSearchCompletion = useReverseSearchCompletion as Mock<
-    typeof useReverseSearchCompletion
-  >;
-
-  beforeEach(() => {
-    vi.resetAllMocks();
-    vi.spyOn(
-      terminalCapabilityManager,
-      'isKittyProtocolEnabled',
-    ).mockReturnValue(true);
-
-    mockCommandContext = createMockCommandContext();
-
-    mockBuffer = {
-      text: '',
-      cursor: [0, 0],
-      lines: [''],
-      // inputPromptRender indexes transformationsByLine and treats
-      // visualToTransformedMap as a number; without both the component throws
-      // while rendering.
-      transformationsByLine: [[]],
-      visualToTransformedMap: [0],
-      setText: vi.fn((newText: string) => {
-        mockBuffer.text = newText;
-        mockBuffer.lines = [newText];
-        mockBuffer.transformationsByLine = [[]];
-        mockBuffer.visualToTransformedMap = [0];
-        mockBuffer.cursor = [0, newText.length];
-        mockBuffer.viewportVisualLines = [newText];
-        mockBuffer.allVisualLines = [newText];
-        mockBuffer.visualToLogicalMap = [[0, 0]];
-      }),
-      replaceRangeByOffset: vi.fn(),
-      viewportVisualLines: [''],
-      allVisualLines: [''],
-      visualCursor: [0, 0],
-      visualScrollRow: 0,
-      handleInput: vi.fn(),
-      move: vi.fn(),
-      moveToOffset: vi.fn((offset: number) => {
-        mockBuffer.cursor = [0, offset];
-      }),
-      moveToVisualPosition: vi.fn(),
-      killLineRight: vi.fn(),
-      killLineLeft: vi.fn(),
-      openInExternalEditor: vi.fn(),
-      newline: vi.fn(),
-      undo: vi.fn(),
-      redo: vi.fn(),
-      backspace: vi.fn(),
-      preferredCol: null,
-      selectionAnchor: null,
-      insert: vi.fn(),
-      del: vi.fn(),
-      replaceRange: vi.fn(),
-      deleteWordLeft: vi.fn(),
-      deleteWordRight: vi.fn(),
-      visualToLogicalMap: [[0, 0]],
-    } as unknown as TextBuffer;
-
-    mockShellHistory = {
-      history: [],
-      addCommandToHistory: vi.fn(),
-      getPreviousCommand: vi.fn().mockReturnValue(null),
-      getNextCommand: vi.fn().mockReturnValue(null),
-      resetHistoryPosition: vi.fn(),
-    };
-    mockedUseShellHistory.mockReturnValue(mockShellHistory);
-
-    mockCommandCompletion = {
-      activeHint: '',
-      suggestions: [],
-      activeSuggestionIndex: -1,
-      isLoadingSuggestions: false,
-      showSuggestions: false,
-      visibleStartIndex: 0,
-      isPerfectMatch: false,
-      navigateUp: vi.fn(),
-      navigateDown: vi.fn(),
-      resetCompletionState: vi.fn(),
-      setActiveSuggestionIndex: vi.fn(),
-      setShowSuggestions: vi.fn(),
-      handleAutocomplete: vi.fn(),
-      promptCompletion: {
-        text: '',
-        accept: vi.fn(),
-        clear: vi.fn(),
-        isLoading: false,
-        isActive: false,
-        markSelected: vi.fn(),
-      },
-      getCommandFromSuggestion: vi.fn().mockReturnValue(null),
-      isArgumentCompletion: false,
-      leafCommand: null,
-    };
-    mockedUseCommandCompletion.mockReturnValue(mockCommandCompletion);
-
-    mockInputHistory = {
-      navigateUp: vi.fn(),
-      navigateDown: vi.fn(),
-      handleSubmit: vi.fn(),
-    };
-    mockedUseInputHistory.mockReturnValue(mockInputHistory);
-
-    mockReverseSearchCompletion = {
-      suggestions: [],
-      activeSuggestionIndex: -1,
-      visibleStartIndex: 0,
-      showSuggestions: false,
-      isLoadingSuggestions: false,
-      navigateUp: vi.fn(),
-      navigateDown: vi.fn(),
-      handleAutocomplete: vi.fn(),
-      resetCompletionState: vi.fn(),
-    };
-    mockedUseReverseSearchCompletion.mockReturnValue(
-      mockReverseSearchCompletion,
-    );
-
-    props = {
-      buffer: mockBuffer,
-      onSubmit: vi.fn(),
-      userMessages: [],
-      onClearScreen: vi.fn(),
-      config: composeFixtureRuntime({
-        getMcpServers: () => undefined,
-        getProjectRoot: () => path.join('test', 'project'),
-        getTargetDir: () => path.join('test', 'project', 'src'),
-        getVimMode: () => false,
-      } as unknown as Config),
-      slashCommands: mockSlashCommands,
-      commandContext: mockCommandContext,
-      shellModeActive: false,
-      setShellModeActive: vi.fn(),
-      approvalMode: ApprovalMode.DEFAULT,
-      inputWidth: 80,
-      suggestionsWidth: 80,
-      focus: true,
-      setQueueErrorMessage: vi.fn(),
-      streamingState: StreamingState.Idle,
-    };
-  });
-
+  const fixture = usePasteTestHarness();
   describe('large paste submission', () => {
     const alphaPaste = 'ALPHA_1\nALPHA_2\nALPHA_3\nALPHA_4';
     const firstPaste = 'FIRST_1\nFIRST_2\nFIRST_3\nFIRST_4';
@@ -322,9 +58,12 @@ describe('InputPrompt', () => {
       'shows placeholders and expands $name through the submit path',
       async ({ initialText, inputs, expected }) => {
         const submittedValues: string[] = [];
-        props.onSubmit = (value) => submittedValues.push(value);
+        fixture.props.onSubmit = (value) => submittedValues.push(value);
         const rendered = renderWithProviders(
-          <InputPromptWithRealBuffer props={props} initialText={initialText} />,
+          <InputPromptWithRealBuffer
+            {...fixture.props}
+            initialText={initialText}
+          />,
           {},
         );
         let pasteCount = 0;
@@ -355,11 +94,64 @@ describe('InputPrompt', () => {
         rendered.unmount();
       },
     );
+    describe('bracketed paste thresholds', () => {
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+
+      afterEach(() => vi.useRealTimers());
+
+      it.each([
+        {
+          name: 'LF newlines',
+          pastedText: 'This \n is \n a \n multiline \n paste.',
+        },
+        {
+          name: 'escaped newlines',
+          pastedText: 'This \\\n is \\\n a \\\n multiline \\\n paste.',
+        },
+        {
+          name: 'CRLF newlines',
+          pastedText: 'This\r\nis\r\na\r\nmultiline\r\npaste.',
+        },
+      ])(
+        'collapses a threshold-sized bracketed paste with $name into one placeholder and submits its expanded text',
+        async ({ pastedText }) => {
+          const expanded = pastedText.replace(/\r\n?/g, '\n');
+          const submittedValues: string[] = [];
+          fixture.props.onSubmit = (value) => submittedValues.push(value);
+          const rendered = renderWithProviders(
+            <InputPromptWithRealBuffer {...fixture.props} />,
+            {},
+          );
+
+          await act(async () =>
+            rendered.stdin.write(`\x1b[200~${pastedText}\x1b[201~`),
+          );
+
+          await waitFor(() =>
+            expect(rendered.stdout.lastFrame()).toContain(
+              '[5 lines pasted #1]',
+            ),
+          );
+          expect(rendered.stdout.lastFrame()).not.toContain('multiline');
+          expect(rendered.stdout.lastFrame()).not.toContain('#2');
+
+          await act(() => advanceTimersByTimeAsync(FAST_RETURN_TIMEOUT + 1));
+          await act(async () => rendered.stdin.write('\r'));
+
+          await waitFor(() =>
+            expect(submittedValues).toStrictEqual([expanded]),
+          );
+          rendered.unmount();
+        },
+      );
+    });
   });
 
   describe('reverse search', () => {
     beforeEach(async () => {
-      props.shellModeActive = true;
+      fixture.props.shellModeActive = true;
 
       (useShellHistory as Mock<typeof useShellHistory>).mockReturnValue({
         history: ['echo hello', 'echo world', 'ls'],
@@ -372,8 +164,8 @@ describe('InputPrompt', () => {
 
     it('invokes reverse search on Ctrl+R', async () => {
       // Mock the reverse search completion to return suggestions
-      mockedUseReverseSearchCompletion.mockReturnValue({
-        ...mockReverseSearchCompletion,
+      fixture.mockedUseReverseSearchCompletion.mockReturnValue({
+        ...fixture.mockReverseSearchCompletion,
         suggestions: [
           { label: 'echo hello', value: 'echo hello' },
           { label: 'echo world', value: 'echo world' },
@@ -384,7 +176,7 @@ describe('InputPrompt', () => {
       });
 
       const { stdin, stdout, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
+        <InputPrompt {...fixture.props} />,
       );
 
       // Trigger reverse search with Ctrl+R
@@ -414,7 +206,7 @@ describe('InputPrompt', () => {
       'resets reverse search state on Escape ($name)',
       async ({ escapeSequence }) => {
         const { stdin, stdout, unmount } = renderWithProviders(
-          <InputPrompt {...props} />,
+          <InputPrompt {...fixture.props} />,
           {},
         );
 
@@ -443,12 +235,12 @@ describe('InputPrompt', () => {
     it('completes the highlighted entry on Tab and exits reverse-search', async () => {
       // Mock the reverse search completion
       const mockHandleAutocomplete = vi.fn(() => {
-        props.buffer.setText('echo hello');
+        fixture.props.buffer.setText('echo hello');
       });
 
-      mockedUseReverseSearchCompletion.mockImplementation(
+      fixture.mockedUseReverseSearchCompletion.mockImplementation(
         (buffer, shellHistory, reverseSearchActive) => ({
-          ...mockReverseSearchCompletion,
+          ...fixture.mockReverseSearchCompletion,
           suggestions: reverseSearchActive
             ? [
                 { label: 'echo hello', value: 'echo hello' },
@@ -463,7 +255,7 @@ describe('InputPrompt', () => {
       );
 
       const { stdin, stdout, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
+        <InputPrompt {...fixture.props} />,
       );
 
       // Enter reverse search mode with Ctrl+R
@@ -482,15 +274,15 @@ describe('InputPrompt', () => {
       });
       await waitFor(() => {
         expect(mockHandleAutocomplete).toHaveBeenCalledWith(0);
-        expect(props.buffer.setText).toHaveBeenCalledWith('echo hello');
+        expect(fixture.props.buffer.setText).toHaveBeenCalledWith('echo hello');
       });
       unmount();
     }, 15000);
 
     it('submits the highlighted entry on Enter and exits reverse-search', async () => {
       // Mock the reverse search completion to return suggestions
-      mockedUseReverseSearchCompletion.mockReturnValue({
-        ...mockReverseSearchCompletion,
+      fixture.mockedUseReverseSearchCompletion.mockReturnValue({
+        ...fixture.mockReverseSearchCompletion,
         suggestions: [
           { label: 'echo hello', value: 'echo hello' },
           { label: 'echo world', value: 'echo world' },
@@ -501,7 +293,7 @@ describe('InputPrompt', () => {
       });
 
       const { stdin, stdout, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
+        <InputPrompt {...fixture.props} />,
       );
 
       await act(async () => {
@@ -520,7 +312,7 @@ describe('InputPrompt', () => {
         expect(stdout.lastFrame()).not.toContain('(r:)');
       });
 
-      expect(props.onSubmit).toHaveBeenCalledWith('echo hello');
+      expect(fixture.props.onSubmit).toHaveBeenCalledWith('echo hello');
       unmount();
     });
 
@@ -528,13 +320,13 @@ describe('InputPrompt', () => {
       const initialText = 'initial text';
       const initialCursor: [number, number] = [0, 3];
 
-      props.buffer.setText(initialText);
-      props.buffer.cursor = initialCursor;
+      fixture.props.buffer.setText(initialText);
+      fixture.props.buffer.cursor = initialCursor;
 
       // Mock the reverse search completion to be active and then reset
-      mockedUseReverseSearchCompletion.mockImplementation(
+      fixture.mockedUseReverseSearchCompletion.mockImplementation(
         (buffer, shellHistory, reverseSearchActiveFromInputPrompt) => ({
-          ...mockReverseSearchCompletion,
+          ...fixture.mockReverseSearchCompletion,
           suggestions: reverseSearchActiveFromInputPrompt
             ? [{ label: 'history item', value: 'history item' }]
             : [],
@@ -543,7 +335,7 @@ describe('InputPrompt', () => {
       );
 
       const { stdin, stdout, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
+        <InputPrompt {...fixture.props} />,
       );
 
       // reverse search with Ctrl+R
@@ -562,8 +354,8 @@ describe('InputPrompt', () => {
 
       await waitFor(() => {
         expect(stdout.lastFrame()).not.toContain('(r:)');
-        expect(props.buffer.text).toBe(initialText);
-        expect(props.buffer.cursor).toStrictEqual(initialCursor);
+        expect(fixture.props.buffer.text).toBe(initialText);
+        expect(fixture.props.buffer.cursor).toStrictEqual(initialCursor);
       });
 
       unmount();
@@ -572,40 +364,40 @@ describe('InputPrompt', () => {
 
   describe('Ctrl+E keyboard shortcut', () => {
     it('should move cursor to end of current line in multiline input', async () => {
-      props.buffer.text = 'line 1\nline 2\nline 3';
-      props.buffer.cursor = [1, 2];
-      props.buffer.lines = ['line 1', 'line 2', 'line 3'];
+      fixture.props.buffer.text = 'line 1\nline 2\nline 3';
+      fixture.props.buffer.cursor = [1, 2];
+      fixture.props.buffer.lines = ['line 1', 'line 2', 'line 3'];
 
       const { stdin, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
+        <InputPrompt {...fixture.props} />,
       );
 
       await act(async () => {
         stdin.write('\x05'); // Ctrl+E
       });
       await waitFor(() => {
-        expect(props.buffer.move).toHaveBeenCalledWith('end');
+        expect(fixture.props.buffer.move).toHaveBeenCalledWith('end');
       });
-      expect(props.buffer.moveToOffset).not.toHaveBeenCalled();
+      expect(fixture.props.buffer.moveToOffset).not.toHaveBeenCalled();
       unmount();
     });
 
     it('should move cursor to end of current line for single line input', async () => {
-      props.buffer.text = 'single line text';
-      props.buffer.cursor = [0, 5];
-      props.buffer.lines = ['single line text'];
+      fixture.props.buffer.text = 'single line text';
+      fixture.props.buffer.cursor = [0, 5];
+      fixture.props.buffer.lines = ['single line text'];
 
       const { stdin, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
+        <InputPrompt {...fixture.props} />,
       );
 
       await act(async () => {
         stdin.write('\x05'); // Ctrl+E
       });
       await waitFor(() => {
-        expect(props.buffer.move).toHaveBeenCalledWith('end');
+        expect(fixture.props.buffer.move).toHaveBeenCalledWith('end');
       });
-      expect(props.buffer.moveToOffset).not.toHaveBeenCalled();
+      expect(fixture.props.buffer.moveToOffset).not.toHaveBeenCalled();
       unmount();
     });
   });
@@ -617,12 +409,12 @@ describe('InputPrompt', () => {
   // and so asserted a mode the product does not implement.
   describe('command search (Ctrl+R in shell mode)', () => {
     it('enters command search on Ctrl+R and shows suggestions', async () => {
-      props.shellModeActive = true;
+      fixture.props.shellModeActive = true;
 
       (
         useReverseSearchCompletion as Mock<typeof useReverseSearchCompletion>
       ).mockImplementation((buffer, data, isActive) => ({
-        ...mockReverseSearchCompletion,
+        ...fixture.mockReverseSearchCompletion,
         suggestions: isActive
           ? [
               { label: 'git commit -m "msg"', value: 'git commit -m "msg"' },
@@ -634,7 +426,7 @@ describe('InputPrompt', () => {
       }));
 
       const { stdin, stdout, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
+        <InputPrompt {...fixture.props} />,
       );
 
       await act(async () => {
@@ -651,13 +443,13 @@ describe('InputPrompt', () => {
     });
 
     it('expands and collapses long suggestion via Right/Left arrows', async () => {
-      props.shellModeActive = true;
+      fixture.props.shellModeActive = true;
       const longValue = 'l'.repeat(200);
 
       (
         useReverseSearchCompletion as Mock<typeof useReverseSearchCompletion>
       ).mockReturnValue({
-        ...mockReverseSearchCompletion,
+        ...fixture.mockReverseSearchCompletion,
         suggestions: [{ label: longValue, value: longValue, matchedIndex: 0 }],
         showSuggestions: true,
         activeSuggestionIndex: 0,
@@ -666,7 +458,7 @@ describe('InputPrompt', () => {
       });
 
       const { stdin, stdout, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
+        <InputPrompt {...fixture.props} />,
       );
 
       // The ←/→ expand affordance shipped with the original Ctrl+R feature
@@ -698,8 +490,8 @@ describe('InputPrompt', () => {
     });
 
     it('renders match window and expanded view (snapshots)', async () => {
-      props.shellModeActive = true;
-      props.buffer.setText('commit');
+      fixture.props.shellModeActive = true;
+      fixture.props.buffer.setText('commit');
 
       const label = 'git commit -m "feat: add search" in src/app';
       const matchedIndex = label.indexOf('commit');
@@ -707,7 +499,7 @@ describe('InputPrompt', () => {
       (
         useReverseSearchCompletion as Mock<typeof useReverseSearchCompletion>
       ).mockReturnValue({
-        ...mockReverseSearchCompletion,
+        ...fixture.mockReverseSearchCompletion,
         suggestions: [{ label, value: label, matchedIndex }],
         showSuggestions: true,
         activeSuggestionIndex: 0,
@@ -716,7 +508,7 @@ describe('InputPrompt', () => {
       });
 
       const { stdin, stdout, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
+        <InputPrompt {...fixture.props} />,
       );
 
       await act(async () => {
@@ -741,13 +533,13 @@ describe('InputPrompt', () => {
     });
 
     it('does not show expand/collapse indicator for short suggestions', async () => {
-      props.shellModeActive = true;
+      fixture.props.shellModeActive = true;
       const shortValue = 'echo hello';
 
       (
         useReverseSearchCompletion as Mock<typeof useReverseSearchCompletion>
       ).mockReturnValue({
-        ...mockReverseSearchCompletion,
+        ...fixture.mockReverseSearchCompletion,
         suggestions: [{ label: shortValue, value: shortValue }],
         showSuggestions: true,
         activeSuggestionIndex: 0,
@@ -756,7 +548,7 @@ describe('InputPrompt', () => {
       });
 
       const { stdin, stdout, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
+        <InputPrompt {...fixture.props} />,
       );
 
       await act(async () => {
@@ -803,8 +595,8 @@ describe('InputPrompt', () => {
         expectedAcceptCall,
       }) => {
         const mockAccept = vi.fn();
-        mockedUseCommandCompletion.mockReturnValue({
-          ...mockCommandCompletion,
+        fixture.mockedUseCommandCompletion.mockReturnValue({
+          ...fixture.mockCommandCompletion,
           showSuggestions,
           suggestions: [...suggestions],
           promptCompletion: {
@@ -818,7 +610,7 @@ describe('InputPrompt', () => {
         });
 
         const { stdin, unmount } = renderWithProviders(
-          <InputPrompt {...props} />,
+          <InputPrompt {...fixture.props} />,
         );
 
         await act(async () => {
@@ -842,6 +634,60 @@ describe('InputPrompt', () => {
   });
 
   describe('mouse interaction', () => {
+    const nativePlatform = process.platform;
+    beforeEach(() => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      enableMouseEvents();
+    });
+    afterEach(() => {
+      disableMouseEvents();
+      Object.defineProperty(process, 'platform', { value: nativePlatform });
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    it('pastes PRIMARY once on middle press and ignores the generic release', async () => {
+      vi.spyOn(primarySelection, 'readPrimarySelection').mockResolvedValue(
+        ['PRIMARY_1', 'PRIMARY_2', 'PRIMARY_3', 'PRIMARY_4'].join(
+          String.fromCharCode(10),
+        ),
+      );
+      const rendered = renderWithProviders(
+        <InputPromptWithRealBuffer {...fixture.props} />,
+        { mouseEventsEnabled: true },
+      );
+
+      await act(async () => {
+        const escape = String.fromCharCode(27);
+        rendered.stdin.write(`${escape}[<1;10;2M${escape}[<3;10;2m`);
+      });
+      await waitFor(() =>
+        expect(rendered.stdout.lastFrame()).toContain('[4 lines pasted #1]'),
+      );
+      expect(rendered.stdout.lastFrame()).not.toContain('#2');
+      rendered.unmount();
+    });
+
+    it.each([
+      { name: 'an inactive prompt', focus: false },
+      { name: 'embedded shell focus', isEmbeddedShellFocused: true },
+    ])('ignores PRIMARY while $name', async (overrides) => {
+      vi.spyOn(primarySelection, 'readPrimarySelection').mockResolvedValue(
+        'PRIVATE_PRIMARY_SELECTION',
+      );
+      const rendered = renderWithProviders(
+        <InputPromptWithRealBuffer {...{ ...fixture.props, ...overrides }} />,
+        { mouseEventsEnabled: true },
+      );
+      const escape = String.fromCharCode(27);
+      await act(async () => {
+        rendered.stdin.write(`${escape}[<1;10;2M`);
+      });
+      expect(rendered.stdout.lastFrame()).not.toContain(
+        'PRIVATE_PRIMARY_SELECTION',
+      );
+      rendered.unmount();
+    });
+
     it.each([
       {
         name: 'first line, first char',
@@ -874,18 +720,21 @@ describe('InputPrompt', () => {
     ])(
       'should move cursor on mouse click - $name',
       async ({ relX, relY, mouseCol, mouseRow }) => {
-        props.buffer.text = 'hello world\nsecond line';
-        props.buffer.lines = ['hello world', 'second line'];
-        props.buffer.viewportVisualLines = ['hello world', 'second line'];
-        props.buffer.visualToLogicalMap = [
+        fixture.props.buffer.text = 'hello world\nsecond line';
+        fixture.props.buffer.lines = ['hello world', 'second line'];
+        fixture.props.buffer.viewportVisualLines = [
+          'hello world',
+          'second line',
+        ];
+        fixture.props.buffer.visualToLogicalMap = [
           [0, 0],
           [1, 0],
         ];
-        props.buffer.visualCursor = [0, 11];
-        props.buffer.visualScrollRow = 0;
+        fixture.props.buffer.visualCursor = [0, 11];
+        fixture.props.buffer.visualScrollRow = 0;
 
         const { stdin, stdout, unmount } = renderWithProviders(
-          <InputPrompt {...props} />,
+          <InputPrompt {...fixture.props} />,
           { mouseEventsEnabled: true },
         );
 
@@ -901,10 +750,9 @@ describe('InputPrompt', () => {
         });
 
         await waitFor(() => {
-          expect(props.buffer.moveToVisualPosition).toHaveBeenCalledWith(
-            relY,
-            relX,
-          );
+          expect(
+            fixture.props.buffer.moveToVisualPosition,
+          ).toHaveBeenCalledWith(relY, relX);
         });
 
         unmount();

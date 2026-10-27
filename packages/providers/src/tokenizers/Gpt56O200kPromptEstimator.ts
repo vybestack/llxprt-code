@@ -105,10 +105,6 @@ function countProjectionTokens(
   return total;
 }
 
-function formatCausalDetail(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 export async function prepareGpt56RuntimeTokenizer(
   activeProvider: string,
   canonicalModel: string,
@@ -121,7 +117,7 @@ export async function prepareGpt56RuntimeTokenizer(
     throw new ModelPromptEstimatorError(
       'asset-unavailable',
       createGpt56ErrorContext(activeProvider, canonicalModel),
-      `verify the local @dqbd/tiktoken o200k_base assets are installed and intact; cause: ${formatCausalDetail(error)}`,
+      'verify the local @dqbd/tiktoken o200k_base assets are installed and intact',
       { cause: error },
     );
   }
@@ -132,7 +128,7 @@ export async function prepareGpt56RuntimeTokenizer(
     throw new ModelPromptEstimatorError(
       'tokenization-failed',
       createGpt56ErrorContext(activeProvider, canonicalModel),
-      `verify the local @dqbd/tiktoken o200k_base encoder can encode ordinary text; cause: ${formatCausalDetail(error)}`,
+      'verify the local @dqbd/tiktoken o200k_base encoder can encode ordinary text',
       { cause: error },
     );
   }
@@ -176,7 +172,7 @@ async function estimateGpt56PromptWithEncoder(
     throw new ModelPromptEstimatorError(
       'asset-unavailable',
       createErrorContext(request),
-      `verify the local @dqbd/tiktoken o200k_base assets are installed and intact; cause: ${formatCausalDetail(error)}`,
+      'verify the local @dqbd/tiktoken o200k_base assets are installed and intact',
       { cause: error },
     );
   }

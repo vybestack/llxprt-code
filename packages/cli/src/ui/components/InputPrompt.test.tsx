@@ -12,7 +12,6 @@ import { renderWithProviders } from '../../__tests__/render.js';
 import { waitFor } from '../../__tests__/async.js';
 import { act } from 'react';
 import { FAST_RETURN_TIMEOUT } from '../contexts/KeypressContext.js';
-import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { InputPromptProps } from './InputPrompt.js';
 import { InputPrompt } from './InputPrompt.js';
 import type { TextBuffer } from './shared/text-buffer.js';
@@ -619,16 +618,14 @@ describe('InputPrompt', () => {
       unmount();
     });
 
-    it('should handle errors during clipboard operations', async () => {
-      // The handler reports through the telemetry debug logger, not console.
-      const debugErrorSpy = vi
-        .spyOn(debugLogger, 'error')
-        .mockImplementation(() => {});
+    it('reports a safe clipboard failure without leaking the backend error', async () => {
       (
         clipboardUtils.clipboardHasImage as Mock<
           typeof clipboardUtils.clipboardHasImage
         >
-      ).mockRejectedValue(new Error('Clipboard error'));
+      ).mockRejectedValue(new Error('PRIVATE clipboard backend body'));
+      const reported: Array<string | null> = [];
+      props.setQueueErrorMessage = (message) => reported.push(message);
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
@@ -638,14 +635,13 @@ describe('InputPrompt', () => {
         stdin.write('\x16'); // Ctrl+V
       });
       await waitFor(() => {
-        expect(debugErrorSpy).toHaveBeenCalledWith(
-          'Error handling clipboard paste:',
-          expect.any(Error),
-        );
+        expect(reported.join(' ')).toContain('Unable to read the clipboard');
       });
+      expect(reported.join(' ')).not.toContain('PRIVATE');
       expect(mockBuffer.setText).not.toHaveBeenCalled();
+      expect(mockBuffer.handleInput).not.toHaveBeenCalled();
+      expect(mockBuffer.insert).not.toHaveBeenCalled();
 
-      debugErrorSpy.mockRestore();
       unmount();
     });
   });

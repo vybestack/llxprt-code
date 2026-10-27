@@ -25,14 +25,42 @@ export type O200kBaseEncoder = ReturnType<TiktokenModule['get_encoding']>;
 export const loadTiktokenModule: TiktokenModuleLoader = () =>
   import('@dqbd/tiktoken');
 
-let sharedEncoder: Promise<O200kBaseEncoder> | undefined;
-
 async function createEncoder(
   loadModule: TiktokenModuleLoader,
 ): Promise<O200kBaseEncoder> {
   const { get_encoding } = await loadModule();
   return get_encoding('o200k_base');
 }
+
+export type O200kBaseEncoderResolver = () => Promise<O200kBaseEncoder>;
+
+/**
+ * Cache a successfully initialized encoder, but never a failed attempt.
+ *
+ * Concurrent callers share the one in-flight attempt, so a failure is
+ * surfaced to each of them. The failed attempt is then dropped, and the next
+ * independent call initializes again instead of replaying a stale rejection
+ * for the life of the process. There is no retry loop here: a retry happens
+ * only because a caller asked again. At most one attempt is ever pending, so
+ * a failed attempt can only clear its own entry.
+ */
+function createRetainOnSuccessResolver(
+  loadModule: TiktokenModuleLoader,
+): O200kBaseEncoderResolver {
+  let pending: Promise<O200kBaseEncoder> | undefined;
+  return () => {
+    if (pending === undefined) {
+      const attempt = createEncoder(loadModule);
+      pending = attempt;
+      attempt.catch(() => {
+        pending = undefined;
+      });
+    }
+    return pending;
+  };
+}
+
+const resolveSharedEncoder = createRetainOnSuccessResolver(loadTiktokenModule);
 
 /**
  * Resolve the process-wide `o200k_base` encoder.
@@ -48,20 +76,16 @@ export function getO200kBaseEncoder(
   if (loadModule !== loadTiktokenModule) {
     return createEncoder(loadModule);
   }
-  sharedEncoder ??= createEncoder(loadModule);
-  return sharedEncoder;
+  return resolveSharedEncoder();
 }
-
-export type O200kBaseEncoderResolver = () => Promise<O200kBaseEncoder>;
 
 export function createO200kBaseEncoderResolver(
   loadModule: TiktokenModuleLoader = loadTiktokenModule,
 ): O200kBaseEncoderResolver {
   if (loadModule === loadTiktokenModule) {
-    return () => getO200kBaseEncoder();
+    return resolveSharedEncoder;
   }
-  let encoder: Promise<O200kBaseEncoder> | undefined;
-  return () => (encoder ??= getO200kBaseEncoder(loadModule));
+  return createRetainOnSuccessResolver(loadModule);
 }
 
 /**

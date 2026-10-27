@@ -26,20 +26,24 @@ import type { InputHandlerDeps } from './inputPromptKeyHandlers.js';
 import { handleInputKey } from './inputPromptKeyHandlers.js';
 import {
   expandLargePastePlaceholders,
+  handleLargePaste,
   insertPathReference,
 } from './inputPromptText.js';
 import type {
   InputPromptProps,
   InputPromptRuntimeProps,
 } from './inputPromptTypes.js';
-import { logicalPosToOffset } from './shared/buffer-operations.js';
 import type { TextBuffer } from './shared/text-buffer.js';
 
-import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import clipboardy from 'clipboardy';
 import type { SessionIdentity } from '../cliUiRuntime.js';
+import {
+  getMouseEventsGeneration,
+  isMouseEventsActive,
+} from '../utils/mouse.js';
+import { readPrimarySelection } from '../utils/primarySelection.js';
 
 // ---------------------------------------------------------------------------
 // Custom hooks
@@ -153,34 +157,40 @@ const useSubmitHandlers = (
 const useClipboardPasteHandler = (
   buffer: TextBuffer,
   session: SessionIdentity,
-) =>
-  useCallback(async () => {
+  pasteText: (text: string) => void,
+  reportError: ((message: string | null) => void) | undefined,
+  captureOwnership: () => () => boolean,
+): (() => Promise<void>) => {
+  const latest = useRef({ buffer, session, pasteText, reportError });
+  latest.current = { buffer, session, pasteText, reportError };
+  return useCallback(async () => {
+    const isCurrent = captureOwnership();
+    if (!isCurrent()) return;
     try {
-      if (await clipboardHasImage()) {
-        const targetDir = session.getTargetDir();
+      const hasImage = await clipboardHasImage();
+      if (!isCurrent()) return;
+      if (hasImage) {
+        const targetDir = latest.current.session.getTargetDir();
         const imagePath = await saveClipboardImage(targetDir);
+        if (!isCurrent()) return;
         if (imagePath) {
           cleanupOldClipboardImages(targetDir).catch(() => {});
           const relativePath = path.relative(targetDir, imagePath);
-          insertPathReference(buffer, relativePath);
+          insertPathReference(latest.current.buffer, relativePath);
         }
         return;
       }
 
-      try {
-        const text = await clipboardy.read();
-        if (text !== '') {
-          const [row, col] = buffer.cursor;
-          const offset = logicalPosToOffset(buffer.lines, row, col);
-          buffer.replaceRangeByOffset(offset, offset, text);
-        }
-      } catch {
-        // clipboard read can fail on Wayland, SSH, headless, etc.
-      }
-    } catch (error) {
-      debugLogger.error('Error handling clipboard paste:', error);
+      const text = await clipboardy.read();
+      if (isCurrent() && text !== '') latest.current.pasteText(text);
+    } catch {
+      if (isCurrent())
+        latest.current.reportError?.(
+          'Unable to read the clipboard. Check desktop clipboard access, or use your terminal paste shortcut.',
+        );
     }
-  }, [buffer, session]);
+  }, [captureOwnership]);
+};
 
 type InputPromptState = Pick<
   InputPromptProps,
@@ -200,6 +210,7 @@ type InputPromptState = Pick<
   | 'setQueueErrorMessage'
   | 'streamingState'
   | 'focus'
+  | 'isEmbeddedShellFocused'
   | 'queuedSubmissionCount'
   | 'sendAllQueuedSubmissions'
   | 'steerAllQueuedSubmissions'
@@ -233,6 +244,7 @@ export type InputPromptStateResult = Pick<
   | 'reverseSearchActive'
 > & {
   handleClipboardPaste: () => Promise<void>;
+  handlePrimaryPaste: () => Promise<void>;
   handleInput: (key: Key) => void;
 };
 
@@ -450,6 +462,85 @@ const useInputHandler = (
     ],
   );
 
+const usePasteOwnership = (active: boolean): (() => () => boolean) => {
+  const ownershipGeneration = useRef(0);
+  const latestActive = useRef(active);
+  latestActive.current = active;
+  useEffect(() => {
+    const generation = ownershipGeneration;
+    generation.current++;
+    return () => {
+      generation.current++;
+    };
+  }, [active]);
+  const captureOwnership = useCallback((): (() => boolean) => {
+    const generation = ownershipGeneration.current;
+    return () =>
+      latestActive.current && generation === ownershipGeneration.current;
+  }, []);
+  return captureOwnership;
+};
+
+const useDesktopPaste = (
+  buffer: TextBuffer,
+  session: SessionIdentity,
+  nextPlaceholderIdRef: React.MutableRefObject<number>,
+  pendingLargePastesRef: React.MutableRefObject<Map<string, string>>,
+  reportError: ((message: string | null) => void) | undefined,
+  captureOwnership: () => () => boolean,
+): Pick<
+  InputPromptStateResult,
+  'handleClipboardPaste' | 'handlePrimaryPaste'
+> => {
+  const latestBuffer = useRef(buffer);
+  latestBuffer.current = buffer;
+  const latestReportError = useRef(reportError);
+  latestReportError.current = reportError;
+  const pasteText = useCallback(
+    (text: string): void => {
+      handleLargePaste(
+        {
+          name: 'paste',
+          sequence: text,
+          ctrl: false,
+          meta: false,
+          shift: false,
+        },
+        latestBuffer.current,
+        nextPlaceholderIdRef,
+        pendingLargePastesRef,
+      );
+    },
+    [nextPlaceholderIdRef, pendingLargePastesRef],
+  );
+  const handleClipboardPaste = useClipboardPasteHandler(
+    buffer,
+    session,
+    pasteText,
+    reportError,
+    captureOwnership,
+  );
+  const handlePrimaryPaste = useCallback(async (): Promise<void> => {
+    const ownsPrompt = captureOwnership();
+    const mouseGeneration = getMouseEventsGeneration();
+    const isCurrent = (): boolean =>
+      ownsPrompt() &&
+      isMouseEventsActive() &&
+      mouseGeneration === getMouseEventsGeneration();
+    if (!isCurrent()) return;
+    try {
+      const text = await readPrimarySelection();
+      if (isCurrent() && text !== '') pasteText(text);
+    } catch {
+      if (isCurrent())
+        latestReportError.current?.(
+          'Unable to read the Linux PRIMARY selection. Check local desktop access and install the appropriate selection tool: wl-clipboard on Wayland, or xclip/xsel on X11.',
+        );
+    }
+  }, [pasteText, captureOwnership]);
+  return { handleClipboardPaste, handlePrimaryPaste };
+};
+
 const useInputPromptState = (
   state: InputPromptState,
 ): InputPromptStateResult => {
@@ -482,9 +573,16 @@ const useInputPromptState = (
     completionState.reverseSearchCompletion.resetCompletionState,
   );
   usePendingPastePruning(state.buffer, state.pendingLargePastesRef);
-  const handleClipboardPaste = useClipboardPasteHandler(
+  const captureOwnership = usePasteOwnership(
+    state.focus !== false && state.isEmbeddedShellFocused !== true,
+  );
+  const { handleClipboardPaste, handlePrimaryPaste } = useDesktopPaste(
     state.buffer,
     state.config,
+    state.nextPlaceholderIdRef,
+    state.pendingLargePastesRef,
+    state.setQueueErrorMessage,
+    captureOwnership,
   );
   const handleInput = useInputHandler(
     state,
@@ -502,6 +600,7 @@ const useInputPromptState = (
     shellPathCompletion: completionState.shellPathCompletion,
     reverseSearchActive: completionState.reverseSearchActive,
     handleClipboardPaste,
+    handlePrimaryPaste,
     handleInput,
   };
 };
@@ -533,6 +632,12 @@ export const useMousePaste = (
       if (focus !== true || isEmbeddedShellFocused === true) return;
       if (event.name === 'right-release') {
         void state.handleClipboardPaste();
+      } else if (
+        event.name === 'middle-press' &&
+        process.platform === 'linux' &&
+        isMouseEventsActive()
+      ) {
+        void state.handlePrimaryPaste();
       }
     },
     [focus, isEmbeddedShellFocused, state],

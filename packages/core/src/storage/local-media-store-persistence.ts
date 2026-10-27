@@ -4,17 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   lstat,
   open,
   readFile,
+  realpath,
   rename,
   unlink,
   utimes,
 } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import { isAbsolute, join } from 'node:path';
+import { startMediaQueueWaitWarning } from './local-media-store-queue-diagnostics.js';
 import {
   isMediaReferenceBlock,
   type MediaReferenceBlock,
@@ -32,12 +35,10 @@ import {
   type LocalMediaStoreOptions,
   type MediaReclamationResult,
   type PublishedMediaObjectPath,
-  type ReservationRecord,
   type StoreLockOwner,
 } from './local-media-store-types.js';
 import {
   LOCK_VERSION,
-  RESERVATION_VERSION,
   contentIdFor,
   hasErrnoCode,
   isNonNegativeSafeInteger,
@@ -57,6 +58,15 @@ const DEFAULT_RESERVATION_LEASE_MS = 30_000;
 const DEFAULT_QUOTA_SCAN_MAX_ENTRIES = 10_000;
 const LOCK_RETRY_MS = 10;
 
+interface StoreQueueTurn {
+  readonly root: string;
+  active: boolean;
+}
+
+const storeQueueContext = new AsyncLocalStorage<readonly StoreQueueTurn[]>();
+const storeQueueTails = new Map<string, Promise<void>>();
+let storeQueueRegistration = Promise.resolve();
+
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -75,7 +85,6 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
   private readonly quotaScanMaxEntries: number;
   private readonly operations = new Set<Promise<unknown>>();
   private readonly lockLifetime: 'operation' | 'store';
-  private exclusiveQueue: Promise<void> = Promise.resolve();
   private heldLock:
     | { readonly owner: StoreLockOwner; readonly heartbeat: LeaseHeartbeat }
     | undefined;
@@ -149,19 +158,67 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
       );
     }
     this.assertOpen(operation, contentId);
-    const pending = this.exclusiveQueue.then(() =>
-      this.executeExclusive(operation, contentId, work),
-    );
-    this.exclusiveQueue = pending.then(
-      () => undefined,
-      () => undefined,
-    );
+    const pending = this.enqueueExclusive(operation, contentId, work);
     this.operations.add(pending);
     try {
       return await pending;
     } finally {
       this.operations.delete(pending);
     }
+  }
+
+  private enqueueExclusive<T>(
+    operation: string,
+    contentId: string | undefined,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const registered = storeQueueRegistration.then(async () => {
+      await this.files.ensureDirectory(
+        this.rootDirectory,
+        contentId,
+        'initialize directories',
+      );
+      const root = await realpath(this.rootDirectory);
+      const ancestors = storeQueueContext.getStore() ?? [];
+      if (ancestors.some((turn) => turn.active && turn.root === root)) {
+        throw new MediaStoreError(
+          operation,
+          contentId,
+          new Error(
+            'Cannot run reentrant exclusive work on the same media root',
+          ),
+        );
+      }
+      const previous = storeQueueTails.get(root);
+      const stopWaitWarning = previous
+        ? startMediaQueueWaitWarning(root, operation)
+        : undefined;
+      const pending = (previous ?? Promise.resolve()).then(async () => {
+        stopWaitWarning?.();
+        const turn: StoreQueueTurn = { root, active: true };
+        try {
+          return await storeQueueContext.run([...ancestors, turn], () =>
+            this.executeExclusive(operation, contentId, work),
+          );
+        } finally {
+          turn.active = false;
+        }
+      });
+      const settled = pending.then(
+        () => {},
+        () => {},
+      );
+      storeQueueTails.set(root, settled);
+      void settled.then(() => {
+        if (storeQueueTails.get(root) === settled) storeQueueTails.delete(root);
+      });
+      return { pending };
+    });
+    storeQueueRegistration = registered.then(
+      () => {},
+      () => {},
+    );
+    return registered.then(({ pending }) => pending);
   }
 
   private async executeExclusive<T>(
@@ -706,33 +763,6 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
     }
   }
 
-  private async rollbackReservationAfterReadFailure(
-    objects: readonly MediaStoredObject[],
-    ownerDigest: string,
-    error: unknown,
-  ): Promise<never> {
-    const failures: unknown[] = [];
-    for (const object of objects) {
-      try {
-        await this.removeReservation(object.contentId, ownerDigest);
-      } catch (cleanupError) {
-        failures.push(cleanupError);
-      }
-    }
-    try {
-      await this.files.syncDirectory(this.files.reservationDirectory);
-    } catch (cleanupError) {
-      failures.push(cleanupError);
-    }
-    if (failures.length > 0) {
-      throw new AggregateError(
-        [error, ...failures],
-        'Media reservation and verification cleanup failed',
-      );
-    }
-    throw error;
-  }
-
   async reserveUnlocked(
     reference: MediaReferenceBlock,
     ownerId: string,
@@ -802,35 +832,5 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
         );
       }
     }
-  }
-
-  private buildReservationRecord(
-    objects: readonly MediaStoredObject[],
-    ownerDigest: string,
-  ): ReservationRecord {
-    const now = Date.now();
-    return {
-      version: RESERVATION_VERSION,
-      ownerDigest,
-      instanceId: this.instanceId,
-      pid: process.pid,
-      hostname: hostname(),
-      createdAt: now,
-      expiresAt: now + this.reservationLeaseMs,
-      relatedContentIds: objects.map((object) => object.contentId),
-    };
-  }
-
-  private reservationMatches(
-    record: ReservationRecord,
-    objects: readonly MediaStoredObject[],
-  ): boolean {
-    const contentIds = objects.map((object) => object.contentId);
-    return (
-      record.relatedContentIds.length === contentIds.length &&
-      record.relatedContentIds.every(
-        (contentId, index) => contentId === contentIds[index],
-      )
-    );
   }
 }

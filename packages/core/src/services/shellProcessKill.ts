@@ -205,6 +205,72 @@ export async function reapProcessGroup(
 }
 
 /**
+ * In-flight {@link terminateOwnedProcessGroup} chains by group id, so
+ * explicit termination and shutdown disposal of the same group share one
+ * TERM → KILL → reap sequence instead of racing two. An entry lives only
+ * while its chain runs.
+ */
+const ownedGroupTerminations = new Map<number, Promise<boolean>>();
+
+/**
+ * Wait until no {@link terminateOwnedProcessGroup} chain is in flight, however
+ * it was started (explicit termination, shutdown disposal, or an earlier
+ * disposal that is still escalating). Chains are independent of the PTY
+ * registry, which empties as soon as a leader exits, so a caller that is about
+ * to exit must wait on the chains themselves. Chains started while waiting are
+ * waited for too. Never rejects.
+ */
+export async function awaitOwnedGroupTerminations(): Promise<void> {
+  while (ownedGroupTerminations.size > 0) {
+    await Promise.allSettled([...ownedGroupTerminations.values()]);
+  }
+}
+
+/**
+ * Terminate a process group that the caller spawned and owns: SIGTERM, a
+ * grace period that ends early once the group is empty, then SIGKILL gated on
+ * GROUP liveness, then the bounded reap. The first signal is sent
+ * synchronously. Unlike a timer hung on the PTY registry entry, the sequence
+ * does not depend on the leader still being tracked: a leader that exits on
+ * SIGTERM must not stop the escalation of a member that ignores it
+ * (Issue #3517). Resolves true when the group is confirmed empty; never
+ * rejects. Only pids that are valid group targets are signalled.
+ */
+export function terminateOwnedProcessGroup(pid: number): Promise<boolean> {
+  if (!isGroupTargetPid(pid)) {
+    return Promise.resolve(true);
+  }
+  const inFlight = ownedGroupTerminations.get(pid);
+  if (inFlight !== undefined) {
+    return inFlight;
+  }
+  try {
+    process.kill(-pid, 'SIGTERM');
+  } catch {
+    // Process group may already be terminated.
+  }
+  const chain = (async (): Promise<boolean> => {
+    try {
+      if (await reapProcessGroup(pid, SIGKILL_TIMEOUT_MS)) {
+        return true;
+      }
+      try {
+        process.kill(-pid, 'SIGKILL');
+      } catch {
+        // Process group may already be terminated.
+      }
+      return await reapProcessGroup(pid);
+    } catch {
+      return false;
+    } finally {
+      ownedGroupTerminations.delete(pid);
+    }
+  })();
+  ownedGroupTerminations.set(pid, chain);
+  return chain;
+}
+
+/**
  * Send SIGTERM then, after a short grace period, SIGKILL to a Unix
  * process group. Escalation is gated on GROUP liveness, not on the direct
  * child the {@link ExitGuard} tracks: when the child dies from the SIGTERM

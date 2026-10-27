@@ -151,6 +151,7 @@ export function createRuntimeTokenizerFactory(
       const claudeTokenizer = createClaudeRuntimeTokenizer(
         providerName,
         resolvedModel,
+        resolveGpt56Encoder,
       );
       if (claudeTokenizer !== undefined) {
         return claudeTokenizer;
