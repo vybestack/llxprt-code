@@ -4,17 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   lstat,
   open,
   readFile,
+  realpath,
   rename,
   unlink,
   utimes,
 } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import { isAbsolute, join } from 'node:path';
+import { startMediaQueueWaitWarning } from './local-media-store-queue-diagnostics.js';
 import {
   isMediaReferenceBlock,
   type MediaReferenceBlock,
@@ -56,6 +59,15 @@ const DEFAULT_STALE_LOCK_MS = 30_000;
 const DEFAULT_RESERVATION_LEASE_MS = 30_000;
 const DEFAULT_QUOTA_SCAN_MAX_ENTRIES = 10_000;
 const LOCK_RETRY_MS = 10;
+
+interface StoreQueueTurn {
+  readonly root: string;
+  active: boolean;
+}
+
+const storeQueueContext = new AsyncLocalStorage<readonly StoreQueueTurn[]>();
+const storeQueueTails = new Map<string, Promise<void>>();
+let storeQueueRegistration = Promise.resolve();
 
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -124,13 +136,67 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
       );
     }
     this.assertOpen(operation, contentId);
-    const pending = this.executeExclusive(operation, contentId, work);
+    const pending = this.enqueueExclusive(operation, contentId, work);
     this.operations.add(pending);
     try {
       return await pending;
     } finally {
       this.operations.delete(pending);
     }
+  }
+
+  private enqueueExclusive<T>(
+    operation: string,
+    contentId: string | undefined,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const registered = storeQueueRegistration.then(async () => {
+      await this.files.ensureDirectory(
+        this.rootDirectory,
+        contentId,
+        'initialize directories',
+      );
+      const root = await realpath(this.rootDirectory);
+      const ancestors = storeQueueContext.getStore() ?? [];
+      if (ancestors.some((turn) => turn.active && turn.root === root)) {
+        throw new MediaStoreError(
+          operation,
+          contentId,
+          new Error(
+            'Cannot run reentrant exclusive work on the same media root',
+          ),
+        );
+      }
+      const previous = storeQueueTails.get(root);
+      const stopWaitWarning = previous
+        ? startMediaQueueWaitWarning(root, operation)
+        : undefined;
+      const pending = (previous ?? Promise.resolve()).then(async () => {
+        stopWaitWarning?.();
+        const turn: StoreQueueTurn = { root, active: true };
+        try {
+          return await storeQueueContext.run([...ancestors, turn], () =>
+            this.executeExclusive(operation, contentId, work),
+          );
+        } finally {
+          turn.active = false;
+        }
+      });
+      const settled = pending.then(
+        () => {},
+        () => {},
+      );
+      storeQueueTails.set(root, settled);
+      void settled.then(() => {
+        if (storeQueueTails.get(root) === settled) storeQueueTails.delete(root);
+      });
+      return { pending };
+    });
+    storeQueueRegistration = registered.then(
+      () => {},
+      () => {},
+    );
+    return registered.then(({ pending }) => pending);
   }
 
   private async executeExclusive<T>(

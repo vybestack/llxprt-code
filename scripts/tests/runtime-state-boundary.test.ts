@@ -338,6 +338,37 @@ describe('runtime boundary production runner', () => {
     expect(result.exitCode).toBe(1);
   });
 
+  it('allows only the exact media queue ancestry scope and still reports other ALS', () => {
+    const file = 'packages/core/src/storage/local-media-store-persistence.ts';
+    put(
+      file,
+      `import { AsyncLocalStorage } from 'node:async_hooks';
+      const storeQueueContext = new AsyncLocalStorage<readonly { root: string; active: boolean }[]>();
+      const identity = new AsyncLocalStorage<string>();`,
+    );
+    const otherFile = 'packages/core/src/storage/other.ts';
+    put(
+      otherFile,
+      `import { AsyncLocalStorage } from 'node:async_hooks';
+      const storeQueueContext = new AsyncLocalStorage<string>();`,
+    );
+    const result = auditRuntimeStateBoundary(workspace, {
+      ...policy,
+      sourceRoots: [...policy.sourceRoots, 'packages/core/src'],
+      alsRoots: ['packages/core/src'],
+      alsAllowances: productionPolicy.alsAllowances,
+    });
+    expect(
+      result.findings
+        .filter((finding) => finding.rule === 'async-local-storage')
+        .map((finding) => [finding.file, finding.declaration]),
+    ).toEqual([
+      [file, 'identity'],
+      [otherFile, 'storeQueueContext'],
+    ]);
+    expect(result.exitCode).toBe(1);
+  });
+
   describe('immutable lookup table allowlist', () => {
     const tableFile = 'packages/demo/src/runtime/table.ts';
     const tableSource = "export const labels = { a: 'x' } as const;";
