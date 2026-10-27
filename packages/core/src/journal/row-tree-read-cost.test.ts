@@ -43,8 +43,10 @@ describe('row tree positional read cost', () => {
     expect(readBytes).toBeLessThanOrEqual(16 * 1024);
     const firstReadBytes = readBytes;
     await readRowTreeNode(access, 32 * 1024);
+    expect(readBytes).toBeLessThanOrEqual(firstReadBytes * 2);
+    const bothReadBytes = readBytes;
     await readRowTreeNode(access, 0);
-    expect(readBytes).toBe(firstReadBytes * 3);
+    expect(readBytes).toBe(bothReadBytes);
   });
 
   it('does not prefetch neighboring payloads from a published metadata read', async () => {

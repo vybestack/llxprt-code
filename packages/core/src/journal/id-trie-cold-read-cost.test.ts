@@ -37,6 +37,7 @@ describe('cold id fact lookup read cost', () => {
         const cache = new BoundedIdNodeCache();
         const reader = fixture.reader(cache);
         fixture.reads.reads = 0;
+        fixture.reads.bytes = 0;
         for (const fact of facts.slice(0, 2048)) {
           expect(await reader.lookup(fixture.root, fact.hash)).toStrictEqual(
             fact.value,
@@ -44,9 +45,10 @@ describe('cold id fact lookup read cost', () => {
           expect(cache.bytes).toBeLessThanOrEqual(64 * 1024);
         }
         process.stdout.write(
-          `COLD_ID_READS ${JSON.stringify({ size, reads: fixture.reads.reads })}\n`,
+          `COLD_ID_READS ${JSON.stringify({ size, reads: fixture.reads.reads, bytes: fixture.reads.bytes })}\n`,
         );
         expect(fixture.reads.reads).toBeLessThanOrEqual(2048 * 1.5 + 273);
+        expect(fixture.reads.bytes).toBeLessThanOrEqual((2048 + 273) * 1024);
       } finally {
         await fixture.close();
       }

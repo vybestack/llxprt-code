@@ -15,8 +15,8 @@ import {
 import type { RecordAccess } from './recordAccess.js';
 import { RECORD_KIND } from './recordKinds.js';
 
-// Random paths cannot use the adjacent-node window. Half a KiB avoids
-// reading a full KiB for each small scalar leaf or internal node.
+// Random paths cannot use the adjacent-node window. Level-three buckets can
+// hold eight full facts; deeper sparse leaves and internal nodes need less.
 const RANDOM_NODE_PREFETCH_BYTES = 512;
 
 /**
@@ -46,7 +46,9 @@ export class IdTrieReader {
     const head = await this.access.readRecordHead(
       offset,
       'ITNODE',
-      readAhead ? ID_TRIE_PREFETCH_BYTES : RANDOM_NODE_PREFETCH_BYTES,
+      readAhead || depth === 3
+        ? ID_TRIE_PREFETCH_BYTES
+        : RANDOM_NODE_PREFETCH_BYTES,
       readAhead,
     );
     if (head.kind !== RECORD_KIND.ITNODE || head.bodyLen !== 0) {
