@@ -55,6 +55,7 @@ describe('actual native CLI source and prepared publication errors', () => {
               this: JournalHistoryStore,
               execute,
               ownerEdits,
+              appendOnly,
             ) {
               return prepare.call(
                 this,
@@ -63,6 +64,7 @@ describe('actual native CLI source and prepared publication errors', () => {
                   throw reason;
                 },
                 ownerEdits,
+                appendOnly,
               );
             });
           if (stage === 'abort')
