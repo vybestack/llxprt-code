@@ -1,4 +1,4 @@
-import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
+import { ProviderReadFixture } from './helpers/provider-read-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -9,16 +9,13 @@ import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import {
-  openRouteAAgent,
-  type RouteAAgent,
-} from '../../../agents/src/api/__tests__/helpers/route-a-agent.js';
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
   cleanupAfterFailure,
   runCleanupSteps,
-} from '../../../agents/src/core/subagent-cleanup.js';
-import { resolveProviderFilePolicy } from '../providerFilePolicy.js';
+} from '../../core/subagent-cleanup.js';
+import { resolveProviderFilePolicy } from '@vybestack/llxprt-code-providers';
 
 describe('isolated runtime owner activation', () => {
   const credentials = useOwnedCredentials();

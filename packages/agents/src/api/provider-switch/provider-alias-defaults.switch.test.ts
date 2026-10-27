@@ -1,7 +1,7 @@
 import { Config as RealConfig } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService as RealSettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { assembleModelSelection } from '../../../agents/src/api/model-selection.js';
+import { assembleModelSelection } from '../model-selection.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -13,7 +13,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const realProviderAliasesModule = {
-  ...(await import('../composition/providerAliases.js')),
+  ...(await import(
+    '@vybestack/llxprt-code-providers/composition/providerAliases.js'
+  )),
 };
 const realLlxprtCodeCoreModule = {
   ...(await import('@vybestack/llxprt-code-core')),
@@ -97,13 +99,16 @@ const mockProviderManager = {
 let stubSettingsService: StubSettingsServiceInstance;
 let stubConfig: StubConfigInstance;
 
-void vi.mock('../composition/providerAliases.js', () => {
-  const actual = realProviderAliasesModule;
-  return {
-    ...actual,
-    loadProviderAliasEntries: () => aliasEntries,
-  };
-});
+void vi.mock(
+  '@vybestack/llxprt-code-providers/composition/providerAliases.js',
+  () => {
+    const actual = realProviderAliasesModule;
+    return {
+      ...actual,
+      loadProviderAliasEntries: () => aliasEntries,
+    };
+  },
+);
 
 void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
@@ -121,12 +126,8 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
   };
 });
 
-const { switchActiveProvider } = await import(
-  '../../../agents/src/api/provider-switch/provider-switch.js'
-);
-const { setActiveModel } = await import(
-  '../../../agents/src/api/providerMutations.js'
-);
+const { switchActiveProvider } = await import('./provider-switch.js');
+const { setActiveModel } = await import('../providerMutations.js');
 
 const mockOAuthManager = {
   clearRetryHandlers: () => {},

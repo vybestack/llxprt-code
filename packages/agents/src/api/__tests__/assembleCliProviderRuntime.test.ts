@@ -1,4 +1,4 @@
-import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
+import { ProviderReadFixture } from './helpers/provider-read-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -18,17 +18,17 @@ import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquis
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
-import { OAuthManager } from '../auth/index.js';
-import { ProviderFileLifecycle } from '../providerFilePolicy.js';
-import { ProviderManager } from '../ProviderManager.js';
-import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
-import { createAgent } from '../../../agents/src/api/createAgent.js';
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
+import { createRuntimeTokenizerFactory } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
+import { createAgent } from '../createAgent.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
   acquirePreferredProviderManager,
   acquirePreferredOAuth,
   preparePreferredProviderCompletion,
-} from '../../../agents/src/api/preferred-provider-acquisition.js';
+} from '../preferred-provider-acquisition.js';
 
 describe('explicit provider primitives under the owning Agent assembly', () => {
   const credentials = useOwnedCredentials();

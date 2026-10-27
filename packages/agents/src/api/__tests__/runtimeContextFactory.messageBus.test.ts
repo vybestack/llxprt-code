@@ -13,21 +13,24 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { ProviderFileLifecycle, ProviderManager } from '../index.js';
+import {
+  ProviderFileLifecycle,
+  ProviderManager,
+} from '@vybestack/llxprt-code-providers';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   acquirePreferredProviderManager,
   acquirePreferredOAuth,
-} from '../../../agents/src/api/preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
+} from '../preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
 import {
   runCleanupSteps,
   cleanupAfterFailure,
-} from '../../../agents/src/core/subagent-cleanup.js';
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
-import type { OAuthManager } from '../auth/oauth-manager.js';
+} from '../../core/subagent-cleanup.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 
-describe('runtime/provider OAuth MessageBus seam integration', () => {
+describe('isolated runtime messageBus ownership', () => {
   const credentials = useOwnedCredentials();
   const retiring: Array<() => void | Promise<void>> = [];
   let config: Config;
@@ -112,15 +115,24 @@ describe('runtime/provider OAuth MessageBus seam integration', () => {
     }
   }
 
-  it('uses the exact owner-supplied session MessageBus for OAuth', async () => {
-    const sessionMessageBus = new MessageBus();
+  it('constructs a private bus when the owner does not supply one', async () => {
     await openCaller(
-      'runtime-auth-messagebus',
-      'runtime-auth-messagebus',
-      'runtime-auth-model',
-      sessionMessageBus,
+      'isolated-private-bus',
+      'message-bus-owner',
+      'model',
+      undefined,
     );
-    expect(oauth.runtimeMessageBus).toBe(sessionMessageBus);
+    expect(oauth.runtimeMessageBus).toBeInstanceOf(MessageBus);
     expect('providerManager' in config).toBe(false);
+  });
+  it('uses the exact MessageBus supplied by the owner', async () => {
+    const providedBus = new MessageBus();
+    await openCaller(
+      'isolated-provided-bus',
+      'message-bus-owner',
+      'model',
+      providedBus,
+    );
+    expect(oauth.runtimeMessageBus).toBe(providedBus);
   });
 });

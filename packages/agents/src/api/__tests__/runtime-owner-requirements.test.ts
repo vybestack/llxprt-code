@@ -6,9 +6,9 @@
 import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-import { fromConfig } from '../../../agents/src/api/fromConfig.js';
-import { prepareAgentPreflight } from '../../../agents/src/api/profile-preflight.js';
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { fromConfig } from '../fromConfig.js';
+import { prepareAgentPreflight } from '../profile-preflight.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 describe('isolated runtime construction requirements', () => {
   const credentials = useOwnedCredentials();

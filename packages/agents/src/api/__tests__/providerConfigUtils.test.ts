@@ -7,12 +7,12 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { afterEach } from 'bun:test';
-import { ProviderManager } from '../ProviderManager.js';
-import { OpenAIProvider } from '../openai/OpenAIProvider.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
+import { OpenAIProvider } from '@vybestack/llxprt-code-providers';
 import {
   setProviderApiKey,
   setProviderBaseUrl,
-} from '../../../agents/src/api/providerConfigUtils.js';
+} from '../providerConfigUtils.js';
 
 describe('providerConfigUtils owner mutations', () => {
   let settings: SettingsService;

@@ -11,10 +11,10 @@ import { join } from 'node:path';
 
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-import { fromConfig } from '../../../agents/src/api/fromConfig.js';
-import { captureAgentPreflightHostInput } from '../../../agents/src/api/preflight-host-input.js';
-import type { AgentPreflightHostInput } from '../../../agents/src/api/preflight-host-input.js';
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { fromConfig } from '../fromConfig.js';
+import { captureAgentPreflightHostInput } from '../preflight-host-input.js';
+import type { AgentPreflightHostInput } from '../preflight-host-input.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 describe('explicit Agent adoption and preflight construction requirements @plan:ISSUE-3222 @requirement:REQ-3222-AC3', () => {
   const credentials = useOwnedCredentials();

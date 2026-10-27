@@ -1,38 +1,38 @@
-import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
+import { ProviderReadFixture } from './helpers/provider-read-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { ProviderFileLifecycle } from '../providerFilePolicy.js';
-import { configureProviderTokenizer } from '../composition/index.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 
 import {
   acquirePreferredOAuth,
   acquirePreferredProviderManager,
   preparePreferredProviderCompletion,
-} from '../../../agents/src/api/preferred-provider-acquisition.js';
+} from '../preferred-provider-acquisition.js';
 import {
   AgentProfilePreflight,
   prepareAgentPreflight,
-} from '../../../agents/src/api/profile-preflight.js';
-import { buildProviderContributionRegistry } from '../composition/runtimePlugins/index.js';
-import type { ProviderContributionRegistry } from '../composition/runtimePlugins/types.js';
-import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
+} from '../profile-preflight.js';
+import { buildProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
+import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
 
 import {
   createSessionAuthPolicyReader,
   createOwnedTokenStoreClose,
-} from '../composition/index.js';
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { createSessionMessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { createOwnerPolicyEvaluation } from '@vybestack/llxprt-code-core/policy/owner-policy-evaluation.js';
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
-import { OAuthManager } from '../auth/oauth-manager.js';
-import { createFileOAuthSettingsProvider } from '../auth/index.js';
+import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { createFileOAuthSettingsProvider } from '@vybestack/llxprt-code-providers/auth.js';
 
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
@@ -48,10 +48,10 @@ import {
   createProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { ProviderManager } from '../ProviderManager.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { IProvider } from '../IProvider.js';
+import type { IProvider } from '@vybestack/llxprt-code-providers/IProvider.js';
 
 class CacheProvider implements IProvider {
   readonly name = 'cache-provider';

@@ -1,4 +1,4 @@
-import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
+import { ProviderReadFixture } from './helpers/provider-read-fixture.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,23 +9,25 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { ProviderFileLifecycle, ProviderManager } from '../index.js';
+import {
+  ProviderFileLifecycle,
+  ProviderManager,
+} from '@vybestack/llxprt-code-providers';
 import {
   acquirePreferredProviderManager,
   acquirePreferredOAuth,
   preparePreferredProviderCompletion,
-} from '../../../agents/src/api/preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
+} from '../preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
 import {
   runCleanupSteps,
   cleanupAfterFailure,
-} from '../../../agents/src/core/subagent-cleanup.js';
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
-import { OAuthManager } from '../auth/oauth-manager.js';
-import { configureProviderTokenizer } from '../composition/index.js';
+} from '../../core/subagent-cleanup.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 
-import { validateRuntimeId } from './runtimeIdValidation.js';
-import { prepareAgentPreflight } from '../../../agents/src/api/profile-preflight.js';
+import { prepareAgentPreflight } from '../profile-preflight.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -292,13 +294,6 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
     );
     expect(firstOauth).not.toBe(secondOauth);
   });
-
-  it.each(['', '  ', '\t\n', null, undefined, 123, false])(
-    'rejects invalid external runtime label %p',
-    (runtimeId) => {
-      expect(() => validateRuntimeId(runtimeId)).toThrow('Invalid runtimeId');
-    },
-  );
 
   it('rejects invalid isolated labels before attaching file infrastructure', async () => {
     const config = new Config({

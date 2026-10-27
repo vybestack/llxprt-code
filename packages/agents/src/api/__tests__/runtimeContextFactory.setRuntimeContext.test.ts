@@ -10,20 +10,20 @@ import { join } from 'node:path';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { configureProviderTokenizer } from '../composition/index.js';
-import { ProviderManager } from '../ProviderManager.js';
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { ProviderFileLifecycle } from '../providerFilePolicy.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 
 import {
   acquirePreferredOAuth,
   acquirePreferredProviderManager,
   preparePreferredProviderCompletion,
-} from '../../../agents/src/api/preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
-import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
+} from '../preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 
 describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP4-004', () => {
   const credentials = useOwnedCredentials();

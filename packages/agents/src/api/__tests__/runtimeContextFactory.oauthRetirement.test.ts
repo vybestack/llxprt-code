@@ -9,18 +9,21 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { MemoryTokenStore } from '../auth/__tests__/behavioral/test-utils.js';
-import type { OAuthManager } from '../auth/oauth-manager.js';
-import type { OAuthProvider, OAuthToken } from '../auth/types.js';
-import { acquirePreferredOAuth } from '../../../agents/src/api/preferred-provider-acquisition.js';
-import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
+import { MemoryTokenStore } from './helpers/provider-auth-fixtures.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type {
+  OAuthProvider,
+  OAuthToken,
+} from '@vybestack/llxprt-code-providers/auth.js';
+import { acquirePreferredOAuth } from '../preferred-provider-acquisition.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { ProviderManager } from '../ProviderManager.js';
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 const PROVIDER = 'renewal-test-provider';
 const RENEWAL_WINDOW_MS = 11 * 60 * 1000;

@@ -10,18 +10,18 @@ import {
   createProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { ProviderManager } from '../ProviderManager.js';
-import { OpenAIProvider } from '../openai/OpenAIProvider.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
+import { OpenAIProvider } from '@vybestack/llxprt-code-providers';
 import {
   switchActiveProvider,
   DEFAULT_PRESERVE_EPHEMERALS,
-} from '../../../agents/src/api/provider-switch/provider-switch.js';
-import { OAuthManager } from '../auth/oauth-manager.js';
+} from './provider-switch.js';
+import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   MemoryTokenStore,
   createTestProvider,
   makeToken,
-} from '../auth/__tests__/behavioral/test-utils.js';
+} from '../__tests__/helpers/provider-auth-fixtures.js';
 
 class SubscriptionProvider extends OpenAIProvider {
   override readonly name = 'claudecode';

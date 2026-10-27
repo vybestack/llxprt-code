@@ -1,4 +1,4 @@
-import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
+import { ProviderReadFixture } from './helpers/provider-read-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -15,17 +15,17 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   installBorrowedConfigSettings,
   installOwnedConfig,
-} from '../__tests__/helpers/session-settings-owner-fixture.js';
+} from './helpers/session-settings-owner-fixture.js';
 import { mkdtemp, rm, writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { prepareAgentPreflight } from '../../../agents/src/api/profile-preflight.js';
-import { createAgent } from '../../../agents/src/api/createAgent.js';
-import { fromConfig } from '../../../agents/src/api/fromConfig.js';
+import { prepareAgentPreflight } from '../profile-preflight.js';
+import { createAgent } from '../createAgent.js';
+import { fromConfig } from '../fromConfig.js';
 
-import type { Agent } from '../../../agents/src/api/agent.js';
+import type { Agent } from '../agent.js';
 
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 const acquireSettings = installBorrowedConfigSettings();
 const acquireConfig = installOwnedConfig();
 function createConfig(sessionId: string): Config {
