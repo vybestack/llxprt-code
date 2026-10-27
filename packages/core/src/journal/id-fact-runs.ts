@@ -56,6 +56,54 @@ async function* mergeEntries(
   }
 }
 
+function newestMinimum(
+  heads: ReadonlyArray<IdEntry | undefined>,
+): IdEntry | undefined {
+  let selected: IdEntry | undefined;
+  for (const head of heads)
+    if (
+      head !== undefined &&
+      (selected === undefined || compareIdHashes(head.hash, selected.hash) <= 0)
+    )
+      selected = head;
+  return selected;
+}
+
+async function advanceHeads(
+  iterators: ReadonlyArray<AsyncIterator<IdEntry>>,
+  heads: Array<IdEntry | undefined>,
+  hash: Uint8Array,
+): Promise<void> {
+  for (let index = 0; index < heads.length; index++) {
+    const head = heads[index];
+    if (head === undefined || compareIdHashes(head.hash, hash) !== 0) continue;
+    const step = await iterators[index].next();
+    heads[index] = step.done === true ? undefined : step.value;
+  }
+}
+
+async function* overlayRuns(
+  sources: ReadonlyArray<AsyncIterable<IdEntry>>,
+): AsyncGenerator<IdEntry> {
+  const iterators = sources.map((source) => source[Symbol.asyncIterator]());
+  // One fact per run, not a materialized index. Runs are oldest first.
+  const heads: Array<IdEntry | undefined> = [];
+  try {
+    for (const iterator of iterators) {
+      const step = await iterator.next();
+      heads.push(step.done === true ? undefined : step.value);
+    }
+    for (;;) {
+      const selected = newestMinimum(heads);
+      if (selected === undefined) return;
+      yield selected;
+      await advanceHeads(iterators, heads, selected.hash);
+    }
+  } finally {
+    for (const iterator of iterators) await iterator.return?.();
+  }
+}
+
 /** Rebuild spills form sorted runs; equal levels merge once instead of updating a growing trie. */
 export class IdFactRuns {
   private readonly runs: FactRun[] = [];
@@ -157,10 +205,25 @@ export class IdFactRuns {
 
   async commit(): Promise<number> {
     if (this.runs.length === 0) return 0;
-    let result = this.runs[0];
-    for (const run of this.runs.slice(1))
-      result = await this.merge(result, run);
+    if (this.runs.length === 1) return this.runs[0].root;
+    const root = await mergeIdTrie(
+      this.spill.appender,
+      undefined,
+      0,
+      overlayRuns(this.runs.map((run) => this.reader().entries(run.root))),
+      this.cache,
+    );
+    await this.spill.appender.drain();
+    this.readableEnd = this.spill.appender.nextOffset;
+    const result: FactRun = {
+      root,
+      level: Math.max(...this.runs.map((run) => run.level)) + 1,
+      filter: this.runs.reduce<Uint8Array>(
+        (filter, run) => unionFilters(filter, run.filter),
+        new Uint8Array(12 * 1024),
+      ),
+    };
     this.runs.splice(0, this.runs.length, result);
-    return result.root;
+    return root;
   }
 }
