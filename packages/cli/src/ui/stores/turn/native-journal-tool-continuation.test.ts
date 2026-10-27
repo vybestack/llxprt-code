@@ -36,7 +36,7 @@ describe('journal tool continuation', () => {
           page.entries.some(
             (entry) =>
               entry.kind === 'projected' &&
-              'text' in entry.item &&
+              typeof entry.item.text === 'string' &&
               entry.item.text.includes('after the tool ran'),
           ),
         ).toBe(true);

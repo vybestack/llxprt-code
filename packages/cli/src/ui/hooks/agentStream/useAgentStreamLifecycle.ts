@@ -41,6 +41,7 @@ export function useStreamingState(
   turnCancelled = false,
 ): StreamingState {
   return useMemo(() => {
+    if (turnCancelled) return StreamingState.Idle;
     if (toolCalls.some((tc) => tc.status === 'awaiting_approval')) {
       return StreamingState.WaitingForConfirmation;
     }
@@ -49,10 +50,7 @@ export function useStreamingState(
     // idle-queue-drain effect so queued messages are processed after cancel
     // (issue #2882). Without this, cancelled-but-not-displayCleared tool calls
     // keep streamingState stuck at Responding indefinitely.
-    if (
-      isResponding ||
-      (!turnCancelled && toolCalls.some(isOutstandingToolCall))
-    ) {
+    if (isResponding || toolCalls.some(isOutstandingToolCall)) {
       return StreamingState.Responding;
     }
     return StreamingState.Idle;
@@ -102,6 +100,7 @@ export function useToolSchedulerSetup(
           completedToolCallsFromScheduler,
           addItem,
           toolSchedulerResult[2],
+          journalControls,
         );
         return;
       }
@@ -109,6 +108,7 @@ export function useToolSchedulerSetup(
         completedToolCallsFromScheduler,
         toolSchedulerResult[2],
         addItem,
+        journalControls,
       );
     },
     schedulerRuntime,
@@ -125,11 +125,13 @@ function processPrimaryCompletion(
   completedToolCallsFromScheduler: TrackedToolCall[],
   addItem: UseHistoryManagerReturn['addItem'],
   markToolsAsDisplayCleared: (callIds: string[]) => void,
+  journalControls: boolean,
 ): void {
-  addItem(
-    mapTrackedToolCallsToDisplay(completedToolCallsFromScheduler),
-    Date.now(),
-  );
+  if (!journalControls)
+    addItem(
+      mapTrackedToolCallsToDisplay(completedToolCallsFromScheduler),
+      Date.now(),
+    );
   // Mark external (subagent) tools as cleared from display. Continuation is
   // owned by the Agent/loop; this is display-only.
   const { externalTools } = classifyCompletedTools(
@@ -144,15 +146,17 @@ function processSecondaryCompletion(
   completedToolCallsFromScheduler: TrackedToolCall[],
   markToolsAsDisplayCleared: (callIds: string[]) => void,
   addItem: UseHistoryManagerReturn['addItem'],
+  journalControls: boolean,
 ): void {
   const callIdsToMark = completedToolCallsFromScheduler.map(
     (toolCall) => toolCall.request.callId,
   );
   if (callIdsToMark.length > 0) markToolsAsDisplayCleared(callIdsToMark);
-  addItem(
-    mapTrackedToolCallsToDisplay(completedToolCallsFromScheduler),
-    Date.now(),
-  );
+  if (!journalControls)
+    addItem(
+      mapTrackedToolCallsToDisplay(completedToolCallsFromScheduler),
+      Date.now(),
+    );
 }
 
 export function useShellCommandSetup({

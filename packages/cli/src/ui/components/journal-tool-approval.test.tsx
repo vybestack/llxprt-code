@@ -154,8 +154,8 @@ describe('mounted journal tool approval', () => {
     );
     try {
       await waitFor(() => expect(view.lastFrame()).toContain('Allow once'));
-      expect(view.lastFrame()).toContain('lookup');
-      expect(view.lastFrame()).not.toContain('control-name');
+      expect(view.lastFrame()).toContain('control-name');
+      expect(view.lastFrame()).not.toContain('lookup lookup');
       await act(async () => {
         view.stdin.write('\r');
         await Bun.sleep(30);
