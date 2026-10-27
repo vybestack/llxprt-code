@@ -45,14 +45,11 @@ export function admitSessionHistory(
   return {
     rows: admitRowsOneAtATime(history, admission, ownerScope, references),
     release: async (): Promise<void> => {
-      try {
-        for (const reference of references.values()) {
-          await admission.releaseReference(reference.contentId, ownerScope);
-          references.delete(reference.contentId);
-        }
-      } finally {
-        references.close();
+      for (const reference of references.values()) {
+        await admission.releaseReference(reference.contentId, ownerScope);
+        references.delete(reference.contentId);
       }
+      references.close();
     },
   };
 }
