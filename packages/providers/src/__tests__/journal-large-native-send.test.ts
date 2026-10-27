@@ -21,7 +21,7 @@ import {
   type WireBodyRecord,
 } from './support/wireBodyCapture.js';
 import type { HistoryCase } from './support/wireBodyHistories.js';
-import { journalSendFixture } from './support/journal-send-fixture.js';
+import { nativeJournalSendFixture } from './support/journal-send-fixture.js';
 import { localWireHashSink } from './support/local-wire-hash-sink.js';
 
 const TEXT_BYTES = 40 * 1024 * 1024;
@@ -93,7 +93,7 @@ async function verifyLargeSend(
 ): Promise<ProviderRequestSelection> {
   const media = withImage ? await mediaFixture() : undefined;
   const expected = await oracle(route, media?.reference, media?.binding);
-  const fixture = await journalSendFixture(
+  const fixture = await nativeJournalSendFixture(
     (function* (): Generator<IContent> {
       yield row(media?.reference);
     })(),

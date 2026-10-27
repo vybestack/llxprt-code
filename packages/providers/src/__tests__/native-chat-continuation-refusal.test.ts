@@ -6,7 +6,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { DEFAULT_HTTP_JSON_ENVELOPE_BYTES } from '../utils/boundedJsonBody.js';
-import { journalSendFixture } from './support/journal-send-fixture.js';
+import { nativeJournalSendFixture } from './support/journal-send-fixture.js';
 import {
   buildHistoryCallOptions,
   WIRE_ROUTES,
@@ -141,16 +141,11 @@ describe('native continuation declared envelope refusal', () => {
       expect(target + tailBytes).toBeGreaterThan(
         DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
       );
-      const fixture = await journalSendFixture(
+      const fixture = await nativeJournalSendFixture(
         (function* (): Generator<IContent> {
           for (let index = 0; index < count; index++)
             yield textRow('x'.repeat(each + (index < remainder ? 1 : 0)));
         })(),
-        [],
-        {
-          directory: 'tmp/p6/chat-mistral-run-bj/fixtures',
-          oneRowAtATime: true,
-        },
       );
       try {
         const options = buildHistoryCallOptions(
