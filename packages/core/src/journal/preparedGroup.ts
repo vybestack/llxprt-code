@@ -197,6 +197,10 @@ class PreparedBuilder {
       actual,
       ownerEdits,
     );
+    if (this.result.built === undefined) {
+      this.started = false;
+      await this.build(actual);
+    }
     this.result = { ...this.result, streamedAppend: true };
   }
 
