@@ -57,6 +57,7 @@ export async function readRowIds(
     );
   }
   validateRowAgainstBody(header, head.bodyLen);
+  header = { ...header, label: entry.label, owner: entry.owner };
   if (header.chunk !== undefined) {
     const rawIds: string[] = [];
     const ids = [];
@@ -160,15 +161,16 @@ export async function readStoredRow(
       `Record at offset ${entry.recordOffset} is not a row (kind ${head.kind})`,
     );
   }
-  const header = await hydrateChunkHeader(
+  let header = await hydrateChunkHeader(
     access,
     decodeRowHeader(head.kindHeader),
   );
-  if (header.label !== entry.label) {
+  if (entry.transcriptId === 0n && header.label !== entry.label) {
     throw new JournalFormatError(
       `Row at offset ${entry.recordOffset} has label ${header.label}, its entry says ${entry.label}`,
     );
   }
+  header = { ...header, label: entry.label, owner: entry.owner };
   if (header.chunk !== undefined) {
     const blocks: Uint8Array[] = [];
     for (let ordinal = 0; ordinal < header.chunk.blockCount; ordinal++)

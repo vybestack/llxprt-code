@@ -8,6 +8,7 @@ import {
   type LabeledDraft,
   type OwnerChange,
   type VersionEdit,
+  type ReplacementRow,
 } from './groupEdits.js';
 import type {
   FreshRole,
@@ -400,7 +401,7 @@ async function applyCompress(
 
 function applyReplace(
   plan: GroupPlan,
-  rows: Iterable<RowDraft> | AsyncIterable<RowDraft>,
+  rows: Iterable<ReplacementRow> | AsyncIterable<ReplacementRow>,
 ): void {
   leaveLineage(plan);
   plan.range = undefined;

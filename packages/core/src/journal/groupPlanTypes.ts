@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionReader } from './lineageChain.js';
 import type { RecordAccess } from './recordAccess.js';
-import type { SourceRow } from './groupEdits.js';
+import type { SourceRow, ReplacementRow } from './groupEdits.js';
 import type { RowDraft } from './rowDraft.js';
 import type { RowEntry } from './rowEntry.js';
 import type { Version } from './version.js';
@@ -80,7 +80,7 @@ export interface ForeignStreamSegment {
 /** The rows of a replace, written as the stream produces them. */
 export interface StreamSegment {
   readonly kind: 'stream';
-  readonly rows: Iterable<RowDraft> | AsyncIterable<RowDraft>;
+  readonly rows: Iterable<ReplacementRow> | AsyncIterable<ReplacementRow>;
 }
 
 /** One piece of the row sequence a group builds, in label order. */

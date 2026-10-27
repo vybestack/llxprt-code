@@ -129,7 +129,9 @@ export function checkedRecordingEdits(
     if (edit.kind === 'replace') {
       return {
         ...edit,
-        rows: checkedRows(edit.rows, owner, (row) => row.owner),
+        rows: checkedRows(edit.rows, owner, (row) =>
+          'source' in row ? row.entry.owner : row.owner,
+        ),
       };
     }
     if (edit.kind === 'adoptAll') {

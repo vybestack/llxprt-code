@@ -20,6 +20,7 @@ import {
 import type { JournalHistoryStore } from './journalHistoryStore.js';
 import type { JournalOwners, ResolvedOwner } from './journalOwners.js';
 import { encodeContentRow } from './journalRowCodec.js';
+import { replacementRows } from './replacement-rows.js';
 
 export function replacementEditBuilder(
   owners: () => JournalOwners,
@@ -234,11 +235,11 @@ export function replacementEdits(
   rows: Iterable<IContent> | AsyncIterable<IContent>,
   origin: string | undefined,
 ): EditBuilder {
-  return async () => {
+  return async (snapshot) => {
     const owner = await owners.resolve(origin);
     return [
       ...owner.edits,
-      { kind: 'replace', rows: encodedRows(rows, owner.id) },
+      { kind: 'replace', rows: replacementRows(snapshot, rows, owner.id) },
     ];
   };
 }

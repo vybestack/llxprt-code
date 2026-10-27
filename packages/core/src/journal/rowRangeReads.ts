@@ -26,12 +26,15 @@ async function rowHead(
     access,
     decodeRowHeader(head.kindHeader),
   );
-  if (header.label !== entry.label)
+  if (entry.transcriptId === 0n && header.label !== entry.label)
     throw new JournalFormatError(
       `Row at offset ${entry.recordOffset} has label ${header.label}, its entry says ${entry.label}`,
     );
   validateRowAgainstBody(header, head.bodyLen);
-  return { head, header };
+  return {
+    head,
+    header: { ...header, label: entry.label, owner: entry.owner },
+  };
 }
 
 export async function readStoredBlock(

@@ -398,6 +398,11 @@ export class VersionSnapshot {
         };
   }
 
+  sourceRow(entry: RowEntry): SourceRow {
+    this.requireOpen();
+    return { source: this.read.access, entry };
+  }
+
   private async *sourceRows(): AsyncGenerator<SourceRow> {
     for await (const entry of this.entries()) {
       yield { source: this.read.access, entry };

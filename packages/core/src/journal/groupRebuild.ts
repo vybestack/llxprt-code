@@ -19,7 +19,7 @@ import {
   type BuiltGroup,
 } from './groupBuildShared.js';
 import { copyForeignRow } from './foreignRows.js';
-import type { SourceRow } from './groupEdits.js';
+import type { SourceRow, ReplacementRow } from './groupEdits.js';
 import {
   NO_FACT_ROOTS,
   applyDraftRow,
@@ -44,7 +44,6 @@ import {
   entryForRewrittenRow,
   type EncodedRow,
 } from './rowDraft.js';
-import type { RowDraft } from './rowDraft.js';
 import { ENTRY_FLAG, type RowEntry } from './rowEntry.js';
 import { ROW_FLAG } from './rowRecord.js';
 import { CONTRIBUTION_FLAGS } from './unitContributions.js';
@@ -159,15 +158,17 @@ class RebuildPass {
   }
 
   private stream(
-    rows: Iterable<RowDraft> | AsyncIterable<RowDraft>,
+    rows: Iterable<ReplacementRow> | AsyncIterable<ReplacementRow>,
   ): AsyncGenerator<RowEntry> {
     return mapRowStream(rows, (draft) => this.streamedRow(draft));
   }
 
-  private async streamedRow(draft: RowDraft): Promise<RowEntry> {
+  private async streamedRow(draft: ReplacementRow): Promise<RowEntry> {
     const allocated = allocateAppendLabels(this.nextLabel, 1);
     const label = allocated.labels[0];
     this.nextLabel = allocated.nextLabel;
+    if ('source' in draft)
+      return this.foreign({ ...draft, entry: { ...draft.entry, label } });
     const encoded = encodeRowDraft(label, draft);
     const segment: FreshSegment = {
       kind: 'fresh',

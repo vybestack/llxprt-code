@@ -65,6 +65,8 @@ export interface SourceRow {
   readonly entry: RowEntry;
 }
 
+export type ReplacementRow = RowDraft | SourceRow;
+
 /** One primitive edit of a commit group (design 4.1). The group applies them in order and commits once. */
 export type VersionEdit =
   | {
@@ -131,7 +133,7 @@ export type VersionEdit =
    */
   | {
       readonly kind: 'replace';
-      readonly rows: Iterable<RowDraft> | AsyncIterable<RowDraft>;
+      readonly rows: Iterable<ReplacementRow> | AsyncIterable<ReplacementRow>;
     }
   /** Design 4.6: the replacements keep their labels, the removed labels are dropped. */
   | {
