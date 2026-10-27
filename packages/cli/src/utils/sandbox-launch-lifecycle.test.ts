@@ -33,10 +33,11 @@ const realAuthProviderModule = {
 };
 void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   ...realAuthProviderModule,
-  createAndStartProxy: vi.fn(async () => ({ stop: async () => {} })),
-  getProxySocketPath: vi.fn(() => '/tmp/llxprt-issue3450-fake.sock'),
-  getProxyCapabilityToken: vi.fn(() => 'issue3450-fake-capability-token'),
-  stopProxy: vi.fn(async () => {}),
+  createAndStartProxy: vi.fn(async () => ({
+    socketPath: '/tmp/llxprt-issue3450-fake.sock',
+    capabilityToken: 'issue3450-fake-capability-token',
+    stop: async () => {},
+  })),
 }));
 
 // Main-container spawn and shell-based name lookup are stubbed. The async

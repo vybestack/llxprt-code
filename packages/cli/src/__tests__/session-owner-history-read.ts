@@ -36,7 +36,7 @@ export function readCurrentOwnerHistory(
     };
   });
   try {
-    owner.nativeHistory.hasHistory();
+    owner.clients.conversationBinding.nativeHistory.hasHistory();
   } finally {
     for (const restore of restores) restore();
   }

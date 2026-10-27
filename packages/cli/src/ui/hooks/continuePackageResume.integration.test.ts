@@ -233,7 +233,7 @@ async function createConfig(
     factoriesTokenizer,
   );
 
-  sessionClient.initializeConversation();
+  sessionClient.clients.conversationBinding.initializeConversation();
   let sessionPersistence: ownedPersistence.AgentSessionPersistence | undefined;
   const createPersistence = ownedPersistence.createAgentSessionPersistence;
   const acquisition = spyOn(

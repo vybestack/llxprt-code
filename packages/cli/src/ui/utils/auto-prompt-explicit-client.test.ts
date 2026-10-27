@@ -156,7 +156,7 @@ async function owner(
     await media.dispose();
     await config.dispose();
   });
-  await sessionClient.refreshAuth();
+  await sessionClient.clients.refreshAuth();
   return {
     config,
     settings,
@@ -198,7 +198,7 @@ describe('auto prompt explicit client ownership', () => {
     );
     cleanups.push(() => unrelated.dispose());
     const result = await generateAutoPrompt('Review code', (input, options) =>
-      a.sessionClient.generateText(input, options, generationRecording),
+      a.sessionClient.clients.generateText(input, options, generationRecording),
     ).catch((error: unknown) => error);
     await unrelated.dispose();
     expect(a.requests).toHaveLength(1);
@@ -217,7 +217,7 @@ describe('auto prompt explicit client ownership', () => {
     );
     cleanups.push(() => unrelated.dispose());
     const result = await generateAutoPrompt('Review code', (input, options) =>
-      a.sessionClient.generateText(input, options, generationRecording),
+      a.sessionClient.clients.generateText(input, options, generationRecording),
     );
     await unrelated.dispose();
     expect(result).toBe('  owner-a: expanded prompt\n');
@@ -230,7 +230,7 @@ describe('auto prompt explicit client ownership', () => {
       const detached = await owner('detached-owner', failure, 'gemini');
       expect(detached.readModelListenerCount()).toBe(1);
       const result = await generateAutoPrompt('Review code', (input, options) =>
-        detached.sessionClient.generateText(
+        detached.sessionClient.clients.generateText(
           input,
           options,
           generationRecording,

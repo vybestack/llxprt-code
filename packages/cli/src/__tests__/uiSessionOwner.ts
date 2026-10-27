@@ -39,6 +39,8 @@ import {
   configureProviderTokenizer,
   createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
+import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { InMemoryTokenStore } from '../../../providers/src/auth/proxy/__tests__/credential-proxy-server-helpers.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { buildAgentClientFactory } from '../../../agents/src/api/agentBootstrap.js';
 import type { SessionClientOwner } from '../../../agents/src/session/session-client-owner.js';
@@ -163,6 +165,7 @@ export async function createUiSessionOwner(
       async () => {
         if (!suppliedSettings) await settings.dispose();
       },
+      () => runtime.oauth.dispose(),
       () => manager.dispose(),
       () => media.close(),
       () => catalogs.dispose(),
@@ -249,6 +252,7 @@ async function assembleUiInfrastructure(
     undefined,
     settings,
   );
+  const oauth = new OAuthManager(new InMemoryTokenStore());
   const media = createUiMedia();
   const filesystem = new WorkspaceFilesystemOwner({
     targetDir: process.cwd(),
@@ -287,6 +291,7 @@ async function assembleUiInfrastructure(
   return {
     trust,
     ide,
+    oauth,
     manager,
     media,
     filesystem,
@@ -316,7 +321,7 @@ function projectUiSessionOwner(
       () => settings.readSelectedModel() ?? config.getModel(),
       (provider) => settingsService.getProviderSettings(provider),
     ),
-    authentication: assembleSessionAuthentication(undefined, () => {}),
+    authentication: assembleSessionAuthentication(runtime.oauth, () => {}),
     ide: new IdeControl(
       runtime.trust,
       runtime.ide,
@@ -341,7 +346,7 @@ function projectUiSessionOwner(
     getActiveProfileName: () => settingsService.getCurrentProfileName(),
     onStats: (listener) =>
       subscribeUiStats(sessionClient, settings, subscriptions, listener),
-    memory: sessionClient.memoryOperations,
+    memory: sessionClient.clients.memoryOperations,
     tools: {
       get: (name) => {
         const tool = sessionClient.toolCatalog.selection.getTool(name);
@@ -366,8 +371,8 @@ function projectUiSessionOwner(
     sessionClient: {
       fetch: sessionClient.operations.fetch,
       runImageOperation: (input) => sessionClient.runImageOperation(input),
-      refreshAuth: (method) => sessionClient.refreshAuth(method),
-      publishTools: () => sessionClient.publishTools(),
+      refreshAuth: (method) => sessionClient.clients.refreshAuth(method),
+      publishTools: () => sessionClient.clients.publishTools(),
     },
   };
 }
@@ -378,7 +383,7 @@ function subscribeUiStats(
   subscriptions: Set<() => void>,
   listener: Parameters<Agent['onStats']>[0],
 ): () => void {
-  const unsubscribe = sessionClient.observeStats(
+  const unsubscribe = sessionClient.clients.conversationBinding.observeStats(
     listener,
     settings.telemetry.localMetrics,
   );

@@ -277,8 +277,9 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
     provider.name = config.getProvider() ?? 'test-provider';
     manager.registerProvider(provider);
     manager.setActiveProvider(provider.name);
-    if (config.getProvider() !== undefined) await sessionClient.refreshAuth();
-    sessionClient.initializeConversation();
+    if (config.getProvider() !== undefined)
+      await sessionClient.clients.refreshAuth();
+    sessionClient.clients.conversationBinding.initializeConversation();
     // The production path reaches the current client; every client the
     // owner's factory built carries the same instance spy.
     const clients = ownerClients(sessionClient);

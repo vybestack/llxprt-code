@@ -41,16 +41,11 @@ import { STORAGE_ENV_KEYS } from '@vybestack/llxprt-code-storage/testing';
 // Hoisted mocks for auth module — used by AC12 setupCredentialProxy/wireCleanupHandlers tests
 const authMocks = {
   createAndStartProxy: vi.fn(),
-  getProxySocketPath: vi.fn(),
-  stopProxy: vi.fn(),
-  getProxyCapabilityToken: vi.fn(),
+  stop: vi.fn(),
 };
 
 void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   createAndStartProxy: authMocks.createAndStartProxy,
-  getProxySocketPath: authMocks.getProxySocketPath,
-  stopProxy: authMocks.stopProxy,
-  getProxyCapabilityToken: authMocks.getProxyCapabilityToken,
 }));
 
 const VALID_TOKEN = 'a'.repeat(64);
@@ -550,7 +545,7 @@ describe('sandbox entrypoint', () => {
    * production code paths in sandbox-containers.ts with a mocked auth module and
    * a fake ChildProcess (EventEmitter-based stub).
    */
-  describe('setupCredentialProxy: fail-fast when socket path is undefined (AC12)', () => {
+  describe('setupCredentialProxy: failed acquisition cleanup (AC12)', () => {
     const getTmpDir = useTempDir(beforeEach, afterEach);
     let environmentSnapshot: NodeJS.ProcessEnv;
     let runtimeRoot = '';
@@ -569,9 +564,10 @@ describe('sandbox entrypoint', () => {
       vi.resetAllMocks();
       overrideOsTmpdir(runtimeRoot);
       vi.spyOn(os, 'homedir').mockReturnValue(isolatedHome);
-      authMocks.createAndStartProxy.mockResolvedValue({ stop: vi.fn() });
-      authMocks.getProxySocketPath.mockReturnValue(undefined);
-      authMocks.stopProxy.mockResolvedValue(undefined);
+      authMocks.createAndStartProxy.mockRejectedValue(
+        new Error('socket startup failed'),
+      );
+      authMocks.stop.mockResolvedValue(undefined);
     });
 
     afterEach(() => {
@@ -590,40 +586,41 @@ describe('sandbox entrypoint', () => {
       );
     }
 
-    it('throws FatalSandboxError when getProxySocketPath returns undefined after createAndStartProxy succeeds', () =>
-      expect(callSetupCredentialProxy()).rejects.toThrow(/socket path/i));
+    it('rejects when proxy socket acquisition fails', () =>
+      expect(callSetupCredentialProxy()).rejects.toThrow(
+        /socket startup failed/i,
+      ));
 
-    it('attempts stopProxy and removes the session directory when socket path is undefined', async () => {
-      try {
-        await callSetupCredentialProxy();
-      } catch {
-        /* expected */
-      }
-      expect(authMocks.stopProxy).toHaveBeenCalledTimes(1);
+    it('removes the session directory when proxy acquisition fails', async () => {
+      await expect(callSetupCredentialProxy()).rejects.toThrow(
+        /socket startup failed/i,
+      );
+      expect(authMocks.stop).not.toHaveBeenCalled();
       expect(fs.existsSync(sessionTmpdir)).toBe(false);
     });
 
-    it('surfaces both invariant and stopProxy failures via AggregateError when socket path is undefined and stopProxy rejects', async () => {
-      authMocks.stopProxy.mockRejectedValue(new Error('stopProxy failed'));
+    it('preserves both setup and acquired-handle stop failures', async () => {
+      authMocks.createAndStartProxy.mockResolvedValue({
+        socketPath: path.join(sessionTmpdir, 'credential-proxy.sock'),
+        capabilityToken: VALID_TOKEN,
+        stop: authMocks.stop,
+      });
+      authMocks.stop.mockRejectedValue(new Error('proxy stop failed'));
+      vi.spyOn(fs, 'openSync').mockImplementation(() => {
+        throw new Error('env-file write failed');
+      });
       let caught: unknown;
       try {
         await callSetupCredentialProxy();
       } catch (error) {
         caught = error;
       }
-      expect(caught).toBeInstanceOf(AggregateError);
-      if (!(caught instanceof AggregateError)) {
+      if (!(caught instanceof AggregateError))
         throw new Error('Expected AggregateError');
-      }
-      const messages = caught.errors.map((error) =>
-        error instanceof Error ? error.message : String(error),
-      );
-      expect(messages.some((message) => /socket path/i.test(message))).toBe(
-        true,
-      );
-      expect(
-        messages.some((message) => /stopProxy failed/i.test(message)),
-      ).toBe(true);
+      expect(caught.errors.map((error: Error) => error.message)).toStrictEqual([
+        'env-file write failed',
+        'proxy stop failed',
+      ]);
       expect(fs.existsSync(sessionTmpdir)).toBe(false);
     });
 
@@ -637,7 +634,7 @@ describe('sandbox entrypoint', () => {
           new Set<number>(),
           [],
         ),
-      ).rejects.toThrow(/socket path/i);
+      ).rejects.toThrow(/socket startup failed/i);
       expect(args.some((arg) => arg.includes('LLXPRT_CREDENTIAL_SOCKET'))).toBe(
         false,
       );
@@ -646,10 +643,11 @@ describe('sandbox entrypoint', () => {
     });
 
     it('removes the session directory when capability env-file setup fails', async () => {
-      authMocks.getProxySocketPath.mockReturnValue(
-        path.join(sessionTmpdir, 'credential-proxy.sock'),
-      );
-      authMocks.getProxyCapabilityToken.mockReturnValue(VALID_TOKEN);
+      authMocks.createAndStartProxy.mockResolvedValue({
+        socketPath: path.join(sessionTmpdir, 'credential-proxy.sock'),
+        capabilityToken: VALID_TOKEN,
+        stop: authMocks.stop,
+      });
       vi.spyOn(fs, 'openSync').mockImplementation(() => {
         throw new Error('simulated env-file write failure');
       });
@@ -657,7 +655,7 @@ describe('sandbox entrypoint', () => {
       await expect(callSetupCredentialProxy()).rejects.toThrow(
         /env-file write failure/i,
       );
-      expect(authMocks.stopProxy).toHaveBeenCalledTimes(1);
+      expect(authMocks.stop).toHaveBeenCalledTimes(1);
       expect(fs.existsSync(sessionTmpdir)).toBe(false);
       expect(
         fs
@@ -667,7 +665,9 @@ describe('sandbox entrypoint', () => {
     });
   });
 
-  describe('wireCleanupHandlers: stopProxy rejection is observable (AC12)', () => {
+  describe('wireCleanupHandlers: owned proxy retirement (AC12)', () => {
+    const getTmpDir = useTempDir(beforeEach, afterEach);
+    let ownedCleanup: (() => void) | undefined;
     let fakeProcess: ChildProcess;
     let errorSpy: ReturnType<typeof vi.spyOn>;
 
@@ -677,9 +677,27 @@ describe('sandbox entrypoint', () => {
     const flushMicrotasks = () =>
       new Promise<void>((resolve) => setImmediate(resolve));
 
-    beforeEach(() => {
+    beforeEach(async () => {
       vi.resetAllMocks();
-      authMocks.stopProxy.mockReset();
+      authMocks.stop.mockResolvedValue(undefined);
+      authMocks.createAndStartProxy.mockImplementation(
+        async (config: { socketPath: string }) => ({
+          socketPath: path.join(config.socketPath, 'credential-proxy.sock'),
+          capabilityToken: VALID_TOKEN,
+          stop: authMocks.stop,
+        }),
+      );
+      const session = path.join(getTmpDir(), 'session');
+      fs.mkdirSync(session);
+      ownedCleanup = (
+        await setupCredentialProxy(
+          [],
+          { command: 'sandbox-exec', image: 'test' },
+          session,
+          new Set(),
+          [],
+        )
+      ).credentialProxyBridgeCleanup;
       fakeProcess = new EventEmitter() as unknown as ChildProcess;
       Object.defineProperty(fakeProcess, 'pid', { value: 12345 });
       errorSpy = vi
@@ -688,6 +706,7 @@ describe('sandbox entrypoint', () => {
     });
 
     afterEach(() => {
+      fakeProcess.emit('close', 0, null);
       fakeProcess.removeAllListeners();
       errorSpy.mockRestore();
       vi.restoreAllMocks();
@@ -703,7 +722,7 @@ describe('sandbox entrypoint', () => {
           entrypointPrefix: undefined,
         },
         undefined,
-        undefined,
+        ownedCleanup,
         noop,
       );
     }
@@ -715,10 +734,10 @@ describe('sandbox entrypoint', () => {
 
     it('logs stopProxy rejection via debugLogger.error instead of swallowing', async () => {
       const stopErr = new Error('proxy stop failed');
-      authMocks.stopProxy.mockRejectedValue(stopErr);
+      authMocks.stop.mockRejectedValue(stopErr);
       wireAndClose();
       await flushMicrotasks();
-      expect(authMocks.stopProxy).toHaveBeenCalledTimes(1);
+      expect(authMocks.stop).toHaveBeenCalledTimes(1);
       expect(errorSpy).toHaveBeenCalledWith(
         expect.stringContaining('proxy stop'),
         stopErr,
@@ -726,17 +745,17 @@ describe('sandbox entrypoint', () => {
     });
 
     it('preserves idempotency: stopProxy called only once across multiple signals', async () => {
-      authMocks.stopProxy.mockResolvedValue(undefined);
+      authMocks.stop.mockResolvedValue(undefined);
       wire();
       fakeProcess.emit('close', 0, null);
       fakeProcess.emit('close', 0, null);
       fakeProcess.emit('close', 0, null);
       await flushMicrotasks();
-      expect(authMocks.stopProxy).toHaveBeenCalledTimes(1);
+      expect(authMocks.stop).toHaveBeenCalledTimes(1);
     });
 
     it('removes all listeners after cleanup', async () => {
-      authMocks.stopProxy.mockResolvedValue(undefined);
+      authMocks.stop.mockResolvedValue(undefined);
       wire();
       const beforeCount = fakeProcess.listenerCount('close');
       fakeProcess.emit('close', 0, null);
@@ -745,7 +764,7 @@ describe('sandbox entrypoint', () => {
     });
 
     it('runBridgeCleanup: sets idempotency, detaches listeners, clears stored cleanup, and re-surfaces the error when the cleanup callback throws', () => {
-      authMocks.stopProxy.mockResolvedValue(undefined);
+      authMocks.stop.mockResolvedValue(undefined);
       const cleanupErr = new Error('bridge cleanup EIO');
       const cleanupFn = vi.fn(() => {
         throw cleanupErr;

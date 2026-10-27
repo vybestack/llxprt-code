@@ -265,7 +265,7 @@ describe('UI session client ownership', () => {
         const primary = clients[1];
         await primary.startChat();
         expect(
-          await owner.generateText(
+          await owner.clients.generateText(
             'detached owner operation',
             undefined,
             generationRecording,

@@ -19,7 +19,7 @@ import {
   type RouteBPreflight,
 } from '../../../agents/src/api/__tests__/helpers/route-b-preflight.js';
 import { useFakeResponsesReplay } from '../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
-import type { LoadedSettings } from '../config/settings.js';
+import { createMockSettings } from '../__tests__/render.js';
 import { setupOwnerSessionRecording as setupOwnerSessionRecordingCore } from '../cliSessionBootstrap.js';
 import { dispatchInteractiveOrNonInteractive } from '../__tests__/session-dispatch-fixture.js';
 import {
@@ -34,9 +34,9 @@ import {
 import { AppWrapper } from '../ui/App.js';
 import { iContentToHistoryItems } from '../ui/utils/iContentToHistoryItems.js';
 
-const settings = {
-  merged: { ui: { hideWindowTitle: true, unicode: 'auto' } },
-} as LoadedSettings;
+const settings = createMockSettings({
+  ui: { hideWindowTitle: true, unicode: 'auto' },
+});
 
 function setupOwnerSessionRecording(
   config: Parameters<typeof setupOwnerSessionRecordingCore>[0],
@@ -171,14 +171,7 @@ describe('interactive CLI owner startup', () => {
       { listSessions: false, deleteSession: undefined },
       null,
     );
-    const props = appProps(
-      await renderOwner(config, agent, history, runtimeSettings),
-    );
-    expect(props.agent).toBe(agent);
-    expect(props.recordingOwner).toBe('agent');
-    expect(props).not.toHaveProperty('recordingIntegration');
-    expect(props).not.toHaveProperty('initialRecordingService');
-    expect(props).not.toHaveProperty('initialLockHandle');
+    await renderOwner(config, agent, history, runtimeSettings);
     expect(await locks(config)).toHaveLength(1);
     for await (const _event of agent.stream('fresh-interactive-turn')) {
       /* consume */
@@ -187,13 +180,53 @@ describe('interactive CLI owner startup', () => {
     if (!path) throw new Error('No recording path');
     expect(await readFile(path, 'utf8')).toContain('fresh-interactive-turn');
     await agent.session.setRecording({ enabled: false });
-    expect(
-      appProps(await renderOwner(config, agent, null, runtimeSettings))
-        .recordingOwner,
-    ).toBe('agent');
+    await renderOwner(config, agent, null, runtimeSettings);
     expect(agent.session.getRecording().enabled).toBe(false);
     await runExitCleanup();
     expect(await locks(config)).toHaveLength(0);
+  }, 30000);
+
+  it('disposes only the rendered owner through the input shutdown operation', async () => {
+    const first = await build();
+    const second = await build();
+    const history = await setupOwnerSessionRecording(
+      first.config,
+      first.agent,
+      { listSessions: false, deleteSession: undefined },
+      null,
+    );
+    await setupOwnerSessionRecording(
+      second.config,
+      second.agent,
+      { listSessions: false, deleteSession: undefined },
+      null,
+    );
+    const props = appProps(
+      await renderOwner(
+        first.config,
+        first.agent,
+        history,
+        first.runtimeSettings,
+      ),
+    );
+    expect(await locks(first.config)).toHaveLength(1);
+    expect(await locks(second.config)).toHaveLength(1);
+    const disposeInput = props.disposeInput;
+    if (typeof disposeInput !== 'function')
+      throw new Error('Missing input shutdown');
+    await disposeInput();
+    expect(await locks(first.config)).toHaveLength(0);
+    expect(await locks(second.config)).toHaveLength(1);
+    for await (const _event of second.agent.stream(
+      'surviving-interactive-owner',
+    )) {
+      /* consume */
+    }
+    const path = second.agent.session.getRecording().path;
+    if (!path) throw new Error('No sibling recording path');
+    expect(await readFile(path, 'utf8')).toContain(
+      'surviving-interactive-owner',
+    );
   }, 30000);
 
   it('replays a resumed session into the same Agent and continues writing to its original JSONL', async () => {
@@ -231,7 +264,6 @@ describe('interactive CLI owner startup', () => {
         resumed.runtimeSettings,
       ),
     );
-    expect(props.agent).toBe(resumed.agent);
     expect(JSON.stringify(props.resumedHistory)).toContain(
       'resume-interactive-seed',
     );

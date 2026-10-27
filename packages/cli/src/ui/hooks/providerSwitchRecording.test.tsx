@@ -197,7 +197,7 @@ describe('provider changes made in dialogs reach the session recording (issue #3
     runtimeHolder.current = createConfigBackedRuntime(config);
     const owner = await createUiSessionOwner(config);
     const runtime = uiFixtureResources(owner);
-    runtime.sessionClient.initializeConversation();
+    runtime.sessionClient.clients.conversationBinding.initializeConversation();
     const acquiredHistory = readCurrentOwnerHistory(runtime.sessionClient);
     if (acquiredHistory === null)
       throw new Error('Actual recording owner has no history');

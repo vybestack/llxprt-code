@@ -21,7 +21,7 @@ import { assembleModelSelection } from '../../../../agents/src/api/model-selecti
 import {
   acquirePreferredOAuth,
   acquirePreferredProviderManager,
-} from '../../../../agents/src/api/preferred-provider-acquisition.js';
+} from '../../../../agents/src/api/__tests__/helpers/provider-acquisition.js';
 import { buildRuntimeProfileSnapshot } from '../../../../agents/src/api/profileSnapshot.js';
 const credentials = installOwnedCredentials();
 /**
@@ -154,7 +154,7 @@ describe('CLI runtime isolation', () => {
           firstManager,
           firstOAuth,
           undefined,
-          () => firstClient.refreshAuth(),
+          () => firstClient.clients.refreshAuth(),
           firstOwner,
         );
         await setActiveModel(
@@ -189,7 +189,7 @@ describe('CLI runtime isolation', () => {
             firstManager,
             firstOAuth,
             () => 'cli-interactive',
-            () => firstClient.refreshAuth(),
+            () => firstClient.clients.refreshAuth(),
 
             firstOwner,
           ),
@@ -234,7 +234,7 @@ describe('CLI runtime isolation', () => {
             secondManager,
             secondOAuth,
             undefined,
-            () => secondClient.refreshAuth(),
+            () => secondClient.clients.refreshAuth(),
             secondOwner,
           );
           await setActiveModel(
@@ -269,7 +269,7 @@ describe('CLI runtime isolation', () => {
               secondManager,
               secondOAuth,
               () => 'cli-interactive',
-              () => secondClient.refreshAuth(),
+              () => secondClient.clients.refreshAuth(),
 
               secondOwner,
             ),
@@ -642,6 +642,7 @@ async function openFirst(data: RuntimeData): Promise<void> {
       firstConfig,
       firstManager,
       firstSettings,
+      firstOAuth,
       firstOwner,
     )
   ).sessionClient;
@@ -758,6 +759,7 @@ async function openSecond(data: RuntimeData): Promise<void> {
       secondConfig,
       secondManager,
       secondSettings,
+      secondOAuth,
       secondOwner,
     )
   ).sessionClient;

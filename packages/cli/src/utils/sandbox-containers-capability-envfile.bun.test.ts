@@ -26,23 +26,21 @@ import {
 } from './sandbox-containers.js';
 
 const authMocks = {
+  stop: vi.fn((): Promise<void> => Promise.resolve()),
   createAndStartProxy: vi.fn(
-    (_config: { socketPath: string; onSandboxHandshake?: () => void }) =>
-      Promise.resolve({ stop: () => {} }),
+    (config: { socketPath: string; onSandboxHandshake?: () => void }) =>
+      Promise.resolve({
+        socketPath: path.join(config.socketPath, 'credential-proxy.sock'),
+        capabilityToken: 'b'.repeat(64),
+        stop: authMocks.stop,
+      }),
   ),
-  getProxySocketPath: vi.fn((): string | undefined => undefined),
-  stopProxy: vi.fn((): Promise<void> => Promise.resolve()),
-  getProxyCapabilityToken: vi.fn((): string | undefined => undefined),
 };
 
 void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   createAndStartProxy: authMocks.createAndStartProxy,
-  getProxySocketPath: authMocks.getProxySocketPath,
-  stopProxy: authMocks.stopProxy,
-  getProxyCapabilityToken: authMocks.getProxyCapabilityToken,
 }));
 
-const CAPABILITY_TOKEN = 'b'.repeat(64);
 // Pinned to the production CAPABILITY_ENV_FILE_FALLBACK_MS so the fallback
 // tests drive time by the real bound the launch path arms.
 const FALLBACK_BOUND_MS = 10 * 60 * 1000;
@@ -128,12 +126,8 @@ describe('#3524 capability env-file early release', () => {
     // Linux skips the macOS SSH bridge entirely; the proxy env var and env
     // file are the only launch-path side effects under test.
     vi.spyOn(os, 'platform').mockReturnValue('linux');
-    authMocks.getProxySocketPath.mockReturnValue(
-      path.join(tmpDir, 'credential-proxy.sock'),
-    );
-    authMocks.getProxyCapabilityToken.mockReturnValue(CAPABILITY_TOKEN);
     authMocks.createAndStartProxy.mockClear();
-    authMocks.stopProxy.mockResolvedValue(undefined);
+    authMocks.stop.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -190,7 +184,10 @@ describe('#3524 capability env-file early release', () => {
     }
     // mock.calls[0] is the argument tuple of the first call; the single
     // config object is its first element.
-    const launched = authMocks.createAndStartProxy.mock.calls[0][0];
+    const launched =
+      authMocks.createAndStartProxy.mock.calls[
+        authMocks.createAndStartProxy.mock.calls.length - 1
+      ][0];
     const handshake = launched.onSandboxHandshake;
     if (typeof handshake !== 'function') {
       throw new Error(
@@ -291,19 +288,24 @@ describe('#3524 capability env-file early release', () => {
     }
   });
 
-  it('fails fast on a second launch while one capability env file launch is active', async () => {
+  it('keeps concurrent launch handshakes and cleanup isolated', async () => {
     const first = await launchCredentialProxy();
-    const artifactsAfterFirst = capabilityArtifacts(capabilityRuntimeRoot);
-    expect(artifactsAfterFirst).toHaveLength(1);
-
-    await expect(launchCredentialProxy()).rejects.toThrow(
-      /not supported by the capability transport/,
-    );
-
-    expect(capabilityArtifacts(capabilityRuntimeRoot)).toStrictEqual(
-      artifactsAfterFirst,
-    );
-    expect(fs.existsSync(first.envFilePath)).toBe(true);
+    const second = await launchCredentialProxy();
+    try {
+      expect(capabilityArtifacts(capabilityRuntimeRoot)).toHaveLength(2);
+      expect(first.envFilePath).not.toBe(second.envFilePath);
+      first.handshake();
+      expect(fs.existsSync(first.envFilePath)).toBe(false);
+      expect(fs.existsSync(second.envFilePath)).toBe(true);
+      first.exitCleanup();
+      expect(fs.existsSync(second.envFilePath)).toBe(true);
+      second.handshake();
+      expect(fs.existsSync(second.envFilePath)).toBe(false);
+    } finally {
+      first.exitCleanup();
+      second.exitCleanup();
+    }
+    expect(capabilityArtifacts(capabilityRuntimeRoot)).toStrictEqual([]);
   });
 
   it('arms no fallback timer during setup: time advanced before wiring deletes nothing', async () => {

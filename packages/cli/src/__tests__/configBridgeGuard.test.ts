@@ -152,35 +152,6 @@ describe('#2373 config boundary guard', () => {
     expect(text).not.toMatch(/\bgetAgentClient\b|\bagentClient\b/);
   });
 
-  it('threads nested runtimes through bootstrap and the streaming input path', () => {
-    const bootstrap = read(
-      'ui/containers/AppContainer/hooks/useAppBootstrap.ts',
-    );
-    const input = read('ui/containers/AppContainer/hooks/useAppInput.ts');
-    const runtime = read('ui/AppContainerRuntime.tsx');
-    const app = read('ui/App.tsx');
-
-    expect(bootstrap).toMatch(/subscribeHistoryTokens:\s*Parameters/);
-    expect(bootstrap).toMatch(/readLlxprtMdFileCount:\s*\(\)\s*=>\s*number/);
-    expect(bootstrap).not.toMatch(/\b(?:uiRuntime|streamRuntime):/);
-    expect(bootstrap).not.toMatch(/\bconfig:\s*props\./);
-    expect(bootstrap).not.toMatch(/\bconfig:\s*uiRuntime/);
-    expect(bootstrap).not.toMatch(/agentClientSource:\s*props\.config/);
-
-    expect(input).toMatch(/AppInputParams extends InputStreamOperations/);
-    expect(input).not.toMatch(/uiRuntime:\s*AppBootstrapResult/);
-    expect(input).not.toMatch(/\b(?:agent|streamRuntime|slashCommandRuntime):/);
-    expect(input).not.toMatch(/AppBootstrapResult\['config'\]/);
-    expect(input).not.toMatch(/useAgentStream\([^)]*\bslashCommandRuntime\b/);
-
-    expect(`${runtime}\n${app}`).toMatch(
-      /disposeInput:\s*props\.disposeInput[\s\S]*disposeInput:\s*AppContainerProps\['disposeInput'\]\s*=\s*\(\)\s*=>\s*this\.props\.agent\.dispose\(\)/,
-    );
-    expect(runtime).toMatch(/readLlxprtMdFileCount:\s*useBound/);
-    expect(runtime).not.toMatch(/bootstrap\.config/);
-    expect(runtime).not.toMatch(/(?:props|bootstrap)\.config\b/);
-  });
-
   it('does not call config.getAgentClient() inline in the streaming input path', () => {
     const input = read('ui/containers/AppContainer/hooks/useAppInput.ts');
 

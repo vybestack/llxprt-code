@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { afterEach } from 'bun:test';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   WorkspaceFilesystemOwner,
   WorkspaceTrustLifecycle,
@@ -45,6 +46,7 @@ export async function createProviderSessionOwner(
   config: Config,
   manager: RuntimeProviderManager,
   settingsService: SettingsService,
+  oauth: OAuthManager,
   borrowedSettingsOwner?: SessionSettingsOwner,
 ): Promise<ProviderSessionOwner> {
   const settingsOwner =
@@ -81,7 +83,7 @@ export async function createProviderSessionOwner(
       settingsService,
       settingsOwner,
       manager,
-      undefined,
+      oauth,
       createRuntimeContentGeneratorFactory(),
       configureProviderTokenizer(manager, undefined),
       new ProviderFileLifecycle({

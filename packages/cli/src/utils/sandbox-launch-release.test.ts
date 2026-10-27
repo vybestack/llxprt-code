@@ -74,13 +74,14 @@ void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
     fs.mkdirSync(path.dirname(proxyFake.markerPath), { recursive: true });
     fs.writeFileSync(proxyFake.markerPath, 'running\n');
     proxyFake.socketPath = path.join(config.socketPath, 'issue3469.sock');
-    return { stop: async () => {} };
-  }),
-  getProxySocketPath: vi.fn(() => proxyFake.socketPath),
-  getProxyCapabilityToken: vi.fn(() => 'issue3469-fake-capability-token'),
-  stopProxy: vi.fn(async () => {
-    fs.rmSync(proxyFake.markerPath, { force: true });
-    proxyFake.socketPath = undefined;
+    return {
+      socketPath: proxyFake.socketPath,
+      capabilityToken: 'issue3469-fake-capability-token',
+      stop: async () => {
+        fs.rmSync(proxyFake.markerPath, { force: true });
+        proxyFake.socketPath = undefined;
+      },
+    };
   }),
 }));
 

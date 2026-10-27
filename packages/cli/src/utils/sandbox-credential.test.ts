@@ -12,9 +12,7 @@ import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 
 const authMocks = {
   createAndStartProxy: vi.fn(),
-  getProxySocketPath: vi.fn(),
-  stopProxy: vi.fn(),
-  getProxyCapabilityToken: vi.fn(),
+  stop: vi.fn(),
 };
 const bridgeMocks = {
   setupCredentialProxyDockerMacOS: vi.fn(),
@@ -25,9 +23,6 @@ const bridgeMocks = {
 
 void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   createAndStartProxy: authMocks.createAndStartProxy,
-  getProxySocketPath: authMocks.getProxySocketPath,
-  stopProxy: authMocks.stopProxy,
-  getProxyCapabilityToken: authMocks.getProxyCapabilityToken,
 }));
 const original = { ...(await import('./sandbox-ssh.js')) };
 void vi.mock('./sandbox-ssh.js', () => ({
@@ -234,12 +229,12 @@ describe('#1456 credential proxy network policy', () => {
     overrideOsTmpdir(tmpDir);
     vi.spyOn(os, 'homedir').mockReturnValue(isolatedHome);
     runtimeAllocation = observeCredentialRuntimeAllocation(nativeRuntimeRoot);
-    authMocks.createAndStartProxy.mockResolvedValue({ stop: vi.fn() });
-    authMocks.getProxySocketPath.mockReturnValue(
-      path.join(tmpDir, HOST_SOCKET_NAME),
-    );
-    authMocks.getProxyCapabilityToken.mockReturnValue(CAPABILITY_TOKEN);
-    authMocks.stopProxy.mockResolvedValue(undefined);
+    authMocks.createAndStartProxy.mockResolvedValue({
+      socketPath: path.join(tmpDir, HOST_SOCKET_NAME),
+      capabilityToken: CAPABILITY_TOKEN,
+      stop: authMocks.stop,
+    });
+    authMocks.stop.mockResolvedValue(undefined);
     bridgeMocks.setupCredentialProxyDockerMacOS.mockResolvedValue({
       cleanup: bridgeMocks.dockerCleanup,
       entrypointPrefix: 'DOCKER_CREDENTIAL_BRIDGE',
@@ -305,9 +300,7 @@ describe('#1456 credential proxy network policy', () => {
           expect(invocation.prefixes).toStrictEqual([]);
           expect(invocation.reservedPorts).toStrictEqual(new Set<number>());
           expect(authMocks.createAndStartProxy).not.toHaveBeenCalled();
-          expect(authMocks.getProxySocketPath).not.toHaveBeenCalled();
-          expect(authMocks.getProxyCapabilityToken).not.toHaveBeenCalled();
-          expect(authMocks.stopProxy).not.toHaveBeenCalled();
+          expect(authMocks.stop).not.toHaveBeenCalled();
           expect(
             bridgeMocks.setupCredentialProxyDockerMacOS,
           ).not.toHaveBeenCalled();
@@ -320,7 +313,7 @@ describe('#1456 credential proxy network policy', () => {
         },
         async () => {
           unexpectedCleanup?.();
-          await authMocks.stopProxy();
+          await authMocks.stop();
           expect(capabilityArtifacts(isolatedHome)).toStrictEqual([]);
           expect(runtimeCapabilityArtifacts(tmpDir)).toStrictEqual([]);
           expect(fs.existsSync(sessionTmpdir)).toBe(false);
@@ -450,7 +443,7 @@ describe('#1456 credential proxy network policy', () => {
         },
         async () => {
           cleanup?.();
-          await authMocks.stopProxy();
+          await authMocks.stop();
           expect(capabilityArtifacts(isolatedHome)).toStrictEqual([]);
           expect(runtimeCapabilityArtifacts(tmpDir)).toStrictEqual([]);
           expect(
@@ -488,8 +481,7 @@ describe('Podman credential socket runtime', () => {
       fs.mkdirSync(sessionTmpdir, { recursive: true, mode: 0o700 });
       overrideOsTmpdir(longTmpRoot);
       vi.spyOn(os, 'platform').mockReturnValue('darwin');
-      authMocks.getProxyCapabilityToken.mockReturnValue(CAPABILITY_TOKEN);
-      authMocks.stopProxy.mockResolvedValue(undefined);
+      authMocks.stop.mockResolvedValue(undefined);
       bridgeMocks.setupCredentialProxyPodmanMacOS.mockResolvedValue({
         cleanup: bridgeMocks.podmanCleanup,
         entrypointPrefix: 'PODMAN_CREDENTIAL_BRIDGE',
@@ -515,10 +507,13 @@ describe('Podman credential socket runtime', () => {
             `${process.pid}-${'n'.repeat(22)}.sock`,
           );
           fs.writeFileSync(socketPath, 'socket fixture');
-          return { stop: async (): Promise<void> => {} };
+          return {
+            socketPath,
+            capabilityToken: CAPABILITY_TOKEN,
+            stop: authMocks.stop,
+          };
         },
       );
-      authMocks.getProxySocketPath.mockImplementation(() => socketPath);
 
       const invocation = invokeCredentialSetup('podman', sessionTmpdir);
       const result = await invocation.promise;
@@ -544,10 +539,13 @@ describe('Podman credential socket runtime', () => {
             `${process.pid}-${'n'.repeat(22)}.sock`,
           );
           fs.writeFileSync(socketPath, 'socket fixture');
-          return { stop: async (): Promise<void> => {} };
+          return {
+            socketPath,
+            capabilityToken: CAPABILITY_TOKEN,
+            stop: authMocks.stop,
+          };
         },
       );
-      authMocks.getProxySocketPath.mockImplementation(() => socketPath);
       bridgeMocks.setupCredentialProxyPodmanMacOS.mockRejectedValue(
         new FatalSandboxError('induced Podman bridge failure'),
       );
@@ -571,10 +569,13 @@ describe('Podman credential socket runtime', () => {
             `${process.pid}-${'n'.repeat(22)}.sock`,
           );
           fs.writeFileSync(socketPath, 'socket fixture');
-          return { stop: async (): Promise<void> => {} };
+          return {
+            socketPath,
+            capabilityToken: CAPABILITY_TOKEN,
+            stop: authMocks.stop,
+          };
         },
       );
-      authMocks.getProxySocketPath.mockImplementation(() => socketPath);
       const result = await invokeCredentialSetup('podman', sessionTmpdir)
         .promise;
       const realRmSync = fs.rmSync.bind(fs);
@@ -730,10 +731,13 @@ describe('Podman credential socket runtime', () => {
         async (config: { socketPath: string }) => {
           socketRuntime = config.socketPath;
           fs.writeFileSync(socketPath, 'socket fixture');
-          return { stop: async (): Promise<void> => {} };
+          return {
+            socketPath,
+            capabilityToken: CAPABILITY_TOKEN,
+            stop: authMocks.stop,
+          };
         },
       );
-      authMocks.getProxySocketPath.mockReturnValue(socketPath);
 
       const invocation = invokeCredentialSetup('docker', sessionTmpdir);
       const result = await invocation.promise;

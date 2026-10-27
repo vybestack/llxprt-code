@@ -23,8 +23,8 @@ import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owne
 import {
   acquirePreferredProviderManager,
   acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../../agents/src/api/preferred-provider-acquisition.js';
+} from '../../agents/src/api/__tests__/helpers/provider-acquisition.js';
+import { preparePreferredProviderCompletion } from '../../agents/src/api/preferred-provider-acquisition.js';
 import { releaseAdoptedFileScope } from '../../agents/src/api/adoption-release.js';
 import { randomUUID } from 'node:crypto';
 import {
@@ -305,7 +305,7 @@ describe('filesystem workspace extension ownership', () => {
       builtCallerTokenizer,
     );
     builtCallerOwner.bindMcpRuntime(builtCallerMcp);
-    builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
+    builtCallerOwner.clients.bindProviderFiles(builtCallerFiles, (provider) =>
       builtCallerOAuth.composeRetryOperations(provider),
     );
     builtCallerOwner.bindHooks();
@@ -331,6 +331,7 @@ describe('filesystem workspace extension ownership', () => {
         builtCallerRuntimeId,
         builtCallerTokenizer,
         undefined,
+        process.env.LLXPRT_FAKE_RESPONSES,
       );
       await builtCallerMcp.initialize();
       const activation = await executeProviderActivation(
@@ -345,12 +346,12 @@ describe('filesystem workspace extension ownership', () => {
           builtCallerManager,
           builtCallerOAuth,
           () => 'agent',
-          () => builtCallerOwner.refreshAuth(),
+          () => builtCallerOwner.clients.refreshAuth(),
           builtCallerSettingsOwner,
         ),
         builtCallerSettings,
         builtCallerManager,
-        (method) => builtCallerOwner.refreshAuth(method),
+        (method) => builtCallerOwner.clients.refreshAuth(method),
         assembleModelSelection(builtCallerSettingsOwner),
       );
       requireCallerActivation(activation);
