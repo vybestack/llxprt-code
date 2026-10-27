@@ -137,7 +137,10 @@ describe('toolMapping', () => {
       const pending = mapPendingToDisplay(retained);
       expect(pending.tools).toHaveLength(1);
       expect(pending.tools[0].resultDisplay).toBeUndefined();
-      expect(pending.tools[0].description).toBe('');
+      expect(pending.tools[0].name).toBe('Test Tool');
+      expect(pending.tools[0].description).toBe(
+        'Calling test_tool with args...',
+      );
       expect(pending.tools[0].ptyId).toBe(123);
       expect(pending.tools[0].journalIdentity).toStrictEqual(
         request.journalIdentity,

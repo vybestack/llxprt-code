@@ -375,8 +375,8 @@ function mapJournalControl(call: TrackedToolCall): IndividualToolCallDisplay[] {
     {
       callId: call.request.callId,
       journalIdentity: call.request.journalIdentity,
-      name: call.request.name,
-      description: '',
+      name: getDisplayName(call),
+      description: getDescription(call),
       status: mapCoreStatusToDisplayStatus(call.status),
       resultDisplay: undefined,
       confirmationDetails:

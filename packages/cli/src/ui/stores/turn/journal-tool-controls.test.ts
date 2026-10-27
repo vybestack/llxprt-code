@@ -74,8 +74,8 @@ describe('journal-positioned tool controls', () => {
       const control: IndividualToolCallDisplay = {
         ...active.tools[0],
         status: ToolCallStatus.Confirming,
-        name: 'must not replace journal tool name',
-        description: 'must not replace journal parameters',
+        name: 'Lookup',
+        description: 'Search the indexed files',
         resultDisplay: 'must not enter the journal window',
         confirmationDetails: {
           type: 'info',
@@ -95,8 +95,9 @@ describe('journal-positioned tool controls', () => {
         item.tools.filter((tool) => tool.status === ToolCallStatus.Confirming),
       );
       expect(confirming).toHaveLength(1);
-      expect(confirming[0].name).toBe('lookup');
-      expect(confirming[0].description).not.toBe(control.description);
+      expect(confirming[0].name).toBe('Lookup');
+      expect(confirming[0].description).toBe('Search the indexed files');
+      expect(active.tools[0].name).toBe('lookup');
       expect(confirming[0].resultDisplay).not.toBe(control.resultDisplay);
       await confirming[0].confirmationDetails?.onConfirm(
         ToolConfirmationOutcome.ProceedAlways,

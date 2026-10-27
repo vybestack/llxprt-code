@@ -65,6 +65,8 @@ export function withJournalToolControls<T extends HistoryItem>(
         ? tool
         : {
             ...tool,
+            name: control.name,
+            description: control.description,
             status: control.status,
             confirmationDetails: control.confirmationDetails,
             ptyId: control.ptyId,

@@ -146,17 +146,29 @@ export class NativeJournalCursor {
       this.options.counters?.rowReleased();
     }
   }
+  private async isToolContinuation(entry: RowEntry): Promise<boolean> {
+    if (this.reader.isTool(entry)) return true;
+    const presentation = await this.reader.presentation(entry);
+    return (
+      presentation?.descriptor.type === 'tool-result' ||
+      presentation?.descriptor.type === 'tool-approval'
+    );
+  }
   private async groupStart(row: number): Promise<number> {
     if (this.group && row >= this.group.start && row < this.group.end)
       return this.group.start;
-    while (row > 0 && this.reader.isTool(await this.reader.entryAt(row))) row--;
+    while (
+      row > 0 &&
+      (await this.isToolContinuation(await this.reader.entryAt(row)))
+    )
+      row--;
     return row;
   }
   private async groupEnd(row: number): Promise<number> {
     if (this.group?.start === row) return this.group.end;
     let end = row + 1;
     for await (const entry of this.reader.entries(end)) {
-      if (!this.reader.isTool(entry)) break;
+      if (!(await this.isToolContinuation(entry))) break;
       end++;
     }
     this.group = { start: row, end };
