@@ -3,7 +3,10 @@ import { mkdir, rename, rm, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { vi } from 'bun:test';
 import { JournalStore } from '@vybestack/llxprt-code-core/journal/journalStore.js';
-import type { VersionEdit } from '@vybestack/llxprt-code-core/journal/groupEdits.js';
+import type {
+  VersionEdit,
+  ReplacementRow,
+} from '@vybestack/llxprt-code-core/journal/groupEdits.js';
 import type { RowDraft } from '@vybestack/llxprt-code-core/journal/rowDraft.js';
 import type { GitService } from '@vybestack/llxprt-code-core';
 import { withCleanupHistory } from '../../../utils/__tests__/support/cleanup-history-test-helpers.js';
@@ -151,11 +154,11 @@ export function gateJournalRowCommit(
           observedRow.candidate = true;
         }
       }
-      async function* observe(
-        rows: Iterable<RowDraft> | AsyncIterable<RowDraft>,
-      ): AsyncGenerator<RowDraft> {
+      async function* observe<T extends ReplacementRow>(
+        rows: Iterable<T> | AsyncIterable<T>,
+      ): AsyncGenerator<T> {
         for await (const row of rows) {
-          inspect(row);
+          if ('blocks' in row) inspect(row);
           if (observedRow.candidate && beforeCommit) await acknowledge();
           yield row;
         }

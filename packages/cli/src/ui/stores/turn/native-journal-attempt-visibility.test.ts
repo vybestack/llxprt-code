@@ -20,7 +20,9 @@ async function readAiItems(
   try {
     return (await cursor.pageBack(8)).entries
       .flatMap((entry) =>
-        entry.kind === 'projected' && attempts.has(entry.transcriptId)
+        entry.kind === 'projected' &&
+        entry.transcriptId !== undefined &&
+        attempts.has(entry.transcriptId)
           ? [entry.item]
           : [],
       )

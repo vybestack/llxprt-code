@@ -51,13 +51,14 @@ let context: CommandContext;
 
 let mutationHistory: HistoryService | undefined;
 
-let displayed: HistoryItemWithoutId[];
+let displayed: unknown[];
 
 async function installHistory(rows: readonly IContent[]): Promise<void> {
   mutationHistory = new HistoryService();
   const history = mutationHistory;
   await history.replaceBatch(rows);
   const chat = publicChat(history);
+  assertDefined(context.services.config);
   Object.assign(context.services.config, {
     getEphemeralSetting: () => 'allowed',
   });
@@ -426,7 +427,7 @@ function chatCommandCase15(): void {
           text: 'B',
           thinkingBlocks: [{ type: 'thinking', thought: 'pondering \u2705' }],
         },
-      ]);
+      ] satisfies HistoryItemWithoutId[]);
       const remaining: IContent[] = [];
       for await (const row of mutationHistory?.streamRawHistory() ?? [])
         remaining.push(row);

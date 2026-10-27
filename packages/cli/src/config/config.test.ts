@@ -764,12 +764,14 @@ describe('loadCliConfig', () => {
     vi.restoreAllMocks();
   });
 
-  it.each([
-    { tools: { core: ['replace', 'read_file'] } },
-    { tools: { core: [] }, coreTools: ['apply_patch'] },
-    { tools: { core: ['read_file'] }, coreTools: ['apply_patch'] },
-    { coreTools: ['read_file'] },
-  ])(
+  it.each(
+    [
+      { tools: { core: ['replace', 'read_file'] } },
+      { tools: { core: [] }, coreTools: ['apply_patch'] },
+      { tools: { core: ['read_file'] }, coreTools: ['apply_patch'] },
+      { coreTools: ['read_file'] },
+    ].map((settings): Settings => settings),
+  )(
     'honors the configured core tool restriction %j',
     async (settings: Settings) => {
       process.argv = ['bun', 'llxprt'];

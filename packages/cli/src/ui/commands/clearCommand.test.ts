@@ -242,7 +242,7 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
       ),
     ).toBe(true);
     const result = await continueAction(context, oldId);
-    if (result?.type !== 'perform_resume')
+    if (result?.type !== 'perform_resume' || result.sessionRef === undefined)
       throw new Error('Expected resume action');
     const history = await agent.session.resumeSession(result.sessionRef);
     expect(history.id).toBe(oldId);
@@ -266,7 +266,12 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
         return Reflect.get(target, property, receiver);
       },
     });
-    const resumed = await setupOwnerSessionRecording(request, agent, {}, null);
+    const resumed = await setupOwnerSessionRecording(
+      request,
+      agent,
+      { listSessions: false, deleteSession: undefined },
+      null,
+    );
     if (resumed === null) throw new Error('Expected resumed rows');
     const resumedRows = await Array.fromAsync(resumed.streamRows());
     expect(resumedRows.flatMap((item) => item.blocks)).toStrictEqual([
