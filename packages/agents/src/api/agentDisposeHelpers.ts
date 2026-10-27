@@ -16,18 +16,20 @@
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import type { OwnershipRecord } from './agentBootstrap.js';
-import type { AgentDeps } from './agent-deps.js';
 
 export async function releaseAgentShutdownResources(
-  deps: AgentDeps,
+  disposeClient: () => Promise<void>,
+  cleanupRuntime: () => Promise<void> | void,
+  mediaOwner: SessionMediaOwner | undefined,
+  oauthManager: OAuthManager,
   ownership: OwnershipRecord,
   errors: unknown[],
 ): Promise<void> {
-  await collectDisposalError(errors, () => deps.sessionClient.dispose());
-  await collectDisposalError(errors, () => deps.runtimeHandle.cleanup());
-  await disposeConfigInfrastructure(ownership, deps.mediaOwner, errors);
+  await collectDisposalError(errors, disposeClient);
+  await collectDisposalError(errors, cleanupRuntime);
+  await disposeConfigInfrastructure(ownership, mediaOwner, errors);
   ownership.extensionsDisposed = true;
-  await releaseAgentFinalResources(ownership, deps.oauthManager, errors);
+  await releaseAgentFinalResources(ownership, oauthManager, errors);
 }
 
 /**

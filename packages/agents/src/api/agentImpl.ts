@@ -1343,7 +1343,10 @@ export class AgentImpl implements Agent {
       releaseResources: [
         async () => {
           await releaseAgentShutdownResources(
-            this.deps,
+            () => this.deps.sessionClient.dispose(),
+            () => this.deps.runtimeHandle.cleanup(),
+            this.deps.mediaOwner,
+            this.deps.oauthManager,
             this.ownership,
             errors,
           );
