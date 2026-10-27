@@ -166,21 +166,19 @@ async function send(
   meet: () => Promise<void>,
 ): Promise<Result> {
   try {
-    if (!source)
+    if (!source) {
+      const contents = await Array.fromAsync(disk.source.openReader());
+      await meet();
       return await consume(
         input.wrapper.generateChatCompletion({
-          contents: {
-            async *[Symbol.asyncIterator](): AsyncGenerator<IContent> {
-              await meet();
-              yield* disk.source.openReader();
-            },
-          },
+          contents,
           invocation: input.setup.invocation,
           systemInstruction: preflightInstructions,
           resolved: { model: 'gpt-5.6' },
           metadata: { [LOGICAL_REQUEST_ID_KEY]: id },
         }),
       );
+    }
     const stream = await enforceAndStreamSourcePromptEnvelopeRetries({
       provider: input.wrapper,
       source: disk.source,
