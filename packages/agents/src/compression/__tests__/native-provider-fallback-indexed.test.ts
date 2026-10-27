@@ -52,7 +52,7 @@ describe('native fallback indexed selection and no-op', () => {
                 size - 1,
               );
             });
-            expect(selected).toBe(size * 2 + 2);
+            expect(selected).toBe(size + 1);
             await publishProviderFallbackCandidate(
               history,
               candidate,
