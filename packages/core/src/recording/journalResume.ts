@@ -75,6 +75,7 @@ export class JournalResumeBoot implements ResumePoint {
   async *streamRows(): AsyncGenerator<IContent> {
     const session = await this.recording.session();
     for await (const row of resumedRows(session, this)) {
+      this.counters?.recordDecoded();
       this.counters?.rowDecoded();
       this.counters?.ownership?.retain(row.content);
       try {
