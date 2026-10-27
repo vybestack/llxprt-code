@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { RecordAppender } from './groupAppender.js';
+import { IdFactRuns } from './id-fact-runs.js';
 import { JournalFormatError } from './errors.js';
 import {
   encodeCountValue,
@@ -114,6 +115,7 @@ export class IdFactBatch {
   private workingRoot: number;
   private workingReader: IdTrieReader | undefined;
   private readonly readback = new BoundedIdNodeCache();
+  private readonly runs: IdFactRuns | undefined;
   /** Reads through the pending writes. */
   readonly queries: IdFactQueries;
 
@@ -132,11 +134,15 @@ export class IdFactBatch {
     this.exceptions = exceptionCount;
     this.workingRoot = root;
     this.workingReader = reader;
+    this.runs =
+      root === 0 && spill !== undefined ? new IdFactRuns(spill) : undefined;
     const committed: IdEntryView = {
-      get: (hash) =>
-        this.workingReader === undefined
+      get: (hash) => {
+        if (this.runs !== undefined) return this.runs.lookup(hash);
+        return this.workingReader === undefined
           ? Promise.resolve(undefined)
-          : this.workingReader.lookup(this.workingRoot, hash),
+          : this.workingReader.lookup(this.workingRoot, hash);
+      },
     };
     this.queries = new IdFactQueries(
       {
@@ -161,6 +167,7 @@ export class IdFactBatch {
 
   private put(namespace: number, key: Uint8Array, value: Uint8Array): void {
     const hash = this.deps.hasher(namespace, key);
+    this.runs?.remember(hash);
     const entry = { hash, value };
     const id = pendingKey(hash);
     const replaced = this.pending.get(id);
@@ -183,6 +190,12 @@ export class IdFactBatch {
 
   private async flush(spill: BatchSpill): Promise<void> {
     const { appender } = spill;
+    if (this.runs !== undefined) {
+      await this.runs.append(this.sortedUpdates());
+      this.pending.clear();
+      this.pendingBytes = 0;
+      return;
+    }
     this.workingRoot = await mergeIdTrie(
       appender,
       this.workingReader,
@@ -312,8 +325,17 @@ export class IdFactBatch {
       {
         freeze: async () => {
           await this.flush(spill);
-          const reader = this.workingReader;
-          const root = this.workingRoot;
+          const root =
+            this.runs === undefined
+              ? this.workingRoot
+              : await this.runs.commit();
+          const reader =
+            this.runs === undefined
+              ? this.workingReader
+              : new IdTrieReader(
+                  spill.readGroup(spill.appender.nextOffset),
+                  this.readback,
+                );
           return new IdFactQueries(
             {
               get: (hash) =>
@@ -373,6 +395,15 @@ export class IdFactBatch {
 
   /** Merges the writes still pending into the trie as part of the current group. */
   async commit(appender: RecordAppender): Promise<FactCommit> {
+    if (this.runs !== undefined) {
+      await this.runs.append(this.sortedUpdates());
+      this.pending.clear();
+      this.pendingBytes = 0;
+      return {
+        root: await this.runs.commit(),
+        exceptionCount: this.exceptions,
+      };
+    }
     const root = await mergeIdTrie(
       appender,
       this.workingReader,
