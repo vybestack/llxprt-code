@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DEFAULT_HTTP_JSON_ENVELOPE_BYTES } from '../utils/boundedJsonBody.js';
-import { journalSendFixture } from './support/journal-send-fixture.js';
+import { nativeJournalSendFixture } from './support/journal-send-fixture.js';
 import { providerStreamError } from './support/provider-stream-error.js';
 import { localWireHashSink } from './support/local-wire-hash-sink.js';
 import {
@@ -53,7 +53,7 @@ describe('native Responses parent recovery envelope planning', () => {
             { status: 400 },
           ),
       });
-      const fixture = await journalSendFixture(
+      const fixture = await nativeJournalSendFixture(
         rows('x'.repeat(DEFAULT_HTTP_JSON_ENVELOPE_BYTES)),
       );
       let error: unknown;

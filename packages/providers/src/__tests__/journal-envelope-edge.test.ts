@@ -12,7 +12,7 @@ import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media
 import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { DEFAULT_HTTP_JSON_ENVELOPE_BYTES } from '../utils/boundedJsonBody.js';
-import { journalSendFixture } from './support/journal-send-fixture.js';
+import { nativeJournalSendFixture } from './support/journal-send-fixture.js';
 import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import { providerStreamError } from './support/provider-stream-error.js';
 import {
@@ -104,11 +104,10 @@ async function verifyEdge(
     padding,
     wire.subarray(offset + marker.length),
   );
-  const fixture = await journalSendFixture(
+  const fixture = await nativeJournalSendFixture(
     (function* (): Generator<IContent> {
       yield row('x'.repeat(padding), reference);
     })(),
-    [],
     { mediaStore: store },
   );
   let rowsRead = 0;

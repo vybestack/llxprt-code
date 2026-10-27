@@ -4,7 +4,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DEFAULT_HTTP_JSON_ENVELOPE_BYTES } from '../utils/boundedJsonBody.js';
 import { REQUEST_SIZE_SINK_KEY } from '../logging/requestSizeReport.js';
-import { journalSendFixture } from './support/journal-send-fixture.js';
+import { nativeJournalSendFixture } from './support/journal-send-fixture.js';
 import { providerStreamError } from './support/provider-stream-error.js';
 import { localWireHashSink } from './support/local-wire-hash-sink.js';
 import {
@@ -24,7 +24,7 @@ const routes = WIRE_ROUTES.filter((route) =>
 describe('native envelope refusal before transport', () => {
   for (const route of routes) {
     it(`${route.id}: refuses an oversized declared envelope without sending bytes and releases its source`, async () => {
-      const fixture = await journalSendFixture(
+      const fixture = await nativeJournalSendFixture(
         (function* (): Generator<IContent> {
           yield {
             speaker: 'human',

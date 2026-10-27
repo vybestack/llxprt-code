@@ -4,7 +4,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DEFAULT_HTTP_JSON_ENVELOPE_BYTES } from '../utils/boundedJsonBody.js';
 import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
-import { journalSendFixture } from '../__tests__/support/journal-send-fixture.js';
+import { nativeJournalSendFixture } from '../__tests__/support/journal-send-fixture.js';
 import { providerStreamError } from '../__tests__/support/provider-stream-error.js';
 import {
   buildNormalizedOptions,
@@ -68,7 +68,7 @@ describe('Responses native rebuilt envelope planning', () => {
         getMediaTransportCapabilities: () =>
           declaredMediaTransportCapabilities('codex'),
       };
-      const fixture = await journalSendFixture(rows());
+      const fixture = await nativeJournalSendFixture(rows());
       const request = captureResponsesTestRequest(
         buildNormalizedOptions({
           requestRows: fixture.selection,

@@ -4,7 +4,7 @@ import type { PreparedResponsesRequestContext } from './openAIResponsesExecutor.
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DEFAULT_HTTP_JSON_ENVELOPE_BYTES } from '../utils/boundedJsonBody.js';
-import { journalSendFixture } from '../__tests__/support/journal-send-fixture.js';
+import { nativeJournalSendFixture } from '../__tests__/support/journal-send-fixture.js';
 import { providerStreamError } from '../__tests__/support/provider-stream-error.js';
 import {
   buildNormalizedOptions,
@@ -64,7 +64,7 @@ describe('Responses WebSocket native envelope planning', () => {
         getWebSocketTransport: () => transport,
         isWebSocketTransportActive: () => true,
       };
-      const smallFixture = await journalSendFixture(rows(1));
+      const smallFixture = await nativeJournalSendFixture(rows(1));
       const smallRequest = captureResponsesTestRequest(
         buildNormalizedOptions({
           requestRows: smallFixture.selection,
@@ -77,7 +77,9 @@ describe('Responses WebSocket native envelope planning', () => {
       const overhead = (await bodyLengthOf(small)) - 1;
       await small.mediaRequest.release();
       await smallFixture.close();
-      const fixture = await journalSendFixture(rows(bodyLength - overhead));
+      const fixture = await nativeJournalSendFixture(
+        rows(bodyLength - overhead),
+      );
       const request = captureResponsesTestRequest(
         buildNormalizedOptions({
           requestRows: fixture.selection,

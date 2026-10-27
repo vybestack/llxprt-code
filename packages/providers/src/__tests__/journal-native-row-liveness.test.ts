@@ -11,7 +11,7 @@ import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/reques
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
-import { journalSendFixture } from './support/journal-send-fixture.js';
+import { nativeJournalSendFixture } from './support/journal-send-fixture.js';
 import { localWireHashSink } from './support/local-wire-hash-sink.js';
 import {
   buildHistoryCallOptions,
@@ -147,7 +147,7 @@ async function sendWithCensus(
     mimeType: 'image/png',
     semanticMetadata: {},
   });
-  const fixture = await journalSendFixture(
+  const fixture = await nativeJournalSendFixture(
     (function* (): Generator<IContent> {
       for (let index = 0; index < ROW_COUNT; index++)
         yield {
@@ -158,7 +158,6 @@ async function sendWithCensus(
           ],
         };
     })(),
-    [],
     { mediaStore: store },
   );
   const census = new NativeRowCensus();

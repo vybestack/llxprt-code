@@ -101,7 +101,7 @@ describe('Responses source route stored media references', () => {
         ],
       },
     ]);
-    expect(resolver.accounting()).toStrictEqual({ ...idle, storeReadCount: 1 });
+    expect(resolver.accounting()).toStrictEqual({ ...idle, storeReadCount: 2 });
     expect([...promptDirs()].filter((e) => !before.has(e))).toHaveLength(0);
   }, 60000);
 
@@ -118,7 +118,7 @@ describe('Responses source route stored media references', () => {
     expect(body.input[0].content[0]['file_data']).toBe(
       'data:application/pdf;base64,JVBERg==',
     );
-    expect(resolver.accounting()).toStrictEqual({ ...idle, storeReadCount: 1 });
+    expect(resolver.accounting()).toStrictEqual({ ...idle, storeReadCount: 2 });
   }, 60000);
 
   it('resolves the media of a stateful suffix only and never reads media before the parent', async () => {
@@ -150,7 +150,7 @@ describe('Responses source route stored media references', () => {
     expect(harness.bodies[0]).toContain('BAUG');
     expect(harness.bodies[0]).not.toContain('AQID');
     expect(harness.bodies[0]).toContain('"previous_response_id":"resp_parent"');
-    expect(resolver.accounting()).toStrictEqual({ ...idle, storeReadCount: 1 });
+    expect(resolver.accounting()).toStrictEqual({ ...idle, storeReadCount: 2 });
   }, 60000);
 
   it('enforces the aggregate media budget across rows and releases what it reserved', async () => {
@@ -171,15 +171,15 @@ describe('Responses source route stored media references', () => {
     expect([...promptDirs()].filter((e) => !before.has(e))).toHaveLength(0);
   }, 60000);
 
-  it('does not reserve or read media when a projection is dropped unsent', async () => {
+  it('verifies a delta blob once without reserving or materializing media when a projection is dropped unsent', async () => {
     const image = await admit(PNG_BYTES);
     const projection = await project(
       [{ speaker: 'human', blocks: [image] }],
       image.normalizedBase64Length,
     );
     expect(resolver.accounting().reservedContentCount).toBe(0);
-    expect(resolver.accounting()).toStrictEqual({ ...idle, storeReadCount: 0 });
+    expect(resolver.accounting()).toStrictEqual({ ...idle, storeReadCount: 1 });
     await projection.releaseIfUnsent?.();
-    expect(resolver.accounting()).toStrictEqual({ ...idle, storeReadCount: 0 });
+    expect(resolver.accounting()).toStrictEqual({ ...idle, storeReadCount: 1 });
   }, 60000);
 });

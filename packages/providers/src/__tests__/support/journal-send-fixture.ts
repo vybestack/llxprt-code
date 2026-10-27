@@ -1,5 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { JournalProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/journal-provider-request.js';
+import { encodedRows } from '@vybestack/llxprt-code-core/services/history/journalPublication.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createCoreSuffixFixtureGraph } from '@vybestack/llxprt-code-core/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import {
@@ -17,6 +20,48 @@ import { join } from 'node:path';
 export interface JournalSendFixture {
   readonly selection: ProviderRequestSnapshot;
   close(): Promise<void>;
+}
+
+export async function nativeJournalSendFixture(
+  rows: Iterable<IContent>,
+  options: { readonly mediaStore?: LocalMediaStore } = {},
+): Promise<JournalSendFixture> {
+  const parent = join(
+    import.meta.dir,
+    '../../../../../tmp/ci-provider-fixtures',
+  );
+  mkdirSync(parent, { recursive: true });
+  const root = mkdtempSync(join(parent, 'native-journal-send-'));
+  const session = await JournalSession.create(join(root, 'session.llxj'));
+  try {
+    // Provider envelope tests need a real journal selection, not unrelated
+    // HistoryService admission and token estimation of their oversized rows.
+    await session.store.commit([
+      { kind: 'replace', rows: encodedRows(rows, 0) },
+    ]);
+    const snapshot = await session.store.snapshot();
+    const selection = await JournalProviderRequestSnapshot.create(
+      snapshot,
+      [],
+      {},
+      undefined,
+      () => snapshot.close(),
+      (pin, registration) =>
+        session.store.prepareSnapshotFormat(pin, registration),
+      options.mediaStore,
+      (pin) => session.store.prepareSnapshotKimi(pin),
+    );
+    return {
+      selection,
+      async close(): Promise<void> {
+        await selection.close();
+        await session.close();
+      },
+    };
+  } catch (error) {
+    await session.close();
+    throw error;
+  }
 }
 
 async function seedBatches(
