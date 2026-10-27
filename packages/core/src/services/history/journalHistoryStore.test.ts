@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { journalPathOf } from './__tests__/support/journalPathOf.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { openJournalReadOnly } from '../../journal/journalReader.js';
+import { RECORD_KIND } from '../../journal/recordKinds.js';
 import {
   testJournalSeams,
   type Failures,
@@ -69,15 +70,22 @@ describe('journal history store', () => {
   });
 
   it('does not report durable, or publish, a group whose trailer write is held (defect 1)', async () => {
-    // Writes: the header (0), then each group's records and trailer (1, 2).
-    const { store, seams } = await created('held.llxj', { gateWriteAt: 2 });
+    const { store, seams } = await created('held.llxj', {
+      gateTrailerAt: 0,
+      recordKinds: true,
+    });
     store.apply({ kind: 'content', content: row('human', 'held', 1) });
     let durable = false;
     const waiting = store.waitForDurable().then(() => {
       durable = true;
     });
     for (let spin = 0; spin < 500; spin++) {
-      if (seams.events.filter((event) => event.type === 'write').length >= 3)
+      if (
+        seams.events.some(
+          (event) =>
+            event.type === 'write' && event.kind === RECORD_KIND.TRAILER,
+        )
+      )
         break;
       await new Promise((resolve) => setTimeout(resolve, 2));
     }
@@ -105,11 +113,13 @@ describe('journal history store', () => {
     const kinds = seams.events
       .filter((event) => event.type === 'flush' || event.type === 'write')
       .map((event) => event.type);
-    // The header write, then for each group its records, the flush, and its trailer.
+    // The header, then each group's row/transcript writes, flush and trailer.
     expect(kinds).toStrictEqual([
       'write',
       'write',
+      'write',
       'flush',
+      'write',
       'write',
       'write',
       'flush',

@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
 import { openJournalReadOnly } from './journalReader.js';
 import { JournalStore } from './journalStore.js';
-import { MUTATION } from './recordKinds.js';
+import { MUTATION, RECORD_KIND } from './recordKinds.js';
 import {
   ArrayModel,
   appendEach,
@@ -68,8 +68,7 @@ describe('commit groups', () => {
 
   it('does not publish a version before its trailer is acked (defect 1)', async () => {
     const target = file('ack.llxj');
-    // Writes: the header (0), then each group's records (1, 3) and trailer (2, 4).
-    const seams = testJournalSeams({ gateWriteAt: 4 });
+    const seams = testJournalSeams({ gateTrailerAt: 1, recordKinds: true });
     const store = await JournalStore.create(target, storeDeps({ seams }));
     await store.commit([{ kind: 'append', rows: [draftRow()] }]);
     const first = published(store);
@@ -81,7 +80,12 @@ describe('commit groups', () => {
     ]);
     // The group's records are written and flushed; its trailer write is held.
     for (let spin = 0; spin < 500; spin++) {
-      if (seams.events.filter((event) => event.type === 'write').length >= 5)
+      if (
+        seams.events.filter(
+          (event) =>
+            event.type === 'write' && event.kind === RECORD_KIND.TRAILER,
+        ).length === 2
+      )
         break;
       await new Promise((resolve) => setTimeout(resolve, 2));
     }
