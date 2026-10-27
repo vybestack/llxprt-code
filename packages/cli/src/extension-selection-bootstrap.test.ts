@@ -4,8 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
+import {
+  mkdtemp,
+  mkdir,
+  readdir,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -37,23 +52,31 @@ const baseArgv = [
 
 describe('extension selection at CLI bootstrap', () => {
   let directory: string;
+  let originalEnv: NodeJS.ProcessEnv;
   let previousArgv: string[];
   let previousEnv: NodeJS.ProcessEnv;
   let previousCwd: string;
+
+  beforeAll(async () => {
+    originalEnv = { ...process.env };
+    directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'llxprt-extension-selection-')),
+    );
+    process.env.HOME = directory;
+    process.env.USERPROFILE = directory;
+  });
+
+  afterAll(async () => {
+    process.env = originalEnv;
+    await rm(directory, { recursive: true, force: true });
+  });
 
   beforeEach(async () => {
     previousArgv = process.argv;
     previousEnv = { ...process.env };
     previousCwd = process.cwd();
-    directory = await realpath(
-      await mkdtemp(join(tmpdir(), 'llxprt-extension-selection-')),
-    );
-    const home = join(directory, 'home');
     const workspace = join(directory, 'workspace');
-    await mkdir(home, { recursive: true });
     await mkdir(workspace, { recursive: true });
-    process.env.HOME = home;
-    process.env.USERPROFILE = home;
     const configHome = join(directory, 'config');
     process.env.LLXPRT_CONFIG_HOME = configHome;
     process.env.LLXPRT_DATA_HOME = configHome;
@@ -79,7 +102,9 @@ describe('extension selection at CLI bootstrap', () => {
     process.chdir(previousCwd);
     process.argv = previousArgv;
     process.env = previousEnv;
-    await rm(directory, { recursive: true, force: true });
+    for (const entry of await readdir(directory)) {
+      await rm(join(directory, entry), { recursive: true, force: true });
+    }
   });
 
   async function activeExtensionNames(
