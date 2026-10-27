@@ -69,6 +69,28 @@ export const defaultEntryBody =
   'console.log(JSON.stringify({exe:process.execPath,argv:process.argv.slice(2)}));' +
   'let c=Number(process.env.LLXPRT_TEST_EXIT||"0");if(c)process.exit(c);';
 
+/**
+ * Fixed source for the profiled child that proves one terminal SIGINT reaches
+ * it once. Its two output paths arrive through SIGNAL_READY_PATH and
+ * SIGNAL_COUNT_PATH so no test value is ever spliced into this code.
+ */
+export const signalBridgeEntryBody = [
+  'import { writeFileSync } from "node:fs";',
+  'if (process.env.LLXPRT_INTERNAL_MEMPROFILE_SIGNAL_BRIDGE !== "1") throw new Error("signal bridge marker missing");',
+  'const countPath = process.env.SIGNAL_COUNT_PATH;',
+  'const readyPath = process.env.SIGNAL_READY_PATH;',
+  'if (countPath === undefined || readyPath === undefined) throw new Error("signal bridge paths missing");',
+  'let signalCount = 0;',
+  'process.on("SIGINT", () => {',
+  '  signalCount++;',
+  '  if (signalCount === 1) {',
+  '    setTimeout(() => { writeFileSync(countPath, String(signalCount)); process.exit(0); }, 250);',
+  '  }',
+  '});',
+  'writeFileSync(readyPath, "ready");',
+  'setInterval(() => {}, 1000);',
+].join('\n');
+
 export function writeSourceEntry(pkgRoot: string, body: string): void {
   writeFileSync(path.join(pkgRoot, 'index.ts'), body);
 }

@@ -137,6 +137,17 @@ describe('Vertex owner transport fixture', () => {
     expect(a.requests).toHaveLength(0);
   });
 
+  it('does not route a regional model host hidden behind another name', async () => {
+    const a = await transportFor('a');
+    await expect(
+      a.fetch('https://evil-us-central1-aiplatform.googleapis.com/v1/m'),
+    ).rejects.toThrow('no route');
+    await expect(
+      a.fetch('https://us-central1-aiplatform.googleapis.com.example.com/v1/m'),
+    ).rejects.toThrow('no route');
+    expect(a.requests).toHaveLength(0);
+  });
+
   it('rejects later calls after close', async () => {
     const a = await transportFor('a');
     await a.close();

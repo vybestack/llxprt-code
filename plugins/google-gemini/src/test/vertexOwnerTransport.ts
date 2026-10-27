@@ -49,12 +49,22 @@ const FIXED_HOSTS: Readonly<Record<string, TransportKind>> = {
   'iamcredentials.googleapis.com': 'iam',
 };
 
+/**
+ * Regional Vertex model hosts the tests actually request. Exact names only: a
+ * suffix test would also route `evil-us-central1-aiplatform.googleapis.com`.
+ * Add a region here when a test starts using it.
+ */
+const MODEL_HOSTS: ReadonlySet<string> = new Set([
+  'us-central1-aiplatform.googleapis.com',
+  'europe-west4-aiplatform.googleapis.com',
+]);
+
 function kindForHost(hostname: string, root: string): TransportKind {
   const fixed = FIXED_HOSTS[hostname];
   if (fixed !== undefined) {
     return fixed;
   }
-  if (hostname.endsWith('-aiplatform.googleapis.com')) {
+  if (MODEL_HOSTS.has(hostname)) {
     return 'model';
   }
   if (hostname === `metadata-${root}.invalid`) {

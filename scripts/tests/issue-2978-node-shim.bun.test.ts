@@ -56,6 +56,7 @@ import {
   readCapture,
   runShim,
   shimSrc,
+  signalBridgeEntryBody,
   writeBundleEntry,
   writeProfileLauncher,
   writeProfilerEntry,
@@ -711,25 +712,17 @@ describe('packages/cli/bin/llxprt.mjs memory-profile dispatch (issue #3386)', ()
       const countPath = path.join(layout.root, 'signal-count');
       writeFileSync(
         path.join(layout.pkgRoot, 'bundle', 'memprofile-launcher.js'),
-        [
-          'import { writeFileSync } from "node:fs";',
-          'if (process.env.LLXPRT_INTERNAL_MEMPROFILE_SIGNAL_BRIDGE !== "1") throw new Error("signal bridge marker missing");',
-          'let signalCount = 0;',
-          'process.on("SIGINT", () => {',
-          '  signalCount++;',
-          '  if (signalCount === 1) {',
-          `    setTimeout(() => { writeFileSync(${JSON.stringify(countPath)}, String(signalCount)); process.exit(0); }, 250);`,
-          '  }',
-          '});',
-          `writeFileSync(${JSON.stringify(readyPath)}, 'ready');`,
-          'setInterval(() => {}, 1000);',
-        ].join('\n'),
+        signalBridgeEntryBody,
       );
 
       const shim = spawn(process.execPath, [layout.shim, '--memprofile'], {
         cwd: layout.root,
         detached: true,
-        env: { ...process.env },
+        env: {
+          ...process.env,
+          SIGNAL_COUNT_PATH: countPath,
+          SIGNAL_READY_PATH: readyPath,
+        },
         stdio: 'ignore',
       });
       if (shim.pid === undefined) {
