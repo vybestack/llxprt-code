@@ -611,7 +611,7 @@ async function acquireAdoptedSession(
   content: RuntimeContentGeneratorFactory<ContentGenerator>,
   tokenizer: RuntimeTokenizerFactory,
   files: ProviderFileLifecycle,
-  mcp: SessionWorkspaceReadsPort,
+  mcp: SessionWorkspaceReadsPort & { readonly messageBus: MessageBus },
   authority: CredentialAuthority,
 ): Promise<SessionClientOwner> {
   selectedSettings.initializeProviderSelection(
@@ -626,7 +626,7 @@ async function acquireAdoptedSession(
   return acquireSessionClient(
     {
       config,
-      messageBus: undefined,
+      messageBus: mcp.messageBus,
       workspacePaths: mcp.workspacePaths,
       readInstructions: mcp.readInstructions,
       imageOperation: undefined,
