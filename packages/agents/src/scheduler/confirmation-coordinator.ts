@@ -697,16 +697,24 @@ export class ConfirmationCoordinator {
       contentOverrides,
     );
 
-    this.statusMutator.setArgs(callId, updatedParams);
-
-    if (isInteractiveConfirmationDetails(waitingToolCall.confirmationDetails)) {
-      await this.rePublishConfirmation(
-        callId,
-        waitingToolCall,
-        updatedDiff,
-        signal,
-      );
-    }
+    const confirmationDetails = waitingToolCall.confirmationDetails;
+    await this.rePublishConfirmation(
+      callId,
+      {
+        ...waitingToolCall,
+        request: { ...waitingToolCall.request, args: updatedParams },
+        confirmationDetails:
+          confirmationDetails.type === 'edit'
+            ? {
+                ...confirmationDetails,
+                newContent:
+                  await modifyContext.getProposedContent(updatedParams),
+              }
+            : confirmationDetails,
+      },
+      updatedDiff,
+      signal,
+    );
   }
 
   private async rePublishConfirmation(
@@ -756,6 +764,7 @@ export class ConfirmationCoordinator {
       this.schedulerAccessor.persistApproval,
     );
     signal.throwIfAborted();
+    this.statusMutator.setArgs(callId, waitingToolCall.request.args);
     this.pendingConfirmations.set(newCorrelationId, callId);
     this.pendingOriginalConfirmHandlers.set(
       newCorrelationId,
@@ -885,11 +894,13 @@ export class ConfirmationCoordinator {
       toolCall.request.args,
     );
 
-    const updatedParams = modifyContext.createUpdatedParams(
-      currentContent,
-      newContent,
-      toolCall.request.args,
-    );
+    const updatedParams = {
+      ...modifyContext.createUpdatedParams(
+        currentContent,
+        newContent,
+        toolCall.request.args,
+      ),
+    };
     const updatedDiff = Diff.createPatch(
       modifyContext.getFilePath(toolCall.request.args),
       currentContent,
@@ -898,16 +909,27 @@ export class ConfirmationCoordinator {
       'Proposed',
     );
 
-    this.statusMutator.setArgs(toolCall.request.callId, updatedParams);
-
-    if (!isInteractiveConfirmationDetails(toolCall.confirmationDetails)) {
-      return;
-    }
-
-    this.statusMutator.setAwaitingApproval(toolCall.request.callId, {
+    const updatedDetails = {
       ...toolCall.confirmationDetails,
       fileDiff: updatedDiff,
-    });
+      originalContent: currentContent,
+      newContent,
+    };
+    await publishApproval(
+      {
+        request: { ...toolCall.request, args: updatedParams },
+        details: serializableApprovalDetails(updatedDetails),
+        status: signal.aborted ? 'cancelled' : 'scheduled',
+        aborted: signal.aborted,
+      },
+      this.schedulerAccessor.persistApproval,
+    );
+    signal.throwIfAborted();
+    this.statusMutator.setArgs(toolCall.request.callId, updatedParams);
+    this.statusMutator.setAwaitingApproval(
+      toolCall.request.callId,
+      updatedDetails,
+    );
   }
 
   // ── Bus publish ────────────────────────────────────────────────────────────
