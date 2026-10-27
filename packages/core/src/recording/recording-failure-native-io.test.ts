@@ -79,11 +79,20 @@ describe('native recording positional failure ownership', () => {
     it(`retains the exact prequeued ${kind} cause through a report and successful diagnostic consumption`, async () => {
       const { recording, integration, control, reports } = fixture();
       const cause = new Error(`native ${kind} failed`);
+      const checkpoint = await recording.createCheckpoint('read target');
+      // Evict the earlier descriptor from the bounded state cache so this
+      // failure exercises physical I/O rather than a cached lookup.
+      for (let index = 0; index < 12; index++) {
+        await recording.createCheckpoint(
+          `${index}:${'checkpoint'.repeat(800)}`,
+        );
+      }
       if (kind === 'read') control.readError = cause;
       else control.flushError = cause;
-      // Checkpoint descriptors read their value from disk even when the trie
-      // path is cached; updating metadata can now finish entirely in cache.
-      const prequeued = recording.createCheckpoint('failed checkpoint');
+      const prequeued = recording.renameCheckpoint(
+        checkpoint.checkpointId,
+        'failed checkpoint',
+      );
       await expect(prequeued).rejects.toBe(cause);
       const report = await rejected(integration.flushAtTurnBoundary());
       if (!(report instanceof RecordingFailureReport)) throw report;
