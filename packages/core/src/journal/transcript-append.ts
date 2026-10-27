@@ -19,7 +19,7 @@ export class TranscriptAppend {
     private readonly write: (node: TranscriptNode) => Promise<TranscriptChild>,
   ) {}
 
-  private async load(): Promise<void> {
+  async prepare(): Promise<void> {
     if (this.loaded) return;
     this.loaded = true;
     if (this.root === 0) return;
@@ -32,7 +32,7 @@ export class TranscriptAppend {
   }
 
   async append(entry: TranscriptEntry): Promise<void> {
-    await this.load();
+    await this.prepare();
     if (
       this.entries.length > 0 &&
       this.entries[this.entries.length - 1].transcriptId >= entry.transcriptId

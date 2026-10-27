@@ -199,6 +199,7 @@ export class TranscriptGroup {
     };
   }
   private async marker(built: BuiltGroup): Promise<void> {
+    await this.admissions.prepare();
     const bytes = new TextEncoder().encode(
       JSON.stringify({
         mutation: built.state.mutation,

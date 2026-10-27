@@ -16,6 +16,19 @@
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import type { OwnershipRecord } from './agentBootstrap.js';
+import type { AgentDeps } from './agent-deps.js';
+
+export async function releaseAgentShutdownResources(
+  deps: AgentDeps,
+  ownership: OwnershipRecord,
+  errors: unknown[],
+): Promise<void> {
+  await collectDisposalError(errors, () => deps.sessionClient.dispose());
+  await collectDisposalError(errors, () => deps.runtimeHandle.cleanup());
+  await disposeConfigInfrastructure(ownership, deps.mediaOwner, errors);
+  ownership.extensionsDisposed = true;
+  await releaseAgentFinalResources(ownership, deps.oauthManager, errors);
+}
 
 /**
  * Defensively disposes an OAuthManager if it exposes a dispose method. The

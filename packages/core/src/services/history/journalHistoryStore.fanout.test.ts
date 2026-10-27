@@ -335,6 +335,7 @@ describe('journal history store owners and mirrors', () => {
       await expect(store.settleFanout()).rejects.toThrow('closed');
       // A clean shutdown reports the same failure instead of leaving the mirror silently behind.
       await expect(store.dispose()).rejects.toThrow('closed');
+      stores.splice(stores.indexOf(store), 1);
     });
   });
 

@@ -39,7 +39,7 @@ describe('pop token accounting settlement', () => {
         try {
           await new Promise<void>((resolve) => setTimeout(resolve, 0));
           expect(finished).toBe(false);
-          expect(ownership.snapshot().liveRows).toBe(1);
+          expect(ownership.snapshot().liveRows).toBe(0);
         } finally {
           release.resolve();
           await operation;

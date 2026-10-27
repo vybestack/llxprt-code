@@ -43,8 +43,8 @@ for (const size of [512, 8192]) {
             await recalculate(service, method);
             expect(service.getTotalTokens()).toBe(expected.total + 17);
             expect(actual.digest('hex')).toBe(expected.digest);
-            expect(counters.snapshot().rowsDecoded).toBe(size);
-            expect(counters.snapshot().peakDecodedRows).toBe(1);
+            expect(counters.snapshot().rowsDecoded).toBe(0);
+            expect(counters.snapshot().peakDecodedRows).toBe(0);
             expect(ownership.snapshot().peakRows).toBeLessThanOrEqual(440);
             expect(
               ownership.snapshot().peakSerializedBytes,
@@ -61,7 +61,7 @@ for (const size of [512, 8192]) {
 
 for (const method of ['total', 'legacy'] satisfies Array<'total' | 'legacy'>) {
   describe(`${method} recalculation lifecycle`, () => {
-    it('holds one row while the tokenizer is suspended and releases it after failure', async () => {
+    it('tokenizes one block without hydrating a row and closes after failure', async () => {
       await withCoreSuffixFixture(
         512,
         async (service, ownership, counters) => {
@@ -78,8 +78,8 @@ for (const method of ['total', 'legacy'] satisfies Array<'total' | 'legacy'>) {
           const operation = recalculate(service, method);
           await entered.promise;
           try {
-            expect(ownership.snapshot().liveRows).toBe(1);
-            expect(counters.snapshot().rowsDecoded).toBe(1);
+            expect(ownership.snapshot().liveRows).toBe(0);
+            expect(counters.snapshot().rowsDecoded).toBe(0);
           } finally {
             release.resolve();
             await expect(operation).rejects.toThrow('tokenizer failed');
@@ -114,7 +114,7 @@ for (const method of ['total', 'legacy'] satisfies Array<'total' | 'legacy'>) {
           ).rejects.toThrow('accounting cancelled');
           expect(service.getTotalTokens()).toBe(29);
           expect(invocations).toBe(1);
-          expect(counters.snapshot().rowsDecoded).toBe(1);
+          expect(counters.snapshot().rowsDecoded).toBe(0);
           expect(ownership.snapshot().liveRows).toBe(0);
         },
         2048,

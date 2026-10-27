@@ -53,8 +53,10 @@ async function measure(mode: string, size: number): Promise<MemoryReport> {
 
 describe('pinned synchronous ticket retained-memory contract', () => {
   it('keeps paused and acknowledged 512-to-8192 growth within one MiB', async () => {
-    const small = await measure('released', 512);
-    const large = await measure('released', 8192);
+    const [small, large] = await Promise.all([
+      measure('released', 512),
+      measure('released', 8192),
+    ]);
     expect(large.retainedBytes - small.retainedBytes).toBeLessThanOrEqual(
       1024 * 1024,
     );
@@ -67,8 +69,10 @@ describe('pinned synchronous ticket retained-memory contract', () => {
   }, 180_000);
 
   it('rejects the same allowance for an observer retaining every input row', async () => {
-    const small = await measure('retaining', 512);
-    const large = await measure('retaining', 8192);
+    const [small, large] = await Promise.all([
+      measure('retaining', 512),
+      measure('retaining', 8192),
+    ]);
     expect(large.retainedBytes - small.retainedBytes).toBeGreaterThan(
       1024 * 1024,
     );

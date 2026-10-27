@@ -8,6 +8,11 @@ import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { JournalSession } from './journalSession.js';
+import {
+  decodeTranscriptHead,
+  TRANSCRIPT_HEAD_KEY,
+} from '../../journal/transcript-head.js';
+import { transcriptEntries } from '../../journal/transcript-tree.js';
 
 const MIB = 1024 * 1024;
 const ROW_BYTES = 70 * MIB;
@@ -64,7 +69,30 @@ async function exercisePin(
   expect(await consumeLarge(stream)).toBe(expected);
   expect((await stream.next()).done).toBe(true);
   await store.idle();
-  expect(store.published?.durableEnd).toBeLessThan(MIB);
+  expect(await store.compact()).toBe('swapped');
+  const head = decodeTranscriptHead(await store.getState(TRANSCRIPT_HEAD_KEY));
+  expect(head.count).toBe(3);
+  const read = await store.openRead();
+  try {
+    const entries = [];
+    for await (const entry of transcriptEntries(
+      read.access,
+      head.root,
+      'transcript',
+      1n,
+      false,
+    ))
+      entries.push(entry);
+    expect(entries.map((entry) => entry.audience)).toStrictEqual([0, 0, 2]);
+    expect(entries[1].recordLength).toBeGreaterThan(ROW_BYTES);
+    expect(entries[2].rowRef).toBe(0);
+  } finally {
+    await read.close();
+  }
+  const retainedBytes = store.published?.durableEnd;
+  if (retainedBytes === undefined) throw new Error('Missing compacted version');
+  expect(retainedBytes).toBeGreaterThan(ROW_BYTES);
+  expect(retainedBytes - ROW_BYTES).toBeLessThan(MIB);
   expect(store.published?.rows).toBe(0);
   expect(counters.snapshot().peakDecodedRows).toBe(1);
   expect(reader.snapshot().liveRows).toBe(0);
@@ -72,15 +100,17 @@ async function exercisePin(
 
 describe('service send pin defers real compaction', () => {
   it('finishes the original 70 MiB row after clear, then compacts and retains no decoded row', async () => {
-    const reader = new RowOwnership();
-    const counters = createRowCounters();
-    const history = new HistoryService({
-      attachmentCounters: { ...counters.counters, ownership: reader },
-    });
-    history.setTokenizerFactory(exactTokenizer());
+    const histories: HistoryService[] = [];
     const completed: Array<AsyncGenerator<IContent, void, unknown>> = [];
     try {
       const retained = await medianSettledDelta(async () => {
+        const reader = new RowOwnership();
+        const counters = createRowCounters();
+        const history = new HistoryService({
+          attachmentCounters: { ...counters.counters, ownership: reader },
+        });
+        histories.push(history);
+        history.setTokenizerFactory(exactTokenizer());
         const stream = history.streamCuratedHistory();
         completed.push(stream);
         try {
@@ -92,7 +122,7 @@ describe('service send pin defers real compaction', () => {
       expect(retained).toBeLessThan(MIB);
     } finally {
       for (const stream of completed) await stream.return();
-      await history.dispose();
+      for (const history of histories) await history.dispose();
     }
   }, 180_000);
 });

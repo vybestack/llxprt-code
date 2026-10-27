@@ -3,6 +3,9 @@ import { createHash } from 'node:crypto';
 import type { BuildContext, BuiltGroup } from './groupBuildShared.js';
 import { mapReader } from './groupBuildShared.js';
 import type { RecordAppender } from './groupAppender.js';
+import type { RecordAccess } from './recordAccess.js';
+import type { IdNodeCache } from './idTrieCache.js';
+import type { TranscriptTreeMode } from './transcript-tree.js';
 import { buildGroup } from './groupBuild.js';
 import { planGroup } from './groupPlan.js';
 import { FIRST_NEXT_LABEL, allocateAppendLabels } from './labels.js';
@@ -37,7 +40,6 @@ import {
   decodeChunkBlock,
   directoryEntry,
   encodeChunkBlock,
-  findChunkEntry,
   pieceHeader,
   readChunkBlock,
   hydrateChunkHeader,
@@ -110,10 +112,12 @@ export class ArrivalGroup {
     readonly target: RecordAppender,
     private built: BuiltGroup,
     private head: ReturnType<typeof decodeTranscriptHead>,
+    private readonly treeCache?: IdNodeCache,
   ) {}
   static async start(
     ctx: BuildContext,
     target: RecordAppender,
+    treeCache?: IdNodeCache,
   ): Promise<ArrivalGroup> {
     const plan = await planGroup(
       {
@@ -135,15 +139,32 @@ export class ArrivalGroup {
         TRANSCRIPT_HEAD_KEY,
       ),
     );
-    return new ArrivalGroup(ctx, target, built, head);
+    return new ArrivalGroup(ctx, target, built, head, treeCache);
   }
-  private access() {
-    return this.ctx.readGroup(this.target.nextOffset);
+  private reading:
+    | { readonly end: number; readonly access: RecordAccess }
+    | undefined;
+  private readonly trees = new Map<TranscriptTreeMode, TranscriptTreeWriter>();
+
+  private access(): RecordAccess {
+    const end = this.target.nextOffset;
+    if (this.reading?.end !== end)
+      this.reading = { end, access: this.ctx.readGroup(end) };
+    return this.reading.access;
   }
-  private tree(
-    mode: 'transcript' | 'blocks' | 'pieces' | 'open' | 'membership',
-  ) {
-    return new TranscriptTreeWriter(() => this.access(), this.target, mode);
+  private tree(mode: TranscriptTreeMode): TranscriptTreeWriter {
+    let tree = this.trees.get(mode);
+    if (tree === undefined) {
+      tree = new TranscriptTreeWriter(
+        () => this.access(),
+        this.target,
+        mode,
+        undefined,
+        this.treeCache,
+      );
+      this.trees.set(mode, tree);
+    }
+    return tree;
   }
   async find(
     row: ArrivalRow,
@@ -151,12 +172,12 @@ export class ArrivalGroup {
     await this.target.drain();
     const staged = this.manifests.get(row.transcriptId);
     if (staged !== undefined) return staged;
-    const entry = await findChunkEntry(
-      this.access(),
-      this.head.root,
-      'transcript',
-      row.transcriptId,
-    );
+    const selected = await this.tree('transcript')
+      .entries(this.head.root, row.transcriptId)
+      .next();
+    const entry = selected.value;
+    if (entry === undefined || entry.transcriptId !== row.transcriptId)
+      throw new Error('Missing recording transcript row');
     const header = decodeRowHeader(
       (await this.access().readRecordHead(entry.rowRef, 'ROW')).kindHeader,
     );

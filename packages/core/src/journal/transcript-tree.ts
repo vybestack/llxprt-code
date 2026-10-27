@@ -155,12 +155,12 @@ export async function readTranscriptNode(
 
 /** A fixed cache bounds both committed and freshly written path nodes. */
 export class TranscriptTreeWriter {
-  private readonly cache = new BoundedIdNodeCache();
   constructor(
     private readonly access: () => RecordAccess,
     private readonly appender: RecordAppender,
     private readonly mode: TranscriptTreeMode,
     private readonly committedCache?: IdNodeCache,
+    private readonly cache: IdNodeCache = new BoundedIdNodeCache(),
   ) {}
 
   appendGroup(root: number): TranscriptAppend {

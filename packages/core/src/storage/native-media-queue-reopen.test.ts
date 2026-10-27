@@ -4,7 +4,7 @@ import { describe, expect, it, spyOn } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, stat, unlink } from 'node:fs/promises';
 import { useTempDir as tempDirectory } from '../journal/__tests__/support/useTempDir.js';
 import { JournalSession } from '../services/history/journalSession.js';
 import { LocalMediaStore } from './local-media-store.js';
@@ -192,7 +192,7 @@ describe('native media release queue across owner reopen', () => {
     }
   });
 
-  it('protects checkpoint media through drain, compaction and reopen until checkpoint deletion', async () => {
+  it('protects transcript media through checkpoint deletion until session deletion', async () => {
     const { session, media, request, reference, bytes } =
       await deferredMediaFixture(directory(), true);
     try {
@@ -223,15 +223,26 @@ describe('native media release queue across owner reopen', () => {
           { kind: 'deleteCheckpoint', id: 'media' },
         ]);
         expect(await reopened.store.compact()).toBe('swapped');
-        const deleted = await projectRecordedContentIds(directory());
-        expect(deleted.has(reference.contentId)).toBe(false);
+        const transcriptIds = await projectRecordedContentIds(directory());
+        expect(transcriptIds.has(reference.contentId)).toBe(true);
         expect(
-          (await media.reclaimUnreferenced(deleted, Number.MAX_SAFE_INTEGER))
-            .objectsRemoved,
-        ).toBe(1);
+          (
+            await media.reclaimUnreferenced(
+              transcriptIds,
+              Number.MAX_SAFE_INTEGER,
+            )
+          ).objectsRemoved,
+        ).toBe(0);
       } finally {
         await reopened.close();
       }
+      await unlink(session.path);
+      const deleted = await projectRecordedContentIds(directory());
+      expect(deleted.has(reference.contentId)).toBe(false);
+      expect(
+        (await media.reclaimUnreferenced(deleted, Number.MAX_SAFE_INTEGER))
+          .objectsRemoved,
+      ).toBe(1);
     } finally {
       await request.close();
       await session.close();

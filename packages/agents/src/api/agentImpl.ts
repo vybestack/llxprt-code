@@ -122,9 +122,8 @@ import {
   subscribeSessionStats,
 } from './agentStatsProjector.js';
 import {
-  releaseAgentFinalResources,
+  releaseAgentShutdownResources,
   disposeAgentObservers,
-  disposeConfigInfrastructure,
   joinAgentWork,
   joinCapturedRun,
   collectDisposalError,
@@ -1343,27 +1342,15 @@ export class AgentImpl implements Agent {
       ],
       releaseResources: [
         async () => {
-          await this.releaseShutdownResources(errors);
+          await releaseAgentShutdownResources(
+            this.deps,
+            this.ownership,
+            errors,
+          );
           if (errors.length > 0) throw new AggregateDisposeError(errors);
         },
       ],
     });
-  }
-
-  private async releaseShutdownResources(errors: unknown[]): Promise<void> {
-    await collectDisposalError(errors, () => this.deps.sessionClient.dispose());
-    await collectDisposalError(errors, () => this.deps.runtimeHandle.cleanup());
-    await disposeConfigInfrastructure(
-      this.ownership,
-      this.deps.mediaOwner,
-      errors,
-    );
-    this.ownership.extensionsDisposed = true;
-    await releaseAgentFinalResources(
-      this.ownership,
-      this.deps.oauthManager,
-      errors,
-    );
   }
 }
 

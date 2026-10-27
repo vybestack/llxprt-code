@@ -11,6 +11,7 @@ import { SeededRandom } from './__tests__/support/seededRandom.js';
 import { draftRow, storeDeps } from './__tests__/support/storeFixtures.js';
 import { MIB, startGrowthProbe } from './__tests__/support/streamedBody.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
+import { testJournalSeams } from './__tests__/support/journalFixtures.js';
 
 const BASE_ROWS = 10_000;
 const GROUPS = 1000;
@@ -298,7 +299,7 @@ describe('journal store heap over mixed primitive groups', () => {
     };
     const store = await JournalStore.create(
       path.join(directory(), name),
-      storeDeps({ createCache }),
+      storeDeps({ createCache, seams: testJournalSeams({}, 1, false) }),
     );
     open.push(store);
     const groups = new MixedGroups(store);
@@ -319,6 +320,9 @@ describe('journal store heap over mixed primitive groups', () => {
   it(
     'keeps the settled heap flat over 1,000 mixed groups on a 10,000-row base, with every cache under its cap and the rows equal to the model',
     async () => {
+      const warmup = await drive('warmup.llxj', () => Promise.resolve());
+      await warmup.store.close();
+      open.splice(open.indexOf(warmup.store), 1);
       const result = await drive('flat.llxj', () => Promise.resolve());
 
       expect(result.growth).toBeLessThan(GROWTH_BOUND);

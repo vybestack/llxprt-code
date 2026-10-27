@@ -54,7 +54,7 @@ export async function openOwnedJournal(
     estimate: (rows) => Promise.resolve([...rows].length),
     notify: () => {},
     notifyBatch: () => undefined,
-    notifyRows: () => {},
+    notifyRows: (rows) => rows.retire(),
     notifyTokens: () => {},
     notifyRange: () => {},
   };

@@ -41,7 +41,7 @@ describe('token accounting row handoff', () => {
         });
         await history.waitForTokenUpdates();
         expect(history.getTotalTokens()).toBe('older'.length + 'latest'.length);
-        expect(read.mock.calls.length).toBe(1);
+        expect(read.mock.calls.length).toBe(0);
         expect(ownership.snapshot().liveRows).toBe(0);
       } finally {
         read.mockRestore();

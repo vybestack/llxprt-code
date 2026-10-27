@@ -7,6 +7,7 @@ import {
   type ArrivalFieldMode,
 } from './chunk-fields.js';
 import type { RowDraft } from './rowDraft.js';
+import { BoundedIdNodeCache } from './idTrieCache.js';
 import type { RowHeader } from './rowRecord.js';
 import type { BuildContext } from './groupBuildShared.js';
 import type { RecordAppender } from './groupAppender.js';
@@ -26,6 +27,8 @@ export const RECORDING_QUEUE_BYTES = 256 * 1024;
 const WRITE_BUFFER_CHARGE = 96 * 1024;
 const PIECE_CHARGE = 256;
 export class JournalArrivalRecorder {
+  // The lifetime pin prevents offset reuse; a failed group poisons this recorder.
+  private readonly treeCache = new BoundedIdNodeCache();
   private readonly textBuffer = new ArrivalTextBuffer();
   private pending: ArrivalPiece[] = [];
   private pendingBytes = 0;
@@ -67,7 +70,11 @@ export class JournalArrivalRecorder {
     try {
       const result = await this.store.mutateRecording(
         async (ctx: BuildContext, target: RecordAppender) => {
-          const group = await ArrivalGroup.start(ctx, target);
+          const group = await ArrivalGroup.start(
+            ctx,
+            target,
+            this.release === undefined ? undefined : this.treeCache,
+          );
           return group.complete(await run(group));
         },
       );

@@ -8,6 +8,18 @@ import { getScratchRoot } from '../../storage/scratch-root.js';
 import type { DetachedHistoryTransform } from './detachedHistoryMutation.js';
 import { openOwnedJournal } from './journalOwnedFixture.js';
 import type { IContent } from './IContent.js';
+import type { HistoryBatchRowSource } from './history-batch-values.js';
+
+async function notifyRows(
+  rows: HistoryBatchRowSource,
+  failure?: Error,
+): Promise<void> {
+  try {
+    if (failure !== undefined) throw failure;
+  } finally {
+    await rows.retire();
+  }
+}
 
 function row(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
@@ -189,9 +201,8 @@ describe('native detached publication without candidate files', () => {
               },
               {
                 ...journal.host,
-                notifyRows: () => {
-                  if (stage === 'listener') throw failure;
-                },
+                notifyRows: (rows) =>
+                  notifyRows(rows, stage === 'listener' ? failure : undefined),
               },
               undefined,
               {
@@ -223,6 +234,7 @@ describe('native detached publication without candidate files', () => {
           );
         });
         expect(journal.store.getLength()).toBe(2);
+        expect(journal.session.store.mediaPins.oldestVersion).toBeUndefined();
         expect(await journal.originsOfRows()).toStrictEqual([
           'original-owner',
           undefined,
