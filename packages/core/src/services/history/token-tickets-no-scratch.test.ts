@@ -14,16 +14,16 @@ describe('journal token tickets without scratch storage', () => {
     await withAccountingFixture(0, async (history) => {
       const entered = deferred();
       const release = deferred();
-      const original = VersionSnapshot.prototype.readRow;
+      const original = VersionSnapshot.prototype.blocks;
       let reading = true;
       const read = spyOn(
         VersionSnapshot.prototype,
-        'readRow',
-      ).mockImplementation(async function (this: VersionSnapshot, entry) {
+        'blocks',
+      ).mockImplementation(async function* (this: VersionSnapshot, entry) {
         entered.resolve();
         await release.promise;
         try {
-          return await original.call(this, entry);
+          yield* original.call(this, entry);
         } finally {
           reading = false;
         }

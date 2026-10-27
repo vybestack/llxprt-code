@@ -78,16 +78,18 @@ export class HistoryTokenTickets {
           do {
             const read =
               ticket.source.readForTokens?.() ?? ticket.source.read();
-            this.reading = read.then(
+            const processing = read.then((content) =>
+              this.process({
+                content,
+                modelName: ticket.modelName,
+                generation: ticket.generation,
+              }),
+            );
+            this.reading = processing.then(
               () => undefined,
               () => undefined,
             );
-            const content = await read;
-            await this.process({
-              content,
-              modelName: ticket.modelName,
-              generation: ticket.generation,
-            });
+            await processing;
           } while (ticket.source.hasNext?.() === true);
         }
       } catch (error) {
