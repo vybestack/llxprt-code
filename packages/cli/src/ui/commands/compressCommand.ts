@@ -10,7 +10,12 @@ import {
   type AgentChatContract,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { HistoryItemCompression } from '../types.js';
+import type {
+  HistoryItemCompression,
+  HistoryItemError,
+  HistoryItemWithoutId,
+} from '../types.js';
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import { MessageType } from '../types.js';
 import type { SlashCommand } from './types.js';
 import { CommandKind } from './types.js';
@@ -139,6 +144,28 @@ async function executeCompression(
   };
 }
 
+async function resolveCompressionOutput(
+  primary: (() => Promise<HistoryItemCompression>) | undefined,
+  readChat: () => AgentChatContract | undefined,
+  promptId: string,
+): Promise<HistoryItemCompression | HistoryItemError> {
+  if (primary) {
+    try {
+      return await primary();
+    } catch {
+      // Preserve the existing runtime fallback for compression failures only.
+    }
+  }
+  const chat = readChat();
+  if (!chat?.getHistoryService()) {
+    return {
+      type: MessageType.ERROR,
+      text: 'Chat instance not available for compression.',
+    };
+  }
+  return executeCompression(chat, promptId);
+}
+
 export const compressCommand: SlashCommand = {
   name: 'compress',
   altNames: ['summarize'],
@@ -147,70 +174,45 @@ export const compressCommand: SlashCommand = {
   autoExecute: true,
   action: async (context) => {
     const { ui } = context;
-    if (ui.pendingItem) {
-      ui.addItem(
-        {
-          type: MessageType.ERROR,
-          text: 'Already compressing, wait for previous request to complete',
-        },
+    const writeOutput = (item: HistoryItemWithoutId): Promise<void> =>
+      writeCommandOutput(
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        ui.addItem,
+        item,
         Date.now(),
       );
+    if (ui.pendingItem) {
+      await writeOutput({
+        type: MessageType.ERROR,
+        text: 'Already compressing, wait for previous request to complete',
+      });
       return;
     }
-
+    ui.setPendingItem(makePendingCompression());
     try {
-      ui.setPendingItem(makePendingCompression());
       const promptId = `compress-${Date.now()}`;
       const agent = context.services.agent;
-      if (agent) {
-        try {
-          const compressionResult = await executeCompressionViaAgent(
-            agent,
-            promptId,
-          );
-          ui.addItem(compressionResult);
-          return;
-        } catch {
-          // Fall through to the legacy runtime-based path if agent compression
-          // fails, so users still get compression.
-        }
-      }
-      // Fallback: command-context service path (tracked migration debt for null agent).
-      const agentClient = context.services.agent?.agentClient;
-      if (agentClient == null || agentClient.hasChatInitialized() !== true) {
-        ui.addItem(
-          {
-            type: MessageType.ERROR,
-            text: 'Chat instance not available for compression.',
+      let output: HistoryItemCompression | HistoryItemError;
+      try {
+        output = await resolveCompressionOutput(
+          agent ? () => executeCompressionViaAgent(agent, promptId) : undefined,
+          () => {
+            const client = agent?.agentClient;
+            return client?.hasChatInitialized() === true
+              ? client.getChat()
+              : undefined;
           },
-          Date.now(),
+          promptId,
         );
-        return;
-      }
-      const chat = agentClient.getChat();
-      const historyService = chat.getHistoryService();
-      if (!historyService) {
-        ui.addItem(
-          {
-            type: MessageType.ERROR,
-            text: 'Chat instance not available for compression.',
-          },
-          Date.now(),
-        );
-        return;
-      }
-      const compressionResult = await executeCompression(chat, promptId);
-      ui.addItem(compressionResult);
-    } catch (e) {
-      ui.addItem(
-        {
+      } catch (error) {
+        output = {
           type: MessageType.ERROR,
-          text: `Failed to compress chat history: ${
-            e instanceof Error ? e.message : String(e)
-          }`,
-        },
-        Date.now(),
-      );
+          text: `Failed to compress chat history: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+      await writeOutput(output);
     } finally {
       ui.setPendingItem(null);
     }

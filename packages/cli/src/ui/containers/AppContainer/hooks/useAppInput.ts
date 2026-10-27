@@ -355,8 +355,10 @@ function useInputStreamSetup(
   const setDebugMessage = p.settingsStore.commands.setDebugMessage;
   const performMemoryRefresh = useMemoryRefreshAction({
     config: p.slashCommandRuntime,
-    settings,
     addItem,
+    readHistory: () => p.agent.agentClient.getHistoryService(),
+    origin: p.agent.session,
+    recordingOwner: p.recordingOwner === 'agent' ? 'agent' : undefined,
     setLlxprtMdFileCount: p.setLlxprtMdFileCount,
   });
   const shellModeActive = useStoreSelector(

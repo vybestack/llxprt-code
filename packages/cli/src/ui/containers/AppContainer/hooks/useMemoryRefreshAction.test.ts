@@ -14,11 +14,7 @@ import {
   WorkspaceFilesystemOwner,
   assembleWorkspaceMemory,
 } from '@vybestack/llxprt-code-core';
-import {
-  renderHook,
-  createMockSettings,
-} from '../../../../__tests__/render.js';
-import { createMockCommandContext } from '../../../../__tests__/mockCommandContext.js';
+import { renderHook } from '../../../../__tests__/render.js';
 import { MessageType, type HistoryItem } from '../../../types.js';
 import { useMemoryRefreshAction } from './useMemoryRefreshAction.js';
 
@@ -57,10 +53,8 @@ describe('useMemoryRefreshAction', () => {
         filesystem,
         { isTrustedFolder: () => true, getIdeTrust: () => undefined },
       );
-      const context = createMockCommandContext();
-      if (!context.services.config) throw new Error('Missing UI fixture');
       const runtime = {
-        ...context.services.config,
+        getDebugMode: () => false,
         refreshMemory: async () => {
           const snapshot = await memory.operations.refresh();
           return {
@@ -75,7 +69,9 @@ describe('useMemoryRefreshAction', () => {
       const { result, unmount } = renderHook(() =>
         useMemoryRefreshAction({
           config: runtime,
-          settings: createMockSettings({}),
+          readHistory: () => null,
+          origin: undefined,
+          recordingOwner: undefined,
           addItem: (item) => {
             items.push(item);
             return items.length;
