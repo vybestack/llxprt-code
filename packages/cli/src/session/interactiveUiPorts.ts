@@ -1,3 +1,4 @@
+import type { DebugCommandOperations } from '../ui/commands/debugCommands.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -33,6 +34,7 @@ import type { SkillsCommandRuntime } from '../ui/hooks/useResourceCommands.js';
 import * as Ports from '../ui/cliCommandPorts.js';
 
 export interface InteractiveUiSources {
+  debug: DebugCommandOperations;
   source: UiRuntimeDeclarationSource;
   agent: Parameters<typeof buildAppRuntime>[1] &
     Parameters<typeof buildSettingsRuntime>[1] & {
@@ -188,6 +190,7 @@ class InteractiveUiAssembly {
       settings,
     } = this;
     return Ports.buildSlashCommandPorts({
+      debug: inputs.debug,
       runtime: {
         app,
         approval,

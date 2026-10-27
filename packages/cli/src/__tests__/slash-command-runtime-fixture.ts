@@ -1,3 +1,5 @@
+import { ConfigurationManager } from '@vybestack/llxprt-code-telemetry';
+import { bindDebugCommand } from '../ui/commands/debugCommandHost.js';
 import { buildInteractiveUiPorts } from '../session/interactiveUiPorts.js';
 import { buildUiRuntimeFromSource } from './ui-runtime-composition-fixture.js';
 /**
@@ -159,6 +161,7 @@ export function buildUiPortsForTest(
     telemetrySettings,
   ] = args;
   return buildInteractiveUiPorts({
+    debug: bindDebugCommand(ConfigurationManager.getInstance()),
     source,
     agent,
     bucketFailover: bucketFailover ?? {},

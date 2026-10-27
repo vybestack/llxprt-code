@@ -1,3 +1,4 @@
+import { bindDebugCommand } from '../ui/commands/debugCommandHost.js';
 import { InteractiveApplication } from './interactiveApplication.js';
 import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFeatures.js';
 
@@ -36,7 +37,10 @@ import { AppWrapper } from '../ui/App.js';
 import { ErrorBoundary } from '../ui/components/ErrorBoundary.js';
 import { basename } from 'node:path';
 import { type LoadedSettings } from '../config/settings.js';
-import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import {
+  debugLogger,
+  ConfigurationManager,
+} from '@vybestack/llxprt-code-telemetry';
 import { getCliVersion } from '../utils/version.js';
 import { enableMouseEvents, disableMouseEvents } from '../ui/utils/mouse.js';
 import { restoreTerminalProtocolsSync } from '../ui/utils/terminalProtocolCleanup.js';
@@ -684,6 +688,7 @@ function startupCommandRuntimes(
   operations: ReturnType<typeof startupBucketOperations>,
 ) {
   const commandPorts = ports.buildCommandPorts({
+    debug: bindDebugCommand(ConfigurationManager.getInstance()),
     source: args.config,
     agent: args.agent,
     bucketFailover: operations,

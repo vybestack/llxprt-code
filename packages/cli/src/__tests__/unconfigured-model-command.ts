@@ -620,6 +620,7 @@ export function createUnconfiguredHistoryReaders(): RegisteredHistoryReads {
 /** Slash-command ports for a registry fixture with no CLI runtime behind it. */
 export function createUnconfiguredSlashCommandPorts(): SlashCommandProcessorPorts {
   return {
+    debug: bindDebugCommand(ConfigurationManager.getInstance()),
     extensions: null,
     hosts: null,
     trust: null,

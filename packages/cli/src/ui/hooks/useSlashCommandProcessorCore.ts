@@ -1,3 +1,4 @@
+import type { DebugCommandOperations } from '../commands/debugCommands.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -158,6 +159,7 @@ export interface CommandResumeRuntime extends ResumeSessionReads {
  * receives the CLI runtime itself.
  */
 export interface SlashCommandProcessorPorts {
+  readonly debug: DebugCommandOperations;
   /** Extension state /extensions lists and restarts. */
   readonly extensions: ExtensionsCommandRuntime | null;
   /** Working directory and proxy the host commands print. */
@@ -373,7 +375,7 @@ function useStaticBuiltinCommands(
       registerIdeCommand,
       subscribeCommandChanges,
     ),
-    ...useUtilityCommands(ports.logging, settings, addItem),
+    ...useUtilityCommands(ports.debug, ports.logging, settings, addItem),
     ...useResourceCommands(ports.skills, settings, addItem, setPendingItem),
   };
 }

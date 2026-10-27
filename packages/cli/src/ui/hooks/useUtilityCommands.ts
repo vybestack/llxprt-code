@@ -15,12 +15,11 @@ import { useQuotaReader } from './useQuotaReader.js';
 import { useBound } from './agentStream/useStreamOwnerCallbacks.js';
 
 import { useCallback, useMemo } from 'react';
-import { ConfigurationManager } from '@vybestack/llxprt-code-telemetry';
 import { createDocsCommand } from '../commands/docsCommand.js';
 import { createHelpCommand } from '../commands/helpCommand.js';
 import { createQuitCommand } from '../commands/quitCommand.js';
 import { createDebugCommand } from '../commands/debugCommands.js';
-import { bindDebugCommand } from '../commands/debugCommandHost.js';
+import type { DebugCommandOperations } from '../commands/debugCommands.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { BuiltinCommandOwners } from '../../services/BuiltinCommandLoader.js';
 import type { LoggingCommandRuntime } from '../commands/loggingCommandHost.js';
@@ -32,6 +31,7 @@ import { createLoggingCommand } from '../commands/loggingCommand.js';
 import { bindLoggingCommand } from '../commands/loggingCommandHost.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 export function useUtilityCommands(
+  debug: DebugCommandOperations,
   logging: LoggingCommandRuntime | null,
   settings: LoadedSettings,
   addItem: UseHistoryManagerReturn['addItem'],
@@ -80,11 +80,7 @@ export function useUtilityCommands(
     () => createLoggingCommand(bindLoggingCommand(logging, settings, addItem)),
     [logging, settings, addItem],
   );
-  const debugCommand = useMemo(
-    () =>
-      createDebugCommand(bindDebugCommand(ConfigurationManager.getInstance())),
-    [],
-  );
+  const debugCommand = useMemo(() => createDebugCommand(debug), [debug]);
   const docsCommand = useMemo(() => createDocsCommand(addItem), [addItem]);
   const helpCommand = useMemo(() => createHelpCommand(addItem), [addItem]);
   const quitCommand = useMemo(() => createQuitCommand(() => stats), [stats]);

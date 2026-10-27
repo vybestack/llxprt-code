@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { DebugCommandOperations } from '../commands/debugCommands.js';
 import { describe, expect, it } from 'bun:test';
 import { act, type ReactNode } from 'react';
 import { setTimeout as idle } from 'node:timers/promises';
@@ -178,8 +179,51 @@ function inputs(): UseSlashCommandProcessorCoreArgs {
     isConfigInitialized: true,
   };
 }
+function debugOwner(): DebugCommandOperations {
+  let config: ReturnType<DebugCommandOperations['readConfig']> = {
+    enabled: false,
+    namespaces: [],
+    level: 'info',
+    output: { target: 'stderr' },
+    lazyEvaluation: true,
+    redactPatterns: [],
+  };
+  return {
+    readConfig: () => config,
+    writeConfig: (value) => {
+      config = { ...config, ...value };
+    },
+    readOutput: () => 'stderr',
+    hasChanges: () => false,
+    persist: () => {},
+  };
+}
 
 describe('production command registration lifecycle', () => {
+  it('runs debug commands against the supplied root rather than a process singleton', async () => {
+    const first = debugOwner();
+    const second = debugOwner();
+    const base = inputs();
+    const args = { ...base, ports: { ...base.ports, debug: first } };
+    const hook = renderHook(() => useSlashCommandProcessorCore(args), {
+      wrapper: createWrapper(),
+    });
+    try {
+      await waitFor(() =>
+        expect(hook.result.current.slashCommands?.length).toBeGreaterThan(0),
+      );
+      await act(async () => {
+        await hook.result.current.handleSlashCommand(
+          '/debug enable llxprt:root-only',
+        );
+      });
+      expect(first.readConfig().namespaces).toContain('llxprt:root-only');
+      expect(second.readConfig().namespaces).not.toContain('llxprt:root-only');
+    } finally {
+      hook.unmount();
+    }
+  });
+
   it('settles after publication and unrelated renders, but reloads on host changes', async () => {
     const args = inputs();
     const listeners = new Set<() => void>();

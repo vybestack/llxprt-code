@@ -1,3 +1,4 @@
+import type { DebugCommandOperations } from './commands/debugCommands.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -541,6 +542,7 @@ function buildBrowserSessionReads(
 }
 
 interface SlashCommandSources {
+  debug: DebugCommandOperations;
   runtime: {
     app: Pick<
       AppStateRuntime,
@@ -606,6 +608,7 @@ export function buildSlashCommandPorts(
   const { session, model, memory, mcp, app, approval, extensions } = runtime;
   const { settings, ephemeral, bucketFailover, checkpoint } = runtime;
   return {
+    debug: sources.debug,
     extensions: {
       getExtensions: extensions.getExtensions,
       restartExtension,
