@@ -97,7 +97,7 @@ export interface SubagentOrchestratorOptions {
     'loadSubagent' | 'listSubagents'
   >;
   readonly profileManager: Pick<ProfileDefinitionReads, 'loadProfile'>;
-  readonly sessionId: string;
+  readonly readSessionId: () => string;
   readonly readRunPolicy: () => SubagentRunPolicy;
   readonly assembleChild: (
     launch: ChildAgentLaunch,
@@ -317,7 +317,7 @@ export class SubagentOrchestrator {
   }
 
   private baseSessionId(): string {
-    return this.options.sessionId || 'llxprt-session';
+    return this.options.readSessionId() || 'llxprt-session';
   }
 
   private createRuntimeId(subagentName: string): string {

@@ -420,7 +420,7 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     const { workspace, policy, profiles, subagents } = composition;
     const bus = policy.messageBus;
     const orchestrator = new SubagentOrchestrator({
-      sessionId: this.config.getSessionId(),
+      readSessionId: () => this.config.getSessionId(),
       profileManager: profiles,
       subagentManager: subagents,
       readRunPolicy: () => this.settingsOwner.readSubagentRunPolicy(),

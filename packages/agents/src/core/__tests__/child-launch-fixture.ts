@@ -91,7 +91,7 @@ export function createTestChildOrchestrator(
     );
   if (options.hookOwner === undefined) hookRoots = [...hookRoots, hooks];
   return new SubagentOrchestrator({
-    sessionId: options.foregroundConfig.getSessionId(),
+    readSessionId: () => options.foregroundConfig.getSessionId(),
     profileManager: options.profileManager,
     subagentManager: options.subagentManager,
     readRunPolicy: options.readRunPolicy,
