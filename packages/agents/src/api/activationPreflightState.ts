@@ -70,7 +70,11 @@ import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
 
 import { assembleHostGitHubBroker } from './host-github-broker-owner.js';
 import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
-import type { McpCapability } from './mcp-runtime-construction.js';
+import type {
+  McpCapability,
+  McpRuntimeAcquisition,
+  McpRuntimeOperations,
+} from './mcp-runtime-construction.js';
 import type { ForegroundMcpPort } from './mcpRuntimePorts.js';
 import type { SessionMcpSettingsReads } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { type PreparedProfileFacade } from './profileApplicationAssembly.js';
@@ -155,6 +159,7 @@ export class AgentActivationBootstrap
   #mediaOwner: SessionMediaOwner | undefined;
   #releaseForegroundProviders!: () => Promise<void>;
   #ownsFilesystem = false;
+  #ownsTrustCleanup = false;
   #ownsDefinitions = false;
   #ownsMemory = false;
   #ownsSessionClient = true;
@@ -210,6 +215,7 @@ export class AgentActivationBootstrap
     this.#sessionResources = acquired;
     this.#mediaOwner = acquired.media;
     this.#ownsFilesystem = true;
+    this.#ownsTrustCleanup = true;
     this.#ownsMemory = true;
     this.#ownsDefinitions = true;
   }
@@ -339,9 +345,6 @@ export class AgentActivationBootstrap
       await this.#constructForegroundMcp();
       const mcp = this.#mcp;
       if (mcp === undefined) throw new Error('Foreground MCP is not acquired');
-      this.#ownsFilesystem = false;
-      this.#ownsDefinitions = false;
-      this.#ownsMemory = false;
       assembly.assertOpen();
       const client = await this.#bindForegroundClient(broker, mcp);
       assembly.assertOpen();
@@ -419,59 +422,65 @@ export class AgentActivationBootstrap
       throw new Error(
         'Foreground MCP construction requires the preflight policy owner',
       );
-    const mcp = await McpRuntimeOwner.create(
-      {
-        oauth: {
-          getAuthProviderFactory: transport?.getAuthProviderFactory,
-          tokenStorage: new MCPOAuthTokenStorage(
-            new KeychainTokenStorage('llxprt-cli-mcp-oauth', feedback),
-          ),
-          openBrowser: transport?.openBrowser ?? openBrowserSecurely,
-        },
-        config: this.#config,
-        managerFactory: McpClientManager,
-        extensionLoader: { kind: 'none' },
-        policy: { kind: 'supplied', owner: policyOwner, ownership: 'caller' },
-        lsp: { kind: 'none' },
-        filesystem: {
-          kind: 'supplied',
-          owner: this.#sessionResources.workspaceFilesystem,
-          ownership: 'runtime',
-        },
-        filesystemService: { kind: 'none' },
-        memory: {
-          kind: 'supplied',
-          owner: this.#sessionResources.workspaceMemory,
-          ownership: 'runtime',
-        },
-        definitions: {
-          kind: 'supplied',
-          owner: this.#sessionResources.workspaceDefinitions,
-          ownership: 'runtime',
-        },
-        trust: {
-          kind: 'supplied',
-          owner: this.#sessionResources.workspaceTrust,
-          cleanup: this.#sessionResources.trustCleanup,
-        },
-        ide: { kind: 'none' },
+    const acquisition: McpRuntimeAcquisition = {
+      oauth: {
+        getAuthProviderFactory: transport?.getAuthProviderFactory,
+        tokenStorage: new MCPOAuthTokenStorage(
+          new KeychainTokenStorage('llxprt-cli-mcp-oauth', feedback),
+        ),
+        openBrowser: transport?.openBrowser ?? openBrowserSecurely,
       },
-      {
-        emitFeedback: feedback,
-        skillOperations: {
-          kind: 'supplied',
-          capability: {
-            reloadPolicy:
-              this.#foregroundHost.skillPolicy ??
-              DEFAULT_SKILL_OPERATIONS.reloadPolicy,
-            registerTools:
-              this.#foregroundHost.registerSkillTools ??
-              DEFAULT_SKILL_OPERATIONS.registerTools,
-          },
-        },
-        mcpSettings: this.#readMcpSettingsCapability(),
+      config: this.#config,
+      managerFactory: McpClientManager,
+      extensionLoader: { kind: 'none' },
+      policy: { kind: 'supplied', owner: policyOwner, ownership: 'caller' },
+      lsp: { kind: 'none' },
+      filesystem: {
+        kind: 'supplied',
+        owner: this.#sessionResources.workspaceFilesystem,
+        ownership: 'runtime',
       },
-    );
+      filesystemService: { kind: 'none' },
+      memory: {
+        kind: 'supplied',
+        owner: this.#sessionResources.workspaceMemory,
+        ownership: 'runtime',
+      },
+      definitions: {
+        kind: 'supplied',
+        owner: this.#sessionResources.workspaceDefinitions,
+        ownership: 'runtime',
+      },
+      trust: {
+        kind: 'supplied',
+        owner: this.#sessionResources.workspaceTrust,
+        cleanup: async () => {
+          this.#ownsTrustCleanup = false;
+          await this.#sessionResources.trustCleanup?.();
+        },
+      },
+      ide: { kind: 'none' },
+    };
+    const operations: McpRuntimeOperations = {
+      emitFeedback: feedback,
+      skillOperations: {
+        kind: 'supplied',
+        capability: {
+          reloadPolicy:
+            this.#foregroundHost.skillPolicy ??
+            DEFAULT_SKILL_OPERATIONS.reloadPolicy,
+          registerTools:
+            this.#foregroundHost.registerSkillTools ??
+            DEFAULT_SKILL_OPERATIONS.registerTools,
+        },
+      },
+      mcpSettings: this.#readMcpSettingsCapability(),
+    };
+    this.#ownsFilesystem = false;
+    this.#ownsDefinitions = false;
+    this.#ownsMemory = false;
+    const mcp = await McpRuntimeOwner.create(acquisition, operations);
+    this.#ownsTrustCleanup = false;
     this.#mcp = mcp;
   }
 
@@ -610,7 +619,7 @@ export class AgentActivationBootstrap
             ? resources.workspaceDefinitions.dispose()
             : undefined,
         () => this.#mediaOwner?.dispose(),
-        () => (this.#ownsFilesystem ? resources.trustCleanup?.() : undefined),
+        () => (this.#ownsTrustCleanup ? resources.trustCleanup?.() : undefined),
         () =>
           this.#ownsFilesystem
             ? resources.workspaceFilesystem.dispose()
