@@ -4,10 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import {
-  useProfileOwner,
-  standardProfile,
-} from '../../../../packages/providers/src/runtime/__tests__/profile-workflow-owner-fixture.js';
+import { useProfileOwner, standardProfile } from './helpers/profileOwner.js';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import type { GeminiApiClientOptions } from '../gemini/geminiWireTypes.js';
 import { createProviderCallOptions } from './testSupport.js';
