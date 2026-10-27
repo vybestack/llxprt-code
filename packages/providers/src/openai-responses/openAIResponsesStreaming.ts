@@ -119,7 +119,7 @@ async function* streamOverWebSocketWithRenewal(
     ) {
       throw error;
     }
-    deps.markStatefulParentRejected?.(parentId);
+    await deps.markStatefulParentRejected?.(parentId);
     deps.logger.debug(
       () =>
         `Codex WebSocket renewal: retiring rejected previous_response_id ${parentId} and retrying once statelessly over WebSocket (#3446).`,
