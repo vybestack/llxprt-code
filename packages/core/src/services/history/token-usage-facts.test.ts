@@ -4,7 +4,11 @@ import { JournalSession } from './journalSession.js';
 import { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
 import type { IContent } from './IContent.js';
 import { call, response } from './__tests__/support/normalization-cases.js';
-import { measureRequestRow } from './token-usage-measurement.js';
+import {
+  measureRequestRow,
+  serializeRequestRow,
+} from './token-usage-measurement.js';
+import { estimateTokens } from '../../utils/toolOutputLimiter.js';
 import {
   decodeTokenUsageFacts,
   tokenUsageFactRegistration,
@@ -30,6 +34,124 @@ async function assertStoredRow(
 }
 
 describe('neutral token usage row facts', () => {
+  it('matches the whole-row token oracle and anonymous fingerprints without hydrating text blocks', async () => {
+    const contents: IContent[] = [
+      ...[
+        '',
+        'hello world',
+        "we\u0027re I'LL snow\u0027s don't I'D",
+        '雪ABCdef 😀é中e\u0301',
+        '\ufeff\u0085 snow',
+        '<|endoftext|> <|endofprompt|>',
+        ' '.repeat(2049) + 'word',
+        '雪ABCdef '.repeat(9000),
+      ].map(
+        (text): IContent => ({
+          speaker: 'ai',
+          blocks: [
+            { type: 'text', text },
+            { type: 'thinking', thought: '\n雪😀' },
+            { type: 'code', code: 'const x = 123;' },
+          ],
+        }),
+      ),
+    ];
+    const session = await JournalSession.createUnlinked();
+    try {
+      await session.append(contents);
+      const snapshot = await session.store.snapshot();
+      const selected = await IndexedJournalRequestSnapshot.create(snapshot);
+      const wholeBlock = spyOn(snapshot, 'readBlock').mockImplementation(() => {
+        throw new Error('Whole token block hydration');
+      });
+      try {
+        let index = 0;
+        for await (const fact of selected.openTokenUsageReader()) {
+          const content = contents[index++];
+          expect(fact.measurement).toStrictEqual(
+            measureRequestRow(content, estimateTokens),
+          );
+          const serialized = serializeRequestRow(content);
+          expect(await fact.fingerprint(17)).toStrictEqual({
+            text: `C:ai:0:${serialized.slice(0, 17)}`,
+            consumed: serialized.length,
+          });
+        }
+        expect(index).toBe(contents.length);
+        const registration = tokenUsageFactRegistration(estimateTokens);
+        for (const [at, content] of contents.entries()) {
+          const bytes = await registration.measure(
+            snapshot,
+            await snapshot.entryAt(at),
+            undefined,
+          );
+          expect(
+            decodeTokenUsageFacts(bytes).map((unit) => unit.measurement),
+          ).toStrictEqual([measureRequestRow(content, estimateTokens)]);
+        }
+      } finally {
+        wholeBlock.mockRestore();
+        await selected.close();
+        await snapshot.close();
+      }
+    } finally {
+      await session.close();
+    }
+  });
+  it('preserves whole-row tool JSON, attribution and bucket measurements with the default tokenizer', async () => {
+    const session = await JournalSession.createUnlinked();
+    try {
+      await session.append([
+        {
+          speaker: 'ai',
+          metadata: { synthetic: true },
+          blocks: [call('one'), call('two')],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'one',
+              toolName: 'shell',
+              result: {
+                z: [null, '雪'],
+                a: '[Output truncated due to token limit]',
+              },
+            },
+            {
+              type: 'tool_response',
+              callId: 'two',
+              toolName: 'shell',
+              result: '',
+            },
+          ],
+        },
+        {
+          speaker: 'human',
+          metadata: { synthetic: true, id: 'context' },
+          blocks: [{ type: 'text', text: 'injected 雪' }],
+        },
+      ]);
+      const snapshot = await session.store.snapshot();
+      const selected = await IndexedJournalRequestSnapshot.create(snapshot);
+      try {
+        const expected = [];
+        for await (const content of selected.openReader())
+          expected.push(measureRequestRow(content, estimateTokens));
+        const actual = [];
+        for await (const fact of selected.openTokenUsageReader())
+          actual.push(fact.measurement);
+        expect(actual).toStrictEqual(expected);
+      } finally {
+        await selected.close();
+        await snapshot.close();
+      }
+    } finally {
+      await session.close();
+    }
+  });
+
   it('measures the known source entry without looking up its label again', async () => {
     const session = await JournalSession.createUnlinked();
     try {

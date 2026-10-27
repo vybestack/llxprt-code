@@ -6,9 +6,18 @@ import type { ContentBlock, IContent } from './IContent.js';
 import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
 import {
   responseBlockAt,
+  responsePartAt,
   type ResponsePart,
 } from './journal-response-parts.js';
 import type { JournalResponseSource } from './journal-response-source.js';
+import { ROW_BLOCK_TYPE } from '../../journal/rowRecord.js';
+import { streamBlockField } from './stream-block-field.js';
+import { serializeRequestRow } from './token-usage-measurement.js';
+
+export interface CountingBlock {
+  readonly content: ContentBlock;
+  readonly text: AsyncIterable<Uint8Array>;
+}
 
 export interface JournalBlockReference {
   readonly at: BlockPosition;
@@ -22,6 +31,7 @@ export interface JournalResponsePlan {
   readonly pending: boolean;
   sourceIds?(label: bigint): RowIds | undefined;
   openBlocks(): AsyncGenerator<ContentBlock>;
+  openCountingBlocks?(): AsyncGenerator<CountingBlock>;
 }
 
 async function resolveBlock(
@@ -61,6 +71,56 @@ async function resolveBlock(
   };
 }
 
+function textProjection(
+  type: number,
+): { readonly content: ContentBlock; readonly field: string } | undefined {
+  switch (type) {
+    case ROW_BLOCK_TYPE.text:
+      return { content: { type: 'text', text: '' }, field: 'text' };
+    case ROW_BLOCK_TYPE.thinking:
+      return { content: { type: 'thinking', thought: '' }, field: 'thought' };
+    case ROW_BLOCK_TYPE.code:
+      return { content: { type: 'code', code: '' }, field: 'code' };
+    default:
+      return undefined;
+  }
+}
+
+async function countingBlock(
+  source: JournalResponseSource,
+  ref: JournalBlockReference,
+  known?: ResponsePart,
+): Promise<CountingBlock> {
+  if (ref.kind !== 'source' || source.blocks === undefined)
+    return materializedCountingBlock(await resolveBlock(source, ref, known));
+  const part = await responsePartAt(source, ref.at, known);
+  const index = part.indices[ref.at.block];
+  const projection = textProjection(part.ids.header.blocks[index].type);
+  if (projection === undefined)
+    return materializedCountingBlock(await resolveBlock(source, ref, known));
+  for await (const block of source.blocks(part.entry)) {
+    if (block.ordinal === index)
+      return {
+        content: projection.content,
+        text: streamBlockField(block, projection.field),
+      };
+  }
+  throw new JournalFormatError('Counting source block is absent');
+}
+
+function materializedCountingBlock(content: ContentBlock): CountingBlock {
+  return {
+    content,
+    text: (async function* () {
+      const bytes = Buffer.from(
+        serializeRequestRow({ speaker: 'ai', blocks: [content] }),
+      );
+      for (let offset = 0; offset < bytes.length; offset += 65536)
+        yield bytes.subarray(offset, offset + 65536);
+    })(),
+  };
+}
+
 export function responsePlan(
   source: JournalResponseSource,
   header: IContent,
@@ -74,6 +134,9 @@ export function responsePlan(
     pending,
     sourceIds: (label) =>
       known?.entry.label === label ? known.ids : undefined,
+    async *openCountingBlocks() {
+      for (const ref of blocks) yield await countingBlock(source, ref, known);
+    },
     async *openBlocks() {
       for (const ref of blocks) {
         const block = await resolveBlock(source, ref, known);

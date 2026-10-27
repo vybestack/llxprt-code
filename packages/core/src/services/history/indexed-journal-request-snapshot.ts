@@ -1,15 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { estimateTokens } from '../../utils/toolOutputLimiter.js';
+import { measureTokenUsagePlan } from './token-usage-plan.js';
 import { HistoryReaderScope } from './historyReaderScope.js';
 import {
-  measureRequestRow,
   type RequestRowMeasurement,
   type TokenCountFn,
 } from './token-usage-measurement.js';
 import {
   storedTokenUsageFacts,
   tokenUsagePlanSignature,
-  readTokenUsagePlan,
   tokenUsageRowFact,
   type TokenUsageRowFact,
 } from './token-usage-facts.js';
@@ -462,7 +461,7 @@ export class IndexedJournalRequestSnapshot {
           (unit) => unit.signature === signature,
         )?.measurement;
     const measurement =
-      stored ?? measureRequestRow(await readTokenUsagePlan(plan), countTokens);
+      stored ?? (await measureTokenUsagePlan(plan, countTokens));
     if (overlay && stored === undefined)
       this.overlayMeasurements.set(signature, measurement);
     let sequence = this.source.appendSequence(selected.entry.label);

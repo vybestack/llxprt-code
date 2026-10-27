@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { FIRST_NEXT_LABEL, LABEL_STEP } from '../../journal/labels.js';
+import type { DirectoryBlock } from '../../journal/row-directory.js';
 import { JournalFormatError } from '../../journal/errors.js';
 import {
   admittedMediaSource,
@@ -236,6 +237,27 @@ export class JournalTailSource implements JournalResponseSource {
     return this.isTail(entry.label)
       ? Promise.resolve(this.tailAt(entry.label).stored)
       : this.base.readRow(entry);
+  }
+
+  async *blocks(entry: RowEntry): AsyncGenerator<DirectoryBlock> {
+    if (!this.isTail(entry.label) && this.base.blocks !== undefined) {
+      yield* this.base.blocks(entry);
+      return;
+    }
+    const ids = await this.readIds(entry);
+    for (const [ordinal, descriptor] of ids.header.blocks.entries()) {
+      const bytes = await this.readBlock(entry, ordinal, ids);
+      yield {
+        ordinal,
+        type: descriptor.type,
+        length: bytes.byteLength,
+        normalizedJson: true,
+        async *parts() {
+          for (let offset = 0; offset < bytes.length; offset += 65536)
+            yield bytes.subarray(offset, offset + 65536);
+        },
+      };
+    }
   }
 
   async readBlock(

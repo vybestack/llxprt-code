@@ -11,13 +11,15 @@ import type { JournalResponsePlan } from './journal-response-plan.js';
 import { JournalTailSource } from './journal-tail-source.js';
 import { journalEntryPlans } from './journal-entry-plans.js';
 import {
-  measureRequestRow,
-  serializeRequestRow,
   stableStringify,
   type RequestRowMeasurement,
   type TokenCountFn,
 } from './token-usage-measurement.js';
-import type { IContent } from './IContent.js';
+import {
+  measureTokenUsagePlan,
+  tokenUsagePlanPrefix,
+} from './token-usage-plan.js';
+export { readTokenUsagePlan } from './token-usage-plan.js';
 
 const measurementSchema = z.object({
   tokens: z.number().nonnegative(),
@@ -85,14 +87,6 @@ export async function tokenUsagePlanSignature(
   return hash.digest('hex');
 }
 
-export async function readTokenUsagePlan(
-  plan: JournalResponsePlan,
-): Promise<IContent> {
-  const blocks: IContent['blocks'] = [];
-  for await (const block of plan.openBlocks()) blocks.push(block);
-  return { ...plan.header, blocks };
-}
-
 export function tokenUsageFactRegistration(
   countTokens: TokenCountFn,
 ): NeutralRowFactRegistration {
@@ -113,10 +107,7 @@ export function tokenUsageFactRegistration(
         units.push(
           stored ?? {
             signature,
-            measurement: measureRequestRow(
-              await readTokenUsagePlan(plan),
-              countTokens,
-            ),
+            measurement: await measureTokenUsagePlan(plan, countTokens),
           },
         );
       }
@@ -159,11 +150,11 @@ export function tokenUsageRowFact(
         const text = `C#${measurement.fingerprintKey}`;
         return { text, consumed: text.length };
       }
-      const serialized = serializeRequestRow(await readTokenUsagePlan(plan));
+      const prefix = await tokenUsagePlanPrefix(plan, budget);
       const synthetic = plan.header.metadata?.synthetic === true ? 1 : 0;
       return {
-        text: `C:${plan.header.speaker}:${synthetic}:${serialized.slice(0, budget)}`,
-        consumed: serialized.length,
+        text: `C:${plan.header.speaker}:${synthetic}:${prefix.text}`,
+        consumed: prefix.consumed,
       };
     },
   };

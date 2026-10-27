@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import type { DirectoryBlock } from '../../journal/row-directory.js';
 import type { RowEntry } from '../../journal/rowEntry.js';
 import type { RowIds, StoredRow } from '../../journal/rowReads.js';
 import type { BlockPosition, IdFact } from '../../journal/idFactCodec.js';
@@ -173,6 +174,25 @@ export class JournalProjectedSource implements JournalRequestBase {
 
   readRow(entry: RowEntry): Promise<StoredRow> {
     return this.selected(entry) ? this.changed() : this.snapshot.readRow(entry);
+  }
+
+  async *blocks(entry: RowEntry): AsyncGenerator<DirectoryBlock> {
+    if (!this.selected(entry)) {
+      yield* this.snapshot.blocks(entry);
+      return;
+    }
+    const stored = await this.changed();
+    for (const [ordinal, bytes] of stored.blocks.entries())
+      yield {
+        ordinal,
+        type: stored.header.blocks[ordinal].type,
+        length: bytes.byteLength,
+        normalizedJson: true,
+        async *parts() {
+          for (let offset = 0; offset < bytes.length; offset += 65536)
+            yield bytes.subarray(offset, offset + 65536);
+        },
+      };
   }
 
   async readBlock(
