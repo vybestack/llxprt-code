@@ -398,14 +398,24 @@ export class IndexedJournalRequestSnapshot {
 
   async *openPlans(signal?: AbortSignal): AsyncGenerator<JournalResponsePlan> {
     this.requireOpen();
-    for await (const entry of this.source.entries()) {
+    let index = 0;
+    while (index < this.count) {
+      const start = index;
       this.requireOpen();
       signal?.throwIfAborted();
-      for await (const plan of journalEntryPlans(this.source, entry)) {
+      const selected = await this.locate(index);
+      let unit = 0;
+      for await (const plan of journalEntryPlans(this.source, selected.entry)) {
+        if (unit++ < selected.unit) continue;
         this.requireOpen();
         signal?.throwIfAborted();
+        index++;
         yield plan;
       }
+      if (index === start)
+        throw new JournalFormatError(
+          'Indexed unit selection exceeds its row contribution',
+        );
     }
   }
 
