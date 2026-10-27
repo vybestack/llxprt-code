@@ -8,7 +8,7 @@ import {
   measureCompaction,
   RETAINED_BOUND_BYTES,
   warmCompaction,
-  sessionWithCheckpoints,
+  isolatedSessionWithCheckpoints,
   type CompactionMeasurement,
 } from './__tests__/support/compactionMemory.js';
 import type { JournalStore } from './journalStore.js';
@@ -17,19 +17,14 @@ import { useTempDir } from './__tests__/support/useTempDir.js';
 const SMALL = 10;
 const MEDIUM = 100;
 /**
- * The warm-up copy is as large as the middle case. A copy that is hot enough
- * to be compiled by the optimising tiers leaves that code on the heap, which
- * is a one-time cost and not growth with the count, so it must be in every
- * baseline and not only in the first copy that gets hot.
- */
-const WARMUP = MEDIUM;
-/**
  * The largest count. The copy's time grows with the checkpoints times the
  * depth of the state map (see the phase 2d notes), so 400 checkpoints, 40
  * times the smallest case, keep this file under two minutes on a loaded
  * machine.
  */
 const LARGE = 400;
+/** Exercise the largest copy's optimizing tiers before every measured size. */
+const WARMUP = LARGE;
 
 function spreadOf(values: readonly number[]): number {
   return Math.max(...values) - Math.min(...values);
@@ -49,7 +44,7 @@ describe('compaction copy memory with growing checkpoint counts (design 13.6)', 
     checkpoints: number,
     label: string,
   ): Promise<JournalStore> {
-    const source = await sessionWithCheckpoints(
+    const source = await isolatedSessionWithCheckpoints(
       path.join(directory(), `source-${label}.llxj`),
       checkpoints,
     );

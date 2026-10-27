@@ -183,6 +183,8 @@ export class TranscriptGroup {
     )
       await this.marker(built);
     this.head = { ...this.head, root: await this.admissions.finish() };
+    // The bounded caches may evict built map nodes before membership reads them.
+    await this.target.drain();
     const state = new KeyedMapBatch(
       this.reader('state'),
       built.state.stateRoot,

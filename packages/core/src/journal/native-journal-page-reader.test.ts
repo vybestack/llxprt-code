@@ -101,6 +101,51 @@ describe('public native journal page reader', () => {
     }
   });
 
+  for (const calls of [40, 400]) {
+    it(`does not reread the same opener for each of ${calls} tool calls`, async () => {
+      const session = await JournalSession.create(
+        join(directory(), `repeated-${calls}.llxj`),
+      );
+      try {
+        await session.append([
+          {
+            speaker: 'ai',
+            blocks: Array.from(
+              { length: calls },
+              (_, index): ToolCallBlock => ({
+                type: 'tool_call',
+                id: `call-${index}`,
+                name: 'read_file',
+                parameters: { index },
+              }),
+            ),
+          },
+        ]);
+        const stats = { reads: 0, bytes: 0 };
+        const reader = await NativeJournalPageReader.open(
+          session.path,
+          countedReads(stats),
+        );
+        try {
+          const first = await reader.entryAt(0);
+          stats.reads = 0;
+          stats.bytes = 0;
+          await Promise.all(
+            Array.from({ length: Math.ceil(calls / 16) }, async () => {
+              expect((await reader.entryAt(0)).toolCallBlocks).toBe(calls);
+            }),
+          );
+          expect(stats.reads).toBeLessThanOrEqual(1);
+          expect(stats.bytes).toBeLessThan(first.recordLength);
+        } finally {
+          await reader.close();
+        }
+      } finally {
+        await session.close();
+      }
+    });
+  }
+
   it('reads committed rows and selects responses within label bounds', async () => {
     const session = await JournalSession.create(join(directory(), 'page.llxj'));
     try {

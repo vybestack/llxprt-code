@@ -7,7 +7,7 @@ import {
   measureCompaction,
   PerVersionBuilders,
   RETAINED_BOUND_BYTES,
-  sessionWithCheckpoints,
+  isolatedSessionWithCheckpoints,
   warmCompaction,
 } from './__tests__/support/compactionMemory.js';
 import type { JournalStore } from './journalStore.js';
@@ -25,11 +25,11 @@ describe('compaction copy memory trap (design 13.6)', () => {
   });
 
   it('a copy that keeps the state of every version in memory exceeds the bounds of both checks', async () => {
-    const warm = await sessionWithCheckpoints(
+    const warm = await isolatedSessionWithCheckpoints(
       path.join(directory(), 'source-warm.llxj'),
       TRAPPED,
     );
-    const source = await sessionWithCheckpoints(
+    const source = await isolatedSessionWithCheckpoints(
       path.join(directory(), 'source-trap.llxj'),
       TRAPPED,
     );

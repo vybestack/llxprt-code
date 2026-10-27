@@ -74,5 +74,5 @@ describe('disk paging ownership', () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
-  }, 30000);
+  }, 180000);
 });

@@ -12,6 +12,7 @@ import type { IContent } from '../services/history/IContent.js';
 export class NativeTranscriptIndex {
   readonly transcript: TranscriptReader;
   private count = 0;
+  private lastEntry: { ordinal: number; entry: RowEntry } | undefined;
   constructor(private readonly journal: JournalReader) {
     this.transcript = new TranscriptReader(journal, sha256KeyHash);
   }
@@ -24,6 +25,12 @@ export class NativeTranscriptIndex {
   async entryAt(ordinal: number): Promise<RowEntry> {
     if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal >= this.count)
       throw new RangeError('Transcript ordinal is outside the published head');
+    if (this.lastEntry?.ordinal === ordinal) return this.lastEntry.entry;
+    const entry = await this.readEntryAt(ordinal);
+    this.lastEntry = { ordinal, entry };
+    return entry;
+  }
+  private async readEntryAt(ordinal: number): Promise<RowEntry> {
     const entry = (
       await this.transcript.page({
         direction: 'forward',

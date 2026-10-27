@@ -7,7 +7,10 @@ import {
 } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { DEFAULT_BATCH_BYTES } from '../../groupAppender.js';
 import { ID_NODE_CACHE_BYTES } from '../../idTrieCache.js';
-import type { JournalStore } from '../../journalStore.js';
+import { JournalStore } from '../../journalStore.js';
+import { join } from 'node:path';
+import { storeDeps } from './storeFixtures.js';
+import { testJournalSeams } from './journalFixtures.js';
 import { iterateRowEntries } from '../../rowTreeReader.js';
 import {
   compactionCopy,
@@ -104,16 +107,12 @@ async function strictSettledHeap(label: string): Promise<number> {
 }
 
 /**
- * How long compiled code that nothing runs any more takes to be dropped.
- * JavaScriptCore drops it in two waves, measured at about 5 s (several MiB:
- * the fixture builders and the start-up code) and about 15 s (about 1.2 MiB)
- * after the last run, with nothing further through 100 s, whatever the number
- * of collections in between. The wait has to end after the second wave: when
- * it ended at 12 s the wave landed in one of the measured copies, took a
- * megabyte off the heap there, and was read as a copy that gives memory back
- * (a different copy on each run).
+ * Bun 1.4.4 defaults optimizedCodeAgingQuietSeconds to 30. A 20-second
+ * baseline still held fixture code that a later copy released: the census
+ * measured 3.5 MiB of FunctionCodeBlock release at 1,000 checkpoints.
+ * Wait past that fixed engine interval before warming the measured copier.
  */
-const IDLE_CODE_AGE_OUT_MS = 20_000;
+const IDLE_CODE_AGE_OUT_MS = 35_000;
 
 /** The heap must then stay level for this long, so a drop that is still coming fails the wait. */
 const LEVEL_FOR_MS = 2_000;
@@ -181,6 +180,35 @@ export async function sessionWithCheckpoints(
     await growAfterCheckpoint(store, `k${index}`, ROWS_PER_CHECKPOINT);
   }
   return store;
+}
+
+/** Keep fixture-builder code and allocation history outside the measured heap. */
+export async function isolatedSessionWithCheckpoints(
+  file: string,
+  checkpoints: number,
+): Promise<JournalStore> {
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      join(import.meta.dir, 'checkpoint-seed.fixture.ts'),
+      file,
+      String(checkpoints),
+    ],
+    { stdout: 'inherit', stderr: 'inherit' },
+  );
+  try {
+    const exit = await child.exited;
+    if (exit !== 0) throw new Error(`Checkpoint seed exited with ${exit}`);
+  } finally {
+    if (child.exitCode === null) {
+      child.kill();
+      await child.exited;
+    }
+  }
+  return JournalStore.open(
+    file,
+    storeDeps({ seams: testJournalSeams({}, 1, false) }),
+  );
 }
 
 /** What a copier that builds every version in memory holds for one version. */

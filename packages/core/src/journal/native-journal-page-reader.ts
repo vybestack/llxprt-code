@@ -147,9 +147,9 @@ export class NativeJournalPageReader {
         : await this.reader.readRecordHead(entry.recordOffset, 'ROW');
     if (source.kind === RECORD_KIND.VALUE)
       return this.transcript.marker(entry.recordOffset);
-    if (decodeRowHeader(source.kindHeader).chunk !== undefined)
-      return readChunkToolPage(this.reader, entry, start, count);
     const ids = await this.toolPageHeader(entry, source);
+    if (ids.header.chunk !== undefined)
+      return readChunkToolPage(this.reader, entry, start, count);
     const head = ids.head;
     const metadata = await readStoredMetadata(this.reader, entry, ids);
     let call = 0;
