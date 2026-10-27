@@ -29,7 +29,7 @@ async function measure(retainAll: boolean): Promise<number> {
     for (let index = 0; index < 64; index++) {
       const block: ContentBlock = {
         type: 'thinking',
-        thought: `${index}:` + 'x'.repeat((index + 1) * 32),
+        thought: 'x'.repeat((index + 1) * 32),
         streamId: 'thinking-span',
         streamStatus: 'delta',
       };
