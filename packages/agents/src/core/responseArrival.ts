@@ -13,20 +13,47 @@ export async function prefetchResponseArrival(
   converted: AsyncGenerator<ModelStreamChunk>,
   arrival: ResponseArrival,
   includeThoughts: boolean,
+  prepare?: (chunk: ModelStreamChunk) => Promise<{
+    readonly historyChunk: ModelStreamChunk;
+    readonly release: () => Promise<void>;
+  }>,
 ): Promise<AsyncGenerator<ModelStreamChunk>> {
+  const pending: PrefetchedArrival = {};
   try {
     const first = await converted.next();
     if (first.done === true)
       throw new EmptyStreamError(
         'Model stream ended immediately with no content.',
       );
-    await appendResponseChunk(arrival, first.value, includeThoughts);
-    markPrefetchedArrival(first.value);
+    const prepared = await prepare?.(first.value);
+    pending.historyChunk = prepared?.historyChunk ?? first.value;
+    pending.release = prepared?.release;
+    await appendResponseChunk(arrival, pending.historyChunk, includeThoughts);
+    prefetched.set(first.value, pending);
     const stream = prependAsyncGenerator(first.value, converted);
-    bindResponseArrival(stream, arrival);
+    bindResponseArrival(stream, {
+      selectAttempt: (id) => arrival.selectAttempt(id),
+      appendToolArguments: (delta) => arrival.appendToolArguments(delta),
+      replaceAfcHistory: (contents) => arrival.replaceAfcHistory(contents),
+      append: (block) => arrival.append(block),
+      seal: (...args) => arrival.seal(...args),
+      interrupt: async (outcome) => {
+        try {
+          await arrival.interrupt(outcome);
+        } finally {
+          await pending.release?.();
+          pending.historyChunk = undefined;
+          pending.release = undefined;
+        }
+      },
+    });
     return stream;
   } catch (error) {
-    await arrival.interrupt('error');
+    try {
+      await arrival.interrupt('error');
+    } finally {
+      await pending.release?.();
+    }
     throw error;
   }
 }
@@ -82,12 +109,22 @@ export function appendResponseBlocks(
       );
   }
 }
-const prefetched = new WeakSet<ModelStreamChunk>();
-export function markPrefetchedArrival(chunk: ModelStreamChunk): void {
-  prefetched.add(chunk);
+interface PrefetchedArrival {
+  historyChunk?: ModelStreamChunk;
+  release?: () => Promise<void>;
 }
-export function takePrefetchedArrival(chunk: ModelStreamChunk): boolean {
-  return prefetched.delete(chunk);
+const prefetched = new WeakMap<ModelStreamChunk, PrefetchedArrival>();
+export function takePrefetchedArrival(
+  chunk: ModelStreamChunk,
+): ModelStreamChunk | undefined {
+  const pending = prefetched.get(chunk);
+  prefetched.delete(chunk);
+  const historyChunk = pending?.historyChunk;
+  if (pending !== undefined) {
+    pending.historyChunk = undefined;
+    pending.release = undefined;
+  }
+  return historyChunk;
 }
 const arrivals = new WeakMap<
   AsyncGenerator<ModelStreamChunk>,

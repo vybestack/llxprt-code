@@ -455,6 +455,29 @@ export class StreamProcessor {
       convertedStream,
       arrival,
       this.runtimeContext.ephemerals.reasoning.includeInContext(),
+      async (chunk) => {
+        const turnId = this.turnIdByPromptId.get(promptId) ?? promptId;
+        const historyChunk = await admitStreamChunkForHistory(
+          this.runtimeContext,
+          chunk,
+          {
+            ...chunk.content,
+            blocks: filterHookRestrictedBlocks(
+              chunk.content.blocks,
+              chunk.hookRestrictions?.allowedToolNames,
+            ),
+          },
+          turnId,
+        );
+        return {
+          historyChunk,
+          release: async () => {
+            await this.runtimeContext.mediaAdmission?.releaseAdmissions(
+              streamMediaAdmissions(historyChunk, turnId),
+            );
+          },
+        };
+      },
     );
   }
   private async _handleBucketFailover(
@@ -714,16 +737,20 @@ export class StreamProcessor {
             allowedToolNames,
           ),
         };
-        const historyChunk = await admitStreamChunkForHistory(
-          this.runtimeContext,
-          chunk,
-          filteredContent,
-          turnId,
-        );
+        const prefetchedChunk = takePrefetchedArrival(chunk);
+        const historyChunk =
+          prefetchedChunk ??
+          (await admitStreamChunkForHistory(
+            this.runtimeContext,
+            chunk,
+            filteredContent,
+            turnId,
+          ));
         admissions.push(...streamMediaAdmissions(historyChunk, turnId));
-        const pendingArrival = takePrefetchedArrival(chunk)
-          ? undefined
-          : appendResponseChunk(arrival, historyChunk, includeThoughts);
+        const pendingArrival =
+          prefetchedChunk === undefined
+            ? appendResponseChunk(arrival, historyChunk, includeThoughts)
+            : undefined;
         if (pendingArrival !== undefined) await pendingArrival;
         terminal.add(historyChunk, includeThoughts);
         await this._recordStreamAfc(historyChunk, arrival);
