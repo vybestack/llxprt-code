@@ -21,6 +21,38 @@ import {
 
 describe('runtime service shape guard', () => {
   it.each([
+    'export class Services { scheduler = new Scheduler(); context = new Context(); }',
+    'export class Services { constructor(public scheduler: Scheduler, public context: Context) {} }',
+    'export type Services = Map<string, Scheduler | Context>;',
+    'export type Services = Array<Scheduler | Context>;',
+  ])(
+    'reports publicly exposed or repeated service bags at declaration: %s',
+    (source) => {
+      expect(scan(imports + source)).toContainEqual(
+        expect.objectContaining({
+          rule: 'runtime-service-bundle',
+          line: 2,
+          column: 1,
+        }),
+      );
+    },
+  );
+
+  it.each([
+    'export class Owner { private scheduler = new Scheduler(); private context = new Context(); run(): void { this.scheduler.schedule(); } }',
+    'export class Owner { constructor(private scheduler: Scheduler, private context: Context) {} run(): void { this.scheduler.schedule(); } }',
+    'export type OneService = Array<Scheduler>;',
+    'export type OneService = Map<string, Scheduler>;',
+    'export type Alternative = Scheduler | Context;',
+    'export type SingleResult = Promise<Scheduler | Context>;',
+  ])(
+    'permits private collaborators and single-service or alternative values: %s',
+    (source) => {
+      expect(scan(imports + source)).toEqual([]);
+    },
+  );
+
+  it.each([
     {
       caseSensitive: false,
       assemblyFile: 'C:/Fixture/Assembly.ts',
@@ -324,6 +356,7 @@ export function other(bag: { clock: Clock; session: Session }): void {}`;
           configs: [{ file: 'settings.ts', exportName: 'Settings' }],
           runtimeObjects: [{ file: 'hooks.ts', exportName: 'HookSystem' }],
         },
+        ['consumer.ts'],
       ),
     ).toEqual([
       expect.objectContaining({

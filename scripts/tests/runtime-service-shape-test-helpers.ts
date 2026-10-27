@@ -40,7 +40,9 @@ export function scan(
   source: string,
   file = 'consumer.ts',
 ): readonly RuntimeServiceShapeFinding[] {
-  return scanRuntimeServiceShapes({ ...roots, [file]: source }, options);
+  return scanRuntimeServiceShapes({ ...roots, [file]: source }, options, [
+    file,
+  ]);
 }
 
 export function scanInstalled(

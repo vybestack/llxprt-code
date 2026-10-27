@@ -66,8 +66,8 @@ function isClassType(type: ts.Type): boolean {
  * storage keeps the value just as public storage does.
  *
  * A class that owns several collaborators is the design the runtime boundary
- * wants, so the class itself is never a bag. Each stored position is judged on
- * its own declared type instead.
+ * wants when those collaborators stay private. Each stored position is also
+ * judged on its own declared type, independently of the public class surface.
  */
 export function classStoredDeclarations(
   node: ts.ClassDeclaration,

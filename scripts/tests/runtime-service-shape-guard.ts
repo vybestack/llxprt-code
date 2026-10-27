@@ -432,8 +432,8 @@ export function scanRuntimeServiceProgram(
      * boundary judges: a field or constructor parameter property whose declared
      * type is a bundle stores a bag, whatever its visibility. Owning several
      * single-service fields is not a bundle, which is the design we want; a
-     * class whose public surface hands out two services is judged on that
-     * surface, through the stored position's declared verdict.
+     * class whose public surface hands out two services is additionally judged
+     * at its declaration by reportNamedShape.
      */
     function reportStoredDeclarations(node: ts.ClassDeclaration): void {
       if (isAssemblyNode(node, options, program)) return;
@@ -483,6 +483,7 @@ export function scanRuntimeServiceProgram(
         reportExpression(node.expression);
       }
       if (ts.isClassDeclaration(node)) {
+        reportNamedShape(node, false);
         reportStoredDeclarations(node);
       } else if (
         ts.isTypeAliasDeclaration(node) ||
@@ -514,6 +515,7 @@ export function scanRuntimeServiceProgram(
 export function scanRuntimeServiceShapes(
   sources: Readonly<Record<string, string>>,
   options: RuntimeServiceShapeOptions,
+  files: readonly string[] = Object.keys(sources),
 ): readonly RuntimeServiceShapeFinding[] {
   const compilerOptions: ts.CompilerOptions = {
     strict: true,
@@ -560,5 +562,5 @@ export function scanRuntimeServiceShapes(
     compilerOptions,
     host,
   );
-  return scanRuntimeServiceProgram(program, options, Object.keys(sources));
+  return scanRuntimeServiceProgram(program, options, files);
 }
