@@ -147,7 +147,9 @@ export class AnthropicRepairIndex {
   ): Promise<ToolRepairOverlay | undefined> {
     const values = await this.facts.get(['decision', message.start, id]);
     if (!sameFactVersion(values, this.version) || values.length !== 5)
-      throw new JournalFormatError('Missing Anthropic native use decision');
+      throw new JournalFormatError(
+        `Missing Anthropic native use decision for ${id} at ${message.start}: expected ${this.version.join(',')}, found ${values?.join(',')}`,
+      );
     if (values[3] === 0 && values[4] === 0) return undefined;
     return {
       id,

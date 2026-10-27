@@ -94,6 +94,21 @@ export async function appendAnthropicFacts(
   settings: RowFormatSettings,
 ): Promise<boolean> {
   const ordinary = appendOnly(edits);
+  if (ordinary)
+    for (let row = previous.rows; row < snapshot.rows; row++) {
+      const { header } = await snapshot.readIds(await snapshot.entryAt(row));
+      if (
+        header.speaker === ROW_SPEAKER.tool ||
+        header.ids.length > 0 ||
+        header.blocks.some(
+          (block) =>
+            block.type !== ROW_BLOCK_TYPE.text &&
+            block.type !== ROW_BLOCK_TYPE.code &&
+            block.type !== ROW_BLOCK_TYPE.thinking,
+        )
+      )
+        return false;
+    }
   const edit = edits[0];
   const toolRow =
     edits.length === 1 && edit.kind === 'append' && edit.rows.length === 1

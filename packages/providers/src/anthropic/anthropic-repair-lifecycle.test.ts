@@ -110,6 +110,51 @@ describe('persisted native Anthropic repair facts', () => {
       await session.close();
     }
   });
+  it.each(['x', 'orphan'])(
+    'maintains native decisions when a streamed %s result changes the normalized units',
+    async (id) => {
+      const session = await JournalSession.create(
+        `${directory()}/stream-${id}.llxj`,
+      );
+      const rows = [text('q'), call('x')];
+      const added = result(id, 'streamed value');
+      try {
+        await session.append(rows);
+        await session.store.commit([
+          {
+            kind: 'factIndex',
+            registration: anthropicRepairFactIndex(settings),
+          },
+        ]);
+        await session.store.commit([
+          {
+            kind: 'prepared',
+            admission: [],
+            prepare: async (group) => {
+              await group.append(
+                (async function* () {
+                  yield encodeContentRow(added, { owner: 0 });
+                })(),
+                [],
+              );
+            },
+          },
+        ]);
+        const pin = await session.store.snapshot();
+        const query = await IndexedJournalRequestSnapshot.create(pin);
+        try {
+          const wire = await output(query);
+          expect(wire).toContain('streamed value');
+          expect(wire).toContain(`"tool_use_id":"toolu_${id}"`);
+        } finally {
+          await query.close();
+          await pin.close();
+        }
+      } finally {
+        await session.close();
+      }
+    },
+  );
   it('maintains native decisions across append, fill, pop, fork and compaction while an old request stays pinned', async () => {
     const rows = [text('q'), call(''), text('next')];
     const added = [
