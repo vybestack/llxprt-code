@@ -78,18 +78,14 @@ export function collectSyncDisposalError(
 export async function joinAgentWork(
   cancelAndJoinProfiles: () => Promise<void>,
   cancelAndJoinMcpAuth: () => Promise<void>,
-  hasPendingTasks: () => boolean,
   joinTasks: () => Promise<void>,
-  disposeMcpRuntime: () => Promise<void> | void,
   errors: unknown[],
 ): Promise<void> {
-  const joinedTasks = collectDisposalError(errors, joinTasks);
-  const stopMcp = (): Promise<void> =>
-    collectDisposalError(errors, disposeMcpRuntime);
-  const stopping = hasPendingTasks() ? joinedTasks.then(stopMcp) : stopMcp();
-  const authenticating = collectDisposalError(errors, cancelAndJoinMcpAuth);
-  const replacing = collectDisposalError(errors, cancelAndJoinProfiles);
-  await Promise.all([joinedTasks, stopping, authenticating, replacing]);
+  await Promise.all([
+    collectDisposalError(errors, joinTasks),
+    collectDisposalError(errors, cancelAndJoinMcpAuth),
+    collectDisposalError(errors, cancelAndJoinProfiles),
+  ]);
 }
 
 export async function disposeConfigInfrastructure(

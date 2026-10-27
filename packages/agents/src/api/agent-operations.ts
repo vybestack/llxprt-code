@@ -379,9 +379,7 @@ export class AgentOperations {
         joinAgentWork(
           () => disposal.profiles.cancelAndJoin(),
           () => disposal.mcp.cancelAndJoin(),
-          () => disposal.tasks.hasPendingWork(),
           () => disposal.tasks.join(),
-          () => disposal.ownership.disposeMcpRuntime?.(),
           errors,
         ),
       (errors) => joinCapturedRun(run, errors),
@@ -414,6 +412,9 @@ export class AgentOperations {
   async #releaseShutdownResources(errors: unknown[]): Promise<void> {
     const disposal = this.#disposal;
     await collectDisposalError(errors, () => disposal.session.dispose());
+    await collectDisposalError(errors, () =>
+      disposal.ownership.disposeMcpRuntime?.(),
+    );
     await collectDisposalError(errors, disposal.closeRuntime);
     await disposeConfigInfrastructure(
       disposal.disposeConfig,

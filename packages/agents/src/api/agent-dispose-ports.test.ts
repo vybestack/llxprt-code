@@ -4,41 +4,60 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
+import { mkdtemp, open, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { deferred } from './__tests__/helpers/shell-owner-gate.js';
-import { joinAgentWork } from './agentDisposeHelpers.js';
+import { assembleAgentShutdown, joinAgentWork } from './agentDisposeHelpers.js';
 
 describe('joined shutdown operation ports', () => {
-  it('retains MCP resources until pending tasks finish while joining auth and profile work', async () => {
-    const open = new Set(['tasks', 'mcp-owner', 'auth', 'profile']);
-    const taskCompletion = deferred<void>();
-    const errors: unknown[] = [];
-    const joining = joinAgentWork(
+  it('keeps runtime resources usable through auth joins and SessionEnd', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'joined-runtime-'));
+    const runtime = await open(join(directory, 'runtime'), 'w+');
+    const auth = deferred<void>();
+    const entered = deferred<void>();
+    let finalHookBytes = 0;
+    const shutdown = assembleAgentShutdown(
+      [],
+      [],
+      [],
+      [],
+      (errors) =>
+        joinAgentWork(
+          async () => {},
+          async () => {
+            entered.resolve();
+            await auth.promise;
+            await runtime.write('joined auth');
+          },
+          async () => {},
+          errors,
+        ),
+      async () => {},
+      async () => {},
       async () => {
-        open.delete('profile');
+        finalHookBytes = (await runtime.write('SessionEnd')).bytesWritten;
       },
-      async () => {
-        open.delete('auth');
-      },
-      () => open.has('tasks'),
-      async () => {
-        await taskCompletion.promise;
-        open.delete('tasks');
-      },
-      async () => {
-        open.delete('mcp-owner');
-      },
-      errors,
+      async () => runtime.close(),
     );
-    await Promise.resolve();
-    expect([...open].sort()).toStrictEqual(['mcp-owner', 'tasks']);
-    taskCompletion.resolve();
-    await joining;
-    expect(open.size).toBe(0);
-    expect(errors).toStrictEqual([]);
+    const closing = shutdown.dispose();
+    try {
+      await entered.promise;
+      await runtime.write('accepted work');
+      auth.resolve();
+      await closing;
+      expect(finalHookBytes).toBeGreaterThan(0);
+      await expect(runtime.write('retired')).rejects.toThrow(
+        'Bad file descriptor',
+      );
+    } finally {
+      auth.resolve();
+      await Promise.allSettled([closing, runtime.close()]);
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
-  it('collects independent cancellation failures without leaving owned MCP resources open', async () => {
-    let open = true;
+  it('collects independent cancellation failures', async () => {
     const errors: unknown[] = [];
     await joinAgentWork(
       async () => {
@@ -47,14 +66,9 @@ describe('joined shutdown operation ports', () => {
       async () => {
         throw new Error('auth cancellation failed');
       },
-      () => false,
       async () => {},
-      async () => {
-        open = false;
-      },
       errors,
     );
-    expect(open).toBe(false);
     expect(errors).toHaveLength(2);
   });
 });
