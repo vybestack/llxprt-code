@@ -16,6 +16,7 @@ import {
   type InternalIdNode,
 } from './idTrieNode.js';
 import { bytesEqual } from './bytes.js';
+import { buildSortedIdTrie } from './sorted-id-trie-builder.js';
 
 /** Facts in ascending hash order, one at a time. */
 interface SortedSource {
@@ -417,9 +418,9 @@ export async function mergeIdTrie(
     }
     return merged;
   }
+  if (root === 0) return buildSortedIdTrie(appender, updates, written);
   const source = new StreamSource(updates);
   if ((await source.peek()) === undefined) return root;
-  if (root === 0) return buildNode(context, 0, source, undefined);
   return mergeNode(context, root, 0, source);
 }
 

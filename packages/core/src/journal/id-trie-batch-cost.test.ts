@@ -10,9 +10,13 @@ import { sha256KeyHash } from './idKeys.js';
 import type { RecordAppender } from './groupAppender.js';
 
 describe('bounded id trie batch CPU work', () => {
-  it.each([32, 128])(
-    'bounds microtask work for %i already-sorted facts',
-    async (size) => {
+  it.each(
+    [32, 128].flatMap((size) =>
+      [false, true].map((stream) => ({ size, stream })),
+    ),
+  )(
+    'bounds microtask work for $size already-sorted facts (stream=$stream)',
+    async ({ size, stream }) => {
       const entries: IdEntry[] = Array.from({ length: size }, (_, index) => ({
         hash: sha256KeyHash(0, new TextEncoder().encode(`id-${index}`)),
         value: Uint8Array.of(index),
@@ -39,7 +43,14 @@ describe('bounded id trie batch CPU work', () => {
       };
       queueMicrotask(tick);
       try {
-        await bulkBuildIdTrie(appender, entries);
+        await bulkBuildIdTrie(
+          appender,
+          stream
+            ? (async function* () {
+                yield* entries;
+              })()
+            : entries,
+        );
       } finally {
         active = false;
       }
