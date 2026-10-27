@@ -60,6 +60,7 @@ describe('native truncation source ownership', () => {
           (offset + 2) % 2 === 0 ? 'owner-a' : 'owner-b',
         );
         expect(await owned.originsOfRows()).toStrictEqual(expected);
+        await owned.dispose();
         const reopened = await JournalSession.open(owned.session.path);
         try {
           const dictionary = await OwnerDictionary.load(reopened.store);
