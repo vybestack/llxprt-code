@@ -159,7 +159,7 @@ export class AgentActivationBootstrap
   #mediaOwner: SessionMediaOwner | undefined;
   #releaseForegroundProviders!: () => Promise<void>;
   #ownsFilesystem = false;
-  #ownsTrustCleanup = false;
+  #trustCleanupOwnership = { owned: false };
   #ownsDefinitions = false;
   #ownsMemory = false;
   #ownsSessionClient = true;
@@ -215,7 +215,7 @@ export class AgentActivationBootstrap
     this.#sessionResources = acquired;
     this.#mediaOwner = acquired.media;
     this.#ownsFilesystem = true;
-    this.#ownsTrustCleanup = true;
+    this.#trustCleanupOwnership.owned = true;
     this.#ownsMemory = true;
     this.#ownsDefinitions = true;
   }
@@ -453,10 +453,10 @@ export class AgentActivationBootstrap
       trust: {
         kind: 'supplied',
         owner: this.#sessionResources.workspaceTrust,
-        cleanup: async () => {
-          this.#ownsTrustCleanup = false;
-          await this.#sessionResources.trustCleanup?.();
-        },
+        cleanup: transferTrustCleanup(
+          this.#trustCleanupOwnership,
+          this.#sessionResources.trustCleanup,
+        ),
       },
       ide: { kind: 'none' },
     };
@@ -479,7 +479,7 @@ export class AgentActivationBootstrap
     this.#ownsDefinitions = false;
     this.#ownsMemory = false;
     const mcp = await McpRuntimeOwner.create(acquisition, operations);
-    this.#ownsTrustCleanup = false;
+    this.#trustCleanupOwnership.owned = false;
     this.#mcp = mcp;
   }
 
@@ -618,7 +618,10 @@ export class AgentActivationBootstrap
             ? resources.workspaceDefinitions.dispose()
             : undefined,
         () => this.#mediaOwner?.dispose(),
-        () => (this.#ownsTrustCleanup ? resources.trustCleanup?.() : undefined),
+        () =>
+          this.#trustCleanupOwnership.owned
+            ? resources.trustCleanup?.()
+            : undefined,
         () =>
           this.#ownsFilesystem
             ? resources.workspaceFilesystem.dispose()
@@ -746,4 +749,14 @@ export class AgentActivationBootstrap
     }
     return agent;
   }
+}
+
+function transferTrustCleanup(
+  ownership: { owned: boolean },
+  cleanup: (() => Promise<void>) | undefined,
+): () => Promise<void> {
+  return async () => {
+    ownership.owned = false;
+    if (cleanup !== undefined) await cleanup();
+  };
 }
