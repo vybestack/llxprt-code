@@ -44,13 +44,21 @@ function row(text: string, reference: MediaReferenceBlock): IContent {
   };
 }
 
+function paddedText(bytes: number): string {
+  const unit = ' information    ';
+  return (
+    unit.repeat(Math.floor(bytes / unit.length)) +
+    unit.slice(0, bytes % unit.length)
+  );
+}
+
 function expectedHash(
   prefix: Uint8Array,
   padding: number,
   end: Uint8Array,
 ): string {
   const hash = createHash('sha256').update(prefix);
-  const chunk = Buffer.alloc(64 * 1024, 'x');
+  const chunk = Buffer.from(paddedText(64 * 1024));
   for (let left = padding; left > 0; left -= chunk.length)
     hash.update(chunk.subarray(0, Math.min(left, chunk.length)));
   return hash.update(end).digest('hex');
@@ -106,7 +114,7 @@ async function verifyEdge(
   );
   const fixture = await nativeJournalSendFixture(
     (function* (): Generator<IContent> {
-      yield row('x'.repeat(padding), reference);
+      yield row(paddedText(padding), reference);
     })(),
     { mediaStore: store },
   );

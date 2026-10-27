@@ -42,7 +42,7 @@ function row(reference?: MediaReferenceBlock): IContent {
   return {
     speaker: 'human',
     blocks: [
-      { type: 'text', text: 'x'.repeat(TEXT_BYTES) },
+      { type: 'text', text: ' information    '.repeat(TEXT_BYTES / 16) },
       ...(reference === undefined ? [] : [reference]),
     ],
   };
