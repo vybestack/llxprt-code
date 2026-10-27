@@ -462,9 +462,8 @@ const useInputHandler = (
     ],
   );
 
-const usePasteOwnership = (state: InputPromptState): (() => () => boolean) => {
+const usePasteOwnership = (active: boolean): (() => () => boolean) => {
   const ownershipGeneration = useRef(0);
-  const active = state.focus !== false && state.isEmbeddedShellFocused !== true;
   const latestActive = useRef(active);
   latestActive.current = active;
   useEffect(() => {
@@ -483,16 +482,20 @@ const usePasteOwnership = (state: InputPromptState): (() => () => boolean) => {
 };
 
 const useDesktopPaste = (
-  state: InputPromptState,
+  buffer: TextBuffer,
+  session: SessionIdentity,
+  nextPlaceholderIdRef: React.MutableRefObject<number>,
+  pendingLargePastesRef: React.MutableRefObject<Map<string, string>>,
+  reportError: ((message: string | null) => void) | undefined,
+  captureOwnership: () => () => boolean,
 ): Pick<
   InputPromptStateResult,
   'handleClipboardPaste' | 'handlePrimaryPaste'
 > => {
-  const captureOwnership = usePasteOwnership(state);
-  const latestBuffer = useRef(state.buffer);
-  latestBuffer.current = state.buffer;
-  const latestReportError = useRef(state.setQueueErrorMessage);
-  latestReportError.current = state.setQueueErrorMessage;
+  const latestBuffer = useRef(buffer);
+  latestBuffer.current = buffer;
+  const latestReportError = useRef(reportError);
+  latestReportError.current = reportError;
   const pasteText = useCallback(
     (text: string): void => {
       handleLargePaste(
@@ -504,17 +507,17 @@ const useDesktopPaste = (
           shift: false,
         },
         latestBuffer.current,
-        state.nextPlaceholderIdRef,
-        state.pendingLargePastesRef,
+        nextPlaceholderIdRef,
+        pendingLargePastesRef,
       );
     },
-    [state.nextPlaceholderIdRef, state.pendingLargePastesRef],
+    [nextPlaceholderIdRef, pendingLargePastesRef],
   );
   const handleClipboardPaste = useClipboardPasteHandler(
-    state.buffer,
-    state.config,
+    buffer,
+    session,
     pasteText,
-    state.setQueueErrorMessage,
+    reportError,
     captureOwnership,
   );
   const handlePrimaryPaste = useCallback(async (): Promise<void> => {
@@ -570,7 +573,17 @@ const useInputPromptState = (
     completionState.reverseSearchCompletion.resetCompletionState,
   );
   usePendingPastePruning(state.buffer, state.pendingLargePastesRef);
-  const { handleClipboardPaste, handlePrimaryPaste } = useDesktopPaste(state);
+  const captureOwnership = usePasteOwnership(
+    state.focus !== false && state.isEmbeddedShellFocused !== true,
+  );
+  const { handleClipboardPaste, handlePrimaryPaste } = useDesktopPaste(
+    state.buffer,
+    state.config,
+    state.nextPlaceholderIdRef,
+    state.pendingLargePastesRef,
+    state.setQueueErrorMessage,
+    captureOwnership,
+  );
   const handleInput = useInputHandler(
     state,
     completionState,
@@ -619,7 +632,11 @@ export const useMousePaste = (
       if (focus !== true || isEmbeddedShellFocused === true) return;
       if (event.name === 'right-release') {
         void state.handleClipboardPaste();
-      } else if (event.name === 'middle-press' && isMouseEventsActive()) {
+      } else if (
+        event.name === 'middle-press' &&
+        process.platform === 'linux' &&
+        isMouseEventsActive()
+      ) {
         void state.handlePrimaryPaste();
       }
     },

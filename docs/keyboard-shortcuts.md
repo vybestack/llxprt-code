@@ -14,12 +14,14 @@ Default keyboard shortcuts for editing, navigation, and UI control.
 
 <!-- KEYBINDINGS-AUTOGEN:START -->
 
-| Action                                                          | Keys       |
-| --------------------------------------------------------------- | ---------- |
-| Confirm the current selection or choice.                        | `Enter`    |
-| Dismiss dialogs or cancel the current focus.                    | `Esc`      |
-| Cancel the current request or quit the CLI when input is empty. | `Ctrl + C` |
-| Exit the CLI when the input buffer is empty.                    | `Ctrl + D` |
+## Basic Controls
+
+| Action                                                          | Keys                  |
+| --------------------------------------------------------------- | --------------------- |
+| Confirm the current selection or choice.                        | `Enter`               |
+| Dismiss dialogs or cancel the current focus.                    | `Esc`                 |
+| Cancel the current request or quit the CLI when input is empty. | `Ctrl + C (no Shift)` |
+| Exit the CLI when the input buffer is empty.                    | `Ctrl + D`            |
 
 ## Cursor Movement
 
@@ -40,7 +42,7 @@ Default keyboard shortcuts for editing, navigation, and UI control.
 | ------------------------------------------------ | --------------------------------------------------------- |
 | Delete from the cursor to the end of the line.   | `Ctrl + K`                                                |
 | Delete from the cursor to the start of the line. | `Ctrl + U`                                                |
-| Clear all text in the input field.               | `Ctrl + C`                                                |
+| Clear all text in the input field.               | `Ctrl + C (no Shift)`                                     |
 | Delete the previous word.                        | `Ctrl + Backspace`<br />`Cmd + Backspace`<br />`Ctrl + W` |
 | Delete the next word.                            | `Ctrl + Delete`<br />`Cmd + Delete`                       |
 | Delete the character to the left.                | `Backspace`<br />`Ctrl + H`                               |

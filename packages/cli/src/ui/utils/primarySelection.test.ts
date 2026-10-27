@@ -141,6 +141,57 @@ describe('PRIMARY backend failures', () => {
     expect(commands).toStrictEqual(['xsel --primary --output']);
     expect(text.split('\r\n')).toHaveLength(2);
   });
+
+  it('treats the recognized xclip unoffered STRING target as empty', async () => {
+    const calls: string[] = [];
+    const text = await readPrimarySelection(
+      { DISPLAY: ':0' },
+      async (command) => {
+        calls.push(command);
+        throw Object.assign(new Error('command failed'), {
+          code: 1,
+          stderr: 'Error: target STRING not available\n',
+          stdout: '',
+        });
+      },
+      (command) => command === 'xclip',
+    );
+
+    expect(text).toBe('');
+    expect(calls).toStrictEqual(['xclip']);
+  });
+
+  it.each([
+    [
+      'appended stderr payload',
+      { stderr: 'Error: target STRING not available\nPRIVATE selection' },
+    ],
+    [
+      'different stderr text',
+      { stderr: 'Error: target UTF8_STRING not available\n' },
+    ],
+    ['a different exit code', { code: 2 }],
+    ['partial stdout', { stdout: 'partial' }],
+    ['a termination signal', { signal: 'SIGKILL' }],
+    ['a killed process', { killed: true }],
+  ])('redacts xclip failures with %s', async (_label, overrides) => {
+    await expect(
+      readPrimarySelection(
+        { DISPLAY: ':0' },
+        async () => {
+          throw Object.assign(new Error('PRIVATE backend'), {
+            code: 1,
+            stderr: 'Error: target STRING not available\n',
+            stdout: '',
+            ...overrides,
+          });
+        },
+        (command) => command === 'xclip',
+      ),
+    ).rejects.toThrow(
+      'Unable to read the PRIMARY selection with xclip; check desktop selection access.',
+    );
+  });
 });
 
 describe('PRIMARY real process boundary', () => {
@@ -171,6 +222,7 @@ describe('PRIMARY real process boundary', () => {
       );
       await chmod(fixture, 0o755);
       await symlink(fixture, path.join(directory, 'wl-paste'));
+      await symlink(fixture, path.join(directory, 'xclip'));
       process.env.PATH = `${directory}${path.delimiter}${process.env.PATH}`;
       process.env.PRIMARY_FIXTURE_PID = path.join(directory, 'pid');
     });
@@ -204,6 +256,36 @@ describe('PRIMARY real process boundary', () => {
           readPrimarySelection({ WAYLAND_DISPLAY: 'fixture' }),
         ).rejects.toThrow(
           'Unable to read the PRIMARY selection with wl-paste; check desktop selection access.',
+        );
+        expect(Date.now() - started).toBeLessThan(3000);
+        const pid = Number(await readFile(path.join(directory, 'pid'), 'utf8'));
+        expect(() => process.kill(pid, 0)).toThrow(/ESRCH|No such process/);
+      },
+      7000,
+    );
+
+    it('returns empty for the actual xclip unoffered STRING target result', async () => {
+      process.env.PRIMARY_FIXTURE_MODE = 'xclip-empty';
+      await expect(readPrimarySelection({ DISPLAY: ':fixture' })).resolves.toBe(
+        '',
+      );
+    });
+
+    it.each([
+      ['appended stderr payload', 'xclip-appended'],
+      ['a different exit code', 'xclip-exit2'],
+      ['partial stdout', 'xclip-partial'],
+      ['a termination signal', 'xclip-signal'],
+      ['a hanging process', 'xclip-hang'],
+    ])(
+      'redacts a real xclip failure with %s',
+      async (_label, mode) => {
+        process.env.PRIMARY_FIXTURE_MODE = mode;
+        const started = Date.now();
+        await expect(
+          readPrimarySelection({ DISPLAY: ':fixture' }),
+        ).rejects.toThrow(
+          'Unable to read the PRIMARY selection with xclip; check desktop selection access.',
         );
         expect(Date.now() - started).toBeLessThan(3000);
         const pid = Number(await readFile(path.join(directory, 'pid'), 'utf8'));

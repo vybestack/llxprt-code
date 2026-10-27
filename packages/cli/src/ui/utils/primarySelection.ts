@@ -39,6 +39,19 @@ const isEmptySelection = (error: unknown): boolean => {
   return true;
 };
 
+const XCLIP_UNOFFERED_STRING_TARGET = 'Error: target STRING not available';
+
+const isEmptyXclipSelection = (error: unknown): boolean => {
+  if (!(error instanceof Error)) return false;
+  if (!('code' in error) || error.code !== 1) return false;
+  if (!('stderr' in error) || typeof error.stderr !== 'string') return false;
+  if (error.stderr.trim() !== XCLIP_UNOFFERED_STRING_TARGET) return false;
+  if (!('stdout' in error) || error.stdout !== '') return false;
+  if ('signal' in error && error.signal != null) return false;
+  if ('killed' in error && error.killed !== false) return false;
+  return true;
+};
+
 export const readPrimarySelection = async (
   environment: NodeJS.ProcessEnv = process.env,
   runner: PrimarySelectionRunner = runCommand,
@@ -75,6 +88,7 @@ export const readPrimarySelection = async (
     return await runner(command, args);
   } catch (error) {
     if (command === 'wl-paste' && isEmptySelection(error)) return '';
+    if (command === 'xclip' && isEmptyXclipSelection(error)) return '';
     throw new Error(
       `Unable to read the PRIMARY selection with ${command}; check desktop selection access.`,
     );

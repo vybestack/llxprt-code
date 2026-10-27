@@ -26,6 +26,13 @@ import {
 
 describe('InputPrompt', () => {
   const fixture = usePasteTestHarness();
+  const nativePlatform = process.platform;
+  beforeEach(() => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+  });
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: nativePlatform });
+  });
   describe('application clipboard paste', () => {
     afterEach(() => vi.restoreAllMocks());
 
@@ -376,6 +383,26 @@ describe('InputPrompt', () => {
       disableMouseEvents();
       vi.restoreAllMocks();
     });
+
+    it.each(['darwin', 'win32'])(
+      'ignores middle-click on %s without inserting or reporting a Linux access error',
+      async (platform) => {
+        Object.defineProperty(process, 'platform', { value: platform });
+        vi.spyOn(primarySelection, 'readPrimarySelection').mockRejectedValue(
+          new Error('PRIMARY is unavailable'),
+        );
+        const rendered = renderWithProviders(
+          <InputPromptWithRealBuffer {...fixture.props} initialText="keep" />,
+          { mouseEventsEnabled: true },
+        );
+        await act(async () => rendered.stdin.write('\x1b[<1;10;2M'));
+        expect(rendered.stdout.lastFrame()).toContain('keep');
+        expect(rendered.stdout.lastFrame()).not.toContain(
+          'Unable to read the Linux PRIMARY',
+        );
+        rendered.unmount();
+      },
+    );
 
     it.each([
       { protocol: 'SGR', click: '\x1b[<1;10;2M\x1b[<1;10;2m' },

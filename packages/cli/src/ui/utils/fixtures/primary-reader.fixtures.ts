@@ -20,6 +20,35 @@ switch (process.env.PRIMARY_FIXTURE_MODE) {
     process.stderr.write('Nothing is copied\n');
     process.exitCode = 1;
     break;
+  case 'xclip-empty':
+    process.stderr.write('Error: target STRING not available\n');
+    process.exitCode = 1;
+    break;
+  case 'xclip-partial':
+    process.stdout.write('partial');
+    process.stderr.write('Error: target STRING not available\n');
+    process.exitCode = 1;
+    break;
+  case 'xclip-appended':
+    process.stderr.write(
+      'Error: target STRING not available\nPRIVATE selection\n',
+    );
+    process.exitCode = 1;
+    break;
+  case 'xclip-exit2':
+    process.stderr.write('Error: target STRING not available\n');
+    process.exitCode = 2;
+    break;
+  case 'xclip-signal':
+    process.stderr.write('Error: target STRING not available\n', () =>
+      process.kill(process.pid, 'SIGKILL'),
+    );
+    break;
+  case 'xclip-hang':
+    process.stderr.write('Error: target STRING not available\n');
+    process.on('SIGTERM', () => {});
+    setTimeout(() => process.exit(0), 4500);
+    break;
   case 'error':
     process.stderr.write('PRIVATE backend failure\n');
     process.exitCode = 1;
