@@ -6,7 +6,6 @@ import { createToolCheckpoint } from './checkpointPersistence.js';
 import {
   checkpointGit,
   checkpointTool,
-  checkpointUiHistory,
   savedCheckpoint,
   trackingFs,
   withCheckpoint,
@@ -39,14 +38,13 @@ describe('checkpoint public disk route after eager preparation removal', () => {
             dir,
             checkpointGit,
             agent,
-            checkpointUiHistory,
+
             () => {},
             fs.ops,
           );
           const saved = await savedCheckpoint(dir);
           const expected = JSON.stringify(
             {
-              history: checkpointUiHistory,
               clientHistory: Array.from({ length: size }, (_, index) =>
                 cleanupRow(index, 2048, size, fixture.reference),
               ),

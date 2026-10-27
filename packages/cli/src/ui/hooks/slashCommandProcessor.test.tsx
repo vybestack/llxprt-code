@@ -211,7 +211,6 @@ describe('useSlashCommandProcessor', () => {
   } as LoadedSettings;
   let addItem: ReturnType<typeof vi.fn>;
   let clearItems: ReturnType<typeof vi.fn>;
-  let loadHistory: ReturnType<typeof vi.fn>;
   let refreshStatic: ReturnType<typeof vi.fn>;
   let onDebugMessage: ReturnType<typeof vi.fn>;
   let openThemeDialog: ReturnType<typeof vi.fn>;
@@ -274,7 +273,6 @@ describe('useSlashCommandProcessor', () => {
 
     addItem = vi.fn();
     clearItems = vi.fn();
-    loadHistory = vi.fn().mockResolvedValue(undefined);
     refreshStatic = vi.fn();
     onDebugMessage = vi.fn();
     openThemeDialog = vi.fn();
@@ -306,7 +304,6 @@ describe('useSlashCommandProcessor', () => {
       mockSettings,
       addItem,
       clearItems,
-      loadHistory,
       refreshStatic,
       toggleVimEnabled,
       setIsProcessing,

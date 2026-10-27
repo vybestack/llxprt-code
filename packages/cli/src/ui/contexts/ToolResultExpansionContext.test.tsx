@@ -23,7 +23,10 @@ import {
   type SessionRecordingPort,
   type IContent,
 } from '@vybestack/llxprt-code-core';
-import { act } from 'react';
+import {
+  createScrollbackPagerStore,
+  type ScrollbackPagerStore,
+} from '../stores/turn/scrollbackPager.js';
 import { render, waitFor } from '../../__tests__/render.js';
 import { Colors } from '../colors.js';
 
@@ -83,12 +86,14 @@ function Probe({
 
 function TestHarness({
   turnStore,
+  pager,
   getTranscriptFilePath,
   callId,
   cappedPreview,
   constrainHeight,
 }: {
   turnStore: ReturnType<typeof createTurnStore>;
+  pager?: ScrollbackPagerStore;
   getTranscriptFilePath: () => string;
   callId: string;
   cappedPreview: string;
@@ -98,6 +103,7 @@ function TestHarness({
     <TerminalProvider store={createTerminalStore({ constrainHeight })}>
       <TurnProvider store={turnStore}>
         <ToolResultExpansionProvider
+          pager={pager}
           getTranscriptFilePath={getTranscriptFilePath}
         >
           <Probe callId={callId} cappedPreview={cappedPreview} />
@@ -110,6 +116,7 @@ function TestHarness({
 describe('ToolResultExpansionProvider — load on expand, purge on append (#3428)', () => {
   let tempDir: string;
   let service: SessionRecordingPort;
+  let pager: ScrollbackPagerStore | undefined;
   let turnStore: ReturnType<typeof createTurnStore>;
 
   beforeEach(async () => {
@@ -126,6 +133,8 @@ describe('ToolResultExpansionProvider — load on expand, purge on append (#3428
   });
 
   afterEach(async () => {
+    await pager?.close();
+    pager = undefined;
     await service.dispose();
     await fs.rm(tempDir, { recursive: true, force: true });
   });
@@ -137,9 +146,17 @@ describe('ToolResultExpansionProvider — load on expand, purge on append (#3428
     await recordRowsForTest(service, [toolResponseContent('call-1', body)]);
     await service.flush();
     const transcriptPath = service.getFilePath() as string;
+    pager = createScrollbackPagerStore({
+      filePath: transcriptPath,
+      pageRows: 8,
+      viewport: { visibleKeys: [], viewportLines: 8, rowHeightLines: () => 1 },
+      settings: { marginViewports: 0, byteFloorBytes: 256, purgeDebounceMs: 0 },
+    });
+    await pager.resumeFromJournal();
 
     const { lastFrame } = render(
       <TestHarness
+        pager={pager}
         turnStore={turnStore}
         getTranscriptFilePath={() => transcriptPath}
         callId="call-1"
@@ -159,13 +176,14 @@ describe('ToolResultExpansionProvider — load on expand, purge on append (#3428
     // Scroll-forward: a new history append purges the expansion and the
     // capped preview renders again — and stays capped (no immediate
     // re-expansion while constraints remain lifted).
-    act(() => {
-      turnStore.commands.addItem(
-        { type: 'user', text: 'next turn' },
-        Date.now(),
-      );
-    });
-    expect(lastFrame()).toContain(`CAPPED:${capped.text.slice(0, 24)}`);
+    await recordRowsForTest(service, [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'next turn' }] },
+    ]);
+    await service.flush();
+    await pager.pageForward();
+    await waitFor(() =>
+      expect(lastFrame()).toContain(`CAPPED:${capped.text.slice(0, 24)}`),
+    );
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(lastFrame()).toContain(`CAPPED:${capped.text.slice(0, 24)}`);
   });
@@ -175,9 +193,17 @@ describe('ToolResultExpansionProvider — load on expand, purge on append (#3428
     await recordRowsForTest(service, [toolResponseContent('call-2', body)]);
     await service.flush();
     const transcriptPath = service.getFilePath() as string;
+    pager = createScrollbackPagerStore({
+      filePath: transcriptPath,
+      pageRows: 8,
+      viewport: { visibleKeys: [], viewportLines: 8, rowHeightLines: () => 1 },
+      settings: { marginViewports: 0, byteFloorBytes: 256, purgeDebounceMs: 0 },
+    });
+    await pager.resumeFromJournal();
 
     const { lastFrame } = render(
       <TestHarness
+        pager={pager}
         turnStore={turnStore}
         getTranscriptFilePath={() => transcriptPath}
         callId="call-2"
@@ -198,9 +224,17 @@ describe('ToolResultExpansionProvider — load on expand, purge on append (#3428
     await recordRowsForTest(service, [toolResponseContent('call-3', body)]);
     await service.flush();
     const transcriptPath = service.getFilePath() as string;
+    pager = createScrollbackPagerStore({
+      filePath: transcriptPath,
+      pageRows: 8,
+      viewport: { visibleKeys: [], viewportLines: 8, rowHeightLines: () => 1 },
+      settings: { marginViewports: 0, byteFloorBytes: 256, purgeDebounceMs: 0 },
+    });
+    await pager.resumeFromJournal();
 
     const harness = (constrainHeight: boolean) => (
       <TestHarness
+        pager={pager}
         turnStore={turnStore}
         getTranscriptFilePath={() => transcriptPath}
         callId="call-3"
@@ -224,12 +258,11 @@ describe('ToolResultExpansionProvider — load on expand, purge on append (#3428
 
     // A scroll-forward purge drops it; lifting constraints again re-arms the
     // fetch and the full body comes back from the transcript.
-    act(() => {
-      turnStore.commands.addItem(
-        { type: 'user', text: 'next turn' },
-        Date.now(),
-      );
-    });
+    await recordRowsForTest(service, [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'next turn' }] },
+    ]);
+    await service.flush();
+    await pager.pageForward();
     await waitFor(() => {
       expect(lastFrame()).toContain(`CAPPED:${capped.text.slice(0, 24)}`);
     });
@@ -251,6 +284,13 @@ FAILRETRY-end`;
     ]);
     await service.flush();
     const realTranscriptPath = service.getFilePath() as string;
+    pager = createScrollbackPagerStore({
+      filePath: realTranscriptPath,
+      pageRows: 8,
+      viewport: { visibleKeys: [], viewportLines: 8, rowHeightLines: () => 1 },
+      settings: { marginViewports: 0, byteFloorBytes: 256, purgeDebounceMs: 0 },
+    });
+    await pager.resumeFromJournal();
 
     const unhandled: unknown[] = [];
     const onUnhandledRejection = (reason: unknown): void => {
@@ -265,6 +305,7 @@ FAILRETRY-end`;
       const accessor = (): string => transcriptPath;
       const harness = (constrainHeight: boolean) => (
         <TestHarness
+          pager={pager}
           turnStore={turnStore}
           getTranscriptFilePath={accessor}
           callId="call-fail-retry"

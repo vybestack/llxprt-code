@@ -64,6 +64,45 @@ async function appendMemoryFixtureRow(
   ]);
 }
 
+async function populateMemoryFixture(
+  session: JournalSession,
+  count: number,
+  workload: MemoryWorkload,
+  media: MediaReferenceBlock | undefined,
+): Promise<void> {
+  const batch: IContent[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const content: IContent = {
+      speaker: index % 2 === 1 ? 'ai' : 'human',
+      blocks: [
+        { type: 'text', text: fixtureText(index) },
+        ...(media && (workload === 'media-dense' || index % 64 === 0)
+          ? [
+              {
+                ...media,
+                semanticMetadata: {
+                  description: fixtureText(index + 100000).repeat(
+                    workload === 'media-dense' ? 2 : 16,
+                  ),
+                },
+              },
+            ]
+          : []),
+      ],
+    };
+    if (workload === 'compressed') {
+      await appendMemoryFixtureRow(session, content, workload);
+      continue;
+    }
+    batch.push(content);
+    if (batch.length === 32) {
+      await session.append(batch);
+      batch.length = 0;
+    }
+  }
+  if (batch.length > 0) await session.append(batch);
+}
+
 /** Runs only in the parent process, never on the measured heap. */
 export async function writeMemoryFixture(
   directory: string,
@@ -95,27 +134,7 @@ export async function writeMemoryFixture(
         },
       ]);
     }
-    for (let index = 0; index < count; index += 1) {
-      const content: IContent = {
-        speaker: index % 2 === 1 ? 'ai' : 'human',
-        blocks: [
-          { type: 'text', text: fixtureText(index) },
-          ...(media && (workload === 'media-dense' || index % 64 === 0)
-            ? [
-                {
-                  ...media,
-                  semanticMetadata: {
-                    description: fixtureText(index + 100000).repeat(
-                      workload === 'media-dense' ? 2 : 16,
-                    ),
-                  },
-                },
-              ]
-            : []),
-        ],
-      };
-      await appendMemoryFixtureRow(session, content, workload);
-    }
+    await populateMemoryFixture(session, count, workload, media);
     if (workload === 'wide-metadata') {
       recording.recordDirectoriesChanged(
         await wideWorkspaceDirectories(directory),

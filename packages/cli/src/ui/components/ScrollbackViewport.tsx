@@ -73,6 +73,7 @@ export interface ScrollbackViewportProps {
   store: ScrollbackPagerStore;
   viewport: ScrollbackViewportReporter;
   viewportLines: number;
+  terminalWidth?: number;
   pollMs: number;
   /**
    * Context boundary snapshot (#854). When absent (or paired with no
@@ -242,6 +243,7 @@ function WiredScrollbackRow({
   terminalWidth,
   pendingToolControls,
   isFocused,
+  availableTerminalHeight,
 }: {
   row: ScrollbackRow;
   config: CliUiRuntime;
@@ -249,9 +251,11 @@ function WiredScrollbackRow({
   terminalWidth: number;
   pendingToolControls: readonly HistoryItemWithoutId[];
   isFocused: boolean;
+  availableTerminalHeight: number;
 }): React.JSX.Element {
   return (
     <HistoryItemDisplay
+      availableTerminalHeight={availableTerminalHeight}
       item={withJournalToolControls(row.item, pendingToolControls)}
       terminalWidth={terminalWidth}
       isPending={false}
@@ -266,17 +270,30 @@ function WiredScrollbackRow({
 function usePagerState(
   store: ScrollbackPagerStore,
   pollMs: number,
+  viewport: ScrollbackViewportReporter,
 ): ScrollbackPagerState {
-  const [, bumpTick] = useState(0);
+  const [state, setState] = useState(() => ({ ...store.getState() }));
+  const height = useRef(viewport.rowHeightLines());
   useEffect(() => {
     const timer = setInterval(() => {
-      bumpTick((tick) => tick + 1);
+      const next = store.getState();
+      const nextHeight = viewport.rowHeightLines();
+      const heightChanged = height.current !== nextHeight;
+      height.current = nextHeight;
+      setState((previous) =>
+        !heightChanged &&
+        Object.entries(next).every(
+          ([key, value]) => Reflect.get(previous, key) === value,
+        )
+          ? previous
+          : { ...next },
+      );
     }, pollMs);
     return () => {
       clearInterval(timer);
     };
-  }, [pollMs]);
-  return store.getState();
+  }, [store, pollMs, viewport]);
+  return state;
 }
 
 /**
@@ -403,6 +420,7 @@ interface FrameWiring {
   readonly config: CliUiRuntime | undefined;
   readonly pendingToolControls: readonly HistoryItemWithoutId[];
   readonly terminalWidth: number;
+  readonly availableTerminalHeight: number;
   readonly expandedSpans: ReadonlySet<string>;
   readonly onToggleBoundary: () => void;
 }
@@ -448,6 +466,7 @@ function ViewportFrame({
           config={wiring.config}
           range={wiring.range}
           terminalWidth={wiring.terminalWidth}
+          availableTerminalHeight={wiring.availableTerminalHeight}
           pendingToolControls={wiring.pendingToolControls}
           isFocused={
             focusedApprovalKey === undefined || focusedApprovalKey === row.key
@@ -573,6 +592,7 @@ export function ScrollbackViewport({
   store,
   viewport,
   viewportLines,
+  terminalWidth,
   pollMs,
   range,
   config,
@@ -587,7 +607,7 @@ export function ScrollbackViewport({
   const { stdin } = useStdin();
   const rowHeightLines = Math.max(1, viewport.rowHeightLines());
   const windowRows = windowRowsFor(viewportLines, rowHeightLines);
-  const state = usePagerState(store, pollMs);
+  const state = usePagerState(store, pollMs, viewport);
   const frame = clipWindow(
     state.rows,
     pageOffset,
@@ -642,7 +662,8 @@ export function ScrollbackViewport({
         range,
         config,
         pendingToolControls,
-        terminalWidth: stdout.columns,
+        terminalWidth: terminalWidth ?? stdout.columns,
+        availableTerminalHeight: viewportLines,
         expandedSpans,
         onToggleBoundary: toggleVisibleBoundaries,
       }}

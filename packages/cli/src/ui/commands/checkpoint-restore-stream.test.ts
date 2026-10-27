@@ -9,7 +9,6 @@ import {
   withCheckpoint,
   saveCheckpoint,
   savedCheckpoint,
-  checkpointUiHistory,
 } from '../hooks/agentStream/checkpoint-disk-test-helpers.js';
 import { restoreCommand } from './restoreCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
@@ -76,7 +75,7 @@ async function boundedRestore(
         throw new Error('eager checkpoint restore is forbidden');
       });
       const { owners, external, release } = observeAdmission(client, retain);
-      let uiHistory: unknown;
+      let invalidated = false;
       const context = createMockCommandContext({
         services: { agent: { agentClient: client } },
       });
@@ -88,8 +87,8 @@ async function boundedRestore(
         getCheckpointingEnabled: () => true,
       };
       context.services.config = runtime;
-      context.ui.loadHistory = (rows) => {
-        uiHistory = rows;
+      context.ui.clear = () => {
+        invalidated = true;
       };
       try {
         const outcome = await restoreCommand(runtime)?.action?.(
@@ -97,7 +96,7 @@ async function boundedRestore(
           basename(saved.path),
         );
         expect(outcome?.type).toBe('tool');
-        expect(uiHistory).toStrictEqual(checkpointUiHistory);
+        expect(invalidated).toBe(true);
         const actual = createHash('sha256');
         let count = 0;
         for await (const row of client.streamHistory()) {

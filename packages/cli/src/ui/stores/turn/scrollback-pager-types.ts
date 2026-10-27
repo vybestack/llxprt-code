@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type {
   JournalReadCounters,
+  EmojiFilterMode,
   NativeJournalReadDependencies,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../../types.js';
@@ -21,6 +22,7 @@ export interface ScrollbackPagerSettings {
 }
 export interface ScrollbackPagerOptions {
   readonly filePath: string;
+  readonly emojiFilterMode?: EmojiFilterMode;
   readonly viewport: ScrollbackViewportReporter;
   readonly pageRows: number;
   readonly settings: ScrollbackPagerSettings;

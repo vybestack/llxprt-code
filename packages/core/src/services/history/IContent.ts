@@ -104,6 +104,8 @@ export interface SemanticMediaPurgeCacheWriteEvidence {
 }
 
 export interface ContentMetadata {
+  /** Original submitted query, before file attachments are resolved for the model. */
+  displayText?: string;
   /** When this content was created */
   timestamp?: number;
 

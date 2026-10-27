@@ -1,124 +1,146 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
+import { join } from 'node:path';
+import { JournalSession, RowOwnership } from '@vybestack/llxprt-code-core';
+import { createRowCounters } from '../../../../core/src/recording/journalCounters.js';
+import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
+import { createScrollbackPagerStore } from '../stores/turn/scrollbackPager.js';
+import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
+import type { HistoryItem } from '../types.js';
+import type { NativeDisplayEntry } from '../stores/turn/native-journal-types.js';
 
-/**
- * The UI history byte budget is a DISPLAY bound (issue #2852).
- *
- * Bounding scrollback is only acceptable because the same content is retained
- * in full by two other places: the core `HistoryService` that builds model
- * requests, and the on-disk session transcript. These tests pin that, so a
- * future change cannot quietly turn the display bound into data loss.
- */
+const ROWS = 2048;
+const PAGE_ROWS = 8;
+const WINDOW_BOUND = { rows: 24, serializedBytes: 128 * 1024 };
 
-import { afterEach, describe, expect, it } from 'bun:test';
-import { renderHook } from '../../__tests__/render.js';
-import { act } from 'react';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import {
-  createSessionRecorder,
-  type SessionRecordingPort,
-} from '@vybestack/llxprt-code-core';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import {
-  collectJournalFileRowsForAssertions,
-  collectRowsForAssertions,
-} from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
-import { useHistory } from './useHistoryManager.js';
-import { createTurnStore } from '../stores/turn/turnStore.js';
-
-const created: string[] = [];
-const services: SessionRecordingPort[] = [];
-const histories: HistoryService[] = [];
-
-const LARGE_TEXT = 'a very long assistant response. '.repeat(400_000 / 32);
-
-describe('UI history display bound preserves content elsewhere', () => {
-  afterEach(async () => {
-    // Disposal here rather than inline, so a failing assertion cannot leak the
-    // recording service or its temp directory.
-    for (const history of histories.splice(0)) await history.dispose();
-    for (const service of services.splice(0)) {
-      await service.dispose();
+async function seed(path: string): Promise<void> {
+  const session = await JournalSession.create(path);
+  try {
+    for (let batch = 0; batch < ROWS / 64; batch++) {
+      await session.append(
+        Array.from({ length: 64 }, (_, index) => ({
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'text',
+              text: `row-${batch * 64 + index}: ${'x'.repeat(2048)}`,
+            },
+          ],
+        })),
+      );
     }
-    for (const dir of created.splice(0)) {
-      rmSync(dir, { recursive: true, force: true });
+  } finally {
+    await session.close();
+  }
+}
+
+function retainPage(
+  entries: readonly NativeDisplayEntry[],
+  ownership: RowOwnership,
+  retained: HistoryItem[],
+): void {
+  for (const entry of entries) {
+    if (entry.kind !== 'projected') continue;
+    ownership.retain(entry.item);
+    retained.push(entry.item);
+  }
+}
+
+async function retainingControl(path: string): Promise<RowOwnership> {
+  const ownership = new RowOwnership();
+  const cursor = await NativeJournalCursor.open(
+    path,
+    {
+      counters: { ...createRowCounters().counters, ownership },
+    },
+    PAGE_ROWS,
+  );
+  const retained: HistoryItem[] = [];
+  try {
+    for (;;) {
+      const page = await cursor.pageBack(PAGE_ROWS);
+      retainPage(page.entries, ownership, retained);
+      if (page.entries.length === 0) break;
+    }
+    expect(retained).toHaveLength(ROWS);
+    return ownership;
+  } finally {
+    await cursor.close();
+    for (const item of retained) ownership.release(item);
+  }
+}
+
+describe('journal window residency', () => {
+  const directory = useTempDir('journal-window-residency-');
+
+  it('preserves the complete giant response in the session journal', async () => {
+    const text = 'a very long assistant response. '.repeat(12500);
+    const session = await JournalSession.create(
+      join(directory(), 'giant.llxj'),
+    );
+    try {
+      await session.append([
+        { speaker: 'ai', blocks: [{ type: 'text', text }] },
+      ]);
+      let count = 0;
+      for await (const row of session.rows()) {
+        expect(row.content.blocks).toStrictEqual([{ type: 'text', text }]);
+        count++;
+      }
+      expect(count).toBe(1);
+    } finally {
+      await session.close();
     }
   });
 
-  it('bounds the on-screen copy while core history keeps the full text', async () => {
-    const historyService = new HistoryService();
-    histories.push(historyService);
-    historyService.add({
-      speaker: 'ai',
-      blocks: [{ type: 'text', text: LARGE_TEXT }],
+  it('keeps a complete session on disk while residency stays window-bounded and rejects a load-all consumer', async () => {
+    const path = join(directory(), 'session.llxj');
+    await seed(path);
+    const ownership = new RowOwnership();
+    const viewport = {
+      visibleKeys: new Array<string>(),
+      viewportLines: 4,
+      rowHeightLines: () => 1,
+    };
+    const pager = createScrollbackPagerStore({
+      filePath: path,
+      pageRows: PAGE_ROWS,
+      viewport,
+      settings: { marginViewports: 1, byteFloorBytes: 0, purgeDebounceMs: 0 },
+      counters: { ...createRowCounters().counters, ownership },
     });
-
-    const turnStore = createTurnStore();
-    const { result } = renderHook(() =>
-      useHistory(turnStore, { maxItems: 10, maxBytes: 4096 }),
-    );
-    act(() => {
-      result.current.addItem({ type: 'gemini', text: LARGE_TEXT });
-    });
-
-    const displayed = result.current.history[0].text as string;
-    await collectRowsForAssertions(
-      historyService.streamRawHistory(),
-      (rows) => {
-        const core = rows[0].blocks[0];
-        if (core.type !== 'text') throw new Error('Expected core text');
-        expect({
-          displayIsBounded: displayed.length < LARGE_TEXT.length,
-          displayExplainsBound: displayed.includes(
-            'full text is in the session transcript',
-          ),
-          coreIsComplete: core.text === LARGE_TEXT,
-        }).toStrictEqual({
-          displayIsBounded: true,
-          displayExplainsBound: true,
-          coreIsComplete: true,
-        });
-      },
-    );
-  });
-
-  it('writes the full text to the session transcript', async () => {
-    const chatsDir = mkdtempSync(path.join(tmpdir(), 'llxprt-display-bound-'));
-    created.push(chatsDir);
-    const recording = createSessionRecorder({
-      sessionId: 'display-bound',
-      projectHash: 'project',
-      chatsDir,
-      workspaceDirs: [chatsDir],
-      cwd: chatsDir,
-      provider: 'test',
-      model: 'test',
-    });
-    services.push(recording);
-
-    await recordRowsForTest(recording, [
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: LARGE_TEXT }],
-      },
-    ]);
-    await recording.flush();
-
-    const filePath = recording.getFilePath();
-    if (filePath === null) throw new Error('Missing native transcript');
-    await collectJournalFileRowsForAssertions(filePath, (rows) => {
-      const contentTexts = rows.map((row) => {
-        const block = row.blocks[0];
-        if (block.type !== 'text') throw new Error('Expected recorded text');
-        return block.text;
-      });
-      expect(contentTexts).toStrictEqual([LARGE_TEXT]);
-    });
-  });
+    try {
+      await pager.resumeFromJournal();
+      expect(pager.getState().rows.at(-1)?.item.text).toContain(
+        `row-${ROWS - 1}:`,
+      );
+      for (
+        let pages = 0;
+        pages <= ROWS / PAGE_ROWS && !pager.getState().atVisibilityFloor;
+        pages++
+      ) {
+        const previousFirst = pager.getState().rows[0]?.key;
+        viewport.visibleKeys = pager
+          .getState()
+          .rows.slice(0, 4)
+          .map((row) => row.key);
+        pager.reportViewport();
+        pager.pageOut('newer');
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        await pager.pageBack();
+        expect(pager.getState().rows[0]?.key).not.toBe(previousFirst);
+        expect(pager.metrics().residentRows).toBeLessThanOrEqual(16);
+        expect(ownership.within(WINDOW_BOUND)).toBe(true);
+      }
+      expect(pager.getState().atVisibilityFloor).toBe(true);
+      expect(pager.getState().rows[0]?.item.text).toContain('row-0:');
+    } finally {
+      await pager.close();
+    }
+    expect(ownership.snapshot().liveRows).toBe(0);
+    const control = await retainingControl(path);
+    expect(control.within(WINDOW_BOUND)).toBe(false);
+    expect(control.snapshot().peakRows).toBeGreaterThanOrEqual(ROWS);
+    expect(control.snapshot().liveRows).toBe(0);
+  }, 180000);
 });

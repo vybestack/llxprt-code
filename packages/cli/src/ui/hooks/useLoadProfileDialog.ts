@@ -15,7 +15,7 @@ import {
 
 interface UseLoadProfileDialogParams {
   addMessage: (msg: {
-    type: MessageType;
+    type: MessageType.INFO | MessageType.WARNING | MessageType.ERROR;
     content: string;
     timestamp: Date;
   }) => void;
@@ -32,7 +32,7 @@ function handleProfileLoadError(
   error: unknown,
   profileName: string,
   addMessage: (msg: {
-    type: MessageType;
+    type: MessageType.INFO | MessageType.WARNING | MessageType.ERROR;
     content: string;
     timestamp: Date;
   }) => void,

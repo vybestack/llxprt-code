@@ -1,164 +1,119 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-import { displayBoot } from '../../../../__tests__/resumeRows.js';
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, it, expect } from 'bun:test';
+import type { EmojiFilterMode, IContent } from '@vybestack/llxprt-code-core';
+import { withRecordingLifetimeFixture } from '../../../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { NativeJournalCursor } from '../../../stores/turn/native-journal-cursor.js';
+import { EMOJI_BLOCKED_ERROR_TEXT } from '../../../utils/iContentToHistoryItems.js';
+import type { HistoryItem } from '../../../types.js';
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { act } from 'react';
-import { renderHook } from '../../../../__tests__/render.js';
-import { useSessionInitialization } from './useSessionInitialization.js';
-import {
-  EMOJI_BLOCKED_ERROR_TEXT,
-  iContentToHistoryItems,
-} from '../../../utils/iContentToHistoryItems.js';
-import type { IContent } from '@vybestack/llxprt-code-core';
-
-// Behavioral coverage for the startup seeding path (#2888): unlike
-// useSessionInitialization.test.ts, the converter is NOT mocked, so these
-// tests prove the seeded UI text actually renders filtered exactly as it
-// would have live.
-
-const makeConfig = (emojiMode: string | undefined) =>
-  ({
-    hooks: {},
-    memory: {
-      getLlxprtMdFileCount: vi.fn().mockReturnValue(0),
-      getCoreMemoryFileCount: vi.fn().mockReturnValue(0),
-    },
-    agentClientSource: {
-      getAgentClient: vi.fn().mockReturnValue(null),
-    },
-    ephemeral: {
-      getEphemeralSetting: vi.fn().mockReturnValue(emojiMode),
-    },
-  }) as never;
-
-const makeAgent = () =>
-  ({ hooks: { triggerSessionStart: vi.fn().mockResolvedValue({}) } }) as never;
-
-// Emojis are written as escapes (U+2705 check mark, U+1F44D thumbs up) so
-// the source stays ASCII-stable.
-const RESUMED_HISTORY: IContent[] = [
+const resumed: IContent[] = [
   { speaker: 'human', blocks: [{ type: 'text', text: 'nice \u{1F44D}' }] },
   { speaker: 'ai', blocks: [{ type: 'text', text: 'Done \u2705' }] },
 ];
 
-async function seedWith(
-  emojiMode: string | undefined,
-  resumedHistory: IContent[] = RESUMED_HISTORY,
-) {
-  const prependHistory = vi.fn();
-  renderHook(() =>
-    useSessionInitialization({
-      uiRuntime: makeConfig(emojiMode),
-      agent: makeAgent(),
-      addItem: vi.fn(),
-      prependHistory,
-      resumedBoot: displayBoot(resumedHistory),
-    }),
-  );
-  await act(async () => {
-    await Promise.resolve();
+async function projected(
+  mode: EmojiFilterMode | undefined,
+  rows = resumed,
+): Promise<HistoryItem[]> {
+  let items: HistoryItem[] = [];
+  await withRecordingLifetimeFixture(async ({ agent }) => {
+    await agent.setHistory(rows);
+    await agent.session.setRecording({ enabled: true });
+    const path = agent.session.getRecording().path;
+    if (!path) throw new Error('Missing resumed journal');
+    const cursor = await NativeJournalCursor.open(
+      path,
+      { emojiFilterMode: mode },
+      8,
+    );
+    try {
+      items = (await cursor.pageBack(8)).entries
+        .flatMap((entry) => (entry.kind === 'projected' ? [entry.item] : []))
+        .reverse();
+    } finally {
+      await cursor.close();
+    }
   });
-  return prependHistory;
+  return items;
 }
 
-function clearTestMocks(): void {
-  vi.clearAllMocks();
-}
-
-function restoreTestMocks(): void {
-  vi.restoreAllMocks();
-}
-
-describe('useSessionInitialization emoji filtering (#2888)', () => {
-  beforeEach(clearTestMocks);
-  afterEach(restoreTestMocks);
-
-  it('seeds filtered model text and verbatim user text by default', async () => {
-    const prependHistory = await seedWith(undefined);
-
-    expect(prependHistory).toHaveBeenCalledTimes(1);
-    expect(prependHistory).toHaveBeenCalledWith([
+describe('resumed journal emoji filtering', () => {
+  it('renders distinct thinking-only rows without merging their prefix-sharing text', async () => {
+    const items = await projected('allowed', [
       {
-        id: -1,
-        type: 'user',
-        text: 'nice \u{1F44D}',
-        rowIdentity: { kind: 'legacy', index: 0, discriminator: 'text' },
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'thinking',
+            thought: 'Plan',
+            sourceField: 'thought',
+            streamId: 'first',
+          },
+        ],
       },
       {
-        id: -2,
-        type: 'gemini',
-        text: 'Done [OK]',
-        rowIdentity: { kind: 'legacy', index: 1, discriminator: 'text' },
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'thinking',
+            thought: 'Plan the next step',
+            sourceField: 'thought',
+            streamId: 'second',
+          },
+        ],
       },
     ]);
-  });
-
-  it('seeds verbatim text when the setting allows emojis', async () => {
-    const prependHistory = await seedWith('allowed');
-
-    expect(prependHistory).toHaveBeenCalledWith([
-      {
-        id: -1,
-        type: 'user',
-        text: 'nice \u{1F44D}',
-        rowIdentity: { kind: 'legacy', index: 0, discriminator: 'text' },
-      },
-      {
-        id: -2,
-        type: 'gemini',
-        text: 'Done \u2705',
-        rowIdentity: { kind: 'legacy', index: 1, discriminator: 'text' },
-      },
+    expect(items).toHaveLength(2);
+    const thoughts = items.flatMap((item) =>
+      item.type === 'gemini' ? (item.thinkingBlocks ?? []) : [],
+    );
+    expect(thoughts.map((block) => block.thought)).toStrictEqual([
+      'Plan',
+      'Plan the next step',
     ]);
-  });
-});
-
-describe('useSessionInitialization emoji filtering (#2888): error and warn', () => {
-  beforeEach(clearTestMocks);
-  afterEach(restoreTestMocks);
-
-  it('seeds the live error item for blocked model text in error mode', async () => {
-    const prependHistory = await seedWith('error');
-
-    // The blocked turn replays as the same error item the live path renders;
-    // user text stays verbatim. The error replacement keeps the source
-    // record's row identity.
-    expect(prependHistory).toHaveBeenCalledWith([
-      {
-        id: -1,
-        type: 'user',
-        text: 'nice \u{1F44D}',
-        rowIdentity: { kind: 'legacy', index: 0, discriminator: 'text' },
-      },
-      {
-        id: -2,
-        type: 'error',
-        text: EMOJI_BLOCKED_ERROR_TEXT,
-        rowIdentity: { kind: 'legacy', index: 1, discriminator: 'text' },
-      },
+    expect(thoughts.map((block) => block.streamId)).toStrictEqual([
+      'first',
+      'second',
     ]);
+    expect(
+      new Set(items.map((item) => JSON.stringify(item.rowIdentity))).size,
+    ).toBe(2);
   });
-
-  it('matches direct conversion output for the same mode', async () => {
-    const prependHistory = await seedWith('warn');
-
-    // Warn mode appends the feedback info item after the filtered turn,
-    // exactly as the live path would have shown it.
-    expect(prependHistory).toHaveBeenCalledWith(
-      iContentToHistoryItems(RESUMED_HISTORY, 'warn'),
+  it('filters model text by default and preserves user text verbatim', async () => {
+    const items = await projected(undefined);
+    expect(items.map((item) => item.text)).toStrictEqual([
+      'nice \u{1F44D}',
+      'Done [OK]',
+    ]);
+    expect(items.every((item) => item.rowIdentity?.kind === 'journal')).toBe(
+      true,
     );
   });
-
-  it('seeds thinking blocks with blanked thoughts in error mode', async () => {
-    // Thought-only emoji does not block the turn (blocking is decided by
-    // main text, mirroring the live pipeline): the gemini item is kept and
-    // the thought renders blanked.
-    const withThinking: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+  it('keeps model emojis when allowed', async () => {
+    expect((await projected('allowed')).map((item) => item.text)).toStrictEqual(
+      ['nice \u{1F44D}', 'Done \u2705'],
+    );
+  });
+  it('replaces blocked model text with the error at the same journal row', async () => {
+    const items = await projected('error');
+    expect(items.map((item) => [item.type, item.text])).toStrictEqual([
+      ['user', 'nice \u{1F44D}'],
+      ['error', EMOJI_BLOCKED_ERROR_TEXT],
+    ]);
+    expect(items[1].rowIdentity?.kind).toBe('journal');
+  });
+  it('puts warning feedback after the filtered model response', async () => {
+    const items = await projected('warn');
+    expect(items.map((item) => item.type)).toStrictEqual([
+      'user',
+      'gemini',
+      'info',
+    ]);
+    expect(items[1].text).toBe('Done [OK]');
+    expect(items[2].text).toContain('emoji');
+  });
+  it('blanks blocked thinking text without blocking a clean answer', async () => {
+    const items = await projected('error', [
       {
         speaker: 'ai',
         blocks: [
@@ -166,23 +121,11 @@ describe('useSessionInitialization emoji filtering (#2888): error and warn', () 
           { type: 'text', text: 'Answer' },
         ],
       },
-    ];
-    const prependHistory = await seedWith('error', withThinking);
-
-    expect(prependHistory).toHaveBeenCalledWith([
-      {
-        id: -1,
-        type: 'user',
-        text: 'hi',
-        rowIdentity: { kind: 'legacy', index: 0, discriminator: 'text' },
-      },
-      {
-        id: -2,
-        type: 'gemini',
-        text: 'Answer',
-        thinkingBlocks: [{ type: 'thinking', thought: '' }],
-        rowIdentity: { kind: 'legacy', index: 1, discriminator: 'text' },
-      },
     ]);
+    expect(items[0]).toMatchObject({
+      type: 'gemini',
+      text: 'Answer',
+      thinkingBlocks: [{ type: 'thinking', thought: '' }],
+    });
   });
 });

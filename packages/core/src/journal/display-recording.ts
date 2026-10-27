@@ -4,6 +4,18 @@ import { mutateDisplay } from './display-mutation.js';
 import { JournalArrivalRecorder } from './arrival-recorder.js';
 import { encodeContentRow } from '../services/history/journalRowCodec.js';
 
+function optionalString(value: object, key: string): string | undefined {
+  const field: unknown = Reflect.get(value, key);
+  if (field === undefined || typeof field === 'string') return field;
+  throw new Error(`Invalid display ${key}`);
+}
+
+function optionalBoolean(value: object, key: string): boolean | undefined {
+  const field: unknown = Reflect.get(value, key);
+  if (field === undefined || typeof field === 'boolean') return field;
+  throw new Error(`Invalid display ${key}`);
+}
+
 export type JournalDisplayDescriptor =
   | {
       readonly type:
@@ -20,6 +32,10 @@ export type JournalDisplayDescriptor =
       readonly attemptId: string;
       readonly callId: string;
       readonly format: 'text' | 'json';
+      readonly status?: string;
+      readonly displayName?: string;
+      readonly description?: string;
+      readonly renderOutputAsMarkdown?: boolean;
     };
 
 export function displayRelationKey(attemptId: string, callId: string): string {
@@ -62,6 +78,13 @@ export function decodeDisplayDescriptor(
         attemptId: value.attemptId,
         callId: value.callId,
         format: value.format,
+        status: optionalString(value, 'status'),
+        displayName: optionalString(value, 'displayName'),
+        description: optionalString(value, 'description'),
+        renderOutputAsMarkdown: optionalBoolean(
+          value,
+          'renderOutputAsMarkdown',
+        ),
       };
     default:
       throw new Error('Invalid display descriptor');

@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
 import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 /**
@@ -16,12 +15,10 @@ export async function prepareTurnForQuery(
   runtime: StreamRuntime,
   startNewPrompt: () => void,
   setThought: (t: null) => void,
-  thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>,
 ): Promise<void> {
   if (!isContinuation) {
     startNewPrompt();
     setThought(null);
-    thinkingBlocksRef.current = [];
     runtime.bucketFailover.resetBuckets?.();
   } else {
     runtime.bucketFailover.resetBucketSession?.();

@@ -98,10 +98,10 @@ void vi.mock('./slashCommandProcessor.js', () => ({
 
 // --- Tests for useAgentStream Hook ---
 describe('useAgentStream', () => {
-  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]>;
+  let mockAddItem: Mock<Parameters<typeof useAgentStream>[1]>;
   let mockConfig: Config;
   let mockOnDebugMessage: Mock<(message: string) => void>;
-  let mockHandleSlashCommand: Mock<Parameters<typeof useAgentStream>[6]>;
+  let mockHandleSlashCommand: Mock<Parameters<typeof useAgentStream>[5]>;
   let mockScheduleToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[1]>;
   let mockCancelAllToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[3]>;
   let mockMarkToolsAsDisplayCleared: Mock<
@@ -111,7 +111,7 @@ describe('useAgentStream', () => {
   beforeEach(() => {
     vi.clearAllMocks(); // Clear mocks before each test
 
-    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]>(() => 0);
+    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[1]>(() => 0);
     // Define the mock for getAgentClient
 
     const contentGeneratorConfig = {
@@ -270,7 +270,6 @@ describe('useAgentStream', () => {
 
         return useAgentStream(
           props.client,
-          props.history,
           props.addItem,
           props.runtime,
           props.loadedSettings,
@@ -391,7 +390,6 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
-          [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig),
           mockLoadedSettings,
@@ -439,7 +437,6 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
-          [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig),
           mockLoadedSettings,
@@ -492,49 +489,6 @@ describe('useAgentStream', () => {
         }),
         expect.any(Number),
       );
-    });
-
-    it('should prevent further processing after cancellation', async () => {
-      let continueStream: () => void;
-      const streamPromise = new Promise<void>((resolve) => {
-        continueStream = resolve;
-      });
-
-      const mockStream = (async function* () {
-        yield { type: 'content', value: 'Initial' };
-        await streamPromise; // Wait until we manually continue
-        yield { type: 'content', value: ' Canceled' };
-      })();
-      mockSendMessageStream.mockReturnValue(mockStream);
-
-      const { result } = renderTestHook();
-      let submission!: Promise<void>;
-
-      await act(async () => {
-        submission = result.current.submitQuery('long running query');
-      });
-
-      await waitFor(() => {
-        expect(result.current.streamingState).toBe(StreamingState.Responding);
-      });
-
-      // Cancel the request
-      simulateEscapeKeyPress();
-
-      // Allow the stream to continue
-      await act(async () => {
-        continueStream();
-        await submission;
-      });
-
-      // The text should not have been updated with " Canceled"
-      const lastCall = mockAddItem.mock.calls.find(
-        (call) => call[0].type === 'gemini',
-      );
-      expect(lastCall?.[0].text).toBe('Initial');
-
-      // The final state should be idle after cancellation
-      expect(result.current.streamingState).toBe(StreamingState.Idle);
     });
 
     it('should cancel if a tool call is in progress', async () => {
@@ -631,6 +585,7 @@ describe('useAgentStream', () => {
 
       // The final state should be idle
       expect(result.current.streamingState).toBe(StreamingState.Idle);
+      expect(result.current.pendingHistoryItems).toStrictEqual([]);
     });
   });
 });

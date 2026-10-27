@@ -3,10 +3,10 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { readJournalItems } from '../stores/turn/journal-turn-test-helpers.js';
 
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
-import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
 import { directoryCommand } from '../commands/directoryCommand.js';
 import { mkdtemp, readFile, rm, realpath } from 'node:fs/promises';
@@ -100,7 +100,6 @@ describe('slashCommandHandlers', () => {
           setDebugMessage: vi.fn(),
           pendingItem: null,
           setPendingItem: vi.fn(),
-          loadHistory: vi.fn(),
           toggleCorgiMode: vi.fn(),
           toggleDebugProfiler: vi.fn(),
           toggleVimEnabled: vi.fn(),
@@ -676,68 +675,45 @@ describe('slashCommandHandlers', () => {
     });
 
     it('filters resumed session model text on perform_resume (#2888)', async () => {
-      const addItem = vi.fn();
-      const deps = createDeps(addItem);
-      deps.config = {
-        getEphemeralSetting: vi.fn().mockReturnValue('auto'),
-        projectTempDir: '/tmp/chats',
-        getSessionRecordingQueueByteLimit: () => 0,
-        logSlashCommand: () => {},
-        // #3199 threads the media store through buildResumeContext.
-        getLocalMediaStore: () => undefined,
-        getProjectRoot: vi.fn().mockReturnValue('/tmp/project'),
-        getSessionId: vi.fn().mockReturnValue('session-1'),
-        getProvider: vi.fn().mockReturnValue('test-provider'),
-        getModel: vi.fn().mockReturnValue('test-model'),
-        directories: () => ['/tmp/project'],
-        adoptSessionId: vi.fn(),
-      } as never;
-      const owner = createUiSessionOwner();
-      deps.commandContext.services.agent = createFakeAgent([], {
-        workspace: owner.workspace,
-        sessionClient: owner.sessionClient,
-        agentClient: owner.agentClient,
-        providerManager: owner.providerManager,
-      });
-      deps.recordingSwapCallbacks = {} as never;
-      deps.sessionMediaStore = new LocalMediaStore({
-        rootDirectory: join(tmpdir(), 'slash-resume-text-only-media'),
-        quotaBytes: 1024,
-      });
-      // Injected instead of vi.mock: bun module mocks leak across test files.
-      deps.performResumeFn = performResumeMock;
-      deps.commands = [
-        {
-          name: 'resumecmd',
-          description: 'Resume for tests',
-          kind: CommandKind.BUILT_IN,
-          action: vi.fn(async () => ({
-            type: 'perform_resume' as const,
-            sessionRef: 'abc',
-          })),
-        },
-      ];
-      performResumeMock.mockResolvedValue({
-        ok: true,
-        warnings: [],
-        history: [
+      await withRecordingLifetimeFixture(async ({ agent, borrow, config }) => {
+        await agent.setHistory([
           { speaker: 'human', blocks: [{ type: 'text', text: USER_TEXT }] },
           { speaker: 'ai', blocks: [{ type: 'text', text: MODEL_TEXT }] },
-        ],
+        ]);
+        await agent.session.setRecording({ enabled: true });
+        const id = (await agent.session.listSessions()).at(0)?.id;
+        if (!id) throw new Error('Missing source session');
+        await agent.session.setRecording({ enabled: false });
+        const next = await borrow();
+        await next.session.setRecording({ enabled: true });
+        const deps = createDeps(vi.fn());
+        deps.config = composeFixtureRuntime(config);
+        deps.commandContext.services.agent = next;
+        deps.commandContext.recordingOwner = 'agent';
+        deps.commands = [
+          {
+            name: 'resumecmd',
+            description: 'Resume',
+            kind: CommandKind.BUILT_IN,
+            action: async () => ({ type: 'perform_resume', sessionRef: id }),
+          },
+        ];
+        await processSlashCommand(deps, '/resumecmd');
+        const items = await readJournalItems(next);
+        expect(items.map((item) => [item.type, item.text])).toStrictEqual([
+          ['user', USER_TEXT],
+          ['gemini', 'Done [OK]'],
+        ]);
+        const raw = await Array.fromAsync(
+          next.agentClient.getHistoryService()?.streamRawHistory() ?? [],
+        );
+        expect(
+          raw
+            .flatMap((row) => row.blocks)
+            .filter((block) => block.type === 'text')
+            .map((block) => block.text),
+        ).toContain(MODEL_TEXT);
       });
-
-      await processSlashCommand(deps, '/resumecmd');
-
-      expect(performResumeMock).toHaveBeenCalledTimes(1);
-      expect(deps.commandContext.ui.clear).toHaveBeenCalled();
-      expect(addItem).toHaveBeenCalledWith(
-        expect.objectContaining({ type: MessageType.USER, text: USER_TEXT }),
-        expect.any(Number),
-      );
-      expect(addItem).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'gemini', text: 'Done [OK]' }),
-        expect.any(Number),
-      );
     });
   });
   it('resumes legacy slash media through explicit client and recording owners without Config media lookup', async () => {
@@ -754,13 +730,7 @@ describe('slashCommandHandlers', () => {
           semanticMetadata: {},
         });
         const deps = createDeps(vi.fn());
-        const displayed: string[] = [];
-        deps.commandContext.ui.addItem = (item) => {
-          if (item.type === MessageType.USER && item.text !== undefined) {
-            displayed.push(item.text);
-          }
-          return displayed.length;
-        };
+        await agent.session.setRecording({ enabled: true });
         deps.config = composeFixtureRuntime(config);
         deps.commandContext.services.config = composeFixtureRuntime(config);
         deps.commandContext.services.agent = agent;
@@ -777,6 +747,12 @@ describe('slashCommandHandlers', () => {
         deps.performResumeFn = async (_sessionRef, context) => {
           const bytes = await context.mediaStore?.readVerified(reference);
           if (bytes === undefined) throw new Error('Missing owner media store');
+          await agent.setHistory([
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: new TextDecoder().decode(bytes) }],
+            },
+          ]);
           return {
             ok: true,
             warnings: [],
@@ -816,7 +792,11 @@ describe('slashCommandHandlers', () => {
 
         await processSlashCommand(deps, '/continue shared-label');
 
-        expect(displayed).toContain('owned media');
+        expect(
+          (await readJournalItems(agent))
+            .filter((item) => item.type === 'user')
+            .map((item) => item.text),
+        ).toContain('owned media');
       } finally {
         await store.close();
         await rm(root, { recursive: true, force: true });
@@ -845,12 +825,6 @@ describe('slashCommandHandlers', () => {
       deps.config = composeFixtureRuntime(config);
       deps.commandContext.services.agent = next;
       deps.commandContext.recordingOwner = 'agent';
-      let loaded:
-        | Parameters<CommandContext['ui']['loadHistory']>[0]
-        | undefined;
-      deps.commandContext.ui.loadHistory = (history) => {
-        loaded = history;
-      };
       deps.commands = [
         {
           name: 'continue',
@@ -864,7 +838,7 @@ describe('slashCommandHandlers', () => {
       ];
       await processSlashCommand(deps, `/continue ${sourceId}`);
       expect(
-        loaded?.some(
+        (await readJournalItems(next)).some(
           (item) => item.type === 'user' && item.text === 'slash replay',
         ),
       ).toBe(true);

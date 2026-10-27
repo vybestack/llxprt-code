@@ -5,7 +5,7 @@
  */
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
-import { act } from 'react';
+import { act, useEffect } from 'react';
 import { renderHook, cleanup } from '../../__tests__/render.js';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
@@ -20,6 +20,7 @@ import { buildCliStyleConfig } from '../../../../agents/src/api/__tests__/helper
 import { FakeProvider } from '../../../../providers/src/fake/FakeProvider.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import { useAgentEventStream } from './agentStream/useAgentEventStream.js';
+import { readJournalItems } from '../stores/turn/read-journal-items.js';
 import {
   useScheduler,
   type SchedulerRefs,
@@ -34,6 +35,30 @@ function gate() {
     release = resolve;
   });
   return { promise, release };
+}
+function noClientDisplay(): void {}
+
+function renderClientScheduler(
+  runtime: Parameters<typeof useReactToolScheduler>[1],
+  completed: CompletedToolCall[][],
+  approvalReady: ReturnType<typeof gate>,
+) {
+  return renderHook(() => {
+    const scheduler = useReactToolScheduler(
+      (_id, calls) => {
+        completed.push(calls);
+      },
+      runtime,
+      noClientDisplay,
+      () => undefined,
+      noClientDisplay,
+    );
+    useEffect(() => {
+      if (scheduler[0].some((call) => call.status === 'awaiting_approval'))
+        approvalReady.release();
+    }, [scheduler]);
+    return scheduler;
+  });
 }
 
 describe('Agent-owned CLI client tools', () => {
@@ -110,17 +135,8 @@ describe('Agent-owned CLI client tools', () => {
       agent,
     };
     const completed: CompletedToolCall[][] = [];
-    const hook = renderHook(() =>
-      useReactToolScheduler(
-        (_id, calls) => {
-          completed.push(calls);
-        },
-        runtime,
-        noop,
-        () => undefined,
-        noop,
-      ),
-    );
+    const approvalReady = gate();
+    const hook = renderClientScheduler(runtime, completed, approvalReady);
     if (awaitReady)
       await waitFor(() => expect(hook.result.current[5]).toBe(true));
     else hook.unmount();
@@ -133,6 +149,7 @@ describe('Agent-owned CLI client tools', () => {
       effects,
       completed,
       record,
+      approvalReady: approvalReady.promise,
     };
   }
 
@@ -289,6 +306,7 @@ describe('Agent-owned CLI client tools', () => {
         new AbortController().signal,
       );
     });
+    await Promise.all([a.approvalReady, b.approvalReady]);
     await waitFor(() => {
       expect(a.hook.result.current[0][0]?.status).toBe('awaiting_approval');
       expect(b.hook.result.current[0][0]?.status).toBe('awaiting_approval');
@@ -370,8 +388,46 @@ describe('Agent-owned CLI client tools', () => {
     );
   }, 30_000);
 
+  it('renders completed client tools from the journal without model resubmission or clearing the observer', async () => {
+    const a = await owner('client-display');
+    await a.agent.session.setRecording({ enabled: true });
+    const provider = a.agent.providerManager.getActiveProvider();
+    if (provider === undefined) throw new Error('Missing active provider');
+    const model = spyOn(provider, 'generateChatCompletion');
+    try {
+      a.finish.release();
+      await act(async () => {
+        await a.hook.result.current[1](
+          request('client-display'),
+          new AbortController().signal,
+        );
+      });
+      const items = await readJournalItems(a.agent);
+      const tools = items.flatMap((item) =>
+        item.type === 'tool_group' ? item.tools : [],
+      );
+      expect(
+        tools.map((tool) => [tool.callId, tool.status, tool.resultDisplay]),
+      ).toStrictEqual([
+        ['client-display', 'Success', 'client-display display'],
+      ]);
+      expect(
+        a.completed
+          .flat()
+          .map((call) => [
+            call.request.callId,
+            'displayCleared' in call && call.displayCleared === true,
+          ]),
+      ).toStrictEqual([['client-display', false]]);
+      expect(model).not.toHaveBeenCalled();
+    } finally {
+      model.mockRestore();
+    }
+  });
+
   it('renders real model tools without rescheduling them through the client channel', async () => {
     const a = await owner('model');
+    await a.agent.session.setRecording({ enabled: true });
     let provider: unknown = a.agent.providerManager.getProviderByName('fake');
     while (
       typeof provider === 'object' &&
@@ -432,7 +488,12 @@ describe('Agent-owned CLI client tools', () => {
       });
       expect(a.effects).toStrictEqual(['model']);
       expect(a.completed).toStrictEqual([]);
-      expect(JSON.stringify(display)).toContain('model-call');
+      const journal = await readJournalItems(a.agent);
+      expect(
+        journal
+          .flatMap((item) => (item.type === 'tool_group' ? item.tools : []))
+          .map((tool) => [tool.callId, tool.status]),
+      ).toStrictEqual([['model-call', 'Success']]);
       expect(turns).toBe(2);
     } finally {
       model.mockRestore();

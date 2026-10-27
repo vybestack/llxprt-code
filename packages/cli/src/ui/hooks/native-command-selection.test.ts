@@ -46,7 +46,16 @@ describe('native CLI continue reference selection', () => {
         );
         expect(await recording(fixture.live)).toBe(targetPath);
         expect(await durable(targetPath)).toStrictEqual(before.target);
-        expect(fixture.displayed()).toHaveLength(expected.count);
+        expect(
+          fixture
+            .displayed()
+            .filter(
+              (item) =>
+                item.type === 'user' ||
+                item.type === 'gemini' ||
+                item.type === 'gemini_content',
+            ),
+        ).toHaveLength(expected.count);
         expect(
           fixture.errors.filter((message) => message.type === 'error'),
         ).toStrictEqual([]);

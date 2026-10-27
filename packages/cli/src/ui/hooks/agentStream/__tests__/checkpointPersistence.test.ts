@@ -27,7 +27,6 @@ import {
 import type { Config, GitService } from '@vybestack/llxprt-code-core';
 import { createFakeAgentFromMockClient } from '../../__tests__/useAgentStream-test-helpers.js';
 import type { TrackedToolCall } from '../../useReactToolScheduler.js';
-import type { HistoryItem } from '../../../types.js';
 import {
   useCheckpointPersistence,
   createToolCheckpoint,
@@ -147,8 +146,6 @@ function makeAgentClient(): { getHistory: ReturnType<typeof vi.fn> } {
   };
 }
 
-const mockHistory: HistoryItem[] = [];
-
 // ─── createToolCheckpoint unit tests ─────────────────────────────────────────
 
 describe('createToolCheckpoint', () => {
@@ -188,7 +185,7 @@ describe('checkpoint effect cancellation', () => {
           ],
           { getCheckpointingEnabled: () => true },
           checkpointGit,
-          mockHistory,
+
           fixture.client,
           dir,
           () => finish(),
@@ -258,7 +255,7 @@ async function checkpointCase1(): Promise<void> {
     checkpointDir,
     gitService as unknown as GitService,
     makeFakeAgent(agentClient),
-    mockHistory,
+
     onDebugMessage,
     fsOps,
   );
@@ -271,7 +268,8 @@ async function checkpointCase1(): Promise<void> {
   expect(writtenContent.commitHash).toBe('snap456');
   expect(writtenContent.filePath).toBe('/project/src/foo.ts');
   expect(writtenContent.toolCall.name).toBe('replace');
-  expect(writtenContent.history).toStrictEqual(mockHistory);
+  expect(Object.hasOwn(writtenContent, 'history')).toBe(false);
+  expect(writtenContent.clientHistory).toStrictEqual([]);
   expect(onDebugMessage).not.toHaveBeenCalled();
 }
 
@@ -287,7 +285,7 @@ async function checkpointCase2(): Promise<void> {
     '/tmp/checkpoints',
     gitService as unknown as GitService,
     makeFakeAgent(agentClient),
-    mockHistory,
+
     onDebugMessage,
     fsOps,
   );
@@ -315,7 +313,7 @@ async function checkpointCase3(): Promise<void> {
     '/tmp/checkpoints',
     gitService as unknown as GitService,
     makeFakeAgent(agentClient),
-    mockHistory,
+
     onDebugMessage,
     fsOps,
   );
@@ -339,7 +337,7 @@ async function checkpointCase4(): Promise<void> {
     '/tmp/checkpoints',
     gitService as unknown as GitService,
     makeFakeAgent(makeAgentClient()),
-    mockHistory,
+
     onDebugMessage,
     fsOps,
   );
@@ -369,7 +367,7 @@ async function checkpointCase5(): Promise<void> {
         tools,
         config,
         gitService as unknown as GitService,
-        mockHistory,
+
         makeFakeAgent(agentClient),
         config.projectCheckpointsDir,
         onDebugMessage,
@@ -394,7 +392,7 @@ async function checkpointCase6(): Promise<void> {
         [makeRestorableTool('r1', 'replace', '/project/a.ts')],
         config,
         gitService as unknown as GitService,
-        mockHistory,
+
         makeFakeAgent(makeAgentClient()),
         config.projectCheckpointsDir,
         vi.fn(),
@@ -419,7 +417,7 @@ async function checkpointCase7(): Promise<void> {
         [makeNonRestorableTool()], // read_file — not restorable
         config,
         gitService as unknown as GitService,
-        mockHistory,
+
         makeFakeAgent(makeAgentClient()),
         config.projectCheckpointsDir,
         vi.fn(),
@@ -444,7 +442,7 @@ async function checkpointCase8(): Promise<void> {
         [makeRestorableTool('r1', 'replace', '/project/a.ts')],
         config,
         undefined, // no gitService
-        mockHistory,
+
         makeFakeAgent(makeAgentClient()),
         config.projectCheckpointsDir,
         onDebugMessage,
@@ -477,7 +475,7 @@ async function checkpointCase9(): Promise<void> {
         [makeRestorableTool('r1', 'replace', '/project/a.ts')],
         config,
         gitService as unknown as GitService,
-        mockHistory,
+
         makeFakeAgent(agentClient),
         config.projectCheckpointsDir,
         onDebugMessage,
@@ -507,7 +505,7 @@ async function checkpointCase10(): Promise<void> {
         [makeRestorableTool('r1', 'replace', '/project/a.ts')],
         config,
         gitService as unknown as GitService,
-        mockHistory,
+
         makeFakeAgent(makeAgentClient()),
         config.projectCheckpointsDir,
         onDebugMessage,
@@ -544,7 +542,7 @@ async function checkpointCase11(): Promise<void> {
         tools,
         config,
         gitService as unknown as GitService,
-        mockHistory,
+
         makeFakeAgent(agentClient),
         config.projectCheckpointsDir,
         onDebugMessage,
@@ -574,7 +572,7 @@ async function checkpointCase12(): Promise<void> {
         [makeRestorableTool('r1', 'replace', '/project/a.ts')],
         config,
         makeGitService() as unknown as GitService,
-        mockHistory,
+
         makeFakeAgent(makeAgentClient()),
         config.projectCheckpointsDir,
         vi.fn(),
@@ -602,7 +600,7 @@ async function checkpointCase13(): Promise<void> {
       currentTools,
       config,
       gitService as unknown as GitService,
-      mockHistory,
+
       makeFakeAgent(agentClient),
       config.projectCheckpointsDir,
       onDebugMessage,
@@ -640,7 +638,7 @@ async function checkpointCase14(): Promise<void> {
       currentTools,
       config,
       gitService as unknown as GitService,
-      mockHistory,
+
       makeFakeAgent(agentClient),
       config.projectCheckpointsDir,
       onDebugMessage,

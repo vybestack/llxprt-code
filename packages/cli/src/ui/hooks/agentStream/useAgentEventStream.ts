@@ -38,7 +38,6 @@ import type {
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { UseHistoryManagerReturn } from '../useHistoryManager.js';
 import type { SubmissionOutcome } from './types.js';
-import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
 import {
   processMemoryToolResults,
   classifyCompletedTools,
@@ -132,10 +131,9 @@ export interface UseAgentEventStreamReturn {
 }
 
 /**
- * Processes a tools_complete callback: adds the tool-group display item and
- * refreshes memory if a save_memory succeeded. The Agent's loop has ALREADY
- * recorded the completed calls into chat history — do NOT call
- * recordCompletedToolCalls here.
+ * Refreshes memory and retires transient controls after tool completion.
+ * Completed tools are already recorded by the engine and projected by the
+ * journal viewport, so this callback must not append another display row.
  */
 function handleToolsComplete(
   completed: readonly CompletedToolCall[],
@@ -149,10 +147,6 @@ function handleToolsComplete(
   args.clearPendingHistoryItem();
 
   const completedArr = [...completed];
-  args.addItem(
-    mapTrackedToolCallsToDisplay(completedArr),
-    userMessageTimestamp,
-  );
   const { primaryTools, externalTools } = classifyCompletedTools(completedArr);
   const memoryRef = { current: processedMemoryTools };
   processMemoryToolResults(primaryTools, memoryRef, args.performMemoryRefresh);

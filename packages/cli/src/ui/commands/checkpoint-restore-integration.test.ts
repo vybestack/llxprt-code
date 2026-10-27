@@ -111,9 +111,9 @@ async function compatibleRestore(active: boolean): Promise<string> {
     const encoded = JSON.stringify(checkpoint, null, 2);
     await writeFile(path, encoded);
     const { context, runtime } = restoreContext(fixture.client, dir);
-    let loaded: unknown;
-    context.ui.loadHistory = (rows) => {
-      loaded = rows;
+    let invalidated = false;
+    context.ui.clear = () => {
+      invalidated = true;
     };
     const snapshots: string[] = [];
     const git = new GitService(fixture.root, fixture.config.projectHistoryDir);
@@ -137,7 +137,7 @@ async function compatibleRestore(active: boolean): Promise<string> {
         toolName: 'run_shell_command',
         toolArgs: 'ls',
       });
-      expect(loaded).toStrictEqual(history);
+      expect(invalidated).toBe(true);
       expect(snapshots.length).toBe(1);
       const actual: IContent[] = [];
       for await (const restored of fixture.client.streamHistory())

@@ -39,7 +39,6 @@ describe('dispatchAgentEvent usage events', () => {
         },
       },
       {} as AgentEventDeps,
-      '',
       Date.now(),
     );
 

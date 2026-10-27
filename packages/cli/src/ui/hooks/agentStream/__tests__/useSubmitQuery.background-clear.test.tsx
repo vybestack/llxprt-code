@@ -19,7 +19,6 @@ import { useQueuedSubmissions } from '../useQueuedSubmissions.js';
 import { useAgentEventStream } from '../useAgentEventStream.js';
 import { StreamingState } from '../../../types.js';
 import type { QueuedSubmission } from '../types.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 import { createDeferred } from './createDeferred.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import {
@@ -79,9 +78,9 @@ function renderNotificationQueue(
     onAuthError: noop,
     sanitizeContent: (text) => ({ text, blocked: false }),
     flushPendingHistoryItem: noop,
-    pendingResponse: new PendingResponseBuffer(undefined),
+
     pendingHistoryItemRef: { current: null },
-    thinkingBlocksRef: { current: [] },
+
     turnCancelledRef: { current: false },
     setTurnCancelled: noop,
     queuedSubmissionsRef,
@@ -244,6 +243,7 @@ describe('background notification queue ownership', () => {
       });
       expect(committed.current).toBe(StreamingState.Idle);
       await finishBackgroundWork(tasks, shell, 'task failed');
+      await tasks.join();
       await waitFor(() => {
         expect(tasks.getPendingNotifications()).toHaveLength(0);
         expect(tasks.hasPendingWork()).toBe(false);

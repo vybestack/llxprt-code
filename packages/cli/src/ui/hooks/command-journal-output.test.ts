@@ -15,7 +15,7 @@ import { extensionsCommand } from '../commands/extensionsCommand.js';
 import { memoryCommand } from '../commands/memoryCommand.js';
 import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
 import { writeCommandOutput } from './command-journal-output.js';
-import type { HistoryItemWithoutId } from '../types.js';
+import { ToolCallStatus, type HistoryItemWithoutId } from '../types.js';
 import type { CommandContext } from '../commands/types.js';
 import { helpCommand } from '../commands/helpCommand.js';
 import { hooksCommand } from '../commands/hooksCommand.js';
@@ -23,6 +23,21 @@ import { hooksCommand } from '../commands/hooksCommand.js';
 const notices: HistoryItemWithoutId[] = [
   { type: 'info', text: 'hook started', icon: '!', color: 'green' },
   { type: 'warning', text: 'startup warning' },
+  {
+    type: 'tool_group',
+    agentId: 'primary',
+    tools: [
+      {
+        callId: 'shell-1',
+        name: 'Shell',
+        description: 'echo done',
+        status: ToolCallStatus.Success,
+        resultDisplay: 'done',
+        renderOutputAsMarkdown: false,
+        confirmationDetails: undefined,
+      },
+    ],
+  },
   { type: 'error', text: 'authentication failed' },
   { type: 'oauth_url', text: 'Authenticate', url: 'https://example.org/auth' },
   { type: 'profile_change', profileName: 'local' },

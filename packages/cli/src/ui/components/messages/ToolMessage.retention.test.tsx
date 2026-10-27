@@ -22,7 +22,10 @@ import {
   type SessionRecordingPort,
   type IContent,
 } from '@vybestack/llxprt-code-core';
-import { act } from 'react';
+import {
+  createScrollbackPagerStore,
+  type ScrollbackPagerStore,
+} from '../../stores/turn/scrollbackPager.js';
 import {
   createMockSettings,
   renderWithProviders,
@@ -96,6 +99,7 @@ function renderCappedToolMessage(cappedText: string, originalLength: number) {
 describe('<ToolMessage /> capped-result expansion (issue #3428)', () => {
   let tempDir: string;
   let service: SessionRecordingPort;
+  let pager: ScrollbackPagerStore | undefined;
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), '3428-render-'));
@@ -110,6 +114,8 @@ describe('<ToolMessage /> capped-result expansion (issue #3428)', () => {
   });
 
   afterEach(async () => {
+    await pager?.close();
+    pager = undefined;
     await service.dispose();
     await fs.rm(tempDir, { recursive: true, force: true });
   });
@@ -167,6 +173,7 @@ describe('<ToolMessage /> capped-result expansion (issue #3428)', () => {
         >
           <TurnProvider store={turnStore}>
             <ToolResultExpansionProvider
+              pager={pager}
               getTranscriptFilePath={() => transcriptPath}
             >
               <ToolMessage
@@ -190,6 +197,13 @@ describe('<ToolMessage /> capped-result expansion (issue #3428)', () => {
     ]);
     await service.flush();
     const transcriptPath = service.getFilePath() as string;
+    pager = createScrollbackPagerStore({
+      filePath: transcriptPath,
+      pageRows: 8,
+      viewport: { visibleKeys: [], viewportLines: 8, rowHeightLines: () => 1 },
+      settings: { marginViewports: 0, byteFloorBytes: 256, purgeDebounceMs: 0 },
+    });
+    await pager.resumeFromJournal();
     const capped = boundResultDisplayForRetention(FULL_BODY);
 
     const turnStore = createTurnStore();
@@ -216,6 +230,13 @@ describe('<ToolMessage /> capped-result expansion (issue #3428)', () => {
     ]);
     await service.flush();
     const transcriptPath = service.getFilePath() as string;
+    pager = createScrollbackPagerStore({
+      filePath: transcriptPath,
+      pageRows: 8,
+      viewport: { visibleKeys: [], viewportLines: 8, rowHeightLines: () => 1 },
+      settings: { marginViewports: 0, byteFloorBytes: 256, purgeDebounceMs: 0 },
+    });
+    await pager.resumeFromJournal();
     const capped = boundResultDisplayForRetention(FULL_BODY);
 
     const turnStore = createTurnStore();
@@ -232,12 +253,14 @@ describe('<ToolMessage /> capped-result expansion (issue #3428)', () => {
 
     // Scroll-forward: a new ledger append purges; the capped preview (with its
     // marker and hint) renders again even though constraints stay lifted.
-    act(() => {
-      turnStore.commands.addItem(
-        { type: 'user', text: 'next turn' },
-        Date.now(),
-      );
-    });
+    await recordRowsForTest(service, [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'next turn' }] },
+    ]);
+    await service.flush();
+    await pager.pageForward();
+    await waitFor(() =>
+      expect(lastFrame() ?? '').not.toContain('MIDDLESENTINEL'),
+    );
 
     const frame = lastFrame() ?? '';
     expect(frame).not.toContain('MIDDLESENTINEL');

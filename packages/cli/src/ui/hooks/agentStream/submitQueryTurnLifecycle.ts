@@ -263,7 +263,6 @@ async function prepareAndCheckProceed(
       cbd.runtime,
       cbd.startNewPrompt,
       cbd.setThought,
-      cbd.thinkingBlocksRef,
     );
   } catch (prepError) {
     if (isCancellation(prepError, turn.abortSignal)) {
@@ -427,7 +426,6 @@ export async function runSubmitQueryCore(
     cbd.setIsResponding(true);
     cbd.setInitError(null);
     observeTurnStarted();
-    cbd.pendingResponse.beginCommittedSegments();
   } catch (error) {
     await finaliseTurnStartFailure(cbd, turn, error);
   }

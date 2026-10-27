@@ -73,7 +73,6 @@ export interface UseSlashCommandProcessorCoreArgs {
   settings: LoadedSettings;
   addItem: UseHistoryManagerReturn['addItem'];
   clearItems: UseHistoryManagerReturn['clearItems'];
-  loadHistory: UseHistoryManagerReturn['loadHistory'];
   refreshStatic: () => void;
   toggleVimEnabled: () => Promise<boolean>;
   setIsProcessing: (isProcessing: boolean) => void;
@@ -181,7 +180,6 @@ export function useSlashCommandProcessorCore(
     ...managers,
     addItem: args.addItem,
     clearItems: args.clearItems,
-    loadHistory: args.loadHistory,
     refreshStatic: args.refreshStatic,
     toggleVimEnabled: args.toggleVimEnabled,
     setLlxprtMdFileCount: args.setLlxprtMdFileCount,

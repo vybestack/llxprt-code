@@ -1,9 +1,10 @@
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 /**
@@ -62,7 +63,6 @@ import { useQueuedSubmissions } from '../useQueuedSubmissions.js';
 import type { QueuedSubmission } from '../types.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import { KeypressProvider } from '../../../contexts/KeypressContext.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import { createDeferred } from './createDeferred.js';
 import {
@@ -600,15 +600,6 @@ async function flushAtTurnBoundary(
   if (state.mode === 'turnA') await gate;
 }
 
-function capturePromptAContent(
-  text: string,
-  buffer: string,
-  latch: { readonly resolve: () => void },
-): string {
-  if (text === PROMPT_A_CONTENT) latch.resolve();
-  return buffer + text;
-}
-
 async function settleTurn(turnPromise: Promise<void> | null): Promise<void> {
   if (turnPromise === null) return;
   await act(async () => {
@@ -648,7 +639,7 @@ function createSubmitDeps(
     runtime: createStreamRuntimeForTest({}, createMockOverrides()),
     agent: env.agent,
     addItem: handles.addItem,
-    removeItems: vi.fn(),
+
     settings: createLoadedSettings(),
     onDebugMessage: vi.fn(),
     onCancelSubmit: vi.fn(),
@@ -656,9 +647,9 @@ function createSubmitDeps(
     recordingIntegration: options.recordingIntegration,
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: handles.flushPendingHistoryItem,
-    pendingResponse: new PendingResponseBuffer(undefined),
+
     pendingHistoryItemRef: handles.pendingHistoryItemRef,
-    thinkingBlocksRef: { current: [] },
+
     turnCancelledRef,
     setTurnCancelled: (v: boolean) => void (turnCancelledRef.current = v),
     drainSuppressedRef,
@@ -752,22 +743,26 @@ async function startParkedTurn(
   // first time the real chain routes A's content event, so the wait is
   // driven by the event itself (no timer drift; a broken chain fails
   // fast at the test runner's per-test deadline instead).
-  const contentEventALatch = createDeferred<void>();
-  handleContentEventMock.mockImplementation((text: string, buffer: string) =>
-    capturePromptAContent(text, buffer, contentEventALatch),
+  await waitFor(
+    () =>
+      expect(env.routedEvents).toContainEqual({
+        type: 'text',
+        text: PROMPT_A_CONTENT,
+      }),
+    { timeout: 5000 },
   );
-  await contentEventALatch.promise;
   // ESC must land AFTER the second read parks: the transport's abort
   // listener (and thus the "provider observed abort" observation under
   // test) is registered by the parked read itself. Cancelling before the
   // park exercises the already-aborted fast path instead of the #3236
   // read-ignores-abort path.
   await env.transport.parkedReadA.promise;
-  expect(handleContentEventMock).toHaveBeenCalledWith(
-    PROMPT_A_CONTENT,
-    '',
-    expect.any(Number),
-  );
+  expect(
+    env.routedEvents.filter((event) => event.type === 'text'),
+  ).toContainEqual({
+    type: 'text',
+    text: PROMPT_A_CONTENT,
+  });
   expect(env.startedPrompts()).toStrictEqual(['A']);
   rerender({ streamingState: StreamingState.Responding });
 

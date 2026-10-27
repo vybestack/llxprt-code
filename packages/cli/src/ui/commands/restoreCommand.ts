@@ -24,14 +24,6 @@ import {
 
 const checkpointSuggestionDescription = 'Restorable tool call checkpoint';
 
-type LoadHistory = CommandContext['ui']['loadHistory'];
-
-function getRuntimeLoadHistory(
-  ui: CommandContext['ui'],
-): LoadHistory | undefined {
-  return ui.loadHistory;
-}
-
 const restoreSchema: CommandArgumentSchema = [
   {
     kind: 'value',
@@ -143,9 +135,6 @@ async function applyCheckpointRestoration(
   checkpoint: DiskCheckpoint,
 ): Promise<void> {
   const { data, rows } = checkpoint;
-  const loadHistory = getRuntimeLoadHistory(context.ui);
-  if (Array.isArray(data.history) && loadHistory == null)
-    throw new Error('loadHistory function is not available.');
   const snapshot =
     typeof data.commitHash === 'string' && data.commitHash.length > 0
       ? data.commitHash
@@ -176,7 +165,7 @@ async function applyCheckpointRestoration(
   } catch (error) {
     throw await files.rollback(error);
   }
-  if (Array.isArray(data.history)) loadHistory?.(data.history);
+  context.ui.clear();
   if (snapshot !== undefined)
     await writeCommandOutput(
       () => context.services.agent?.agentClient.getHistoryService() ?? null,

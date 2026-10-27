@@ -39,7 +39,7 @@ describe('interactive owner transcript', () => {
       first.unmount();
 
       const checkpoint = await agent.session.createCheckpoint('owner-fork');
-      await resumeOwnerSession(agent, checkpoint.checkpointId, 'allowed');
+      await resumeOwnerSession(agent, checkpoint.checkpointId);
       const forkPath = agent.session.getRecording().path;
       if (!forkPath) throw new Error('Expected fork transcript');
       expect(forkPath).not.toBe(original);
@@ -56,7 +56,7 @@ describe('interactive owner transcript', () => {
           entry.kind === 'session' && entry.session.filePath === forkPath,
       );
       if (target?.kind !== 'session') throw new Error('Expected fork session');
-      await resumeOwnerSession(next, target.session.sessionId, 'allowed');
+      await resumeOwnerSession(next, target.session.sessionId);
       const resumed = render(<Transcript agent={next} />);
       expect(
         resumed.lastFrame()?.split(String.fromCharCode(10)).join(''),

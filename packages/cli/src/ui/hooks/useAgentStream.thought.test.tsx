@@ -3,6 +3,8 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { withJournalStreamHook } from './agentStream/__tests__/journal-stream-hook-fixture.js';
+import * as core from '@vybestack/llxprt-code-core';
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import type { Mock } from 'bun:test';
@@ -93,10 +95,10 @@ void vi.mock('./slashCommandProcessor.js', () => ({
 
 // --- Tests for useAgentStream Hook ---
 describe('useAgentStream', () => {
-  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]>;
+  let mockAddItem: Mock<Parameters<typeof useAgentStream>[1]>;
   let mockConfig: Config;
   let mockOnDebugMessage: Mock<(message: string) => void>;
-  let mockHandleSlashCommand: Mock<Parameters<typeof useAgentStream>[6]>;
+  let mockHandleSlashCommand: Mock<Parameters<typeof useAgentStream>[5]>;
   let mockScheduleToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[1]>;
   let mockCancelAllToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[3]>;
   let mockMarkToolsAsDisplayCleared: Mock<
@@ -106,7 +108,7 @@ describe('useAgentStream', () => {
   beforeEach(() => {
     vi.clearAllMocks(); // Clear mocks before each test
 
-    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]>(() => 0);
+    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[1]>(() => 0);
     // Define the mock for getAgentClient
 
     const contentGeneratorConfig = {
@@ -203,96 +205,53 @@ describe('useAgentStream', () => {
 
   describe('Thought Reset', () => {
     it('should reset thought to null when starting a new prompt', async () => {
-      // First, simulate a response with a thought
-      mockSendMessageStream.mockReturnValue(
-        (async function* () {
-          yield {
-            type: ServerEventType.Thought,
-            value: {
-              subject: 'Previous thought',
-              description: 'Old description',
+      vi.spyOn(core, 'tokenLimit').mockReturnValue(1_000_000);
+      await withJournalStreamHook(
+        [
+          [
+            {
+              speaker: 'ai',
+              blocks: [
+                {
+                  type: 'thinking',
+                  thought: 'Previous thought: Old description',
+                  sourceField: 'thought',
+                },
+                { type: 'text', text: 'Some response content' },
+              ],
             },
-          };
-          yield {
-            type: ServerEventType.Content,
-            value: 'Some response content',
-          };
-          yield {
-            type: ServerEventType.Finished,
-            value: { reason: 'STOP', usageMetadata: undefined },
-          };
-        })(),
-      );
-
-      const { result } = renderHook(() =>
-        useAgentStream(
-          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
-          [],
-          mockAddItem,
-          createStreamRuntimeForTest(mockConfig),
-          mockLoadedSettings,
-          mockOnDebugMessage,
-          mockHandleSlashCommand,
-          false,
-          () => 'vscode' as EditorType,
-          () => {},
-          () => Promise.resolve(),
-          () => {},
-          () => {},
-          () => {},
-          80,
-          24,
-        ),
-      );
-
-      // Submit first query to set a thought
-      await act(async () => {
-        await result.current.submitQuery('First query');
-      });
-
-      // Wait for the first response to complete
-      await waitFor(() => {
-        expect(mockAddItem).toHaveBeenCalledWith(
-          expect.objectContaining({
+          ],
+          [
+            {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'New response content' }],
+            },
+          ],
+        ],
+        async ({ submit, items, state }) => {
+          await submit('First query');
+          const first = (await items())
+            .filter((item) => item.type === 'gemini')
+            .find((item) => item.text === 'Some response content');
+          expect(first).toMatchObject({
             type: 'gemini',
             text: 'Some response content',
-          }),
-          expect.any(Number),
-        );
-      });
-
-      // Now simulate a new response without a thought
-      mockSendMessageStream.mockReturnValue(
-        (async function* () {
-          yield {
-            type: ServerEventType.Content,
-            value: 'New response content',
-          };
-          yield {
-            type: ServerEventType.Finished,
-            value: { reason: 'STOP', usageMetadata: undefined },
-          };
-        })(),
-      );
-
-      // Submit second query - thought should be reset
-      await act(async () => {
-        await result.current.submitQuery('Second query');
-      });
-
-      // The thought should be reset to null when starting the new prompt
-      // We can verify this by checking that the LoadingIndicator would not show the previous thought
-      // The actual thought state is internal to the hook, but we can verify the behavior
-      // by ensuring the second response doesn't show the previous thought
-      await waitFor(() => {
-        expect(mockAddItem).toHaveBeenCalledWith(
-          expect.objectContaining({
+          });
+          expect(first?.thinkingBlocks?.[0]?.thought).toBe(
+            'Previous thought: Old description',
+          );
+          await submit('Second query');
+          const second = (await items())
+            .filter((item) => item.type === 'gemini')
+            .at(-1);
+          expect(second).toMatchObject({
             type: 'gemini',
             text: 'New response content',
-          }),
-          expect.any(Number),
-        );
-      });
+          });
+          expect(second?.thinkingBlocks ?? []).toStrictEqual([]);
+          expect(state().thought).toBeNull();
+        },
+      );
     });
 
     it('should memoize pendingHistoryItems', () => {
@@ -310,7 +269,6 @@ describe('useAgentStream', () => {
       const { result, rerender } = renderHook(() =>
         useAgentStream(
           createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
-          [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig),
           mockLoadedSettings,
@@ -399,7 +357,6 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
-          [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig),
           mockLoadedSettings,
@@ -447,7 +404,6 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
-          [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig),
           mockLoadedSettings,
@@ -503,7 +459,6 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
-          [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig),
           mockLoadedSettings,

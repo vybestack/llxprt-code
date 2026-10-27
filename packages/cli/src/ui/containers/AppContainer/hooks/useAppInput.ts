@@ -203,7 +203,7 @@ function useSlashCommandSetup(
     recordingSwapCallbacks,
     setLlxprtMdFileCount,
   } = p;
-  const { addItem, clearItems, loadHistory, refreshStatic, setIsProcessing } =
+  const { addItem, clearItems, refreshStatic, setIsProcessing } =
     p.turnStore.commands;
   const extensions = useExtensionUpdates(
     p.slashCommandRuntime.getExtensions(),
@@ -227,7 +227,6 @@ function useSlashCommandSetup(
     settings,
     addItem,
     clearItems,
-    loadHistory,
     refreshStatic,
     toggleVimEnabled,
     setIsProcessing,
@@ -349,8 +348,7 @@ function useInputStreamSetup(
   const { refreshStatic } = p.turnStore.commands;
   // The stream reads the committed transcript (checkpoint context) through a
   // narrow selector; commands come straight from the store.
-  const history = useStoreSelector(p.turnStore.store, (s) => s.history);
-  const { addItem, removeItems } = p.turnStore.commands;
+  const { addItem } = p.turnStore.commands;
   const handleSlashCommand = core.handleSlashCommand;
   const setDebugMessage = p.settingsStore.commands.setDebugMessage;
   const performMemoryRefresh = useMemoryRefreshAction({
@@ -369,7 +367,6 @@ function useInputStreamSetup(
   const { handleUserCancel } = bufferSetup;
   const agentStreamResult = useAgentStream(
     p.agent,
-    history,
     addItem,
     streamRuntime,
     settings,
@@ -388,7 +385,6 @@ function useInputStreamSetup(
     recordingIntegration,
     runtimeMessageBus,
     p.subagentManager,
-    removeItems,
     p.operationLifecycle,
     core.cancelActiveSlashCommand,
     p.recordingOwner,

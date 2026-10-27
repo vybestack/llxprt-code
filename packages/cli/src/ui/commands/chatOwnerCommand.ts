@@ -6,16 +6,9 @@
 
 import React from 'react';
 import { Text } from 'ink';
-import type {
-  Agent,
-  AgentHistoryItem,
-  CheckpointInfo,
-} from '@vybestack/llxprt-code-agents';
+import type { Agent, CheckpointInfo } from '@vybestack/llxprt-code-agents';
 import { Colors } from '../colors.js';
 import { MessageType, type HistoryItemChatList } from '../types.js';
-import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
-import { resumeHistoryWindow } from '../utils/streamHistoryItems.js';
-import { historyLimitsFromSettings } from '../utils/historyLimitsFromSettings.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import type {
   CommandContext,
@@ -75,20 +68,6 @@ function resolveCheckpoint(
   return matchesByName[0] ?? `No checkpoint found with tag: ${ref}`;
 }
 
-async function replayUiHistory(
-  context: CommandContext,
-  history: AsyncIterable<AgentHistoryItem> | Iterable<AgentHistoryItem>,
-): Promise<void> {
-  context.ui.loadHistory(
-    await resumeHistoryWindow(
-      history,
-      resolveEmojiFilterMode(context.services.config),
-      undefined,
-      historyLimitsFromSettings(context.services.settings),
-    ),
-  );
-}
-
 const actions: Record<string, NonNullable<SlashCommand['action']>> = {
   list: async (context) => {
     try {
@@ -142,7 +121,7 @@ const actions: Record<string, NonNullable<SlashCommand['action']>> = {
       };
     try {
       const agent = owner(context);
-      await replayUiHistory(context, await agent.session.resume(tag));
+      await agent.session.resume(tag);
       return undefined;
     } catch (error) {
       return failure('resume checkpoint', error);
@@ -266,7 +245,7 @@ const actions: Record<string, NonNullable<SlashCommand['action']>> = {
           content:
             'Not enough history to restore the requested number of turns.',
         };
-      await replayUiHistory(context, result.remainingHistory);
+      context.ui.clear();
       return undefined;
     } catch (error) {
       return failure('restore history', error);

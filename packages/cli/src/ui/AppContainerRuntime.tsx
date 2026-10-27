@@ -359,7 +359,6 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
       settingsStore={settingsStore}
       recordingSwapCallbacks={bootstrap.recordingSwapCallbacks}
       scrollbackPager={bootstrap.scrollbackPager}
-      scrollbackRestartNotice={bootstrap.scrollbackRestartNotice}
       recordingOwner={bootstrap.recordingOwner}
       agent={props.agent}
     />
@@ -392,6 +391,7 @@ function AppRuntimeView({
     <TerminalProvider store={terminalStore}>
       <TurnProvider store={turnStore}>
         <ToolResultExpansionProvider
+          pager={layoutProps.scrollbackPager?.store}
           getTranscriptFilePath={() =>
             getInteractiveTranscriptPath(
               recordingOwner,

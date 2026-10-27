@@ -22,14 +22,10 @@ import {
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
-  type HistoryItem,
   type HistoryItemWithoutId,
   type SlashCommandProcessorResult,
 } from '../../types.js';
-import {
-  type RemoveHistoryItems,
-  type UseHistoryManagerReturn,
-} from '../useHistoryManager.js';
+import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { mergePendingToolGroupsForDisplay } from './streamUtils.js';
 import { useCheckpointPersistence } from './checkpointPersistence.js';
 import type { useStreamState } from './useStreamState.js';
@@ -40,7 +36,6 @@ import type { OperationLifecycleRegistry } from './operationLifecycle.js';
 
 export const useAgentStream = (
   agent: Agent,
-  history: HistoryItem[],
   addItem: UseHistoryManagerReturn['addItem'],
   runtime: StreamRuntime,
   settings: LoadedSettings,
@@ -61,7 +56,6 @@ export const useAgentStream = (
   recordingIntegration?: RecordingIntegration,
   runtimeMessageBus?: MessageBus,
   subagentManager?: UiSubagentManager,
-  removeItems?: RemoveHistoryItems,
   operationLifecycle?: OperationLifecycleRegistry,
   cancelActiveSlashCommand?: () => boolean,
   recordingOwner?: 'agent' | 'raw',
@@ -69,7 +63,6 @@ export const useAgentStream = (
   const orchestration = useAgentStreamOrchestration({
     agent,
     addItem,
-    removeItems,
     runtime,
     settings,
     onDebugMessage,
@@ -95,7 +88,6 @@ export const useAgentStream = (
   return useAgentStreamReturn(
     orchestration,
     runtime,
-    history,
     agent,
 
     onDebugMessage,
@@ -105,7 +97,6 @@ export const useAgentStream = (
 function useAgentStreamReturn(
   orchestration: ReturnType<typeof useAgentStreamOrchestration>,
   runtime: StreamRuntime,
-  history: HistoryItem[],
   agent: Agent,
   onDebugMessage: (message: string) => void,
 ) {
@@ -118,7 +109,6 @@ function useAgentStreamReturn(
     orchestration.toolCalls,
     runtime,
     orchestration.st.gitService,
-    history,
     agent,
     runtime.projectCheckpointsDir,
     onDebugMessage,
@@ -148,11 +138,13 @@ function usePendingHistoryItems(
 ) {
   return useMemo(
     () =>
-      mergePendingToolGroupsForDisplay(
-        st.pendingHistoryItem,
-        pendingToolCallGroupDisplay,
-      ),
-    [st.pendingHistoryItem, pendingToolCallGroupDisplay],
+      st.turnCancelled
+        ? []
+        : mergePendingToolGroupsForDisplay(
+            st.pendingHistoryItem,
+            pendingToolCallGroupDisplay,
+          ),
+    [st.turnCancelled, st.pendingHistoryItem, pendingToolCallGroupDisplay],
   );
 }
 

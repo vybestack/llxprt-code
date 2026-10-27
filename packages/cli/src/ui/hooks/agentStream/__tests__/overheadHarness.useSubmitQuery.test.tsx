@@ -61,7 +61,6 @@ import { readPerfRecords } from '@vybestack/llxprt-code-telemetry/perf/perfRecor
 import type { PerfOperationRecord } from '@vybestack/llxprt-code-telemetry/perf/perfRecords.js';
 import type { PerfScheduler } from '@vybestack/llxprt-code-telemetry/perf/index.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 import {
   type OperationIdentitySnapshot,
   type OperationIdentityProvider,
@@ -251,11 +250,11 @@ function renderUseSubmitQuery(opts: {
     onAuthError: vi.fn(),
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: vi.fn(),
-    pendingResponse: new PendingResponseBuffer(undefined),
+
     pendingHistoryItemRef: {
       current: null,
     } as React.MutableRefObject<HistoryItemWithoutId | null>,
-    thinkingBlocksRef: { current: [] },
+
     turnCancelledRef: { current: false },
     queuedSubmissionsRef: { current: [] },
     drainSuppressedRef: { current: false },

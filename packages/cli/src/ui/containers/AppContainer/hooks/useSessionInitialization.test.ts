@@ -1,345 +1,136 @@
-/**
- * @license
- * Copyright 2025 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-import { displayBoot } from '../../../../__tests__/resumeRows.js';
-
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, it, expect, spyOn } from 'bun:test';
 import { act } from 'react';
-import { renderHook } from '../../../../__tests__/render.js';
+import { withRecordingLifetimeFixture } from '../../../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { renderHook, waitFor } from '../../../../__tests__/render.js';
+import { buildUiRuntimeFromSource } from '../../../cliUiRuntime.js';
+import { readJournalItems } from '../../../stores/turn/journal-turn-test-helpers.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
-import type { IContent } from '@vybestack/llxprt-code-core';
-import { iContentToHistoryItems } from '../../../utils/iContentToHistoryItems.js';
 
-// #2378: the hook drives SessionStart through the Agent's own hooks surface
-// (agent.hooks.triggerSessionStart), so the raw core triggerSessionStartHook is
-// no longer imported by the SUT and does not need to be mocked here.
-//
-// The history converter (iContentToHistoryItems) is intentionally NOT mocked:
-// bun's vi.mock is not scoped per test file, so mocking it here would leak
-// into useSessionInitialization.emojifilter.test.ts, which verifies the same
-// seeding path behaviorally against the real converter.
-
-interface ConfigStub {
-  hooks: Record<string, unknown>;
-  memory: {
-    getLlxprtMdFileCount: ReturnType<typeof vi.fn>;
-    getCoreMemoryFileCount: ReturnType<typeof vi.fn>;
-  };
-  agentClientSource: {
-    getAgentClient: ReturnType<typeof vi.fn>;
-  };
-  ephemeral: {
-    getEphemeralSetting: ReturnType<typeof vi.fn>;
-  };
-}
-
-const makeConfig = (
-  llxprtMdFileCount = 0,
-  coreMemoryFileCount = 0,
-): ConfigStub => {
-  const hooks = {};
-  return {
-    hooks,
-    memory: {
-      getLlxprtMdFileCount: vi.fn().mockReturnValue(llxprtMdFileCount),
-      getCoreMemoryFileCount: vi.fn().mockReturnValue(coreMemoryFileCount),
-    },
-    agentClientSource: {
-      getAgentClient: vi.fn().mockReturnValue(null),
-    },
-    ephemeral: {
-      getEphemeralSetting: vi.fn().mockReturnValue(undefined),
-    },
-  };
+const forbiddenAdd = (): number => {
+  throw new Error('UI ledger forbidden');
 };
 
-interface SessionStartOutput {
-  systemMessage?: string;
-  additionalContext?: string;
-}
-
-// Build a fake Agent whose hooks.triggerSessionStart resolves to the given
-// SessionStart output. The captured spy is returned alongside so tests can
-// assert the hook was driven through the Agent surface (#2378) rather than the
-// raw core trigger. Cast to `never` matches the stub convention already used
-// for uiRuntime in this file.
-const makeAgentWithSpy = (output: SessionStartOutput = {}) => {
-  const triggerSessionStart = vi.fn().mockResolvedValue(output);
-  return {
-    agent: { hooks: { triggerSessionStart } } as never,
-    triggerSessionStart,
-  };
-};
-
-const makeAgent = (output: SessionStartOutput = {}) =>
-  makeAgentWithSpy(output).agent;
-
-function registerUnmountAndMemoryTests(): void {
-  describe('unmount and memory', () => {
-    it.each([false, true])(
-      'does not publish delayed resume output after unmount (failure: %s)',
-      async (fail) => {
-        let release = (): void => {
-          throw new Error('Stream not initialized');
-        };
-        const gate = new Promise<void>((resolve) => {
-          release = resolve;
-        });
-        const displayed: string[] = [];
-        const { unmount } = renderHook(() =>
-          useSessionInitialization({
-            uiRuntime: makeConfig() as never,
-            agent: makeAgent(),
-            addItem: (item) => {
-              displayed.push(item.type);
-              return displayed.length;
+describe('session initialization', () => {
+  it('initializes memory counts from the runtime', async () => {
+    await withRecordingLifetimeFixture(async ({ agent, config }) => {
+      const runtime = buildUiRuntimeFromSource(config, agent);
+      const hook = spyOn(agent.hooks, 'triggerSessionStart').mockResolvedValue(
+        {},
+      );
+      const view = renderHook(() =>
+        useSessionInitialization({
+          uiRuntime: {
+            ...runtime,
+            memory: {
+              ...runtime.memory,
+              getLlxprtMdFileCount: () => 3,
+              getCoreMemoryFileCount: () => 5,
             },
-            prependHistory: (items) => {
-              displayed.push(...items.map((item) => item.type));
-            },
-            resumedBoot: {
-              async *streamRows(): AsyncIterable<IContent> {
-                await gate;
-                if (fail) throw new Error('Disk read failed');
-                yield {
-                  speaker: 'human',
-                  blocks: [{ type: 'text', text: 'old' }],
-                };
-              },
-            },
-          }),
-        );
-        unmount();
-        await act(async () => {
-          release();
-        });
-        expect(displayed).toStrictEqual([]);
-      },
-    );
-
-    it('initializes memory file counts from config', async () => {
-      const config = makeConfig(3, 5);
-      const prependHistory = vi.fn();
-      const addItem = vi.fn();
-
-      const { result } = renderHook(() =>
-        useSessionInitialization({
-          uiRuntime: config as never,
-          agent: makeAgent(),
-          addItem,
-          prependHistory,
-        }),
-      );
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      expect(result.current.llxprtMdFileCount).toBe(3);
-      expect(result.current.coreMemoryFileCount).toBe(5);
-    });
-  });
-}
-
-function registerHistorySeedingTests(): void {
-  describe('history seeding', () => {
-    it('seeds resumed history via prependHistory when resumedHistory is provided', async () => {
-      const config = makeConfig();
-      const prependHistory = vi.fn();
-      const addItem = vi.fn();
-      const resumedHistory: IContent[] = [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
-      ];
-
-      renderHook(() =>
-        useSessionInitialization({
-          uiRuntime: config as never,
-          agent: makeAgent(),
-          addItem,
-          prependHistory,
-          resumedBoot: displayBoot(resumedHistory),
-        }),
-      );
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      // Assert against the converter's real output (the stub config resolves
-      // no emojifilter setting → 'auto') instead of hard-coding its ID scheme.
-      expect(prependHistory).toHaveBeenCalledWith(
-        iContentToHistoryItems(resumedHistory, 'auto'),
-      );
-    });
-
-    it('does not call prependHistory when resumedHistory is empty', async () => {
-      const config = makeConfig();
-      const prependHistory = vi.fn();
-      const addItem = vi.fn();
-
-      renderHook(() =>
-        useSessionInitialization({
-          uiRuntime: config as never,
-          agent: makeAgent(),
-          addItem,
-          prependHistory,
-          resumedBoot: displayBoot([]),
-        }),
-      );
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      expect(prependHistory).not.toHaveBeenCalled();
-    });
-  });
-}
-
-function registerSessionStartTests(): void {
-  describe('session start', () => {
-    it('triggers session start hook on mount', async () => {
-      const config = makeConfig();
-      const prependHistory = vi.fn();
-      const addItem = vi.fn();
-      const { agent, triggerSessionStart } = makeAgentWithSpy();
-
-      renderHook(() =>
-        useSessionInitialization({
-          uiRuntime: config as never,
+          },
           agent,
-          addItem,
-          prependHistory,
+          addItem: forbiddenAdd,
+          recordingOwner: 'agent',
         }),
       );
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      // #2378: SessionStart is driven through the Agent's own hooks surface
-      // exactly once (the idempotency guard ref prevents duplicate triggers),
-      // NOT via the raw core triggerSessionStartHook.
-      expect(triggerSessionStart).toHaveBeenCalledTimes(1);
-      expect(triggerSessionStart).toHaveBeenCalledWith();
+      try {
+        expect(view.result.current.llxprtMdFileCount).toBe(3);
+        expect(view.result.current.coreMemoryFileCount).toBe(5);
+      } finally {
+        view.unmount();
+        hook.mockRestore();
+      }
     });
+  });
 
-    it('injects SessionStart output into history via the agent client', async () => {
-      const config = makeConfig();
-      const prependHistory = vi.fn();
-      const addItem = vi.fn();
-      const addHistory = vi.fn().mockResolvedValue(undefined);
-      config.agentClientSource.getAgentClient.mockReturnValue({ addHistory });
-      const { agent, triggerSessionStart } = makeAgentWithSpy({
+  it('writes hook presentation and context once across rerenders without replaying a resume array', async () => {
+    await withRecordingLifetimeFixture(async ({ agent, config }) => {
+      await agent.session.setRecording({ enabled: true });
+      const hook = spyOn(agent.hooks, 'triggerSessionStart').mockResolvedValue({
         systemMessage: 'welcome message',
         additionalContext: 'extra context',
       });
-
-      renderHook(() =>
+      const runtime = buildUiRuntimeFromSource(config, agent);
+      const view = renderHook(() =>
         useSessionInitialization({
-          uiRuntime: config as never,
+          uiRuntime: runtime,
           agent,
-          addItem,
-          prependHistory,
+          addItem: forbiddenAdd,
+          recordingOwner: 'agent',
+          resumedBoot: {
+            async *streamRows() {
+              yield await Promise.reject(
+                new Error('Resume materialization forbidden'),
+              );
+            },
+          },
         }),
       );
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      // The Agent hook is the single source of SessionStart output; its
-      // systemMessage is surfaced as an info item and its additionalContext is
-      // injected into agent-client history.
-      expect(triggerSessionStart).toHaveBeenCalledTimes(1);
-      expect(addItem).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'info', text: 'welcome message' }),
-        expect.any(Number),
-      );
-      expect(addHistory).toHaveBeenCalledWith({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'extra context' }],
-      });
+      try {
+        await waitFor(async () =>
+          expect(
+            (await readJournalItems(agent)).map((item) => item.text),
+          ).toStrictEqual(['welcome message', 'extra context']),
+        );
+        view.rerender();
+        await act(async () => {
+          await Promise.resolve();
+        });
+        expect(
+          (await readJournalItems(agent)).map((item) => item.text),
+        ).toStrictEqual(['welcome message', 'extra context']);
+        expect(await agent.session.getHistory()).toMatchObject([
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'extra context' }],
+          },
+        ]);
+      } finally {
+        view.unmount();
+        hook.mockRestore();
+      }
     });
   });
-}
 
-function registerUnmountAndRerenderTests(): void {
-  describe('unmount and rerender', () => {
-    it('aborts session initialization on unmount', async () => {
-      const config = makeConfig();
-      const prependHistory = vi.fn();
-      const addItem = vi.fn();
-
-      const { unmount } = renderHook(() =>
-        useSessionInitialization({
-          uiRuntime: config as never,
-          agent: makeAgent(),
-          addItem,
-          prependHistory,
-        }),
-      );
-
-      // Unmount should not throw and should abort cleanly
-      unmount();
-
-      // Give any pending promises time to settle
-      await act(async () => {
-        await Promise.resolve();
+  it.each([false, true])(
+    'does not publish delayed hook output after unmount, failure=%s',
+    async (fail) => {
+      await withRecordingLifetimeFixture(async ({ agent, config }) => {
+        await agent.session.setRecording({ enabled: true });
+        let release: () => void = () => {};
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const hook = spyOn(
+          agent.hooks,
+          'triggerSessionStart',
+        ).mockImplementation(async () => {
+          await gate;
+          if (fail) throw new Error('hook failed');
+          return {
+            systemMessage: 'late message',
+            additionalContext: 'late context',
+          };
+        });
+        const view = renderHook(() =>
+          useSessionInitialization({
+            uiRuntime: buildUiRuntimeFromSource(config, agent),
+            agent,
+            addItem: forbiddenAdd,
+            recordingOwner: 'agent',
+          }),
+        );
+        try {
+          view.unmount();
+          await act(async () => release());
+          expect(await readJournalItems(agent)).toStrictEqual([]);
+          expect(await agent.session.getHistory()).toStrictEqual([]);
+        } finally {
+          release();
+          view.unmount();
+          hook.mockRestore();
+        }
       });
-
-      // The hook must not continue to load history after unmount; with no
-      // resumedHistory supplied, prependHistory is never called anyway, and the
-      // abort must not cause a spurious invocation either.
-      expect(prependHistory).not.toHaveBeenCalled();
-    });
-
-    it('does not duplicate history seeding across renders', async () => {
-      const config = makeConfig();
-      const prependHistory = vi.fn();
-      const addItem = vi.fn();
-      const resumedHistory: IContent[] = [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
-      ];
-
-      const { rerender } = renderHook(() =>
-        useSessionInitialization({
-          uiRuntime: config as never,
-          agent: makeAgent(),
-          addItem,
-          prependHistory,
-          resumedBoot: displayBoot(resumedHistory),
-        }),
-      );
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      rerender();
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      expect(prependHistory).toHaveBeenCalledTimes(1);
-    });
-  });
-}
-
-describe('useSessionInitialization', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  registerUnmountAndMemoryTests();
-  registerHistorySeedingTests();
-  registerSessionStartTests();
-  registerUnmountAndRerenderTests();
+    },
+  );
 });

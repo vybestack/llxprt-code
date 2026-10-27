@@ -1,90 +1,74 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-import { describe, it, expect, vi } from 'bun:test';
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, it, expect, spyOn } from 'bun:test';
 import { act } from 'react';
-import type { IContent } from '@vybestack/llxprt-code-core';
-import { renderHook } from '../../../../__tests__/render.js';
+import { withRecordingLifetimeFixture } from '../../../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { renderHook, waitFor } from '../../../../__tests__/render.js';
+import { buildUiRuntimeFromSource } from '../../../cliUiRuntime.js';
+import { readJournalItems } from '../../../stores/turn/journal-turn-test-helpers.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
-import { useRetractableHistory } from '../../../hooks/useHistoryManager.js';
-import { createTurnStore } from '../../../stores/turn/turnStore.js';
 
-// Regression for #854: the restored transcript loads asynchronously. Rows
-// that reach the history before the load finishes (the SessionStart hook
-// message, the first prompt and its reply) must survive it, with the
-// restored rows ahead of them.
-
-const uiRuntime = {
-  memory: {
-    getLlxprtMdFileCount: () => 0,
-    getCoreMemoryFileCount: () => 0,
-  },
-  agentClientSource: { getAgentClient: () => null },
-  ephemeral: { getEphemeralSetting: () => undefined },
-} as never;
-
-const agent = {
-  hooks: { triggerSessionStart: vi.fn().mockResolvedValue({}) },
-} as never;
-
-function restoredRows(): IContent[] {
-  return [
-    { speaker: 'human', blocks: [{ type: 'text', text: 'restored question' }] },
-    { speaker: 'ai', blocks: [{ type: 'text', text: 'restored answer' }] },
-  ];
-}
-
-describe('useSessionInitialization resumed history arrivals', () => {
-  it('keeps rows added while the restored transcript loads, after the restored rows', async () => {
-    let releaseLoad = (): void => {
-      throw new Error('Load gate not initialized');
-    };
-    const loadGate = new Promise<void>((resolve) => {
-      releaseLoad = resolve;
-    });
-    const turnStore = createTurnStore();
-    const rows = restoredRows();
-
-    const { result } = renderHook(() => {
-      const history = useRetractableHistory(turnStore);
-      useSessionInitialization({
-        uiRuntime,
-        agent,
-        addItem: history.addItem,
-        prependHistory: history.prependHistory,
-        resumedBoot: {
-          async *streamRows(): AsyncIterable<IContent> {
-            await loadGate;
-            yield* rows;
-          },
+describe('journal resume arrivals', () => {
+  it('keeps restored rows ahead of hook output and the next prompt and response', async () => {
+    await withRecordingLifetimeFixture(async ({ agent, config }) => {
+      await agent.setHistory([
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'restored question' }],
         },
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'restored answer' }] },
+      ]);
+      await agent.session.setRecording({ enabled: true });
+      let release: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
       });
-      return history;
+      const hook = spyOn(agent.hooks, 'triggerSessionStart').mockImplementation(
+        async () => {
+          await gate;
+          return { systemMessage: 'hook message' };
+        },
+      );
+      const view = renderHook(() =>
+        useSessionInitialization({
+          uiRuntime: buildUiRuntimeFromSource(config, agent),
+          agent,
+          recordingOwner: 'agent',
+          addItem: () => {
+            throw new Error('UI ledger forbidden');
+          },
+        }),
+      );
+      try {
+        expect(
+          (await readJournalItems(agent)).map((item) => item.text),
+        ).toStrictEqual(['restored question', 'restored answer']);
+        await act(async () => release());
+        await waitFor(async () =>
+          expect((await readJournalItems(agent)).at(-1)?.text).toBe(
+            'hook message',
+          ),
+        );
+        await agent.agentClient.getHistoryService()?.addBatch([
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'first prompt' }],
+          },
+          { speaker: 'ai', blocks: [{ type: 'text', text: 'first reply' }] },
+        ]);
+        expect(
+          (await readJournalItems(agent)).map((item) => item.text),
+        ).toStrictEqual([
+          'restored question',
+          'restored answer',
+          'hook message',
+          'first prompt',
+          'first reply',
+        ]);
+      } finally {
+        release();
+        view.unmount();
+        hook.mockRestore();
+      }
     });
-
-    act(() => {
-      result.current.addItem({ type: 'info', text: 'hook message' }, 1);
-      result.current.addItem({ type: 'user', text: 'first prompt' }, 2);
-      result.current.addItem({ type: 'gemini', text: 'first reply' }, 3);
-    });
-    expect(result.current.history.map((item) => item.text)).toStrictEqual([
-      'hook message',
-      'first prompt',
-      'first reply',
-    ]);
-
-    await act(async () => {
-      releaseLoad();
-    });
-
-    expect(result.current.history.map((item) => item.text)).toStrictEqual([
-      'restored question',
-      'restored answer',
-      'hook message',
-      'first prompt',
-      'first reply',
-    ]);
   });
 });

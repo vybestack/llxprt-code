@@ -44,7 +44,6 @@ import {
 } from '../../../types.js';
 import { KeypressProvider } from '../../../contexts/KeypressContext.js';
 import { createFakeAgentFromMockClient } from '../../__tests__/useAgentStream-test-helpers.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import { createDeferred } from './createDeferred.js';
 import {
@@ -160,7 +159,7 @@ function renderWithRealQueue(
         runtime: createStreamRuntimeForTest({}, createMockOverrides()),
         agent: createMockAgent(),
         addItem: handles.addItem,
-        removeItems: vi.fn(),
+
         settings: createLoadedSettings(),
         onDebugMessage: vi.fn(),
         onCancelSubmit: vi.fn(),
@@ -168,9 +167,9 @@ function renderWithRealQueue(
         recordingIntegration: undefined,
         sanitizeContent: (text: string) => ({ text, blocked: false }),
         flushPendingHistoryItem: handles.flushPendingHistoryItem,
-        pendingResponse: new PendingResponseBuffer(undefined),
+
         pendingHistoryItemRef: handles.pendingHistoryItemRef,
-        thinkingBlocksRef: { current: [] },
+
         turnCancelledRef,
         setTurnCancelled: (v: boolean) => void (turnCancelledRef.current = v),
         drainSuppressedRef,

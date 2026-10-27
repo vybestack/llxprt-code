@@ -9,7 +9,6 @@ import { renderHook } from '../../../../__tests__/render.js';
 import { LoadedSettings } from '../../../../config/settings.js';
 import type { HistoryItem } from '../../../types.js';
 import { useStreamEventHandlers } from '../useStreamEventHandlers.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 
 describe('CLI overflow guidance live provider port', () => {
@@ -48,9 +47,9 @@ describe('CLI overflow guidance live provider port', () => {
         onCancelSubmit: () => undefined,
         sanitizeContent: (text) => ({ text, blocked: false }),
         flushPendingHistoryItem: () => undefined,
-        pendingResponse: new PendingResponseBuffer(undefined),
+
         pendingHistoryItemRef: { current: null },
-        thinkingBlocksRef: { current: [] },
+
         turnCancelledRef: { current: false },
         clearSubmissions: () => undefined,
         setPendingHistoryItem: () => undefined,

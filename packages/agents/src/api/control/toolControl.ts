@@ -73,6 +73,9 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { ToolKeysControl } from './toolKeysControl.js';
 import type { ToolKeysControlDeps } from './toolKeysControl.js';
 import { createClientToolChannel } from '../../session/clientToolChannel.js';
+import { recordClientRequests } from '../../session/client-tool-recording.js';
+import { persistToolPresentations } from '../../core/agenticLoop/toolPresentationRecording.js';
+import { persistApprovalLifecycle } from '../../core/agenticLoop/approvalLifecycleRecording.js';
 
 const logger = new DebugLogger('llxprt:agents:tool-control');
 
@@ -179,6 +182,10 @@ export class ToolControl implements AgentToolControl {
       () => this.deps.editorCallbacksHolder.editorCallbacks,
       async (calls) => {
         this.recordCompletedToolCalls(calls);
+        await persistToolPresentations(
+          calls,
+          this.deps.resolveClient().getHistoryService(),
+        );
         await onComplete?.(calls);
       },
       this.deps.selection,
@@ -187,6 +194,11 @@ export class ToolControl implements AgentToolControl {
       this.deps.getToolGovernance,
       this.deps.readApprovalMode,
       this.deps.telemetry,
+      (record) =>
+        persistApprovalLifecycle(
+          record,
+          this.deps.resolveClient().getHistoryService(),
+        ),
     );
     this.clientChannels.add(channel);
     return {
@@ -195,7 +207,11 @@ export class ToolControl implements AgentToolControl {
         this.deps.assertSessionAdmission?.();
         this.pendingClientWork++;
         try {
-          await channel.schedule(request, signal);
+          const recorded = await recordClientRequests(
+            this.deps.resolveClient().getHistoryService(),
+            request,
+          );
+          await channel.schedule(recorded, signal);
         } finally {
           this.pendingClientWork--;
         }

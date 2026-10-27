@@ -412,10 +412,12 @@ export function iContentToHistoryItems(
   for (const [index, content] of contents.entries()) {
     const source = rowSourceFor(sources, index);
     if (content.speaker === 'human') {
-      const text = content.blocks
-        .filter((b): b is TextBlock => b.type === 'text')
-        .map((b) => b.text)
-        .join('\n');
+      const text =
+        content.metadata?.displayText ??
+        content.blocks
+          .filter((b): b is TextBlock => b.type === 'text')
+          .map((b) => b.text)
+          .join('\n');
       if (text) {
         items.push({
           type: 'user',

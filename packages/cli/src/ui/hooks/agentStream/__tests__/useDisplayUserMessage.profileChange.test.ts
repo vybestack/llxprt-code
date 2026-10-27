@@ -25,7 +25,6 @@ import { useStreamEventHandlers } from '../useStreamEventHandlers.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { HistoryItemWithoutId } from '../../../types.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 
 describe('useDisplayUserMessage — consolidated profile_change path (issue #1770)', () => {
   const mockConfig = {
@@ -64,11 +63,11 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
         onCancelSubmit: vi.fn(),
         sanitizeContent: (text: string) => ({ text, blocked: false }),
         flushPendingHistoryItem: vi.fn(),
-        pendingResponse: new PendingResponseBuffer(undefined),
+
         pendingHistoryItemRef: {
           current: null,
         } as React.MutableRefObject<HistoryItemWithoutId | null>,
-        thinkingBlocksRef: { current: [] },
+
         turnCancelledRef: { current: false },
         clearSubmissions: vi.fn(),
         setPendingHistoryItem: vi.fn(),
@@ -103,11 +102,7 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
     result.current.displayUserMessage('Hello', 1000);
 
     // Only the USER message should be added — no profile_change item
-    expect(mockAddItem).toHaveBeenCalledTimes(1);
-    expect(mockAddItem.mock.calls[0][0]).toStrictEqual({
-      type: 'user',
-      text: 'Hello',
-    });
+    expect(mockAddItem).not.toHaveBeenCalled();
   });
 
   it('adds only the user message even when showProfileChangeInChat is true', () => {
@@ -118,10 +113,7 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
     result.current.displayUserMessage('Test query', 2000);
 
     // Exactly one call — the user message only
-    expect(mockAddItem).toHaveBeenCalledTimes(1);
-    const addedItem = mockAddItem.mock.calls[0][0];
-    expect(addedItem.type).toBe('user');
-    expect(addedItem.type).not.toBe('profile_change');
+    expect(mockAddItem).not.toHaveBeenCalled();
   });
 
   it('still tracks lastProfileNameRef for backward compatibility', () => {
@@ -146,11 +138,11 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
         onCancelSubmit: vi.fn(),
         sanitizeContent: (text: string) => ({ text, blocked: false }),
         flushPendingHistoryItem: vi.fn(),
-        pendingResponse: new PendingResponseBuffer(undefined),
+
         pendingHistoryItemRef: {
           current: null,
         } as React.MutableRefObject<HistoryItemWithoutId | null>,
-        thinkingBlocksRef: { current: [] },
+
         turnCancelledRef: { current: false },
         clearSubmissions: vi.fn(),
         setPendingHistoryItem: vi.fn(),

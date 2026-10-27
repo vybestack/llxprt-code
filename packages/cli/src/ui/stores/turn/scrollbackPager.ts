@@ -712,6 +712,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
         signal: this.controller.signal,
         publishedEnd: this.publishedEnd,
         journal: this.options.journal,
+        emojiFilterMode: this.options.emojiFilterMode,
       };
       const opening = NativeJournalCursor.open(
         this.filePath,

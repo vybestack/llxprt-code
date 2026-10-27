@@ -2,10 +2,8 @@
 import { open, type FileHandle } from 'node:fs/promises';
 import type { IContent, RowOwnership } from '@vybestack/llxprt-code-core';
 import { CheckpointJsonReader } from './checkpoint-json-reader.js';
-import type { CommandContext } from './types.js';
 
 interface CheckpointData {
-  history?: Parameters<NonNullable<CommandContext['ui']['loadHistory']>>[0];
   commitHash?: string;
   toolCall: { name: string; args: Record<string, unknown> };
 }
@@ -79,6 +77,18 @@ async function clientRange(
   return { start, end: reader.position, count };
 }
 
+async function discardLegacyDisplay(
+  reader: CheckpointJsonReader,
+): Promise<void> {
+  await reader.expect(91);
+  if ((await reader.peek()) !== 93) {
+    do {
+      await reader.value();
+    } while (await hasNext(reader, 93));
+  }
+  await reader.expect(93);
+}
+
 async function inspect(
   file: FileHandle,
   signal?: AbortSignal,
@@ -96,6 +106,7 @@ async function inspect(
         throw new SyntaxError('Expected checkpoint key');
       await reader.expect(58);
       if (key === 'clientHistory') range = await clientRange(reader, ownership);
+      else if (key === 'history') await discardLegacyDisplay(reader);
       else
         Object.defineProperty(data, key, {
           value: await reader.value(),

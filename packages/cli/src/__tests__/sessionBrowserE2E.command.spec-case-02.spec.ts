@@ -70,7 +70,7 @@ describe('Continue command integration #2', () => {
         clear: () => {},
         setDebugMessage: () => {},
         setPendingItem: () => {},
-        loadHistory: () => {},
+
         toggleCorgiMode: () => {},
         toggleDebugProfiler: () => {},
         toggleVimEnabled: async () => false,

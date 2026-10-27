@@ -169,7 +169,6 @@ export function FooterRegion(props: DefaultAppLayoutProps): React.ReactNode {
 export function PanelsRegion(props: DefaultAppLayoutProps): React.ReactNode {
   const terminal = useTerminalStore();
   const turn = useTurnStore();
-  const history = useStoreSelector(turn.store, (s) => s.history);
   const queued = useStoreSelector(turn.store, (s) => s.queuedSubmissions);
   const width = useStoreSelector(terminal.store, (s) => s.inputWidth);
   const todoCollapsed = useStoreSelector(
@@ -185,7 +184,7 @@ export function PanelsRegion(props: DefaultAppLayoutProps): React.ReactNode {
       <Notifications
         startupWarnings={props.startupWarnings}
         updateInfo={props.updateInfo}
-        history={history}
+        pager={props.scrollbackPager?.store}
       />
       {(props.settings.merged.ui.showTodoPanel ?? true) ? (
         <TodoPanel width={width} collapsed={todoCollapsed} />

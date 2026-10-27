@@ -7,16 +7,11 @@
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type {
   ContinueTarget,
-  EmojiFilterMode,
   UnreadableRecording,
 } from '@vybestack/llxprt-code-core';
-import type { HistoryItem } from '../types.js';
-import type { HistoryLimits } from '../stores/turn/historyLedger.js';
-import { resumeHistoryWindow } from './streamHistoryItems.js';
 import { resumeOwnerSession as resumeSession } from './resumeOwnerSession.js';
 
 type OwnerUiReplay = {
-  readonly uiHistory: readonly HistoryItem[];
   readonly warnings: readonly string[];
 };
 
@@ -25,17 +20,9 @@ export const resumeOwnerSession = resumeSession;
 export async function importOwnerSession(
   agent: Agent,
   packageDirectory: string,
-  emojiFilterMode: EmojiFilterMode,
-  limits?: HistoryLimits,
 ): Promise<OwnerUiReplay> {
   await agent.session.importSession(packageDirectory);
   return {
-    uiHistory: await resumeHistoryWindow(
-      agent.streamHistory(),
-      emojiFilterMode,
-      undefined,
-      limits,
-    ),
     warnings: [],
   };
 }

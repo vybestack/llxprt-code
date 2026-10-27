@@ -6,7 +6,7 @@ import type {
   NativeJournalEntry,
   ToolResultDisplay,
 } from '@vybestack/llxprt-code-core';
-import type { HistoryItem } from '../../types.js';
+import { ToolCallStatus, type HistoryItem } from '../../types.js';
 import { withPersistedApproval } from './journal-approval-projection.js';
 
 const metadata = z.record(z.unknown()).optional();
@@ -44,7 +44,7 @@ const ansiToken = z.object({
   fg: z.string(),
   bg: z.string(),
 });
-const toolDisplay = z.union([
+export const toolDisplay = z.union([
   z.string(),
   fileRead,
   fileDiff,
@@ -85,7 +85,14 @@ export async function withToolPresentations(
       tools.push({
         ...tool,
         journalIdentity,
+        status:
+          presentation.descriptor.status === 'cancelled'
+            ? ToolCallStatus.Canceled
+            : tool.status,
         resultDisplay,
+        name: presentation.descriptor.displayName ?? tool.name,
+        description: presentation.descriptor.description ?? tool.description,
+        renderOutputAsMarkdown: presentation.descriptor.renderOutputAsMarkdown,
         retention: undefined,
       });
     }

@@ -3,770 +3,236 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-/**
- * @plan:PLAN-20251202-THINKING-UI.P07
- * @requirement:REQ-THINK-UI-001
- * @requirement:REQ-THINK-UI-003
- */
-
-import { automock } from '@vybestack/llxprt-code-test-utils';
-import type { Mock } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
+import { act } from 'react';
+import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
+import { waitFor } from '../../__tests__/render.js';
+import { StreamingState } from '../types.js';
+import { withJournalResponse } from './agentStream/__tests__/journal-response-test-helpers.js';
+import { withJournalStreamHook } from './agentStream/__tests__/journal-stream-hook-fixture.js';
 import {
-  MockedAgentClientClass,
-  mockSendMessageStream,
-  mockStartChat,
-  createFakeAgentFromMockClient,
-} from './__tests__/useAgentStream-test-helpers.js';
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import React, { act } from 'react';
-import { renderHook, waitFor } from '../../__tests__/render.js';
-import * as ReactDOM from 'react-dom';
-import { useAgentStream } from './agentStream/index.js';
-import { createStreamRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
-import type { TrackedToolCall } from './useReactToolScheduler.js';
-import { useReactToolScheduler } from './useReactToolScheduler.js';
-import type {
-  Config,
-  EditorType,
-  ToolRegistry,
-} from '@vybestack/llxprt-code-core';
-import { AgentEventType as ServerEventType } from '@vybestack/llxprt-code-core';
-import type { UseHistoryManagerReturn } from './useHistoryManager.js';
-import type { HistoryItemAi } from '../types.js';
-import { MessageType, StreamingState } from '../types.js';
-import type { LoadedSettings } from '../../config/settings.js';
+  gate,
+  scriptProvider,
+} from './agentStream/__tests__/journal-provider-test-helpers.js';
 
-const realAtCommandProcessorModule = {
-  ...(await import('./atCommandProcessor.js')),
+const thought: ThinkingBlock = {
+  type: 'thinking',
+  thought: 'Analyzing request: First thought process',
+  sourceField: 'thought',
 };
 
-const inkMock = (() => {
-  const write = vi.fn();
-  const exit = vi.fn();
-  const setRawMode = vi.fn();
-  const noopComponent = vi.fn(() => null);
-
-  const module = {
-    Box: noopComponent,
-    Text: noopComponent,
-    Newline: noopComponent,
-    useStdout: vi.fn(() => ({
-      stdout: {
-        write,
-        columns: 80,
-        rows: 24,
-      },
-      write,
-    })),
-    useApp: vi.fn(() => ({ exit })),
-    useInput: vi.fn(),
-    useStdin: vi.fn(() => ({
-      stdin: {
-        setRawMode,
-        resume: vi.fn(),
-        pause: vi.fn(),
-        removeListener: vi.fn(),
-        off: vi.fn(),
-      },
-      setRawMode,
-      isRawModeSupported: true,
-    })),
-    useIsScreenReaderEnabled: vi.fn(() => false),
-    measureElement: vi.fn(() => ({ width: 0, height: 0 })),
-    DOMElement: class {},
-  };
-  (module as Record<string, unknown>).default = module;
-  return module;
-})();
-
-void vi.mock('ink', () => inkMock);
-
-type InternalCarrier = {
-  __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED?: {
-    S?: unknown;
-    T?: unknown;
-    H?: unknown;
-    [key: string]: unknown;
-  };
-};
-
-const ensureReactSharedInternals = () => {
-  const reactInternals = (React as typeof React & InternalCarrier)
-    .__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
-  const domInternals = (ReactDOM as typeof ReactDOM & InternalCarrier)
-    .__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
-
-  const shared = reactInternals ??
-    domInternals ?? {
-      S: null,
-      T: null,
-      H: null,
-    };
-
-  if (shared.S === undefined) shared.S = null;
-  if (shared.T === undefined) shared.T = null;
-  if (shared.H === undefined) shared.H = null;
-
-  if (typeof globalThis !== 'undefined') {
-    (
-      globalThis as typeof globalThis & {
-        ReactSharedInternals?: typeof shared;
-      }
-    ).ReactSharedInternals = shared;
-  }
-};
-
-ensureReactSharedInternals();
-
-// --- MOCKS ---
-const actualSchedulerModule = {
-  ...(await import('./useReactToolScheduler.js')),
-};
-const mockUseReactToolScheduler = vi.fn<typeof useReactToolScheduler>();
-void vi.mock('./useReactToolScheduler.js', () => ({
-  ...actualSchedulerModule,
-  useReactToolScheduler: mockUseReactToolScheduler,
-}));
-
-void vi.mock('./useKeypress.js', () => ({
-  useKeypress: vi.fn(),
-}));
-
-void vi.mock('./shellCommandProcessor.js', () => ({
-  useShellCommandProcessor: vi.fn().mockReturnValue({
-    handleShellCommand: vi.fn(),
-  }),
-}));
-
-void vi.mock('./atCommandProcessor.js', () =>
-  automock(realAtCommandProcessorModule),
-);
-
-void vi.mock('../utils/markdownUtilities.js', () => ({
-  findLastSafeSplitPoint: vi.fn((s: string) => s.length),
-}));
-
-void vi.mock('./useLogger.js', () => ({
-  useLogger: vi.fn().mockReturnValue({
-    logMessage: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-
-const mockStartNewPrompt = vi.fn();
-const mockAddUsage = vi.fn();
-void vi.mock('../contexts/SessionContext.js', () => ({
-  useSessionStats: vi.fn(() => ({
-    startNewPrompt: mockStartNewPrompt,
-    addUsage: mockAddUsage,
-    getPromptCount: vi.fn(() => 5),
-  })),
-}));
-
-void vi.mock('./slashCommandProcessor.js', () => ({
-  handleSlashCommand: vi.fn().mockReturnValue(false),
-}));
-
-// --- END MOCKS ---
-
-describe('useAgentStream - ThinkingBlock Integration', () => {
-  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]>;
-  let mockConfig: Config;
-  let mockSettings: LoadedSettings;
-  let mockOnDebugMessage: Mock<(message: string) => void>;
-  let mockHandleSlashCommand: Mock<Parameters<typeof useAgentStream>[6]>;
-  let mockScheduleToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[1]>;
-  let mockCancelAllToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[3]>;
-  let mockMarkToolsAsDisplayCleared: Mock<
-    ReturnType<typeof useReactToolScheduler>[2]
-  >;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-
-    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]>(() => 0);
-
-    const contentGeneratorConfig = {
-      model: 'test-model',
-      apiKey: 'test-key',
-      vertexai: false,
-    };
-
-    mockConfig = {
-      apiKey: 'test-api-key',
-      model: 'gemini-pro',
-      sandbox: false,
-      targetDir: '/test/dir',
-      debugMode: false,
-      question: undefined,
-
-      coreTools: [],
-      toolDiscoveryCommand: undefined,
-      toolCallCommand: undefined,
-      mcpServerCommand: undefined,
-      mcpServers: undefined,
-      userAgent: 'test-agent',
-      userMemory: '',
-      llxprtMdFileCount: 0,
-      alwaysSkipModificationConfirmation: false,
-      vertexai: false,
-      showMemoryUsage: false,
-      contextFileName: undefined,
-      getToolRegistry: vi.fn(
-        () =>
-          ({ getToolSchemaList: vi.fn(() => []) }) as unknown as ToolRegistry,
-      ),
-      getProjectRoot: vi.fn(() => '/test/dir'),
-      getCheckpointingEnabled: vi.fn(() => false),
-      getMcpClientManager: vi.fn(() => undefined),
-      getMcpServers: vi.fn(() => undefined),
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      addHistory: vi.fn(),
-      getSessionId() {
-        return 'test-session-id';
-      },
-      getModel: vi.fn(() => 'gemini-2.5-pro'),
-      getContentGeneratorConfig: vi
-        .fn()
-        .mockReturnValue(contentGeneratorConfig),
-      // Mock setupAsyncTaskAutoTrigger to return a no-op unsubscribe function
-      setupAsyncTaskAutoTrigger: vi.fn(() => () => {}),
-    } as unknown as Config;
-
-    mockSettings = {
-      merged: {
-        ui: {
-          showCitations: false,
-        },
-      },
-    } as LoadedSettings;
-
-    mockOnDebugMessage = vi.fn();
-    mockHandleSlashCommand = vi.fn().mockResolvedValue(false);
-
-    mockScheduleToolCalls = vi.fn();
-    mockCancelAllToolCalls = vi.fn();
-    mockMarkToolsAsDisplayCleared = vi.fn();
-
-    mockUseReactToolScheduler.mockReturnValue([
-      [],
-      mockScheduleToolCalls,
-      mockMarkToolsAsDisplayCleared,
-      mockCancelAllToolCalls,
-      0,
-      true,
-      vi.fn(),
-      vi.fn(),
-    ]);
-
-    mockStartChat.mockClear().mockResolvedValue({
-      sendMessageStream: mockSendMessageStream,
-    } as unknown as Awaited<ReturnType<typeof mockStartChat>>);
-    mockSendMessageStream
-      .mockClear()
-      .mockReturnValue((async function* () {})());
+describe('journal-backed streaming thinking', () => {
+  it('makes the newest thought visible without overwriting earlier recorded thinking', async () => {
+    await withJournalResponse(async (fixture) => {
+      const arrival = await fixture.open('live');
+      await arrival.append({ ...thought, thought: 'First: thought' });
+      await fixture.history.waitForCommit();
+      const first = (await fixture.items()).filter(
+        (item) => item.type === 'gemini',
+      );
+      expect(first.at(-1)?.thinkingBlocks?.at(-1)?.thought).toBe(
+        'First: thought',
+      );
+      await arrival.append({ ...thought, thought: 'Second: thought' });
+      await arrival.seal({});
+      const second = (await fixture.items()).filter(
+        (item) => item.type === 'gemini',
+      );
+      expect(
+        second.at(-1)?.thinkingBlocks?.map((block) => block.thought),
+      ).toStrictEqual(['First: thought', 'Second: thought']);
+    });
   });
 
-  const mockLoadedSettings: LoadedSettings = {
-    merged: { preferredEditor: 'vscode' },
-    user: { path: '/user/settings.json', settings: {} },
-    workspace: { path: '/workspace/.gemini/settings.json', settings: {} },
-    errors: [],
-    forScope: vi.fn(),
-    setValue: vi.fn(),
-  } as unknown as LoadedSettings;
-
-  const renderTestHook = (
-    initialToolCalls: TrackedToolCall[] = [],
-    agentClient?: Parameters<typeof createFakeAgentFromMockClient>[0],
-  ) => {
-    let currentToolCalls = initialToolCalls;
-    const setToolCalls = (newToolCalls: TrackedToolCall[]) => {
-      currentToolCalls = newToolCalls;
-    };
-
-    mockUseReactToolScheduler.mockImplementation(() => [
-      currentToolCalls,
-      mockScheduleToolCalls,
-      mockMarkToolsAsDisplayCleared,
-      mockCancelAllToolCalls,
-      0,
-      true,
-      vi.fn(),
-      vi.fn(),
-    ]);
-
-    const client = createFakeAgentFromMockClient(
-      agentClient ?? new MockedAgentClientClass(mockConfig),
-    );
-
-    const { result, rerender } = renderHook(
-      (props: {
-        client: Parameters<typeof useAgentStream>[0];
-        history: Parameters<typeof useAgentStream>[1];
-        addItem: UseHistoryManagerReturn['addItem'];
-        runtime: ReturnType<typeof createStreamRuntimeForTest>;
-        onDebugMessage: (message: string) => void;
-        handleSlashCommand: Parameters<typeof useAgentStream>[6];
-        shellModeActive: boolean;
-        loadedSettings: LoadedSettings;
-        toolCalls?: TrackedToolCall[];
-      }) => {
-        if (props.toolCalls) {
-          setToolCalls(props.toolCalls);
-        }
-        return useAgentStream(
-          props.client,
-          props.history,
-          props.addItem,
-          props.runtime,
-          mockSettings,
-          props.onDebugMessage,
-          props.handleSlashCommand,
-          props.shellModeActive,
-          () => 'vscode' as EditorType,
-          () => {},
-          () => Promise.resolve(),
-          () => {},
-          () => {},
-          () => {},
-        );
-      },
-      {
-        initialProps: {
-          client,
-          history: [],
-          addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-          runtime: createStreamRuntimeForTest(mockConfig),
-          onDebugMessage: mockOnDebugMessage,
-          handleSlashCommand: mockHandleSlashCommand,
-          shellModeActive: false,
-          loadedSettings: mockLoadedSettings,
-          toolCalls: initialToolCalls,
+  it('updates one thinking stream from snapshots without appending duplicate prefixes', async () => {
+    await withJournalResponse(async (fixture) => {
+      const arrival = await fixture.open('snapshots');
+      await arrival.append({
+        ...thought,
+        thought: 'Analyzing',
+        streamId: 'reasoning',
+      });
+      await arrival.append({
+        ...thought,
+        thought: 'Analyzing request',
+        streamId: 'reasoning',
+      });
+      await arrival.append({ type: 'text', text: 'Response text' });
+      await arrival.seal({});
+      const replies = (await fixture.items()).filter(
+        (item) => item.type === 'gemini',
+      );
+      expect(replies).toHaveLength(1);
+      expect(replies[0]?.thinkingBlocks).toMatchObject([
+        {
+          type: 'thinking',
+          thought: 'Analyzing request',
+          sourceField: 'thought',
         },
-      },
-    );
-    return {
-      result,
-      rerender,
-      mockMarkToolsAsDisplayCleared,
-      mockSendMessageStream,
-      client,
-    };
-  };
+      ]);
+      expect(replies[0]?.text).toBe('Response text');
+    });
+  });
 
-  it('should verify thought field is replaced (overwritten) not appended', async () => {
-    const resolvers: Array<() => void> = [];
-    mockSendMessageStream.mockReturnValue(
-      (async function* () {
+  it('exposes recorded thinking before any response text arrives', async () => {
+    await withJournalStreamHook([], async ({ agent, state, items }) => {
+      const entered = gate();
+      const finish = gate();
+      const provider = scriptProvider(agent, async function* () {
         yield {
-          type: ServerEventType.Thought,
-          value: {
-            subject: 'First',
-            description: 'thought',
-          },
+          speaker: 'ai',
+          blocks: [
+            { ...thought, thought: 'Streaming thought: before content' },
+          ],
         };
-        await new Promise<void>((resolve) => {
-          resolvers.push(resolve);
+        entered.release();
+        await finish.promise;
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Now content' }],
+        };
+      });
+      let running: Promise<void> = Promise.resolve();
+      act(() => {
+        running = state().submitQuery('test query');
+      });
+      try {
+        await entered.promise;
+        const live = (await items()).filter((item) => item.type === 'gemini');
+        expect(
+          live
+            .flatMap((item) => item.thinkingBlocks ?? [])
+            .map((block) => block.thought),
+        ).toStrictEqual(['Streaming thought: before content']);
+        expect(live.map((item) => item.text).join('')).toBe('');
+        expect(state().pendingHistoryItems).toStrictEqual([]);
+      } finally {
+        finish.release();
+        await act(async () => {
+          await running;
         });
-        yield {
-          type: ServerEventType.Thought,
-          value: {
-            subject: 'Second',
-            description: 'thought',
-          },
-        };
-        yield {
-          type: ServerEventType.Content,
-          value: 'Response',
-        };
-        yield {
-          type: ServerEventType.Finished,
-          value: { reason: 'STOP' },
-        };
-      })(),
-    );
-
-    const { result } = renderTestHook();
-
-    act(() => {
-      void result.current.submitQuery('test query');
-    });
-
-    await waitFor(() => {
-      expect(result.current.thought).toBeDefined();
-      expect(result.current.thought?.subject).toBe('First');
-    });
-
-    const firstThoughtValue = result.current.thought;
-
-    act(() => {
-      resolvers[0]?.();
-    });
-
-    await waitFor(() => {
-      expect(result.current.thought).toBeDefined();
-      expect(result.current.thought?.subject).toBe('Second');
-    });
-
-    const secondThoughtValue = result.current.thought;
-    expect(secondThoughtValue).not.toStrictEqual(firstThoughtValue);
-  });
-  it('should replace thinking content on subsequent Thought events (not append)', async () => {
-    mockSendMessageStream.mockReturnValue(
-      (async function* () {
-        yield {
-          type: ServerEventType.Thought,
-          value: {
-            subject: 'Analyzing request',
-            description: 'First thought process',
-          },
-        };
-        yield {
-          type: ServerEventType.Content,
-          value: 'Response text',
-        };
-        yield {
-          type: ServerEventType.Finished,
-          value: { reason: 'STOP' },
-        };
-      })(),
-    );
-
-    const { result } = renderTestHook();
-
-    await act(async () => {
-      await result.current.submitQuery('test query');
-    });
-
-    await waitFor(() => {
-      const aiCalls = mockAddItem.mock.calls.filter(
-        (call) => call[0].type === MessageType.AI,
-      );
-      expect(aiCalls.length).toBeGreaterThan(0);
-    });
-
-    const lastAiCall = mockAddItem.mock.calls
-      .filter((call) => call[0].type === MessageType.AI)
-      .pop();
-    if (lastAiCall === undefined) throw new Error('Expected AI history item');
-
-    expect(lastAiCall).toBeDefined();
-    const historyItem = lastAiCall[0] as HistoryItemAi;
-
-    expect(historyItem.thinkingBlocks).toBeDefined();
-    expect(historyItem.thinkingBlocks).toHaveLength(1);
-    expect(historyItem.thinkingBlocks![0]).toMatchObject({
-      type: 'thinking',
-      thought: 'Analyzing request: First thought process',
-      sourceField: 'thought',
+        provider.mockRestore();
+      }
+      expect(
+        (await items()).some(
+          (item) => item.type === 'gemini' && item.text === 'Now content',
+        ),
+      ).toBe(true);
     });
   });
-  const observePendingThinkingBlocksBeforeContentArrives =
-    async (): Promise<string> => {
-      const resolvers: Array<() => void> = [];
-      mockSendMessageStream.mockReturnValue(
-        (async function* () {
-          yield {
-            type: ServerEventType.Thought,
-            value: {
-              subject: 'Streaming thought',
-              description: 'before content',
-            },
-          };
-          await new Promise<void>((resolve) => {
-            resolvers.push(resolve);
-          });
-          yield {
-            type: ServerEventType.Content,
-            value: 'Now content',
-          };
-          yield {
-            type: ServerEventType.Finished,
-            value: { reason: 'STOP' },
-          };
-        })(),
-      );
 
-      const { result } = renderTestHook();
-
-      act(() => {
-        void result.current.submitQuery('test query');
-      });
-
-      let thinkingText = '';
-      await waitFor(() => {
-        const pending = result.current.pendingHistoryItems;
-        thinkingText = pending
-          .flatMap((item) =>
-            item.type === 'gemini' ? (item.thinkingBlocks ?? []) : [],
-          )
-          .map((block) => block.thought)
-          .join('');
-        if (!thinkingText.includes('Streaming thought')) {
-          throw new Error('Pending thinking block has not arrived');
-        }
-      });
-      return thinkingText;
-    };
-
-  it('should expose pending thinking blocks before content arrives', async () => {
-    const thinkingText =
-      await observePendingThinkingBlocksBeforeContentArrives();
-    expect(thinkingText).toContain('Streaming thought');
-  });
-  it('should accumulate multiple Thought events into multiple blocks', async () => {
-    mockSendMessageStream.mockReturnValue(
-      (async function* () {
-        yield {
-          type: ServerEventType.Thought,
-          value: {
-            subject: 'First subject',
-            description: 'First description',
+  it('preserves separate thought blocks in arrival order', async () => {
+    await withJournalStreamHook(
+      [
+        [
+          {
+            speaker: 'ai',
+            blocks: [
+              thought,
+              { ...thought, thought: 'Second thought' },
+              { type: 'text', text: 'Response' },
+            ],
           },
-        };
-        yield {
-          type: ServerEventType.Thought,
-          value: {
-            subject: 'Second subject',
-            description: 'Second description',
-          },
-        };
-        yield {
-          type: ServerEventType.Content,
-          value: 'Response text',
-        };
-        yield {
-          type: ServerEventType.Finished,
-          value: { reason: 'STOP' },
-        };
-      })(),
-    );
-
-    const { result } = renderTestHook();
-
-    await act(async () => {
-      await result.current.submitQuery('test query');
-    });
-
-    await waitFor(() => {
-      const aiCalls = mockAddItem.mock.calls.filter(
-        (call) => call[0].type === MessageType.AI,
-      );
-      expect(aiCalls.length).toBeGreaterThan(0);
-    });
-
-    const lastAiCall = mockAddItem.mock.calls
-      .filter((call) => call[0].type === MessageType.AI)
-      .pop();
-    if (lastAiCall === undefined) throw new Error('Expected AI history item');
-
-    expect(lastAiCall).toBeDefined();
-    const historyItem = lastAiCall[0] as HistoryItemAi;
-
-    expect(historyItem.thinkingBlocks).toBeDefined();
-    expect(historyItem.thinkingBlocks).toHaveLength(2);
-    expect(historyItem.thinkingBlocks![0]).toMatchObject({
-      type: 'thinking',
-      thought: 'First subject: First description',
-      sourceField: 'thought',
-    });
-    expect(historyItem.thinkingBlocks![1]).toMatchObject({
-      type: 'thinking',
-      thought: 'Second subject: Second description',
-      sourceField: 'thought',
-    });
-  });
-  it('should verify ThinkingBlock structure matches IContent specification', async () => {
-    mockSendMessageStream.mockReturnValue(
-      (async function* () {
-        yield {
-          type: ServerEventType.Thought,
-          value: {
-            subject: 'Test subject',
-            description: 'Test description',
-          },
-        };
-        yield {
-          type: ServerEventType.Content,
-          value: 'Response',
-        };
-        yield {
-          type: ServerEventType.Finished,
-          value: { reason: 'STOP' },
-        };
-      })(),
-    );
-
-    const { result } = renderTestHook();
-
-    await act(async () => {
-      await result.current.submitQuery('test query');
-    });
-
-    await waitFor(() => {
-      const aiCalls = mockAddItem.mock.calls.filter(
-        (call) => call[0].type === MessageType.AI,
-      );
-      expect(aiCalls.length).toBeGreaterThan(0);
-    });
-
-    const lastAiCall = mockAddItem.mock.calls
-      .filter((call) => call[0].type === MessageType.AI)
-      .pop();
-    if (lastAiCall === undefined) throw new Error('Expected AI history item');
-
-    const historyItem = lastAiCall[0] as HistoryItemAi;
-    const block = historyItem.thinkingBlocks![0];
-
-    expect(block.type).toBe('thinking');
-    expect(typeof block.thought).toBe('string');
-    expect(block.thought.length).toBeGreaterThan(0);
-    expect(block.sourceField).toBe('thought');
-    expect(block.isHidden).toBeUndefined();
-  });
-  it('should include thinkingBlocks when reasoning.includeInResponse is true', async () => {
-    // Mock settings with reasoning.includeInResponse = true
-    const settingsWithReasoning: LoadedSettings = {
-      ...mockSettings,
-      merged: {
-        ...mockSettings.merged,
-        'reasoning.includeInResponse': true,
+        ],
+      ],
+      async ({ submit, items }) => {
+        await submit('test query');
+        const reply = (await items()).find((item) => item.type === 'gemini');
+        expect(
+          reply?.type === 'gemini' &&
+            reply.thinkingBlocks?.map((block) => block.thought),
+        ).toStrictEqual([thought.thought, 'Second thought']);
       },
-    } as unknown as LoadedSettings;
-
-    mockSendMessageStream.mockReturnValue(
-      (async function* () {
-        yield {
-          type: ServerEventType.Thought,
-          value: {
-            subject: 'With reasoning enabled',
-            description: 'This should be included',
-          },
-        };
-        yield {
-          type: ServerEventType.Content,
-          value: 'Response',
-        };
-        yield {
-          type: ServerEventType.Finished,
-          value: { reason: 'STOP' },
-        };
-      })(),
     );
-
-    const { result } = renderHook(() =>
-      useAgentStream(
-        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
-        [],
-        mockAddItem,
-        createStreamRuntimeForTest(mockConfig),
-        settingsWithReasoning,
-        mockOnDebugMessage,
-        mockHandleSlashCommand,
-        false,
-        () => 'vscode' as EditorType,
-        () => {},
-        () => Promise.resolve(),
-        () => {},
-        () => {},
-        () => {},
-      ),
-    );
-
-    await act(async () => {
-      await result.current.submitQuery('test query');
-    });
-
-    await waitFor(() => {
-      const aiCalls = mockAddItem.mock.calls.filter(
-        (call) => call[0].type === MessageType.AI,
-      );
-      expect(aiCalls.length).toBeGreaterThan(0);
-    });
-
-    const lastAiCall = mockAddItem.mock.calls
-      .filter((call) => call[0].type === MessageType.AI)
-      .pop();
-    if (lastAiCall === undefined) throw new Error('Expected AI history item');
-
-    const historyItem = lastAiCall[0] as HistoryItemAi;
-    expect(historyItem.thinkingBlocks).toBeDefined();
-    expect(historyItem.thinkingBlocks!.length).toBeGreaterThan(0);
   });
-  describe('Submission queue (regression #862)', () => {
-    it('drains queued prompts sequentially when multiple are queued', async () => {
-      const streamResolvers: Array<() => void> = [];
-      mockSendMessageStream.mockImplementation(() =>
-        (async function* () {
-          await new Promise<void>((resolve) => {
-            streamResolvers.push(resolve);
-          });
-          yield {
-            type: ServerEventType.Finished,
-            value: { reason: 'STOP' },
-          } as unknown as {
-            type: ServerEventType;
-            value: { reason: string };
-          };
-        })(),
-      );
 
-      const { result } = renderTestHook();
+  it('preserves the ThinkingBlock structure and source field through projection', async () => {
+    await withJournalStreamHook(
+      [
+        [
+          {
+            speaker: 'ai',
+            blocks: [thought, { type: 'text', text: 'Response' }],
+          },
+        ],
+      ],
+      async ({ submit, items }) => {
+        await submit('test query');
+        const reply = (await items()).find((item) => item.type === 'gemini');
+        expect(reply?.type === 'gemini' && reply.thinkingBlocks).toMatchObject([
+          thought,
+        ]);
+      },
+    );
+  });
 
-      act(() => {
-        void result.current.submitQuery('first prompt');
+  it('stores thinking when reasoning.includeInResponse is true', async () => {
+    await withJournalStreamHook(
+      [
+        [
+          {
+            speaker: 'ai',
+            blocks: [thought, { type: 'text', text: 'Response' }],
+          },
+        ],
+      ],
+      async ({ agent, submit, items }) => {
+        agent.setEphemeralSetting('reasoning.includeInResponse', true);
+        await submit('test query');
+        const reply = (await items()).find((item) => item.type === 'gemini');
+        expect(
+          reply?.type === 'gemini' && reply.thinkingBlocks?.[0]?.thought,
+        ).toBe(thought.thought);
+      },
+    );
+  });
+
+  it('drains queued prompts once each and in submission order', async () => {
+    await withJournalStreamHook([], async ({ agent, state, items }) => {
+      const releases = [gate(), gate(), gate()];
+      const entered = [gate(), gate(), gate()];
+      let calls = 0;
+      const provider = scriptProvider(agent, async function* () {
+        const index = calls++;
+        entered[index].release();
+        await releases[index].promise;
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: `Reply ${index}` }],
+        };
       });
-
-      await waitFor(() =>
-        expect(result.current.streamingState).toBe(StreamingState.Responding),
-      );
-
+      let first: Promise<void> = Promise.resolve();
       act(() => {
-        void result.current.submitQuery('second prompt');
-        void result.current.submitQuery('third prompt');
+        first = state().submitQuery('first prompt');
       });
-
-      // While the first prompt is still responding, subsequent prompts should
-      // only be enqueued.
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
-
-      await waitFor(() => expect(streamResolvers.length).toBeGreaterThan(0));
-
-      act(() => {
-        streamResolvers[0]?.();
-      });
-
-      await waitFor(() =>
-        expect(mockSendMessageStream).toHaveBeenCalledTimes(2),
-      );
-      await waitFor(() => expect(streamResolvers.length).toBeGreaterThan(1));
-
-      // Regression: we previously scheduled the next queued submission twice
-      // (on stream finish + in submitQuery finally), which could submit the same
-      // queued prompt multiple times.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
-      expect(streamResolvers).toHaveLength(2);
-
-      act(() => {
-        streamResolvers[1]?.();
-      });
-
-      await waitFor(() =>
-        expect(mockSendMessageStream).toHaveBeenCalledTimes(3),
-      );
-      await waitFor(() => expect(streamResolvers.length).toBeGreaterThan(2));
-
-      act(() => {
-        streamResolvers[2]?.();
-      });
-
-      await waitFor(() =>
-        expect(result.current.streamingState).toBe(StreamingState.Idle),
-      );
+      try {
+        await entered[0].promise;
+        await act(async () => {
+          await state().submitQuery('second prompt');
+          await state().submitQuery('third prompt');
+        });
+        expect(calls).toBe(1);
+        act(() => releases[0].release());
+        await entered[1].promise;
+        expect(calls).toBe(2);
+        act(() => releases[1].release());
+        await entered[2].promise;
+        expect(calls).toBe(3);
+      } finally {
+        releases.forEach((entry) => entry.release());
+        await act(async () => {
+          await first;
+        });
+        await waitFor(() =>
+          expect(state().streamingState).toBe(StreamingState.Idle),
+        );
+        provider.mockRestore();
+      }
+      expect(
+        (await items())
+          .filter((item) => item.type === 'gemini')
+          .map((item) => item.text),
+      ).toStrictEqual(['Reply 0', 'Reply 1', 'Reply 2']);
     });
   });
 });

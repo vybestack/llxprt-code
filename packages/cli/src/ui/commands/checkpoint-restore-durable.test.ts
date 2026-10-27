@@ -67,7 +67,7 @@ async function pausedRestore(
     };
     context.services.config = runtime;
     let uiPublished = false;
-    context.ui.loadHistory = () => {
+    context.ui.clear = () => {
       uiPublished = true;
     };
     gateDurableWrite(gate, entered);

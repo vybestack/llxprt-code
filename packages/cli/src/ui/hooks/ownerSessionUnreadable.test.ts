@@ -64,7 +64,6 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
           ui: {
             addItem: commands.addItem,
             clear: commands.clearItems,
-            loadHistory: commands.loadHistory,
           },
           services: { agent: next },
         }),
@@ -116,11 +115,7 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
       const brokenPath = join(chatsDir, BROKEN_NAME);
       await writeFile(brokenPath, 'LLXJRNL\0', 'utf-8');
       const next = await borrow();
-      const failure = await resumeOwnerSession(
-        next,
-        BROKEN_NAME,
-        'allowed',
-      ).then(
+      const failure = await resumeOwnerSession(next, BROKEN_NAME).then(
         () => null,
         (error: unknown) => error,
       );

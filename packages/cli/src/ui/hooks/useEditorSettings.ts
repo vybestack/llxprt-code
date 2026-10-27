@@ -6,7 +6,7 @@
 
 import { useCallback } from 'react';
 import type { LoadedSettings, SettingScope } from '../../config/settings.js';
-import { type HistoryItem, MessageType } from '../types.js';
+import { type HistoryItemWithoutId, MessageType } from '../types.js';
 import type { EditorType } from '@vybestack/llxprt-code-core';
 import {
   allowEditorTypeInSandbox,
@@ -28,7 +28,7 @@ interface UseEditorSettingsReturn {
 export const useEditorSettings = (
   loadedSettings: LoadedSettings,
   dialogs: DialogOpeners,
-  addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => void,
+  addItem: (item: HistoryItemWithoutId, timestamp: number) => void,
   setEditorError: (error: string | null) => void,
 ): UseEditorSettingsReturn => {
   const openEditorDialog = useCallback(() => {

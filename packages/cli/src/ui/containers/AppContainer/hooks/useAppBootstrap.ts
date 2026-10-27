@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { resolveEmojiFilterMode } from '../../../utils/iContentToHistoryItems.js';
 
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -10,17 +11,14 @@ import { useStdin, useStdout } from 'ink';
 import { useResponsive } from '../../../hooks/useResponsive.js';
 import type { TerminalStore } from '../../../stores/terminal/terminalStore.js';
 import type { SettingsProfileStore } from '../../../stores/settings/settingsStore.js';
+import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 import type { TurnStore } from '../../../stores/turn/turnStore.js';
 import { useBracketedPaste } from '../../../hooks/useBracketedPaste.js';
 import { useConsoleMessages } from '../../../hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from '../../../hooks/useExtensionAutoUpdate.js';
 import { useCoreEventHandlers } from '../../../hooks/useCoreEventHandlers.js';
 import {
-  DEFAULT_HISTORY_MAX_BYTES,
-  DEFAULT_HISTORY_MAX_ITEMS,
-} from '../../../../constants/historyLimits.js';
-import {
-  useRetractableHistory,
+  useHistory,
   type UseHistoryManagerReturn,
 } from '../../../hooks/useHistoryManager.js';
 import { useMemoryMonitor } from '../../../hooks/useMemoryMonitor.js';
@@ -119,7 +117,6 @@ export interface AppBootstrapResult {
    */
   scrollbackPager: ScrollbackPagerBinding | null;
   /** P02e: one-line restart prompt when the scrollback flag changed mid-session. */
-  scrollbackRestartNotice: string | null;
   idePromptAnswered: boolean;
   setIdePromptAnswered: React.Dispatch<React.SetStateAction<boolean>>;
   currentIDE: IdeInfo | undefined;
@@ -139,7 +136,7 @@ export interface AppBootstrapResult {
 
 /** Initializes history, session, and IO primitives */
 function useBootstrapHistory(props: AppBootstrapProps) {
-  const { uiRuntime, agent, settings, resumedBoot } = props;
+  const { uiRuntime, agent, resumedBoot } = props;
   const runtime = useRuntimeApi();
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
@@ -163,23 +160,10 @@ function useBootstrapHistory(props: AppBootstrapProps) {
   const { stdout } = useStdout();
   const { stdin, setRawMode } = useStdin();
   const nightly = props.version.includes('nightly');
-  const historyLimits = useMemo(
-    () => ({
-      maxItems:
-        typeof settings.merged.ui.historyMaxItems === 'number'
-          ? settings.merged.ui.historyMaxItems
-          : DEFAULT_HISTORY_MAX_ITEMS,
-      maxBytes:
-        typeof settings.merged.ui.historyMaxBytes === 'number'
-          ? settings.merged.ui.historyMaxBytes
-          : DEFAULT_HISTORY_MAX_BYTES,
-    }),
-    [settings.merged.ui.historyMaxItems, settings.merged.ui.historyMaxBytes],
+  props.turnStore.commands.bindJournal(() =>
+    agent.agentClient.getHistoryService(),
   );
-  const { addItem, prependHistory } = useRetractableHistory(
-    props.turnStore,
-    historyLimits,
-  );
+  const { addItem } = useHistory(props.turnStore);
   const {
     llxprtMdFileCount,
     setLlxprtMdFileCount,
@@ -190,7 +174,6 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     agent,
     recordingOwner: props.recordingOwner,
     addItem,
-    prependHistory,
     resumedBoot,
   });
   // Store mirrors: the context summary renders from the settings store.
@@ -325,10 +308,15 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     }),
     [agentSession],
   );
+  const historyEpoch = useStoreSelector(
+    props.turnStore.store,
+    (state) => state.historyEpoch,
+  );
   const sb = useScrollbackBootstrap({
+    epoch: historyEpoch,
+    emojiFilterMode: resolveEmojiFilterMode(uiRuntime.ephemeral),
     settings: props.settings,
-    recordingSwapCallbacks: e.recordingSwapCallbacks ?? agentJournalSource,
-    addItem: h.addItem,
+    recordingSwapCallbacks: agentJournalSource,
   });
   useEffect(() => {
     props.settingsStore.commands.setRawConsoleMessages(e.consoleMessages);
@@ -357,7 +345,6 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     recordingIntegrationRef: e.recordingIntegrationRef,
     recordingSwapCallbacks: e.recordingSwapCallbacks,
     scrollbackPager: sb.pager,
-    scrollbackRestartNotice: sb.restartNotice,
     idePromptAnswered: e.idePromptAnswered,
     setIdePromptAnswered: e.setIdePromptAnswered,
     currentIDE: e.currentIDE,

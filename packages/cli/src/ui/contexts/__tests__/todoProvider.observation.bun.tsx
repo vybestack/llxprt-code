@@ -178,7 +178,7 @@ function commandContextFrom(
       setDebugMessage: () => {},
       pendingItem: null,
       setPendingItem: () => {},
-      loadHistory: () => {},
+
       toggleCorgiMode: () => {},
       toggleDebugProfiler: () => {},
       toggleVimEnabled: () => Promise.resolve(true),

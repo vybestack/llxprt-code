@@ -6,7 +6,8 @@ import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core';
-import type { HistoryItemWithoutId } from '../../types.js';
+import { ToolCallStatus, type HistoryItemWithoutId } from '../../types.js';
+import { toolDisplay } from './journal-display-projection.js';
 
 const skill = z.object({
   name: z.string(),
@@ -43,11 +44,29 @@ const hook = z.object({
 /** Only serializable presentation data belongs here; execution callbacks never do. */
 const uiItem = z.discriminatedUnion('type', [
   z.object({
+    type: z.literal('tool_group'),
+    agentId: z.string().optional(),
+    tools: z.array(
+      z.object({
+        callId: z.string(),
+        name: z.string(),
+        description: z.string(),
+        status: z.nativeEnum(ToolCallStatus),
+        resultDisplay: toolDisplay.optional(),
+        renderOutputAsMarkdown: z.boolean().optional(),
+        retention: z
+          .object({ capped: z.literal(true), originalLength: z.number() })
+          .optional(),
+      }),
+    ),
+  }),
+  z.object({
     type: z.literal('info'),
     text: z.string(),
     icon: z.string().optional(),
     color: z.string().optional(),
   }),
+  z.object({ type: z.literal('gemini_content'), text: z.string() }),
   z.object({ type: z.literal('warning'), text: z.string() }),
   z.object({ type: z.literal('error'), text: z.string() }),
   z.object({ type: z.literal('user_shell'), text: z.string() }),
@@ -139,5 +158,15 @@ export function encodeJournalUiItem(item: HistoryItemWithoutId): string {
 }
 
 export function decodeJournalUiItem(text: string): HistoryItemWithoutId {
-  return uiItem.parse(JSON.parse(text));
+  const item = uiItem.parse(JSON.parse(text));
+  return item.type === 'tool_group'
+    ? {
+        ...item,
+        tools: item.tools.map((tool) => ({
+          ...tool,
+          resultDisplay: tool.resultDisplay,
+          confirmationDetails: undefined,
+        })),
+      }
+    : item;
 }

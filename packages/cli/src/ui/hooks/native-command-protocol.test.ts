@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { readJournalItems } from '../stores/turn/journal-turn-test-helpers.js';
+
 import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
 import {
   DebugLogger,
@@ -127,9 +129,6 @@ describe('native CLI command protocol', () => {
       recordingOwner: 'agent',
       services: { agent },
       ui: {
-        loadHistory: (items: readonly HistoryItemWithoutId[]): void => {
-          displayed = items;
-        },
         clear: () => {
           displayed = [];
         },
@@ -158,6 +157,7 @@ describe('native CLI command protocol', () => {
       expect(
         await processSlashCommand(deps, text, undefined, undefined, false),
       ).toStrictEqual({ type: 'handled' });
+      displayed = await readJournalItems(agent, 64, true);
     }
     try {
       await agent.session.setRecording({ enabled: true });

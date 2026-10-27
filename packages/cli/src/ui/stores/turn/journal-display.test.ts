@@ -106,6 +106,9 @@ describe('journal presentation projection', () => {
           attemptId: '',
           callId: 'call-one',
           format: 'text',
+          displayName: 'Read File',
+          description: 'example.ts',
+          renderOutputAsMarkdown: false,
         },
         'distinct user-facing display',
       );
@@ -119,6 +122,9 @@ describe('journal presentation projection', () => {
       expect(groups[0].tools[0].resultDisplay).toBe(
         'distinct user-facing display',
       );
+      expect(groups[0].tools[0].name).toBe('Read File');
+      expect(groups[0].tools[0].description).toBe('example.ts');
+      expect(groups[0].tools[0].renderOutputAsMarkdown).toBe(false);
       expect(entries).toHaveLength(1);
       const diff = {
         fileDiff: `-old

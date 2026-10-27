@@ -12,6 +12,7 @@ import { processSlashCommand } from '../../ui/hooks/slashCommandHandlers.js';
 import type { HistoryItemWithoutId, Message } from '../../ui/types.js';
 import { createMockCommandContext } from '../mockCommandContext.js';
 import { commandDeps } from '../native-command-fixture.js';
+import { readJournalItems } from '../../ui/stores/turn/journal-turn-test-helpers.js';
 import { NativeJournalCursor } from '../../ui/stores/turn/native-journal-cursor.js';
 
 const environmentKeys = ['LLXPRT_FAKE_RESPONSES', 'LLXPRT_LOG_HOME'] as const;
@@ -97,11 +98,7 @@ function dispatcher(
   const context = createMockCommandContext({
     recordingOwner: 'agent',
     services: { agent: live },
-    ui: {
-      loadHistory: (items: readonly HistoryItemWithoutId[]): void => {
-        displayed = items;
-      },
-    },
+    ui: {},
   });
   const deps = commandDeps(context, errors);
   return {
@@ -111,6 +108,7 @@ function dispatcher(
       expect(
         await processSlashCommand(deps, text, undefined, undefined, false),
       ).toStrictEqual({ type: 'handled' });
+      displayed = await readJournalItems(live);
       await live.session.flushRecording();
       const path = live.session.getRecording().path;
       if (path === undefined) throw new Error('Missing command journal');

@@ -7,12 +7,6 @@ import type {
 import type { HistoryItem } from '../types.js';
 import type { RowSource } from './rowIdentity.js';
 import { HistoryProjection } from './historyProjection.js';
-import {
-  createHistoryLedger,
-  projectHistory,
-  type HistoryLimits,
-} from '../stores/turn/historyLedger.js';
-
 export interface StreamHistoryOptions {
   readonly signal?: AbortSignal;
   readonly temporaryRoot?: string;
@@ -44,23 +38,5 @@ export async function* streamHistoryItems(
     yield* projection.flush();
   } finally {
     projection.close();
-  }
-}
-
-export async function resumeHistoryWindow(
-  rows: AsyncIterable<IContent> | Iterable<IContent>,
-  mode?: EmojiFilterMode,
-  ownership?: RowOwnership,
-  limits?: HistoryLimits,
-): Promise<HistoryItem[]> {
-  const ledger = createHistoryLedger(limits, ownership);
-  try {
-    for await (const item of streamHistoryItems(rows, mode, ownership))
-      ledger.append(item);
-    const result = projectHistory(ledger.getState());
-    for (const item of result) ownership?.retain(item);
-    return result;
-  } finally {
-    ledger.clear();
   }
 }

@@ -62,8 +62,13 @@ describe('checkpoint disk JSON framing and cold row ownership', () => {
         });
         try {
           expect(await collect(checkpoint)).toStrictEqual(object.clientHistory);
-          const { clientHistory: _rows, ...metadata } = object;
+          const {
+            clientHistory: _rows,
+            history: _uiHistory,
+            ...metadata
+          } = object;
           expect(checkpoint.data).toStrictEqual(metadata);
+          expect(Object.hasOwn(checkpoint.data, 'history')).toBe(false);
         } finally {
           await checkpoint.close();
         }

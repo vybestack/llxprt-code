@@ -207,10 +207,12 @@ describe('restoreCommand', () => {
         toolName: 'run_shell_command',
         toolArgs: { command: 'ls' },
       });
-      expect(mockContext.ui.loadHistory).toHaveBeenCalledWith(
-        toolCallData.history,
-      );
       expect(restoredRows).toStrictEqual(toolCallData.clientHistory);
+      expect(
+        restoredRows.every(
+          (row) => typeof row === 'object' && row !== null && 'speaker' in row,
+        ),
+      ).toBe(true);
       expect(mockGitService.restoreProjectFromSnapshot).toHaveBeenCalledWith(
         toolCallData.commitHash,
       );
@@ -242,7 +244,6 @@ describe('restoreCommand', () => {
         toolArgs: { command: 'ls' },
       });
 
-      expect(mockContext.ui.loadHistory).not.toHaveBeenCalled();
       expect(mockSetHistoryFromSource).not.toHaveBeenCalled();
       expect(mockGitService.restoreProjectFromSnapshot).not.toHaveBeenCalled();
     });

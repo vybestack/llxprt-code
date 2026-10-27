@@ -74,11 +74,9 @@ void vi.mock('../contexts/RuntimeContext.js', () => {
 
 void vi.mock('../hooks/useHistoryManager.js', () => ({
   useHistory: vi.fn(() => ({
-    history: [],
     addItem: vi.fn(),
-    updateItem: vi.fn(),
+
     clearItems: vi.fn(),
-    loadHistory: vi.fn(),
   })),
 }));
 
@@ -92,7 +90,7 @@ import {
   SessionContext,
   type SessionContextType,
 } from './SessionController.js';
-import { MessageType } from '../types.js';
+import { MessageType, type HistoryItemWithoutId } from '../types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 // import { AppAction } from '../reducers/appReducer.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
@@ -134,9 +132,8 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
 describe('SessionController', () => {
   let mockConfig: Partial<Config>;
   let mockAddItem: ReturnType<typeof vi.fn>;
-  let mockUpdateItem: ReturnType<typeof vi.fn>;
+
   let mockClearItems: ReturnType<typeof vi.fn>;
-  let mockLoadHistory: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     // The runtime status mock is mutable so tests can drive provider, model and
@@ -167,16 +164,13 @@ describe('SessionController', () => {
     vi.useFakeTimers();
 
     mockAddItem = vi.fn();
-    mockUpdateItem = vi.fn();
+
     mockClearItems = vi.fn();
-    mockLoadHistory = vi.fn();
 
     mockHistoryManager.mockReturnValue({
-      history: [],
       addItem: mockAddItem,
-      updateItem: mockUpdateItem,
+
       clearItems: mockClearItems,
-      loadHistory: mockLoadHistory,
     });
 
     mockConfig = {
@@ -223,11 +217,9 @@ describe('SessionController', () => {
     );
 
     expect(contextValue).toBeDefined();
-    expect(contextValue!.history).toStrictEqual([]);
+
     expect(typeof contextValue!.addItem).toBe('function');
-    expect(typeof contextValue!.updateItem).toBe('function');
     expect(typeof contextValue!.clearItems).toBe('function');
-    expect(typeof contextValue!.loadHistory).toBe('function');
     expect(typeof contextValue!.checkPaymentModeChange).toBe('function');
     expect(typeof contextValue!.performMemoryRefresh).toBe('function');
     expect(contextValue!.sessionState).toBeDefined();
@@ -273,7 +265,10 @@ describe('SessionController', () => {
       </SessionController>,
     );
 
-    const itemData = { type: MessageType.USER, text: 'Test message' };
+    const itemData: HistoryItemWithoutId = {
+      type: 'user',
+      text: 'Test message',
+    };
     const baseTimestamp = Date.now();
 
     await React.act(async () => {
@@ -289,11 +284,9 @@ describe('SessionController', () => {
   it('should handle payment mode changes properly', async () => {
     // Mock useHistory to return a non-empty history
     mockHistoryManager.mockReturnValue({
-      history: [{ id: 1, type: MessageType.USER, text: 'Test' }],
       addItem: mockAddItem,
-      updateItem: mockUpdateItem,
+
       clearItems: mockClearItems,
-      loadHistory: mockLoadHistory,
     });
 
     let contextValue: SessionContextType | undefined;
@@ -566,33 +559,6 @@ describe('SessionController', () => {
     );
     expect(pollingIntervals).toHaveLength(0);
     setIntervalSpy.mockRestore();
-    unmount();
-  });
-
-  it('should handle UPDATE_ITEM action', async () => {
-    let contextValue: SessionContextType | undefined;
-
-    const TestComponent = () => {
-      contextValue = React.useContext(SessionContext);
-      return null;
-    };
-
-    const { unmount } = render(
-      <SessionController config={memoryRuntime}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    const itemId = 1;
-    const updateData = { type: MessageType.USER, text: 'Updated' };
-
-    contextValue!.updateItem(itemId, updateData);
-
-    // Allow microtasks to complete
-    await Promise.resolve();
-
-    expect(mockUpdateItem).toHaveBeenCalledWith(itemId, updateData);
-
     unmount();
   });
 

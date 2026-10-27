@@ -18,8 +18,8 @@ import {
   type TranscriptPathAccessor,
 } from '../stores/toolResultExpansion/toolResultExpansionStore.js';
 import type { Store } from '../stores/createStore.js';
-import type { TurnStore } from '../stores/turn/turnStore.js';
-import { useTurnStore } from '../stores/turn/TurnContext.js';
+import type { ScrollbackPagerStore } from '../stores/turn/scrollbackPager.js';
+import { SCROLLBACK_VIEWPORT_POLL_MS } from '../../constants/scrollbackLimits.js';
 import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
 import { useStoreSelector } from '../stores/useStoreSelector.js';
 
@@ -47,17 +47,18 @@ const emptyExpansionStore: Store<ToolResultExpansionState> =
  */
 export function ToolResultExpansionProvider({
   getTranscriptFilePath,
+  pager,
   children,
 }: {
   getTranscriptFilePath: TranscriptPathAccessor;
+  pager?: ScrollbackPagerStore;
   children: ReactNode;
 }): ReactNode {
-  const turnStore = useTurnStore();
   const storeRef = useRef<ToolResultExpansionStore | null>(null);
   storeRef.current ??= createToolResultExpansionStore(getTranscriptFilePath);
   const expansion = storeRef.current;
 
-  useHistoryAppendPurge(turnStore, expansion);
+  useHistoryAppendPurge(pager, expansion);
 
   return (
     <ToolResultExpansionContext.Provider value={expansion}>
@@ -72,24 +73,26 @@ export function ToolResultExpansionProvider({
  * streaming refreshes do not purge.
  */
 function useHistoryAppendPurge(
-  turnStore: TurnStore,
+  pager: ScrollbackPagerStore | undefined,
   expansion: ToolResultExpansionStore,
 ): void {
   useEffect(() => {
-    const idsOf = (): string =>
-      turnStore.store
-        .getState()
-        .history.map((item) => item.id)
-        .join(',');
-    let lastIds = idsOf();
-    return turnStore.store.subscribe(() => {
-      const nextIds = idsOf();
-      if (nextIds !== lastIds) {
-        lastIds = nextIds;
-        expansion.commands.purge();
-      }
-    });
-  }, [turnStore, expansion]);
+    const signature = (): string => {
+      const rows = pager?.getState().rows;
+      return rows ? `${rows[0]?.key}:${rows.at(-1)?.key}:${rows.length}` : '';
+    };
+    let previous = signature();
+    const timer = setInterval(() => {
+      const next = signature();
+      if (next === previous) return;
+      previous = next;
+      expansion.commands.purge();
+    }, SCROLLBACK_VIEWPORT_POLL_MS);
+    return () => {
+      clearInterval(timer);
+      expansion.commands.purge();
+    };
+  }, [pager, expansion]);
 }
 
 /** The full transcript body loaded for `callId`, when one has been expanded. */

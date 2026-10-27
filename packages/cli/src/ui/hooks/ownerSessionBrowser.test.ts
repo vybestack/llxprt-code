@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { readJournalItems } from '../stores/turn/journal-turn-test-helpers.js';
+
 import { describe, expect, it } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
@@ -52,7 +54,6 @@ describe('owner session browser', () => {
                 target.kind === 'session'
                   ? target.session.sessionId
                   : target.checkpointId,
-                'allowed',
               );
               return { ok: true };
             },
@@ -103,14 +104,13 @@ describe('owner session browser', () => {
             currentSessionId: config.getSessionId(),
             ownerAgent: next,
             onSelect: async (target) => {
-              const replay = await resumeOwnerSession(
+              await resumeOwnerSession(
                 next,
                 target.kind === 'session'
                   ? target.session.sessionId
                   : target.checkpointId,
-                'allowed',
               );
-              shown = replay.uiHistory.some(
+              shown = (await readJournalItems(next)).some(
                 (item) =>
                   item.type === 'user' && item.text === 'browser resume source',
               );

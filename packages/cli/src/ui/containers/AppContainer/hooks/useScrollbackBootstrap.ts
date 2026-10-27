@@ -1,30 +1,6 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
-/**
- * @plan PLAN-20260917-ISSUE854.P02e
- * @requirement G1,G2
- *
- * Scrollback pager boot wiring (issue-854-design.md §8): ui.scrollbackPagerEnabled
- * is read ONCE at boot — the store decision never changes mid-session. When the
- * flag is on and the session journal path resolves, a ScrollbackPagerStore is
- * constructed against the journal with the residency knobs from
- * ui.scrollbackMarginViewports / ui.scrollbackByteFloorKiB (KiB → bytes) and
- * handed to the layout through the returned binding. When the journal path is
- * unavailable (no recording, unmaterialized file) the non-pager path stays
- * active and a one-line notice is added to the history — never a throw. A
- * mid-session flag change does not hot-swap anything; it only surfaces a
- * restart prompt (cleared again if the setting returns to its boot value).
- * Immediately after construction the hook starts the store's boot-time
- * resumeFromJournal() seed (P04b); a failure tears the binding down and
- * takes the non-pager fallback with a one-line notice — never a throw out
- * of the hook. On unmount the store is closed, dropping the journal cursor.
- */
-
-import { useEffect, useRef, useState } from 'react';
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { useEffect, useState } from 'react';
+import type { EmojiFilterMode } from '@vybestack/llxprt-code-core';
 import type {
   ScrollbackPagerSettings,
   ScrollbackPagerStore,
@@ -36,211 +12,97 @@ import {
   DEFAULT_SCROLLBACK_MARGIN_VIEWPORTS,
   SCROLLBACK_PAGE_ROWS,
   SCROLLBACK_PURGE_DEBOUNCE_MS,
+  SCROLLBACK_VIEWPORT_POLL_MS,
 } from '../../../../constants/scrollbackLimits.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
-import { MessageType, type HistoryItemWithoutId } from '../../../types.js';
 
-const SCROLLBACK_UNAVAILABLE_NOTICE = 'scrollback unavailable: no journal';
-const SCROLLBACK_RESUME_FAILED_NOTICE = 'scrollback unavailable: resume failed';
-const SCROLLBACK_RESTART_NOTICE =
-  'scrollback pager setting changed: restart to apply';
-
-/** Store plus the viewport reporter shared with the viewport component. */
 export interface ScrollbackPagerBinding {
   readonly store: ScrollbackPagerStore;
   readonly viewport: ScrollbackViewportReporter;
 }
 
-/**
- * What the pager needs from the active recording owner: the journal path.
- * The raw recorder exposes it through its swap callbacks; the Agent owner
- * exposes it through `agent.session.getRecording()`.
- */
 export interface JournalPathSource {
   getCurrentRecording(): { getFilePath(): string | null } | null;
 }
 
 export interface UseScrollbackBootstrapOptions {
   readonly settings: LoadedSettings;
+  readonly epoch?: number;
+  readonly emojiFilterMode?: EmojiFilterMode;
   readonly recordingSwapCallbacks: JournalPathSource;
-  readonly addItem: (item: HistoryItemWithoutId, timestamp?: number) => number;
 }
 
 export interface ScrollbackBootstrapResult {
   readonly pager: ScrollbackPagerBinding | null;
-  readonly restartNotice: string | null;
 }
 
-function isFlagEnabled(settings: LoadedSettings): boolean {
-  return settings.merged.ui.scrollbackPagerEnabled === true;
-}
-
-function positiveOr(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0
-    ? value
-    : fallback;
-}
-
-/**
- * Maps the residency knobs into the store's settings; the schema defaults
- * (2 viewports, 256 KiB) apply whenever a settings file carries a missing or
- * non-numeric value. The byte knob is KiB on the wire, bytes in the store.
- */
 export function scrollbackPagerSettingsFrom(
   settings: LoadedSettings,
 ): ScrollbackPagerSettings {
   const ui = settings.merged.ui;
   return {
-    marginViewports: positiveOr(
-      ui.scrollbackMarginViewports,
-      DEFAULT_SCROLLBACK_MARGIN_VIEWPORTS,
-    ),
+    marginViewports:
+      ui.scrollbackMarginViewports ?? DEFAULT_SCROLLBACK_MARGIN_VIEWPORTS,
     byteFloorBytes:
-      positiveOr(ui.scrollbackByteFloorKiB, DEFAULT_SCROLLBACK_BYTE_FLOOR_KIB) *
-      1024,
+      (ui.scrollbackByteFloorKiB ?? DEFAULT_SCROLLBACK_BYTE_FLOOR_KIB) * 1024,
     purgeDebounceMs: SCROLLBACK_PURGE_DEBOUNCE_MS,
   };
 }
 
-/** Boot-time pager decision: a live binding, the fallback notice, or flag-off. */
-type ScrollbackBootOutcome =
-  | { readonly kind: 'disabled' }
-  | { readonly kind: 'unavailable' }
-  | { readonly kind: 'ready'; readonly binding: ScrollbackPagerBinding };
-
-/**
- * Resolves the boot-time pager outcome once: a live store binding when the
- * flag is on and the journal path resolves, 'unavailable' when the flag is
- * on but no journal exists (one-line notice), and 'disabled' when the flag
- * is off (no notice).
- */
-function resolveBootOutcome(
-  settings: LoadedSettings,
-  recordingSwapCallbacks: JournalPathSource,
-  enabled: boolean,
-): ScrollbackBootOutcome {
-  if (!enabled) {
-    return { kind: 'disabled' };
-  }
-  const journalPath =
-    recordingSwapCallbacks.getCurrentRecording()?.getFilePath() ?? null;
-  if (journalPath === null) {
-    return { kind: 'unavailable' };
-  }
-  const viewport: ScrollbackViewportReporter = {
-    visibleKeys: [],
-    viewportLines: 0,
-    rowHeightLines: () => 1,
-  };
-  const store = createScrollbackPagerStore({
-    filePath: journalPath,
-    viewport,
-    pageRows: SCROLLBACK_PAGE_ROWS,
-    settings: scrollbackPagerSettingsFrom(settings),
-  });
-  return { kind: 'ready', binding: { store, viewport } };
-}
-
-export function useScrollbackBootstrap(
-  options: UseScrollbackBootstrapOptions,
-): ScrollbackBootstrapResult {
-  const { settings, recordingSwapCallbacks, addItem } = options;
-
-  // Boot-time construction: the flag and journal path are resolved once.
-  // The store owns no renders, so it never re-binds; unmount closes it.
-  const pagerRef = useRef<ScrollbackPagerBinding | null>(null);
-  const initializedRef = useRef(false);
-  const enabledRef = useRef(isFlagEnabled(settings));
-  const journalPath =
-    recordingSwapCallbacks.getCurrentRecording()?.getFilePath() ?? null;
-  const journalPathRef = useRef(journalPath);
-  const unavailableRef = useRef(false);
-  const noticeSentRef = useRef(false);
-  const disposedRef = useRef(false);
-  // Resume-failure teardown: the binding is dropped whole and the hook
-  // falls back to the non-pager path with the one-line notice; it never
-  // throws out of the hook.
-  const handleResumeFailure = (store: ScrollbackPagerStore): void => {
-    if (disposedRef.current || pagerRef.current?.store !== store) {
-      return;
-    }
-    pagerRef.current = null;
-    unavailableRef.current = true;
-    void store.close();
-    if (noticeSentRef.current) {
-      return;
-    }
-    noticeSentRef.current = true;
-    addItem(
-      {
-        type: MessageType.INFO,
-        text: SCROLLBACK_RESUME_FAILED_NOTICE,
-      },
-      Date.now(),
-    );
-  };
-  if (journalPathRef.current !== journalPath) {
-    journalPathRef.current = journalPath;
-    void pagerRef.current?.store.close();
-    pagerRef.current = null;
-    initializedRef.current = false;
-    unavailableRef.current = false;
-    noticeSentRef.current = false;
-  }
-  if (!initializedRef.current) {
-    initializedRef.current = true;
-    const outcome = resolveBootOutcome(
-      settings,
-      recordingSwapCallbacks,
-      enabledRef.current,
-    );
-    if (outcome.kind === 'unavailable') {
-      unavailableRef.current = true;
-    }
-    if (outcome.kind === 'ready') {
-      pagerRef.current = outcome.binding;
-      // Boot-time resume: seed the resident window with the journal's
-      // last page.
-      void outcome.binding.store
-        .resumeFromJournal()
-        .catch(() => handleResumeFailure(outcome.binding.store));
-    }
-  }
-
-  // The unavailable notice is a history row on the fallback (non-pager)
-  // path; the guard keeps it at exactly one line across re-renders. The
-  // effect covers a missing journal at boot; the resume catch above covers
-  // a failed seed.
+export function useScrollbackBootstrap({
+  settings,
+  epoch = 0,
+  emojiFilterMode,
+  recordingSwapCallbacks,
+}: UseScrollbackBootstrapOptions): ScrollbackBootstrapResult {
+  const [pager, setPager] = useState<ScrollbackPagerBinding | null>(null);
+  const [error, setError] = useState<unknown>(null);
   useEffect(() => {
-    if (noticeSentRef.current || !unavailableRef.current) {
-      return;
-    }
-    noticeSentRef.current = true;
-    addItem(
-      { type: MessageType.INFO, text: SCROLLBACK_UNAVAILABLE_NOTICE },
-      Date.now(),
-    );
-  }, [addItem]);
-
-  const restartNotice = useRestartNotice(settings);
-
-  useEffect(
-    () => () => {
-      disposedRef.current = true;
-      void pagerRef.current?.store.close();
-    },
-    [],
-  );
-
-  return { pager: pagerRef.current, restartNotice };
-}
-
-function useRestartNotice(settings: LoadedSettings): string | null {
-  const bootFlag = useRef(isFlagEnabled(settings));
-  const flagNow = isFlagEnabled(settings);
-  const [notice, setNotice] = useState<string | null>(null);
-  useEffect(() => {
-    setNotice(flagNow === bootFlag.current ? null : SCROLLBACK_RESTART_NOTICE);
-  }, [flagNow]);
-  return notice;
+    let disposed = false;
+    let path: string | null = null;
+    let active: ScrollbackPagerBinding | null = null;
+    const update = (): void => {
+      const nextPath =
+        recordingSwapCallbacks.getCurrentRecording()?.getFilePath() ?? null;
+      if (nextPath === path) return;
+      path = nextPath;
+      void active?.store.close();
+      active = null;
+      setPager(null);
+      if (nextPath === null) return;
+      const viewport: ScrollbackViewportReporter = {
+        visibleKeys: [],
+        viewportLines: 0,
+        rowHeightLines: () => 1,
+      };
+      const binding = {
+        viewport,
+        store: createScrollbackPagerStore({
+          filePath: nextPath,
+          emojiFilterMode,
+          viewport,
+          pageRows: SCROLLBACK_PAGE_ROWS,
+          settings: scrollbackPagerSettingsFrom(settings),
+        }),
+      };
+      active = binding;
+      void binding.store.resumeFromJournal().then(
+        () => {
+          if (!disposed && active === binding) setPager(binding);
+        },
+        (failure: unknown) => {
+          if (!disposed && active === binding) setError(() => failure);
+        },
+      );
+    };
+    update();
+    const timer = setInterval(update, SCROLLBACK_VIEWPORT_POLL_MS);
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+      void active?.store.close();
+    };
+  }, [recordingSwapCallbacks, settings, epoch, emojiFilterMode]);
+  if (error !== null) throw error;
+  return { pager };
 }

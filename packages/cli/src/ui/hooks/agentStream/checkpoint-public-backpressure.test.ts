@@ -6,7 +6,6 @@ import { createToolCheckpoint, type FsOps } from './checkpointPersistence.js';
 import {
   checkpointGit,
   checkpointTool,
-  checkpointUiHistory,
   trackingFs,
   withCheckpoint,
 } from './checkpoint-disk-test-helpers.js';
@@ -59,7 +58,7 @@ async function backpressure(size: number, active: boolean): Promise<number> {
       dir,
       checkpointGit,
       fixture.client,
-      checkpointUiHistory,
+
       () => {},
       sink.ops,
       abort.signal,

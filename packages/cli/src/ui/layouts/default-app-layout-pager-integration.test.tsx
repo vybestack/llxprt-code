@@ -29,6 +29,9 @@ const { createTestAgentClient } = await import(
 );
 const { Config } = await import('@vybestack/llxprt-code-core');
 const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
+const { JournalStandardTranscript } = await import(
+  './journal-standard-transcript.js'
+);
 const { createUiSessionOwner } = await import(
   '../../__tests__/uiSessionOwner.js'
 );
@@ -62,7 +65,7 @@ async function writeJournal(filePath: string): Promise<void> {
   }
 }
 
-function makeUiRuntime(dir: string) {
+function makeUiRuntime(dir: string, alternate: boolean) {
   const config = new Config({
     sessionId: 'critical-pager',
     targetDir: dir,
@@ -71,12 +74,10 @@ function makeUiRuntime(dir: string) {
     model: 'test',
   });
   const terminal = createTerminalStore();
-  const turn = createTurnStore({
-    history: [{ id: 1, type: 'user', text: 'ordinary-array-sentinel' }],
-  });
+  const turn = createTurnStore();
   const settings = createMockSettings({
     ui: {
-      useAlternateBuffer: true,
+      useAlternateBuffer: alternate,
       hideContextSummary: true,
       showTodoPanel: false,
     },
@@ -94,67 +95,143 @@ function makeUiRuntime(dir: string) {
 }
 
 describe('layout disk-pager integration', () => {
-  it('renders the bounded disk window instead of resident transcript arrays and updates its geometry', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'critical-layout-pager-'));
+  it.each([false, true])(
+    'renders the bounded disk window and updates geometry, alternate=%s',
+    async (alternate) => {
+      const dir = await mkdtemp(join(tmpdir(), 'critical-layout-pager-'));
+      const filePath = join(dir, 'session.llxj');
+      await writeJournal(filePath);
+      const viewport = {
+        visibleKeys: [],
+        viewportLines: 0,
+        rowHeightLines: () => 1,
+      };
+      const store = createScrollbackPagerStore({
+        filePath,
+        viewport,
+        pageRows: 4,
+        settings: {
+          marginViewports: 0,
+          byteFloorBytes: 256,
+          purgeDebounceMs: 0,
+        },
+      });
+      const { config, owner, terminal, turn, settings, uiRuntime } =
+        makeUiRuntime(dir, alternate);
+      await store.resumeFromJournal();
+      const view = renderWithProviders(
+        <TerminalProvider store={terminal}>
+          <TurnProvider store={turn}>
+            <DefaultAppLayout
+              uiRuntime={uiRuntime}
+              slashCommandRuntime={buildSlashCommandRuntime(config, owner)}
+              settings={settings}
+              startupWarnings={[]}
+              version="test"
+              nightly={false}
+              mainControlsRef={{ current: null }}
+              rootUiRef={{ current: null }}
+              pendingHistoryItemRef={{ current: null }}
+              contextFileNames={[]}
+              updateInfo={null}
+              scrollbackPager={{ store, viewport }}
+            />
+          </TurnProvider>
+        </TerminalProvider>,
+        { settings },
+      );
+      const frame = (): string =>
+        alternate
+          ? (view.lastFrame() ?? '')
+          : view.frames.join(String.fromCharCode(10));
+      try {
+        await waitFor(() => expect(frame()).toContain('disk-page-31'));
+        expect(frame()).not.toContain('ordinary-array-sentinel');
+        expect(store.metrics().residentRows).toBeLessThanOrEqual(4);
+        await act(async () => {
+          terminal.commands.setDimensions({
+            terminalWidth: 70,
+            terminalHeight: 16,
+            inputWidth: 60,
+            suggestionsWidth: 50,
+          });
+        });
+        await waitFor(() =>
+          expect(viewport.viewportLines).toBe(
+            Math.max(1, terminal.store.getState().availableTerminalHeight),
+          ),
+        );
+        expect(frame()).toContain('disk-page-31');
+        expect(frame()).not.toContain('disk-page-0');
+      } finally {
+        view.unmount();
+        await store.close();
+        await config.dispose();
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
+describe('standard transcript residency', () => {
+  it('releases emitted batches while retaining new output until it is printed', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'standard-output-residency-'));
     const filePath = join(dir, 'session.llxj');
-    await writeJournal(filePath);
+    const session = await JournalSession.create(filePath);
     const viewport = {
       visibleKeys: [],
-      viewportLines: 0,
+      viewportLines: 8,
       rowHeightLines: () => 1,
     };
     const store = createScrollbackPagerStore({
       filePath,
       viewport,
-      pageRows: 4,
-      settings: { marginViewports: 0, byteFloorBytes: 256, purgeDebounceMs: 0 },
+      pageRows: 16,
+      settings: {
+        marginViewports: 0,
+        byteFloorBytes: 256,
+        purgeDebounceMs: 0,
+      },
     });
-    const { config, owner, terminal, turn, settings, uiRuntime } =
-      makeUiRuntime(dir);
+    const { config, owner, terminal, turn, settings } = makeUiRuntime(
+      dir,
+      false,
+    );
     await store.resumeFromJournal();
     const view = renderWithProviders(
       <TerminalProvider store={terminal}>
         <TurnProvider store={turn}>
-          <DefaultAppLayout
-            uiRuntime={uiRuntime}
-            slashCommandRuntime={buildSlashCommandRuntime(config, owner)}
-            settings={settings}
-            startupWarnings={[]}
-            version="test"
-            nightly={false}
-            mainControlsRef={{ current: null }}
-            rootUiRef={{ current: null }}
-            pendingHistoryItemRef={{ current: null }}
-            contextFileNames={[]}
-            updateInfo={null}
-            scrollbackPager={{ store, viewport }}
+          <JournalStandardTranscript
+            store={store}
+            config={buildSlashCommandRuntime(config, owner)}
+            viewport={viewport}
           />
         </TurnProvider>
       </TerminalProvider>,
       { settings },
     );
     try {
-      await waitFor(() => expect(view.lastFrame()).toContain('disk-page-31'));
-      expect(view.lastFrame()).not.toContain('ordinary-array-sentinel');
-      expect(store.metrics().residentRows).toBeLessThanOrEqual(4);
-      await act(async () => {
-        terminal.commands.setDimensions({
-          terminalWidth: 70,
-          terminalHeight: 16,
-          inputWidth: 60,
-          suggestionsWidth: 50,
+      for (let batch = 0; batch < 8; batch++) {
+        await act(async () => {
+          await session.append(
+            Array.from({ length: 16 }, (_, index) => ({
+              speaker: 'human',
+              blocks: [{ type: 'text', text: `batch-${batch}-${index}` }],
+            })),
+          );
         });
-      });
-      await waitFor(() =>
-        expect(viewport.viewportLines).toBe(
-          Math.max(1, terminal.store.getState().availableTerminalHeight),
-        ),
-      );
-      expect(view.lastFrame()).toContain('disk-page-31');
-      expect(view.lastFrame()).not.toContain('disk-page-0');
+        await waitFor(() =>
+          expect(view.frames.join('\n')).toContain(`batch-${batch}-15`),
+        );
+        await waitFor(() =>
+          expect(store.metrics().residentRows).toBeLessThanOrEqual(16),
+        );
+      }
+      expect(view.frames.join('\n')).toContain('batch-0-0');
     } finally {
       view.unmount();
       await store.close();
+      await session.close();
       await config.dispose();
       await rm(dir, { recursive: true, force: true });
     }

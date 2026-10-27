@@ -4,10 +4,7 @@ import type { IContent } from '@vybestack/llxprt-code-core';
 import { RowOwnership } from '../../../../core/src/recording/rowOwnership.js';
 import { streamHistoryItems } from './streamHistoryItems.js';
 import { ToolCallStatus } from '../types.js';
-import {
-  createHistoryLedger,
-  projectHistory,
-} from '../stores/turn/historyLedger.js';
+import type { HistoryItem } from '../types.js';
 import { rowIdentityKey } from './rowIdentity.js';
 
 const bound = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
@@ -35,22 +32,23 @@ describe('bounded tool response projection', () => {
 });
 
 async function verifyPreservesOneChronologySpanAndDistinctPageIdentitiesAlongsideALiveCall(): Promise<void> {
-  const ledger = createHistoryLedger();
-  ledger.append({
-    id: 1,
-    type: 'tool_group',
-    rowIdentity: { kind: 'pending', pendingKey: 'live' },
-    tools: [
-      {
-        callId: '0',
-        name: 'read_file',
-        description: 'live',
-        resultDisplay: undefined,
-        status: ToolCallStatus.Pending,
-        confirmationDetails: undefined,
-      },
-    ],
-  });
+  const items: HistoryItem[] = [
+    {
+      id: 1,
+      type: 'tool_group',
+      rowIdentity: { kind: 'pending', pendingKey: 'live' },
+      tools: [
+        {
+          callId: '0',
+          name: 'read_file',
+          description: 'live',
+          resultDisplay: undefined,
+          status: ToolCallStatus.Pending,
+          confirmationDetails: undefined,
+        },
+      ],
+    },
+  ];
   async function* rows(): AsyncIterable<IContent> {
     yield {
       speaker: 'ai',
@@ -87,9 +85,8 @@ async function verifyPreservesOneChronologySpanAndDistinctPageIdentitiesAlongsid
   }
   for await (const item of streamHistoryItems(rows())) {
     expect(item.seqSpan).toStrictEqual([10, 43]);
-    ledger.append(item);
+    items.push(item);
   }
-  const items = projectHistory(ledger.getState());
   expect(items.length).toBe(4);
   const keys = items.map((item) => {
     if (!item.rowIdentity) throw new Error('Missing identity');
@@ -102,7 +99,6 @@ async function verifyPreservesOneChronologySpanAndDistinctPageIdentitiesAlongsid
     'legacy:0:toolGroup:tools:32',
   ]);
   expect(new Set(items.map((item) => item.id)).size).toBe(4);
-  ledger.clear();
 }
 
 async function verifyCapsWideResponsePayloadsBeforeRetainingADisplayPage(): Promise<void> {

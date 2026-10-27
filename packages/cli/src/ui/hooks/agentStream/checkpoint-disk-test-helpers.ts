@@ -126,7 +126,7 @@ export async function saveCheckpoint(
     dir,
     checkpointGit,
     fixture.client,
-    checkpointUiHistory,
+
     () => {},
     ops,
     signal,

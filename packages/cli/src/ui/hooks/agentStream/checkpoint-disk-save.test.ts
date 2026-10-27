@@ -9,7 +9,6 @@ import {
 } from '../../../utils/__tests__/support/cleanup-history-test-helpers.js';
 import {
   checkpointTool,
-  checkpointUiHistory,
   saveCheckpoint,
   savedCheckpoint,
   trackingFs,
@@ -26,7 +25,6 @@ for (const size of [65]) {
           const saved = await savedCheckpoint(dir);
           const expected = JSON.stringify(
             {
-              history: checkpointUiHistory,
               clientHistory: Array.from({ length: size }, (_, index) =>
                 cleanupRow(index, 2048, size, fixture.reference),
               ),
@@ -189,7 +187,6 @@ describe('CLI checkpoint publication faults', () => {
         expect(saved.bytes).toBe(
           JSON.stringify(
             {
-              history: checkpointUiHistory,
               clientHistory: [cleanupRow(0, bytes, 1, fixture.reference)],
               toolCall: {
                 name: checkpointTool.request.name,

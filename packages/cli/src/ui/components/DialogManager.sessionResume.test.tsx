@@ -1,142 +1,74 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- *
- * Issue #3732: resuming from the session browser reports the recordings it
- * skipped, and that report must survive the history restore that follows.
- */
-
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+import { describe, expect, it } from 'bun:test';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import {
-  SessionDiscovery,
-  createSessionRecorder,
-  type SessionRecordingPort,
-  type RecordingIntegration,
-  getProjectHash,
-  type LockHandle,
-} from '@vybestack/llxprt-code-core';
-import { renderHook } from '../../__tests__/render.js';
-import { seedSessionRows } from '../../__tests__/journal-recording.js';
+import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { renderHook, createMockSettings } from '../../__tests__/render.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
+import { readJournalItems } from '../stores/turn/journal-turn-test-helpers.js';
 import { useSessionBrowserHandler } from './DialogManager.js';
 
-const SESSION_ID = 'browser-resume-session';
-function corruptReason(path: string): string {
-  return `Session file ${path} ends inside its header (8 bytes)`;
-}
-
-describe('session browser resume with an unreadable recording present (issue #3732)', () => {
-  let root: string;
-  let committed: SessionRecordingPort | null;
-  let committedIntegration: RecordingIntegration | null;
-  let committedLock: LockHandle | null;
-
-  beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'browser-resume-3732-'));
-    committed = null;
-    committedIntegration = null;
-    committedLock = null;
-  });
-
-  afterEach(async () => {
-    await committedIntegration?.dispose();
-    await committed?.dispose();
-    await committedLock?.release();
-    await rm(root, { recursive: true, force: true });
-  });
-
-  it('leaves the skipped-recording warning visible next to the restored conversation', async () => {
-    const chatsDir = join(root, 'chats');
-    await mkdir(chatsDir, { recursive: true });
-    const projectRoot = join(root, 'project');
-    const projectHash = getProjectHash(projectRoot);
-    const recording = createSessionRecorder({
-      chatsDir,
-      sessionId: SESSION_ID,
-      projectHash,
-      workspaceDirs: [chatsDir],
-      provider: 'test-provider',
-      model: 'test-model',
-    });
-    await seedSessionRows(recording, [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'restored conversation' }],
-      },
-    ]);
-    await recording.flush();
-    await recording.dispose();
-    const corruptPath = join(
-      chatsDir,
-      'session-2026-10-08T21-18-08-corrupt.llxj',
-    );
-    await writeFile(corruptPath, 'LLXJRNL\0', 'utf-8');
-    const [target] = await SessionDiscovery.listContinueTargets(
-      chatsDir,
-      projectHash,
-    );
-    const turnStore = createTurnStore();
-    const { commands } = turnStore;
-    const config = {
-      getEphemeralSetting: () => 'auto',
-      getProjectTempDir: () => root,
-      getProjectRoot: () => projectRoot,
-      getSessionId: () => 'current-session',
-      getProvider: () => 'test-provider',
-      getModel: () => 'test-model',
-      directories: () => [root],
-      adoptSessionId: () => {},
-    } as never;
-    const { result, unmount } = renderHook(() =>
-      useSessionBrowserHandler(
-        config,
-        {
-          ui: {
-            clear: commands.clearItems,
-            addItem: commands.addItem,
-            pendingItem: null,
-            loadHistory: commands.loadHistory,
+describe('session browser journal resume', () => {
+  it('keeps the skipped-recording warning alongside the restored transcript', async () => {
+    await withRecordingLifetimeFixture(
+      async ({ agent, borrow, chatsDir, config }) => {
+        await agent.setHistory([
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'restored conversation' }],
           },
-          services: {
-            agent: {
-              agentClient: { getHistoryService: () => undefined },
-            } as never,
-            settings: { merged: { ui: {} } } as never,
-          },
-          recordingSwapCallbacks: {
-            getCurrentRecording: () => null,
-            getCurrentIntegration: () => null,
-            getCurrentLockHandle: () => null,
-            getCurrentMetadata: () => null,
-            setRecording: (
-              next: SessionRecordingPort | null,
-              integration: RecordingIntegration | null,
-              lock: LockHandle | null,
-            ) => {
-              committed = next;
-              committedIntegration = integration;
-              committedLock = lock;
+        ]);
+        await agent.session.setRecording({ enabled: true });
+        const id = agent.session.getSessionId();
+        await agent.session.setRecording({ enabled: false });
+        const corruptPath = join(
+          chatsDir,
+          'session-2026-10-08T21-18-08-corrupt.llxj',
+        );
+        await writeFile(corruptPath, 'LLXJRNL\0');
+        const next = await borrow();
+        const turn = createTurnStore();
+        turn.commands.bindJournal(() => next.agentClient.getHistoryService());
+        const target = (await next.session.listBrowserTargets()).find(
+          (entry) => entry.kind === 'session' && entry.session.sessionId === id,
+        );
+        if (!target) throw new Error('Missing source session');
+        let closed = false;
+        const view = renderHook(() =>
+          useSessionBrowserHandler(
+            composeFixtureRuntime(config),
+            {
+              recordingOwner: 'agent',
+              ui: {
+                clear: turn.commands.clearItems,
+                addItem: turn.commands.addItem,
+                pendingItem: null,
+              },
+              services: { agent: next, settings: createMockSettings({}) },
             },
-          },
-        },
-        commands.addItem,
-        () => {},
-      ),
+            turn.commands.addItem,
+            () => {
+              closed = true;
+            },
+          ),
+        );
+        try {
+          expect(await view.result.current(target)).toStrictEqual({ ok: true });
+          const visible = (await readJournalItems(next)).map(
+            (item) => item.text,
+          );
+          expect(visible[0]).toBe('restored conversation');
+          expect(visible.at(-1)).toContain(corruptPath);
+          expect(visible.at(-1)).toContain(
+            'Skipped unreadable session recording',
+          );
+          expect(closed).toBe(true);
+        } finally {
+          view.unmount();
+        }
+      },
     );
-
-    await result.current(target);
-
-    const visible = turnStore.store
-      .getState()
-      .history.map((item) => ('text' in item ? item.text : item.type));
-    expect(visible).toStrictEqual([
-      'restored conversation',
-      `Warning: Skipped unreadable session recording ${corruptPath}: ${corruptReason(corruptPath)}`,
-    ]);
-    unmount();
   });
 });

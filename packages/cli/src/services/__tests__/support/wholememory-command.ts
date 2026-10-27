@@ -13,7 +13,6 @@ import {
   type LockHandle,
 } from '@vybestack/llxprt-code-core';
 import { performResume } from '../../performResume.js';
-import { resumeHistoryWindow } from '../../../ui/utils/streamHistoryItems.js';
 import type { HistoryItem } from '../../../ui/types.js';
 import {
   createScrollbackPagerStore,
@@ -55,11 +54,10 @@ export class MemoryCommand {
   lock: LockHandle | null = null;
   pager: ScrollbackPagerStore | undefined;
   pagerDecoded = 0;
-  uiHistory: HistoryItem[] = [];
   metadataDirectories = 0;
   metadataDirectoryCharacters = 0;
 
-  constructor(private readonly ownership?: RowOwnership) {
+  constructor(ownership?: RowOwnership) {
     this.counters = {
       ...this.counters,
       counters: { ...this.counters.counters, ownership },
@@ -75,11 +73,9 @@ export class MemoryCommand {
     await this.registerMediaOwner(directory, workload);
     const result = await performResume(target, this.resumeOptions(directory));
     if (!result.ok) throw new Error(result.error);
-    this.uiHistory = await resumeHistoryWindow(
-      verifyRows(result.history, count, workload),
-      undefined,
-      this.ownership,
-    );
+    for await (const _row of verifyRows(result.history, count, workload)) {
+      // Validate the adopted source without creating a second transcript.
+    }
     await this.history.waitForCommit();
     await this.history.waitForTokenUpdates();
     await this.history.waitForOwnershipSettlement();
@@ -168,13 +164,10 @@ export class MemoryCommand {
         throw new Error('Incorrect compressed transcript context markers');
       }
     }
-    verifyWindow(this.uiHistory, workload === 'compressed' ? 1 : 400, count);
     this.pagerDecoded = this.counters.snapshot().recordsDecoded - beforePager;
   }
 
   async close(): Promise<void> {
-    for (const item of this.uiHistory) this.ownership?.release(item);
-    this.uiHistory = [];
     await this.pager?.close();
     await this.integration?.dispose();
     await this.history.dispose();

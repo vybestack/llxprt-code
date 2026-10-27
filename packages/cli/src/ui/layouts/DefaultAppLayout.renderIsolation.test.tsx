@@ -3,6 +3,9 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { registerJournalPagerFixture } from '../stores/turn/journal-turn-test-helpers.js';
+const journalPager = registerJournalPagerFixture();
+
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 
 import { act, cloneElement, useState } from 'react';
@@ -16,13 +19,16 @@ interface Fiber {
   readonly sibling: Fiber | null;
 }
 const renders = new Map<string, number>();
+let previousFibers = new Set<Fiber>();
+let currentFibers = new Set<Fiber>();
 function countRenderedFibers(fiber: Fiber | null): void {
   if (!fiber) return;
+  currentFibers.add(fiber);
   const name =
     typeof fiber.type === 'function' || typeof fiber.type === 'object'
       ? fiber.type?.name
       : undefined;
-  if (name && (fiber.flags & 1) !== 0) {
+  if (name && !previousFibers.has(fiber) && (fiber.flags & 1) !== 0) {
     renders.set(name, (renders.get(name) ?? 0) + 1);
   }
   countRenderedFibers(fiber.child);
@@ -33,8 +39,11 @@ function countRenderedFibers(fiber: Fiber | null): void {
 Reflect.set(globalThis, '__REACT_DEVTOOLS_GLOBAL_HOOK__', {
   supportsFiber: true,
   inject: () => 1,
-  onCommitFiberRoot: (_id: number, root: { current: Fiber }) =>
-    countRenderedFibers(root.current),
+  onCommitFiberRoot: (_id: number, root: { current: Fiber }) => {
+    currentFibers = new Set<Fiber>();
+    countRenderedFibers(root.current);
+    previousFibers = currentFibers;
+  },
   onCommitFiberUnmount: () => {},
 });
 await import('ink-testing-library');
@@ -71,15 +80,21 @@ const { createTerminalStore } = await import(
 const { createTurnStore } = await import('../stores/turn/turnStore.js');
 const { createDialogStore } = await import('../stores/dialog/dialogStore.js');
 
-function mountLayout(runtimeMessageBus?: InstanceType<typeof MessageBus>) {
+async function mountLayout(
+  runtimeMessageBus?: InstanceType<typeof MessageBus>,
+) {
   const terminal = createTerminalStore();
-  const turn = createTurnStore({
-    history: [{ id: 1, type: 'user', text: 'committed transcript' }],
-  });
+  const turn = createTurnStore();
+  const pager = await journalPager([
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'committed transcript' }],
+    },
+  ]);
   const dialog = createDialogStore();
   const settings = createMockSettings({
     ui: {
-      useAlternateBuffer: false,
+      useAlternateBuffer: true,
       hideContextSummary: true,
       showTodoPanel: false,
     },
@@ -93,6 +108,14 @@ function mountLayout(runtimeMessageBus?: InstanceType<typeof MessageBus>) {
   });
   const layout = (
     <DefaultAppLayout
+      scrollbackPager={{
+        store: pager,
+        viewport: {
+          visibleKeys: [],
+          viewportLines: 8,
+          rowHeightLines: () => 1,
+        },
+      }}
       runtimeMessageBus={runtimeMessageBus}
       uiRuntime={buildUiRuntimeFromSource(config, createUiSessionOwner())}
       slashCommandRuntime={buildSlashCommandRuntime(
@@ -133,12 +156,13 @@ describe('production layout render isolation', () => {
   it('keeps the transcript and static parent idle on dialog, clock, and geometry updates', async () => {
     renders.clear();
     setEnv('DEV', 'true');
-    const { terminal, turn, dialog, view, invalidateParent } = mountLayout();
+    const { terminal, turn, dialog, view, invalidateParent } =
+      await mountLayout();
     try {
       expect(view.lastFrame()).toContain('committed transcript');
       const initial = renders.get('DefaultAppLayout') ?? 0;
-      const transcript = renders.get('TranscriptRegion') ?? 0;
-      const viewport = renders.get('TranscriptViewport') ?? 0;
+      const transcript = renders.get('PagerTranscript') ?? 0;
+      const viewport = renders.get('ScrollbackViewport') ?? 0;
       expect(initial).toBeGreaterThan(0);
       expect(transcript).toBeGreaterThan(0);
       expect(viewport).toBeGreaterThan(0);
@@ -146,8 +170,8 @@ describe('production layout render isolation', () => {
         dialog.commands.openDialog({ kind: 'settings', payload: {} });
       });
       expect(renders.get('DefaultAppLayout')).toBe(initial);
-      expect(renders.get('TranscriptRegion')).toBe(transcript);
-      expect(renders.get('TranscriptViewport')).toBe(viewport);
+      expect(renders.get('PagerTranscript')).toBe(transcript);
+      expect(renders.get('ScrollbackViewport')).toBe(viewport);
       await act(async () => {
         dialog.commands.closeDialog('settings');
       });
@@ -157,8 +181,8 @@ describe('production layout render isolation', () => {
       });
       expect(renders.get('ComposerContent')).toBeGreaterThan(composer);
       expect(renders.get('DefaultAppLayout')).toBe(initial);
-      expect(renders.get('TranscriptRegion')).toBe(transcript);
-      expect(renders.get('TranscriptViewport')).toBe(viewport);
+      expect(renders.get('PagerTranscript')).toBe(transcript);
+      expect(renders.get('ScrollbackViewport')).toBe(viewport);
       await act(async () => {
         terminal.commands.setDimensions({
           terminalWidth: 100,
@@ -168,17 +192,17 @@ describe('production layout render isolation', () => {
         });
       });
       expect(renders.get('DefaultAppLayout')).toBe(initial);
-      expect(renders.get('TranscriptRegion')).toBe(transcript);
-      expect(renders.get('TranscriptViewport')).toBeGreaterThan(viewport);
+      expect(renders.get('PagerTranscript')).toBe(transcript);
+      expect(renders.get('ScrollbackViewport')).toBeGreaterThan(viewport);
       await act(async () => {
         invalidateParent();
       });
       expect(renders.get('DefaultAppLayout')).toBeGreaterThan(initial);
-      expect(renders.get('TranscriptRegion')).toBe(transcript);
+      expect(renders.get('PagerTranscript')).toBe(transcript);
       await act(async () => {
-        turn.commands.addItem({ type: 'user', text: 'next committed item' });
+        turn.commands.clearItems();
       });
-      expect(renders.get('TranscriptRegion')).toBeGreaterThan(transcript);
+      expect(turn.store.getState().historyEpoch).toBe(1);
     } finally {
       view.unmount();
       restoreEnv();
@@ -191,7 +215,7 @@ describe('store migration regressions', () => {
     'shows bucket authentication requests only when the layout receives the bus (provided: %s)',
     async (provided) => {
       const bus = new MessageBus(new PolicyEngine(), false);
-      const { view } = mountLayout(provided ? bus : undefined);
+      const { view } = await mountLayout(provided ? bus : undefined);
       try {
         expect(view.lastFrame()).not.toContain('OAuth Bucket Authentication');
         await act(async () => {
@@ -216,7 +240,7 @@ describe('store migration regressions', () => {
 
   it('renders runtime hook activity and clears it after completion', async () => {
     const bus = new MessageBus(new PolicyEngine(), false);
-    const { view } = mountLayout(bus);
+    const { view } = await mountLayout(bus);
     try {
       await act(async () => {
         bus.publish({

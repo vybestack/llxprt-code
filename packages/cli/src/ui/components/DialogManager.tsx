@@ -3,8 +3,6 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { resumeHistoryWindow } from '../utils/streamHistoryItems.js';
-import { historyLimitsFromSettings } from '../utils/historyLimitsFromSettings.js';
 import type { CommandContext } from '../commands/types.js';
 
 import type { CliUiRuntime } from '../cliUiRuntime.js';
@@ -20,7 +18,6 @@ import {
   performResume,
   type ResumeContext,
 } from '../../services/performResume.js';
-import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // NOTE: Not yet ported from upstream
 import { SettingsDialog } from './SettingsDialog.js';
 import { PrivacyNotice } from '../privacy/PrivacyNotice.js';
@@ -155,24 +152,15 @@ function useDialogData(): DialogData {
 async function selectOwnerBrowserTarget(
   agent: Agent,
   target: ContinueTarget,
-  config: CliUiRuntime,
-  loadHistory: UseHistoryManagerReturn['loadHistory'],
   addItem: UseHistoryManagerReturn['addItem'],
   closeDialog: (kind: ListDialogKind) => void,
-  settings: Pick<LoadedSettings, 'merged'>,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const ref =
       target.kind === 'session'
         ? target.session.sessionId
         : target.checkpointId;
-    const replay = await resumeOwnerSession(
-      agent,
-      ref,
-      resolveEmojiFilterMode(config),
-      historyLimitsFromSettings(settings),
-    );
-    loadHistory([...replay.uiHistory]);
+    const replay = await resumeOwnerSession(agent, ref);
     // After the restore: loading history would erase warnings added before it.
     for (const warning of replay.warnings) {
       addItem({ type: 'info', text: `Warning: ${warning}` });
@@ -212,7 +200,6 @@ export function useSessionBrowserHandler(
       clear: () => void;
       addItem: UseHistoryManagerReturn['addItem'];
       pendingItem: unknown;
-      loadHistory: UseHistoryManagerReturn['loadHistory'];
     };
     recordingOwner?: 'agent';
     services: { agent: Agent | null; settings: Pick<LoadedSettings, 'merged'> };
@@ -228,15 +215,7 @@ export function useSessionBrowserHandler(
       if (commandContext.recordingOwner === 'agent') {
         const agent = commandContext.services.agent;
         if (agent === null) throw new Error('Session agent is unavailable');
-        return selectOwnerBrowserTarget(
-          agent,
-          target,
-          config,
-          commandContext.ui.loadHistory,
-          addItem,
-          closeDialog,
-          commandContext.services.settings,
-        );
+        return selectOwnerBrowserTarget(agent, target, addItem, closeDialog);
       }
       const recordingSwapCallbacks = commandContext.recordingSwapCallbacks;
       if (recordingSwapCallbacks == null) {
@@ -264,16 +243,7 @@ export function useSessionBrowserHandler(
         addItem({ type: 'error', text: resumeResult.error });
         return resumeResult;
       }
-      const uiHistory = await resumeHistoryWindow(
-        resumeResult.history,
-        resolveEmojiFilterMode(config),
-        undefined,
-        historyLimitsFromSettings(commandContext.services.settings),
-      );
       commandContext.ui.clear();
-      uiHistory.forEach((item, index) => {
-        commandContext.ui.addItem(item, index);
-      });
       // After the restore: clearing history would erase warnings added before it.
       for (const warning of resumeResult.warnings) {
         addItem({ type: 'info', text: `Warning: ${warning}` });

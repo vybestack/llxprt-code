@@ -1,421 +1,143 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
-/**
- * @plan PLAN-20260917-ISSUE854.P02e
- * @requirement G1,G2
- *
- * Behavioral tests for useScrollbackBootstrap (issue-854-design.md §8):
- * the flag is read once at boot, a pager store is constructed only when
- * ui.scrollbackPagerEnabled is on AND the session journal path resolves,
- * a missing journal falls back to the non-pager path with a one-line
- * notice and no throw, a mid-session flag toggle prompts restart without
- * hot-swapping the pager, and the residency knobs map into the store
- * settings (KiB → bytes).
- *
- * The schema default for ui.scrollbackPagerEnabled is false (the pager
- * cannot yet render tool resultDisplay or UI-only rows); the "schema default"
- * test proves the default-off wiring, and every pager test enables the flag
- * explicitly.
- *
- * The store factory and JournalCursor run for real; the journal is a real
- * temp file, so the binding test proves the store reads the given file
- * path. LoadedSettings is the real class driven through its real
- * setValue() path for the live-toggle scenarios.
- */
-
-import { afterEach, describe, expect, it, vi, type Mock } from 'bun:test';
-import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
-import * as path from 'node:path';
-import { renderHook } from '../../../../__tests__/render.js';
-import { LoadedSettings, SettingScope } from '../../../../config/settings.js';
-import type { RecordingSwapCallbacks } from '../../../../services/performResume.js';
-import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
-import type { IContent } from '@vybestack/llxprt-code-core';
-import type { HistoryItemWithoutId } from '../../../types.js';
-import type { ScrollbackPagerSettings } from '../../../stores/turn/scrollbackPager.js';
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
+import { join } from 'node:path';
+import { JournalSession } from '@vybestack/llxprt-code-core';
+import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
+import { renderHook, waitFor } from '../../../../__tests__/render.js';
+import { LoadedSettings } from '../../../../config/settings.js';
 import {
-  scrollbackPagerSettingsFrom,
   useScrollbackBootstrap,
-  type UseScrollbackBootstrapOptions,
+  scrollbackPagerSettingsFrom,
+  type JournalPathSource,
 } from './useScrollbackBootstrap.js';
 
-function userContent(text: string, seq: number): IContent {
-  return {
-    speaker: 'human',
-    blocks: [{ type: 'text', text }],
-    metadata: { chronology: { seq, userTurn: 1, step: 1, recordedAt: 0 } },
-  };
-}
-
-interface JournalFixture {
-  filePath: string;
-  addUser(seq: number, text: string): Promise<void>;
-}
-
-const journalDirs: string[] = [];
-
-async function makeJournalFixture(
-  records: ReadonlyArray<readonly [number, string]> = [],
-): Promise<JournalFixture> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'scrollback-bootstrap-'));
-  journalDirs.push(dir);
-  const filePath = path.join(dir, 'session-under-test.llxj');
-  const session = await JournalSession.create(filePath);
-  try {
-    for (const [seq, text] of records)
-      await session.append([userContent(text, seq)]);
-  } finally {
-    await session.close();
-  }
-  return {
-    filePath,
-    async addUser(seq: number, text: string): Promise<void> {
-      const session = await JournalSession.open(filePath);
-      try {
-        await session.append([userContent(text, seq)]);
-      } finally {
-        await session.close();
-      }
-    },
-  };
-}
-
-/** Removes temp journals created since the last cleanup; runs per test. */
-async function cleanupJournalDirs(): Promise<void> {
-  const dirs = journalDirs.splice(0);
-  await Promise.all(
-    dirs.map((dir) => fs.rm(dir, { recursive: true, force: true })),
-  );
-}
-
-function makeSettings(ui: Record<string, unknown>): LoadedSettings {
+function settings(ui: Record<string, unknown> = {}): LoadedSettings {
   return new LoadedSettings(
-    { settings: {}, path: '/tmp/system-settings.json' },
-    { settings: {}, path: '/tmp/system-defaults.json' },
-    { settings: {}, path: '/tmp/user-settings.json' },
-    { settings: { ui }, path: '/tmp/workspace-settings.json' },
+    { settings: {}, path: '' },
+    { settings: {}, path: '' },
+    { settings: {}, path: '' },
+    { settings: { ui }, path: '' },
     true,
   );
 }
 
-function makeSwapCallbacks(
-  recordingPath: string | null,
-): RecordingSwapCallbacks {
-  const recording = JournalRecordingService.create({
-    sessionId: 'bootstrap',
-    projectHash: 'bootstrap',
-    chatsDir: '/unused',
-    workspaceDirs: [],
-    provider: 'test',
-    model: 'test',
-  });
-  recording.getFilePath = () => recordingPath;
-  return {
-    getCurrentRecording: () => recording,
-    getCurrentIntegration: () => null,
-    getCurrentLockHandle: () => null,
-    getCurrentMetadata: () => null,
-    setRecording: () => undefined,
-  };
+async function journal(path: string, text: string): Promise<void> {
+  const session = await JournalSession.create(path);
+  try {
+    await session.append([
+      { speaker: 'human', blocks: [{ type: 'text', text }] },
+    ]);
+  } finally {
+    await session.close();
+  }
 }
 
-interface HarnessOptions {
-  readonly ui: Record<string, unknown>;
-  readonly recordingPath: string | null;
-}
-
-function makeHarness(options: HarnessOptions): {
-  props: UseScrollbackBootstrapOptions;
-  addItem: Mock<(item: HistoryItemWithoutId, timestamp?: number) => number>;
-} {
-  const addItem =
-    vi.fn<(item: HistoryItemWithoutId, timestamp?: number) => number>();
-  addItem.mockImplementation(() => 1);
+function source(readPath: () => string | null): JournalPathSource {
   return {
-    addItem,
-    props: {
-      settings: makeSettings(options.ui),
-      recordingSwapCallbacks: makeSwapCallbacks(options.recordingPath),
-      addItem,
+    getCurrentRecording: () => {
+      const path = readPath();
+      return path === null ? null : { getFilePath: () => path };
     },
   };
 }
 
-describe('useScrollbackBootstrap', () => {
-  afterEach(() => cleanupJournalDirs());
+describe('journal transcript bootstrap', () => {
+  const directory = useTempDir('journal-bootstrap-');
 
-  it('rebinds scrollback to the resumed journal after a recording swap', async () => {
-    const first = await makeJournalFixture([[1, 'old session']]);
-    const second = await makeJournalFixture([[1, 'resumed session']]);
-    const { props } = makeHarness({
-      ui: { scrollbackPagerEnabled: true },
-      recordingPath: first.filePath,
-    });
-    const { result, rerender, unmount } = renderHook(
-      (p: UseScrollbackBootstrapOptions) => useScrollbackBootstrap(p),
-      { initialProps: props },
+  it('opens the journal with default settings without a feature flag', async () => {
+    const path = join(directory(), 'default.llxj');
+    await journal(path, 'persisted startup prompt');
+    const loaded = settings();
+    const journalSource = source(() => path);
+    const mounted = renderHook(() =>
+      useScrollbackBootstrap({
+        settings: loaded,
+        recordingSwapCallbacks: journalSource,
+      }),
     );
-    const oldPager = result.current.pager;
-    await oldPager?.store.pageBack();
-    const oldGeneration = oldPager?.store.getState().generation ?? 0;
-    rerender({
-      ...props,
-      recordingSwapCallbacks: makeSwapCallbacks(second.filePath),
-    });
-    const resumedPager = result.current.pager;
-    await resumedPager?.store.pageBack();
+    try {
+      await waitFor(() => {
+        expect(
+          mounted.result.current.pager?.store
+            .getState()
+            .rows.map((row) => row.item.text),
+        ).toStrictEqual(['persisted startup prompt']);
+      });
+    } finally {
+      mounted.unmount();
+    }
+  });
+
+  it('follows a session swap and releases the previous journal window', async () => {
+    const first = join(directory(), 'first.llxj');
+    const second = join(directory(), 'second.llxj');
+    await journal(first, 'old session');
+    await journal(second, 'resumed session');
+    let path = first;
+    const journalSource = source(() => path);
+    const loaded = settings();
+    const mounted = renderHook(() =>
+      useScrollbackBootstrap({
+        settings: loaded,
+        recordingSwapCallbacks: journalSource,
+      }),
+    );
+    try {
+      await waitFor(() => expect(mounted.result.current.pager).not.toBeNull());
+      const previous = mounted.result.current.pager;
+      path = second;
+      await waitFor(() => {
+        expect(
+          mounted.result.current.pager?.store
+            .getState()
+            .rows.map((row) => row.item.text),
+        ).toStrictEqual(['resumed session']);
+      });
+      expect(previous?.store.metrics().residentRows).toBe(0);
+    } finally {
+      mounted.unmount();
+    }
+  });
+
+  it('waits for journal materialization without creating a fallback transcript', async () => {
+    const file = join(directory(), 'late.llxj');
+    let path: string | null = null;
+    const journalSource = source(() => path);
+    const loaded = settings();
+    const mounted = renderHook(() =>
+      useScrollbackBootstrap({
+        settings: loaded,
+        recordingSwapCallbacks: journalSource,
+      }),
+    );
+    try {
+      expect(mounted.result.current.pager).toBeNull();
+      await journal(file, 'first materialized row');
+      path = file;
+      await waitFor(() => {
+        expect(
+          mounted.result.current.pager?.store
+            .getState()
+            .rows.map((row) => row.item.text),
+        ).toStrictEqual(['first materialized row']);
+      });
+    } finally {
+      mounted.unmount();
+    }
+  });
+
+  it('maps configured residency settings from KiB to bytes', () => {
     expect(
-      resumedPager?.store.getState().rows.map((row) => row.item.text),
-    ).toStrictEqual(['resumed session']);
-    expect(oldPager?.store.getState().generation).toBeGreaterThan(
-      oldGeneration,
-    );
-    unmount();
-  });
-
-  it('flag off constructs no pager and emits no notice', () => {
-    // Explicit false, independent of the schema default.
-    const { props, addItem } = makeHarness({
-      ui: { scrollbackPagerEnabled: false },
-      recordingPath: '/tmp/unused-session.jsonl',
-    });
-    const { result, unmount } = renderHook(
-      (p: UseScrollbackBootstrapOptions) => useScrollbackBootstrap(p),
-      { initialProps: props },
-    );
-    unmount();
-    expect(result.current.pager).toBeNull();
-    expect(result.current.restartNotice).toBeNull();
-    expect(addItem).not.toHaveBeenCalled();
-  });
-});
-
-describe('useScrollbackBootstrap (group 2)', () => {
-  afterEach(() => cleanupJournalDirs());
-
-  it('flag on binds the pager to the session journal file', async () => {
-    const fixture = await makeJournalFixture([
-      [1, 'r-01'],
-      [2, 'r-02'],
-      [3, 'r-03'],
-    ]);
-    const { props, addItem } = makeHarness({
-      ui: { scrollbackPagerEnabled: true },
-      recordingPath: fixture.filePath,
-    });
-    const { result, unmount } = renderHook(
-      (p: UseScrollbackBootstrapOptions) => useScrollbackBootstrap(p),
-      { initialProps: props },
-    );
-    const pager = result.current.pager;
-    expect(pager).not.toBeNull();
-    expect(result.current.restartNotice).toBeNull();
-    expect(addItem).not.toHaveBeenCalled();
-    expect(pager?.viewport.viewportLines).toBe(0);
-    await pager?.store.pageBack();
-    const state = pager?.store.getState();
-    expect(state?.rows.map((row) => row.item.text)).toStrictEqual([
-      'r-01',
-      'r-02',
-      'r-03',
-    ]);
-    unmount();
-  });
-
-  it('schema default (no explicit flag) leaves the pager off', async () => {
-    // The pager projects only journal rows (no tool resultDisplay or UI-only
-    // rows), so it is opt-in. The flag value arrives purely through the schema
-    // default merged into LoadedSettings, with no explicit override.
-    const fixture = await makeJournalFixture([[1, 'r-01']]);
-    const { props, addItem } = makeHarness({
-      ui: {},
-      recordingPath: fixture.filePath,
-    });
-    const { result, unmount } = renderHook(
-      (p: UseScrollbackBootstrapOptions) => useScrollbackBootstrap(p),
-      { initialProps: props },
-    );
-    expect(result.current.pager).toBeNull();
-    expect(result.current.restartNotice).toBeNull();
-    expect(addItem).not.toHaveBeenCalled();
-    unmount();
-  });
-
-  it('flag on without a journal falls back with a one-line notice and no throw', () => {
-    const { props, addItem } = makeHarness({
-      ui: { scrollbackPagerEnabled: true },
-      recordingPath: null,
-    });
-    const { result, unmount } = renderHook(
-      (p: UseScrollbackBootstrapOptions) => useScrollbackBootstrap(p),
-      { initialProps: props },
-    );
-    unmount();
-    expect(result.current.pager).toBeNull();
-    expect(result.current.restartNotice).toBeNull();
-    expect(addItem).toHaveBeenCalledTimes(1);
-    const [notice] = addItem.mock.calls[0];
-    expect(notice.type).toBe('info');
-    expect(notice.text).toBe('scrollback unavailable: no journal');
-  });
-});
-
-describe('useScrollbackBootstrap (group 3)', () => {
-  afterEach(() => cleanupJournalDirs());
-
-  it('failed journal resolution emits the notice exactly once across renders', () => {
-    const { props, addItem } = makeHarness({
-      ui: { scrollbackPagerEnabled: true },
-      recordingPath: null,
-    });
-    const { rerender, unmount } = renderHook(
-      (p: UseScrollbackBootstrapOptions) => useScrollbackBootstrap(p),
-      { initialProps: props },
-    );
-    rerender(props);
-    rerender(props);
-    unmount();
-    expect(addItem).toHaveBeenCalledTimes(1);
-  });
-
-  it('live toggle to on prompts restart without constructing a pager', () => {
-    const { props } = makeHarness({
-      ui: { scrollbackPagerEnabled: false },
-      recordingPath: '/tmp/unused-session.jsonl',
-    });
-    const { result, rerender, unmount } = renderHook(
-      (p: UseScrollbackBootstrapOptions) => useScrollbackBootstrap(p),
-      { initialProps: props },
-    );
-    expect(result.current.pager).toBeNull();
-    props.settings.setValue(
-      SettingScope.Workspace,
-      'ui.scrollbackPagerEnabled',
-      true,
-    );
-    rerender(props);
-    expect(result.current.restartNotice).toBe(
-      'scrollback pager setting changed: restart to apply',
-    );
-    expect(result.current.pager).toBeNull();
-    unmount();
-  });
-
-  it('live toggle to off keeps the pager identity and prompts restart', async () => {
-    const fixture = await makeJournalFixture([[1, 'r-01']]);
-    const { props } = makeHarness({
-      ui: { scrollbackPagerEnabled: true },
-      recordingPath: fixture.filePath,
-    });
-    const { result, rerender, unmount } = renderHook(
-      (p: UseScrollbackBootstrapOptions) => useScrollbackBootstrap(p),
-      { initialProps: props },
-    );
-    const pagerBefore = result.current.pager;
-    expect(pagerBefore).not.toBeNull();
-    props.settings.setValue(
-      SettingScope.Workspace,
-      'ui.scrollbackPagerEnabled',
-      false,
-    );
-    rerender(props);
-    expect(result.current.restartNotice).toBe(
-      'scrollback pager setting changed: restart to apply',
-    );
-    expect(result.current.pager).toBe(pagerBefore);
-    unmount();
-  });
-});
-
-describe('useScrollbackBootstrap (group 4)', () => {
-  afterEach(() => cleanupJournalDirs());
-
-  it('toggle back to the boot value clears the restart notice', async () => {
-    const fixture = await makeJournalFixture();
-    const { props } = makeHarness({
-      ui: { scrollbackPagerEnabled: true },
-      recordingPath: fixture.filePath,
-    });
-    const { result, rerender, unmount } = renderHook(
-      (p: UseScrollbackBootstrapOptions) => useScrollbackBootstrap(p),
-      { initialProps: props },
-    );
-    props.settings.setValue(
-      SettingScope.Workspace,
-      'ui.scrollbackPagerEnabled',
-      false,
-    );
-    rerender(props);
-    expect(result.current.restartNotice).not.toBeNull();
-    props.settings.setValue(
-      SettingScope.Workspace,
-      'ui.scrollbackPagerEnabled',
-      true,
-    );
-    rerender(props);
-    expect(result.current.restartNotice).toBeNull();
-    unmount();
-  });
-
-  it('unmount closes the pager store so paging becomes a no-op', async () => {
-    const fixture = await makeJournalFixture([
-      [1, 'r-01'],
-      [2, 'r-02'],
-    ]);
-    const { props } = makeHarness({
-      ui: { scrollbackPagerEnabled: true },
-      recordingPath: fixture.filePath,
-    });
-    const { result, unmount } = renderHook(
-      (p: UseScrollbackBootstrapOptions) => useScrollbackBootstrap(p),
-      { initialProps: props },
-    );
-    const pager = result.current.pager;
-    expect(pager).not.toBeNull();
-    unmount();
-    await pager?.store.pageBack();
-    expect(pager?.store.getState().rows).toHaveLength(0);
-  });
-});
-
-describe('scrollbackPagerSettingsFrom', () => {
-  it('maps the residency knobs into store settings (KiB to bytes)', () => {
-    const settings = makeSettings({
-      scrollbackPagerEnabled: true,
-      scrollbackMarginViewports: 3,
-      scrollbackByteFloorKiB: 512,
-    });
-    const expected: ScrollbackPagerSettings = {
-      marginViewports: 3,
-      byteFloorBytes: 512 * 1024,
-      purgeDebounceMs: 1500,
-    };
-    expect(scrollbackPagerSettingsFrom(settings)).toStrictEqual(expected);
-  });
-
-  it('falls back to schema defaults when the knobs are missing', () => {
-    const settings = makeSettings({ scrollbackPagerEnabled: true });
-    const expected: ScrollbackPagerSettings = {
+      scrollbackPagerSettingsFrom(
+        settings({
+          scrollbackMarginViewports: 3,
+          scrollbackByteFloorKiB: 64,
+        }),
+      ),
+    ).toMatchObject({ marginViewports: 3, byteFloorBytes: 65536 });
+    expect(scrollbackPagerSettingsFrom(settings())).toMatchObject({
       marginViewports: 2,
-      byteFloorBytes: 256 * 1024,
-      purgeDebounceMs: 1500,
-    };
-    expect(scrollbackPagerSettingsFrom(settings)).toStrictEqual(expected);
-  });
-
-  it('falls back to schema defaults when the knobs are not finite numbers', () => {
-    const settings = makeSettings({
-      scrollbackMarginViewports: 'many',
-      scrollbackByteFloorKiB: Number.NaN,
+      byteFloorBytes: 262144,
     });
-    const mapped = scrollbackPagerSettingsFrom(settings);
-    expect(mapped.marginViewports).toBe(2);
-    expect(mapped.byteFloorBytes).toBe(256 * 1024);
   });
 });

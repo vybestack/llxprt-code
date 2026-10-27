@@ -19,6 +19,7 @@ import {
 import type { SlashCommandProcessorActions } from '../ui/hooks/slashCommandProcessor.js';
 import type { HistoryItemWithoutId, Message } from '../ui/types.js';
 import { createMockCommandContext } from './mockCommandContext.js';
+import { readJournalItems } from '../ui/stores/turn/journal-turn-test-helpers.js';
 import { NativeJournalCursor } from '../ui/stores/turn/native-journal-cursor.js';
 const actions: SlashCommandProcessorActions = {
   openAuthDialog: () => {},
@@ -158,9 +159,6 @@ export async function nativeCommandFixture(): Promise<NativeCommandFixture> {
     recordingOwner: 'agent',
     services: { agent: live },
     ui: {
-      loadHistory: (history: readonly HistoryItemWithoutId[]): void => {
-        displayed = history;
-      },
       addItem: (item: HistoryItemWithoutId): number => {
         items.push(item);
         return items.length;
@@ -182,6 +180,7 @@ export async function nativeCommandFixture(): Promise<NativeCommandFixture> {
       expect(
         await processSlashCommand(deps, text, undefined, undefined, false),
       ).toStrictEqual({ type: 'handled' });
+      displayed = await readJournalItems(live);
       const path = live.session.getRecording().path;
       if (path !== undefined) await collectJournalNotices(path, items);
     },

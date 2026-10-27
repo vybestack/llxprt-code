@@ -92,10 +92,10 @@ void vi.mock('./slashCommandProcessor.js', () => ({
 
 // --- Tests for useAgentStream Hook ---
 describe('useAgentStream', () => {
-  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]>;
+  let mockAddItem: Mock<Parameters<typeof useAgentStream>[1]>;
   let mockConfig: Config;
   let mockOnDebugMessage: Mock<(message: string) => void>;
-  let mockHandleSlashCommand: Mock<Parameters<typeof useAgentStream>[6]>;
+  let mockHandleSlashCommand: Mock<Parameters<typeof useAgentStream>[5]>;
   let mockScheduleToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[1]>;
   let mockCancelAllToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[3]>;
   let mockMarkToolsAsDisplayCleared: Mock<
@@ -105,7 +105,7 @@ describe('useAgentStream', () => {
   beforeEach(() => {
     vi.clearAllMocks(); // Clear mocks before each test
 
-    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]>(() => 0);
+    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[1]>(() => 0);
     // Define the mock for getAgentClient
 
     const contentGeneratorConfig = {
@@ -264,7 +264,6 @@ describe('useAgentStream', () => {
 
         return useAgentStream(
           props.client,
-          props.history,
           props.addItem,
           props.runtime,
           props.loadedSettings,
@@ -446,7 +445,6 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
-          [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig),
           mockLoadedSettings,
@@ -493,7 +491,6 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           createFakeAgentFromMockClient(new MockedAgentClientClass(testConfig)),
-          [],
           mockAddItem,
           createStreamRuntimeForTest(testConfig),
           mockLoadedSettings,

@@ -33,7 +33,9 @@ import { UNCONFIGURED_PROVIDER } from '@vybestack/llxprt-code-core';
  * while the UI HistoryItem expects a MessageType enum. oauth_url has no
  * MessageType counterpart and is rendered as INFO.
  */
-function mapOAuthEventType(type: AgentOAuthUIEvent['type']): MessageType {
+function mapOAuthEventType(
+  type: AgentOAuthUIEvent['type'],
+): MessageType.INFO | MessageType.WARNING | MessageType.ERROR {
   switch (type) {
     case 'warning':
       return MessageType.WARNING;

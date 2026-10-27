@@ -112,7 +112,6 @@ export interface CommandContext {
      *
      * @param history The array of history items to load.
      */
-    loadHistory: UseHistoryManagerReturn['loadHistory'];
     /** Toggles a special display mode. */
     toggleCorgiMode: () => void;
     toggleDebugProfiler: () => void;

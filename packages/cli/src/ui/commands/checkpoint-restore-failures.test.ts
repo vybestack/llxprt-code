@@ -40,7 +40,6 @@ type Fault =
   | 'acknowledgement'
   | 'write'
   | 'corrupt'
-  | 'missing-ui'
   | 'truncated';
 async function failure(fault: Fault, active: boolean): Promise<boolean> {
   return withCheckpoint(2, active, async (fixture, dir) => {
@@ -82,11 +81,9 @@ async function failure(fault: Fault, active: boolean): Promise<boolean> {
     });
     context.signal = abort.signal;
     let uiPublished = false;
-    context.ui.loadHistory = () => {
+    context.ui.clear = () => {
       uiPublished = true;
     };
-    if (fault === 'missing-ui')
-      Reflect.deleteProperty(context.ui, 'loadHistory');
     context.ui.addItem = () => {
       uiPublished = true;
       return 1;
@@ -139,7 +136,6 @@ describe('CLI checkpoint restoration atomic recovery', () => {
       'write',
       'acknowledgement',
       'corrupt',
-      'missing-ui',
       'truncated',
     ] as const) {
       it(`keeps prior history and UI with no media reservations after ${fault}, active=${active}`, async () => {

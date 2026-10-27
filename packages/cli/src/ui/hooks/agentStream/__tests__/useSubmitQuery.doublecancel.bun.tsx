@@ -36,7 +36,6 @@ import {
 import type { StreamRuntime } from '../../../cliUiRuntime.js';
 import { KeypressProvider } from '../../../contexts/KeypressContext.js';
 import { createFakeAgentFromMockClient } from '../../__tests__/useAgentStream-test-helpers.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 // ─── Module mocks ───────────────────────────────────────────────────────────
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import { createDeferred } from './createDeferred.js';
@@ -162,7 +161,7 @@ function createUseSubmitQueryDeps(
       createStreamRuntimeForTest({}, createMockOverrides()),
     agent: overrides.agent ?? createMockAgent(),
     addItem: overrides.addItem ?? vi.fn().mockReturnValue(1),
-    removeItems: vi.fn(),
+
     settings: createLoadedSettings(),
     onDebugMessage: vi.fn(),
     onCancelSubmit: vi.fn(),
@@ -170,9 +169,9 @@ function createUseSubmitQueryDeps(
     recordingIntegration: overrides.recordingIntegration,
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: deps.flushPendingHistoryItem,
-    pendingResponse: new PendingResponseBuffer(undefined),
+
     pendingHistoryItemRef: deps.pendingHistoryItemRef,
-    thinkingBlocksRef: { current: [] },
+
     turnCancelledRef: overrides.turnCancelledRef ?? { current: false },
     setTurnCancelled: vi.fn(),
     queuedSubmissionsRef,

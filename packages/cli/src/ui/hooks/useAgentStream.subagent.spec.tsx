@@ -26,7 +26,6 @@ import type {
   ToolRegistry,
   AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
-import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { SlashCommandProcessorResult } from '../types.js';
@@ -305,7 +304,6 @@ describe('useAgentStream subagent isolation', () => {
     renderHook(() =>
       useAgentStream(
         client,
-        [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         createStreamRuntimeForTest(mockConfig, mockOverrides),
         mockSettings,
@@ -429,7 +427,6 @@ describe('useAgentStream subagent isolation', () => {
     const { result } = renderHook(() =>
       useAgentStream(
         client,
-        [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         createStreamRuntimeForTest(mockConfig, mockOverrides),
         mockSettings,
@@ -500,7 +497,6 @@ describe('useAgentStream subagent isolation', () => {
     const { result } = renderHook(() =>
       useAgentStream(
         client,
-        [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         createStreamRuntimeForTest(mockConfig, mockOverrides),
         mockSettings,
@@ -522,117 +518,5 @@ describe('useAgentStream subagent isolation', () => {
     // so the streaming state settles to Idle without any model resubmission.
     expect(result.current.streamingState).toBe(StreamingState.Idle);
     expect(mockSendMessageStream).not.toHaveBeenCalled();
-  });
-
-  const observeClientInitiatedToolCompletion = async (): Promise<{
-    readonly addItem: ReturnType<typeof vi.fn>;
-    readonly sendMessageStream: ReturnType<typeof vi.fn>;
-    readonly markToolsAsDisplayCleared: ReturnType<typeof vi.fn>;
-  }> => {
-    const client = new MockedAgentClientClass(
-      mockConfig,
-    ) as unknown as Parameters<typeof useAgentStream>[0];
-
-    let capturedOnComplete:
-      | ((
-          schedulerId: symbol,
-          completedTools: TrackedToolCall[],
-          options: { isPrimary: boolean },
-        ) => Promise<void>)
-      | null = null;
-
-    mockUseReactToolScheduler.mockImplementation((onComplete) => {
-      capturedOnComplete = onComplete as typeof capturedOnComplete;
-      return [
-        [],
-        mockScheduleToolCalls,
-        mockMarkToolsAsDisplayCleared,
-        vi.fn(),
-        0,
-        true,
-        vi.fn(),
-        vi.fn(),
-      ] as const;
-    });
-
-    renderHook(() =>
-      useAgentStream(
-        client,
-        [],
-        mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-        createStreamRuntimeForTest(mockConfig, mockOverrides),
-        mockSettings,
-        mockOnDebugMessage,
-        mockHandleSlashCommand as unknown as (
-          cmd: AgentRequestInput,
-        ) => Promise<SlashCommandProcessorResult | false>,
-        false,
-        () => 'vscode' as EditorType,
-        () => {},
-        () => Promise.resolve(),
-        () => {},
-        () => {},
-        () => {},
-      ),
-    );
-
-    // A client-initiated tool completes through the MAIN scheduler: it has
-    // isClientInitiated: true and agentId: DEFAULT_AGENT_ID, and its completion
-    // callback is invoked with { isPrimary: true }.
-    const clientInitiatedTool: TrackedCompletedToolCall = {
-      request: {
-        callId: 'client-callId',
-        name: 'list_directory',
-        args: {},
-        isClientInitiated: true,
-        prompt_id: 'prompt-client',
-        agentId: DEFAULT_AGENT_ID,
-      },
-      status: 'success',
-      displayCleared: false,
-      response: {
-        callId: 'client-callId',
-        responseParts: [{ type: 'text', text: 'dir listing' }],
-        resultDisplay: undefined,
-        error: undefined,
-        errorType: undefined,
-      },
-      invocation: {
-        getDescription: () => `Mock description`,
-      } as unknown as AnyToolInvocation,
-      tool: {
-        name: 'list_directory',
-        displayName: 'List Directory',
-        description: 'List files',
-        build: vi.fn(),
-      } as unknown as AnyDeclarativeTool,
-    };
-
-    await act(async () => {
-      if (capturedOnComplete) {
-        await capturedOnComplete(Symbol('scheduler'), [clientInitiatedTool], {
-          isPrimary: true,
-        });
-      }
-    });
-
-    await waitFor(() => {
-      if (mockAddItem.mock.calls.length === 0) {
-        throw new Error('Expected the completed tool to be rendered');
-      }
-    });
-
-    return {
-      addItem: mockAddItem,
-      sendMessageStream: mockSendMessageStream,
-      markToolsAsDisplayCleared: mockMarkToolsAsDisplayCleared,
-    };
-  };
-
-  it('renders a completed client-initiated tool to display without resubmitting to the model or marking it display-cleared', async () => {
-    const completion = await observeClientInitiatedToolCompletion();
-    expect(completion.addItem).toHaveBeenCalled();
-    expect(completion.sendMessageStream).not.toHaveBeenCalled();
-    expect(completion.markToolsAsDisplayCleared).not.toHaveBeenCalled();
   });
 });

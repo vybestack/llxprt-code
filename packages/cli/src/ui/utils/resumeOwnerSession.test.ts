@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { readJournalItems } from '../stores/turn/journal-turn-test-helpers.js';
 
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
@@ -62,7 +63,7 @@ describe('interactive owner session replay', () => {
     await first.session.setRecording({ enabled: false });
 
     const next = await build(root, 'second-owner');
-    const replay = await resumeOwnerSession(next, 'first-owner', 'allowed');
+    await resumeOwnerSession(next, 'first-owner');
     expect(
       (await Array.fromAsync(next.streamHistory())).some((item) =>
         item.blocks.some(
@@ -72,7 +73,7 @@ describe('interactive owner session replay', () => {
       ),
     ).toBe(true);
     expect(
-      replay.uiHistory.some(
+      (await readJournalItems(next)).some(
         (item) => item.type === 'user' && item.text === 'replayed owner turn',
       ),
     ).toBe(true);
@@ -100,13 +101,9 @@ describe('interactive owner session replay', () => {
     }
     const checkpoint = await agent.session.createCheckpoint('fork-point');
     const source = agent.session.getRecording().path;
-    const replay = await resumeOwnerSession(
-      agent,
-      checkpoint.checkpointId,
-      'allowed',
-    );
+    await resumeOwnerSession(agent, checkpoint.checkpointId);
     expect(
-      replay.uiHistory.some(
+      (await readJournalItems(agent)).some(
         (item) => item.type === 'user' && item.text === 'before owner fork',
       ),
     ).toBe(true);
@@ -130,9 +127,9 @@ describe('interactive owner session replay', () => {
     for await (const _event of agent.stream('retain failed resume session')) {
       // Consume the real Agent turn.
     }
-    await expect(
-      resumeOwnerSession(agent, 'absent-owner', 'allowed'),
-    ).rejects.toThrow('Failed to resume session');
+    await expect(resumeOwnerSession(agent, 'absent-owner')).rejects.toThrow(
+      'Failed to resume session',
+    );
     await agent.session.recordRecordingEvent({
       type: 'directories_changed',
       directories: ['/still-running-after-failed-resume'],

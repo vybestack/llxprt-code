@@ -3,7 +3,9 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it, spyOn, type Mock } from 'bun:test';
+import { readJournalItems } from '../stores/turn/journal-turn-test-helpers.js';
+
+import { describe, expect, it, spyOn } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { readJournalCheckpoints } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
 import {
@@ -121,7 +123,7 @@ describe('owner-backed /chat command route', () => {
         expect(JSON.stringify(await agent.session.getHistory())).not.toContain(
           'second',
         );
-        expect(context.ui.loadHistory).toHaveBeenCalledWith([
+        expect(await readJournalItems(agent, 64, true)).toMatchObject([
           expect.objectContaining({ type: 'user', text: 'first' }),
           expect.objectContaining({ type: 'gemini', text: 'one' }),
         ]);
@@ -215,7 +217,7 @@ describe('owner-backed /chat command route', () => {
       ]);
       const context = createMockCommandContext({ services: { agent } });
       expect(await action('resume')(context, 'branch')).toBeUndefined();
-      expect(context.ui.loadHistory).toHaveBeenCalledWith([
+      expect(await readJournalItems(agent, 64, true)).toMatchObject([
         expect.objectContaining({ type: 'user', text: 'branch-point' }),
         expect.objectContaining({ type: 'gemini', text: 'first' }),
       ]);
@@ -290,30 +292,33 @@ describe('owner-backed /chat command route', () => {
     });
   }, 30000);
 
-  it('replays a restored transcript up to the configured historyMaxItems', async () => {
+  it('keeps the complete restored transcript on disk beyond former history limits', async () => {
     await withRecordingLifetimeFixture(async ({ agent }) => {
       const pairs = 1000;
+      await agent.session.setRecording({ enabled: true });
       await agent.setHistory(
         Array.from({ length: pairs }, (_unused, index) => [
           human(`question ${index}`),
           ai(`answer ${index}`),
         ]).flat(),
       );
-      await agent.session.setRecording({ enabled: true });
       const context = createMockCommandContext({
         services: {
           agent,
-          settings: { merged: { ui: { historyMaxItems: pairs * 2 } } },
         },
       });
 
       expect(await action('restore')(context, '1')).toBeUndefined();
 
-      const [loaded] = (
-        context.ui.loadHistory as Mock<(items: readonly unknown[]) => void>
-      ).mock.calls[0];
-      expect(loaded).toHaveLength((pairs - 1) * 2);
-      expect(loaded.at(-1)).toMatchObject({ text: `answer ${pairs - 2}` });
+      let restoredRows = 0;
+      let lastText: string | undefined;
+      for await (const row of agent.streamHistory()) {
+        restoredRows += 1;
+        const block = row.blocks.at(-1);
+        lastText = block?.type === 'text' ? block.text : undefined;
+      }
+      expect(restoredRows).toBe((pairs - 1) * 2);
+      expect(lastText).toBe(`answer ${pairs - 2}`);
     });
   }, 60000);
 });

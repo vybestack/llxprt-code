@@ -28,9 +28,6 @@ describe('SessionStart journal notice', () => {
           addItem: () => {
             throw new Error('Ledger write forbidden');
           },
-          prependHistory: () => {
-            throw new Error('Resume materialization forbidden');
-          },
         }),
       );
       try {

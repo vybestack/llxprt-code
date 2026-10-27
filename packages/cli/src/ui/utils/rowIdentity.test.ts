@@ -25,8 +25,6 @@ import {
   sameRowIdentity,
 } from './rowIdentity.js';
 import { iContentToHistoryItems } from './iContentToHistoryItems.js';
-import { createHistoryLedger } from '../stores/turn/historyLedger.js';
-import type { HistoryItem } from '../types.js';
 
 function chronology(seq: number) {
   return { seq, userTurn: 1, step: 1, recordedAt: 0 };
@@ -63,15 +61,6 @@ function toolResponse(id: string, seq?: number): IContent {
       { type: 'tool_response', callId: id, toolName: 'ls', result: 'ok' },
     ],
     ...(seq !== undefined ? { metadata: { chronology: chronology(seq) } } : {}),
-  };
-}
-
-function userItem(id: number, rowIdentityShape: unknown): HistoryItem {
-  return {
-    id,
-    type: 'user',
-    text: `item-${id}`,
-    rowIdentity: rowIdentityShape as HistoryItem['rowIdentity'],
   };
 }
 
@@ -461,82 +450,6 @@ describe('rowIdentity', () => {
       });
       expect(warned[1].type).toBe('info');
       expect(warned[1].rowIdentity).toBeUndefined();
-    });
-  });
-
-  describe('historyLedger identity threading', () => {
-    it('locates a resident row by identity without a session-sized lookup contract change', () => {
-      const ledger = createHistoryLedger({
-        maxItems: 100,
-        maxBytes: 1_000_000,
-      });
-      const identity = rowIdentity({ kind: 'journal', offset: 500 }, 'text');
-      ledger.append(userItem(1, identity));
-      ledger.append(
-        userItem(2, rowIdentity({ kind: 'journal', offset: 600 }, 'text')),
-      );
-
-      expect(ledger.findIndexByIdentity(identity)).toBe(0);
-      expect(
-        ledger.findIndexByIdentity(
-          rowIdentity({ kind: 'journal', offset: 999 }, 'text'),
-        ),
-      ).toBe(-1);
-      expect(
-        ledger.findIndexByIdentity(
-          rowIdentity({ kind: 'journal', offset: 500 }, 'toolGroup'),
-        ),
-      ).toBe(-1);
-    });
-
-    it('preserves the identity through the oversized display-bound fallback', () => {
-      const ledger = createHistoryLedger({ maxItems: 100, maxBytes: 200 });
-      const identity = rowIdentity(
-        { kind: 'journal', offset: 700 },
-        'toolGroup',
-      );
-      ledger.append({
-        id: 3,
-        type: 'tool_group',
-        rowIdentity: identity,
-        tools: [
-          {
-            callId: 'c1',
-            name: 'read_file',
-            description: 'read a big file',
-            resultDisplay: 'x'.repeat(500),
-            status: 'success' as never,
-            confirmationDetails: undefined,
-          },
-        ],
-      });
-
-      const entry = ledger.getState().entries[0];
-      expect(entry.item.type).toBe('info');
-      expect(entry.item.rowIdentity).toStrictEqual(identity);
-    });
-
-    it('keeps the identity across an update and a load', () => {
-      const ledger = createHistoryLedger({
-        maxItems: 100,
-        maxBytes: 1_000_000,
-      });
-      const identity = rowIdentity({ kind: 'journal', offset: 500 }, 'text');
-      ledger.append(userItem(1, identity));
-      ledger.update(1, (prev) => ({ text: `${prev.text}-updated` }));
-      expect(ledger.getState().entries[0].item.rowIdentity).toStrictEqual(
-        identity,
-      );
-
-      const reloaded = createHistoryLedger({
-        maxItems: 100,
-        maxBytes: 1_000_000,
-      });
-      reloaded.load([userItem(9, identity)]);
-      expect(reloaded.getState().entries[0].item.rowIdentity).toStrictEqual(
-        identity,
-      );
-      expect(reloaded.findIndexByIdentity(identity)).toBe(0);
     });
   });
 });

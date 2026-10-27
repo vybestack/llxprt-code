@@ -49,7 +49,7 @@ function slashInputs(
     settings: createMockSettings({}),
     addItem: () => 0,
     clearItems: () => {},
-    loadHistory: () => {},
+
     refreshStatic: () => {},
     toggleVimEnabled: async () => true,
     setIsProcessing: () => {},

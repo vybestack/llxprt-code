@@ -5,15 +5,8 @@
  */
 
 import { describe, expect, it, vi } from 'bun:test';
-import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
 import { prepareTurnForQuery } from '../turnPreparation.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
-
-const existingThinkingBlock: ThinkingBlock = {
-  type: 'thinking',
-  thought: 'existing',
-  sourceField: 'thought',
-};
 
 describe('prepareTurnForQuery', () => {
   it('runs new-turn handler steps in reset -> ensure order', async () => {
@@ -39,16 +32,12 @@ describe('prepareTurnForQuery', () => {
     const setThought = vi.fn(() => {
       callOrder.push('setThought');
     });
-    const thinkingBlocksRef = { current: [existingThinkingBlock] } as {
-      current: ThinkingBlock[];
-    };
 
     await prepareTurnForQuery(
       false,
       createStreamRuntimeForTest(config),
       startNewPrompt,
       setThought,
-      thinkingBlocksRef,
     );
 
     expect(callOrder).toStrictEqual([
@@ -57,7 +46,6 @@ describe('prepareTurnForQuery', () => {
       'reset',
       'ensure',
     ]);
-    expect(thinkingBlocksRef.current).toStrictEqual([]);
     expect(handler.resetSession).not.toHaveBeenCalled();
   });
 
@@ -83,23 +71,18 @@ describe('prepareTurnForQuery', () => {
     const setThought = vi.fn(() => {
       callOrder.push('setThought');
     });
-    const thinkingBlocksRef = { current: [existingThinkingBlock] } as {
-      current: ThinkingBlock[];
-    };
 
     await prepareTurnForQuery(
       true,
       createStreamRuntimeForTest(config),
       startNewPrompt,
       setThought,
-      thinkingBlocksRef,
     );
 
     expect(callOrder).toStrictEqual(['resetSession', 'ensure']);
     expect(handler.reset).not.toHaveBeenCalled();
     expect(startNewPrompt).not.toHaveBeenCalled();
     expect(setThought).not.toHaveBeenCalled();
-    expect(thinkingBlocksRef.current).toStrictEqual([existingThinkingBlock]);
   });
 
   it('preserves Config method binding when preparing a turn', async () => {
@@ -130,9 +113,6 @@ describe('prepareTurnForQuery', () => {
       createStreamRuntimeForTest(config),
       vi.fn(),
       vi.fn(),
-      {
-        current: [existingThinkingBlock],
-      } as { current: ThinkingBlock[] },
     );
 
     expect(callOrder).toStrictEqual(['reset', 'ensure']);

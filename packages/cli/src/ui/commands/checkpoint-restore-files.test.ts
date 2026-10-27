@@ -117,7 +117,7 @@ async function runRestore(fault: Fault, toolEdits = true): Promise<Outcome> {
         services: { config: runtime, agent: { agentClient: client } },
       });
       let uiPublished = false;
-      context.ui.loadHistory = () => {
+      context.ui.clear = () => {
         uiPublished = true;
       };
       context.ui.addItem = () => {

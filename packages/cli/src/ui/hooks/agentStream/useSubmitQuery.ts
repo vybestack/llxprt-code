@@ -18,36 +18,28 @@ import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   type MessageSenderType,
   type RecordingIntegration,
-  type ThinkingBlock,
   type ThoughtSummary,
   type ToolCallRequestInfo,
   type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
 import {
   StreamingState,
-  type HistoryItem,
   type HistoryItemWithoutId,
   type SlashCommandProcessorResult,
 } from '../../types.js';
 import { isSlashCommand } from '../../utils/commandUtils.js';
 import { useSessionStats } from '../../contexts/SessionContext.js';
 import { useStreamEventHandlers } from './useStreamEventHandlers.js';
-import { dispatchAgentEvent } from './agentEventDispatcher.js';
+import { useProcessAgentEvent } from './use-process-agent-event.js';
 import type { AgentEventRouter } from './useAgentEventStream.js';
-import {
-  resolveContentPrefixIdentity,
-  createCliModelIdentityRuntime,
-} from '../../utils/modelIdentity.js';
 import type { QueuedSubmission, SubmissionOutcome } from './types.js';
 import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
-import { observeAgentEvent } from '../../../observation/jspWiring.js';
 
-import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
 import type { OperationLifecycleRegistry } from './operationLifecycle.js';
 import {
   runSubmitQueryCore,
-  finaliseOnceAfterBegin,
   isCurrentTurn,
+  finaliseOnceAfterBegin,
   type TurnInit,
   type SubmitQueryCallbackDeps,
 } from './submitQueryTurnLifecycle.js';
@@ -73,23 +65,14 @@ export type SubmissionExecutor = (
  * Shared content-prefix identity resolver for the AgentEvent dispatcher. Reads
  * fresh runtime state at call time so a single stable reference can be reused.
  */
-function defaultGetContentPrefixIdentity(agent: Agent): string | null {
-  try {
-    return resolveContentPrefixIdentity(createCliModelIdentityRuntime(agent));
-  } catch {
-    return null;
-  }
-}
-
 export interface UseSubmitQueryDeps {
   runtime: StreamRuntime;
   agent: Agent;
   addItem: (
-    item: Omit<HistoryItem, 'id'>,
+    item: HistoryItemWithoutId,
     timestamp?: number,
     isResuming?: boolean,
   ) => number;
-  removeItems?: (ids: readonly number[]) => void;
   settings: Parameters<typeof useStreamEventHandlers>[0]['settings'];
   onDebugMessage: (message: string) => void;
   onCancelSubmit: (shouldRestorePrompt?: boolean) => void;
@@ -102,9 +85,7 @@ export interface UseSubmitQueryDeps {
     feedback?: string;
   };
   flushPendingHistoryItem: (timestamp: number) => void;
-  pendingResponse: PendingResponseBuffer;
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
-  thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
   turnCancelledRef: React.MutableRefObject<boolean>;
   drainSuppressedRef: React.MutableRefObject<boolean>;
   setTurnCancelled: (value: boolean) => void;
@@ -206,14 +187,11 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
     agent: eventAgent,
     settings: deps.settings,
     addItem: deps.addItem,
-    removeItems: deps.removeItems,
     onDebugMessage: deps.onDebugMessage,
     onCancelSubmit: deps.onCancelSubmit,
     sanitizeContent: deps.sanitizeContent,
     flushPendingHistoryItem: deps.flushPendingHistoryItem,
-    pendingResponse: deps.pendingResponse,
     pendingHistoryItemRef: deps.pendingHistoryItemRef,
-    thinkingBlocksRef: deps.thinkingBlocksRef,
     turnCancelledRef: deps.turnCancelledRef,
     clearSubmissions: deps.clearSubmissions,
     setPendingHistoryItem: deps.setPendingHistoryItem,
@@ -266,84 +244,6 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
     prepareQueryForAgent: handlers.prepareQueryForAgent,
     handleLoopDetectedEvent: handlers.handleLoopDetectedEvent,
   };
-}
-
-function useProcessAgentEvent(
-  deps: UseSubmitQueryDeps,
-  handlers: Pick<
-    ReturnType<typeof useStreamEventHandlers>,
-    | 'handleContentEvent'
-    | 'handleStreamAttemptDiscarded'
-    | 'handleUserCancelledEvent'
-    | 'handleErrorEvent'
-    | 'handleChatCompressionEvent'
-    | 'handleFinishedNotice'
-    | 'handleMaxSessionTurnsEvent'
-    | 'handleContextWindowWillOverflowEvent'
-    | 'handleCitationEvent'
-  >,
-  activeTurnRef: React.MutableRefObject<boolean>,
-) {
-  const agentBufferRef = useRef('');
-  // Latest-ref pattern: store deps+handlers in a ref so the useCallback
-  // never needs to change identity (avoids recreating every render).
-  const latestDeps = useRef(deps);
-  latestDeps.current = deps;
-  const latestHandlers = useRef(handlers);
-  latestHandlers.current = handlers;
-  return useCallback<AgentEventRouter>(
-    (event, userMessageTimestamp, signal) => {
-      if (!isCurrentTurn(latestDeps.current, signal)) {
-        return;
-      }
-      // P07: live phase tracking for granular cancellation classification is
-      // routed OUTSIDE this handler's call site (via the
-      // onAgentEventObserved callback in useAgentEventStream, invoked directly
-      // outside the generic catch — D8). It must NOT live inside
-      // processAgentEvent, where it could be swallowed by this handler's
-      // callers. See useAgentStreamOrchestration.useEventStreamForAgent.
-      // Release the interactive active-turn gate and responding state BEFORE
-      // dispatching fallible event rendering for terminal public Agent
-      // error/idle-timeout events. If rendering throws, the gate must already
-      // be released so follow-up submissions are not queued while the
-      // iterator/promise settles (issue #2954). The dispatcher preserves the
-      // existing error-queue-clearing / idle-timeout-queue-preservation
-      // semantics via handleErrorEvent's clearQueue option.
-      const isTerminal =
-        event.type === 'error' || event.type === 'idle-timeout';
-      if (isTerminal) {
-        activeTurnRef.current = false;
-        latestDeps.current.setIsResponding(false);
-        agentBufferRef.current = '';
-      }
-      observeAgentEvent(event);
-      const result = dispatchAgentEvent(
-        event,
-        {
-          addItem: latestDeps.current.addItem,
-          sanitizeContent: latestDeps.current.sanitizeContent,
-          flushPendingHistoryItem: latestDeps.current.flushPendingHistoryItem,
-          pendingResponse: latestDeps.current.pendingResponse,
-          pendingHistoryItemRef: latestDeps.current.pendingHistoryItemRef,
-          thinkingBlocksRef: latestDeps.current.thinkingBlocksRef,
-          turnCancelledRef: latestDeps.current.turnCancelledRef,
-          loopDetectedRef: latestDeps.current.loopDetectedRef,
-          lastModelInfoRef: latestDeps.current.lastModelInfoRef,
-          lastModelIdentityRef: latestDeps.current.lastModelIdentityRef,
-          setPendingHistoryItem: latestDeps.current.setPendingHistoryItem,
-          setLastAgentActivityTime: latestDeps.current.setLastAgentActivityTime,
-          setThought: latestDeps.current.setThought,
-          getContentPrefixIdentity: () =>
-            defaultGetContentPrefixIdentity(latestDeps.current.agent),
-          ...latestHandlers.current,
-        },
-        agentBufferRef.current,
-        userMessageTimestamp,
-      );
-      agentBufferRef.current = result.agentMessageBuffer;
-    },
-    [activeTurnRef],
-  );
 }
 
 function useSubmitQueryEffects(

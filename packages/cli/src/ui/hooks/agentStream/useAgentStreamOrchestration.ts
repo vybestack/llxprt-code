@@ -19,10 +19,7 @@ import {
   type HistoryItemWithoutId,
   type SlashCommandProcessorResult,
 } from '../../types.js';
-import {
-  type RemoveHistoryItems,
-  type UseHistoryManagerReturn,
-} from '../useHistoryManager.js';
+import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { type TrackedToolCall } from '../useReactToolScheduler.js';
 import {
   mapToDisplay as mapTrackedToolCallsToDisplay,
@@ -47,7 +44,6 @@ import type { OperationLifecycleRegistry } from './operationLifecycle.js';
 export interface AgentStreamOrchestrationDeps {
   agent: Agent;
   addItem: UseHistoryManagerReturn['addItem'];
-  removeItems?: RemoveHistoryItems;
   runtime: StreamRuntime;
   settings: LoadedSettings;
   onDebugMessage: (message: string) => void;
@@ -118,7 +114,7 @@ export function useAgentStreamOrchestration(
   const scheduler = useToolSchedulerState(args, st);
   const pendingToolCallGroupDisplay = usePendingToolGroupDisplay(
     scheduler.toolCalls,
-    args.settings.merged.ui.scrollbackPagerEnabled === true,
+    true,
   );
   const shell = useShell(args, st);
   const streamingState = useStreamingState(
@@ -206,7 +202,7 @@ function useToolSchedulerState(
     args.onEditorOpen,
     args.addItem,
     args.agent,
-    args.settings.merged.ui.scrollbackPagerEnabled === true,
+    true,
   );
   const [
     toolCalls,
@@ -285,9 +281,7 @@ function useEventStreamForAgent(
     processAgentEventRef,
     flushPendingHistoryItem: st.flushPendingHistoryItem,
     clearPendingHistoryItem: () => {
-      st.pendingResponse.endCommittedSegments();
       st.setPendingHistoryItem(null);
-      st.pendingResponse.reset();
     },
     performMemoryRefresh: args.performMemoryRefresh,
     markToolsAsDisplayCleared: scheduler.markToolsAsDisplayCleared,
@@ -392,7 +386,6 @@ function buildSubmitQueryDeps({
     runtime: args.runtime,
     agent: args.agent,
     addItem: args.addItem,
-    removeItems: args.removeItems,
     settings: args.settings,
     onDebugMessage: args.onDebugMessage,
     onCancelSubmit: args.onCancelSubmit,
@@ -401,9 +394,7 @@ function buildSubmitQueryDeps({
     recordingOwner: args.recordingOwner,
     sanitizeContent: st.sanitizeContent,
     flushPendingHistoryItem: st.flushPendingHistoryItem,
-    pendingResponse: st.pendingResponse,
     pendingHistoryItemRef: st.pendingHistoryItemRef,
-    thinkingBlocksRef: st.thinkingBlocksRef,
     turnCancelledRef: st.turnCancelledRef,
     setTurnCancelled: st.setTurnCancelled,
     drainSuppressedRef: st.drainSuppressedRef,

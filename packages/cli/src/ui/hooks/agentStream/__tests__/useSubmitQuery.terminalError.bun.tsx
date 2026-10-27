@@ -39,7 +39,6 @@ import {
 import type { QueuedSubmission } from '../types.js';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import type { StructuredError } from '@vybestack/llxprt-code-core';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import { createDeferred } from './createDeferred.js';
 import { createFakeAgentFromMockClient } from '../../__tests__/useAgentStream-test-helpers.js';
@@ -198,7 +197,7 @@ function createUseSubmitQueryDeps(
       createStreamRuntimeForTest({}, createMockOverrides()),
     agent: createMockAgent(),
     addItem: overrides.addItem ?? vi.fn().mockReturnValue(1),
-    removeItems: vi.fn(),
+
     settings: createLoadedSettings(),
     onDebugMessage: vi.fn(),
     onCancelSubmit: vi.fn(),
@@ -206,9 +205,9 @@ function createUseSubmitQueryDeps(
     recordingIntegration: undefined,
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: deps.flushPendingHistoryItem,
-    pendingResponse: new PendingResponseBuffer(undefined),
+
     pendingHistoryItemRef: deps.pendingHistoryItemRef,
-    thinkingBlocksRef: { current: [] },
+
     turnCancelledRef: overrides.turnCancelledRef ?? { current: false },
     setTurnCancelled: vi.fn(),
     queuedSubmissionsRef,

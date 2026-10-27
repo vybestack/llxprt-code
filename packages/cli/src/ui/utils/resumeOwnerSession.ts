@@ -8,12 +8,7 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   describeUnreadableRecording,
   matchUnreadableRecordings,
-  type EmojiFilterMode,
 } from '@vybestack/llxprt-code-core';
-import type { HistoryItem } from '../types.js';
-import type { HistoryLimits } from '../stores/turn/historyLedger.js';
-import { resumeHistoryWindow } from './streamHistoryItems.js';
-
 /**
  * Resume through the Agent session owner. Recordings discovery skipped as
  * unreadable come back as `warnings` (shown after the restore, like the raw
@@ -22,27 +17,17 @@ import { resumeHistoryWindow } from './streamHistoryItems.js';
 export async function resumeOwnerSession(
   agent: Agent,
   ref: string,
-  emojiFilterMode: EmojiFilterMode,
-  limits?: HistoryLimits,
 ): Promise<{
-  readonly uiHistory: readonly HistoryItem[];
   readonly warnings: readonly string[];
 }> {
-  let uiHistory: HistoryItem[];
   try {
-    uiHistory = await resumeHistoryWindow(
-      await agent.session.resume(ref),
-      emojiFilterMode,
-      undefined,
-      limits,
-    );
+    await agent.session.resume(ref);
   } catch (error) {
     throw await nameUnreadableRecording(agent, ref, error);
   }
   const { unreadableRecordings } =
     await agent.session.listBrowserTargetsDetailed();
   return {
-    uiHistory,
     warnings: unreadableRecordings.map(
       (recording) =>
         `Skipped unreadable session recording ${describeUnreadableRecording(recording)}`,

@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { readJournalItems } from '../stores/turn/journal-turn-test-helpers.js';
+
 import { describe, expect, it } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { readRecordedFacts } from '../../__tests__/journal-recording.js';
@@ -46,8 +48,10 @@ describe('owner-backed interactive session operations', () => {
       expect(
         target?.kind === 'session' ? target.session.filePath : undefined,
       ).toBe(source);
-      const replay = await resumeOwnerSession(next, sourceId, 'allowed');
-      expect(hasUserTurn(replay.uiHistory, 'browse source')).toBe(true);
+      await resumeOwnerSession(next, sourceId);
+      expect(hasUserTurn(await readJournalItems(next), 'browse source')).toBe(
+        true,
+      );
       expect(
         (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
       ).toHaveLength(1);
@@ -70,12 +74,10 @@ describe('owner-backed interactive session operations', () => {
       expect(
         target?.kind === 'checkpoint' ? target.source.filePath : undefined,
       ).toBe(sourcePath);
-      const replay = await resumeOwnerSession(
-        agent,
-        checkpoint.checkpointId,
-        'allowed',
-      );
-      expect(hasUserTurn(replay.uiHistory, 'checkpoint source')).toBe(true);
+      await resumeOwnerSession(agent, checkpoint.checkpointId);
+      expect(
+        hasUserTurn(await readJournalItems(agent), 'checkpoint source'),
+      ).toBe(true);
       await agent.session.deleteCheckpoint(checkpoint.checkpointId);
       expect(
         (await listOwnerBrowserTargets(agent)).some(
@@ -96,13 +98,13 @@ describe('owner-backed interactive session operations', () => {
       await agent.session.setRecording({ enabled: true });
       const path = agent.session.getRecording().path;
       await expect(
-        resumeOwnerSession(agent, 'missing-session', 'allowed'),
+        resumeOwnerSession(agent, 'missing-session'),
       ).rejects.toThrow('Failed to resume session');
       const checkpoint =
         await agent.session.createCheckpoint('discarded-branch');
       await agent.session.deleteCheckpoint(checkpoint.checkpointId);
       await expect(
-        resumeOwnerSession(agent, checkpoint.checkpointId, 'allowed'),
+        resumeOwnerSession(agent, checkpoint.checkpointId),
       ).rejects.toThrow('Failed to resume session');
       const activeId = (await agent.session.listSessions()).at(0)?.id;
       if (!activeId) throw new Error('No active session');
@@ -140,8 +142,10 @@ describe('owner-backed interactive session operations', () => {
       const next = await borrow();
       await next.setHistory([human('current owner')]);
       await next.session.setRecording({ enabled: true });
-      const replay = await importOwnerSession(next, destination, 'allowed');
-      expect(hasUserTurn(replay.uiHistory, 'portable turn')).toBe(true);
+      await importOwnerSession(next, destination);
+      expect(hasUserTurn(await readJournalItems(next), 'portable turn')).toBe(
+        true,
+      );
       expect(
         (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
       ).toHaveLength(1);

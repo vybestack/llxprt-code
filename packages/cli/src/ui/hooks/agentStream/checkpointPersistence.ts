@@ -32,7 +32,6 @@ export type { FsOps } from './checkpoint-disk-writer.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { getErrorMessage, isNodeError } from '@vybestack/llxprt-code-core';
 import type { TrackedToolCall } from '../useReactToolScheduler.js';
-import type { HistoryItem } from '../../types.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -58,7 +57,6 @@ export async function createToolCheckpoint(
     'createFileSnapshot' | 'getCurrentCommitHash'
   >,
   agent: Pick<Agent, 'streamHistory'>,
-  history: HistoryItem[],
   onDebugMessage: (message: string) => void,
   fsOps: FsOps = checkpointFs,
   signal?: AbortSignal,
@@ -105,7 +103,6 @@ export async function createToolCheckpoint(
     checkpointFilePath,
     streamPrettyCheckpointJson(
       {
-        history,
         clientHistory: new CheckpointHistoryArray(agent.streamHistory(signal)),
         toolCall: {
           name: toolCall.request.name,
@@ -143,7 +140,6 @@ async function saveRestorableToolCalls(
         'createFileSnapshot' | 'getCurrentCommitHash'
       >
     | undefined,
-  history: HistoryItem[],
   agent: Pick<Agent, 'streamHistory'>,
   checkpointDir: StreamRuntime['projectCheckpointsDir'],
   onDebugMessage: (message: string) => void,
@@ -193,7 +189,6 @@ async function saveRestorableToolCalls(
         checkpointDir,
         gitService,
         agent,
-        history,
         onDebugMessage,
         effectiveFsOps,
         signal,
@@ -230,7 +225,6 @@ export function useCheckpointPersistence(
         'createFileSnapshot' | 'getCurrentCommitHash'
       >
     | undefined,
-  history: HistoryItem[],
   agent: Pick<Agent, 'streamHistory'>,
   checkpointDir: StreamRuntime['projectCheckpointsDir'],
   onDebugMessage: (message: string) => void,
@@ -259,7 +253,6 @@ export function useCheckpointPersistence(
       toolCalls,
       checkpoint,
       gitService,
-      history,
       agent,
       checkpointDir,
       onDebugMessage,
@@ -272,7 +265,6 @@ export function useCheckpointPersistence(
     checkpoint,
     onDebugMessage,
     gitService,
-    history,
     agent,
     checkpointDir,
     fsOps,

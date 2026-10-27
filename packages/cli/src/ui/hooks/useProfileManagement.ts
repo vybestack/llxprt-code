@@ -65,7 +65,11 @@ function validateProfileForSave(profile: unknown): string | null {
 }
 
 interface AddMessageFn {
-  (msg: { type: MessageType; content: string; timestamp: Date }): void;
+  (msg: {
+    type: MessageType.INFO | MessageType.WARNING | MessageType.ERROR;
+    content: string;
+    timestamp: Date;
+  }): void;
 }
 
 interface UseProfileManagementParams {

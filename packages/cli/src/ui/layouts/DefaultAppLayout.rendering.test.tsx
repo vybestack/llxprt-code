@@ -29,6 +29,7 @@ import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { render } from 'ink-testing-library';
+import { act } from 'react';
 import type { DOMElement } from 'ink';
 
 const realInkModule = {
@@ -109,7 +110,8 @@ import { TerminalProvider } from '../stores/terminal/TerminalContext.js';
 import { createTerminalStore } from '../stores/terminal/terminalStore.js';
 import { TurnProvider } from '../stores/turn/TurnContext.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
-import type { HistoryItem } from '../types.js';
+import { registerJournalPagerFixture } from '../stores/turn/journal-turn-test-helpers.js';
+const journalPager = registerJournalPagerFixture();
 import { SettingsProfileProvider } from '../stores/settings/SettingsContext.js';
 import { createSettingsProfileStore } from '../stores/settings/settingsStore.js';
 import { VimModeProvider } from '../contexts/VimModeContext.js';
@@ -172,11 +174,11 @@ function createSettings(useAlternateBuffer: boolean) {
 }
 
 /** Renders DefaultAppLayout through real Ink and returns what tests assert on. */
-function renderLayout({
+async function renderLayout({
   useAlternateBuffer,
   screenReader = false,
   historyText,
-}: RenderOptions): RenderedLayout {
+}: RenderOptions): Promise<RenderedLayout> {
   const mainControlsRef: { current: DOMElement | null } = { current: null };
   const rootUiRef: { current: DOMElement | null } = { current: null };
   const pendingHistoryItemRef: { current: DOMElement | null } = {
@@ -185,14 +187,11 @@ function renderLayout({
   const configSource = createConfigSource(screenReader);
   const settings = createSettings(useAlternateBuffer) as never;
 
-  // Turn-plane state lives in the TurnStore; only the history content this
-  // suite asserts on is seeded, everything else keeps store defaults.
-  const turnStore = createTurnStore(
+  const turnStore = createTurnStore();
+  const pager = await journalPager(
     historyText === undefined
-      ? {}
-      : {
-          history: [{ id: 1, type: 'user', text: historyText } as HistoryItem],
-        },
+      ? []
+      : [{ speaker: 'human', blocks: [{ type: 'text', text: historyText }] }],
   );
 
   const rendered = render(
@@ -215,6 +214,14 @@ function renderLayout({
         >
           <TurnProvider store={turnStore}>
             <DefaultAppLayout
+              scrollbackPager={{
+                store: pager,
+                viewport: {
+                  visibleKeys: [],
+                  viewportLines: 8,
+                  rowHeightLines: () => 1,
+                },
+              }}
               uiRuntime={buildUiRuntimeFromSource(
                 configSource as never,
                 createUiSessionOwner(),
@@ -239,14 +246,24 @@ function renderLayout({
     </SettingsProfileProvider>,
   );
 
-  const frame = rendered.lastFrame() ?? '';
+  await act(async () => {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+  const frame =
+    useAlternateBuffer && !screenReader
+      ? (rendered.lastFrame() ?? '')
+      : rendered.frames.join(String.fromCharCode(10));
 
-  return {
+  const snapshot = {
     frame,
     lineCount: frame.split('\n').length,
-    mainControlsRef,
-    rootUiRef,
+    mainControlsRef: { current: mainControlsRef.current },
+    rootUiRef: { current: rootUiRef.current },
   };
+  await act(async () => {
+    rendered.unmount();
+  });
+  return snapshot;
 }
 
 describe('DefaultAppLayout rendering', () => {
@@ -255,10 +272,10 @@ describe('DefaultAppLayout rendering', () => {
   });
 
   describe('standard buffer with the static header suppressed', () => {
-    it('mounts the live controls and the root when there are no static items', () => {
+    it('mounts the live controls and the root when there are no static items', async () => {
       setEnv('LLXPRT_CODE_SUPPRESS_STATIC_HEADER', 'true');
 
-      const { mainControlsRef, rootUiRef } = renderLayout({
+      const { mainControlsRef, rootUiRef } = await renderLayout({
         useAlternateBuffer: false,
       });
 
@@ -266,10 +283,10 @@ describe('DefaultAppLayout rendering', () => {
       expect(mainControlsRef.current).not.toBeNull();
     });
 
-    it('renders committed history content into the frame', () => {
+    it('renders committed history content into the frame', async () => {
       setEnv('LLXPRT_CODE_SUPPRESS_STATIC_HEADER', 'true');
 
-      const { frame } = renderLayout({
+      const { frame } = await renderLayout({
         useAlternateBuffer: false,
         historyText: HISTORY_SENTINEL,
       });
@@ -277,10 +294,10 @@ describe('DefaultAppLayout rendering', () => {
       expect(frame).toContain(HISTORY_SENTINEL);
     });
 
-    it('renders no history content when history is empty', () => {
+    it('renders no history content when history is empty', async () => {
       setEnv('LLXPRT_CODE_SUPPRESS_STATIC_HEADER', 'true');
 
-      const { frame, mainControlsRef } = renderLayout({
+      const { frame, mainControlsRef } = await renderLayout({
         useAlternateBuffer: false,
       });
 
@@ -290,8 +307,8 @@ describe('DefaultAppLayout rendering', () => {
   });
 
   describe('buffer selection', () => {
-    it('renders a fixed-height viewport when the alternate buffer is enabled', () => {
-      const { lineCount, mainControlsRef } = renderLayout({
+    it('renders a fixed-height viewport when the alternate buffer is enabled', async () => {
+      const { lineCount, mainControlsRef } = await renderLayout({
         useAlternateBuffer: true,
       });
 
@@ -299,10 +316,10 @@ describe('DefaultAppLayout rendering', () => {
       expect(mainControlsRef.current).not.toBeNull();
     });
 
-    it('renders a content-height root when the alternate buffer is disabled', () => {
+    it('renders a content-height root when the alternate buffer is disabled', async () => {
       setEnv('LLXPRT_CODE_SUPPRESS_STATIC_HEADER', 'true');
 
-      const { frame, lineCount, mainControlsRef } = renderLayout({
+      const { frame, lineCount, mainControlsRef } = await renderLayout({
         useAlternateBuffer: false,
         historyText: HISTORY_SENTINEL,
       });
@@ -314,8 +331,8 @@ describe('DefaultAppLayout rendering', () => {
       expect(mainControlsRef.current).not.toBeNull();
     });
 
-    it('falls back to the standard buffer when the screen reader is enabled', () => {
-      const { lineCount, mainControlsRef } = renderLayout({
+    it('falls back to the standard buffer when the screen reader is enabled', async () => {
+      const { lineCount, mainControlsRef } = await renderLayout({
         useAlternateBuffer: true,
         screenReader: true,
       });
