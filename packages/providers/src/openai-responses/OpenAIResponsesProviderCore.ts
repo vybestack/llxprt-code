@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import { RejectedParentSet } from './rejected-parent-set.js';
 import { captureResponsesRequest } from './responses-request.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
@@ -70,7 +69,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
   // per id rather than as a session-wide switch so a resumed session, whose
   // loaded history carries parents scoped to a socket that no longer exists,
   // recovers instead of replaying the full history for the rest of the run.
-  private readonly rejectedStatefulParents = this.createRejectedParentSet();
+  private readonly rejectedStatefulParents = new Set<string>();
   private readonly preparedPromptEnvelopes = new WeakMap<
     object,
     PreparedResponsesRequestContext
@@ -126,13 +125,10 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       },
       isRejectedStatefulParent: (responseId) =>
         this.rejectedStatefulParents.has(responseId),
-      markStatefulParentRejected: (responseId) =>
-        this.rejectedStatefulParents.add(responseId),
+      markStatefulParentRejected: (responseId) => {
+        this.rejectedStatefulParents.add(responseId);
+      },
     };
-  }
-
-  protected createRejectedParentSet(): RejectedParentSet {
-    return new RejectedParentSet();
   }
 
   dispose(): void {

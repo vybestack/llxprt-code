@@ -1,9 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { readdirSync, readSync, writeSync } from 'node:fs';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProviderCore.js';
-import { RejectedParentSet } from '../openai-responses/rejected-parent-set.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { operationFileCreates } from '../../../agents/src/compression/__tests__/support/operation-file-creates.js';
 import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -85,11 +83,14 @@ async function sequence(
       const projection = await provider.projectPromptEnvelope?.(options);
       if (projection === undefined)
         throw new Error('Missing native retry projection');
-      for await (const item of provider.generateChatCompletion({
-        ...options,
-        promptEnvelopeTransportToken: projection.transportToken,
-      }))
-        void item;
+      const created = await operationFileCreates(async () => {
+        for await (const item of provider.generateChatCompletion({
+          ...options,
+          promptEnvelopeTransportToken: projection.transportToken,
+        }))
+          void item;
+      }, true);
+      expect(created).toStrictEqual({ directories: [], files: [] });
     };
     try {
       if (useNative) {
@@ -118,21 +119,6 @@ function bodies(requests: CapturedWireRequest[][]): string[][] {
   return requests.map((source) =>
     source.map((request) => new TextDecoder().decode(request.bytes)),
   );
-}
-
-class RefusingRejectionProvider extends OpenAIResponsesProvider {
-  protected override createRejectedParentSet(): RejectedParentSet {
-    let writes = 0;
-    return new RejectedParentSet({
-      io: {
-        read: readSync,
-        write: (...args) => {
-          if (++writes > 1) throw new Error('slot write refused');
-          return writeSync(...args);
-        },
-      },
-    });
-  }
 }
 
 describe('native Responses rejected-parent replay', () => {
@@ -194,7 +180,6 @@ describe('native Responses rejected-parent replay', () => {
     };
     const requests: CapturedWireRequest[] = [];
     let rejectNext = true;
-    const before = new Set(readdirSync(getScratchRoot()));
     const restore = installFakeTransport(
       {
         ...route,
@@ -238,12 +223,15 @@ describe('native Responses rejected-parent replay', () => {
                   close: async () => {},
                 },
               );
-              const projection = await active.projectPromptEnvelope(options);
-              for await (const item of active.generateChatCompletion({
-                ...options,
-                promptEnvelopeTransportToken: projection.transportToken,
-              }))
-                void item;
+              const created = await operationFileCreates(async () => {
+                const projection = await active.projectPromptEnvelope(options);
+                for await (const item of active.generateChatCompletion({
+                  ...options,
+                  promptEnvelopeTransportToken: projection.transportToken,
+                }))
+                  void item;
+              }, true);
+              expect(created).toStrictEqual({ directories: [], files: [] });
             } finally {
               await selection.close();
             }
@@ -266,19 +254,7 @@ describe('native Responses rejected-parent replay', () => {
           expect(new TextDecoder().decode(requests[3].bytes)).toContain(
             '"previous_response_id":"resp_dead"',
           );
-          expect(
-            readdirSync(getScratchRoot()).filter(
-              (name) =>
-                !before.has(name) && name.startsWith('responses-rejections-'),
-            ),
-          ).toHaveLength(1);
           provider.clearState();
-          expect(
-            readdirSync(getScratchRoot()).filter(
-              (name) =>
-                !before.has(name) && name.startsWith('responses-rejections-'),
-            ),
-          ).toHaveLength(0);
           await send(provider);
           expect(new TextDecoder().decode(requests[4].bytes)).toContain(
             '"previous_response_id":"resp_dead"',
@@ -289,12 +265,6 @@ describe('native Responses rejected-parent replay', () => {
             '"previous_response_id":"resp_ok"',
           );
           provider.dispose();
-          expect(
-            readdirSync(getScratchRoot()).filter(
-              (name) =>
-                !before.has(name) && name.startsWith('responses-rejections-'),
-            ),
-          ).toHaveLength(0);
           await send(provider);
           expect(new TextDecoder().decode(requests[7].bytes)).toContain(
             '"previous_response_id":"resp_dead"',
@@ -307,26 +277,6 @@ describe('native Responses rejected-parent replay', () => {
       restore();
       provider.dispose();
       other.dispose();
-    }
-    expect(
-      readdirSync(getScratchRoot()).filter(
-        (name) => !before.has(name) && name.startsWith('responses-rejections-'),
-      ),
-    ).toHaveLength(0);
-  });
-
-  it('fails the turn when recording a rejected parent fails', async () => {
-    const route = WIRE_ROUTES.find(
-      (candidate) => candidate.id === 'openai-responses',
-    );
-    if (route === undefined) throw new Error('Missing Responses route');
-    const provider = new RefusingRejectionProvider('test-api-key');
-    try {
-      await expect(
-        sequence({ ...route, createProvider: () => provider }, true),
-      ).rejects.toThrow('slot write refused');
-    } finally {
-      provider.clearState();
     }
   });
 
