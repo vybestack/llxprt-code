@@ -86,39 +86,48 @@ export function acquirePreferredProviderRuntime(
     readonly files: ProviderFileLifecycle;
     readonly runtimeId: string;
     readonly authority: CredentialAuthority;
+  },
+  oauthSelection: {
     readonly suppliedStore: TokenStore | undefined;
     readonly messageBus: MessageBus;
     readonly profileReads: Pick<ProfileManager, 'loadProfile'> | undefined;
     readonly oauthSettings: IOAuthSettingsProvider | null | undefined;
   },
-): { readonly manager: ProviderManager; readonly oauth: OAuthManager } {
+  publishOAuth: (oauth: OAuthManager) => void,
+): ProviderManager {
   const { config, settings, settingsOwner, files, runtimeId, authority } =
     inputs;
-  return acquireProviderRuntime(release, {
-    config,
-    settings,
-    settingsOwner,
-    files,
-    proxy: config.getProxy(),
-    authority,
-    context: createProviderRuntimeContext({
-      runtimeId,
-      runtimeKind: 'agent',
-      metadata: { source: 'cli-isolated-runtime-factory' },
-    }),
-    oauth: {
-      suppliedStore: inputs.suppliedStore,
+  const { suppliedStore, messageBus, profileReads, oauthSettings } =
+    oauthSelection;
+  return acquireProviderRuntime(
+    release,
+    {
+      config,
+      settings,
+      settingsOwner,
+      files,
+      proxy: config.getProxy(),
+      authority,
+      context: createProviderRuntimeContext({
+        runtimeId,
+        runtimeKind: 'agent',
+        metadata: { source: 'cli-isolated-runtime-factory' },
+      }),
+    },
+    {
+      suppliedStore,
       readSettings: () =>
-        inputs.oauthSettings === undefined
+        oauthSettings === undefined
           ? createFileOAuthSettingsProvider()
-          : (inputs.oauthSettings ?? undefined),
-      messageBus: inputs.messageBus,
+          : (oauthSettings ?? undefined),
+      messageBus,
       profileReads:
-        inputs.profileReads ?? createOAuthProfileReads(config.profileDirectory),
+        profileReads ?? createOAuthProfileReads(config.profileDirectory),
       readIdentity: () => ({ runtimeId, runtimeKind: 'agent' }),
       requestInteractiveAuth: undefined,
     },
-  });
+    publishOAuth,
+  );
 }
 
 export async function preparePreferredProviderCompletion(

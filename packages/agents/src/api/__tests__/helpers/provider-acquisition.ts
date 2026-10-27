@@ -21,7 +21,10 @@ import {
   type CredentialAuthority,
   type OAuthManager,
 } from '@vybestack/llxprt-code-providers/auth.js';
-import { createOAuthProfileReads } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  createSessionAuthPolicyReader,
+  createOAuthProfileReads,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import type {
   ProfileManager,
   SettingsService,
@@ -70,8 +73,12 @@ export function acquirePreferredOAuth(
   oauthSettings: IOAuthSettingsProvider | null | undefined,
 ): OAuthManager {
   return acquireRuntimeOAuth(release, {
-    manager,
-    settings,
+    provider: {
+      getProviderByName: (name) => manager.getProviderByName(name),
+      fetchNetwork: (input, init) => manager.fetchNetwork(input, init),
+      getAuthIdentity: () => manager.getAuthIdentity(),
+    },
+    readPolicy: createSessionAuthPolicyReader(settings),
     authority,
     oauth: {
       suppliedStore,

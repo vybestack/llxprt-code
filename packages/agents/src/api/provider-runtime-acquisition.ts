@@ -54,8 +54,11 @@ export interface ProviderOAuthInputs {
 }
 
 interface OAuthAcquisitionInputs {
-  readonly manager: ProviderManager;
-  readonly settings: SettingsService;
+  readonly provider: Pick<
+    ProviderManager,
+    'getProviderByName' | 'fetchNetwork' | 'getAuthIdentity'
+  >;
+  readonly readPolicy: Parameters<typeof createOwnerOAuthManager>[4];
   readonly authority: Pick<CredentialAuthority, 'createTokenStore'>;
   readonly oauth: ProviderOAuthInputs;
 }
@@ -105,7 +108,7 @@ export function acquireRuntimeOAuth(
   release: AcquisitionRelease,
   inputs: OAuthAcquisitionInputs,
 ): OAuthManager {
-  const { manager, oauth: selection } = inputs;
+  const { provider, oauth: selection } = inputs;
   const tokens = selection.suppliedStore ?? inputs.authority.createTokenStore();
   if (selection.suppliedStore === undefined)
     release.acquire('tokens', createOwnedTokenStoreClose(tokens));
@@ -114,11 +117,11 @@ export function acquireRuntimeOAuth(
     selection.readSettings(),
     selection.messageBus,
     selection.profileReads,
-    createSessionAuthPolicyReader(inputs.settings),
-    () => selection.readIdentity(manager),
+    inputs.readPolicy,
+    () => selection.readIdentity(provider),
     selection.requestInteractiveAuth,
-    createOwnerAuthCacheInvalidator((name) => manager.getProviderByName(name)),
-    (input, init) => manager.fetchNetwork(input, init),
+    createOwnerAuthCacheInvalidator((name) => provider.getProviderByName(name)),
+    (input, init) => provider.fetchNetwork(input, init),
   );
   release.acquire('oauth', () => oauth.dispose());
   return oauth;
@@ -131,17 +134,23 @@ export function acquireProviderRuntime(
       CredentialAuthority,
       'createProviderKeyStorage' | 'createTokenStore'
     >;
-    readonly oauth: ProviderOAuthInputs;
   },
-): { readonly manager: ProviderManager; readonly oauth: OAuthManager } {
+  selection: ProviderOAuthInputs,
+  publishOAuth: (oauth: OAuthManager) => void,
+): ProviderManager {
   const manager = acquireRuntimeProviderManager(release, inputs);
   const oauth = acquireRuntimeOAuth(release, {
-    manager,
-    settings: inputs.settings,
+    provider: {
+      getProviderByName: (name) => manager.getProviderByName(name),
+      fetchNetwork: (input, init) => manager.fetchNetwork(input, init),
+      getAuthIdentity: () => manager.getAuthIdentity(),
+    },
+    readPolicy: createSessionAuthPolicyReader(inputs.settings),
     authority: inputs.authority,
-    oauth: inputs.oauth,
+    oauth: selection,
   });
-  return { manager, oauth };
+  publishOAuth(oauth);
+  return manager;
 }
 
 export function readProviderAuthIdentity(

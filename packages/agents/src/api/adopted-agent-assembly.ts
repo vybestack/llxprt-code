@@ -75,6 +75,7 @@ import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import type {
   AdoptedMcpPort,
   McpTeardownPort,
+  PublishedMcpPort,
   SessionWorkspaceReadsPort,
 } from './mcpRuntimePorts.js';
 import { assembleModelSelection } from './model-selection.js';
@@ -82,11 +83,6 @@ import { executeProviderActivation } from './providerActivationExecutor.js';
 import { assembleProviderSwitch } from './providerSwitchAssembly.js';
 import { acquireAdoptedMedia } from './session-image-assembly.js';
 import { DEFAULT_SKILL_OPERATIONS } from './workspace-skill-assembly.js';
-
-export interface AdoptedProviderResources {
-  manager: ProviderManager;
-  oauth: OAuthManager;
-}
 
 /** The publication the adopted assembly needs from the operation that owns it. */
 export interface AdoptionLifecyclePort {
@@ -137,7 +133,8 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
   #content!: RuntimeContentGeneratorFactory<ContentGenerator>;
   #runtimeId!: string;
   #authority!: CredentialAuthority;
-  #providers!: AdoptedProviderResources;
+  #manager!: ProviderManager;
+  #oauth!: OAuthManager;
   #client!: SessionClientOwner;
   #foreground: ForegroundAssembly | undefined;
   #agent!: Agent;
@@ -271,8 +268,8 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
     this.#mcp = await this.#adoptConstructMcp();
     try {
       this.#media = acquireAdoptedMedia(this.#config);
-      this.#providers = this.#adoptAcquireProviders();
-      this.#tokenizer = configureProviderTokenizer(this.#providers.manager);
+      this.#adoptAcquireProviders();
+      this.#tokenizer = configureProviderTokenizer(this.#manager);
       this.#content = createRuntimeContentGeneratorFactory();
     } catch (primary) {
       await cleanupFailedAdoption(
@@ -288,7 +285,7 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
     await this.#adoptComplete();
   }
 
-  #adoptAcquireProviders(): AdoptedProviderResources {
+  #adoptAcquireProviders(): void {
     const settingsOwner = new SessionSettingsOwner(this.#settingsService);
     this.#selectedSettings = settingsOwner;
     this.#release.acquire('settings', () => settingsOwner.dispose());
@@ -299,15 +296,18 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
       proxy: config.getProxy(),
       scopeIds: [runtimeId, config.getSessionId()],
     });
-    return acquireProviderRuntime(this.#release, {
-      files: this.#files,
-      proxy: config.getProxy(),
-      config,
-      settings: this.#settingsService,
-      settingsOwner,
-      context: adoptionProviderContext(runtimeId),
-      authority: this.#authority,
-      oauth: {
+    this.#manager = acquireProviderRuntime(
+      this.#release,
+      {
+        files: this.#files,
+        proxy: config.getProxy(),
+        config,
+        settings: this.#settingsService,
+        settingsOwner,
+        context: adoptionProviderContext(runtimeId),
+        authority: this.#authority,
+      },
+      {
         suppliedStore: undefined,
         readSettings: () => createFileOAuthSettingsProvider(),
         messageBus: this.#mcp.messageBus,
@@ -315,7 +315,10 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
         readIdentity: () => ({ runtimeId, runtimeKind: 'agent' }),
         requestInteractiveAuth: undefined,
       },
-    });
+      (oauth) => {
+        this.#oauth = oauth;
+      },
+    );
   }
 
   async #adoptComplete(): Promise<void> {
@@ -327,8 +330,8 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
         this.#selectedSettings,
         this.#media,
         this.#settingsService,
-        this.#providers.manager,
-        this.#providers.oauth,
+        this.#manager,
+        this.#oauth,
         this.#content,
         this.#tokenizer,
         this.#files,
@@ -355,7 +358,7 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
     const client = this.#client;
     const bindings = adoptedClientBindings(
       this.#files,
-      this.#providers.oauth,
+      this.#oauth,
       this.#config.getSessionId(),
     );
     client.clients.bindProviderFiles(
@@ -373,8 +376,8 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
     await activateAdoptedProviders(
       this.#config,
       this.#selectedSettings,
-      this.#providers.manager,
-      this.#providers.oauth,
+      this.#manager,
+      this.#oauth,
       this.#settingsService,
       this.#tokenizer,
       this.#runtimeId,
@@ -390,13 +393,13 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
       this.#intent,
       this.#client,
       this.#settingsService,
-      this.#providers.manager,
-      this.#providers.oauth,
+      this.#manager,
+      this.#oauth,
       this.#selectedSettings,
     );
     const parsed: FacadeParsedConfig = {
       provider:
-        this.#providers.manager.getActiveProviderName() ??
+        this.#manager.getActiveProviderName() ??
         this.#config.getProvider() ??
         '',
       model:
@@ -424,17 +427,19 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
   }
 
   #createForeground(): ForegroundAssembly {
+    const manager: RuntimeProviderManager = this.#manager;
+    const mcp: PublishedMcpPort = this.#mcp;
     return new ForegroundAssembly(
       this.#config,
       {
-        mcp: this.#mcp,
+        mcp,
         mediaOwner: this.#media,
         sessionClient: this.#client,
         release: closeReleaseScope(this.#release),
       },
       { settingsOwner: this.#selectedSettings },
-      { settings: this.#settingsService, manager: this.#providers.manager },
-      { oauth: this.#providers.oauth },
+      { settings: this.#settingsService, manager },
+      { oauth: this.#oauth },
       this.#construction.signal,
     );
   }

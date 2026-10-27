@@ -10,7 +10,7 @@ import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { DiscoveredProvider } from './oauth-bucket-discovery.js';
 import { discoverProviderBuckets } from './oauth-bucket-discovery.js';
 
-const OAUTH_OPERATIONS = [
+const OAUTH_OPERATIONS = Object.freeze([
   'attachInteractiveAuthMessages',
   'bindInteractiveAuthHost',
   'unbindInteractiveAuthHost',
@@ -49,7 +49,7 @@ const OAUTH_OPERATIONS = [
   'getAllAnthropicUsageInfo',
   'getAllCodexUsageInfo',
   'getAllCodexRateLimitResetCredits',
-] as const satisfies ReadonlyArray<keyof OAuthManager>;
+] as const satisfies ReadonlyArray<keyof OAuthManager>);
 
 type OAuthOperations = Pick<OAuthManager, (typeof OAUTH_OPERATIONS)[number]>;
 export type AgentSessionAuthentication = OAuthOperations & {

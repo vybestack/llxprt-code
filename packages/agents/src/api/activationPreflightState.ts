@@ -154,6 +154,7 @@ export class AgentActivationBootstrap
   #auth!: PreflightAuthInput;
   #switcher!: ProviderSwitcher;
   #sessionResources!: ActivationSessionResources;
+  #sessionClient!: SessionClientOwner;
   #sessionAuth!: ActivationSessionAuth;
   #mcp: ForegroundMcpPort | undefined;
   #mediaOwner: SessionMediaOwner | undefined;
@@ -190,6 +191,9 @@ export class AgentActivationBootstrap
   async preparePreflight(): Promise<ProviderSwitcher> {
     const receiver: ActivationSessionReceiver = {
       resources: (acquired) => this.#acceptSessionResources(acquired),
+      client: (client) => {
+        this.#sessionClient = client;
+      },
       auth: (acquired) => {
         this.#sessionAuth = acquired;
       },
@@ -222,17 +226,14 @@ export class AgentActivationBootstrap
 
   #initializePreparedActivation(): void {
     const resources = this.#sessionResources;
+    const client = this.#sessionClient;
     this.sessionClient = {
       workspaceDirectories: () =>
         resources.workspaceFilesystem.paths.directories(),
       refreshAuth: (method) =>
-        this.#admitPublic(() =>
-          resources.sessionClient.clients.refreshAuth(method),
-        ),
+        this.#admitPublic(() => client.clients.refreshAuth(method)),
       runImageOperation: (input) =>
-        this.#admitPublic(() =>
-          resources.sessionClient.runImageOperation(input),
-        ),
+        this.#admitPublic(() => client.runImageOperation(input)),
     };
     this.#manager = this.#providers.manager;
     this.#execute = (intent) =>
@@ -241,7 +242,10 @@ export class AgentActivationBootstrap
         intent,
         this.#switcher,
         this.#providers,
-        resources,
+        {
+          settingsOwner: resources.settingsOwner,
+          refreshAuth: (method) => client.clients.refreshAuth(method),
+        },
       );
   }
 
@@ -254,9 +258,7 @@ export class AgentActivationBootstrap
     );
   }
   readHistory(): ReturnType<SessionClientOwner['clients']['readHistory']> {
-    return this.#admitPublic(() =>
-      this.#sessionResources.sessionClient.clients.readHistory(),
-    );
+    return this.#admitPublic(() => this.#sessionClient.clients.readHistory());
   }
   #foregroundAgent: Agent | undefined;
   #foregroundPending: Promise<Agent> | undefined;
@@ -404,7 +406,7 @@ export class AgentActivationBootstrap
     broker: ReturnType<typeof assembleHostGitHubBroker>,
     mcp: ForegroundMcpPort,
   ): Promise<SessionClientOwner> {
-    const client = this.#sessionResources.sessionClient;
+    const client = this.#sessionClient;
     client.bindHostGitHub(broker);
     client.bindMcpRuntime(mcp, mcp.profileDefinitions, mcp.subagentDefinitions);
     if (!client.hasHookComposition()) client.bindHooks();
@@ -496,9 +498,7 @@ export class AgentActivationBootstrap
     return this.#admitPublic(async () => {
       signal.throwIfAborted();
       const replacement =
-        await this.#sessionResources.sessionClient.clients.prepareProfileActivation(
-          signal,
-        );
+        await this.#sessionClient.clients.prepareProfileActivation(signal);
       try {
         signal.throwIfAborted();
         const commitHistory = await replacement.prepareHistoryCommit();
@@ -602,6 +602,7 @@ export class AgentActivationBootstrap
     ++this.#attempt;
     this.#receipt = undefined;
     const resources = this.#sessionResources;
+    const client = this.#sessionClient;
     if (this.#ownsDefinitions) resources.workspaceDefinitions.closeAdmission();
     const memoryClosing = this.#ownsMemory
       ? resources.workspaceMemory.dispose()
@@ -611,7 +612,7 @@ export class AgentActivationBootstrap
       publicWork: Promise.allSettled([this.#tail, ...this.#publicWork]),
       memory: memoryClosing,
       sessionClient: () =>
-        this.#ownsSessionClient ? resources.sessionClient.dispose() : undefined,
+        this.#ownsSessionClient ? client.dispose() : undefined,
       afterClient: [
         () =>
           this.#ownsDefinitions

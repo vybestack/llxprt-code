@@ -226,7 +226,7 @@ export class ChildAgentAssembly {
       scopeIds: [this.data.runtimeId, this.config.getSessionId()],
     });
     const runtimeId = this.data.runtimeId;
-    ({ manager: this.manager, oauth: this.oauth } = acquireProviderRuntime(
+    this.manager = acquireProviderRuntime(
       this.providers,
       {
         files: this.files,
@@ -239,19 +239,22 @@ export class ChildAgentAssembly {
           this.data.runtimeId,
           this.data.subagent.name,
         ),
-        oauth: {
-          suppliedStore: undefined,
-          readSettings: () => createFileOAuthSettingsProvider(),
-          messageBus: this.operations.messageBus,
-          profileReads: this.operations.profileReads,
-          readIdentity: () => ({
-            runtimeId,
-            runtimeKind: 'agent',
-          }),
-          requestInteractiveAuth: this.operations.requestInteractiveAuth,
-        },
       },
-    ));
+      {
+        suppliedStore: undefined,
+        readSettings: () => createFileOAuthSettingsProvider(),
+        messageBus: this.operations.messageBus,
+        profileReads: this.operations.profileReads,
+        readIdentity: () => ({
+          runtimeId,
+          runtimeKind: 'agent',
+        }),
+        requestInteractiveAuth: this.operations.requestInteractiveAuth,
+      },
+      (oauth) => {
+        this.oauth = oauth;
+      },
+    );
     this.tokenizer = configureProviderTokenizer(this.manager);
     this.content = createRuntimeContentGeneratorFactory();
   }

@@ -47,7 +47,6 @@ export interface ActivationSessionResources {
   workspaceFilesystem: WorkspaceFilesystemOwner;
   workspaceMemory: WorkspaceMemoryOwner;
   workspaceDefinitions: WorkspaceDefinitionOwner;
-  sessionClient: SessionClientOwner;
 }
 
 export interface ActivationSessionAuth {
@@ -56,6 +55,7 @@ export interface ActivationSessionAuth {
 
 export interface ActivationSessionReceiver {
   resources(acquired: ActivationSessionResources): void;
+  client(acquired: SessionClientOwner): void;
   auth(acquired: ActivationSessionAuth): void;
 }
 
@@ -110,8 +110,8 @@ export async function acquireActivationSession(
       workspaceFilesystem: activation.filesystem,
       workspaceMemory: activation.memory,
       workspaceDefinitions: definitions,
-      sessionClient: client,
     });
+    receiver.client(client);
     receiver.auth({ oauth: auth.oauth });
     return switcher;
   } catch (error) {
@@ -246,7 +246,10 @@ export async function executeActivationSession(
   intent: ProviderActivationIntent,
   switcher: ProviderSwitcher,
   providers: PreflightProviderInput,
-  resources: ActivationSessionResources,
+  resources: {
+    readonly settingsOwner: SessionSettingsOwner;
+    readonly refreshAuth: SessionClientOwner['clients']['refreshAuth'];
+  },
 ): Promise<ProviderActivationResult> {
   await resources.settingsOwner.startTelemetry(config);
   return executeProviderActivation(
@@ -255,7 +258,7 @@ export async function executeActivationSession(
     switcher,
     providers.settings,
     providers.manager,
-    (method) => resources.sessionClient.clients.refreshAuth(method),
+    resources.refreshAuth,
     assembleModelSelection(resources.settingsOwner),
   );
 }

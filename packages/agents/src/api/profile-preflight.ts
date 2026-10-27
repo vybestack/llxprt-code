@@ -172,15 +172,18 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     oauthSettings: IOAuthSettingsProvider | undefined,
     fakeResponses: string | undefined,
   ): void {
-    const { manager, oauth } = acquireProviderRuntime(this.#release, {
-      files: this.#files,
-      proxy: this.#host.proxy,
-      settings: this.#settings,
-      config: undefined,
-      settingsOwner: undefined,
-      context: this.#runtimeContext('pre-config'),
-      authority,
-      oauth: {
+    const manager = acquireProviderRuntime(
+      this.#release,
+      {
+        files: this.#files,
+        proxy: this.#host.proxy,
+        settings: this.#settings,
+        config: undefined,
+        settingsOwner: undefined,
+        context: this.#runtimeContext('pre-config'),
+        authority,
+      },
+      {
         suppliedStore: undefined,
         readSettings: retainOAuthSettings(oauthSettings),
         messageBus: this.#bus,
@@ -188,9 +191,12 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
         readIdentity: readProviderAuthIdentity,
         requestInteractiveAuth: undefined,
       },
-    });
+      (oauth) => {
+        this.#oauth = oauth;
+      },
+    );
     this.#manager = manager;
-    this.#oauth = oauth;
+    const oauth = this.#oauth;
     populateProviderManager(
       manager,
       oauth,

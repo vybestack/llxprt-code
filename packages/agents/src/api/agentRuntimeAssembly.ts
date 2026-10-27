@@ -328,7 +328,6 @@ export class PreferredAgentAssembly {
     let settingsOwner: SessionSettingsOwner;
     let files: ProviderFileLifecycle;
     let manager: ProviderManager;
-    let oauth: OAuthManager;
     let tokenizerFactory: RuntimeTokenizerFactory;
     try {
       settings =
@@ -349,18 +348,26 @@ export class PreferredAgentAssembly {
         this.retainedFiles,
         release,
       );
-      ({ manager, oauth } = acquirePreferredProviderRuntime(release, {
-        config: this.config,
-        settings,
-        settingsOwner,
-        files,
-        runtimeId: this.runtimeId,
-        authority: this.authority,
-        suppliedStore: this.suppliedStore,
-        messageBus: this.preferredMessageBus,
-        profileReads: this.profileReads,
-        oauthSettings: this.oauthSettings,
-      }));
+      manager = acquirePreferredProviderRuntime(
+        release,
+        {
+          config: this.config,
+          settings,
+          settingsOwner,
+          files,
+          runtimeId: this.runtimeId,
+          authority: this.authority,
+        },
+        {
+          suppliedStore: this.suppliedStore,
+          messageBus: this.preferredMessageBus,
+          profileReads: this.profileReads,
+          oauthSettings: this.oauthSettings,
+        },
+        (oauth) => {
+          this.oauth = oauth;
+        },
+      );
       tokenizerFactory = configureProviderTokenizer(
         manager,
         this.tokenizerSelection,
@@ -372,7 +379,7 @@ export class PreferredAgentAssembly {
         settings,
         settingsOwner,
         manager,
-        oauth,
+        this.oauth,
         this.runtimeId,
         tokenizerFactory,
         this.providerContributions,
@@ -382,7 +389,6 @@ export class PreferredAgentAssembly {
       this.settingsOwner = settingsOwner;
       this.files = files;
       this.manager = manager;
-      this.oauth = oauth;
       this.tokenizerFactory = tokenizerFactory;
       this.release = release;
     } catch (primary) {
