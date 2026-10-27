@@ -4,11 +4,17 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { existsSync, mkdirSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { dirname, resolve, sep } from 'node:path';
 import { portableRelativePath as relative } from './compiler-source-path.js';
 import { parseArgs } from 'node:util';
 import ts from 'typescript';
+import { findAssemblyClosureViolations } from './assembly-closure-guard.js';
+import {
+  exportedSymbol,
+  declarationCandidates,
+  selectedSources,
+} from './runtime-audit-declarations.js';
 import { verifyJavascriptModuleIdentities } from './tests/runtime-javascript-module-identity.js';
 import {
   compilerConfiguration,
@@ -346,26 +352,6 @@ function diagnostic(
       : {}),
   };
 }
-function exportedSymbol(
-  program: ts.Program,
-  root: RuntimeDeclarationRoot,
-): ts.Symbol | undefined {
-  const source = program.getSourceFile(root.file);
-  const checker = program.getTypeChecker();
-  const module = source && checker.getSymbolAtLocation(source);
-  const symbol =
-    module &&
-    checker
-      .getExportsOfModule(module)
-      .find((entry) => entry.name === root.exportName);
-  return (
-    symbol &&
-    (symbol.flags & ts.SymbolFlags.Alias
-      ? checker.getAliasedSymbol(symbol)
-      : symbol)
-  );
-}
-
 function auditProgram(
   workspace: string,
   compilerConfig: string,
@@ -394,35 +380,6 @@ function auditProgram(
   ].map((problem) => diagnostic(workspace, problem));
   if (!compilerDiagnostics.length) verifyJavascriptModuleIdentities(program);
   return { program, compilerDiagnostics };
-}
-
-function declarationCandidates(
-  workspace: string,
-  root: RuntimeDeclarationRoot,
-): readonly string[] {
-  const source = workspacePath(workspace, root.file);
-  const packagePath = root.file.split('/').slice(0, 2).join('/');
-  const buildConfig = `${packagePath}/tsconfig.build.json`;
-  const defaultConfig = `${packagePath}/tsconfig.json`;
-  const config = existsSync(workspacePath(workspace, buildConfig))
-    ? buildConfig
-    : defaultConfig;
-  if (!existsSync(workspacePath(workspace, config))) return [source];
-  const parsed = compilerConfiguration(workspace, config);
-  const compilerSource = parsed.fileNames.find(
-    (file) => workspacePath(workspace, file) === source,
-  );
-  if (compilerSource === undefined) return [source];
-  return [
-    source,
-    ...ts
-      .getOutputFileNames(
-        parsed,
-        compilerSource,
-        !ts.sys.useCaseSensitiveFileNames,
-      )
-      .filter((file) => /\.d\.(?:ts|mts|cts)$/.test(file)),
-  ];
 }
 
 function resolvePolicy(
@@ -617,11 +574,8 @@ function scanPackage(
         selected,
       ),
     );
-  const sources = selected.map((file) => {
-    const source = program.getSourceFile(file);
-    if (!source) throw new Error(`Missing production source: ${file}`);
-    return source;
-  });
+  const sources = selectedSources(program, selected);
+  shapeFindings.push(...findAssemblyClosureViolations(program, sources));
   const ambient = roots.ambientSources;
   const ambientFindings = scanAmbientDelegation(program, sources, ambient);
   onProgress?.({ ...progress, phase: 'scanners-complete' });

@@ -84,6 +84,28 @@ beforeEach(() => {
 afterEach(() => rmSync(workspace, { recursive: true, force: true }));
 
 describe('strict runtime boundary enforcement after ratchet retirement', () => {
+  it('fails when a production assembly publishes a closure from its own scope', () => {
+    put(
+      'packages/demo/src/assembly.ts',
+      `
+      function publishAgentFacade(input: unknown): unknown { return input; }
+      export class ForegroundAgentAssembly {
+        publish(): unknown { return publishAgentFacade(() => 1); }
+      }
+      `,
+    );
+    const result = audit();
+    expect(result.compilerDiagnostics).toEqual([]);
+    expect(result.exitCode).toBe(1);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        rule: 'assembly-closure',
+        file: 'packages/demo/src/assembly.ts',
+        line: 4,
+      }),
+    );
+  });
+
   it('fails for an existing service bundle without an allowance', () => {
     put('packages/demo/src/bag.ts', bundleSource);
     const result = audit();
