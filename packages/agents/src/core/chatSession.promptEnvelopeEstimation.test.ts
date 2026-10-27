@@ -24,8 +24,7 @@ import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.j
  *   (HistoryService total is synced to the real value).
  */
 
-import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, beforeEach, onTestFinished } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
@@ -45,7 +44,6 @@ import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybesta
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { waitForCondition } from '../test-utils/eventLoop.js';
 
 /**
  * A fake provider that implements projectPromptEnvelope by serializing the
@@ -251,19 +249,10 @@ function buildChatSession(fixture: TestFixture): ChatSession {
   return new ChatSession(view, fixture.mockContentGenerator, {}, []);
 }
 
-function registerRetryTimerCleanup(): void {
-  vi.useFakeTimers();
-  // Restore real timers even if an assertion below throws, so fake timers
-  // cannot leak into subsequent tests.
-  onTestFinished(() => {
-    vi.useRealTimers();
-  });
-}
-
 function createRetryingProvider(
   estimateHistory: number[],
   transportedBodies: string[],
-  observation: { attempt: number },
+  observation: { attempt: number; entered(): void },
 ): IProvider {
   const preparedBodies = new WeakMap<object, string>();
   let preparationAttempt = 0;
@@ -285,6 +274,7 @@ function createRetryingProvider(
       }
       transportedBodies.push(body);
       observation.attempt += 1;
+      observation.entered();
       if (observation.attempt === 1) {
         const transient: Error & { status?: number } = new Error(
           'upstream temporarily unavailable',
@@ -331,10 +321,10 @@ function createRetryingProvider(
 }
 
 const prepareRetryEstimationScenario = () => {
-  registerRetryTimerCleanup();
   const estimateHistory: number[] = [];
   const transportedBodies: string[] = [];
-  const observation = { attempt: 0 };
+  const firstAttempt = Promise.withResolvers<void>();
+  const observation = { attempt: 0, entered: firstAttempt.resolve };
   const retryingProvider = createRetryingProvider(
     estimateHistory,
     transportedBodies,
@@ -349,6 +339,7 @@ const prepareRetryEstimationScenario = () => {
   );
 
   return {
+    firstAttempt: firstAttempt.promise,
     observation,
     estimateHistory,
     transportedBodies,
@@ -700,13 +691,17 @@ async function testSplitCase7(): Promise<void> {
 }
 
 async function testSplitCase8(): Promise<void> {
-  const { observation, estimateHistory, transportedBodies, chat, sendPromise } =
-    prepareRetryEstimationScenario();
-  expect(await waitForCondition(() => observation.attempt >= 1)).toBe(true);
+  const {
+    firstAttempt,
+    observation,
+    estimateHistory,
+    transportedBodies,
+    chat,
+    sendPromise,
+  } = prepareRetryEstimationScenario();
+  await firstAttempt;
+  expect(observation.attempt >= 1).toBe(true);
 
-  // Advance past the default 5s retry backoff delay so no real wall-clock
-  // time is consumed by the test.
-  await advanceTimersByTimeAsync(10_000);
   await sendPromise;
 
   expect(observation.attempt).toBeGreaterThanOrEqual(2);
