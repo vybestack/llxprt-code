@@ -195,7 +195,8 @@ export async function executeTokenRefresh(
       return null;
     }
 
-    signal?.throwIfAborted();
+    // Upstream may have consumed a single-use refresh token. Persist its
+    // replacement before cancellation can release the refresh lock.
     const mergedToken = mergeRefreshedToken(
       (recheckToken ?? token) as OAuthTokenWithExtras,
       refreshedToken as OAuthTokenWithExtras,

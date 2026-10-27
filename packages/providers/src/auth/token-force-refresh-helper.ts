@@ -146,7 +146,7 @@ export async function refreshStoredToken(
     return null;
   }
 
-  signal?.throwIfAborted();
+  // The upstream rotation must reach storage even when its caller retires.
   const mergedToken = mergeRefreshedToken(
     storedToken as OAuthTokenWithExtras,
     refreshedToken as Partial<OAuthTokenWithExtras>,
@@ -158,6 +158,7 @@ export async function refreshStoredToken(
   );
 
   await tokenStore.saveToken(providerName, mergedToken, bucket);
+  signal?.throwIfAborted();
   proactiveRenewalManager.scheduleProactiveRenewal(
     providerName,
     bucket,
