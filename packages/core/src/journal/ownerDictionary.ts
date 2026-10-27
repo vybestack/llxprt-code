@@ -2,6 +2,7 @@
 import { JournalFormatError } from './errors.js';
 import type { VersionEdit } from './groupEdits.js';
 import type { JournalStore } from './journalStore.js';
+import { ownerBloomBit } from './ownerRules.js';
 
 /** State map keys of the owner dictionary are `owner:<id>`; `owner:next` is the next id to hand out. */
 export const OWNER_KEY_PREFIX = 'owner:';
@@ -77,6 +78,23 @@ export class OwnerDictionary {
 
   originOf(id: number): string | undefined {
     return this.origins.get(id);
+  }
+
+  /** Transfers the sole live owner to its resumed runtime without changing row ids. */
+  handoff(origin: string, ownerBloom: bigint): readonly VersionEdit[] {
+    if (this.ids.has(origin)) return [];
+    const candidates = [...this.origins].filter(
+      ([id]) =>
+        this.origins.size === 1 || (ownerBloomBit(id) & ownerBloom) !== 0n,
+    );
+    // A bloom collision cannot authorize a handoff between different owners.
+    const selected = candidates.length === 1 ? candidates[0] : undefined;
+    if (selected === undefined) return [];
+    const [id, previous] = selected;
+    this.ids.delete(previous);
+    this.ids.set(origin, id);
+    this.origins.set(id, origin);
+    return [setState(ownerKey(id), origin)];
   }
 
   /** The registration of `origin`: a new id when it has none, and then the edits that record it. */

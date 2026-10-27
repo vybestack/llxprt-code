@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { OwnerDictionary } from '../../journal/ownerDictionary.js';
+import { requireJournalRecorder } from './recorderBackend.js';
 import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
 import {
   resumeSession,
@@ -66,6 +68,44 @@ describe('resuming one origin while another is mirrored', () => {
     await resumed?.recording.dispose();
     resumed = undefined;
     await rm(root, { recursive: true, force: true });
+  });
+
+  it('keeps the named recording durable when a new runtime resumes and replaces its history', async () => {
+    const result = await resumedSession({});
+    const owner = {};
+    const service = new HistoryService();
+    try {
+      await service.adoptResumeBoot(result.recording, result.boot, () =>
+        service.attachJournal(result.recording, false, undefined, owner),
+      );
+      await service.addBatch([textRow('first continuation')], undefined, {
+        origin: owner,
+        streamPublication: true,
+        awaitDurableCommit: true,
+      });
+      expect(await harness.replayed(result.recording)).toStrictEqual([
+        'row-0',
+        'row-1',
+        'row-2',
+        'first continuation',
+      ]);
+      const session = await requireJournalRecorder(result.recording).session();
+      expect([
+        ...(await OwnerDictionary.load(session.store)).entries(),
+      ]).toHaveLength(1);
+      await service.replaceBatch([textRow('replacement')], undefined, {
+        origin: owner,
+      });
+      service.add(textRow('continued'), undefined, owner);
+      await service.waitForCommit();
+      expect(service.journalPath()).toBe(result.recording.getFilePath());
+      expect(await harness.replayed(result.recording)).toStrictEqual([
+        'replacement',
+        'continued',
+      ]);
+    } finally {
+      await service.dispose();
+    }
   });
 
   it('keeps the resumed recorder a filtered mirror of its own origin', async () => {

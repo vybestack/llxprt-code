@@ -3,6 +3,7 @@ import type { VersionEdit } from '../../journal/groupEdits.js';
 import type { JournalStore } from '../../journal/journalStore.js';
 import { OwnerDictionary } from '../../journal/ownerDictionary.js';
 import { UNOWNED_ROW } from './journalRowCodec.js';
+import { ownerBloomBit } from '../../journal/ownerRules.js';
 
 /** The owner id of an origin and the state edits that must go in the group of the first row using it. */
 export interface ResolvedOwner {
@@ -20,17 +21,32 @@ export interface ResolvedOwner {
  */
 export class JournalOwners {
   private dictionary: Promise<OwnerDictionary> | undefined;
+  private resumedOrigin: string | undefined;
+  private handoffPending = false;
 
   constructor(private readonly store: JournalStore) {}
+
+  adoptOrigin(origin: string | undefined): void {
+    this.resumedOrigin = origin;
+    this.handoffPending = true;
+  }
 
   /** Undefined is unowned (id 0). */
   async resolve(origin: string | undefined): Promise<ResolvedOwner> {
     if (origin === undefined) return { id: UNOWNED_ROW, edits: [] };
     this.dictionary ??= OwnerDictionary.load(this.store);
     const dictionary = await this.dictionary;
+    const handoff =
+      !this.handoffPending || this.resumedOrigin === undefined
+        ? []
+        : dictionary.handoff(
+            this.resumedOrigin,
+            this.store.published?.aggregate.ownerBloom ?? 0n,
+          );
+    this.handoffPending = false;
     const registration = dictionary.prepare(origin);
     dictionary.confirm(registration);
-    return { id: registration.id, edits: registration.edits };
+    return { id: registration.id, edits: [...handoff, ...registration.edits] };
   }
 
   /** The origin of a published owner id, or undefined for id 0 and unknown ids. */
@@ -41,13 +57,16 @@ export class JournalOwners {
 
   async hasOnly(origin: string | undefined): Promise<boolean> {
     this.dictionary ??= OwnerDictionary.load(this.store);
-    for (const [, registered] of (await this.dictionary).entries()) {
-      if (registered !== origin) return false;
+    const bloom = this.store.published?.aggregate.ownerBloom ?? 0n;
+    for (const [id, registered] of (await this.dictionary).entries()) {
+      if (registered !== origin && (ownerBloomBit(id) & bloom) !== 0n)
+        return false;
     }
     return true;
   }
 
   invalidate(): void {
     this.dictionary = undefined;
+    this.handoffPending = true;
   }
 }

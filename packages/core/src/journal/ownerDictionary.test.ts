@@ -52,6 +52,69 @@ describe('owner dictionary (design 5.1)', () => {
     await reopened.close();
   });
 
+  it('does not hand off different owners that share a bloom bit', async () => {
+    const store = await JournalStore.create(
+      file('handoff-collision.llxj'),
+      storeDeps(),
+    );
+    try {
+      const dictionary = await OwnerDictionary.load(store);
+      for (let id = 1; id <= 65; id++)
+        await appendOwned(store, dictionary, `runtime-${id}`);
+      await store.commit([
+        {
+          kind: 'replace',
+          rows: [draftRow({ owner: 1 }), draftRow({ owner: 65 })],
+        },
+      ]);
+      expect(
+        dictionary.handoff(
+          'next-runtime',
+          store.published?.aggregate.ownerBloom ?? 0n,
+        ),
+      ).toStrictEqual([]);
+      expect([dictionary.originOf(1), dictionary.originOf(65)]).toStrictEqual([
+        'runtime-1',
+        'runtime-65',
+      ]);
+      expect(dictionary.idOf('next-runtime')).toBeUndefined();
+    } finally {
+      await store.close();
+    }
+  });
+
+  it('hands off the sole live owner without reusing an inactive owner id', async () => {
+    const store = await JournalStore.create(file('handoff.llxj'), storeDeps());
+    try {
+      const dictionary = await OwnerDictionary.load(store);
+      await appendOwned(store, dictionary, 'inactive-runtime');
+      const live = await appendOwned(store, dictionary, 'previous-runtime');
+      expect(
+        dictionary.handoff(
+          'next-runtime',
+          store.published?.aggregate.ownerBloom ?? 0n,
+        ),
+      ).toStrictEqual([]);
+      await store.commit([
+        { kind: 'replace', rows: [draftRow({ owner: live })] },
+      ]);
+      await store.commit([
+        ...dictionary.handoff(
+          'next-runtime',
+          store.published?.aggregate.ownerBloom ?? 0n,
+        ),
+      ]);
+      const loaded = await OwnerDictionary.load(store);
+      expect([
+        loaded.originOf(1),
+        loaded.originOf(live),
+        loaded.prepare('third-runtime').id,
+      ]).toStrictEqual(['inactive-runtime', 'next-runtime', 3]);
+    } finally {
+      await store.close();
+    }
+  });
+
   it('survives a pop below the group that registered an origin, and never reuses its id', async () => {
     const store = await JournalStore.create(file('b.llxj'), storeDeps());
     const dictionary = await OwnerDictionary.load(store);

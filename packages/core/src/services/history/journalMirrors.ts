@@ -344,5 +344,6 @@ export class JournalMirrors {
       );
     }
     this.primaryOrigin = origin;
+    this.owners.adoptOrigin(origin);
   }
 }
