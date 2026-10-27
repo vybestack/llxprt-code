@@ -31,7 +31,7 @@ export type JournalDisplayDescriptor =
       readonly type: 'tool-result' | 'tool-approval';
       readonly attemptId: string;
       readonly callId: string;
-      readonly format: 'text' | 'json';
+      readonly format: 'text' | 'json' | 'none';
       readonly status?: string;
       readonly displayName?: string;
       readonly description?: string;
@@ -70,7 +70,9 @@ export function decodeDisplayDescriptor(
         throw new Error('Invalid display call id');
       if (
         !('format' in value) ||
-        (value.format !== 'text' && value.format !== 'json')
+        (value.format !== 'text' &&
+          value.format !== 'json' &&
+          value.format !== 'none')
       )
         throw new Error('Invalid display format');
       return {

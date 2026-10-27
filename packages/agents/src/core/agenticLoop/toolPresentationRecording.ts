@@ -2,6 +2,14 @@
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 
+function presentationContent(
+  display: CompletedToolCall['response']['resultDisplay'],
+): { format: 'text' | 'json' | 'none'; source: string } {
+  if (display === undefined) return { format: 'none', source: '' };
+  if (typeof display === 'string') return { format: 'text', source: display };
+  return { format: 'json', source: JSON.stringify(display) };
+}
+
 export async function persistToolPresentations(
   tools: readonly CompletedToolCall[],
   history: Pick<HistoryService, 'appendDisplay'> | null,
@@ -10,26 +18,23 @@ export async function persistToolPresentations(
   for (const tool of tools) {
     const identity = tool.request.journalIdentity;
     const display = tool.response.resultDisplay;
-    if (
-      identity === undefined ||
-      display === undefined ||
-      tool.response.suppressDisplay === true
-    )
+    if (identity === undefined || tool.response.suppressDisplay === true)
       continue;
     if (history === null)
       throw new Error('Journal tool request has no history owner');
+    const content = presentationContent(display);
     await history.appendDisplay(
       {
         type: 'tool-result',
         attemptId: identity.attemptId,
         callId: tool.request.callId,
-        format: typeof display === 'string' ? 'text' : 'json',
+        format: content.format,
         status: tool.status,
         displayName: tool.tool?.displayName,
         description: tool.invocation?.getDescription(),
         renderOutputAsMarkdown: tool.tool?.isOutputMarkdown,
       },
-      typeof display === 'string' ? display : JSON.stringify(display),
+      content.source,
       origin,
     );
   }

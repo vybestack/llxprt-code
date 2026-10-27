@@ -57,6 +57,16 @@ export function displayText(content: IContent): string {
     .join('');
 }
 
+function presentationResult(
+  format: 'none' | 'text' | 'json',
+  text: string,
+  original: ToolResultDisplay | undefined,
+): ToolResultDisplay | undefined {
+  if (format === 'none') return original;
+  if (format === 'text') return text;
+  return toolDisplay.parse(JSON.parse(text));
+}
+
 export async function withToolPresentations(
   reader: NativeJournalPageReader,
   row: NativeJournalEntry,
@@ -78,10 +88,11 @@ export async function withToolPresentations(
         continue;
       }
       const text = displayText(presentation.content);
-      const resultDisplay: ToolResultDisplay =
-        presentation.descriptor.format === 'text'
-          ? text
-          : toolDisplay.parse(JSON.parse(text));
+      const resultDisplay = presentationResult(
+        presentation.descriptor.format,
+        text,
+        tool.resultDisplay,
+      );
       tools.push({
         ...tool,
         journalIdentity,

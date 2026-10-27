@@ -32,8 +32,8 @@ export async function withPersistedApproval(
     row.transcriptId.toString()
   )
     throw new Error('Mismatched approval transcript identity');
-  return approval.status === 'cancelled' ||
-    tool.status === ToolCallStatus.Pending
+  return approval.status === 'cancelled' &&
+    tool.status !== ToolCallStatus.Pending
     ? { ...tool, status: ToolCallStatus.Canceled }
     : tool;
 }
