@@ -108,15 +108,10 @@ async function summaries(
 }> {
   const corrected =
     Math.floor(atom.key / 4) === state.engine.tools.index.lastThinking;
-  const metadata = atom.repair
-    ? undefined
-    : (await state.query.planAt(atom.end ?? Math.floor(atom.key / 4))).header
-        .metadata;
-  const anchored =
-    state.settings.anthropic?.cacheFacts === true &&
-    metadata?.cacheAnchor === true;
-  const purge = metadata?.semanticMediaPurgeBoundary !== undefined;
   const measured = await readAnthropicMeasurementFact(state.facts, atom.key);
+  const anchored =
+    state.settings.anthropic?.cacheFacts === true && measured.anchored;
+  const purge = measured.purge;
   const chain = measured.chain;
   const sameVariants = measured.stripped === undefined;
   const previous = state.cache;

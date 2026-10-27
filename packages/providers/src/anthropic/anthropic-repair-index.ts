@@ -10,10 +10,17 @@ import {
 } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import type { RepairMessage } from './anthropic-repair-source.js';
 import type { ToolRepairOverlay } from './anthropic-tool-repair.js';
+import {
+  readMessageScalars,
+  writeMessageScalars,
+} from './anthropic-message-pages.js';
 
 export const anthropicRepairScope = (settings: RowFormatSettings): string =>
-  `anthropic-repair:8:${rowFormatKey(settings)}`;
+  `anthropic-repair:9:${rowFormatKey(settings)}`;
 export interface ScalarFacts {
+  getBytes(
+    key: ReadonlyArray<string | number>,
+  ): Promise<Uint8Array | undefined>;
   get(
     key: ReadonlyArray<string | number>,
   ): Promise<readonly number[] | undefined>;
@@ -61,7 +68,7 @@ export class AnthropicRepairIndex {
       throw new JournalFormatError(
         'Anthropic message ordinal is outside native facts',
       );
-    const values = await this.facts.get(['message', ordinal]);
+    const values = await readMessageScalars(this.facts, ordinal);
     if (
       !sameFactVersion(values, this.version) ||
       values.length !== 5 ||
@@ -180,17 +187,14 @@ export async function writeRepairMessage(
   let atom = 0;
   if (message.kept !== undefined && message.inserts !== undefined)
     atom = 8 | (Number(message.kept) * 16) | (Number(message.inserts) * 32);
-  await writer.set(
-    ['message', ordinal],
-    [
-      ...generation,
-      message.start,
-      message.end,
-      (message.slot === 'results' ? 0 : slot) +
-        Number(message.role === 'assistant') +
-        atom,
-    ],
-  );
+  await writeMessageScalars(writer, ordinal, [
+    ...generation,
+    message.start,
+    message.end,
+    (message.slot === 'results' ? 0 : slot) +
+      Number(message.role === 'assistant') +
+      atom,
+  ]);
 }
 
 export type AnthropicRequestRepairIndex = Pick<

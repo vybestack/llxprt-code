@@ -15,6 +15,10 @@ import {
 import type { RecordAccess } from './recordAccess.js';
 import { RECORD_KIND } from './recordKinds.js';
 
+// Random paths cannot use the adjacent-node window. Half a KiB avoids
+// reading a full KiB for each small scalar leaf or internal node.
+const RANDOM_NODE_PREFETCH_BYTES = 512;
+
 /**
  * Reads nodes of the id trie through a record access and a node cache. The
  * access is bound to one published `durableEnd`; a caller that has committed
@@ -42,7 +46,7 @@ export class IdTrieReader {
     const head = await this.access.readRecordHead(
       offset,
       'ITNODE',
-      ID_TRIE_PREFETCH_BYTES,
+      readAhead ? ID_TRIE_PREFETCH_BYTES : RANDOM_NODE_PREFETCH_BYTES,
       readAhead,
     );
     if (head.kind !== RECORD_KIND.ITNODE || head.bodyLen !== 0) {

@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { flushMessagePages } from './anthropic-message-pages.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
 import type {
@@ -223,7 +224,7 @@ export function rawAnthropicFactIndex(
   settings: RowFormatSettings,
 ): NativeFactIndexRegistration {
   return {
-    scope: `anthropic-raw:1:${rowFormatKey(settings)}`,
+    scope: `anthropic-raw:2:${rowFormatKey(settings)}`,
     async write(snapshot, writer, generation) {
       const query = new RawAnthropicQuery(snapshot, writer, generation);
       await writeOccurrences(query, writer, generation);
@@ -267,6 +268,7 @@ export function rawAnthropicFactIndex(
         for await (const call of source.calls(message))
           await decide(source, writer, index, message, next, call.id);
       }
+      await flushMessagePages(writer);
     },
   };
 }

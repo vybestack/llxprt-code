@@ -174,8 +174,13 @@ export class AnthropicStreamRepair<
         message.start !== this.lastThinking)
     );
   }
-  async *atoms(from = 0): AsyncGenerator<LazyRepairAtom> {
+  async *atoms(
+    from = 0,
+    finalize?: (message: RepairMessage, ordinal: number) => Promise<void>,
+  ): AsyncGenerator<LazyRepairAtom> {
+    let ordinal = 0;
     for await (const message of this.source.messages(Math.floor(from / 4))) {
+      ordinal++;
       const key = message.start * 4 + Number(message.slot !== 'results');
       const exists =
         message.kept ??
@@ -192,7 +197,10 @@ export class AnthropicStreamRepair<
           openPieces: (redact = this.redact(message)) =>
             this.tools.kept(message, redact),
         };
-      if (message.role !== 'assistant') continue;
+      if (message.role !== 'assistant') {
+        await finalize?.({ ...message, kept: exists, inserts: false }, ordinal);
+        continue;
+      }
       let inserted = message.inserts ?? false;
       if (message.inserts === undefined)
         for await (const _block of this.tools.scripts(message)) {
@@ -210,6 +218,10 @@ export class AnthropicStreamRepair<
           },
         };
       }
+      await finalize?.(
+        { ...message, kept: exists, inserts: inserted },
+        ordinal,
+      );
     }
   }
   async measure(): Promise<{

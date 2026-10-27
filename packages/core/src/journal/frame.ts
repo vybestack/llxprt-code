@@ -263,7 +263,14 @@ export async function readFrameStart(
   const inFirstRead = kindHeaderEnd <= first.length;
   const kindHeader = inFirstRead
     ? first.slice(FRAME_HEAD_BYTES, kindHeaderEnd)
-    : await reader.readAt(offset + FRAME_HEAD_BYTES, raw.headerLen);
+    : new Uint8Array(raw.headerLen);
+  if (!inFirstRead) {
+    kindHeader.set(first.subarray(FRAME_HEAD_BYTES));
+    kindHeader.set(
+      await reader.readAt(offset + first.length, kindHeaderEnd - first.length),
+      first.length - FRAME_HEAD_BYTES,
+    );
+  }
   assertFrameCrc(offset, head, raw, kindHeader);
   const bodyEnd = Math.min(first.length, kindHeaderEnd + Number(raw.bodyLen));
   return {

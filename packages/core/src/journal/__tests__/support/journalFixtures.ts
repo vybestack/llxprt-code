@@ -41,7 +41,7 @@ export interface Failures {
   /** Includes record-kind metadata in the otherwise positional write log. */
   recordKinds?: boolean;
   /** Counts the positional reads that reach the file. */
-  readCounter?: { reads: number };
+  readCounter?: { reads: number; bytes?: number };
   /** Holds every positional read until `promise` settles; `hits` counts the reads that arrived. */
   readGate?: { promise: Promise<void>; hits: number };
 }
@@ -100,7 +100,10 @@ function wrapHandle(
         failures.readGate.hits += 1;
         await failures.readGate.promise;
       }
-      return real.read(buffer, offset, length, position);
+      const result = await real.read(buffer, offset, length, position);
+      if (failures.readCounter?.bytes !== undefined)
+        failures.readCounter.bytes += result.bytesRead;
+      return result;
     },
     write: async (buffer, offset, length, position) => {
       await admit(position, length, buffer[offset]);

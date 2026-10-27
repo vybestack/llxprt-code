@@ -58,10 +58,11 @@ describe('Anthropic repeated atom conversion', () => {
   const directory = useTempDir('anthropic-repeated-work-');
   for (const count of [2048, 8192]) {
     it(`serializes ${count} tool-heavy rows once and measures redaction-independent blocks once`, async () => {
+      const physical = { reads: 0, bytes: 0 };
       const session = await JournalSession.create(
         `${directory()}/work-${count}.llxj`,
         {
-          journal: testJournalSeams().dependencies,
+          journal: testJournalSeams({ readCounter: physical }).dependencies,
         },
       );
       function* rows(): Generator<
@@ -82,8 +83,15 @@ describe('Anthropic repeated atom conversion', () => {
         'readAt',
       );
       const lengths = spyOn(measuredMedia, 'anthropicBlockByteLength');
+      const encoder = await getO200kBaseEncoder();
+      const tokenization = spyOn(encoder, 'encode');
       let decoded = 0;
       let toolMeasurements = 0;
+      let tokenizerCalls = 0;
+      let fillReads = 0;
+      let fillBytes = 0;
+      physical.reads = 0;
+      physical.bytes = 0;
       try {
         await session.store.commit([
           {
@@ -95,15 +103,26 @@ describe('Anthropic repeated atom conversion', () => {
         toolMeasurements = lengths.mock.calls.filter(
           ([block]) => block.type === 'tool_use',
         ).length;
+        tokenizerCalls = tokenization.mock.calls.length;
+        fillReads = physical.reads;
+        fillBytes = physical.bytes;
       } finally {
         coldReads.mockRestore();
         lengths.mockRestore();
+        tokenization.mockRestore();
       }
       const snapshot = await session.store.snapshot();
       const query = await IndexedJournalRequestSnapshot.create(snapshot);
       try {
         expect(decoded).toBe(count + 1);
         expect(toolMeasurements).toBe(count / 4);
+        expect(tokenizerCalls).toBeLessThanOrEqual(count * 2 + 256);
+        expect(fillReads).toBeLessThanOrEqual(count * 10 + 512);
+        // Fixed per-row work plus two radix-16 paths, allowing O(log N)
+        // depth growth without allowing a history scan for each row.
+        const depth = Math.ceil(Math.log(count) / Math.log(16));
+        expect(fillReads).toBeLessThanOrEqual(count * (2 + 2 * depth) + 512);
+        expect(fillBytes).toBeLessThanOrEqual(count * 12 * 1024);
         const engine = await AnthropicStreamRepair.create(query, settings);
         let bytes = 0;
         for await (const piece of engine.serialize())
@@ -177,6 +196,10 @@ describe('Anthropic repeated atom conversion', () => {
             reads++;
             return facts.get(key);
           },
+          getBytes: (key) => {
+            reads++;
+            return facts.getBytes(key);
+          },
         },
         version,
       );
@@ -191,7 +214,7 @@ describe('Anthropic repeated atom conversion', () => {
       expect(await scan()).toStrictEqual([10, 11]);
       const before = reads;
       expect(await scan()).toStrictEqual([10, 11]);
-      expect(reads - before).toBe(2);
+      expect(reads - before).toBe(0);
     } finally {
       await snapshot.close();
       await session.close();

@@ -121,6 +121,7 @@ export class AnthropicRepairSource<
     this.currentRow = undefined;
     this.work.unitReads++;
     const row = await this.query.readAt(index);
+    this.work.media ||= row.blocks.some((block) => block.type === 'media');
     await this.observeRow?.(row, index);
     const value = projectAnthropicUnit(row, this.settings, this.normalized);
     this.currentRow = { index, value };

@@ -421,7 +421,7 @@ describe('frame head with a prefetch', () => {
 
     expect(reads).toStrictEqual([
       { position: 0, length: 1024 },
-      { position: FRAME_HEAD_BYTES, length: 6000 },
+      { position: 1024, length: FRAME_HEAD_BYTES + 6000 - 1024 },
     ]);
     expect(head.kindHeader).toStrictEqual(new Uint8Array(header));
   });

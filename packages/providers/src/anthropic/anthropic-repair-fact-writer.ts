@@ -22,6 +22,7 @@ import { writeAnthropicRecoveryFacts } from './anthropic-recovery-facts.js';
 import { decideAnthropicTool } from './anthropic-tool-decision.js';
 import { AnthropicStreamRepair } from './anthropic-stream-repair.js';
 import { writeAnthropicCacheWindows } from './anthropic-cache-windows.js';
+import { flushMessagePages } from './anthropic-message-pages.js';
 import type { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
 import type { Version } from '@vybestack/llxprt-code-core/journal/version.js';
 import type { VersionEdit } from '@vybestack/llxprt-code-core/journal/groupEdits.js';
@@ -48,32 +49,19 @@ async function survives(
   if (message.slot !== 'results') return true;
   for (let at = message.start; at <= message.end; at++) {
     const local = new Map<string, number>();
-    for (const fact of await source.query.anthropicToolFactsAt(at)) {
-      if (fact.kind !== 'result' || fact.orphan) continue;
-      const within = (local.get(fact.id) ?? 0) + 1;
-      local.set(fact.id, within);
-      if (
-        !(await index.taken(
-          fact.id,
-          fact.resultsBefore + within,
-          message.start - 1,
-        ))
-      )
+    for await (const id of source.resultIds(at)) {
+      if ((await source.query.normalizedCount(2, 0, id)) === 0) continue;
+      const within = (local.get(id) ?? 0) + 1;
+      local.set(id, within);
+      const before = await source.query.normalizedCount(2, 1, id, {
+        from: 0,
+        to: at,
+      });
+      if (!(await index.taken(id, before + within, message.start - 1)))
         return true;
     }
   }
   return false;
-}
-async function nextMessage(
-  source: AnthropicRepairSource,
-  index: AnthropicRepairIndex,
-  ordinal: number,
-): Promise<RepairMessage | undefined> {
-  for (let next = ordinal + 1; next <= index.count; next++) {
-    const message = await index.message(next);
-    if (await survives(source, index, message)) return message;
-  }
-  return undefined;
 }
 async function decide(
   source: AnthropicRepairSource,
@@ -174,11 +162,70 @@ async function appendIndexedFacts(
       rewind === 0 ? previous.aggregate.units : rewind - 1,
     );
     await writeAnthropicCacheWindows(engine, writer, previous.aggregate.units);
+    await flushMessagePages(writer);
     return true;
   } finally {
     await query.close();
   }
 }
+async function writeTopology(
+  source: AnthropicRepairSource,
+  writer: NativeFactIndexWriter,
+  generation: readonly number[],
+): Promise<AnthropicRepairIndex> {
+  let messages = 0;
+  let last = -1;
+  let thinking = 0;
+  await writer.set(['messages'], [0, 0]);
+  const decisions = await AnthropicRepairIndex.prepared(writer, generation);
+  const topology = source.messages();
+  let tail: RepairMessage | undefined;
+  const nextRecorded = async (): Promise<RepairMessage | undefined> => {
+    const next = await topology.next();
+    if (next.done === true) return undefined;
+    const message = next.value;
+    tail = message;
+    await writeRepairMessage(writer, ++messages, message, generation);
+    if (
+      message.role === 'assistant' &&
+      (await source.describe(message.start))?.thinking === true
+    ) {
+      last = message.start;
+      await writer.set(['thinking', thinking++], [last]);
+    }
+    return message;
+  };
+  try {
+    let message = await nextRecorded();
+    while (message !== undefined) {
+      let next = await nextRecorded();
+      if (message.role !== 'assistant') {
+        message = next;
+        continue;
+      }
+      while (next !== undefined && !(await survives(source, decisions, next)))
+        next = await nextRecorded();
+      for await (const call of source.calls(message))
+        await decide(source, writer, decisions, message, next, call.id);
+      message = next;
+    }
+  } finally {
+    await topology.return(undefined);
+  }
+  await writer.set(['thinking-count'], [thinking]);
+  await writer.set(['messages'], [messages, last + 1]);
+  let tailChain = false;
+  let tailCalls = false;
+  if (tail !== undefined) {
+    tailChain =
+      tail.slot === 'chain' ||
+      (await source.describe(tail.start))?.chain === true;
+    for await (const _call of source.calls(tail)) tailCalls = true;
+  }
+  await writer.set(['tail'], [Number(tailChain), Number(tailCalls)]);
+  return AnthropicRepairIndex.prepared(writer, generation);
+}
+
 export function anthropicRepairFactIndex(
   input: RowFormatSettings,
 ): NativeFactIndexRegistration {
@@ -193,46 +240,7 @@ export function anthropicRepairFactIndex(
       try {
         const ledger = anthropicMediaLedgerWriter(writer, settings);
         const source = new AnthropicRepairSource(query, settings);
-        let messages = 0;
-        let last = -1;
-        let thinking = 0;
-        for await (const message of source.messages()) {
-          await writeRepairMessage(writer, ++messages, message, generation);
-          if (
-            message.role === 'assistant' &&
-            (await source.describe(message.start))?.thinking === true
-          ) {
-            last = message.start;
-            await writer.set(['thinking', thinking++], [last]);
-          }
-        }
-        await writer.set(['thinking-count'], [thinking]);
-        await writer.set(['messages'], [messages, last + 1]);
-        const index = await AnthropicRepairIndex.prepared(writer, generation);
-        let tailChain = false;
-        let tailCalls = false;
-        if (messages > 0) {
-          const tail = await index.message(messages);
-          tailChain =
-            tail.slot === 'chain' ||
-            (await source.describe(tail.start))?.chain === true;
-          for await (const _call of source.calls(tail)) tailCalls = true;
-        }
-        await writer.set(['tail'], [Number(tailChain), Number(tailCalls)]);
-        for (let ordinal = 1; ordinal <= messages; ordinal++) {
-          const message = await index.message(ordinal);
-          if (message.role !== 'assistant') continue;
-          const next = await nextMessage(source, index, ordinal);
-          for await (const call of source.calls(message))
-            await decide(source, writer, index, message, next, call.id);
-        }
-        const engine = await AnthropicStreamRepair.create(
-          query,
-          settings,
-          {},
-          index,
-        );
-        await writeAtomFacts(index, engine, writer);
+        const index = await writeTopology(source, writer, generation);
         await writeAnthropicRecoveryFacts(
           query,
           writer,
@@ -241,9 +249,11 @@ export function anthropicRepairFactIndex(
           source.work.media,
           undefined,
           ledger.observe,
+          (message, ordinal) =>
+            writeRepairMessage(writer, ordinal, message, generation),
         );
         await ledger.finish();
-        await writeAnthropicCacheWindows(engine, writer);
+        await flushMessagePages(writer);
       } finally {
         await query.close();
       }

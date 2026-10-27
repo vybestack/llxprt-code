@@ -44,52 +44,86 @@ async function counter(
   return from === 0 ? 0 : ((await writer.get([key]))?.[0] ?? 0);
 }
 
+export class AnthropicCacheWindowWriter {
+  private constructor(
+    private readonly writer: NativeFactIndexWriter,
+    private run: number,
+    private start: number,
+    private end: number,
+    private role: LazyRepairAtom['role'] | undefined,
+    private anchors: number,
+    private purgeWindows: number,
+  ) {}
+
+  static async create(
+    writer: NativeFactIndexWriter,
+    from = 0,
+  ): Promise<AnthropicCacheWindowWriter> {
+    const previous = from === 0 ? undefined : await writer.get(['cache-runs']);
+    const run = previous === undefined ? -1 : previous[0] - 1;
+    const tail = run < 0 ? undefined : await writer.get(['cache-run', run]);
+    const previousRole = tail?.[2] === 0 ? 'user' : 'assistant';
+    return new AnthropicCacheWindowWriter(
+      writer,
+      run,
+      tail?.[0] ?? 0,
+      from,
+      tail === undefined ? undefined : previousRole,
+      await counter(writer, 'cache-anchors', from),
+      await counter(writer, 'cache-purge-windows', from),
+    );
+  }
+
+  async add(
+    atom: LazyRepairAtom,
+    purge: boolean,
+    anchor: boolean,
+  ): Promise<void> {
+    const at = Math.floor(atom.key / 4);
+    if (this.role !== atom.role) {
+      if (this.run >= 0) await this.saveRun(this.end);
+      this.run++;
+      this.role = atom.role;
+      this.start = at;
+    }
+    this.end = (atom.end ?? at) + 1;
+    if (purge)
+      await this.writer.set(
+        ['cache-purge-window', this.purgeWindows++],
+        [at, this.end],
+      );
+    if (anchor)
+      await this.writer.set(['cache-anchor', this.anchors++], [at, this.end]);
+  }
+
+  private saveRun(end: number): Promise<void> {
+    return this.writer.set(
+      ['cache-run', this.run],
+      [this.start, end, Number(this.role === 'assistant')],
+    );
+  }
+
+  async finish(count: number): Promise<void> {
+    if (this.run >= 0) await this.saveRun(Math.max(this.end, count));
+    await this.writer.set(['cache-runs'], [this.run + 1]);
+    await this.writer.set(['cache-anchors'], [this.anchors]);
+    await this.writer.set(['cache-purge-windows'], [this.purgeWindows]);
+  }
+}
+
 export async function writeAnthropicCacheWindows(
   engine: AnthropicStreamRepair,
   writer: NativeFactIndexWriter,
   from = 0,
 ): Promise<void> {
-  const previous = from === 0 ? undefined : await writer.get(['cache-runs']);
-  let run = previous === undefined ? -1 : previous[0] - 1;
-  const tail = run < 0 ? undefined : await writer.get(['cache-run', run]);
-  let start = tail?.[0] ?? 0;
-  let end = from;
-  const previousRole = tail?.[2] === 0 ? 'user' : 'assistant';
-  let role = tail === undefined ? undefined : previousRole;
-  let anchors = await counter(writer, 'cache-anchors', from);
-  let purgeWindows = await counter(writer, 'cache-purge-windows', from);
-  for await (const atom of engine.atoms(from * 4)) {
-    const at = Math.floor(atom.key / 4);
-    if (role !== atom.role) {
-      if (run >= 0)
-        await writer.set(
-          ['cache-run', run],
-          [start, end, Number(role === 'assistant')],
-        );
-      run++;
-      role = atom.role;
-      start = at;
-    }
-    end = (atom.end ?? at) + 1;
-    if (await purgeWindow(engine, atom, writer))
-      await writer.set(['cache-purge-window', purgeWindows++], [at, end]);
-    if (
+  const windows = await AnthropicCacheWindowWriter.create(writer, from);
+  for await (const atom of engine.atoms(from * 4))
+    await windows.add(
+      atom,
+      await purgeWindow(engine, atom, writer),
       !atom.repair &&
-      (await engine.source.query.planAt(atom.end ?? at)).header.metadata
-        ?.cacheAnchor === true
-    )
-      await writer.set(['cache-anchor', anchors++], [at, end]);
-  }
-  if (run >= 0)
-    await writer.set(
-      ['cache-run', run],
-      [
-        start,
-        Math.max(end, engine.source.query.count),
-        Number(role === 'assistant'),
-      ],
+        (await engine.source.query.planAt(atom.end ?? Math.floor(atom.key / 4)))
+          .header.metadata?.cacheAnchor === true,
     );
-  await writer.set(['cache-runs'], [run + 1]);
-  await writer.set(['cache-anchors'], [anchors]);
-  await writer.set(['cache-purge-windows'], [purgeWindows]);
+  await windows.finish(engine.source.query.count);
 }

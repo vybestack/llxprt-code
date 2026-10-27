@@ -58,6 +58,10 @@ export async function readRowTreeNode(
     );
   }
   const node = decodeRowTreeNode(head.kindHeader);
+  if (node.kind === 'leaf') {
+    const previous = path.get(0);
+    if (previous !== undefined) path.set(-1, previous);
+  }
   path.set(node.kind === 'leaf' ? 0 : node.level, { offset, node });
   return node;
 }

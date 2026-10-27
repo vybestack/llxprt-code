@@ -14,14 +14,18 @@ import {
   numericRepairPiece,
   type LazyRepairAtom,
 } from './anthropic-stream-repair.js';
-import type { RepairPiece } from './anthropic-repair-source.js';
+import type { RepairPiece, RepairMessage } from './anthropic-repair-source.js';
 import type { AnthropicAtom } from './anthropic-unit-facts.js';
-import { writeAnthropicMeasurementFact } from './anthropic-measurement-facts.js';
+import {
+  writeAnthropicMeasurementFact,
+  flushAnthropicMeasurementFacts,
+} from './anthropic-measurement-facts.js';
 import {
   estimatePieceFact,
   type EstimatePieceFact,
 } from './anthropic-estimate-facts.js';
 import type { AnthropicRequestRepairIndex } from './anthropic-repair-index.js';
+import { AnthropicCacheWindowWriter } from './anthropic-cache-windows.js';
 import {
   addAnthropicCachePiece,
   beginAnthropicCacheAtom,
@@ -150,6 +154,73 @@ async function persistRecoveryPiece(
   }
   return { state: event.value, count };
 }
+async function persistMeasurement({
+  engine,
+  writer,
+  atom,
+  kept,
+  estimates,
+  stripped,
+  strippedEstimates,
+  windows,
+}: {
+  readonly engine: AnthropicStreamRepair;
+  readonly writer: NativeFactIndexWriter;
+  readonly atom: LazyRepairAtom;
+  readonly kept: readonly AnthropicAtom[];
+  readonly estimates: readonly EstimatePieceFact[];
+  readonly stripped?: readonly AnthropicAtom[];
+  readonly strippedEstimates?: readonly EstimatePieceFact[];
+  readonly windows?: AnthropicCacheWindowWriter;
+}): Promise<void> {
+  const assistantTail =
+    !atom.repair &&
+    atom.role === 'assistant' &&
+    atom.end === engine.source.query.count - 1;
+  const chain =
+    atom.chain === true ||
+    (assistantTail &&
+      (await engine.source.describe(atom.end ?? Math.floor(atom.key / 4)))
+        ?.chain === true);
+  const row = atom.repair
+    ? undefined
+    : await engine.source.row(atom.end ?? Math.floor(atom.key / 4));
+  const anchored = row?.metadata?.cacheAnchor === true;
+  const purge = row?.metadata?.semanticMediaPurgeBoundary !== undefined;
+  await writeAnthropicMeasurementFact(writer, atom.key, {
+    kept,
+    stripped,
+    estimates,
+    strippedEstimates,
+    chain,
+    anchored,
+    purge,
+  });
+  await windows?.add(
+    atom,
+    !atom.repair &&
+      (purge ||
+        kept.some(
+          (piece) =>
+            piece.form === 'array' &&
+            piece.blocks.some((block) => block.kind === 'image'),
+        )),
+    anchored,
+  );
+}
+
+async function saveRecoveryRun(
+  writer: NativeFactIndexWriter,
+  state: AnthropicCacheState,
+  hasMedia: boolean,
+): Promise<void> {
+  if (hasMedia && state.run !== undefined)
+    await writer.set(
+      ['recovery-run', state.run.ordinal],
+      [state.run.atoms, state.run.leading],
+    );
+}
+
 export async function writeAnthropicRecoveryFacts(
   query: IndexedJournalRequestSnapshot,
   writer: NativeFactIndexWriter,
@@ -158,8 +229,13 @@ export async function writeAnthropicRecoveryFacts(
   hasMedia: boolean,
   measurementsFrom?: number,
   observeRow?: (row: IContent, at: number) => Promise<void>,
+  finalize?: (message: RepairMessage, ordinal: number) => Promise<void>,
 ): Promise<void> {
   let count = 0;
+  const windows =
+    measurementsFrom === undefined
+      ? await AnthropicCacheWindowWriter.create(writer)
+      : undefined;
   const engine = await AnthropicStreamRepair.create(
     query,
     settings,
@@ -168,16 +244,12 @@ export async function writeAnthropicRecoveryFacts(
     observeRow,
   );
   let state: AnthropicCacheState = {};
-  const saveRun = async (): Promise<void> => {
-    if (hasMedia && state.run !== undefined)
-      await writer.set(
-        ['recovery-run', state.run.ordinal],
-        [state.run.atoms, state.run.leading],
-      );
-  };
-  for await (const atom of engine.atoms((measurementsFrom ?? 0) * 4)) {
+  for await (const atom of engine.atoms(
+    (measurementsFrom ?? 0) * 4,
+    finalize,
+  )) {
     if (state.run !== undefined && state.run.role !== atom.role)
-      await saveRun();
+      await saveRecoveryRun(writer, state, hasMedia);
     state = beginAnthropicCacheAtom(state, atom.role);
     const kept: AnthropicAtom[] = [];
     const estimates: EstimatePieceFact[] = [];
@@ -207,22 +279,20 @@ export async function writeAnthropicRecoveryFacts(
         strippedEstimates.push(await estimatePieceFact(piece, atom.role));
       }
     }
-    const assistantTail =
-      !atom.repair && atom.role === 'assistant' && atom.end === query.count - 1;
-    const chain =
-      atom.chain === true ||
-      (assistantTail &&
-        (await engine.source.describe(atom.end ?? Math.floor(atom.key / 4)))
-          ?.chain === true);
-    await writeAnthropicMeasurementFact(writer, atom.key, {
+    await persistMeasurement({
+      engine,
+      writer,
+      atom,
       kept,
-      stripped: thinking ? stripped : undefined,
       estimates,
+      stripped: thinking ? stripped : undefined,
       strippedEstimates: thinking ? strippedEstimates : undefined,
-      chain,
+      windows,
     });
   }
-  await saveRun();
+  await flushAnthropicMeasurementFacts(writer);
+  await windows?.finish(query.count);
+  await saveRecoveryRun(writer, state, hasMedia);
   if (measurementsFrom === undefined)
     await writer.set(['recovery-images'], [count]);
 }
