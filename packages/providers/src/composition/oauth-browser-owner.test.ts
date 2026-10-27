@@ -13,16 +13,16 @@ import {
   populateProviderManager,
 } from './index.js';
 import {
-  acquirePreferredOAuth,
-  acquirePreferredProviderManager,
-} from '../../../agents/src/api/preferred-provider-acquisition.js';
+  acquireOwnedOAuth,
+  acquireOwnedProviderManager,
+} from '../__tests__/helpers/acquire-provider-owners.js';
 
-import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { releaseAdoptedFileScope } from '../__tests__/helpers/adopted-file-scope.js';
+import { useOwnedCredentials } from '../__tests__/helpers/owned-credential-fixture.js';
 import {
   cleanupAfterFailure,
   runCleanupSteps,
-} from '../../../agents/src/core/subagent-cleanup.js';
+} from '../__tests__/helpers/cleanup.js';
 
 /**
  * @license
@@ -203,7 +203,7 @@ describe('OAuth owner reads before registration', () => {
     release.acquire('files', () =>
       releaseAdoptedFileScope(files, config.getSessionId()),
     );
-    const manager = acquirePreferredProviderManager(
+    const manager = acquireOwnedProviderManager(
       config,
       settings,
       owner,
@@ -213,7 +213,7 @@ describe('OAuth owner reads before registration', () => {
       release,
     );
     manager.bindNetworkFetch(stubbedOwnerFetch);
-    return acquirePreferredOAuth(
+    return acquireOwnedOAuth(
       undefined,
       policy.session.messageBus,
       config,

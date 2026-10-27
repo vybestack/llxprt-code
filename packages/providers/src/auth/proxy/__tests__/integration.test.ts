@@ -6,11 +6,11 @@ import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { ProviderFileLifecycle } from '../../../providerFilePolicy.js';
 import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-} from '../../../../../agents/src/api/preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../../../../../agents/src/api/adoption-release.js';
-import { cleanupAfterFailure } from '../../../../../agents/src/core/subagent-cleanup.js';
+  acquireOwnedProviderManager,
+  acquireOwnedOAuth,
+} from '../../../__tests__/helpers/acquire-provider-owners.js';
+import { releaseAdoptedFileScope } from '../../../__tests__/helpers/adopted-file-scope.js';
+import { cleanupAfterFailure } from '../../../__tests__/helpers/cleanup.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -270,7 +270,7 @@ describe('proxy integration (phase 31)', () => {
       });
       release.acquire('files', () => releaseAdoptedFileScope(files, runtimeId));
       const authority = new CredentialAuthority(started.socketPath);
-      const manager = acquirePreferredProviderManager(
+      const manager = acquireOwnedProviderManager(
         config,
         settings,
         settingsOwner,
@@ -279,7 +279,7 @@ describe('proxy integration (phase 31)', () => {
         authority,
         release,
       );
-      const oauth = acquirePreferredOAuth(
+      const oauth = acquireOwnedOAuth(
         undefined,
         policy.session.messageBus,
         config,

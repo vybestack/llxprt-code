@@ -13,12 +13,12 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
 import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-} from '../../../agents/src/api/preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
-import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
+  acquireOwnedProviderManager,
+  acquireOwnedOAuth,
+} from '../__tests__/helpers/acquire-provider-owners.js';
+import { releaseAdoptedFileScope } from '../__tests__/helpers/adopted-file-scope.js';
+import { useOwnedCredentials } from '../__tests__/helpers/owned-credential-fixture.js';
+import { runCleanupSteps } from '../__tests__/helpers/cleanup.js';
 
 describe('isolated-runtime OAuthManager honors authOnly through the threaded config', () => {
   const credentials = useOwnedCredentials();
@@ -68,7 +68,7 @@ describe('isolated-runtime OAuthManager honors authOnly through the threaded con
     release.acquire('files', () =>
       releaseAdoptedFileScope(files, 'oauth-authonly-isolated'),
     );
-    const manager = acquirePreferredProviderManager(
+    const manager = acquireOwnedProviderManager(
       config,
       settingsService,
       settingsOwner,
@@ -77,7 +77,7 @@ describe('isolated-runtime OAuthManager honors authOnly through the threaded con
       credentials().authority,
       release,
     );
-    const oauth = acquirePreferredOAuth(
+    const oauth = acquireOwnedOAuth(
       undefined,
       policy.session.messageBus,
       config,

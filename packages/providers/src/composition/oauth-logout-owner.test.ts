@@ -11,16 +11,16 @@ import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquis
 import { ProviderFileLifecycle, ProviderManager } from '../index.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../../../agents/src/api/preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
+  acquireOwnedProviderManager,
+  acquireOwnedOAuth,
+  prepareOwnedProviderCompletion,
+} from '../__tests__/helpers/acquire-provider-owners.js';
+import { releaseAdoptedFileScope } from '../__tests__/helpers/adopted-file-scope.js';
 import {
   runCleanupSteps,
   cleanupAfterFailure,
-} from '../../../agents/src/core/subagent-cleanup.js';
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+} from '../__tests__/helpers/cleanup.js';
+import { useOwnedCredentials } from '../__tests__/helpers/owned-credential-fixture.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import {
   populateProviderManager,
@@ -95,7 +95,7 @@ describe('logout ownership', () => {
         release.acquire('files', () =>
           releaseAdoptedFileScope(firstFiles, scope),
         );
-      firstManager = acquirePreferredProviderManager(
+      firstManager = acquireOwnedProviderManager(
         firstConfig,
         firstSettings,
         firstSettingsOwner,
@@ -104,7 +104,7 @@ describe('logout ownership', () => {
         credentials().authority,
         release,
       );
-      firstOauth = acquirePreferredOAuth(
+      firstOauth = acquireOwnedOAuth(
         undefined,
         firstBus,
         firstConfig,
@@ -151,7 +151,7 @@ describe('logout ownership', () => {
         undefined,
       );
     } else
-      await preparePreferredProviderCompletion(
+      await prepareOwnedProviderCompletion(
         firstConfig,
         firstSettings,
         firstSettingsOwner,
@@ -221,7 +221,7 @@ describe('logout ownership', () => {
         release.acquire('files', () =>
           releaseAdoptedFileScope(secondFiles, scope),
         );
-      secondManager = acquirePreferredProviderManager(
+      secondManager = acquireOwnedProviderManager(
         secondConfig,
         secondSettings,
         secondSettingsOwner,
@@ -230,7 +230,7 @@ describe('logout ownership', () => {
         credentials().authority,
         release,
       );
-      secondOauth = acquirePreferredOAuth(
+      secondOauth = acquireOwnedOAuth(
         undefined,
         secondBus,
         secondConfig,
@@ -277,7 +277,7 @@ describe('logout ownership', () => {
         undefined,
       );
     } else
-      await preparePreferredProviderCompletion(
+      await prepareOwnedProviderCompletion(
         secondConfig,
         secondSettings,
         secondSettingsOwner,

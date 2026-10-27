@@ -18,14 +18,14 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
-import { acquirePreferredProviderManager } from '../../../agents/src/api/preferred-provider-acquisition.js';
+import { acquireOwnedProviderManager } from '../__tests__/helpers/acquire-provider-owners.js';
 
-import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
+import { releaseAdoptedFileScope } from '../__tests__/helpers/adopted-file-scope.js';
 import {
   runCleanupSteps,
   cleanupAfterFailure,
-} from '../../../agents/src/core/subagent-cleanup.js';
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+} from '../__tests__/helpers/cleanup.js';
+import { useOwnedCredentials } from '../__tests__/helpers/owned-credential-fixture.js';
 import { createOwnerOAuthManager } from '../composition/owner-oauth-construction.js';
 import {
   createOAuthProfileReads,
@@ -99,7 +99,7 @@ describe('explicit OAuth owner identity', () => {
       release.acquire('files', () =>
         releaseAdoptedFileScope(files, 'same-label'),
       );
-      firstManager = acquirePreferredProviderManager(
+      firstManager = acquireOwnedProviderManager(
         config,
         settings,
         owner,
@@ -199,7 +199,7 @@ describe('explicit OAuth owner identity', () => {
       release.acquire('files', () =>
         releaseAdoptedFileScope(files, 'same-label'),
       );
-      secondManager = acquirePreferredProviderManager(
+      secondManager = acquireOwnedProviderManager(
         config,
         settings,
         owner,

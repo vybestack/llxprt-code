@@ -5,13 +5,13 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { ProviderManager, ProviderFileLifecycle } from './index.js';
 import { configureProviderTokenizer } from './composition/index.js';
-import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
-import { acquirePreferredProviderManager } from '../../agents/src/api/preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../../agents/src/api/adoption-release.js';
+import { useOwnedCredentials } from './__tests__/helpers/owned-credential-fixture.js';
+import { acquireOwnedProviderManager } from './__tests__/helpers/acquire-provider-owners.js';
+import { releaseAdoptedFileScope } from './__tests__/helpers/adopted-file-scope.js';
 import {
   runCleanupSteps,
   cleanupAfterFailure,
-} from '../../agents/src/core/subagent-cleanup.js';
+} from './__tests__/helpers/cleanup.js';
 
 /**
  * @license
@@ -71,7 +71,7 @@ describe('retry runtime kind', () => {
       retiring.push(() => (complete ? release.close() : release.rollback()));
       for (const scope of new Set([runtimeId, 'same-label']))
         release.acquire('files', () => releaseAdoptedFileScope(files, scope));
-      manager = acquirePreferredProviderManager(
+      manager = acquireOwnedProviderManager(
         config,
         settings,
         settingsOwner,
