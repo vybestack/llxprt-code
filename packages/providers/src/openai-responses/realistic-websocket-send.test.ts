@@ -7,7 +7,7 @@ describe('Realistic journal-backed sends', () => {
       const child = Bun.spawn(
         [
           process.execPath,
-          `${import.meta.dir}/realistic-websocket-worker.ts`,
+          `${import.meta.dir}/../__tests__/support/realistic-websocket-worker.ts`,
           ...(control ? ['--control'] : []),
         ],
         { stdout: 'pipe', stderr: 'pipe' },

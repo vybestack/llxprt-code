@@ -2,14 +2,14 @@
 import { createHash } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { realisticNativeFixture } from '../__tests__/support/realistic-native-fixture.js';
+import { realisticNativeFixture } from './realistic-native-fixture.js';
 import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   realisticSessionRows,
   realisticSessionSummary,
   type RealisticSessionRow,
-} from '../../../test-utils/src/core/realistic-session.js';
+} from '../../../../test-utils/src/core/realistic-session.js';
 import {
   assertSessionMemory,
   assertWholeHistoryControl,
@@ -20,15 +20,15 @@ import {
   type SessionProbe,
   type SessionPayloadOwner,
   type SessionWireDigest,
-} from '../../../test-utils/src/core/session-memory-protocol.js';
+} from '../../../../test-utils/src/core/session-memory-protocol.js';
 import WebSocket from 'ws';
-import { WsTransportSocket } from './responses-websocket-socket.js';
+import { WsTransportSocket } from '../../openai-responses/responses-websocket-socket.js';
 import {
   createCodexResponsesWebSocketTransport,
   type WebSocketTransport,
-} from './openAIResponsesWebSocketTransport.js';
-import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
-import { buildOpenAIResponsesUnit } from './OpenAIResponsesInputBuilder.js';
+} from '../../openai-responses/openAIResponsesWebSocketTransport.js';
+import { OpenAIResponsesProvider } from '../../openai-responses/OpenAIResponsesProvider.js';
+import { buildOpenAIResponsesUnit } from '../../openai-responses/OpenAIResponsesInputBuilder.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 
 function content(row: RealisticSessionRow): IContent {
@@ -169,7 +169,7 @@ try {
     close(): Promise<void>;
   }
   async function seedJournal(): Promise<JournalFixture> {
-    const directory = join(import.meta.dir, '../../../../tmp/r10-retained');
+    const directory = join(import.meta.dir, '../../../../../tmp/r10-retained');
     await mkdir(directory, { recursive: true });
     const fixture = await realisticNativeFixture(directory);
     if (fixture.selection.count !== 25_000)

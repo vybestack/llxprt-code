@@ -7,7 +7,7 @@ describe('Realistic journal-backed sends', () => {
       const child = Bun.spawn(
         [
           process.execPath,
-          `${import.meta.dir}/realistic-send-worker.ts`,
+          `${import.meta.dir}/../__tests__/support/realistic-vercel-send-worker.ts`,
           ...(control ? ['--control'] : []),
         ],
         { stdout: 'pipe', stderr: 'pipe' },

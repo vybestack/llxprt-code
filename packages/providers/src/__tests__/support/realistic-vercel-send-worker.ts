@@ -11,7 +11,7 @@ import {
   realisticSessionRows,
   realisticSessionSummary,
   type RealisticSessionRow,
-} from '../../../test-utils/src/core/realistic-session.js';
+} from '../../../../test-utils/src/core/realistic-session.js';
 import {
   assertSessionMemory,
   assertWholeHistoryControl,
@@ -22,11 +22,11 @@ import {
   type SessionProbe,
   type SessionPayloadOwner,
   type SessionWireDigest,
-} from '../../../test-utils/src/core/session-memory-protocol.js';
+} from '../../../../test-utils/src/core/session-memory-protocol.js';
 import { withRequestRepresentationObserver } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
-import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
-import { convertToVercelMessages } from './messageConversion.js';
-import { vercelWireMessages } from './streamed-request.js';
+import { OpenAIVercelProvider } from '../../openai-vercel/OpenAIVercelProvider.js';
+import { convertToVercelMessages } from '../../openai-vercel/messageConversion.js';
+import { vercelWireMessages } from '../../openai-vercel/streamed-request.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 
 function content(row: RealisticSessionRow): IContent {

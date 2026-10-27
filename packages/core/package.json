@@ -771,15 +771,25 @@
       "bun": "./src/storage/history-media-ownership.ts",
       "import": "./dist/src/storage/history-media-ownership.js"
     },
-    "./storage/SessionPersistenceService.js": {
-      "types": "./dist/src/storage/SessionPersistenceService.d.ts",
-      "bun": "./src/storage/SessionPersistenceService.ts",
-      "import": "./dist/src/storage/SessionPersistenceService.js"
-    },
     "./services/history/detachedHistoryJournal.js": {
       "types": "./dist/src/services/history/detachedHistoryJournal.d.ts",
       "bun": "./src/services/history/detachedHistoryJournal.ts",
       "import": "./dist/src/services/history/detachedHistoryJournal.js"
+    },
+    "./journal/journalStore.js": {
+      "types": "./dist/src/journal/journalStore.d.ts",
+      "bun": "./src/journal/journalStore.ts",
+      "import": "./dist/src/journal/journalStore.js"
+    },
+    "./services/history/compression-token-selection.js": {
+      "types": "./dist/src/services/history/compression-token-selection.d.ts",
+      "bun": "./src/services/history/compression-token-selection.ts",
+      "import": "./dist/src/services/history/compression-token-selection.js"
+    },
+    "./utils/neutral-merge-queue.js": {
+      "types": "./dist/src/utils/neutral-merge-queue.d.ts",
+      "bun": "./src/utils/neutral-merge-queue.ts",
+      "import": "./dist/src/utils/neutral-merge-queue.js"
     },
     "./services/history/compression-span-index.js": {
       "types": "./dist/src/services/history/compression-span-index.d.ts",
