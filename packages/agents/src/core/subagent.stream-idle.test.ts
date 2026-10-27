@@ -37,11 +37,11 @@ import {
   SubagentTerminateMode,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import {
-  waitForCondition,
   waitForConditionInRealTime,
   delayRealTime,
 } from '../test-utils/eventLoop.js';
 import { createIdleScope } from './__tests__/support/subagent-stream-idle-test-helpers.js';
+import { deferred } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 
 const realEnvironmentContextModule = {
   ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
@@ -189,6 +189,7 @@ function registerDisabledTimeout(): void {
         'Test no timeout behavior.',
         60, // Long enough for test
       );
+      const stalled = deferred();
       let resolveIterator: () => void;
       let stallReached = false;
       const iteratorPromise = new Promise<void>((resolve) => {
@@ -201,6 +202,7 @@ function registerDisabledTimeout(): void {
           value: mockChunk({ text: 'Starting...' }),
         };
         stallReached = true;
+        stalled.resolve();
         // Wait indefinitely until manually resolved
         await iteratorPromise;
         yield {
@@ -216,10 +218,8 @@ function registerDisabledTimeout(): void {
           runSettled = true;
         });
 
-      // Reach the stall before moving the clock. A real event-loop yield is
-      // only reliable while the fake clock is still, so this gate has to come
-      // first; without it the advance races the stream start on slower hosts.
-      expect(await waitForCondition(() => stallReached)).toBe(true);
+      await stalled.promise;
+      expect(stallReached).toBe(true);
 
       // Hold the stall open in real time to show the idle watchdog never
       // fires. The fake clock is not used for this: draining the pipeline to
@@ -265,6 +265,7 @@ function registerEnvPrecedence(): void {
         'Test env precedence.',
       );
 
+      const gap = deferred();
       let gapReached = false;
       let releaseGap: () => void;
       const gapPromise = new Promise<void>((resolve) => {
@@ -276,6 +277,7 @@ function registerEnvPrecedence(): void {
           value: mockChunk({ text: 'Starting...' }),
         };
         gapReached = true;
+        gap.resolve();
         // The gap exceeds the env timeout: the stream produces nothing
         // until the test releases it, so the env-driven watchdog fires
         // first. It must be releasable — an async generator suspended
@@ -297,7 +299,8 @@ function registerEnvPrecedence(): void {
         .finally(() => {
           resultSettled = true;
         });
-      expect(await waitForCondition(() => gapReached)).toBe(true);
+      await gap.promise;
+      expect(gapReached).toBe(true);
 
       // The stream stalls after its first chunk, so the env-driven 50ms
       // watchdog fires. Were the 20s config value being used instead, the
