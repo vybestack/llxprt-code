@@ -242,7 +242,6 @@ describe('preflight acquired lifetime', () => {
     const failure: unknown = await cleanupFailedCreatedAgent(
       primary,
       () => keys.close(),
-      config,
       media,
       undefined,
       () => policy.dispose(),

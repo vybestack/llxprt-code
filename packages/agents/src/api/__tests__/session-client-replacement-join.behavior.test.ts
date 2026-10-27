@@ -56,7 +56,6 @@ describe('Session owner cleanup joining', () => {
         cleanupFailedCreatedAgent(
           new Error('Runtime assembly fault'),
           () => engine.release.close(),
-          engine.config,
           engine.media,
           owner,
           () => engine.mcp.dispose(),
@@ -141,7 +140,6 @@ describe('Session owner cleanup joining', () => {
         cleanupFailedCreatedAgent(
           new Error('Activation failed'),
           () => engine.release.close(),
-          engine.config,
           engine.media,
           owner,
           () => engine.mcp.dispose(),
