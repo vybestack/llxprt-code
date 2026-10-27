@@ -143,7 +143,7 @@ export class SessionControl implements AgentSessionControl {
   private readonly persistence: AgentSessionPersistence;
   constructor(
     private readonly paths: SessionRecordingPaths,
-    mediaStore: LocalMediaStore | undefined,
+    mediaStore: LocalMediaStore,
     private readonly readRecordingQueueLimit: () => number,
     private readonly directories: () => readonly string[],
     private readonly sessionIdentityOwnership: 'config' | 'facade',
@@ -162,16 +162,13 @@ export class SessionControl implements AgentSessionControl {
     private readonly adoptOwnedSessionId: (sessionId: string) => void,
     persistence?: AgentSessionPersistence,
   ) {
-    const selectedMedia = mediaStore;
-    if (selectedMedia === undefined)
-      throw new Error('Agent client requires explicit media store');
-    this.mediaStore = selectedMedia;
+    this.mediaStore = mediaStore;
     this.persistence =
       persistence ??
       createAgentSessionPersistence(
         paths.storageRoot,
         paths.projectChatsDir,
-        selectedMedia,
+        mediaStore,
         paths.persistenceQueueBytes,
       );
     this.recordingLifetime = new SessionRecordingLifetime(

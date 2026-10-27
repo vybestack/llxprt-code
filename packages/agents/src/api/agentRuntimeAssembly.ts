@@ -565,7 +565,7 @@ function facadeInputsForPreferred(
   release: AcquisitionRelease,
   inheritedTrustRelease: AcquisitionRelease,
   runtimeId: string,
-  onOAuthPrompt: unknown,
+  onOAuthPrompt: AgentConfig['onOAuthPrompt'],
   handles: AgentSchedulerHandle[],
 ): LeafFacadeValues {
   const closeRuntime = (): Promise<void> =>

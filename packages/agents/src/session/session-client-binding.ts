@@ -199,7 +199,7 @@ export async function acquireSessionClient(
   target: SessionClientTarget,
   settings: SessionClientSettings,
   providerManager: RuntimeProviderManager,
-  oauth: OAuthManager | undefined,
+  oauth: OAuthManager,
   construction: SessionClientConstruction,
 ): Promise<SessionClientOwner> {
   const { config, messageBus, readInstructions, workspacePaths } = target;
@@ -224,10 +224,9 @@ export async function acquireSessionClient(
     },
   );
   try {
-    if (oauth !== undefined)
-      client.bindInteractiveAuthRequests((prompt) =>
-        oauth.requestInteractiveAuth(prompt),
-      );
+    client.bindInteractiveAuthRequests((prompt) =>
+      oauth.requestInteractiveAuth(prompt),
+    );
     assembleSessionImages(
       client,
       config.getTargetDir(),
@@ -239,7 +238,7 @@ export async function acquireSessionClient(
     const mainScope = config.getSessionId();
     client.clients.bindProviderFiles(
       construction.providerFiles,
-      (provider) => oauth?.composeRetryOperations(provider) ?? {},
+      (provider) => oauth.composeRetryOperations(provider),
       (scope) =>
         scope === mainScope
           ? Promise.resolve()
