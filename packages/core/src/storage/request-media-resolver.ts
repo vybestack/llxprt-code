@@ -6,6 +6,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { admittedMediaSource } from './admitted-media-source.js';
+import { verifyMediaObject } from './verify-media-object.js';
 import {
   isMediaReferenceBlock,
   type IContent,
@@ -73,6 +74,7 @@ export interface ResolvedMediaRequest {
 }
 
 export interface RequestMediaResolutionService {
+  verify(input: RequestMediaResolutionInput): Promise<void>;
   resolve(input: RequestMediaResolutionInput): Promise<ResolvedMediaRequest>;
   openReservations(requestId: string): RequestMediaReservations;
 }
@@ -581,6 +583,34 @@ export class RequestMediaResolver {
       throw new Error('Cannot resolve media against released reservations');
     }
     return reservations;
+  }
+
+  async verify(input: RequestMediaResolutionInput): Promise<void> {
+    validateBudget(input.aggregateBudgetBytes);
+    throwIfAborted(input.signal);
+    const selected = selectReferences(input);
+    selectedNormalizedBytes(input);
+    for (const entry of uniqueReferencesByContentId(selected).values()) {
+      throwIfAborted(input.signal);
+      this.storeReadCount += 1;
+      try {
+        const verify = (): Promise<void> =>
+          verifyMediaObject(
+            this.store.rootDirectory,
+            entry.reference.selectedObject,
+            input.signal,
+          );
+        if (input.lease === undefined) await verify();
+        else await input.lease.withRead(verify);
+      } catch (error) {
+        throw new RequestMediaResolutionError(
+          entry.reference.contentId,
+          entry.turnId,
+          'blob verification',
+          { cause: error },
+        );
+      }
+    }
   }
 
   async resolve(

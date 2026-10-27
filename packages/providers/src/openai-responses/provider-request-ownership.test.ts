@@ -91,6 +91,7 @@ describe('provider request ownership', () => {
       settingsService: settings,
       config,
       mediaResolver: {
+        verify: (input) => resolver.verify(input),
         resolve: async (input) => {
           entered.open();
           await resume.promise;

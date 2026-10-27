@@ -5,7 +5,8 @@
  */
 
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import * as fileSystem from 'node:fs/promises';
 import { chmod, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -227,6 +228,40 @@ describe('openai-responses-media-resolution', () => {
 
 function registerProviderBehavior1(tempDirectory: () => string): void {
   describe('provider fixture 1', () => {
+    it('verifies a multi-chunk blob without a whole-file payload read', async () => {
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 256 * 1024,
+      });
+      const reference = await admitted(
+        store,
+        new Uint8Array(128 * 1024 + 3).fill(42),
+      );
+      const resolver = new RequestMediaResolver(store);
+      const wholeFileRead = spyOn(fileSystem, 'readFile').mockImplementation(
+        async () => {
+          throw new Error('Preflight must not materialize a whole blob');
+        },
+      );
+      try {
+        await resolver.verify({
+          contents: [{ speaker: 'human', blocks: [reference] }],
+          requestId: 'bounded-preflight',
+          turnId: 'turn-multi-chunk',
+          aggregateBudgetBytes: reference.normalizedBase64Length,
+        });
+        expect(resolver.accounting()).toStrictEqual({
+          activeRequestCount: 0,
+          reservedContentCount: 0,
+          materializedNormalizedBytes: 0,
+          storeReadCount: 1,
+        });
+      } finally {
+        wholeFileRead.mockRestore();
+      }
+      expect(await store.hasReservations(reference.contentId)).toBe(false);
+    });
+
     it('reads only post-parent media when the stateful parent is usable', async () => {
       const store = new LocalMediaStore({
         rootDirectory: tempDirectory(),
@@ -267,7 +302,7 @@ function registerProviderBehavior1(tempDirectory: () => string): void {
         activeRequestCount: 0,
         reservedContentCount: 0,
         materializedNormalizedBytes: 0,
-        storeReadCount: 1,
+        storeReadCount: 2,
       });
     });
   });
@@ -314,7 +349,7 @@ function registerProviderBehavior2(tempDirectory: () => string): void {
         activeRequestCount: 0,
         reservedContentCount: 0,
         materializedNormalizedBytes: 0,
-        storeReadCount: 3,
+        storeReadCount: 6,
       });
     });
   });
@@ -354,7 +389,7 @@ function registerProviderBehavior3(tempDirectory: () => string): void {
       expect(requestBodies[0]).toContain('AQID');
       expect(requestBodies[0]).toContain('BAUG');
       expect(requestBodies[0]).not.toContain('previous_response_id');
-      expect(resolver.accounting().storeReadCount).toBe(2);
+      expect(resolver.accounting().storeReadCount).toBe(4);
     });
   });
 }
@@ -395,7 +430,7 @@ function registerProviderBehavior4(tempDirectory: () => string): void {
       expect(requestBodies[0]).toContain('AQID');
       expect(requestBodies[0]).toContain('BAUG');
       expect(requestBodies[0]).not.toContain('previous_response_id');
-      expect(resolver.accounting().storeReadCount).toBe(2);
+      expect(resolver.accounting().storeReadCount).toBe(4);
     });
   });
 }
@@ -431,7 +466,7 @@ function registerProviderBehavior5(tempDirectory: () => string): void {
         activeRequestCount: 0,
         reservedContentCount: 0,
         materializedNormalizedBytes: 0,
-        storeReadCount: 1,
+        storeReadCount: 2,
       });
     });
   });
@@ -439,21 +474,30 @@ function registerProviderBehavior5(tempDirectory: () => string): void {
 
 function registerProviderBehavior6(tempDirectory: () => string): void {
   describe('provider fixture 6', () => {
-    it.each([
-      'missing',
-      'corrupt',
-      'hash-mismatch',
-      'over-budget',
-      'malformed',
-    ])(
-      'fails %s post-parent media before Codex socket or HTTP submission',
-      async (failure) => {
+    it.each(
+      [
+        'missing',
+        'corrupt',
+        'hash-mismatch',
+        'late-hash-mismatch',
+        'over-budget',
+        'malformed',
+      ].flatMap((failure) =>
+        ['http', 'websocket'].map((transport) => ({ failure, transport })),
+      ),
+    )(
+      'fails $failure post-parent media before $transport submission',
+      async ({ failure, transport }) => {
         const store = new LocalMediaStore({
           rootDirectory: tempDirectory(),
-          quotaBytes: 1024,
+          quotaBytes: 256 * 1024,
         });
         const beforeParent = await admitted(store, new Uint8Array([1, 2, 3]));
-        const invalid = await admitted(store, new Uint8Array([4, 5, 6]));
+        const selectedBytes =
+          failure === 'late-hash-mismatch'
+            ? new Uint8Array(128 * 1024).fill(4)
+            : new Uint8Array([4, 5, 6]);
+        const invalid = await admitted(store, selectedBytes);
         if (failure === 'missing') {
           await unlink(objectPath(store, invalid));
         } else if (failure === 'corrupt') {
@@ -463,6 +507,10 @@ function registerProviderBehavior6(tempDirectory: () => string): void {
             objectPath(store, invalid),
             new Uint8Array([7, 8, 9]),
           );
+        } else if (failure === 'late-hash-mismatch') {
+          const changed = selectedBytes.slice();
+          changed[changed.length - 1] = 9;
+          await writeFile(objectPath(store, invalid), changed);
         }
         const resolver = new RequestMediaResolver(store);
         const harness = new SocketHarness([completingScript('unreachable')]);
@@ -474,7 +522,11 @@ function registerProviderBehavior6(tempDirectory: () => string): void {
           },
           { preconnect: originalFetch.preconnect },
         );
-        const provider = new SocketCodexProvider(harness);
+        const baseURL = transport === 'http' ? OPENAI_BASE_URL : CODEX_BASE_URL;
+        const provider =
+          transport === 'http'
+            ? new OpenAIResponsesProvider('test-key', baseURL)
+            : new SocketCodexProvider(harness);
         const budget =
           failure === 'over-budget'
             ? invalid.normalizedBase64Length - 1
@@ -487,7 +539,7 @@ function registerProviderBehavior6(tempDirectory: () => string): void {
             failure === 'malformed'
               ? { ...invalid, normalizedBase64Length: -1 }
               : invalid,
-            CODEX_BASE_URL,
+            baseURL,
           ),
           resolver,
           budget,
@@ -555,7 +607,7 @@ function registerProviderBehavior7(tempDirectory: () => string): void {
         activeRequestCount: 0,
         reservedContentCount: 0,
         materializedNormalizedBytes: 0,
-        storeReadCount: 3,
+        storeReadCount: 6,
       });
     });
   });

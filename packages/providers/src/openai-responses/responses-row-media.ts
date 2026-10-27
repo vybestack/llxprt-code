@@ -26,8 +26,42 @@ function hasReference(row: IContent): boolean {
 }
 export class ResponsesMediaBudget {
   private used = 0;
+  private readonly verified = new Set<string>();
 
-  constructor(private readonly budget = DEFAULT_REQUEST_MEDIA_BUDGET_BYTES) {}
+  constructor(
+    private readonly budget = DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
+    private readonly media?: RowsMediaInput,
+    private readonly signal?: AbortSignal,
+    private readonly native?: NativeProviderFormat,
+  ) {}
+
+  async verify(row: IContent): Promise<void> {
+    if (this.media === undefined) return;
+    const turnId = row.metadata?.turnId ?? row.metadata?.id ?? 'unknown-turn';
+    for (const block of row.blocks) {
+      if (
+        block.type !== 'media' ||
+        block.encoding !== 'reference' ||
+        this.verified.has(block.contentId)
+      )
+        continue;
+      if (this.media.resolver === undefined)
+        throw new RequestMediaResolutionError(
+          block.contentId,
+          turnId,
+          'missing resolver',
+        );
+      await this.media.resolver.verify({
+        contents: [{ ...row, blocks: [block] }],
+        requestId: this.media.requestId,
+        turnId,
+        aggregateBudgetBytes: this.budget,
+        signal: this.signal,
+        lease: this.native?.mediaLease,
+      });
+      this.verified.add(block.contentId);
+    }
+  }
 
   include(row: IContent): void {
     const turnId = row.metadata?.turnId ?? row.metadata?.id ?? 'unknown-turn';

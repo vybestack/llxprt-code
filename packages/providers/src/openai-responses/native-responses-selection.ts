@@ -55,6 +55,7 @@ export async function statefulUnsupportedMedia(
     if (indexed === undefined) {
       const row = await rows.readAt(index);
       mediaBudget?.include(row);
+      await mediaBudget?.verify(row);
       unsupported.addAll(unsupportedMediaForRow(row, pdfEnabled));
     } else {
       await unsupportedMediaForPlan(
@@ -81,6 +82,7 @@ async function unsupportedMediaForPlan(
     if (block.type === 'media') {
       const row = { ...plan.header, blocks: [block] };
       mediaBudget?.include(row);
+      await mediaBudget?.verify(row);
       unsupported.addAll(unsupportedMediaForRow(row, pdfEnabled));
     }
   }

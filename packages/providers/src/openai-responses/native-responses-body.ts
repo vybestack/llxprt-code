@@ -451,9 +451,22 @@ async function historyByteLength(
       rows,
       selection.skipRows,
       options.pdfEnabled,
-      new ResponsesMediaBudget(options.mediaBudgetBytes),
+      requestMediaBudget(options),
     ),
   };
+}
+
+function requestMediaBudget(options: ResponsesRequest): ResponsesMediaBudget {
+  return new ResponsesMediaBudget(
+    options.mediaBudgetBytes,
+    {
+      requestId: options.mediaRequestId,
+      resolver: options.mediaResolver,
+      aggregateBudgetBytes: options.mediaBudgetBytes,
+    },
+    options.invocation.signal,
+    options.requestRows?.native,
+  );
 }
 
 async function callerOwnedByteLength(
@@ -466,7 +479,7 @@ async function callerOwnedByteLength(
   const query = rows.index ?? (await CallerOwnedToolQuery.create(rows));
   const settings = nativeSettings(options);
   const unsupportedMedia = new UnsupportedMediaSummary();
-  const mediaBudget = new ResponsesMediaBudget(options.mediaBudgetBytes);
+  const mediaBudget = requestMediaBudget(options);
   let pdfBytes = 0;
   let bytes = 2;
   let items = 0;
@@ -474,6 +487,7 @@ async function callerOwnedByteLength(
   for (let at = selection.skipRows; at < rows.count; at++) {
     const row = await rows.readAt(at, options.invocation.signal);
     mediaBudget.include(row);
+    await mediaBudget.verify(row);
     unsupportedMedia.addAll(unsupportedMediaForRow(row, options.pdfEnabled));
     const pairs = await responsesUnitPairs(row, query, selection.skipRows);
     const measured = responsesUnitLength(
