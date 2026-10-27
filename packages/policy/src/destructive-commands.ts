@@ -497,6 +497,9 @@ const ANSI_C_ESCAPES: ReadonlyMap<string, string> = new Map([
  * `$'a\'b'` closes at the final quote, inner = `a'b`).
  */
 function unwrapAnsiCQuotes(text: string): string {
+  if (!text.includes("$'")) {
+    return text;
+  }
   let result = '';
   let i = 0;
   while (i < text.length) {

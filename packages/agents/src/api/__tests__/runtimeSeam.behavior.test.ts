@@ -1,3 +1,5 @@
+import { buildPropertyAgent } from './helpers/agentHarness.js';
+import { createTerminalOnlyIdePort } from './helpers/terminal-only-ide.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -41,6 +43,22 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
   const credentials = useOwnedCredentials();
 
   useFakeResponsesReplay('plain-text.jsonl');
+
+  it('CLI fixture with a terminal-only IDE port initializes without acquiring a host IDE client', async () => {
+    const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl', {
+      idePort: createTerminalOnlyIdePort(),
+    });
+    try {
+      expect(agent.ide.readContext()).toBeUndefined();
+      expect(agent.ide.readConnection().available).toBe(false);
+      expect(agent.ide.getIdeMode()).toBe(false);
+      expect(() => agent.ide.setIdeMode(true)).toThrow(
+        'Terminal-only fixture does not support IDE mode',
+      );
+    } finally {
+      await cleanup();
+    }
+  });
 
   it('T6a fromConfig with a known sessionId yields agent.getRuntimeId() === that sessionId @requirement:REQ-005.1 @scenario:runtime-id @given:a real CLI-style Config and sessionId "known-runtime-id-T6a" @when:fromConfig({ config, sessionId }) @then:agent.getRuntimeId() === "known-runtime-id-T6a"', async () => {
     const route = await openRouteAAgent({

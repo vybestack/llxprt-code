@@ -41,6 +41,7 @@ import {
   type DoneReason,
 } from '@vybestack/llxprt-code-agents';
 import { stripSandboxSegment } from './fixtureRoot.js';
+import { createTerminalOnlyIdePort } from './terminal-only-ide.js';
 
 const HARNESS_DIR = stripSandboxSegment(
   fileURLToPath(new URL('.', import.meta.url)),
@@ -203,6 +204,7 @@ export function buildPropertyAgent(
 ): Promise<BuiltAgent> {
   return buildAgent(fixtureRelPath, {
     workingDir: scratchWorkspace(),
+    idePort: createTerminalOnlyIdePort(),
     ...configOverrides,
   });
 }
@@ -214,6 +216,7 @@ export function buildPropertyAgentFromContent(
 ): Promise<BuiltAgent> {
   return buildAgentFromContent(jsonlContent, {
     workingDir: scratchWorkspace(),
+    idePort: createTerminalOnlyIdePort(),
     ...configOverrides,
   });
 }

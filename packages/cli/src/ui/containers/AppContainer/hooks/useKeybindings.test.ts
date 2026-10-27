@@ -91,6 +91,14 @@ const CTRL_Q_KEY: Key = {
   sequence: 'q',
 };
 
+const ctrlKey = (name: string, sequence = name): Key => ({
+  ctrl: true,
+  meta: false,
+  shift: false,
+  name,
+  sequence,
+});
+
 const createHarness = (): HookHarness => ({
   requestCtrlCExit: vi.fn(),
   requestCtrlDExit: vi.fn(),
@@ -208,7 +216,7 @@ describe('useKeybindings', () => {
     const handler = getRegisteredHandler();
 
     act(() => {
-      handler({ ctrl: true, name: 'c' } as Key);
+      handler(ctrlKey('c'));
     });
 
     expect(harness.setCopyModeEnabled).toHaveBeenCalledWith(false);
@@ -225,7 +233,7 @@ describe('useKeybindings', () => {
     const handler = getRegisteredHandler();
 
     act(() => {
-      handler({ ctrl: true, name: 'c' } as Key);
+      handler(ctrlKey('c'));
     });
 
     expect(harness.cancelOngoingRequest).toHaveBeenCalledTimes(1);
@@ -248,7 +256,7 @@ describe('useKeybindings', () => {
     const handler = getRegisteredHandler();
 
     act(() => {
-      handler({ ctrl: true, name: 'd' } as Key);
+      handler(ctrlKey('d'));
     });
 
     expect(harness.requestCtrlDExit).not.toHaveBeenCalled();
@@ -295,7 +303,7 @@ describe('useKeybindings', () => {
     const handler = getRegisteredHandler();
 
     act(() => {
-      handler({ ctrl: true, name: 't' } as Key);
+      handler(ctrlKey('t'));
     });
 
     expect(harness.setShowToolDescriptions).toHaveBeenCalledWith(true);
@@ -363,7 +371,7 @@ describe('useKeybindings', () => {
     const handler = getRegisteredHandler();
 
     act(() => {
-      handler({ ctrl: true, name: 'f' } as Key);
+      handler(ctrlKey('f'));
     });
 
     expect(harness.setEmbeddedShellFocused).toHaveBeenCalledWith(
@@ -387,7 +395,7 @@ describe('useKeybindings', () => {
     const handler = getRegisteredHandler();
 
     act(() => {
-      handler({ ctrl: true, name: 'f' } as Key);
+      handler(ctrlKey('f'));
     });
 
     expect(harness.setEmbeddedShellFocused).not.toHaveBeenCalled();
@@ -409,7 +417,7 @@ describe('useKeybindings', () => {
     const handler = getRegisteredHandler();
 
     act(() => {
-      handler({ ctrl: true, name: 'f' } as Key);
+      handler(ctrlKey('f'));
     });
 
     expect(harness.setEmbeddedShellFocused).toHaveBeenCalledWith(
@@ -433,7 +441,7 @@ describe('useKeybindings', () => {
     const handler = getRegisteredHandler();
 
     act(() => {
-      handler({ ctrl: true, name: 'f' } as Key);
+      handler(ctrlKey('f'));
     });
 
     expect(harness.setEmbeddedShellFocused).not.toHaveBeenCalled();

@@ -149,12 +149,13 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
       });
       try {
         const agent: Agent = built.agent;
-        return (
-          agent.getProvider() === 'fake' &&
-          agent.getModel() === 'fake-model' &&
-          agent.getProvider() === built.config.getProvider() &&
-          agent.getModel() === built.config.getModel()
-        );
+        expect(agent.getRuntimeId()).toBe(sessionId);
+        expect(agent.getProvider()).toBe('fake');
+        expect(agent.getModel()).toBe('fake-model');
+        expect(agent.getProvider()).toBe(built.config.getProvider());
+        expect(agent.getModel()).toBe(built.config.getModel());
+        built.config.setApprovalMode(ApprovalMode.AUTO_EDIT);
+        expect(agent.getApprovalMode()).toBe(ApprovalMode.AUTO_EDIT);
       } finally {
         await built.close();
       }
@@ -173,8 +174,12 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
           },
         });
         try {
+          const agent = built.agent;
+          expect(agent.getRuntimeId()).toBe(sessionId);
           built.config.setApprovalMode(ApprovalMode.AUTO_EDIT);
-          return built.agent.getApprovalMode() === ApprovalMode.AUTO_EDIT;
+          expect(agent.getApprovalMode()).toBe(ApprovalMode.AUTO_EDIT);
+          built.config.setApprovalMode(ApprovalMode.DEFAULT);
+          expect(agent.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
         } finally {
           await built.close();
         }

@@ -1,3 +1,4 @@
+import { createTerminalOnlyIdePort } from './helpers/terminal-only-ide.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -361,7 +362,10 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
               script: { fixtureRelPath: 'provider-switch-two-turn.jsonl' },
             },
           ],
-          configOverrides: { workingDir: scratchWorkspace() },
+          configOverrides: {
+            workingDir: scratchWorkspace(),
+            idePort: createTerminalOnlyIdePort(),
+          },
         });
         try {
           await agent.setProvider('p', model);
@@ -512,7 +516,10 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
             alias,
             script: { fixtureRelPath: 'plain-text.jsonl' },
           })),
-          configOverrides: { workingDir: scratchWorkspace() },
+          configOverrides: {
+            workingDir: scratchWorkspace(),
+            idePort: createTerminalOnlyIdePort(),
+          },
         });
         try {
           const beforeModel = agent.getModel();

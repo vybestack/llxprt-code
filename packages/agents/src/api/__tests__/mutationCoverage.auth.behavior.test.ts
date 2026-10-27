@@ -30,6 +30,7 @@ import {
   drain,
   ToolConfirmationOutcome,
   ASYNC_PROPERTY_TIMEOUT_MS,
+  type Agent,
   buildPropertyAgent,
 } from './helpers/agentHarness.js';
 
@@ -187,38 +188,68 @@ describe('mutation P23.c — auth control delegation (REQ-002)', () => {
 // ─── Property-based (>=30% ratio) ───────────────────────────────────────────
 
 describe('mutation P23.c — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @requirement:REQ-002', () => {
+  // These properties only read or mutate per-agent public state, so one real
+  // agent per property is enough. Building a full real workspace inside every
+  // sample performed ~100 real initializations per property and pushed
+  // canonical full-workspace runs past the 30s deadline. Each sample resets
+  // the state it touches back to the pre-sample baseline (and asserts that
+  // baseline), so samples cannot leak into each other.
+
   it('PROP auth.status: for any provider string, a no-auth agent reports unauthenticated (REQ-002)', async () => {
-    await fc.assert(
-      fc.asyncProperty(nonBlankStringArbitrary, async (provider) => {
-        const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
-        try {
-          return agent.auth.status(provider) === 'unauthenticated';
-        } finally {
-          await cleanup();
-        }
-      }),
-    );
+    const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
+    try {
+      expect(agent.auth.status('fake')).toBe('unauthenticated');
+      await fc.assert(
+        fc.asyncProperty(
+          nonBlankStringArbitrary,
+          async (provider) => agent.auth.status(provider) === 'unauthenticated',
+        ),
+      );
+    } finally {
+      await cleanup();
+    }
   }, 30000);
 
   it('PROP keyName precedence: for any keyName, getProviderStatus surfaces keyName not keyFile (REQ-002)', async () => {
-    await expect(
-      fc.assert(
-        createPROPKeyNamePrecedenceForAnyKeyNameGetProviderStatusSurfacesKeyNameNotKeyFileREQProperty(),
-      ),
-    ).resolves.toBeUndefined();
+    // Seed ONLY apiKeyFile so the keyfile winner is live before every sample.
+    // Each sample switches the winner by using a generated keyName and then
+    // deletes that name, which restores the keyfile baseline (keys.delete
+    // clears a matching keyName reference).
+    const keyFile = '/tmp/competing.pem';
+    const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl', {
+      auth: { apiKeyFile: keyFile },
+    });
+    try {
+      await expect(
+        fc.assert(
+          createPROPKeyNamePrecedenceForAnyKeyNameGetProviderStatusSurfacesKeyNameNotKeyFileREQProperty(
+            agent,
+            keyFile,
+          ),
+        ),
+      ).resolves.toBeUndefined();
+    } finally {
+      await cleanup();
+    }
   }, 30000);
 
-  function createPROPKeyNamePrecedenceForAnyKeyNameGetProviderStatusSurfacesKeyNameNotKeyFileREQProperty() {
+  function createPROPKeyNamePrecedenceForAnyKeyNameGetProviderStatusSurfacesKeyNameNotKeyFileREQProperty(
+    agent: Agent,
+    keyFile: string,
+  ) {
     return fc.asyncProperty(
       fc.string({ minLength: 1, maxLength: 50 }),
       async (keyName) => {
-        const { agent, cleanup } = await buildPropertyAgent(
-          'plain-text.jsonl',
-          {
-            auth: { keyName, apiKeyFile: '/tmp/competing.pem' },
-          },
-        );
+        const baseline = agent.getProviderStatus();
+        if (
+          baseline.keyName !== undefined ||
+          baseline.keyFile !== keyFile ||
+          baseline.authStatus !== 'authenticated'
+        ) {
+          return false; // prior sample leaked state
+        }
         try {
+          await agent.auth.keys.use(keyName);
           const status = agent.getProviderStatus();
           return (
             status.keyName === keyName &&
@@ -226,21 +257,30 @@ describe('mutation P23.c — property cases @plan:PLAN-20260621-COREAPIREMED.P23
             status.authStatus === 'authenticated'
           );
         } finally {
-          await cleanup();
+          await agent.auth.keys.delete(keyName);
         }
       },
     );
   }
 
   it('PROP setModelParam: for any distinct two numbers, overwrite replaces the first value (REQ-005)', async () => {
-    await expect(
-      fc.assert(
-        createPROPSetModelParamForAnyDistinctTwoNumbersOverwriteReplacesTheFirstValueProperty(),
-      ),
-    ).resolves.toBeUndefined();
+    const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
+    try {
+      await expect(
+        fc.assert(
+          createPROPSetModelParamForAnyDistinctTwoNumbersOverwriteReplacesTheFirstValueProperty(
+            agent,
+          ),
+        ),
+      ).resolves.toBeUndefined();
+    } finally {
+      await cleanup();
+    }
   }, 30000);
 
-  function createPROPSetModelParamForAnyDistinctTwoNumbersOverwriteReplacesTheFirstValueProperty() {
+  function createPROPSetModelParamForAnyDistinctTwoNumbersOverwriteReplacesTheFirstValueProperty(
+    agent: Agent,
+  ) {
     return fc.asyncProperty(
       fc.float({ min: 0, max: 1, noNaN: true }),
       fc.float({ min: 0, max: 1, noNaN: true }),
@@ -248,51 +288,67 @@ describe('mutation P23.c — property cases @plan:PLAN-20260621-COREAPIREMED.P23
         if (first === second) {
           return true; // overwrite with same value is trivially correct
         }
-        const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
-        try {
-          agent.setModelParam('temperature', first);
-          agent.setModelParam('temperature', second);
-          return agent.getModelParams().temperature === second;
-        } finally {
-          await cleanup();
+        // Reset the touched key so a prior sample's value cannot satisfy or
+        // mask this sample's assertions.
+        agent.clearModelParam('temperature');
+        if ('temperature' in agent.getModelParams()) {
+          return false; // prior sample leaked state
         }
+        agent.setModelParam('temperature', first);
+        if (agent.getModelParams().temperature !== first) {
+          return false; // the first write did not land
+        }
+        agent.setModelParam('temperature', second);
+        return agent.getModelParams().temperature === second;
       },
     );
   }
 
   it('PROP setBaseUrl: for any non-empty URL, getProviderStatus surfaces it (REQ-002)', async () => {
-    await fc.assert(
-      fc.asyncProperty(fc.webUrl(), async (url) => {
-        const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
-        try {
+    const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
+    try {
+      await fc.assert(
+        fc.asyncProperty(fc.webUrl(), async (url) => {
+          await agent.auth.setBaseUrl(null);
+          if (agent.getProviderStatus().baseUrl !== undefined) {
+            return false; // prior sample leaked state
+          }
           await agent.auth.setBaseUrl(url);
           return agent.getProviderStatus().baseUrl === url;
-        } finally {
-          await cleanup();
-        }
-      }),
-    );
+        }),
+      );
+    } finally {
+      await cleanup();
+    }
   }, 30000);
 
   it('PROP clearModelParam: after clear, the key is absent from getModelParams (REQ-005)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc
-          .string({ minLength: 1, maxLength: 20 })
-          .filter((s) => !s.includes('__proto__')),
-        async (key) => {
-          const { agent, cleanup } =
-            await buildPropertyAgent('plain-text.jsonl');
-          try {
+    const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
+    try {
+      await fc.assert(
+        fc.asyncProperty(
+          fc
+            .string({ minLength: 1, maxLength: 20 })
+            .filter((s) => !s.includes('__proto__')),
+          async (key) => {
+            // Reset the touched key first: a leaked value would make the
+            // post-clear absence assertion pass for the wrong reason.
+            agent.clearModelParam(key);
+            if (key in agent.getModelParams()) {
+              return false; // prior sample leaked state
+            }
             agent.setModelParam(key, 42);
+            if (agent.getModelParams()[key] !== 42) {
+              return false; // the write did not land
+            }
             agent.clearModelParam(key);
             return !(key in agent.getModelParams());
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
-    );
+          },
+        ),
+      );
+    } finally {
+      await cleanup();
+    }
   }, 30000);
 });
 

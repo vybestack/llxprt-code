@@ -13,7 +13,8 @@ import {
 } from './inputPromptRender.js';
 import type { InputPromptProps } from './inputPromptTypes.js';
 import type { TextBuffer } from './shared/text-buffer.js';
-import type { DOMElement } from 'ink';
+import { Text, type DOMElement } from 'ink';
+import { theme } from '../semantic-colors.js';
 import type React from 'react';
 import { useRef } from 'react';
 import { useMouseClick } from '../hooks/useMouseClick.js';
@@ -32,6 +33,7 @@ type InputPromptViewProps = {
   suggestionsNode: React.ReactNode;
   innerBoxRef: React.RefObject<DOMElement | null>;
   ghostText: { inlineGhost: string; additionalLines: string[] };
+  queueErrorMessage?: string | null;
 };
 
 const InputPromptView: React.FC<InputPromptViewProps> = ({
@@ -45,6 +47,7 @@ const InputPromptView: React.FC<InputPromptViewProps> = ({
   suggestionsNode,
   ghostText,
   innerBoxRef,
+  queueErrorMessage,
 }) => (
   <>
     {suggestionsPosition === 'above' && suggestionsNode}
@@ -59,6 +62,9 @@ const InputPromptView: React.FC<InputPromptViewProps> = ({
       additionalLines={ghostText.additionalLines}
       innerBoxRef={innerBoxRef}
     />
+    {queueErrorMessage && (
+      <Text color={theme.status.error}>{queueErrorMessage}</Text>
+    )}
     {suggestionsPosition === 'below' && suggestionsNode}
   </>
 );
@@ -113,6 +119,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       suggestionsNode={suggestionsNode}
       ghostText={ghostText}
       innerBoxRef={innerBoxRef}
+      queueErrorMessage={runtimeProps.queueErrorMessage}
     />
   );
 };

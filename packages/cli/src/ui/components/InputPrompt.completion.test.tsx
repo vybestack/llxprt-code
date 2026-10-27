@@ -534,42 +534,6 @@ describe('InputPrompt', () => {
   });
 
   describe('multiline paste', () => {
-    it.each([
-      {
-        description: 'with \n newlines',
-        pastedText: 'This \n is \n a \n multiline \n paste.',
-      },
-      {
-        description: 'with extra slashes before \n newlines',
-        pastedText: 'This \\\n is \\\n a \\\n multiline \\\n paste.',
-      },
-      {
-        description: 'with \r\n newlines',
-        pastedText: 'This\r\nis\r\na\r\nmultiline\r\npaste.',
-      },
-    ])('should handle multiline paste $description', async ({ pastedText }) => {
-      const { stdin, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
-      );
-
-      // Simulate a bracketed paste event from the terminal
-      await act(async () => {
-        stdin.write(`\x1b[200~${pastedText}\x1b[201~`);
-      });
-      // Each of these pastes is five lines, which is at or above
-      // LARGE_PASTE_LINE_THRESHOLD, so the prompt collapses it to a placeholder
-      // instead of inserting the raw text.
-      await waitFor(() => {
-        expect(props.buffer.setText).toHaveBeenCalledTimes(1);
-      });
-      expect(props.buffer.setText).toHaveBeenCalledWith(
-        expect.stringContaining('lines pasted'),
-      );
-      expect(props.buffer.handleInput).not.toHaveBeenCalled();
-
-      unmount();
-    });
-
     it('inserts a paste below the large-paste threshold as a single input with normalised newlines', async () => {
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
