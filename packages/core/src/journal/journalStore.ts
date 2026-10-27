@@ -7,7 +7,10 @@ import {
   interruptRecordingOrphans,
   readRecordingField,
 } from './store-recording.js';
-import { compactStoreFile } from './store-compaction-run.js';
+import {
+  compactStoreFile,
+  AutomaticCompaction,
+} from './store-compaction-run.js';
 import { openStoreIdFacts } from './store-id-facts.js';
 import { CommittedIdNodes } from './committed-id-nodes.js';
 import { writtenLabelsOf, type SpineEntry } from './journal-store-state.js';
@@ -178,11 +181,11 @@ export class JournalStore {
   /** The file size below which the trigger is not evaluated, set after a refused swap. */
   private rearmAt = 0;
   /** The compaction in progress; a pin or a read waits for it (design 10.1). */
-  private compacting: Promise<SwapOutcome> | undefined;
   private readonly maintenance = new DeferredMaintenance(
     () => (this.tail = this.tail.then(() => this.compactWhenIdle())),
     (error) => (this.compactionFailure = { error }),
   );
+  private readonly automaticCompaction = new AutomaticCompaction();
   private compactionFailure: { readonly error: unknown } | undefined;
   private readonly fileOperations: FileOperations;
   private neutralRowFactsEnabled: boolean;
@@ -197,7 +200,7 @@ export class JournalStore {
   ) {
     this.admissions = new JournalAdmissions(
       writer,
-      () => !this.closing && this.compacting === undefined,
+      () => !this.closing && this.automaticCompaction.running === undefined,
     );
     this.neutralRowFactsEnabled = deps.eagerNeutralRowFacts ?? false;
     this.fileOperations =
@@ -409,8 +412,8 @@ export class JournalStore {
    * `idFacts`, a committed group) are the only way to a `RecordAccess`.
    */
   async openRead(): Promise<PinnedRead> {
-    while (this.compacting !== undefined) {
-      await this.compacting.catch(noop);
+    while (this.automaticCompaction.running !== undefined) {
+      await this.automaticCompaction.running.catch(noop);
     }
     if (this.closing) throw new Error('The journal store is closed');
     return this.readOfPublished();
@@ -470,6 +473,7 @@ export class JournalStore {
 
   async close(): Promise<void> {
     this.closing = true;
+    this.automaticCompaction.cancel();
     await this.tail;
     await this.writer.close();
     this.releaseNamedWriter?.();
@@ -613,17 +617,11 @@ export class JournalStore {
 
   /** The version a trailer at `offset` carries. */
   readVersion(offset: number): Promise<Version> {
-    return this.whilePinned(() => this.readVersionUnpinned(offset));
+    return this.whilePinned(() => readVersionAt(this.requireAccess(), offset));
   }
 
-  /** For the commit path, which runs on the tail where no compaction can run. */
-  private readVersionUnpinned(offset: number): Promise<Version> {
-    return readVersionAt(this.requireAccess(), offset);
-  }
-
-  private makeCache(): IdNodeCache {
-    return this.deps.createCache?.() ?? new BoundedIdNodeCache();
-  }
+  private readonly makeCache = (): IdNodeCache =>
+    this.deps.createCache?.() ?? new BoundedIdNodeCache();
 
   private afterCommit(): void {
     this.queued -= 1;
@@ -655,35 +653,32 @@ export class JournalStore {
       return;
     }
     try {
-      await this.runCompaction();
+      await this.runCompaction(true);
     } catch (error) {
       this.compactionFailure = { error };
     }
   }
 
-  private runCompaction(): Promise<SwapOutcome> {
+  private runCompaction(automatic = false): Promise<SwapOutcome> {
     this.maintenance.consumeRequests();
-    const running = this.compactOnce();
-    this.compacting = running;
-    return running.finally(() => {
-      this.compacting = undefined;
-    });
-  }
-
-  private compactOnce(): Promise<SwapOutcome> {
-    return compactStoreFile({
-      path: this.path,
-      unlinked: this.unlinked,
-      writer: this.writer,
-      access: this.requireAccess(),
-      version: this.requireVersion(),
-      deps: this.deps,
-      fileOperations: this.fileOperations,
-      restart: () => this.restartOnNewFile(),
-      rearm: (value) => {
-        this.rearmAt = value;
-      },
-    });
+    return this.automaticCompaction.run(
+      (signal) =>
+        compactStoreFile({
+          signal,
+          path: this.path,
+          unlinked: this.unlinked,
+          writer: this.writer,
+          access: this.requireAccess(),
+          version: this.requireVersion(),
+          deps: this.deps,
+          fileOperations: this.fileOperations,
+          restart: () => this.restartOnNewFile(),
+          rearm: (value) => {
+            this.rearmAt = value;
+          },
+        }),
+      automatic,
+    );
   }
 
   /** Every offset a cache or a chain holds belongs to the old file. */
@@ -891,7 +886,7 @@ export class JournalStore {
     return {
       access: this.access,
       published: this.currentVersion,
-      readVersion: (offset) => this.readVersionUnpinned(offset),
+      readVersion: (offset) => readVersionAt(this.requireAccess(), offset),
       firstNextLabel: FIRST_NEXT_LABEL,
       readState: (key) => this.getStateUnpinned(key),
     };
@@ -946,6 +941,9 @@ export class JournalStore {
     if (held?.offsetAtDepth(parent.lineageDepth) === parent.selfOffset) {
       return held;
     }
-    return loadChain((offset) => this.readVersionUnpinned(offset), parent);
+    return loadChain(
+      (offset) => readVersionAt(this.requireAccess(), offset),
+      parent,
+    );
   }
 }
