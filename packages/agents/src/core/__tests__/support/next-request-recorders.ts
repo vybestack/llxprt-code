@@ -15,12 +15,15 @@ export async function callerRecording(directory: string, name: string) {
   const flush = await loadFlushRecords();
   const gate = toolGate();
   let flushes = 0;
+  let barriers = 0;
+  let groupRecordsWritten = false;
   let target: number | undefined;
   let held:
     | {
         seq: number;
         rows: number;
         flushes: number;
+        barriers: number;
         before: Awaited<ReturnType<typeof diskToolState>>;
       }
     | undefined;
@@ -33,6 +36,10 @@ export async function callerRecording(directory: string, name: string) {
           const handle = await open(path, flags);
           return {
             ...handle,
+            writev: (buffers, position) => {
+              groupRecordsWritten = true;
+              return handle.writev(buffers, position);
+            },
             write: async (buffer, offset, length, position) => {
               if (
                 length === TRAILER_RECORD_BYTES &&
@@ -47,17 +54,21 @@ export async function callerRecording(directory: string, name: string) {
                     seq: trailer.commitSeq,
                     rows: target,
                     flushes,
+                    barriers,
                     before: await diskToolState(path),
                   };
                   await gate.promise;
                 }
               }
+              if (length !== TRAILER_RECORD_BYTES) groupRecordsWritten = true;
               return handle.write(buffer, offset, length, position);
             },
           };
         },
         flush: (fd) => {
           flush(fd);
+          if (!groupRecordsWritten) barriers++;
+          groupRecordsWritten = false;
           flushes++;
         },
       },
@@ -66,6 +77,7 @@ export async function callerRecording(directory: string, name: string) {
   return {
     recording,
     flushes: () => flushes,
+    barriers: () => barriers,
     held: () => held,
     arm: (rows: number): void => {
       target = rows;

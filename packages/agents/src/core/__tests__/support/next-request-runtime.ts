@@ -213,6 +213,7 @@ export async function nextRequestRuntime(
     entries: boundary.entries(),
     seqs: sessions.map((session) => session.store.published?.commitSeq ?? 0),
     flushes: [primary.flushes()],
+    barriers: [primary.barriers()],
   });
   const disk = () => Promise.all(files.map(diskToolState));
   const send = async (text: string): Promise<void> => {

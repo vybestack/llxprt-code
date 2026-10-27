@@ -21,19 +21,19 @@ function assertRows(
   transport: DriverEvent,
 ): void {
   const expectedRows = {
-    turn: 2,
-    'two-group': 4,
-    directory: 3,
-    ide: 3,
-    client: 3,
-    pause: 3,
+    turn: 3,
+    'two-group': 5,
+    directory: 4,
+    ide: 4,
+    client: 4,
+    pause: 4,
   };
   expect(committed[0].rows).toHaveLength(expectedRows[variant]);
   expect(transport.details.liveRows).toStrictEqual(
     committed[0].rows.map((row) => row.content),
   );
   const text = JSON.stringify(committed[0].rows);
-  expect(text).not.toContain('pending next input');
+  expect(text).toContain('pending next input');
   expect(text).not.toContain('API Error');
   if (variant === 'directory') expect(text).toContain('following directories');
   if (variant === 'ide') expect(text).toContain('native selection');
@@ -80,22 +80,23 @@ async function scenario(
         seq: z.number(),
         rows: z.number(),
         flushes: z.number(),
+        barriers: z.number(),
         before: z.unknown(),
       })
       .parse(held.details.candidate);
     expect(candidate.before).toStrictEqual(before);
     expect(before.seq).toBe(candidate.seq - 1);
-    expect(before.rows).toHaveLength(
-      candidate.rows -
-        (variant === 'turn' || (variant === 'pause' && group === 1) ? 2 : 1),
-    );
+    expect(before.rows).toHaveLength(candidate.rows - 1);
     expect(z.array(z.number()).parse(held.details.flushes)[selected]).toBe(
       candidate.flushes,
     );
     const readyFlushes = z.array(z.number()).parse(ready.details.flushes);
     const readySeqs = z.array(z.number()).parse(ready.details.seqs);
     expect(candidate.flushes - readyFlushes[selected]).toBe(
-      candidate.seq - readySeqs[selected],
+      candidate.seq -
+        readySeqs[selected] +
+        candidate.barriers -
+        z.array(z.number()).parse(ready.details.barriers)[selected],
     );
     child.send('release');
     const transport = await child.wait('transport');
@@ -106,9 +107,16 @@ async function scenario(
     expect(committed[selected].seq).toBeGreaterThanOrEqual(candidate.seq);
     const entrySeqs = z.array(z.number()).parse(transport.details.seqs);
     const entryFlushes = z.array(z.number()).parse(transport.details.flushes);
+    const readyBarriers = z.array(z.number()).parse(ready.details.barriers);
+    const entryBarriers = z.array(z.number()).parse(transport.details.barriers);
     expect(
       entryFlushes.map((count, index) => count - readyFlushes[index]),
-    ).toStrictEqual(entrySeqs.map((seq, index) => seq - readySeqs[index]));
+    ).toStrictEqual(
+      entrySeqs.map(
+        (seq, index) =>
+          seq - readySeqs[index] + entryBarriers[index] - readyBarriers[index],
+      ),
+    );
     assertRows(variant, committed, transport);
     child.send('respond');
     const completed = await child.wait('completed');
@@ -116,11 +124,22 @@ async function scenario(
     expect(completed.details.terminalEvents).toContain(
       ending === 'failure' ? 'error' : 'user_cancelled',
     );
-    expect(completed.details.disk).toStrictEqual(committed);
+    const completedDisk = z
+      .array(z.object({ seq: z.number(), rows: z.array(z.unknown()) }))
+      .parse(completed.details.disk);
+    expect(completedDisk.map((state) => state.rows)).toStrictEqual(
+      committed.map((state) => state.rows.slice(0, -1)),
+    );
+    expect(completedDisk[selected].seq).toBeGreaterThan(
+      committed[selected].seq,
+    );
     await child.wait('closed');
     expect(await child.child.exited).toBe(0);
     expect(
-      isDeepStrictEqual(await Promise.all(files.map(diskToolState)), committed),
+      isDeepStrictEqual(
+        await Promise.all(files.map(diskToolState)),
+        completedDisk,
+      ),
     ).toBe(true);
     await writeFile(
       join(child.directory, 'proof.json'),

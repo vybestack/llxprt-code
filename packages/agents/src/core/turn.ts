@@ -794,7 +794,7 @@ export class Turn {
         }
         return { iterator, firstResult: outcome.value };
       } catch (error) {
-        await closeIteratorBounded(iterator, timeoutSignal);
+        await closeIteratorBounded(iterator);
         throw error;
       }
     }
@@ -827,7 +827,7 @@ export class Turn {
     } catch (error) {
       watchdog.cancel();
       const iteratorAtCatch = acquisition.acquiredIterator();
-      await closeIteratorBounded(iteratorAtCatch, timeoutSignal);
+      await closeIteratorBounded(iteratorAtCatch);
       // Close a late-acquired iterator without waiting for its first next().
       closeLateAcquiredIterator(
         acquisitionPromise,
