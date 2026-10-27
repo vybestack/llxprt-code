@@ -6,22 +6,26 @@
 
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
-import { cancelTransportRetirement } from './mcp-connection-lifetime.js';
-
 export const MCP_CLIENT_CLOSE_TIMEOUT_MS = 10_000;
 
-export async function closeClientWithTimeout(
-  client: Client,
-  serverName: string,
+export async function closeClientWithTimeout({
+  client,
+  serverName,
+  retirement,
   timeoutMs = MCP_CLIENT_CLOSE_TIMEOUT_MS,
-): Promise<void> {
+}: {
+  readonly client: Pick<Client, 'close'>;
+  readonly serverName: string;
+  readonly retirement: Pick<AbortController, 'abort'>;
+  readonly timeoutMs?: number;
+}): Promise<void> {
   const deadline = new AbortController();
   const timeout = setTimeout(() => {
     const expired = new Error(
       `Timed out closing MCP client '${serverName}' after ${timeoutMs}ms`,
     );
     deadline.abort(expired);
-    cancelTransportRetirement(client.transport, expired);
+    retirement.abort(expired);
   }, timeoutMs);
   try {
     await client.close();
