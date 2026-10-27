@@ -14,11 +14,11 @@ import {
   ProviderFileLifecycle,
   ProviderManager,
 } from '@vybestack/llxprt-code-providers';
+import { preparePreferredProviderCompletion } from '../preferred-provider-acquisition.js';
 import {
   acquirePreferredProviderManager,
   acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
+} from './helpers/provider-acquisition.js';
 import { releaseAdoptedFileScope } from '../adoption-release.js';
 import {
   runCleanupSteps,
@@ -134,6 +134,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
       foregroundConfig.getSessionId(),
       configureProviderTokenizer(foregroundManager),
       undefined,
+      process.env.LLXPRT_FAKE_RESPONSES,
     );
   }
 
@@ -231,6 +232,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
       firstConfig.getSessionId(),
       configureProviderTokenizer(firstManager),
       undefined,
+      process.env.LLXPRT_FAKE_RESPONSES,
     );
   }
   async function closeFirst(): Promise<void> {
@@ -331,6 +333,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
       secondConfig.getSessionId(),
       configureProviderTokenizer(secondManager),
       undefined,
+      process.env.LLXPRT_FAKE_RESPONSES,
     );
   }
 

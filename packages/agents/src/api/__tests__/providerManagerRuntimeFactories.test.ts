@@ -16,7 +16,7 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import {
   acquirePreferredProviderManager,
   acquirePreferredOAuth,
-} from '../preferred-provider-acquisition.js';
+} from './helpers/provider-acquisition.js';
 import { releaseAdoptedFileScope } from '../adoption-release.js';
 import {
   runCleanupSteps,

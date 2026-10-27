@@ -34,11 +34,11 @@ import {
   AgentProfilePreflight,
   prepareAgentPreflight,
 } from '../profile-preflight.js';
+import { preparePreferredProviderCompletion } from '../preferred-provider-acquisition.js';
 import {
   acquirePreferredOAuth,
   acquirePreferredProviderManager,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
+} from './helpers/provider-acquisition.js';
 import { releaseAdoptedFileScope } from '../adoption-release.js';
 import {
   runCleanupSteps,
@@ -176,6 +176,7 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
             runtimeId,
             configureProviderTokenizer(manager),
             undefined,
+            process.env.LLXPRT_FAKE_RESPONSES,
           ),
         close,
       };

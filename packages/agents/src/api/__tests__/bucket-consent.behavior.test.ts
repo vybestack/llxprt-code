@@ -31,7 +31,7 @@ import type { BucketAuthConsentRequest } from '../agent.js';
 import { toConfigParameters } from '../agentConfig.adapter.js';
 import { releaseAdoptedFileScope } from '../adoption-release.js';
 import { buildAgentClientFactory } from '../agentBootstrap.js';
-import { acquirePreferredProviderManager } from '../preferred-provider-acquisition.js';
+import { acquirePreferredProviderManager } from './helpers/provider-acquisition.js';
 import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { createCapturedSessionOwner } from './helpers/session-client-capture.js';

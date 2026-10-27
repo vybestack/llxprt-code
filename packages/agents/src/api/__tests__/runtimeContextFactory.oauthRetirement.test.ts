@@ -15,7 +15,7 @@ import type {
   OAuthProvider,
   OAuthToken,
 } from '@vybestack/llxprt-code-providers/auth.js';
-import { acquirePreferredOAuth } from '../preferred-provider-acquisition.js';
+import { acquirePreferredOAuth } from './helpers/provider-acquisition.js';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 

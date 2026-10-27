@@ -42,11 +42,11 @@ import { toConfigParameters } from '../agentConfig.adapter.js';
 import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { assembleModelSelection } from '../model-selection.js';
+import { preparePreferredProviderCompletion } from '../preferred-provider-acquisition.js';
 import {
   acquirePreferredOAuth,
   acquirePreferredProviderManager,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
+} from './helpers/provider-acquisition.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
@@ -239,6 +239,7 @@ async function openRoot(
       runtimeId,
       tokenizer,
       undefined,
+      process.env.LLXPRT_FAKE_RESPONSES,
     );
     await mcp.initialize();
     const activation = await executeProviderActivation(

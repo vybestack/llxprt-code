@@ -24,11 +24,11 @@ import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManage
 import { createRuntimeTokenizerFactory } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import { createAgent } from '../createAgent.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { preparePreferredProviderCompletion } from '../preferred-provider-acquisition.js';
 import {
   acquirePreferredProviderManager,
   acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
+} from './helpers/provider-acquisition.js';
 
 describe('explicit provider primitives under the owning Agent assembly', () => {
   const credentials = useOwnedCredentials();
@@ -125,6 +125,7 @@ describe('explicit provider primitives under the owning Agent assembly', () => {
       'same-label',
       createRuntimeTokenizerFactory(),
       undefined,
+      process.env.LLXPRT_FAKE_RESPONSES,
     );
   }
 

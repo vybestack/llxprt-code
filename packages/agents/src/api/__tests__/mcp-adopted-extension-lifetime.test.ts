@@ -31,11 +31,11 @@ import { toConfigParameters } from '../agentConfig.adapter.js';
 import { releaseAdoptedFileScope } from '../adoption-release.js';
 import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { fromConfig } from '../fromConfig.js';
+import { preparePreferredProviderCompletion } from '../preferred-provider-acquisition.js';
 import {
   acquirePreferredOAuth,
   acquirePreferredProviderManager,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
+} from './helpers/provider-acquisition.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
@@ -186,6 +186,7 @@ describe('MCP extension lifetime ownership', () => {
         builtRuntimeId,
         builtTokenizer,
         undefined,
+        process.env.LLXPRT_FAKE_RESPONSES,
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();

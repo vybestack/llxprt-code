@@ -7,37 +7,37 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
 import { registerProvidersOntoManager } from './policyComposition.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type {
+  ProviderFileLifecycle,
+  ProviderManager,
+} from '@vybestack/llxprt-code-providers';
 import { applyRuntimeEphemerals } from './agentConfig.adapter.js';
 import type { ParsedAgentConfig } from './config-schema.js';
 import type { AgentRetainedProviderFile } from './provider-file-domain.js';
-import { releaseAdoptedFileScope } from './adoption-release.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type {
   TokenStore,
   IOAuthSettingsProvider,
 } from '@vybestack/llxprt-code-auth';
-import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  createOAuthProfileReads,
+  type ProviderContributionRegistry,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import type {
   SettingsService,
   ProfileManager,
 } from '@vybestack/llxprt-code-settings';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import {
   createFileOAuthSettingsProvider,
   type CredentialAuthority,
   type OAuthManager,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import {
-  createOwnerOAuthManager,
-  createOwnedTokenStoreClose,
-  createSessionAuthPolicyReader,
-  createOAuthProfileReads,
-  createOwnerAuthCacheInvalidator,
-} from '@vybestack/llxprt-code-providers/composition.js';
+  acquireProviderFiles,
+  acquireProviderRuntime,
+} from './provider-runtime-acquisition.js';
 
 export function acquirePreferredSettings(
   config: Config,
@@ -66,15 +66,10 @@ export async function acquirePreferredFiles(
   inputs: readonly AgentRetainedProviderFile[],
   release: AcquisitionRelease,
 ): Promise<ProviderFileLifecycle> {
-  const files = new ProviderFileLifecycle({
-    maxFiles: 100,
-    maxBytes: 512 * 1024 * 1024,
+  const files = acquireProviderFiles(release, {
     proxy: config.getProxy(),
+    scopeIds: [runtimeId, config.getSessionId()],
   });
-  for (const scope of runtimeId === config.getSessionId()
-    ? [runtimeId]
-    : [runtimeId, config.getSessionId()])
-    release.acquire('files', () => releaseAdoptedFileScope(files, scope));
   for (const input of inputs) {
     const retained = await files.retain({ ...input, scopeId: runtimeId });
     await retained.lease.release();
@@ -82,73 +77,48 @@ export async function acquirePreferredFiles(
   return files;
 }
 
-export function acquirePreferredProviderManager(
-  config: Config,
-  settings: SettingsService,
-  settingsOwner: SessionSettingsOwner,
-  files: ProviderFileLifecycle,
-  runtimeId: string,
-  authority: CredentialAuthority,
+export function acquirePreferredProviderRuntime(
   release: AcquisitionRelease,
-): ProviderManager {
-  const network = new OwnedFetch(config.getProxy());
-  release.beforeRelease(() => network.closeAdmissionAndAbort());
-  release.acquire('network', () => network.dispose());
-  const manager = new ProviderManager(
-    undefined,
-    undefined,
-    undefined,
-    files,
-    settings,
+  inputs: {
+    readonly config: Config;
+    readonly settings: SettingsService;
+    readonly settingsOwner: SessionSettingsOwner;
+    readonly files: ProviderFileLifecycle;
+    readonly runtimeId: string;
+    readonly authority: CredentialAuthority;
+    readonly suppliedStore: TokenStore | undefined;
+    readonly messageBus: MessageBus;
+    readonly profileReads: Pick<ProfileManager, 'loadProfile'> | undefined;
+    readonly oauthSettings: IOAuthSettingsProvider | null | undefined;
+  },
+): { readonly manager: ProviderManager; readonly oauth: OAuthManager } {
+  const { config, settings, settingsOwner, files, runtimeId, authority } =
+    inputs;
+  return acquireProviderRuntime(release, {
     config,
-    createProviderRuntimeContext({
+    settings,
+    settingsOwner,
+    files,
+    proxy: config.getProxy(),
+    authority,
+    context: createProviderRuntimeContext({
       runtimeId,
       runtimeKind: 'agent',
       metadata: { source: 'cli-isolated-runtime-factory' },
     }),
-    undefined,
-    settingsOwner,
-  );
-  manager.bindNetworkFetch(network.fetch);
-  release.acquire('manager', () => manager.dispose());
-  const keys = authority.createProviderKeyStorage();
-  release.acquire('manager', () => keys.close());
-  manager.bindProviderKeyStorage(keys);
-  return manager;
-}
-
-export function acquirePreferredOAuth(
-  suppliedStore: TokenStore | undefined,
-  messageBus: MessageBus,
-  config: Config,
-  settings: SettingsService,
-  manager: ProviderManager,
-  runtimeId: string,
-  profileReads: Pick<ProfileManager, 'loadProfile'> | undefined,
-  authority: CredentialAuthority,
-  release: AcquisitionRelease,
-  oauthSettings: IOAuthSettingsProvider | null | undefined,
-): OAuthManager {
-  const store = suppliedStore ?? authority.createTokenStore();
-  if (suppliedStore === undefined)
-    release.acquire('tokens', createOwnedTokenStoreClose(store));
-  const selectedSettings =
-    oauthSettings === undefined
-      ? createFileOAuthSettingsProvider()
-      : oauthSettings;
-  const oauth = createOwnerOAuthManager(
-    store,
-    selectedSettings ?? undefined,
-    messageBus,
-    profileReads ?? createOAuthProfileReads(config.profileDirectory),
-    createSessionAuthPolicyReader(settings),
-    () => ({ runtimeId, runtimeKind: 'agent' }),
-    undefined,
-    createOwnerAuthCacheInvalidator((name) => manager.getProviderByName(name)),
-    (input, init) => manager.fetchNetwork(input, init),
-  );
-  release.acquire('oauth', () => oauth.dispose());
-  return oauth;
+    oauth: {
+      suppliedStore: inputs.suppliedStore,
+      readSettings: () =>
+        inputs.oauthSettings === undefined
+          ? createFileOAuthSettingsProvider()
+          : (inputs.oauthSettings ?? undefined),
+      messageBus: inputs.messageBus,
+      profileReads:
+        inputs.profileReads ?? createOAuthProfileReads(config.profileDirectory),
+      readIdentity: () => ({ runtimeId, runtimeKind: 'agent' }),
+      requestInteractiveAuth: undefined,
+    },
+  });
 }
 
 export async function preparePreferredProviderCompletion(
@@ -160,6 +130,7 @@ export async function preparePreferredProviderCompletion(
   runtimeId: string,
   tokenizer: RuntimeTokenizerFactory,
   contributions: ProviderContributionRegistry | undefined,
+  fakeResponses: string | undefined,
 ): Promise<void> {
   await settingsOwner.startTelemetry(config);
   manager.setRetryOperationsFactory((name, profileId) =>
@@ -175,7 +146,14 @@ export async function preparePreferredProviderCompletion(
     settings,
     config,
   );
-  registerProvidersOntoManager(manager, settings, config, oauth, contributions);
+  registerProvidersOntoManager(
+    manager,
+    settings,
+    config,
+    oauth,
+    contributions,
+    fakeResponses,
+  );
   manager.setTokenizerFactory(tokenizer);
   manager.setConfig(config);
 }

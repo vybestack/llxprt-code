@@ -28,11 +28,11 @@ import type { SessionClientOwner } from '../../../session/session-client-owner.j
 import { releaseAdoptedFileScope } from '../../adoption-release.js';
 import { buildAgentClientFactory } from '../../agentBootstrap.js';
 import { toConfigParameters } from '../../agentConfig.adapter.js';
+import { preparePreferredProviderCompletion } from '../../preferred-provider-acquisition.js';
 import {
   acquirePreferredOAuth,
   acquirePreferredProviderManager,
-  preparePreferredProviderCompletion,
-} from '../../preferred-provider-acquisition.js';
+} from './provider-acquisition.js';
 import { createTestMcpRuntime } from './create-mcp-runtime.js';
 import {
   createCapturedSessionOwner,
@@ -229,6 +229,7 @@ export async function openSessionClientEngine(
       stack.runtimeId,
       stack.tokenizer,
       undefined,
+      process.env.LLXPRT_FAKE_RESPONSES,
     );
     await mcp.initialize();
     await owner.initializeTools();

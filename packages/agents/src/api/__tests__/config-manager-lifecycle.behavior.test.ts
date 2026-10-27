@@ -10,11 +10,11 @@ import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 
+import { preparePreferredProviderCompletion } from '../preferred-provider-acquisition.js';
 import {
   acquirePreferredOAuth,
   acquirePreferredProviderManager,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
+} from './helpers/provider-acquisition.js';
 import {
   AgentProfilePreflight,
   prepareAgentPreflight,
@@ -320,6 +320,7 @@ describe('Config-independent provider owner lifecycle', () => {
         'owned-manager',
         configureProviderTokenizer(manager),
         undefined,
+        process.env.LLXPRT_FAKE_RESPONSES,
       );
       const provider = new CacheProvider();
       manager.registerProvider(provider);
@@ -406,6 +407,7 @@ describe('Config-independent provider owner lifecycle', () => {
         'shared-label',
         configureProviderTokenizer(earlyManager),
         undefined,
+        process.env.LLXPRT_FAKE_RESPONSES,
       );
       expect(earlyOAuth.runtimeMessageBus).toBe(bus);
       ownerSettings.set('auth.noBrowser', true);

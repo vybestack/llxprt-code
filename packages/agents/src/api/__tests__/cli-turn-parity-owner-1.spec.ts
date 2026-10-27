@@ -24,11 +24,11 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { preparePreferredProviderCompletion } from '../preferred-provider-acquisition.js';
 import {
   acquirePreferredProviderManager,
   acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
+} from './helpers/provider-acquisition.js';
 
 import { randomUUID } from 'node:crypto';
 import {
@@ -403,6 +403,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
                     builtRefCallerRuntimeId,
                     builtRefCallerTokenizer,
                     undefined,
+                    process.env.LLXPRT_FAKE_RESPONSES,
                   );
                   await builtRefCallerMcp.initialize();
                   const activation = await executeProviderActivation(

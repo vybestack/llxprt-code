@@ -30,8 +30,7 @@ import type { ParsedAgentConfig } from './config-schema.js';
 import type { AgentConfig } from './config-types.js';
 import {
   acquirePreferredFiles,
-  acquirePreferredOAuth,
-  acquirePreferredProviderManager,
+  acquirePreferredProviderRuntime,
   acquirePreferredSettings,
   preparePreferredProviderCompletion,
 } from './preferred-provider-acquisition.js';
@@ -133,6 +132,7 @@ export async function disposeIsolatedMediaRuntime(
 
 export class PreferredAgentAssembly {
   private config!: Config;
+  private fakeResponses: string | undefined;
   private settingsOwner!: SessionSettingsOwner;
   private preferredSettings!: SettingsService;
 
@@ -183,6 +183,7 @@ export class PreferredAgentAssembly {
   ) {}
 
   async assemble(): Promise<Agent> {
+    this.fakeResponses = process.env.LLXPRT_FAKE_RESPONSES;
     // Everything the caller transferred is owned from here on, so host
     // credential acquisition sits inside the same rollback as the rest.
     const images = prepareImageConstruction(this.rawConfig.imageOperation);
@@ -348,33 +349,24 @@ export class PreferredAgentAssembly {
         this.retainedFiles,
         release,
       );
-      manager = acquirePreferredProviderManager(
-        this.config,
+      ({ manager, oauth } = acquirePreferredProviderRuntime(release, {
+        config: this.config,
         settings,
         settingsOwner,
         files,
-        this.runtimeId,
-        this.authority,
-        release,
-      );
+        runtimeId: this.runtimeId,
+        authority: this.authority,
+        suppliedStore: this.suppliedStore,
+        messageBus: this.preferredMessageBus,
+        profileReads: this.profileReads,
+        oauthSettings: this.oauthSettings,
+      }));
       tokenizerFactory = configureProviderTokenizer(
         manager,
         this.tokenizerSelection,
       );
       this.contentGeneratorFactory =
         this.contentSelection ?? createRuntimeContentGeneratorFactory();
-      oauth = acquirePreferredOAuth(
-        this.suppliedStore,
-        this.preferredMessageBus,
-        this.config,
-        settings,
-        manager,
-        this.runtimeId,
-        this.profileReads,
-        this.authority,
-        release,
-        this.oauthSettings,
-      );
       await preparePreferredProviderCompletion(
         this.config,
         settings,
@@ -384,6 +376,7 @@ export class PreferredAgentAssembly {
         this.runtimeId,
         tokenizerFactory,
         this.providerContributions,
+        this.fakeResponses,
       );
       this.preferredSettings = settings;
       this.settingsOwner = settingsOwner;

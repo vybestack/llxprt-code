@@ -32,8 +32,8 @@ import {
 } from '@vybestack/llxprt-code-providers/auth.js';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import {
-  ProviderManager,
-  ProviderFileLifecycle,
+  type ProviderManager,
+  type ProviderFileLifecycle,
 } from '@vybestack/llxprt-code-providers';
 import { createOwnerPolicyEvaluation } from '@vybestack/llxprt-code-core/policy/owner-policy-evaluation.js';
 import { createSessionMessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -41,14 +41,15 @@ import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquis
 import {
   populateProviderManager,
   NodeFileSystem,
-  createOwnerOAuthManager,
-  createSessionAuthPolicyReader,
-  createOwnedTokenStoreClose,
-  createOwnerAuthCacheInvalidator,
   createPreflightOAuthProfileReads,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { releaseAdoptedFileScope } from './adoption-release.js';
-import { acquireRootNetwork } from './root-network.js';
+import {
+  acquireProviderFiles,
+  acquireProviderRuntime,
+  readProviderAuthIdentity,
+  retainOAuthSettings,
+} from './provider-runtime-acquisition.js';
 import { applyCliArgumentOverrides } from './settingsResolver.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 import {
@@ -115,16 +116,12 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
   ) {
     this.#host = host;
     this.#authority = authority;
-    this.#files = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
-      proxy: host.proxy,
-    });
     this.#settings = settings;
     this.#release.acquire('bus', () => this.#bus.cancelPendingConfirmations());
-    this.#release.acquire('files', () =>
-      releaseAdoptedFileScope(this.#files, host.runtimeId),
-    );
+    this.#files = acquireProviderFiles(this.#release, {
+      proxy: host.proxy,
+      scopeIds: [host.runtimeId],
+    });
   }
 
   static async create(
@@ -175,43 +172,29 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     oauthSettings: IOAuthSettingsProvider | undefined,
     fakeResponses: string | undefined,
   ): void {
-    const network = acquireRootNetwork(this.#release, this.#host.proxy);
-    this.#manager = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      this.#files,
-      this.#settings,
-      undefined,
-      this.#runtimeContext('pre-config'),
-    );
-    const manager = this.#manager;
-    manager.bindNetworkFetch(network.fetch);
-    this.#release.acquire('manager', () => manager.dispose());
-    const keys = authority.createProviderKeyStorage();
-    this.#release.acquire('manager', () => keys.close());
-    manager.bindProviderKeyStorage(keys);
-    const tokens = authority.createTokenStore();
-    this.#release.acquire('tokens', createOwnedTokenStoreClose(tokens));
-    const oauth = createOwnerOAuthManager(
-      tokens,
-      oauthSettings,
-      this.#bus,
-      this.#profileReads,
-      createSessionAuthPolicyReader(this.#settings),
-      () => manager.getAuthIdentity(),
-      undefined,
-      createOwnerAuthCacheInvalidator((name) =>
-        manager.getProviderByName(name),
-      ),
-      manager.fetchNetwork,
-    );
+    const { manager, oauth } = acquireProviderRuntime(this.#release, {
+      files: this.#files,
+      proxy: this.#host.proxy,
+      settings: this.#settings,
+      config: undefined,
+      settingsOwner: undefined,
+      context: this.#runtimeContext('pre-config'),
+      authority,
+      oauth: {
+        suppliedStore: undefined,
+        readSettings: retainOAuthSettings(oauthSettings),
+        messageBus: this.#bus,
+        profileReads: this.#profileReads,
+        readIdentity: readProviderAuthIdentity,
+        requestInteractiveAuth: undefined,
+      },
+    });
+    this.#manager = manager;
     this.#oauth = oauth;
-    this.#release.acquire('oauth', () => oauth.dispose());
     populateProviderManager(
       manager,
       oauth,
-      tokens,
+      oauth.getTokenStore(),
       this.#settings,
       new NodeFileSystem(),
       undefined,

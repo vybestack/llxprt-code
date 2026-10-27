@@ -31,7 +31,7 @@ import { cleanupFailedAdoption } from '../fromConfig-cleanup.js';
 import {
   acquirePreferredOAuth,
   acquirePreferredProviderManager,
-} from '../preferred-provider-acquisition.js';
+} from './helpers/provider-acquisition.js';
 
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';

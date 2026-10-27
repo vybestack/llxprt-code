@@ -26,11 +26,11 @@ import {
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { preparePreferredProviderCompletion } from '../preferred-provider-acquisition.js';
 import {
   acquirePreferredProviderManager,
   acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
+} from './helpers/provider-acquisition.js';
 import { releaseAdoptedFileScope } from '../adoption-release.js';
 import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { randomUUID } from 'node:crypto';
@@ -172,6 +172,7 @@ describe('Isolated session client collaborators', () => {
         builtRuntimeId,
         builtTokenizer,
         undefined,
+        process.env.LLXPRT_FAKE_RESPONSES,
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();

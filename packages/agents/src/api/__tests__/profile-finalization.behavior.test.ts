@@ -34,11 +34,11 @@ import {
 } from '../control/authState.js';
 import { ProfilesControl } from '../control/profilesControl.js';
 import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
+import { preparePreferredProviderCompletion } from '../preferred-provider-acquisition.js';
 import {
   acquirePreferredOAuth,
   acquirePreferredProviderManager,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
+} from './helpers/provider-acquisition.js';
 import { assembleProfileApplication } from '../profileApplicationAssembly.js';
 import { captureProfileModelParams } from '../profileSnapshot.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
@@ -185,6 +185,7 @@ describe('Profile finalization', () => {
         builtRuntimeId,
         builtTokenizer,
         undefined,
+        process.env.LLXPRT_FAKE_RESPONSES,
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();

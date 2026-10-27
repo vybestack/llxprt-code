@@ -23,7 +23,7 @@ import { toConfigParameters } from '../agentConfig.adapter.js';
 import {
   acquirePreferredOAuth,
   acquirePreferredProviderManager,
-} from '../preferred-provider-acquisition.js';
+} from './helpers/provider-acquisition.js';
 import { bindCreatedSessionClient } from '../policyComposition.js';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';

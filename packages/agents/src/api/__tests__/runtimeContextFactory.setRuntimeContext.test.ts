@@ -17,11 +17,11 @@ import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 
+import { preparePreferredProviderCompletion } from '../preferred-provider-acquisition.js';
 import {
   acquirePreferredOAuth,
   acquirePreferredProviderManager,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
+} from './helpers/provider-acquisition.js';
 import { releaseAdoptedFileScope } from '../adoption-release.js';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 
@@ -86,6 +86,7 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
       runtimeId,
       configureProviderTokenizer(manager),
       undefined,
+      process.env.LLXPRT_FAKE_RESPONSES,
     );
   }
 
@@ -177,6 +178,7 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
       'setRuntimeContext-adopted',
       configureProviderTokenizer(adoptedManager),
       undefined,
+      process.env.LLXPRT_FAKE_RESPONSES,
     );
     expect(() =>
       adoptedManager.prepareStatelessProviderInvocation(),

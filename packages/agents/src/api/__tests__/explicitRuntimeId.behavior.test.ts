@@ -13,11 +13,11 @@ import {
   ProviderFileLifecycle,
   ProviderManager,
 } from '@vybestack/llxprt-code-providers';
+import { preparePreferredProviderCompletion } from '../preferred-provider-acquisition.js';
 import {
   acquirePreferredProviderManager,
   acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
+} from './helpers/provider-acquisition.js';
 import { releaseAdoptedFileScope } from '../adoption-release.js';
 import {
   runCleanupSteps,
@@ -131,6 +131,7 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
       firstConfig.getSessionId(),
       configureProviderTokenizer(firstManager),
       undefined,
+      process.env.LLXPRT_FAKE_RESPONSES,
     );
   }
 
@@ -228,6 +229,7 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
       secondConfig.getSessionId(),
       configureProviderTokenizer(secondManager),
       undefined,
+      process.env.LLXPRT_FAKE_RESPONSES,
     );
   }
 

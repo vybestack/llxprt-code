@@ -19,11 +19,11 @@ import {
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './__tests__/helpers/owned-credential-fixture.js';
+import { preparePreferredProviderCompletion } from './preferred-provider-acquisition.js';
 import {
   acquirePreferredProviderManager,
   acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from './preferred-provider-acquisition.js';
+} from './__tests__/helpers/provider-acquisition.js';
 import { releaseAdoptedFileScope } from './adoption-release.js';
 import { randomUUID } from 'node:crypto';
 import {
@@ -201,6 +201,7 @@ describe('profile candidate operations', () => {
         firstCallerRuntimeId,
         firstCallerTokenizer,
         undefined,
+        process.env.LLXPRT_FAKE_RESPONSES,
       );
       await firstCallerMcp.initialize();
       const activation = await executeProviderActivation(
@@ -365,6 +366,7 @@ describe('profile candidate operations', () => {
         secondCallerRuntimeId,
         secondCallerTokenizer,
         undefined,
+        process.env.LLXPRT_FAKE_RESPONSES,
       );
       await secondCallerMcp.initialize();
       const activation = await executeProviderActivation(

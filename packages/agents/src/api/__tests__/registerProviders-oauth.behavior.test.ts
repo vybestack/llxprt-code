@@ -7,7 +7,7 @@ import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {
   acquirePreferredProviderManager,
   acquirePreferredOAuth,
-} from '../preferred-provider-acquisition.js';
+} from './helpers/provider-acquisition.js';
 import { releaseAdoptedFileScope } from '../adoption-release.js';
 import {
   cleanupAfterFailure,
@@ -168,7 +168,14 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
         undefined,
       );
       await owner.startTelemetry(config);
-      registerProvidersOntoManager(manager, settings, config, oauth, undefined);
+      registerProvidersOntoManager(
+        manager,
+        settings,
+        config,
+        oauth,
+        undefined,
+        process.env.LLXPRT_FAKE_RESPONSES,
+      );
       const provider = manager.getProviderByName(providerName);
       complete = true;
       if (!provider) {

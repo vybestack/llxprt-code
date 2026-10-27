@@ -14,7 +14,6 @@ import type {
 import { openBrowserSecurely } from '@vybestack/llxprt-code-core';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import {
@@ -23,7 +22,7 @@ import {
   McpClientManager,
 } from '@vybestack/llxprt-code-mcp';
 import { defaultFeedbackSink } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {
   createFileOAuthSettingsProvider,
   type CredentialAuthority,
@@ -31,22 +30,20 @@ import {
 } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   configureProviderTokenizer,
-  createOwnerAuthCacheInvalidator,
-  createOwnedTokenStoreClose,
-  createOwnerOAuthManager,
   createOAuthProfileReads,
   createRuntimeContentGeneratorFactory,
-  createSessionAuthPolicyReader,
-  NodeFileSystem,
-  populateProviderManager,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { type SettingsService } from '@vybestack/llxprt-code-settings';
 import { admittedEndpoint } from '../core/admittedRouteSecurity.js';
 import { cleanupProviderScope } from '../session/session-client-cleanup.js';
 import { acquireSessionClient } from '../session/session-client-binding.js';
 import { type SessionClientOwner } from '../session/session-client-owner.js';
-import { releaseAdoptedFileScope } from './adoption-release.js';
+import {
+  acquireProviderFiles,
+  acquireProviderRuntime,
+} from './provider-runtime-acquisition.js';
+import { registerProvidersOntoManager } from './policyComposition.js';
 import { type Agent } from './agent.js';
 import {
   AgentBootstrapError,
@@ -127,6 +124,7 @@ export interface ForegroundAdoptionView {
  */
 export class AdoptedAgentAssembly implements ForegroundAdoptionView {
   readonly #config: Config;
+  #fakeResponses: string | undefined;
   #adoption: AdoptionSessionInput | undefined;
   #lifecycle: AdoptionLifecyclePort | undefined;
   #settingsService!: SettingsService;
@@ -139,7 +137,6 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
   #content!: RuntimeContentGeneratorFactory<ContentGenerator>;
   #runtimeId!: string;
   #authority!: CredentialAuthority;
-  #oAuthBus!: MessageBus;
   #providers!: AdoptedProviderResources;
   #client!: SessionClientOwner;
   #foreground: ForegroundAssembly | undefined;
@@ -196,6 +193,7 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
   }
 
   async assembleAdoption(): Promise<Agent> {
+    this.#fakeResponses = process.env.LLXPRT_FAKE_RESPONSES;
     const adoption = this.#adoption;
     const lifecycle = this.#lifecycle;
     if (adoption === undefined || lifecycle === undefined)
@@ -273,9 +271,9 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
     this.#mcp = await this.#adoptConstructMcp();
     try {
       this.#media = acquireAdoptedMedia(this.#config);
-      const manager = this.#adoptAcquireProviders();
-      const oauth = this.#adoptAcquireOAuth(manager);
-      this.#providers = { manager, oauth };
+      this.#providers = this.#adoptAcquireProviders();
+      this.#tokenizer = configureProviderTokenizer(this.#providers.manager);
+      this.#content = createRuntimeContentGeneratorFactory();
     } catch (primary) {
       await cleanupFailedAdoption(
         primary,
@@ -290,46 +288,34 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
     await this.#adoptComplete();
   }
 
-  #adoptAcquireProviders(): ProviderManager {
+  #adoptAcquireProviders(): AdoptedProviderResources {
     const settingsOwner = new SessionSettingsOwner(this.#settingsService);
     this.#selectedSettings = settingsOwner;
     this.#release.acquire('settings', () => settingsOwner.dispose());
     settingsOwner.bindTelemetry(this.#config);
-    const files = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
-      proxy: this.#config.getProxy(),
+    const config = this.#config;
+    const runtimeId = this.#runtimeId;
+    this.#files = acquireProviderFiles(this.#release, {
+      proxy: config.getProxy(),
+      scopeIds: [runtimeId, config.getSessionId()],
     });
-    this.#files = files;
-    const scope = this.#config.getSessionId();
-    for (const id of this.#runtimeId === scope
-      ? [scope]
-      : [this.#runtimeId, scope])
-      this.#release.acquire('files', () => releaseAdoptedFileScope(files, id));
-    return acquireAdoptedProviderManager(
-      this.#config,
-      this.#release,
-      files,
-      this.#settingsService,
+    return acquireProviderRuntime(this.#release, {
+      files: this.#files,
+      proxy: config.getProxy(),
+      config,
+      settings: this.#settingsService,
       settingsOwner,
-      this.#authority,
-      this.#runtimeId,
-    );
-  }
-
-  #adoptAcquireOAuth(manager: ProviderManager): OAuthManager {
-    this.#tokenizer = configureProviderTokenizer(manager, undefined);
-    this.#content = createRuntimeContentGeneratorFactory();
-    this.#oAuthBus = this.#mcp.messageBus;
-    return acquireAdoptedOAuth(
-      this.#config,
-      this.#release,
-      manager,
-      this.#authority,
-      this.#settingsService,
-      this.#oAuthBus,
-      this.#runtimeId,
-    );
+      context: adoptionProviderContext(runtimeId),
+      authority: this.#authority,
+      oauth: {
+        suppliedStore: undefined,
+        readSettings: () => createFileOAuthSettingsProvider(),
+        messageBus: this.#mcp.messageBus,
+        profileReads: createOAuthProfileReads(config.profileDirectory),
+        readIdentity: () => ({ runtimeId, runtimeKind: 'agent' }),
+        requestInteractiveAuth: undefined,
+      },
+    });
   }
 
   async #adoptComplete(): Promise<void> {
@@ -392,6 +378,7 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
       this.#settingsService,
       this.#tokenizer,
       this.#runtimeId,
+      this.#fakeResponses,
     );
     await this.#mcp.initialize();
     await client.initializeTools();
@@ -490,67 +477,6 @@ function closeReleaseScope(release: AcquisitionRelease): () => Promise<void> {
   return () => release.close();
 }
 
-function acquireAdoptedProviderManager(
-  config: Config,
-  release: AcquisitionRelease,
-  files: ProviderFileLifecycle,
-  settingsService: SettingsService,
-  selectedSettings: SessionSettingsOwner,
-  authority: CredentialAuthority,
-  runtimeId: string,
-): ProviderManager {
-  const network = new OwnedFetch(config.getProxy());
-  release.beforeRelease(() => network.closeAdmissionAndAbort());
-  release.acquire('network', () => network.dispose());
-  const manager = new ProviderManager(
-    undefined,
-    undefined,
-    undefined,
-    files,
-    settingsService,
-    config,
-    adoptionProviderContext(runtimeId),
-    undefined,
-    selectedSettings,
-  );
-  manager.bindNetworkFetch(network.fetch);
-  release.acquire('manager', () => manager.dispose());
-  const storage = authority.createProviderKeyStorage();
-  release.acquire('manager', () => storage.close());
-  manager.bindProviderKeyStorage(storage);
-  return manager;
-}
-
-function acquireAdoptedOAuth(
-  config: Config,
-  release: AcquisitionRelease,
-  manager: RuntimeProviderManager,
-  authority: CredentialAuthority,
-  settingsService: SettingsService,
-  bus: MessageBus,
-  runtimeId: string,
-): OAuthManager {
-  const requestFetch = (
-    input: RequestInfo | URL,
-    init?: RequestInit,
-  ): Promise<Response> => manager.fetchNetwork(input, init);
-  const store = authority.createTokenStore();
-  release.acquire('tokens', createOwnedTokenStoreClose(store));
-  const oauth = createOwnerOAuthManager(
-    store,
-    createFileOAuthSettingsProvider(),
-    bus,
-    createOAuthProfileReads(config.profileDirectory),
-    createSessionAuthPolicyReader(settingsService),
-    () => ({ runtimeId, runtimeKind: 'agent' }),
-    undefined,
-    createOwnerAuthCacheInvalidator((name) => manager.getProviderByName(name)),
-    requestFetch,
-  );
-  release.acquire('oauth', () => oauth.dispose());
-  return oauth;
-}
-
 async function activateAdoptedProviders(
   config: Config,
   selectedSettings: SessionSettingsOwner,
@@ -559,6 +485,7 @@ async function activateAdoptedProviders(
   settingsService: SettingsService,
   tokenizer: RuntimeTokenizerFactory,
   runtimeId: string,
+  fakeResponses: string | undefined,
 ): Promise<void> {
   await selectedSettings.startTelemetry(config);
   manager.setRetryOperationsFactory((providerName, profileId) =>
@@ -573,18 +500,13 @@ async function activateAdoptedProviders(
     settingsService,
     config,
   );
-  populateProviderManager(
+  registerProvidersOntoManager(
     manager,
-    oauth,
-    oauth.getTokenStore(),
     settingsService,
-    new NodeFileSystem(),
     config,
+    oauth,
     undefined,
-    undefined,
-    false,
-    false,
-    process.env.LLXPRT_FAKE_RESPONSES,
+    fakeResponses,
   );
   manager.setTokenizerFactory(tokenizer);
   manager.setConfig(config);

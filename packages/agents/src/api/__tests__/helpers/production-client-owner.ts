@@ -34,11 +34,11 @@ import type {
 import { injectConfirmationForcingPolicy } from '../../confirmationForcing.js';
 import type { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
 import { assembleModelSelection } from '../../model-selection.js';
+import { preparePreferredProviderCompletion } from '../../preferred-provider-acquisition.js';
 import {
   acquirePreferredOAuth,
   acquirePreferredProviderManager,
-  preparePreferredProviderCompletion,
-} from '../../preferred-provider-acquisition.js';
+} from './provider-acquisition.js';
 import { executeProviderActivation } from '../../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../../providerSwitchAssembly.js';
 import { buildTestMcpRuntime } from './mcp-owner-fixture.js';
@@ -192,6 +192,7 @@ async function activateProvider(
     stack.runtimeId,
     stack.tokenizer,
     inputs.providerContributions,
+    process.env.LLXPRT_FAKE_RESPONSES,
   );
   await mcp.initialize();
   const result = await executeProviderActivation(

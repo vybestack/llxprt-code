@@ -37,10 +37,9 @@ import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/serv
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
-import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import {
-  ProviderFileLifecycle,
-  ProviderManager,
+  type ProviderFileLifecycle,
+  type ProviderManager,
 } from '@vybestack/llxprt-code-providers';
 import {
   createFileOAuthSettingsProvider,
@@ -49,11 +48,7 @@ import {
 } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   configureProviderTokenizer,
-  createOwnedTokenStoreClose,
-  createOwnerAuthCacheInvalidator,
-  createOwnerOAuthManager,
   createRuntimeContentGeneratorFactory,
-  createSessionAuthPolicyReader,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import type { Profile, SettingsService } from '@vybestack/llxprt-code-settings';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings';
@@ -81,7 +76,10 @@ import {
 } from '../core/subagentSettingsPopulation.js';
 import type { SessionClientOwner } from '../session/session-client-owner.js';
 import { admitLoadBalancerModelParameters } from './admit-load-balancer-model-parameters.js';
-import { releaseAdoptedFileScope } from './adoption-release.js';
+import {
+  acquireProviderFiles,
+  acquireProviderRuntime,
+} from './provider-runtime-acquisition.js';
 import { disposeIsolatedMediaRuntime } from './agentRuntimeAssembly.js';
 import { registerProvidersOntoManager } from './policyComposition.js';
 
@@ -155,11 +153,12 @@ export class ChildAgentAssembly {
   ) {}
 
   async assemble(): Promise<SubagentLaunchResult> {
+    const fakeResponses = process.env.LLXPRT_FAKE_RESPONSES;
     try {
       this.acquireWorkspace();
       this.acquireProviders();
       await this.prepareClient();
-      await this.activate();
+      await this.activate(fakeResponses);
       await this.load();
       this.assertAdmission(
         'Subagent launch aborted after runtime assembly completed.',
@@ -222,58 +221,39 @@ export class ChildAgentAssembly {
   }
 
   private acquireProviders(): void {
-    this.files = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
+    this.files = acquireProviderFiles(this.providers, {
       proxy: this.config.getProxy(),
+      scopeIds: [this.data.runtimeId, this.config.getSessionId()],
     });
-    for (const scope of new Set([
-      this.data.runtimeId,
-      this.config.getSessionId(),
-    ]))
-      this.providers.acquire('files', () =>
-        releaseAdoptedFileScope(this.files, scope),
-      );
-    const network = new OwnedFetch(this.config.getProxy());
-    this.providers.beforeRelease(() => network.closeAdmissionAndAbort());
-    this.providers.acquire('network', () => network.dispose());
-    this.manager = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      this.files,
-      this.settings,
-      this.config,
-      createSubagentProviderRuntime(
-        this.data.runtimeId,
-        this.data.subagent.name,
-      ),
-      undefined,
-      this.settingsOwner,
-    );
-    this.manager.bindNetworkFetch(network.fetch);
-    this.providers.acquire('manager', () => this.manager.dispose());
-    const keys = this.acquisition.authority.createProviderKeyStorage();
-    this.providers.acquire('manager', () => keys.close());
-    this.manager.bindProviderKeyStorage(keys);
+    const runtimeId = this.data.runtimeId;
+    ({ manager: this.manager, oauth: this.oauth } = acquireProviderRuntime(
+      this.providers,
+      {
+        files: this.files,
+        config: this.config,
+        proxy: this.config.getProxy(),
+        settings: this.settings,
+        settingsOwner: this.settingsOwner,
+        authority: this.acquisition.authority,
+        context: createSubagentProviderRuntime(
+          this.data.runtimeId,
+          this.data.subagent.name,
+        ),
+        oauth: {
+          suppliedStore: undefined,
+          readSettings: () => createFileOAuthSettingsProvider(),
+          messageBus: this.operations.messageBus,
+          profileReads: this.operations.profileReads,
+          readIdentity: () => ({
+            runtimeId,
+            runtimeKind: 'agent',
+          }),
+          requestInteractiveAuth: this.operations.requestInteractiveAuth,
+        },
+      },
+    ));
     this.tokenizer = configureProviderTokenizer(this.manager);
     this.content = createRuntimeContentGeneratorFactory();
-    const tokens = this.acquisition.authority.createTokenStore();
-    this.providers.acquire('tokens', createOwnedTokenStoreClose(tokens));
-    this.oauth = createOwnerOAuthManager(
-      tokens,
-      createFileOAuthSettingsProvider(),
-      this.operations.messageBus,
-      this.operations.profileReads,
-      createSessionAuthPolicyReader(this.settings),
-      () => ({ runtimeId: this.data.runtimeId, runtimeKind: 'agent' }),
-      this.operations.requestInteractiveAuth,
-      createOwnerAuthCacheInvalidator((name) =>
-        this.manager.getProviderByName(name),
-      ),
-      (input, init) => this.manager.fetchNetwork(input, init),
-    );
-    this.providers.acquire('oauth', () => this.oauth.dispose());
   }
 
   private async prepareClient(): Promise<void> {
@@ -315,7 +295,7 @@ export class ChildAgentAssembly {
     );
   }
 
-  private async activate(): Promise<void> {
+  private async activate(fakeResponses: string | undefined): Promise<void> {
     await this.settingsOwner.startTelemetry(this.config);
     this.manager.setRetryOperationsFactory((name, profileId) =>
       this.oauth.composeRetryOperations(
@@ -342,6 +322,7 @@ export class ChildAgentAssembly {
       this.config,
       this.oauth,
       undefined,
+      fakeResponses,
     );
     this.manager.setTokenizerFactory(this.tokenizer);
     this.manager.setConfig(this.config);

@@ -37,11 +37,11 @@ import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { toConfigParameters } from '../agentConfig.adapter.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
+import { preparePreferredProviderCompletion } from '../preferred-provider-acquisition.js';
 import {
   acquirePreferredOAuth,
   acquirePreferredProviderManager,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
+} from './helpers/provider-acquisition.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 /**
  * @license
@@ -212,6 +212,7 @@ async function withChildOwner(
       builtRuntimeId,
       builtTokenizer,
       undefined,
+      process.env.LLXPRT_FAKE_RESPONSES,
     );
     await builtMcp.initialize();
     await builtOwner.initializeTools();

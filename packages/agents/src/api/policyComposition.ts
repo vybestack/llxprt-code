@@ -113,6 +113,7 @@ export function registerProvidersOntoManager(
   config: Config,
   oauthManager: OAuthManager,
   contributions: ProviderContributionRegistry | undefined,
+  fakeResponses: string | undefined,
 ): void {
   populateProviderManager(
     isolatedManager,
@@ -125,6 +126,6 @@ export function registerProvidersOntoManager(
     undefined,
     false,
     false,
-    process.env.LLXPRT_FAKE_RESPONSES,
+    fakeResponses,
   );
 }
