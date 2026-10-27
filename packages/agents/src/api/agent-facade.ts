@@ -24,7 +24,6 @@ import type { Agent } from './agent.js';
 import {
   AgentOperations,
   createAgentApprovalOwner,
-  createAgentDisposalOwners,
   createAgentTurnOwners,
 } from './agent-operations.js';
 import { createAgentFacade, type AgentFacadeComposition } from './agentImpl.js';
@@ -265,7 +264,6 @@ function buildOperations(
   controls: AgentFacadeControls,
   settings: AgentFacadeSettings,
   providers: AgentFacadeProviders,
-  auth: AgentFacadeAuth,
   published: PublishedControls,
 ): AgentOperations {
   const { providerControl, scoped, profilePersistence } = published;
@@ -291,38 +289,34 @@ function buildOperations(
       owners.awaitMcpDiscovery,
     ),
     createAgentApprovalOwner(controls.ide, config),
-    createAgentDisposalOwners(
-      {
-        ownership: owners.ownership,
-        session: {
-          closeAdmission: () => session.clients.closeAdmission(),
-          closeHookAdmission: session.closeHookAdmission,
-          joinAuxiliaryShutdown: () => session.clients.joinAuxiliaryShutdown(),
-          closeImageAdmission: session.closeImageAdmission,
-          closeToolAdmission: () => session.toolCatalog.closeAdmission(),
-          abortExecution: () => session.clients.abortExecution(),
-          dispose: () => session.dispose(),
-        },
-        coordinator: providerControl.coordinator,
-        tasks: owners.tasks,
-        shell: owners.shell,
-        hooks: scoped.hooks,
-        releaseHooks: session.transferHookRelease(),
-        profilePersistence,
-        closeMcpAdmission: owners.closeMcpAdmission,
-        skills: scoped.skills,
-        workspace: controls.workspace,
-        sessionControl: scoped.session,
-        ide: controls.ide,
-        tools: scoped.tools,
-        profiles: providerControl.profiles,
-        mcp: controls.mcp,
-        closeRuntime: owners.closeRuntime,
-        media: owners.media,
+    {
+      ownership: owners.ownership,
+      session: {
+        closeAdmission: () => session.clients.closeAdmission(),
+        closeHookAdmission: session.closeHookAdmission,
+        joinAuxiliaryShutdown: () => session.clients.joinAuxiliaryShutdown(),
+        closeImageAdmission: session.closeImageAdmission,
+        closeToolAdmission: () => session.toolCatalog.closeAdmission(),
+        abortExecution: () => session.clients.abortExecution(),
+        dispose: () => session.dispose(),
       },
-      config,
-      auth.oauth,
-    ),
+      coordinator: providerControl.coordinator,
+      tasks: owners.tasks,
+      shell: owners.shell,
+      hooks: scoped.hooks,
+      releaseHooks: session.transferHookRelease(),
+      profilePersistence,
+      closeMcpAdmission: owners.closeMcpAdmission,
+      skills: scoped.skills,
+      workspace: controls.workspace,
+      sessionControl: scoped.session,
+      ide: controls.ide,
+      tools: scoped.tools,
+      profiles: providerControl.profiles,
+      mcp: controls.mcp,
+      closeRuntime: owners.closeRuntime,
+      media: owners.media,
+    },
   );
 }
 
@@ -457,7 +451,6 @@ export function publishAgentFacade(
     controls,
     settings,
     providers,
-    auth,
     published,
   );
   return createAgentFacade(

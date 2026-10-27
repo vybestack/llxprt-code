@@ -18,20 +18,6 @@ import { AggregateDisposeError } from './disposeErrors.js';
  * @requirement:REQ-016
  */
 
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-
-/**
- * Disposes the required OAuth manager.
- * @plan:PLAN-20260617-COREAPI.P24
- * @requirement:REQ-016
- * @pseudocode dispose.md 90-92
- */
-export async function disposeOAuthManager(
-  manager: OAuthManager,
-): Promise<void> {
-  await manager.dispose();
-}
-
 /**
  * Awaits fn and pushes any throw/rejection into the errors accumulator so the
  * teardown continues. Never rethrows mid-teardown.

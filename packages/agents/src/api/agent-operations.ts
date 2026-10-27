@@ -10,7 +10,6 @@ import {
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import type { SessionClientAcquisitionOwner } from '../session/session-client-acquisition-owner.js';
 import type { SessionConversationBinding } from '../session/session-conversation-binding.js';
@@ -29,7 +28,6 @@ import {
   assembleAgentShutdown,
   collectDisposalError,
   disposeAgentObservers,
-  disposeOAuthManager,
   disposeWorkspaceFacades,
   finishOwnedHooks,
   joinAgentWork,
@@ -120,24 +118,7 @@ export interface AgentDisposalOwners {
   readonly profiles: ProfilesControl;
   readonly mcp: McpControl;
   readonly closeRuntime: () => Promise<void> | void;
-  readonly disposeConfig: (() => Promise<void>) | undefined;
   readonly media: SessionMediaOwner | undefined;
-  readonly disposeOAuth: () => Promise<void>;
-}
-
-export function createAgentDisposalOwners(
-  owners: Omit<AgentDisposalOwners, 'disposeConfig' | 'disposeOAuth'>,
-  config: Config,
-  oauth: OAuthManager,
-): AgentDisposalOwners {
-  return {
-    ...owners,
-    disposeConfig:
-      owners.ownership.configOwnership === 'caller'
-        ? undefined
-        : () => config.dispose(),
-    disposeOAuth: () => disposeOAuthManager(oauth),
-  };
 }
 
 export function createAgentApprovalOwner(

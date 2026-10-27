@@ -405,13 +405,11 @@ export interface OwnershipRecord {
   readonly disposeMcpRuntime: () => Promise<void>;
   disposed: boolean;
   readonly injectedSchedulerHandles: AgentSchedulerHandle[];
-  readonly configOwnership: 'agent' | 'caller';
 }
 
 export function recordOwnership(deps: {
   readonly disposeMcpRuntime: () => Promise<void>;
   readonly injectedSchedulerHandles: AgentSchedulerHandle[];
-  readonly configOwnership: 'agent' | 'caller';
 }): OwnershipRecord {
   return { disposed: false, ...deps };
 }

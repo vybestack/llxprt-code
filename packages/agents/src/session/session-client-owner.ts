@@ -510,6 +510,7 @@ export class SessionClientOwner {
   }
 
   dispose(): Promise<void> {
+    if (this.closing !== undefined) return this.closing;
     this.clients.closeAdmission();
     const executionClosing = this.clients.disposeSessionExecution();
     void executionClosing?.catch(() => undefined);
@@ -520,7 +521,6 @@ export class SessionClientOwner {
     const toolsClosing = this.toolCatalog.closeAdmission();
     void toolsClosing.catch(() => undefined);
     const auxiliaryClosing = this.clients.closeAuxiliaryAdmission();
-    if (this.closing !== undefined) return this.closing;
     const bindingClosing = Promise.resolve().then(() =>
       this.releaseMcpBinding?.(),
     );

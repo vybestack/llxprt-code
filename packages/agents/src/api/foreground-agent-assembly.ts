@@ -179,7 +179,6 @@ function facadeInputsForForeground(
       config.isInteractive() ? 'cli-interactive' : 'agent',
     ownership: recordOwnership({
       injectedSchedulerHandles: handles,
-      configOwnership: 'agent',
       disposeMcpRuntime: () => runtime.dispose(),
     }),
     sessionIdentityOwnership: 'config',

@@ -565,7 +565,6 @@ function facadeInputsForPreferred(
     readRuntimeKind: () => 'agent',
     ownership: recordOwnership({
       injectedSchedulerHandles: handles,
-      configOwnership: 'agent',
       disposeMcpRuntime: () => runtime.dispose(),
     }),
     sessionIdentityOwnership: 'config',
