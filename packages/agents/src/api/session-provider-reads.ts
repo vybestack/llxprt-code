@@ -32,8 +32,8 @@ import type {
 } from './agent.js';
 import { buildProviderInfos, type OwnershipRecord } from './agentBootstrap.js';
 import { AgentExecutionCoordinator } from './agentExecutionCoordinator.js';
-import type { AgentAuth } from './config-types.js';
-import { AuthControl, isOAuthPromptHandler } from './control/authControl.js';
+import type { AgentAuth, OAuthPromptHandler } from './config-types.js';
+import { AuthControl } from './control/authControl.js';
 import {
   authStatusForWinner,
   computeAuthWinner,
@@ -68,6 +68,7 @@ import {
   applyFacadeProviderSwitch,
   type FacadeSwitchOperations,
 } from './providerSwitchOptionsAdapter.js';
+import { assembleProviderSwitch } from './providerSwitchAssembly.js';
 import { initializeProviderState } from './session-control-assembly.js';
 
 type OpenAIProviderInfo = ReturnType<typeof getOpenAIProviderInfo>;
@@ -284,7 +285,7 @@ export interface SessionProviderContext {
   readonly ownership: OwnershipRecord;
   readonly runtimeState: AgentRuntimeState;
   readonly initialAuth: AgentAuth | undefined;
-  readonly onOAuthPrompt: unknown;
+  readonly onOAuthPrompt: OAuthPromptHandler | undefined;
   readonly coordinator: AgentExecutionCoordinator;
   readonly workspace: WorkspaceControl;
   readonly readRuntimeKind: () => RuntimeKind;
@@ -534,20 +535,15 @@ export class SessionProviderControl {
     const providers = this.#providers;
     const oauth = this.#oauth;
     const session = this.#session;
-    return async (name, options) => {
-      const { assembleProviderSwitch } = await import(
-        './providerSwitchAssembly.js'
-      );
-      return assembleProviderSwitch(
-        config,
-        settingsService,
-        providers,
-        oauth,
-        readRuntimeKind,
-        () => session.refreshAuth(),
-        settingsOwner,
-      )(name, options);
-    };
+    return assembleProviderSwitch(
+      config,
+      settingsService,
+      providers,
+      oauth,
+      readRuntimeKind,
+      () => session.refreshAuth(),
+      settingsOwner,
+    );
   }
 
   #prepareReplacement(changed: boolean, signal: AbortSignal) {
@@ -569,14 +565,11 @@ export class SessionProviderControl {
     const { settingsOwner, settingsService } = this.#settings;
     const { authState, onOAuthPrompt } = this.#context;
     const oauth = this.#oauth;
-    const onOAuthPromptHandler = isOAuthPromptHandler(onOAuthPrompt)
-      ? onOAuthPrompt
-      : undefined;
     return new AuthControl(
       authState,
       () => this.#providerState.provider,
       (provider) => authStatusForWinner(this.#computeWinner(provider)),
-      onOAuthPromptHandler,
+      onOAuthPrompt,
       (baseUrl) =>
         applyFacadeAuthBaseUrl(
           baseUrl,
