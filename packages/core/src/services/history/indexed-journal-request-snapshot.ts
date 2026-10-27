@@ -397,13 +397,18 @@ export class IndexedJournalRequestSnapshot {
     return { ...plan.header, blocks };
   }
 
-  async *openReader(signal?: AbortSignal): AsyncGenerator<IContent> {
+  async *openPlans(signal?: AbortSignal): AsyncGenerator<JournalResponsePlan> {
     this.requireOpen();
     for await (const plan of streamResponsePlans(this.source)) {
       this.requireOpen();
       signal?.throwIfAborted();
-      yield await this.readPlan(plan, signal);
+      yield plan;
     }
+  }
+
+  async *openReader(signal?: AbortSignal): AsyncGenerator<IContent> {
+    for await (const plan of this.openPlans(signal))
+      yield await this.readPlan(plan, signal);
   }
 
   openTokenUsageReader(

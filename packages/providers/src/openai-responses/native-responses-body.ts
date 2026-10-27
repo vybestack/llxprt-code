@@ -233,13 +233,13 @@ export class NativeResponsesPrompt {
     if (indexed === undefined) throw new Error('Missing native request index');
     let separator = '';
     const counter = { value: 0 };
-    for (
-      let index = this.selection.skipRows;
-      index < this.rows.count;
-      index++
-    ) {
+    let ordinal = 0;
+    for await (const plan of indexed.openPlans(
+      this.options.invocation.signal,
+    )) {
+      const index = ordinal++;
+      if (index < this.selection.skipRows) continue;
       this.requireOpen();
-      const plan = await indexed.planAt(index, this.options.invocation.signal);
       if (isTextResponsePlan(plan)) {
         let emitted = false;
         for await (const piece of nativeTextResponsePieces(plan, separator)) {
@@ -248,18 +248,18 @@ export class NativeResponsesPrompt {
           emitted = true;
         }
         if (emitted) separator = ',';
-        continue;
-      }
-      for await (const item of this.items(
-        index,
-        false,
-        index + 1,
-        counter,
-        this.selection.skipRows,
-      )) {
-        yield nativeDumpLiteral(separator);
-        yield* nativeDumpValue(item);
-        separator = ',';
+      } else {
+        for await (const item of this.items(
+          index,
+          false,
+          index + 1,
+          counter,
+          this.selection.skipRows,
+        )) {
+          yield nativeDumpLiteral(separator);
+          yield* nativeDumpValue(item);
+          separator = ',';
+        }
       }
     }
   }

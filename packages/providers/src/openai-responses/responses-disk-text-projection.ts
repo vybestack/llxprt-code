@@ -50,8 +50,8 @@ async function* statefulRows(
     yield* countedRows(rows, signal);
     return;
   }
-  for (let index = 0; index < rows.count; index++)
-    yield (await rows.native.indexed.planAt(index, signal)).header;
+  for await (const plan of rows.native.indexed.openPlans(signal))
+    yield plan.header;
 }
 
 /**
