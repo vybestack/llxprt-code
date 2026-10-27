@@ -183,8 +183,10 @@ export class TranscriptGroup {
     )
       await this.marker(built);
     this.head = { ...this.head, root: await this.admissions.finish() };
-    // The bounded caches may evict built map nodes before membership reads them.
-    await this.target.drain();
+    // A standalone restore reuses committed map roots and does not rebuild
+    // membership. Other edits may need built map nodes evicted from the caches.
+    if (edits.length !== 1 || edits[0].kind !== 'restore')
+      await this.target.drain();
     const state = new KeyedMapBatch(
       this.reader('state'),
       built.state.stateRoot,
