@@ -111,9 +111,10 @@ export async function seedWithProbe(
       { store: mirror, owner: MIRROR_OWNER },
       { version, access: await accessOf(primary) },
     );
-    if (edit.kind !== 'adoptAll') throw new Error('a seed adopts all rows');
-    const source = edit.rows;
-    async function* watched(): AsyncGenerator<SourceRow> {
+    if (edit.kind !== 'prepared') throw new Error('a seed prepares its rows');
+    async function* watched(
+      source: AsyncIterable<SourceRow>,
+    ): AsyncGenerator<SourceRow> {
       for await (const row of source) {
         seen += 1;
         observe(row, seen);
@@ -121,9 +122,28 @@ export async function seedWithProbe(
         yield row;
       }
     }
-    const watchedEdit: VersionEdit = { ...edit, rows: watched() };
-    await mirror.commit([watchedEdit]);
-    await sample();
-    return { mirror, growth: Math.max(...series), series, accepted: seen };
+    const watchedEdit: VersionEdit = {
+      ...edit,
+      prepare: (group) =>
+        edit.prepare({
+          ...group,
+          build: (edits) =>
+            group.build(
+              edits.map((operation) =>
+                operation.kind === 'adoptAll'
+                  ? { ...operation, rows: watched(operation.rows) }
+                  : operation,
+              ),
+            ),
+        }),
+    };
+    try {
+      await mirror.commit([watchedEdit]);
+      await sample();
+      return { mirror, growth: Math.max(...series), series, accepted: seen };
+    } catch (error) {
+      await mirror.close();
+      throw error;
+    }
   });
 }

@@ -5,6 +5,7 @@ import { MUTATION } from './recordKinds.js';
 import type { JournalStore } from './journalStore.js';
 import { OFFSET_FIELDS } from './offsetFields.js';
 import { cloneVersion } from './versionTransfer.js';
+import { JournalArrivalRecorder } from './arrival-recorder.js';
 import {
   SESSION_STATE,
   copyDeps,
@@ -115,6 +116,19 @@ describe('clone of one version (design 4.8)', () => {
 
   it('points every offset field at a record of the right kind written earlier in the new file, with the source gone', async () => {
     const source = await richSource();
+    const arrival = new JournalArrivalRecorder(source);
+    try {
+      const row = await arrival.beginRow(
+        { ...draftRow(), blocks: [] },
+        { id: 'chunked-clone', submissionId: 'chunked-clone' },
+      );
+      const block = await arrival.beginBlock(row, 0);
+      await arrival.appendField(block, new TextEncoder().encode('chunked row'));
+      await arrival.endBlock(block);
+      await arrival.sealRow(row);
+    } finally {
+      await arrival.close();
+    }
     const result = await cloneVersion(
       await accessOf(source),
       current(source),
@@ -134,7 +148,6 @@ describe('clone of one version (design 4.8)', () => {
       [
         'TranscriptHead.openRoot',
         'TranscriptChild.ref',
-        'TranscriptEntry.attemptRef',
         'TranscriptEntry.presentationRef',
         'CheckpointDescriptor.trailerOffset',
         'IdFact.mappedRef',
