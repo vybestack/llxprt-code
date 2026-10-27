@@ -44,7 +44,12 @@ export function nativeFactRegistration(
         ACTIVE_FACT_INDEX,
       );
       const coverage = nativeFactCoverage(active);
-      if (coverage !== undefined && coverage.scope !== '')
+      const detachedAppend =
+        edits.every((item) => item.kind === 'append') &&
+        context.published.slots.formatSlots.some(
+          (slot) => slot.summaryKind === 'anthropic',
+        );
+      if (coverage !== undefined && coverage.scope !== '' && !detachedAppend)
         throw new JournalFormatError(
           'Stored format incremental holder maintenance is not implemented; a native fact writer must be registered before history mutations',
         );
