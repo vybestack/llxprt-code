@@ -172,7 +172,7 @@ export interface ToolRegistryCreation {
   readonly imageOperation?: ImageOperationRunner;
   readonly telemetry?: RootTelemetry;
   readonly discover?: boolean;
-  readonly requestFetch?: NetworkFetch;
+  readonly requestFetch: NetworkFetch;
 }
 
 function getTaskToolMissingReason(
@@ -647,7 +647,7 @@ export async function createToolRegistry(
     input;
   const { workspace, definitions } = input;
   const discover = input.discover ?? true;
-  const requestFetch = input.requestFetch ?? globalThis.fetch;
+  const requestFetch = input.requestFetch;
   const registry = new ToolRegistry(
     new CoreToolRegistryHostAdapter(config, workspace.trust),
     new CoreMessageBusAdapter(messageBus),

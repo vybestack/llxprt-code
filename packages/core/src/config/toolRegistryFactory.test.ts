@@ -628,6 +628,7 @@ describe('tool registry assembly', () => {
     });
     return {
       ...(await createToolRegistry({
+        requestFetch: globalThis.fetch,
         config,
         host,
         messageBus,

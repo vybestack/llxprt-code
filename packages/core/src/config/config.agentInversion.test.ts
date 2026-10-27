@@ -93,6 +93,7 @@ describe('P01 construction inversion contracts', () => {
       policy.session.messageBus,
     );
     const result = await createToolRegistry({
+      requestFetch: globalThis.fetch,
       config,
       host: config,
       messageBus: policy.session.messageBus,
