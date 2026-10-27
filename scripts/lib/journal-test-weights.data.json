@@ -839,6 +839,7 @@
   "packages/core/src/journal/groupWriter.test.ts": 1,
   "packages/core/src/journal/id-fact-readback-cost.test.ts": 1,
   "packages/core/src/journal/id-node-read-window.test.ts": 1,
+  "packages/core/src/journal/id-fact-run-settlement.test.ts": 1,
   "packages/core/src/journal/id-trie-batch-cost.test.ts": 1,
   "packages/core/src/journal/id-trie-cold-read-cost.test.ts": 1,
   "packages/core/src/journal/idFactBatch.memory.test.ts": 49,
