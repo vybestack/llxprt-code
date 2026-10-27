@@ -110,7 +110,18 @@ export const estimatePieceFactSchema = z.object({
 });
 export type EstimatePieceFact = z.infer<typeof estimatePieceFactSchema>;
 
-const PROTOCOL_TAILS = new Set(['"}', '"}}', '}}', '}}}']);
+const PROTOCOL_TAILS = new Set(['"}', '"}}', '}}', '}}}', ' "}', ' "}}']);
+const PROTOCOL_HEADS = new Set(
+  [...PROTOCOL_TAILS].flatMap((tail) =>
+    ['5m', '1h'].map(
+      (ttl) =>
+        tail.slice(0, -1) +
+        ',"cache_control":{"type":"ephemeral","ttl":"' +
+        ttl,
+    ),
+  ),
+);
+const protocolHeadCounts = new Map<string, Promise<number>>();
 export function encodeEstimatePieceFact(piece: EstimatePieceFact): unknown {
   const encode = (fact: EstimateTextFact): unknown => [
     fact.tokens,
@@ -138,9 +149,10 @@ export function encodeEstimatePieceFact(piece: EstimatePieceFact): unknown {
 
 const protocolTailCounts = new Map<string, Promise<number[]>>();
 
-export async function estimateTextFact(
-  value: unknown,
-): Promise<EstimateTextFact> {
+function estimateBody(value: unknown): {
+  readonly text: string;
+  readonly images: number[][];
+} {
   const images: number[][] = [];
   const text = JSON.stringify(
     canonicalAnthropicEstimateValue(value, 'messages', (image) =>
@@ -150,6 +162,34 @@ export async function estimateTextFact(
       ]),
     ),
   );
+  return { text, images };
+}
+
+async function countText(part: string): Promise<number> {
+  if (part === '') return 0;
+  const cached = protocolHeadCounts.get(part);
+  if (cached !== undefined) return cached;
+  const encoder = await getO200kBaseEncoder();
+  const count = countO200kBaseTokensFromChunks(
+    (async function* () {
+      yield part;
+    })(),
+    encoder,
+  );
+  if (PROTOCOL_HEADS.has(part)) protocolHeadCounts.set(part, count);
+  return count;
+}
+
+export async function estimateTextFact(
+  value: unknown,
+): Promise<EstimateTextFact> {
+  return measureTextFact(estimateBody(value));
+}
+
+async function measureTextFact(
+  { text, images }: ReturnType<typeof estimateBody>,
+  shared?: { readonly prefix: string; readonly tokens: number },
+): Promise<EstimateTextFact> {
   if (!text.startsWith('{"'))
     throw new Error('Anthropic estimate fact must start with an object key');
   const body = text.slice(2);
@@ -157,14 +197,6 @@ export async function estimateTextFact(
   if (!tail.endsWith('}'))
     throw new Error('Anthropic estimate fact has no closing punctuation');
   const head = body.slice(0, -tail.length);
-  const encoder = await getO200kBaseEncoder();
-  const count = async (part: string): Promise<number> =>
-    countO200kBaseTokensFromChunks(
-      (async function* () {
-        yield part;
-      })(),
-      encoder,
-    );
   const oversized = hasOversizedO200kPiece(body);
   // The chunk counter batches around oversized pieces. Measure their complete
   // framed body to preserve that counter's results at each JSON boundary.
@@ -172,21 +204,51 @@ export async function estimateTextFact(
   if (tails === undefined) {
     tails = Promise.all(
       ESTIMATE_SUFFIXES.map((suffix) =>
-        count((oversized ? body : tail) + suffix),
+        countText((oversized ? body : tail) + suffix),
       ),
     );
     if (!oversized && PROTOCOL_TAILS.has(tail))
       protocolTailCounts.set(tail, tails);
   }
+  let tokens = 0;
+  if (!oversized) {
+    tokens =
+      shared !== undefined && head.startsWith(shared.prefix)
+        ? shared.tokens + (await countText(head.slice(shared.prefix.length)))
+        : await countText(head);
+  }
   return {
-    tokens: oversized ? 0 : await count(head),
+    tokens,
     tails: await tails,
     length: body.length,
     features: extractClaudeContentFeatures(body),
     special: body.includes('<|endoftext|>') || body.includes('<|endofprompt|>'),
-    oversized: hasOversizedO200kPiece(body),
+    oversized,
     images,
   };
+}
+
+async function estimateVariants(
+  block: AnthropicMessageBlock,
+): Promise<EstimateTextFact[]> {
+  const bodies = [
+    block,
+    sanitizeBlockForCacheControl(block, '5m'),
+    sanitizeBlockForCacheControl(block, '1h'),
+  ].map(estimateBody);
+  let prefix = bodies[0].text.slice(2);
+  for (const { text } of bodies.slice(1)) {
+    let at = 0;
+    while (at < prefix.length && prefix[at] === text[at + 2]) at++;
+    prefix = prefix.slice(0, at);
+  }
+  // Discard the possibly incomplete final pre-tokenizer piece. The remaining
+  // prefix ends on a shared piece boundary in all three serialized variants.
+  prefix = prefix.slice(0, -trailingO200kPiece(prefix).length);
+  const shared = hasOversizedO200kPiece(prefix)
+    ? undefined
+    : { prefix, tokens: await countText(prefix) };
+  return Promise.all(bodies.map((body) => measureTextFact(body, shared)));
 }
 
 export async function estimatePieceFact(
@@ -213,13 +275,7 @@ export async function estimatePieceFact(
       blocks.map(async (block) => ({
         kind: block.type,
         blank: block.type === 'text' && block.text.trim() === '',
-        variants: await Promise.all(
-          [
-            block,
-            sanitizeBlockForCacheControl(block, '5m'),
-            sanitizeBlockForCacheControl(block, '1h'),
-          ].map(estimateTextFact),
-        ),
+        variants: await estimateVariants(block),
       })),
     ),
   };
