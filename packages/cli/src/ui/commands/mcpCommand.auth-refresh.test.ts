@@ -183,7 +183,7 @@ describe('mcpCommand', () => {
           },
         ],
         authenticate: async (server, display) => {
-          display?.('Open the owner authorization URL');
+          await display?.('Open the owner authorization URL');
           await pending;
           return {
             server,
