@@ -399,8 +399,15 @@ export class IndexedJournalRequestSnapshot {
 
   async *openPlans(signal?: AbortSignal): AsyncGenerator<JournalResponsePlan> {
     this.requireOpen();
-    for (let index = 0; index < this.count; index++)
-      yield await this.planAt(index, signal);
+    for await (const entry of this.source.entries()) {
+      this.requireOpen();
+      signal?.throwIfAborted();
+      for await (const plan of journalEntryPlans(this.source, entry)) {
+        this.requireOpen();
+        signal?.throwIfAborted();
+        yield plan;
+      }
+    }
   }
 
   async *openReader(signal?: AbortSignal): AsyncGenerator<IContent> {
