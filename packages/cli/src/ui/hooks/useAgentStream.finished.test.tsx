@@ -189,7 +189,7 @@ describe('useAgentStream', () => {
   });
 
   const mockLoadedSettings: LoadedSettings = {
-    merged: { preferredEditor: 'vscode' },
+    merged: { preferredEditor: 'vscode', ui: {} },
     user: { path: '/user/settings.json', settings: {} },
     workspace: { path: '/workspace/.gemini/settings.json', settings: {} },
     errors: [],
