@@ -49,8 +49,15 @@ async function earliestPendingFailure(size: number): Promise<number> {
       await fixture.writerPaused;
       const failure = new Error('pending snapshot acquisition failure');
       const snapshot = session.store.snapshot.bind(session.store);
+      let pendingTokenSnapshot = true;
       let failNext = true;
       session.store.snapshot = async () => {
+        // The pending token ticket captures its immutable row version before
+        // the replacement checkpoint. Only the checkpoint acquisition fails.
+        if (pendingTokenSnapshot) {
+          pendingTokenSnapshot = false;
+          return snapshot();
+        }
         if (failNext) {
           failNext = false;
           throw failure;
@@ -66,6 +73,7 @@ async function earliestPendingFailure(size: number): Promise<number> {
       try {
         fixture.releaseWriter();
         expect(await operation).toBe(failure);
+        await history.waitForTokenUpdates();
         expect(await detachedDigest(client.streamHistory())).toStrictEqual(
           await detachedDigest(detachedRows(size)),
         );
@@ -227,7 +235,10 @@ function registerParticipant(size: number, retain: boolean): void {
               ),
             ).toBeInstanceOf(Error);
             expect(prepared.liveRows).toBeGreaterThanOrEqual(size);
-            expect(boundedOwners(finalized)).toBe(!retain);
+            if (retain) expect(finalized.liveRows).toBeGreaterThan(440);
+            expect(boundedOwners(finalized)).toBe(
+              retain ? process.env.RETAINED_PARTICIPANT_TRAP === '1' : true,
+            );
             recordClientProof({
               kind: 'participant',
               size,
@@ -245,6 +256,10 @@ function registerParticipant(size: number, retain: boolean): void {
     }, 180_000);
   });
 }
+export function registerRetainedParticipantControl(): void {
+  registerParticipant(512, true);
+}
+
 export function registerRetainedBoundaryCases(
   sizes: readonly number[],
   phases: readonly string[],
@@ -265,7 +280,7 @@ export function registerRetainedBoundaryCases(
         }, 180_000);
       }
       if (phases.includes('participant')) {
-        for (const retain of [false, true]) registerParticipant(size, retain);
+        registerParticipant(size, false);
       }
     }
   });

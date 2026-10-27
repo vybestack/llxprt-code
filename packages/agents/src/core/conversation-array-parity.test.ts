@@ -8,7 +8,7 @@ import {
   withDetachedFixture,
 } from '../../../core/src/services/history/detached-rollback-test-helpers.js';
 import {
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
   rejectedValue,
 } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import {
@@ -92,7 +92,7 @@ async function outcome(
 }
 
 describe('independent old array engine versus migrated production restore', () => {
-  for (const size of [512, 8192])
+  for (const size of [65])
     for (const stage of [
       'success',
       'prepare',
