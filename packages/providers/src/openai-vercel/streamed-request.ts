@@ -19,8 +19,13 @@ function record(value: unknown): Record<string, unknown> {
 function assistantWire(
   message: Extract<ModelMessage, { role: 'assistant' }>,
 ): unknown {
+  const reasoning =
+    'reasoning_content' in message &&
+    typeof message.reasoning_content === 'string'
+      ? { reasoning_content: message.reasoning_content }
+      : {};
   if (typeof message.content === 'string')
-    return { role: 'assistant', content: message.content };
+    return { role: 'assistant', content: message.content, ...reasoning };
   const text = message.content
     .flatMap((part) => (part.type === 'text' ? [part.text] : []))
     .join('');
@@ -39,6 +44,7 @@ function assistantWire(
   });
   return {
     role: 'assistant',
+    ...reasoning,
     content: calls.length > 0 ? text || null : text,
     ...(calls.length > 0 ? { tool_calls: calls } : {}),
   };

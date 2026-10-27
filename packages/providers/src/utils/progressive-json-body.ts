@@ -10,7 +10,9 @@ import {
 export function jsonValueByteLength(value: unknown): number {
   return new BoundedJsonBody(value, {
     maxChunkBytes: DEFAULT_STREAMING_JSON_CHUNK_BYTES,
-    maxEnvelopeBytes: DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
+    // A stored row can exceed the transport envelope yet be excluded by a parent.
+    // The selected request is bounded at transport admission, after composition.
+    maxEnvelopeBytes: Number.MAX_SAFE_INTEGER,
   }).byteLength;
 }
 

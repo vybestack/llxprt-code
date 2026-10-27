@@ -12,7 +12,7 @@
  */
 
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import type {
   ThinkingBlock,
@@ -33,18 +33,44 @@ void vi.mock('ai', () => {
   };
 });
 
+let configuredFetch: typeof fetch;
+
 void vi.mock('@ai-sdk/openai', () => ({
-  createOpenAI: vi.fn(() => ({
-    // ai@7's wrapLanguageModel proxies the model to normalize spec versions,
-    // so the mock has to be an object that already declares v4 rather than a
-    // bare string.
-    chat: vi.fn(() => ({
-      specificationVersion: 'v4',
-      provider: 'mock',
-      modelId: 'mock-model',
-    })),
-  })),
+  createOpenAI: vi.fn((config: { fetch: typeof fetch }) => {
+    configuredFetch = config.fetch;
+    return {
+      // ai@7's wrapLanguageModel proxies the model to normalize spec versions,
+      // so the mock has to be an object that already declares v4 rather than a
+      // bare string.
+      chat: vi.fn(() => ({
+        specificationVersion: 'v4',
+        provider: 'mock',
+        modelId: 'mock-model',
+      })),
+    };
+  }),
 }));
+
+async function wireMessages(config: {
+  messages: unknown[];
+}): Promise<unknown[]> {
+  const response = await configuredFetch(
+    'https://example.test/chat/completions',
+    {
+      method: 'POST',
+      body: JSON.stringify({ messages: config.messages }),
+    },
+  );
+  const body: unknown = await response.json();
+  if (
+    typeof body !== 'object' ||
+    body === null ||
+    !('messages' in body) ||
+    !Array.isArray(body.messages)
+  )
+    throw new Error('Expected streamed request messages');
+  return body.messages;
+}
 
 /**
  * Helper function to check if a block contains a thinking block.
@@ -117,8 +143,24 @@ function getAssistantMessages(
 describe('OpenAIVercelProvider reasoning support @issue:722', () => {
   let provider: OpenAIVercelProvider;
 
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
   beforeEach(() => {
     vi.clearAllMocks();
+    globalThis.fetch = Object.assign(
+      async (
+        _input: RequestInfo | URL,
+        init?: RequestInit,
+      ): Promise<Response> => {
+        const bytes = await new Response(init?.body).text();
+        return new Response(bytes, {
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+      { preconnect: originalFetch.preconnect },
+    );
     provider = new OpenAIVercelProvider(
       'test-api-key',
       'https://api.openai.com/v1',
@@ -281,7 +323,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       let capturedMessages: unknown[] | undefined;
       mockGenerateText.mockImplementation(
         async (config: { messages: unknown[] }) => {
-          capturedMessages = structuredClone(config.messages);
+          capturedMessages = await wireMessages(config);
           return {
             text: 'Response',
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
@@ -325,7 +367,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       let capturedMessages: unknown[] | undefined;
       mockGenerateText.mockImplementation(
         async (config: { messages: unknown[] }) => {
-          capturedMessages = structuredClone(config.messages);
+          capturedMessages = await wireMessages(config);
           return {
             text: 'Response',
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
@@ -376,7 +418,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       let capturedMessages: unknown[] | undefined;
       mockGenerateText.mockImplementation(
         async (config: { messages: unknown[] }) => {
-          capturedMessages = structuredClone(config.messages);
+          capturedMessages = await wireMessages(config);
           return {
             text: 'Response',
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
@@ -585,7 +627,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       let capturedMessages: unknown[] | undefined;
       mockGenerateText.mockImplementation(
         async (config: { messages: unknown[] }) => {
-          capturedMessages = structuredClone(config.messages);
+          capturedMessages = await wireMessages(config);
           return {
             text: 'Response',
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
@@ -630,7 +672,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       let capturedMessages: unknown[] | undefined;
       mockGenerateText.mockImplementation(
         async (config: { messages: unknown[] }) => {
-          capturedMessages = structuredClone(config.messages);
+          capturedMessages = await wireMessages(config);
           return {
             text: 'Response',
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
@@ -673,7 +715,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       let capturedMessages: unknown[] | undefined;
       mockGenerateText.mockImplementation(
         async (config: { messages: unknown[] }) => {
-          capturedMessages = structuredClone(config.messages);
+          capturedMessages = await wireMessages(config);
           return {
             text: 'Response',
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
@@ -779,7 +821,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       let capturedMessages: unknown[] | undefined;
       mockGenerateText.mockImplementation(
         async (config: { messages: unknown[] }) => {
-          capturedMessages = structuredClone(config.messages);
+          capturedMessages = await wireMessages(config);
           return {
             text: 'Response',
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },

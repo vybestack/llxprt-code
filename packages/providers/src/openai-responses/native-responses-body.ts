@@ -513,13 +513,13 @@ async function callerOwnedResponsesRows(
   rows: ProviderRequestRows,
   signal: AbortSignal | undefined,
 ): Promise<ProviderRequestRows> {
+  const query = await CallerOwnedToolQuery.create(rows, (row) => row, true);
+  if (!query.hasToolBlocks) return { ...rows, index: query };
   const dangling = await findDanglingCalls(
     () => rows.openReader(signal),
     signal,
   );
   const missing = [...dangling.missing];
-  const query = await CallerOwnedToolQuery.create(rows);
-  if (!query.hasToolBlocks) return rows;
   const allowEmpty = (await query.normalizedCount(1, 1, 'call_')) > 0;
   const originalAt = async (
     at: number,

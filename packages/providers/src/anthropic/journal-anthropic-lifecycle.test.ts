@@ -8,6 +8,7 @@ import { testJournalSeams } from '@vybestack/llxprt-code-core/journal/__tests__/
 import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
 import { OffsetAudit } from '@vybestack/llxprt-code-core/journal/__tests__/support/offsetAudit.js';
 import { IdTrieReader } from '@vybestack/llxprt-code-core/journal/idTrieReader.js';
+import { decodeMapRef } from '@vybestack/llxprt-code-core/journal/keyedMap.js';
 import { BoundedIdNodeCache } from '@vybestack/llxprt-code-core/journal/idTrieCache.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { anthropicRepairFactIndex } from './anthropic-repair-fact-writer.js';
@@ -64,11 +65,21 @@ async function metaCount(session: JournalSession): Promise<number> {
     if (read.version === undefined)
       throw new Error('Missing generation version');
     let count = 0;
-    for await (const _entry of new IdTrieReader(
+    const memberships: string[] = [];
+    for await (const entry of new IdTrieReader(
       read.access,
       new BoundedIdNodeCache(),
-    ).entries(read.version.roots.metaRoot))
-      count++;
+    ).entries(read.version.roots.metaRoot)) {
+      const record = await read.access.readRecordHead(
+        decodeMapRef(entry.value),
+        'VALUE',
+      );
+      const key = new TextDecoder().decode(record.kindHeader);
+      if (key.startsWith('member:')) memberships.push(key);
+      else count++;
+    }
+    // Transcript membership is row state, separate from the generation-slot census.
+    expect(memberships).toStrictEqual(['member:1']);
     return count;
   } finally {
     await read.close();

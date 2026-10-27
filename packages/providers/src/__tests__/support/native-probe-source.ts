@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { deserialize } from 'node:v8';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import {
-  journalSendFixture,
-  type JournalSendFixture,
-} from './journal-send-fixture.js';
+import type { JournalSendFixture } from './journal-send-fixture.js';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { JournalProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/journal-provider-request.js';
+import { encodedRows } from '@vybestack/llxprt-code-core/services/history/journalPublication.js';
 import { armSendTrap, type SendTrap, type TrapHold } from './sendPeakTraps.js';
 import type { SendPeakPlan } from './sendPeakMeasurement.js';
 
@@ -37,6 +37,39 @@ function* sourceRows(job: ProbeJob): Generator<IContent> {
   }
 }
 
+async function probeJournal(job: ProbeJob): Promise<JournalSendFixture> {
+  const directory = join(job.directory, 'journal');
+  mkdirSync(directory, { recursive: true });
+  const session = await JournalSession.create(join(directory, 'session.llxj'));
+  try {
+    await session.store.commit([
+      { kind: 'replace', rows: encodedRows(sourceRows(job), 0) },
+    ]);
+    const snapshot = await session.store.snapshot();
+    const selection = await JournalProviderRequestSnapshot.create(
+      snapshot,
+      [],
+      {},
+      undefined,
+      () => snapshot.close(),
+      (pin, registration) =>
+        session.store.prepareSnapshotFormat(pin, registration),
+      undefined,
+      (pin) => session.store.prepareSnapshotKimi(pin),
+    );
+    return {
+      selection,
+      async close() {
+        await selection.close();
+        await session.close();
+      },
+    };
+  } catch (error) {
+    await session.close();
+    throw error;
+  }
+}
+
 export async function prepareNativeProbeSources(
   root: string,
   plan: SendPeakPlan,
@@ -47,14 +80,7 @@ export async function prepareNativeProbeSources(
       const directory = join(root, shape, size);
       fixtures.set(
         directory,
-        await journalSendFixture(
-          sourceRows({ directory, count: counts[size] }),
-          [],
-          {
-            directory: join(directory, 'journal'),
-            seedBatchRows: counts[size],
-          },
-        ),
+        await probeJournal({ directory, count: counts[size] }),
       );
     }
   }

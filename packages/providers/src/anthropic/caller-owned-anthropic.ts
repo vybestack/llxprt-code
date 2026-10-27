@@ -195,7 +195,7 @@ export async function callerOwnedAnthropicEngine(
       : await CallerOwnedToolQuery.create(
           rows,
           (row) => projectAnthropicUnit(row, settings, false),
-          rawDump,
+          true,
         );
   const query: AnthropicRepairRows = Object.assign(toolQuery, {
     readAt: rows.readAt,

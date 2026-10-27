@@ -79,6 +79,22 @@ function watchedSelection(
 ): ProviderRequestSelection {
   const watch = (indexed: IndexedJournalRequestSnapshot): void => {
     const read = indexed.readAt.bind(indexed);
+    const openPlans = indexed.openPlans.bind(indexed);
+    indexed.openPlans = async function* (signal) {
+      for await (const plan of openPlans(signal)) {
+        await census.sample();
+        const blocks: IContent['blocks'] = [];
+        for await (const block of plan.openBlocks()) blocks.push(block);
+        const row = { ...plan.header, blocks };
+        census.track(row);
+        yield {
+          ...plan,
+          async *openBlocks() {
+            yield* row.blocks;
+          },
+        };
+      }
+    };
     const retain = indexed.retain.bind(indexed);
     indexed.readAt = async (index, signal): Promise<IContent> => {
       await census.sample();
@@ -113,7 +129,10 @@ function watchedSelection(
   };
 }
 
-async function sendWithCensus(route: WireRoute): Promise<Census> {
+async function sendWithCensus(
+  route: WireRoute,
+  includeMedia = true,
+): Promise<Census> {
   const parent = join(
     import.meta.dir,
     '../../../../tmp/854-notes/p4/w23/limits-memory-run-c/fixtures',
@@ -135,7 +154,7 @@ async function sendWithCensus(route: WireRoute): Promise<Census> {
           speaker: 'human',
           blocks: [
             { type: 'text', text: `${index}:` + 'x'.repeat(ROW_TEXT_BYTES) },
-            { ...reference },
+            ...(includeMedia ? [{ ...reference }] : []),
           ],
         };
     })(),
@@ -200,6 +219,21 @@ describe('native production sends release decoded rows, text blocks and stored i
       expect(peak.rows).toBeLessThanOrEqual(LIVE_BOUND);
       expect(peak.text).toBeLessThanOrEqual(LIVE_BOUND);
       expect(peak.media).toBeLessThanOrEqual(LIVE_BOUND);
+    }, 170000);
+  }
+});
+
+describe('native text plan row lifetime', () => {
+  for (const routeId of ['openai-responses', 'openai-responses-via-openai']) {
+    it(`releases native text-plan objects on ${routeId}`, async () => {
+      const route = WIRE_ROUTES.find((item) => item.id === routeId);
+      if (route === undefined) throw new Error('Missing native text route');
+      const peak = await sendWithCensus(route, false);
+      expect(peak.rows).toBeGreaterThan(0);
+      expect(peak.text).toBeGreaterThan(0);
+      expect(peak.media).toBe(0);
+      expect(peak.rows).toBeLessThanOrEqual(LIVE_BOUND);
+      expect(peak.text).toBeLessThanOrEqual(LIVE_BOUND);
     }, 170000);
   }
 });

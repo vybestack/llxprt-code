@@ -74,7 +74,7 @@ export async function fillNativeFacts(
   // Keep the last complete prefix available for catch-up while its format
   // writer is detached. Coverage stays behind the published version, so
   // readers cannot mistake those prefix facts for a filled current index.
-  if (!explicit && !refillAllowed) return { built, invalidated: false };
+  if (!explicit && !refillAllowed) return { built, invalidated: true };
   await appender.drain();
   const batch = new IdFactBatch(
     new IdTrieReader(ctx.readGroup(appender.nextOffset), ctx.idCache),

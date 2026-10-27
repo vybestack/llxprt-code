@@ -229,6 +229,33 @@ try {
     let rows = 0;
     let nextQuarter = 6250;
     await probe.checkpoint('conversion');
+    const indexed = selection.native?.indexed;
+    if (indexed === undefined)
+      throw new Error('Missing native text plan source');
+    const openPlans = indexed.openPlans.bind(indexed);
+    indexed.openPlans = async function* (signal) {
+      for await (const plan of openPlans(signal)) {
+        const blocks: IContent['blocks'] = [];
+        for await (const block of plan.openBlocks()) blocks.push(block);
+        const payload = wire({ ...plan.header, blocks })
+          .map((entry) => JSON.stringify(entry))
+          .join(',');
+        owner.retain(payload);
+        rows++;
+        if (rows % 3125 === 0) await probe.checkpoint('conversion');
+        else if (rows % 256 === 0) probe.sample('conversion');
+        if (rows === nextQuarter && nextQuarter <= 18750) {
+          await probe.checkpoint(quarterPhase(nextQuarter));
+          nextQuarter += 6250;
+        }
+        yield {
+          ...plan,
+          async *openBlocks() {
+            yield* blocks;
+          },
+        };
+      }
+    };
     const observed = {
       count: selection.count,
       native: selection.native,
@@ -237,29 +264,18 @@ try {
       close: async (): Promise<void> => {
         await selection.close();
       },
-      async *openReader(signal?: AbortSignal): AsyncGenerator<IContent> {
-        for await (const row of selection.openReader(signal)) {
-          const payload = wire(row)
-            .map((entry) => JSON.stringify(entry))
-            .join(',');
-          owner.retain(payload);
-          rows++;
-          if (rows % 3125 === 0) await probe.checkpoint('conversion');
-          else if (rows % 256 === 0) probe.sample('conversion');
-          if (rows === nextQuarter && nextQuarter <= 18750) {
-            await probe.checkpoint(quarterPhase(nextQuarter));
-            nextQuarter += 6250;
-          }
-          yield row;
-        }
-      },
+      openReader: selection.openReader.bind(selection),
     };
-    for await (const chunk of provider.generateChatCompletion({
-      ...base,
-      requestRows: observed,
-      contentCount: selection.count,
-    }))
-      void chunk;
+    try {
+      for await (const chunk of provider.generateChatCompletion({
+        ...base,
+        requestRows: observed,
+        contentCount: selection.count,
+      }))
+        void chunk;
+    } finally {
+      indexed.openPlans = openPlans;
+    }
     activeProbe = undefined;
     if (rows !== selection.count) throw new Error(`Converted ${rows} rows`);
     const received = await nextMessage();
