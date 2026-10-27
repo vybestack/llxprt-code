@@ -308,17 +308,29 @@ export class AnthropicStreamRepair<
     run: Run,
     pass: number,
   ): AsyncGenerator<AnthropicMessageBlock> {
-    for await (const piece of this.runPieces(run)) {
-      const values: readonly AnthropicMessageBlock[] =
-        typeof piece === 'string' ? [{ type: 'text', text: piece }] : piece;
-      for (const block of values) {
-        const blank = block.type === 'text' && block.text.trim() === '';
-        if (
-          !blank &&
-          (!run.merged || Number(!leading(block, run.role)) === pass)
-        )
-          yield block;
-      }
+    for await (const atom of this.runAtoms(run)) {
+      // User result slots contain only leading blocks; content slots contain none.
+      if (
+        run.merged &&
+        run.role === 'user' &&
+        Number(!(atom.results === true || atom.repair)) !== pass
+      )
+        continue;
+      for await (const piece of atom.openPieces())
+        yield* this.pieceBlocks(piece, run, pass);
+    }
+  }
+  private *pieceBlocks(
+    piece: RepairPiece,
+    run: Run,
+    pass: number,
+  ): Generator<AnthropicMessageBlock> {
+    const values: readonly AnthropicMessageBlock[] =
+      typeof piece === 'string' ? [{ type: 'text', text: piece }] : piece;
+    for (const block of values) {
+      const blank = block.type === 'text' && block.text.trim() === '';
+      if (!blank && (!run.merged || Number(!leading(block, run.role)) === pass))
+        yield block;
     }
   }
   private async *taggedRunBlocks(
@@ -443,25 +455,7 @@ export class AnthropicStreamRepair<
       yield* this.singleRowContent(run, transform, ordinal, cache);
       return;
     }
-    const shape = await this.shape(run);
-    if (shape.blocks === 0) {
-      yield JSON.stringify(
-        transform(
-          this.cachedText(getEmptyMessagePlaceholder(run.role), ordinal, cache),
-        ),
-      );
-      return;
-    }
-    if (shape.string) {
-      for await (const piece of this.runPieces(run))
-        if (typeof piece === 'string')
-          yield JSON.stringify(
-            transform(this.cachedText(piece, ordinal, cache)),
-          );
-      return;
-    }
-    yield '[';
-    let comma = '';
+    let comma = '[';
     let blockOrdinal = 0;
     for (let pass = 0; pass < (run.merged ? 2 : 1); pass++) {
       for await (const block of this.runBlocks(run, pass)) {
@@ -476,7 +470,13 @@ export class AnthropicStreamRepair<
         comma = ',';
       }
     }
-    yield ']';
+    if (comma === '[')
+      yield JSON.stringify(
+        transform(
+          this.cachedText(getEmptyMessagePlaceholder(run.role), ordinal, cache),
+        ),
+      );
+    else yield ']';
   }
   async *serialize(
     transform: (value: unknown) => unknown = (value) => value,

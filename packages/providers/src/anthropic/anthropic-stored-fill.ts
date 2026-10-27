@@ -102,20 +102,26 @@ async function summaries(
 }> {
   const corrected =
     Math.floor(atom.key / 4) === state.engine.tools.index.lastThinking;
+  const metadata = atom.repair
+    ? undefined
+    : (await state.query.planAt(atom.end ?? Math.floor(atom.key / 4))).header
+        .metadata;
   const anchored =
     state.settings.anthropic?.cacheFacts === true &&
-    !atom.repair &&
-    (await state.query.planAt(atom.end ?? Math.floor(atom.key / 4))).header
-      .metadata?.cacheAnchor === true;
-  const purge =
-    !atom.repair &&
-    (await state.query.planAt(atom.end ?? Math.floor(atom.key / 4))).header
-      .metadata?.semanticMediaPurgeBoundary !== undefined;
+    metadata?.cacheAnchor === true;
+  const purge = metadata?.semanticMediaPurgeBoundary !== undefined;
   const chain =
     atom.chain === true ||
     (atom.role === 'assistant' &&
       atom.end === state.query.count - 1 &&
       (await state.engine.source.describe(atom.end))?.chain === true);
+  const sameVariants =
+    atom.chain !== true &&
+    (atom.repair ||
+      (atom.end === Math.floor(atom.key / 4) &&
+        (await state.engine.source.row(atom.end))?.blocks.some(
+          (block) => block.type === 'thinking',
+        ) !== true));
   const previous = state.cache;
   state.cache = {
     kept: beginAnthropicCacheAtom(state.cache.kept, atom.role, chain),
@@ -126,20 +132,26 @@ async function summaries(
     state.cache = {
       ...state.cache,
       kept: addAnthropicCachePiece(state.cache.kept, fact),
-      corrected: corrected
-        ? addAnthropicCachePiece(state.cache.corrected, fact)
-        : state.cache.corrected,
+      stripped: sameVariants
+        ? addAnthropicCachePiece(state.cache.stripped, fact)
+        : state.cache.stripped,
+      corrected:
+        corrected || sameVariants
+          ? addAnthropicCachePiece(state.cache.corrected, fact)
+          : state.cache.corrected,
     };
   });
-  const stripped = await atomSummary(atom, true, anchored, purge, (fact) => {
-    state.cache = {
-      ...state.cache,
-      stripped: addAnthropicCachePiece(state.cache.stripped, fact),
-      corrected: !corrected
-        ? addAnthropicCachePiece(state.cache.corrected, fact)
-        : state.cache.corrected,
-    };
-  });
+  const stripped = sameVariants
+    ? kept
+    : await atomSummary(atom, true, anchored, purge, (fact) => {
+        state.cache = {
+          ...state.cache,
+          stripped: addAnthropicCachePiece(state.cache.stripped, fact),
+          corrected: !corrected
+            ? addAnthropicCachePiece(state.cache.corrected, fact)
+            : state.cache.corrected,
+        };
+      });
   const before = (name: keyof AnthropicCacheFacts): number =>
     previous[name].run?.role === atom.role ? previous[name].run.blocks : 0;
   state.cache = {
