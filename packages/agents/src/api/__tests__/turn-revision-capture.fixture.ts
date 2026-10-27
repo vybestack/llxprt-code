@@ -293,9 +293,15 @@ export async function withOwners(
   const endpointB = await transport(0);
   let agents: readonly Agent[] = [];
   let pending: ReadonlyArray<Promise<Observation>> = [];
+  const turns = new WeakMap<Agent, number>();
   const start = (agent: Agent, text: string): Promise<Observation> => {
+    const turn = turns.get(agent) ?? 0;
+    turns.set(agent, turn + 1);
     const result = collect(
-      agent.stream(text, { promptId: 'same-prompt', mcpDiscovery: 'skip' }),
+      agent.stream(text, {
+        promptId: turn === 0 ? 'same-prompt' : `same-prompt-${turn}`,
+        mcpDiscovery: 'skip',
+      }),
     );
     pending = [...pending, result];
     return result;
