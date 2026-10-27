@@ -11,8 +11,6 @@ import {
   type IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createStreamInterruptionError } from '@vybestack/llxprt-code-core/utils/retry.js';
-import { ownedString } from '@vybestack/llxprt-code-core/utils/ownedString.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { StreamLivenessListener } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { randomUUID } from 'node:crypto';
 import { isAcceptedTerminalEventType } from './responsesTerminalEvents.js';
@@ -23,7 +21,6 @@ import type {
   DispatchState,
   FunctionCallState,
   ReasoningDeltaSource,
-  ResponsesApiError,
   ResponsesEvent,
 } from './parseResponsesStreamTypes.js';
 import {
@@ -34,15 +31,19 @@ import {
   shouldEmitReasoningDelta,
   updateReasoningDeltaState,
 } from './parseResponsesStreamReasoning.js';
-import {
-  assertProviderStreamByteLimit,
-  assertSseLinesWithinLimit,
-  assertToolCallArgumentsWithinLimit,
-  MAX_PROVIDER_TOOL_CALL_BYTES,
-  utf8ByteLength,
-} from '../streamLimits.js';
+import { assertSseLinesWithinLimit } from '../streamLimits.js';
 
-const logger = new DebugLogger('llxprt:providers:openai-responses:sse');
+import {
+  handleOutputItemAdded,
+  handleArgumentsDelta,
+  handleFunctionCallDone,
+} from './responsesToolArguments.js';
+
+import {
+  topLevelErrorPayload,
+  getIncompleteReason,
+  logSseEvent,
+} from './responsesEventDiagnostics.js';
 
 /**
  * Options for parseResponsesStream.
@@ -138,52 +139,6 @@ function* handleReasoningDone(
     };
   }
   return { hasEmittedVisibleThinking, reasoningCleared: '' };
-}
-
-/**
- * Handle an output_item.added event for function calls.
- */
-function handleOutputItemAdded(
-  event: ResponsesEvent,
-  functionCalls: Map<string, FunctionCallState>,
-): void {
-  if (event.item?.type === 'function_call' && event.item.id) {
-    const argumentsValue = event.item.arguments ?? '';
-    const argumentBytes = utf8ByteLength(argumentsValue);
-    assertProviderStreamByteLimit(
-      'tool-call arguments',
-      argumentBytes,
-      MAX_PROVIDER_TOOL_CALL_BYTES,
-    );
-    functionCalls.set(event.item.id, {
-      id: event.item.id,
-      call_id: event.item.call_id,
-      name: event.item.name ?? '',
-      arguments: argumentsValue,
-      argumentBytes,
-    });
-  }
-}
-
-/**
- * Handle function_call_arguments.delta event.
- */
-function handleArgumentsDelta(
-  event: ResponsesEvent,
-  functionCalls: Map<string, FunctionCallState>,
-): void {
-  if (event.item_id && event.delta) {
-    const call = functionCalls.get(event.item_id);
-    if (call) {
-      call.argumentBytes += utf8ByteLength(event.delta);
-      assertProviderStreamByteLimit(
-        'tool-call arguments',
-        call.argumentBytes,
-        MAX_PROVIDER_TOOL_CALL_BYTES,
-      );
-      call.arguments += event.delta;
-    }
-  }
 }
 
 /**
@@ -294,85 +249,6 @@ function* handleReasoningItem(
 }
 
 /**
- * Handle a completed function call from output_item.done or arguments.done.
- */
-function* handleFunctionCallDone(
-  event: ResponsesEvent,
-  functionCalls: Map<string, FunctionCallState>,
-): Generator<IContent> {
-  const itemId = event.item?.id ?? event.item_id;
-  if (!itemId) return;
-  const call = functionCalls.get(itemId);
-  if (!call) return;
-
-  assertToolCallArgumentsWithinLimit(event.arguments);
-  const finalArguments = event.arguments ?? call.arguments;
-
-  let parsedArguments: unknown = {};
-  if (finalArguments) {
-    try {
-      parsedArguments = JSON.parse(finalArguments);
-    } catch (parseError) {
-      throw createStreamInterruptionError(
-        'Streaming tool call arguments were malformed JSON.',
-        {
-          itemId,
-          snippet: ownedString(finalArguments.slice(0, 200)),
-        },
-        parseError,
-      );
-    }
-  }
-
-  yield {
-    speaker: 'ai',
-    blocks: [
-      {
-        type: 'tool_call',
-        id: call.call_id ?? call.id,
-        name: call.name,
-        parameters: parsedArguments,
-      },
-    ],
-  };
-
-  // Clean up
-  functionCalls.delete(itemId);
-}
-
-// OpenAI's ResponseErrorEvent carries message/code/param at the top level.
-// Merge the two shapes so the documented top-level fields win for message/code
-// while anything already modelled on the nested error object (notably type)
-// still survives. Returns undefined only when neither source has anything.
-function topLevelErrorPayload(
-  event: ResponsesEvent,
-): ResponsesApiError | undefined {
-  const nested = event.error;
-  const hasTopLevel =
-    event.message !== undefined ||
-    event.code !== undefined ||
-    event.param !== undefined;
-  if (nested === undefined && !hasTopLevel) return undefined;
-  return {
-    message: event.message ?? nested?.message,
-    type: nested?.type ?? event.type,
-    code: event.code !== undefined ? event.code : nested?.code,
-    // `null` is a meaningful value (no provider code or offending param):
-    // preserve it rather than treating it as a fallback trigger.
-    param: event.param !== undefined ? event.param : nested?.param,
-  };
-}
-
-function getIncompleteReason(
-  event: ResponsesEvent,
-  terminalReason: string,
-): string | undefined {
-  return terminalReason === 'incomplete'
-    ? event.response?.incomplete_details?.reason
-    : undefined;
-}
-
-/**
  * Handle response.completed / response.done / response.incomplete events.
  */
 function* handleResponseCompleted(
@@ -457,36 +333,6 @@ function* handleResponseCompleted(
     reasoningText: '',
     reasoningSummaryText: '',
   };
-}
-
-/**
- * Log SSE event details for debugging.
- */
-function logSseEvent(
-  event: ResponsesEvent,
-  lastLoggedType: string | undefined,
-): string | undefined {
-  const newLastLoggedType =
-    event.type !== lastLoggedType ? event.type : lastLoggedType;
-
-  logger.debug(
-    () =>
-      `SSE event: type=${event.type}, delta="${event.delta?.slice(0, 50) ?? ''}", text="${event.text?.slice(0, 50) ?? ''}", item_type=${event.item?.type ?? 'none'}, summary_index=${event.summary_index ?? 'none'}, content_index=${event.content_index ?? 'none'}`,
-  );
-  // Extra debug for any reasoning-related events
-  if (event.type.includes('reasoning') || event.item?.type === 'reasoning') {
-    logger.debug(() => `REASONING SSE: ${JSON.stringify(event).slice(0, 500)}`);
-  }
-
-  // Debug: Log raw reasoning items
-  if (event.item?.type === 'reasoning') {
-    logger.debug(
-      () =>
-        `Reasoning item received: summary=${JSON.stringify(event.item?.summary)}, content=${JSON.stringify(event.item?.content)}, encrypted_content_length=${event.item?.encrypted_content?.length ?? 0}`,
-    );
-  }
-
-  return newLastLoggedType;
 }
 
 function* emitReasoningDelta(
@@ -724,10 +570,10 @@ function* dispatchEventCases(
       );
       break;
     case 'response.output_item.added':
-      handleOutputItemAdded(event, functionCalls);
+      yield* handleOutputItemAdded(event, functionCalls);
       break;
     case 'response.function_call_arguments.delta':
-      handleArgumentsDelta(event, functionCalls);
+      yield* handleArgumentsDelta(event, functionCalls);
       break;
     case 'response.function_call_arguments.done':
     case 'response.output_item.done':
