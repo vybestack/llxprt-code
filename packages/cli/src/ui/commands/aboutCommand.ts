@@ -172,6 +172,12 @@ export const aboutCommand: SlashCommand = {
       baseURL,
     };
 
-    await writeCommandOutput(context, aboutItem);
+    await writeCommandOutput(
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
+      aboutItem,
+    );
   },
 };

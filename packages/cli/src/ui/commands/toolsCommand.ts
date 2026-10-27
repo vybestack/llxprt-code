@@ -155,6 +155,23 @@ function resolveToolByName(
   return null;
 }
 
+function toggleToolState(
+  subcommand: string,
+  canonical: string,
+  display: string,
+  disabled: Set<string>,
+  allowed: Set<string>,
+): string {
+  if (subcommand === 'disable') {
+    disabled.add(canonical);
+    allowed.delete(canonical);
+    return `Disabled tool '${display}'.`;
+  }
+  disabled.delete(canonical);
+  if (allowed.size > 0) allowed.add(canonical);
+  return `Enabled tool '${display}'.`;
+}
+
 async function handleToggleTool(
   context: CommandContext,
   subcommand: string,
@@ -166,7 +183,10 @@ async function handleToggleTool(
   const identifier = stripQuotes(remainder);
   if (!identifier) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: `Usage: /tools ${subcommand} <tool name>`,
@@ -179,7 +199,10 @@ async function handleToggleTool(
   const target = resolveToolByName(identifier, tools);
   if (!target || target.source === 'mcp') {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: `Tool "${identifier}" not found.`,
@@ -191,19 +214,13 @@ async function handleToggleTool(
 
   const canonical = canonicalizeToolName(target.name);
   const display = target.displayName ?? target.name;
-  let feedback: string;
-
-  if (subcommand === 'disable') {
-    disabled.add(canonical);
-    allowed.delete(canonical);
-    feedback = `Disabled tool '${display}'.`;
-  } else {
-    disabled.delete(canonical);
-    if (allowed.size > 0) {
-      allowed.add(canonical);
-    }
-    feedback = `Enabled tool '${display}'.`;
-  }
+  const feedback = toggleToolState(
+    subcommand,
+    canonical,
+    display,
+    disabled,
+    allowed,
+  );
 
   persistToolLists(context, disabled, allowed);
 
@@ -214,7 +231,10 @@ async function handleToggleTool(
       await agentClient.setTools();
     } catch (error) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: MessageType.INFO,
           text: `Warning: failed to refresh tool schema after ${
@@ -227,7 +247,10 @@ async function handleToggleTool(
   }
 
   await writeCommandOutput(
-    context,
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
     { type: MessageType.INFO, text: feedback },
     Date.now(),
   );
@@ -242,7 +265,10 @@ export const toolsCommand: SlashCommand = {
     const agent = context.services.agent;
     if (!agent) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: MessageType.ERROR,
           text: 'Could not retrieve tools from the agent.',
@@ -273,10 +299,16 @@ export const toolsCommand: SlashCommand = {
         allowed,
         showDescriptions,
       );
-      await writeCommandOutput(context, {
-        type: MessageType.INFO,
-        text: message,
-      });
+      await writeCommandOutput(
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
+        {
+          type: MessageType.INFO,
+          text: message,
+        },
+      );
       return;
     }
 
@@ -293,9 +325,15 @@ export const toolsCommand: SlashCommand = {
     }
 
     const message = formatListMessage(tools, disabled, allowed, false);
-    await writeCommandOutput(context, {
-      type: MessageType.INFO,
-      text: message,
-    });
+    await writeCommandOutput(
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
+      {
+        type: MessageType.INFO,
+        text: message,
+      },
+    );
   },
 };

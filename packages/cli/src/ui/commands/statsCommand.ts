@@ -39,7 +39,10 @@ async function defaultSessionView(context: CommandContext): Promise<void> {
     | undefined;
   if (rawStartTime == null) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Session start time is unavailable, cannot calculate stats.',
@@ -60,7 +63,13 @@ async function defaultSessionView(context: CommandContext): Promise<void> {
     quotaLines: quotaLines.length > 0 ? quotaLines : undefined,
   };
 
-  await writeCommandOutput(context, statsItem);
+  await writeCommandOutput(
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
+    statsItem,
+  );
 
   // Session recording section (stub - result currently discarded)
   // @plan PLAN-20260214-SESSIONBROWSER.P24
@@ -79,7 +88,10 @@ async function quotaSubcommandAction(context: CommandContext): Promise<void> {
 
     if (quotaLines.length === 0) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: MessageType.INFO,
           text: 'No quota information available. Supported providers: Claude Code (OAuth), Codex (OAuth), Z.ai, Synthetic, Chutes, Kimi.',
@@ -90,7 +102,10 @@ async function quotaSubcommandAction(context: CommandContext): Promise<void> {
     }
 
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.INFO,
         text: quotaLines.join('\n'),
@@ -101,7 +116,10 @@ async function quotaSubcommandAction(context: CommandContext): Promise<void> {
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error';
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: `Failed to retrieve quota information: ${errorMessage}`,
@@ -177,7 +195,10 @@ async function bucketsSubcommandAction(
 
   if (!oauthControl.isAvailable()) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.INFO,
         text: 'OAuth is not available or configured',
@@ -192,7 +213,10 @@ async function bucketsSubcommandAction(
 
     if (discovered.length === 0) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: MessageType.INFO,
           text: 'No OAuth buckets available',
@@ -204,7 +228,10 @@ async function bucketsSubcommandAction(
 
     const output = formatDiscoveredProviders(discovered);
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.INFO,
         text: output.join('\n'),
@@ -215,7 +242,10 @@ async function bucketsSubcommandAction(
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error';
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: `Failed to retrieve bucket statistics: ${errorMessage}`,
@@ -251,7 +281,10 @@ export const statsCommand: SlashCommand = {
       autoExecute: true,
       action: async (context: CommandContext) => {
         await writeCommandOutput(
-          context,
+          () => context.services.agent?.agentClient.getHistoryService() ?? null,
+          context.services.agent?.session,
+          context.recordingOwner,
+          context.ui.addItem,
           {
             type: MessageType.MODEL_STATS,
           },
@@ -266,7 +299,10 @@ export const statsCommand: SlashCommand = {
       autoExecute: true,
       action: async (context: CommandContext) => {
         await writeCommandOutput(
-          context,
+          () => context.services.agent?.agentClient.getHistoryService() ?? null,
+          context.services.agent?.session,
+          context.recordingOwner,
+          context.ui.addItem,
           {
             type: MessageType.TOOL_STATS,
           },
@@ -280,7 +316,10 @@ export const statsCommand: SlashCommand = {
       kind: CommandKind.BUILT_IN,
       action: async (context: CommandContext) => {
         await writeCommandOutput(
-          context,
+          () => context.services.agent?.agentClient.getHistoryService() ?? null,
+          context.services.agent?.session,
+          context.recordingOwner,
+          context.ui.addItem,
           {
             type: MessageType.CACHE_STATS,
           },
@@ -308,7 +347,10 @@ export const statsCommand: SlashCommand = {
       kind: CommandKind.BUILT_IN,
       action: async (context: CommandContext) => {
         await writeCommandOutput(
-          context,
+          () => context.services.agent?.agentClient.getHistoryService() ?? null,
+          context.services.agent?.session,
+          context.recordingOwner,
+          context.ui.addItem,
           {
             type: MessageType.LB_STATS,
           },

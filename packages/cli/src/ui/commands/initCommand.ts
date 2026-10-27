@@ -123,7 +123,10 @@ export const initCommand: SlashCommand = {
     fs.writeFileSync(llxprtMdPath, '', 'utf8');
 
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: 'info',
         text: 'Empty LLXPRT.md created. Now analyzing the project to populate it.',

@@ -50,7 +50,10 @@ async function listHooks(context: CommandContext): Promise<void> {
     const agentHooks = agent.hooks.listHooks();
     if (agentHooks.length === 0) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: MessageType.INFO,
           text: 'No hooks registered.',
@@ -63,14 +66,23 @@ async function listHooks(context: CommandContext): Promise<void> {
       type: MessageType.HOOKS_LIST,
       hooks: mapHookInfoToEntries(agentHooks),
     };
-    await writeCommandOutput(context, historyItem);
+    await writeCommandOutput(
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
+      historyItem,
+    );
     return;
   }
 
   const { config } = context.services;
   if (!config) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Configuration not loaded.',
@@ -81,7 +93,10 @@ async function listHooks(context: CommandContext): Promise<void> {
   }
 
   await writeCommandOutput(
-    context,
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
     {
       type: MessageType.INFO,
       text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
@@ -104,7 +119,10 @@ async function resolveAgentHook(
   const found = allHooks.some((h) => h.name === hookName);
   if (!found) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: `Hook '${hookName}' not found.`,
@@ -132,7 +150,10 @@ async function enableHook(
     }
     agent.hooks.enable(hookName);
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.INFO,
         text: `Enabled hook '${hookName}'.`,
@@ -144,7 +165,10 @@ async function enableHook(
 
   if (!config) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Configuration not loaded.',
@@ -155,7 +179,10 @@ async function enableHook(
   }
 
   await writeCommandOutput(
-    context,
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
     {
       type: MessageType.INFO,
       text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
@@ -180,7 +207,10 @@ async function disableHook(
     }
     agent.hooks.disable(hookName);
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.INFO,
         text: `Disabled hook '${hookName}'.`,
@@ -192,7 +222,10 @@ async function disableHook(
 
   if (!config) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Configuration not loaded.',
@@ -203,7 +236,10 @@ async function disableHook(
   }
 
   await writeCommandOutput(
-    context,
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
     {
       type: MessageType.INFO,
       text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
@@ -223,7 +259,10 @@ async function enableAllHooks(context: CommandContext): Promise<void> {
     const allHooks = agent.hooks.listHooks();
     if (allHooks.length === 0) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: MessageType.INFO,
           text: 'No hooks registered.',
@@ -234,7 +273,10 @@ async function enableAllHooks(context: CommandContext): Promise<void> {
     }
     agent.hooks.setDisabledHooks([]);
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.INFO,
         text: `Enabled all ${allHooks.length} hook(s).`,
@@ -247,7 +289,10 @@ async function enableAllHooks(context: CommandContext): Promise<void> {
 
   if (!config) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Configuration not loaded.',
@@ -258,7 +303,10 @@ async function enableAllHooks(context: CommandContext): Promise<void> {
   }
 
   await writeCommandOutput(
-    context,
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
     {
       type: MessageType.INFO,
       text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
@@ -278,7 +326,10 @@ async function disableAllHooks(context: CommandContext): Promise<void> {
     const allHooks = agent.hooks.listHooks();
     if (allHooks.length === 0) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: MessageType.INFO,
           text: 'No hooks registered.',
@@ -290,7 +341,10 @@ async function disableAllHooks(context: CommandContext): Promise<void> {
     const allHookNames = allHooks.map((h) => h.name);
     agent.hooks.setDisabledHooks(allHookNames);
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.INFO,
         text: `Disabled all ${allHooks.length} hook(s).`,
@@ -303,7 +357,10 @@ async function disableAllHooks(context: CommandContext): Promise<void> {
 
   if (!config) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Configuration not loaded.',
@@ -314,7 +371,10 @@ async function disableAllHooks(context: CommandContext): Promise<void> {
   }
 
   await writeCommandOutput(
-    context,
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
     {
       type: MessageType.INFO,
       text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
@@ -354,7 +414,10 @@ const enableCommand: SlashCommand = {
     const hookName = args.trim();
     if (!hookName) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: MessageType.ERROR,
           text: 'Usage: /hooks enable <hook-name>',
@@ -377,7 +440,10 @@ const disableCommand: SlashCommand = {
     const hookName = args.trim();
     if (!hookName) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: MessageType.ERROR,
           text: 'Usage: /hooks disable <hook-name>',

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { writeSlashOutput } from './slash-journal-output.js';
+import { appendJournalUiItem } from './command-journal-output.js';
 import {
   stringifyPrompt,
   addUserCommandToHistory,
@@ -122,7 +123,14 @@ export async function processSlashCommand(
   deps.setIsProcessing(true);
   deps.setLocalIsProcessing(true);
   if (addToHistory) {
-    const admission = addUserCommandToHistory(deps, trimmed);
+    const admission = addUserCommandToHistory(
+      deps.addItem,
+      deps.commandContext.services.agent?.agentClient.getHistoryService() ??
+        null,
+      deps.commandContext.services.agent?.session,
+      deps.commandContext.recordingOwner,
+      trimmed,
+    );
     if (admission !== undefined) await admission;
   }
 
@@ -188,10 +196,24 @@ async function executeParsedCommand(
       : { type: 'handled' };
   }
   if (commandToExecute?.subCommands) {
-    await addSubcommandHelp(deps, commandToExecute);
+    await addSubcommandHelp(
+      deps.addMessage,
+      deps.commandContext.services.agent?.agentClient.getHistoryService() ??
+        null,
+      deps.commandContext.services.agent?.session,
+      deps.commandContext.recordingOwner,
+      commandToExecute,
+    );
     return { type: 'handled' };
   }
-  await addUnknownCommandMessage(deps, parsed.trimmed);
+  await addUnknownCommandMessage(
+    deps.addMessage,
+    deps.commandContext.services.agent?.agentClient.getHistoryService() ?? null,
+    deps.commandContext.services.agent?.session,
+    deps.commandContext.recordingOwner,
+    parsed.trimmed,
+    deps.commandContext.services.agent?.mcp.discoveryState() === 'pending',
+  );
   return { type: 'handled' };
 }
 
@@ -309,7 +331,14 @@ async function handleActionResult(
         toolArgs: result.toolArgs,
       };
     case 'message':
-      return handleMessageResult(deps, context, result);
+      return handleMessageResult(
+        deps.addItem,
+        deps.recordingIntegration,
+        context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        result,
+      );
     case 'dialog':
       return handleDialogResult(deps, result);
     case 'load_history':
@@ -619,7 +648,13 @@ async function performOwnerSessionResume(
             limits,
           );
     context.ui.loadHistory([...replay.uiHistory]);
-    addResumeWarnings(deps.addMessage, replay.warnings);
+    for (const warning of replay.warnings) {
+      await appendJournalUiItem(
+        agent.agentClient.getHistoryService(),
+        agent.session,
+        { type: MessageType.INFO, text: `Warning: ${warning}` },
+      );
+    }
   } catch (error) {
     deps.addMessage({
       type: MessageType.ERROR,
@@ -748,9 +783,16 @@ async function handleCommandError(
     logParsedCommand(deps, parsed);
   }
   const errorText = error instanceof Error ? error.message : String(error);
-  await writeSlashOutput(deps.commandContext, 'error', errorText, () => {
-    deps.addItem({ type: MessageType.ERROR, text: errorText }, Date.now());
-  });
+  await writeSlashOutput(
+    deps.commandContext.services.agent?.agentClient.getHistoryService() ?? null,
+    deps.commandContext.services.agent?.session,
+    deps.commandContext.recordingOwner,
+    'error',
+    errorText,
+    () => {
+      deps.addItem({ type: MessageType.ERROR, text: errorText }, Date.now());
+    },
+  );
   if (
     Object.getOwnPropertyDescriptor(deps.commandContext, 'recordingOwner')
       ?.value === 'agent'

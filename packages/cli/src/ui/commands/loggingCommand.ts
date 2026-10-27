@@ -393,7 +393,10 @@ const statusCommand: SlashCommand = {
   action: async (context: CommandContext) => {
     if (!context.services.config) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: 'error',
           text: 'Configuration not available',
@@ -408,7 +411,10 @@ const statusCommand: SlashCommand = {
     });
     if (result.type === 'message') {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: result.messageType,
           text: result.content,
@@ -426,7 +432,10 @@ const enableCommand: SlashCommand = {
   action: async (context: CommandContext, args: string) => {
     if (!context.services.config) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: 'error',
           text: 'Configuration not available',
@@ -442,7 +451,10 @@ const enableCommand: SlashCommand = {
     });
     if (result.type === 'message') {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: result.messageType,
           text: result.content,
@@ -460,7 +472,10 @@ const disableCommand: SlashCommand = {
   action: async (context: CommandContext) => {
     if (!context.services.config) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: 'error',
           text: 'Configuration not available',
@@ -475,7 +490,10 @@ const disableCommand: SlashCommand = {
     });
     if (result.type === 'message') {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: result.messageType,
           text: result.content,
@@ -493,7 +511,10 @@ const redactionCommand: SlashCommand = {
   action: async (context: CommandContext, args: string) => {
     if (!context.services.config) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: 'error',
           text: 'Configuration not available',
@@ -509,7 +530,10 @@ const redactionCommand: SlashCommand = {
     });
     if (result.type === 'message') {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: result.messageType,
           text: result.content,
@@ -527,7 +551,10 @@ const showCommand: SlashCommand = {
   action: async (context: CommandContext, args: string) => {
     if (!context.services.config) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: 'error',
           text: 'Configuration not available',
@@ -543,7 +570,10 @@ const showCommand: SlashCommand = {
     });
     if (result.type === 'message') {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: result.messageType,
           text: result.content,
@@ -559,7 +589,10 @@ const showCommand: SlashCommand = {
       : [];
     if (entries.length === 0) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: 'info',
           text: 'No log entries found',
@@ -575,7 +608,10 @@ const showCommand: SlashCommand = {
       .join('\n');
 
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: 'info',
         text: `Conversation Logs (${entries.length} entries):\n${'─'.repeat(60)}\n${formattedEntries}\n${'─'.repeat(60)}`,
@@ -605,7 +641,10 @@ export const loggingCommand: SlashCommand = {
     }
     // If args provided but no subcommand matched, show help
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: 'info',
         text: 'Available logging commands:\n  status - show current status\n  enable - enable logging\n  disable - disable logging\n  redaction - configure redaction\n  show [N] - show last N lines from log (default 50)',

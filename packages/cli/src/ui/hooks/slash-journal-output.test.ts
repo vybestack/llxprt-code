@@ -18,19 +18,35 @@ describe('owner slash output', () => {
       };
       const before = await agent.session.getHistory();
       await writeSlashOutput(
-        context,
+        context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
         'user',
         '/command sanitized-input',
         () => {
           throw new Error('Ledger input is forbidden');
         },
       );
-      await writeSlashOutput(context, 'info', 'slash persisted output', () => {
-        throw new Error('Ledger output is forbidden');
-      });
-      await writeSlashOutput(context, 'error', 'slash persisted error', () => {
-        throw new Error('Ledger output is forbidden');
-      });
+      await writeSlashOutput(
+        context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        'info',
+        'slash persisted output',
+        () => {
+          throw new Error('Ledger output is forbidden');
+        },
+      );
+      await writeSlashOutput(
+        context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        'error',
+        'slash persisted error',
+        () => {
+          throw new Error('Ledger output is forbidden');
+        },
+      );
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('Missing materialized journal');
       const cursor = await NativeJournalCursor.open(path, {}, 16);

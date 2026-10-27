@@ -100,7 +100,10 @@ async function appendHistoryExport(
       info += `* **Conversation Transcript:** Exported to \`${filePath}\` (please attach to your bug report)\n`;
 
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: MessageType.INFO,
           text: `Conversation history exported to: ${filePath}`,
@@ -111,7 +114,10 @@ async function appendHistoryExport(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.WARNING,
         text: `Warning: Could not export conversation history: ${errorMessage}`,
@@ -147,7 +153,10 @@ async function openBugReport(
   dependencies: BugCommandDependencies,
 ): Promise<void> {
   await writeCommandOutput(
-    context,
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
     {
       type: MessageType.INFO,
       text: `To submit your bug report, please open the following URL in your browser:\n${bugReportUrl}`,
@@ -164,7 +173,10 @@ async function openBugReport(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: `Could not open URL in browser: ${errorMessage}`,

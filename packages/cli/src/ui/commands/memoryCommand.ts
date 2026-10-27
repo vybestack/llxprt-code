@@ -71,7 +71,10 @@ async function handleCoreMemoryAdd(
     await context.services.config?.updateSystemInstructionIfInitialized();
 
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.INFO,
         text: `Core memory saved to ${firstArg}: "${fact}"`,
@@ -80,7 +83,10 @@ async function handleCoreMemoryAdd(
     );
   } catch (error) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: `Error saving core memory: ${getErrorMessage(error)}`,
@@ -116,7 +122,10 @@ async function handleScopedMemoryAdd(
   }
 
   await writeCommandOutput(
-    context,
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
     {
       type: MessageType.INFO,
       text: `Attempting to save to memory: "${fact}"`,
@@ -158,7 +167,10 @@ export const memoryCommand: SlashCommand = {
             : 'Memory is currently empty.';
 
         await writeCommandOutput(
-          context,
+          () => context.services.agent?.agentClient.getHistoryService() ?? null,
+          context.services.agent?.session,
+          context.recordingOwner,
+          context.ui.addItem,
           {
             type: MessageType.INFO,
             text: messageContent,
@@ -203,7 +215,11 @@ export const memoryCommand: SlashCommand = {
           }
           const fact = trimmedArgs;
           await writeCommandOutput(
-            context,
+            () =>
+              context.services.agent?.agentClient.getHistoryService() ?? null,
+            context.services.agent?.session,
+            context.recordingOwner,
+            context.ui.addItem,
             {
               type: MessageType.INFO,
               text: `Attempting to save to memory: "${fact}"`,
@@ -242,7 +258,10 @@ export const memoryCommand: SlashCommand = {
       autoExecute: true,
       action: async (context) => {
         await writeCommandOutput(
-          context,
+          () => context.services.agent?.agentClient.getHistoryService() ?? null,
+          context.services.agent?.session,
+          context.recordingOwner,
+          context.ui.addItem,
           {
             type: MessageType.INFO,
             text: 'Refreshing memory from source files...',
@@ -275,7 +294,11 @@ export const memoryCommand: SlashCommand = {
                 : 'Memory refreshed successfully. No memory content found.';
 
             await writeCommandOutput(
-              context,
+              () =>
+                context.services.agent?.agentClient.getHistoryService() ?? null,
+              context.services.agent?.session,
+              context.recordingOwner,
+              context.ui.addItem,
               {
                 type: MessageType.INFO,
                 text: successMessage,
@@ -286,7 +309,11 @@ export const memoryCommand: SlashCommand = {
         } catch (error) {
           const errorMessage = getErrorMessage(error);
           await writeCommandOutput(
-            context,
+            () =>
+              context.services.agent?.agentClient.getHistoryService() ?? null,
+            context.services.agent?.session,
+            context.recordingOwner,
+            context.ui.addItem,
             {
               type: MessageType.ERROR,
               text: `Error refreshing memory: ${errorMessage}`,
@@ -311,7 +338,10 @@ export const memoryCommand: SlashCommand = {
             : 'No LLXPRT.md files in use.';
 
         await writeCommandOutput(
-          context,
+          () => context.services.agent?.agentClient.getHistoryService() ?? null,
+          context.services.agent?.session,
+          context.recordingOwner,
+          context.ui.addItem,
           {
             type: MessageType.INFO,
             text: messageContent,

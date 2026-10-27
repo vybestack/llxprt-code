@@ -148,7 +148,14 @@ describe('journal command presentation', () => {
           },
         },
       };
-      for (const notice of notices) await writeCommandOutput(context, notice);
+      for (const notice of notices)
+        await writeCommandOutput(
+          () => context.services.agent?.agentClient.getHistoryService() ?? null,
+          context.services.agent?.session,
+          context.recordingOwner,
+          context.ui.addItem,
+          notice,
+        );
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('Missing journal path');
       await agent.session.setRecording({ enabled: false });

@@ -76,7 +76,12 @@ async function runSessionStartHook(
       type: 'info',
       text: sessionStartOutput.systemMessage,
     } satisfies HistoryItemWithoutId;
-    if (recordingOwner === 'agent') await appendJournalUiItem(agent, item);
+    if (recordingOwner === 'agent')
+      await appendJournalUiItem(
+        agent.agentClient.getHistoryService(),
+        agent.session,
+        item,
+      );
     else addItem(item, Date.now());
   }
 

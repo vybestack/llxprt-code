@@ -57,10 +57,14 @@ export function useCoreEventHandlers({
       }
       if (recordingOwner === 'agent') {
         if (!agent) throw new Error('Session agent is unavailable');
-        void appendJournalUiItem(agent, {
-          type: payload.severity,
-          text: payload.message,
-        }).catch((error: unknown) => {
+        void appendJournalUiItem(
+          agent.agentClient.getHistoryService(),
+          agent.session,
+          {
+            type: payload.severity,
+            text: payload.message,
+          },
+        ).catch((error: unknown) => {
           const reason = error instanceof Error ? error.message : String(error);
           handleNewMessage({
             type: 'error',

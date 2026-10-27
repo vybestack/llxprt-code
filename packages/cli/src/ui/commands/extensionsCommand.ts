@@ -24,7 +24,10 @@ async function showMessageIfNoExtensions(
 ): Promise<boolean> {
   if (extensions.length === 0) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.INFO,
         text: 'No extensions installed. Run `/extensions explore` to check out the gallery.',
@@ -48,7 +51,10 @@ async function listAction(context: CommandContext) {
 
     if (adminDisabled) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: MessageType.INFO,
           text: 'Extensions are disabled by your administrator.',
@@ -68,7 +74,13 @@ async function listAction(context: CommandContext) {
     extensions,
   };
 
-  await writeCommandOutput(context, historyItem);
+  await writeCommandOutput(
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
+    historyItem,
+  );
 }
 
 async function reportMissingExtensions(
@@ -84,7 +96,10 @@ async function reportMissingExtensions(
     const extension = extensions.find((extension) => extension.name === name);
     if (!extension) {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: MessageType.ERROR,
           text: `Extension ${name} not found.`,
@@ -119,7 +134,10 @@ async function dispatchUpdateAndReport(
   } catch (error) {
     resolveUpdateComplete([]);
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: getErrorMessage(error),
@@ -136,7 +154,10 @@ async function handleUpdateComplete(
 ): Promise<void> {
   if (updateInfos.length === 0) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.INFO,
         text: 'No extensions to update.',
@@ -145,7 +166,13 @@ async function handleUpdateComplete(
     );
   }
 
-  await writeCommandOutput(context, historyItem);
+  await writeCommandOutput(
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
+    historyItem,
+  );
   context.ui.setPendingItem(null);
 }
 
@@ -159,7 +186,10 @@ async function updateAction(
 
   if (!all && names?.length === 0) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Usage: /extensions update <extension-names>|--all',
@@ -248,7 +278,10 @@ async function filterExtensionsToRestart(
       );
       if (notFound.length > 0) {
         await writeCommandOutput(
-          context,
+          () => context.services.agent?.agentClient.getHistoryService() ?? null,
+          context.services.agent?.session,
+          context.recordingOwner,
+          context.ui.addItem,
           {
             type: MessageType.WARNING,
             text: `Extension(s) not found or not active: ${notFound.join(', ')}`,
@@ -268,10 +301,16 @@ async function performRestart(
 ): Promise<void> {
   const s = extensionsToRestart.length > 1 ? 's' : '';
 
-  await writeCommandOutput(context, {
-    type: MessageType.INFO,
-    text: `Restarting ${extensionsToRestart.length} extension${s}...`,
-  });
+  await writeCommandOutput(
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
+    {
+      type: MessageType.INFO,
+      text: `Restarting ${extensionsToRestart.length} extension${s}...`,
+    },
+  );
 
   const results = await Promise.allSettled(
     extensionsToRestart.map(async (extension: LlxprtExtension) => {
@@ -298,7 +337,10 @@ async function performRestart(
   if (failureMessages.length > 0) {
     const errorMessages = failureMessages.join('\n  ');
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: `Failed to restart some extensions:\n  ${errorMessages}`,
@@ -307,7 +349,10 @@ async function performRestart(
     );
   } else {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.INFO,
         text: `${extensionsToRestart.length} extension${s} restarted successfully.`,
@@ -324,7 +369,10 @@ async function restartAction(
   const restart = context.services.config?.restartExtension;
   if (!restart) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: "Extensions are not yet loaded, can't restart yet",
@@ -344,7 +392,10 @@ async function restartAction(
   const names = all ? null : restartArgs;
   if (!all && names?.length === 0) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Usage: /extensions restart <extension-names>|--all',
@@ -399,7 +450,10 @@ async function validateInstallSource(
 
   if (!source) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Usage: /extensions install <source>',
@@ -418,7 +472,10 @@ async function validateInstallSource(
 
   if (!isUrl && /[;&|`'"]/.test(source)) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Invalid characters in source path.',
@@ -440,7 +497,10 @@ async function installAction(
   // Check if extension reloading is enabled
   if (!restart) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Extension reloading is not enabled. Use the CLI command instead.',
@@ -454,7 +514,10 @@ async function installAction(
   if (source === undefined) return;
 
   await writeCommandOutput(
-    context,
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
     {
       type: MessageType.INFO,
       text: `Installing extension from ${source}...`,
@@ -478,7 +541,10 @@ async function installAction(
     );
 
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.INFO,
         text: `Extension installed successfully.`,
@@ -487,7 +553,10 @@ async function installAction(
     );
   } catch (error) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: getErrorMessage(error),
@@ -505,7 +574,10 @@ async function uninstallAction(
 
   if (!restart) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Extension reloading is not enabled. Use the CLI command instead.',
@@ -519,7 +591,10 @@ async function uninstallAction(
 
   if (!name) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Usage: /extensions uninstall <name>',
@@ -530,7 +605,10 @@ async function uninstallAction(
   }
 
   await writeCommandOutput(
-    context,
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
     {
       type: MessageType.INFO,
       text: `Uninstalling extension ${name}...`,
@@ -543,7 +621,10 @@ async function uninstallAction(
     await uninstallExtension(name, false);
 
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.INFO,
         text: `Extension ${name} uninstalled successfully.`,
@@ -552,7 +633,10 @@ async function uninstallAction(
     );
   } catch (error) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: getErrorMessage(error),

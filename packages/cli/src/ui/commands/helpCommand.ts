@@ -21,6 +21,12 @@ export const helpCommand: SlashCommand = {
       timestamp: new Date(),
     };
 
-    await writeCommandOutput(context, helpItem);
+    await writeCommandOutput(
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
+      helpItem,
+    );
   },
 };

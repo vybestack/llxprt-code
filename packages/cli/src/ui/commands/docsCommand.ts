@@ -47,7 +47,10 @@ export function createDocsCommand(
 
       if (requiresManualOpen) {
         await writeCommandOutput(
-          context,
+          () => context.services.agent?.agentClient.getHistoryService() ?? null,
+          context.services.agent?.session,
+          context.recordingOwner,
+          context.ui.addItem,
           {
             type: MessageType.INFO,
             text: `Please open the following URL in your browser to view the documentation:\n${docsUrl}`,
@@ -56,7 +59,10 @@ export function createDocsCommand(
         );
       } else {
         await writeCommandOutput(
-          context,
+          () => context.services.agent?.agentClient.getHistoryService() ?? null,
+          context.services.agent?.session,
+          context.recordingOwner,
+          context.ui.addItem,
           {
             type: MessageType.INFO,
             text: `Opening documentation in your browser: ${docsUrl}`,

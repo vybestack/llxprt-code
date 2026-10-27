@@ -1,6 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { AgentRequestInput } from '@vybestack/llxprt-code-core';
-import type { CommandContext, SlashCommand } from '../commands/types.js';
+import type {
+  AgentRequestInput,
+  HistoryService,
+  RecordingIntegration,
+} from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { SlashCommand } from '../commands/types.js';
 import type { SlashCommandProcessorResult } from '../types.js';
 import { MessageType } from '../types.js';
 import { secureInputHandler } from '../utils/secureInputHandler.js';
@@ -12,24 +17,23 @@ type ActionResult = NonNullable<
 >;
 
 export function addUserCommandToHistory(
-  deps: SlashCommandHandlerDeps,
+  addItem: SlashCommandHandlerDeps['addItem'],
+  history: HistoryService | null,
+  session: Agent['session'] | undefined,
+  recordingOwner: 'agent' | undefined,
   trimmed: string,
 ): Promise<void> | void {
   const sanitizedCommand = secureInputHandler.shouldUseSecureMode(trimmed)
     ? secureInputHandler.sanitizeForHistory(trimmed)
     : trimmed;
   const writeRaw = (): void => {
-    deps.addItem(
-      { type: MessageType.USER, text: sanitizedCommand },
-      Date.now(),
-    );
+    addItem({ type: MessageType.USER, text: sanitizedCommand }, Date.now());
   };
-  if (
-    Object.getOwnPropertyDescriptor(deps.commandContext, 'recordingOwner')
-      ?.value === 'agent'
-  ) {
+  if (recordingOwner === 'agent') {
     return writeSlashOutput(
-      deps.commandContext,
+      history,
+      session,
+      recordingOwner,
       'user',
       sanitizedCommand,
       writeRaw,
@@ -39,16 +43,21 @@ export function addUserCommandToHistory(
 }
 
 export async function handleMessageResult(
-  deps: SlashCommandHandlerDeps,
-  context: CommandContext,
+  addItem: SlashCommandHandlerDeps['addItem'],
+  recordingIntegration: RecordingIntegration | undefined,
+  history: HistoryService | null,
+  session: Agent['session'] | undefined,
+  recordingOwner: 'agent' | undefined,
   result: Extract<ActionResult, { type: 'message' }>,
 ): Promise<SlashCommandProcessorResult> {
   await writeSlashOutput(
-    context,
+    history,
+    session,
+    recordingOwner,
     result.messageType === 'error' ? 'error' : 'info',
     result.content,
     () => {
-      deps.addItem(
+      addItem(
         {
           type:
             result.messageType === 'error'
@@ -61,53 +70,71 @@ export async function handleMessageResult(
     },
   );
   if (result.messageType === 'error') {
-    if (context.recordingOwner === 'agent') {
-      const agent = context.services.agent;
-      if (!agent) throw new Error('Session agent is unavailable');
-      await agent.session.recordRecordingEvent({
+    if (recordingOwner === 'agent') {
+      if (!session) throw new Error('Session agent is unavailable');
+      await session.recordRecordingEvent({
         type: 'session_event',
         severity: 'error',
         message: result.content,
       });
     } else {
-      deps.recordingIntegration?.recordSessionEvent('error', result.content);
+      recordingIntegration?.recordSessionEvent('error', result.content);
     }
   }
   return { type: 'handled' };
 }
 
 export async function addSubcommandHelp(
-  deps: SlashCommandHandlerDeps,
+  addMessage: SlashCommandHandlerDeps['addMessage'],
+  history: HistoryService | null,
+  session: Agent['session'] | undefined,
+  recordingOwner: 'agent' | undefined,
   command: SlashCommand,
 ): Promise<void> {
   const helpText = `Command '/${command.name}' requires a subcommand. Available:\n${command.subCommands
     ?.map((sc) => `  - ${sc.name}: ${sc.description || ''}`)
     .join('\n')}`;
-  await writeSlashOutput(deps.commandContext, 'info', helpText, () => {
-    deps.addMessage({
-      type: MessageType.INFO,
-      content: helpText,
-      timestamp: new Date(),
-    });
-  });
+  await writeSlashOutput(
+    history,
+    session,
+    recordingOwner,
+    'info',
+    helpText,
+    () => {
+      addMessage({
+        type: MessageType.INFO,
+        content: helpText,
+        timestamp: new Date(),
+      });
+    },
+  );
 }
 
 export async function addUnknownCommandMessage(
-  deps: SlashCommandHandlerDeps,
+  addMessage: SlashCommandHandlerDeps['addMessage'],
+  history: HistoryService | null,
+  session: Agent['session'] | undefined,
+  recordingOwner: 'agent' | undefined,
   trimmed: string,
+  isMcpLoading: boolean,
 ): Promise<void> {
-  const isMcpLoading =
-    deps.commandContext.services.agent?.mcp.discoveryState() === 'pending';
   const text = isMcpLoading
     ? `Unknown command: ${trimmed}. Command might have been from an MCP server but MCP servers are not done loading.`
     : `Unknown command: ${trimmed}`;
-  await writeSlashOutput(deps.commandContext, 'error', text, () => {
-    deps.addMessage({
-      type: MessageType.ERROR,
-      content: text,
-      timestamp: new Date(),
-    });
-  });
+  await writeSlashOutput(
+    history,
+    session,
+    recordingOwner,
+    'error',
+    text,
+    () => {
+      addMessage({
+        type: MessageType.ERROR,
+        content: text,
+        timestamp: new Date(),
+      });
+    },
+  );
 }
 
 export function stringifyPrompt(content: AgentRequestInput): string {

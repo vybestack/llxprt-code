@@ -166,7 +166,10 @@ const reloadCommand: SlashCommand = {
       };
     }
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: 'info',
         text: 'Reloading MCP configuration from disk...',
@@ -216,7 +219,10 @@ const refreshCommand: SlashCommand = {
     }
 
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: 'info',
         text: 'Restarting MCP servers...',

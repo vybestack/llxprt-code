@@ -1,5 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { HistoryService } from '@vybestack/llxprt-code-core';
 
 type JournalDisplayHandle = Awaited<
@@ -7,28 +6,30 @@ type JournalDisplayHandle = Awaited<
 >;
 import type { CommandContext } from '../commands/types.js';
 import type { HistoryItemWithoutId } from '../types.js';
-import { requireSessionAgent } from '../commands/historyServiceAccess.js';
 import { encodeJournalUiItem } from '../stores/turn/journal-ui-item.js';
 
 export async function appendJournalUiItem(
-  agent: Agent,
+  history: HistoryService | null,
+  origin: Parameters<HistoryService['appendDisplay']>[2],
   item: HistoryItemWithoutId,
 ): Promise<JournalDisplayHandle> {
   const source = encodeJournalUiItem(item);
-  const history = agent.agentClient.getHistoryService();
   if (history === null) throw new Error('Session history is unavailable');
-  return history.appendDisplay({ type: 'ui-item' }, source, agent.session);
+  return history.appendDisplay({ type: 'ui-item' }, source, origin);
 }
 
 export async function writeCommandOutput(
-  context: CommandContext,
+  readHistory: () => HistoryService | null,
+  origin: Parameters<HistoryService['appendDisplay']>[2],
+  recordingOwner: 'agent' | undefined,
+  addItem: CommandContext['ui']['addItem'],
   item: HistoryItemWithoutId,
   timestamp?: number,
 ): Promise<void> {
-  if (context.recordingOwner !== 'agent') {
-    if (timestamp === undefined) context.ui.addItem(item);
-    else context.ui.addItem(item, timestamp);
+  if (recordingOwner !== 'agent') {
+    if (timestamp === undefined) addItem(item);
+    else addItem(item, timestamp);
     return;
   }
-  await appendJournalUiItem(requireSessionAgent(context), item);
+  await appendJournalUiItem(readHistory(), origin, item);
 }

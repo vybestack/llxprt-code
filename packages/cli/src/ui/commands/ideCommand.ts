@@ -132,7 +132,10 @@ function buildInstallCommand(
       const installer = getIdeInstaller(currentIDE);
       if (!installer) {
         await writeCommandOutput(
-          context,
+          () => context.services.agent?.agentClient.getHistoryService() ?? null,
+          context.services.agent?.session,
+          context.recordingOwner,
+          context.ui.addItem,
           {
             type: 'error',
             text: `No installer is available for ${ideClient.getDetectedIdeDisplayName()}. Please install the '${LLXPRT_CODE_COMPANION_EXTENSION_NAME}' extension manually from the marketplace.`,
@@ -143,7 +146,10 @@ function buildInstallCommand(
       }
 
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: 'info',
           text: `Installing IDE companion from marketplace...`,
@@ -153,7 +159,10 @@ function buildInstallCommand(
 
       const result = await installer.install();
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: result.success ? 'info' : 'error',
           text: result.message,
@@ -170,25 +179,20 @@ function buildInstallCommand(
 
         const { messageType, content } =
           await getIdeStatusMessageWithFiles(ideClient);
-        if (messageType === 'error') {
-          await writeCommandOutput(
-            context,
-            {
-              type: messageType,
-              text: `Failed to automatically enable IDE integration. To fix this, run the CLI in a new terminal window.`,
-            },
-            Date.now(),
-          );
-        } else {
-          await writeCommandOutput(
-            context,
-            {
-              type: messageType,
-              text: content,
-            },
-            Date.now(),
-          );
-        }
+        await writeCommandOutput(
+          () => context.services.agent?.agentClient.getHistoryService() ?? null,
+          context.services.agent?.session,
+          context.recordingOwner,
+          context.ui.addItem,
+          {
+            type: messageType,
+            text:
+              messageType === 'error'
+                ? 'Failed to automatically enable IDE integration. To fix this, run the CLI in a new terminal window.'
+                : content,
+          },
+          Date.now(),
+        );
       }
     },
   };

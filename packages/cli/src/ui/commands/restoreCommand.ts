@@ -179,7 +179,10 @@ async function applyCheckpointRestoration(
   if (Array.isArray(data.history)) loadHistory?.(data.history);
   if (snapshot !== undefined)
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: 'info',
         text: 'Restored project to the state before the tool call.',

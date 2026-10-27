@@ -44,7 +44,10 @@ export const imageCommand: SlashCommand = {
           ? error.message
           : `Failed to parse /image command: ${detail}`;
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: MessageType.ERROR,
           text: parseMessage,
@@ -57,7 +60,10 @@ export const imageCommand: SlashCommand = {
     const runner = context.services.agent?.sessionClient.runImageOperation;
     if (typeof runner !== 'function') {
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: MessageType.ERROR,
           text:
@@ -89,7 +95,10 @@ export const imageCommand: SlashCommand = {
       if (context.signal.aborted) return;
 
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: MessageType.INFO,
           text: `${verb} image.\nSaved to: ${result.absoluteOutputPath}`,
@@ -102,7 +111,10 @@ export const imageCommand: SlashCommand = {
       if (context.signal.aborted) return;
       const message = error instanceof Error ? error.message : String(error);
       await writeCommandOutput(
-        context,
+        () => context.services.agent?.agentClient.getHistoryService() ?? null,
+        context.services.agent?.session,
+        context.recordingOwner,
+        context.ui.addItem,
         {
           type: MessageType.ERROR,
           text: `Image ${parsed.operation} failed: ${message}`,

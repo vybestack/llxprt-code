@@ -45,7 +45,10 @@ export const clearCommand: SlashCommand = {
       // Display system message if provided
       if (sessionStartOutput.systemMessage) {
         await writeCommandOutput(
-          context,
+          () => context.services.agent?.agentClient.getHistoryService() ?? null,
+          context.services.agent?.session,
+          context.recordingOwner,
+          context.ui.addItem,
           {
             type: 'info',
             text: sessionStartOutput.systemMessage,

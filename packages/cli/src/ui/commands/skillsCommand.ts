@@ -38,7 +38,10 @@ async function listAction(
   const skillManager = context.services.config?.skillOperations;
   if (!skillManager) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Could not retrieve skill manager.',
@@ -68,7 +71,13 @@ async function listAction(
     showDescriptions: useShowDescriptions,
   };
 
-  await writeCommandOutput(context, skillsListItem);
+  await writeCommandOutput(
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
+    skillsListItem,
+  );
 }
 
 async function disableAction(
@@ -78,7 +87,10 @@ async function disableAction(
   const skillName = args.trim();
   if (!skillName) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Please provide a skill name to disable.',
@@ -90,7 +102,10 @@ async function disableAction(
   const skillManager = context.services.config?.skillOperations;
   if (skillManager?.isAdminEnabled() === false) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Skills are disabled by your admin.',
@@ -103,7 +118,10 @@ async function disableAction(
   const skill = skillManager?.find(skillName);
   if (!skill) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: `Skill "${skillName}" not found.`,
@@ -128,7 +146,10 @@ async function disableAction(
   }
 
   await writeCommandOutput(
-    context,
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
     {
       type: MessageType.INFO,
       text: feedback,
@@ -144,7 +165,10 @@ async function enableAction(
   const skillName = args.trim();
   if (!skillName) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Please provide a skill name to enable.',
@@ -157,7 +181,10 @@ async function enableAction(
   const skillManager = context.services.config?.skillOperations;
   if (skillManager?.isAdminEnabled() === false) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Skills are disabled by your admin.',
@@ -178,7 +205,10 @@ async function enableAction(
   }
 
   await writeCommandOutput(
-    context,
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
     {
       type: MessageType.INFO,
       text: feedback,
@@ -223,7 +253,10 @@ async function reloadAction(
   const config = context.services.config;
   if (!config) {
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: 'Could not retrieve configuration.',
@@ -266,7 +299,10 @@ async function reloadAction(
     const successText = buildReloadSummary(beforeNames, afterSkills);
 
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: 'info',
         text: successText,
@@ -281,7 +317,10 @@ async function reloadAction(
       context.ui.setPendingItem(null);
     }
     await writeCommandOutput(
-      context,
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: `Failed to reload skills: ${error instanceof Error ? error.message : String(error)}`,

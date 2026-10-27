@@ -9,6 +9,7 @@ import { helpCommand } from './helpCommand.js';
 import { type CommandContext } from './types.js';
 import { MessageType } from '../types.js';
 import { assertDefined } from '../../__tests__/assertions.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
 describe('helpCommand', () => {
   let mockContext: CommandContext;
@@ -16,11 +17,11 @@ describe('helpCommand', () => {
 
   beforeEach(() => {
     mockAddItem = vi.fn();
-    mockContext = {
+    mockContext = createMockCommandContext({
       ui: {
         addItem: mockAddItem,
       },
-    } as unknown as CommandContext;
+    });
   });
 
   it("should add a HELP history item for '/help'", async () => {

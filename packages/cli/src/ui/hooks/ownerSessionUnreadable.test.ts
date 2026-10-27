@@ -17,6 +17,7 @@ import { createMockCommandContext } from '../../__tests__/mockCommandContext.js'
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { continueCommand } from '../commands/continueCommand.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
+import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
 import { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
 import { useSessionBrowser } from './useSessionBrowser.js';
 import {
@@ -47,6 +48,7 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
       await writeFile(brokenPath, 'LLXJRNL\0', 'utf-8');
 
       const next = await borrow();
+      await next.session.setRecording({ enabled: true });
       const turnStore = createTurnStore();
       const { commands } = turnStore;
       const addItem: SlashCommandHandlerDeps['addItem'] = (item, timestamp) =>
@@ -87,13 +89,24 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
 
       await processSlashCommand(deps, `/continue ${sourceId}`);
 
-      const visible = turnStore.store
-        .getState()
-        .history.map((item) => ('text' in item ? item.text : item.type));
-      expect(visible).toStrictEqual([
-        'owner restored conversation',
-        `Warning: Skipped unreadable session recording ${brokenPath}: ${brokenReason(brokenPath)}`,
-      ]);
+      const path = next.session.getRecording().path;
+      if (path === undefined) throw new Error('Missing resumed journal');
+      const cursor = await NativeJournalCursor.open(path, {}, 10);
+      try {
+        const visible = (await cursor.pageBack(10)).entries
+          .reverse()
+          .flatMap((entry) =>
+            entry.kind === 'projected'
+              ? ['text' in entry.item ? entry.item.text : entry.item.type]
+              : [],
+          );
+        expect(visible).toStrictEqual([
+          'owner restored conversation',
+          `Warning: Skipped unreadable session recording ${brokenPath}: ${brokenReason(brokenPath)}`,
+        ]);
+      } finally {
+        await cursor.close();
+      }
     });
   });
 
