@@ -13,7 +13,7 @@ import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookE
 import { BeforeToolSelectionHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import { applyToolSelectionHook } from './streamRequestHelpers.js';
-import { TurnProcessor } from './TurnProcessor.js';
+import { selectDirectRequestTools } from './directRequestTools.js';
 
 type V2ToolSelectionRequest = {
   model: string;
@@ -69,7 +69,7 @@ function createTools(): ToolDeclaration[] {
 /** Real `_applyToolSelectionHook` on a prototype-only processor stub. */
 function makeVariant(
   name: string,
-  ProcessorClass: typeof DirectMessageProcessor | typeof TurnProcessor,
+  ProcessorClass: typeof DirectMessageProcessor,
 ): ProcessorVariant {
   return {
     name,
@@ -97,7 +97,18 @@ const directVariant = makeVariant(
   DirectMessageProcessor,
 );
 
-const turnVariant = makeVariant('TurnProcessor', TurnProcessor);
+const turnVariant: ProcessorVariant = {
+  name: 'TurnProcessor',
+  applyToolSelectionHook: async (toolChoice, toolsFromConfig) => {
+    const firedRequest: { request?: V2ToolSelectionRequest } = {};
+    const result = await selectDirectRequestTools(
+      STUB_MODEL,
+      toolsFromConfig,
+      createHookExecution(toolChoice, firedRequest),
+    );
+    return { tools: result.tools ?? [], firedRequest: firedRequest.request };
+  },
+};
 
 /**
  * The streaming send selects tools through the shared helper that its source
