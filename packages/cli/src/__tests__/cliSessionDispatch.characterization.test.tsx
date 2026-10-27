@@ -21,6 +21,7 @@ const makeDispatchAgent = installCommandOwners();
  * bodies byte-identical.
  */
 import { createMinimalConfig } from './dispatch-settings-fixture.js';
+import { createMockSettings } from './render.js';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import {
@@ -192,16 +193,14 @@ function createMinimalSettings(options?: {
   hideWindowTitle?: boolean;
   enableMouseEvents?: boolean;
   useAlternateBuffer?: boolean;
-}): unknown {
-  return {
-    merged: {
-      ui: {
-        hideWindowTitle: options?.hideWindowTitle ?? false,
-        enableMouseEvents: options?.enableMouseEvents ?? false,
-        useAlternateBuffer: options?.useAlternateBuffer ?? false,
-      },
+}): ReturnType<typeof createMockSettings> {
+  return createMockSettings({
+    ui: {
+      hideWindowTitle: options?.hideWindowTitle ?? false,
+      enableMouseEvents: options?.enableMouseEvents ?? false,
+      useAlternateBuffer: options?.useAlternateBuffer ?? false,
     },
-  };
+  });
 }
 
 // #2378: dispatch no longer constructs the Agent — the composition root builds
