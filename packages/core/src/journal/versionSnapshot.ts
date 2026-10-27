@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { LabelSorter } from './ordered-labels.js';
+import { chunkBlock } from './chunk-row.js';
 import { rowDirectory, type DirectoryBlock } from './row-directory.js';
 import { ToolRankingTree, TOOL_RANKING_READY } from './tool-ranking-tree.js';
 import {
@@ -121,6 +122,14 @@ export class VersionSnapshot {
     if (head === undefined)
       throw new JournalFormatError('Measurement source has no stored frame');
     const parts: string[] = [];
+    if (ids.header.chunk !== undefined) {
+      const manifest = ids.header.chunk;
+      for (let ordinal = 0; ordinal < manifest.blockCount; ordinal++) {
+        const block = await chunkBlock(this.read.access, manifest, ordinal);
+        parts.push(`chunk:${block.type}:${block.length}:${block.piecesRoot}`);
+      }
+      return parts.join(',');
+    }
     for (const block of ids.header.blocks) {
       const bytes = await this.read.access.readRecordRange(
         head,

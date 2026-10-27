@@ -145,7 +145,7 @@ function parentEndpointOf(content: IContent): bigint {
   return createHash('sha256').update(url).digest().readBigUInt64BE(0);
 }
 
-function flagsOf(content: IContent, options: EncodeRowOptions): number {
+export function flagsOf(content: IContent, options: EncodeRowOptions): number {
   const blocks = content.blocks;
   const has = (test: (block: ContentBlock) => boolean): boolean =>
     blocks.some(test);

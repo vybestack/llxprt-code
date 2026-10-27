@@ -7,6 +7,7 @@ import {
   type ArrivalFieldMode,
 } from './chunk-fields.js';
 import type { RowDraft } from './rowDraft.js';
+import type { RowHeader } from './rowRecord.js';
 import type { BuildContext } from './groupBuildShared.js';
 import type { RecordAppender } from './groupAppender.js';
 import {
@@ -28,6 +29,7 @@ export class JournalArrivalRecorder {
   private readonly textBuffer = new ArrivalTextBuffer();
   private pending: ArrivalPiece[] = [];
   private pendingBytes = 0;
+  private waitingForCapacity = false;
   private chargedBytes = 0;
   private chargedPieces = 0;
   private peakBytes = 0;
@@ -264,8 +266,21 @@ export class JournalArrivalRecorder {
       this.chargedBytes + bytes.length + PIECE_CHARGE + WRITE_BUFFER_CHARGE >
         RECORDING_QUEUE_BYTES ||
       this.chargedPieces >= 256
-    )
-      return this.flush().then(() => this.enqueuePiece(piece));
+    ) {
+      if (this.waitingForCapacity)
+        throw new Error('Concurrent arrival push exceeds recording capacity');
+      this.waitingForCapacity = true;
+      return this.flush().then(
+        () => {
+          this.waitingForCapacity = false;
+          return this.enqueuePiece(piece);
+        },
+        (error: unknown) => {
+          this.waitingForCapacity = false;
+          throw error;
+        },
+      );
+    }
     this.pending.push({ ...piece, bytes: bytes.slice() });
     this.pendingBytes += bytes.length;
     this.chargedBytes += bytes.length + PIECE_CHARGE;
@@ -335,6 +350,7 @@ export class JournalArrivalRecorder {
   async sealRow(
     row: ArrivalRow,
     metadata?: Readonly<Record<string, unknown>>,
+    facts?: Pick<RowHeader, 'flags' | 'parentEndpoint'>,
   ): Promise<void> {
     await this.flush();
     await this.mutate(async (group) => {
@@ -353,7 +369,7 @@ export class JournalArrivalRecorder {
         metadata === undefined
           ? bytes
           : new TextEncoder().encode(JSON.stringify({ ...stored, metadata }));
-      await group.finish(row, 'completed', meta);
+      await group.finish(row, 'completed', meta, facts);
     });
   }
   async finishAttempt(

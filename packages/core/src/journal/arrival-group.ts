@@ -472,8 +472,10 @@ export class ArrivalGroup {
     row: ArrivalRow,
     outcome: ArrivalOutcome,
     metadata?: Uint8Array,
+    facts?: Pick<RowHeader, 'flags' | 'parentEndpoint'>,
   ): Promise<void> {
     let { entry, header } = await this.find(row);
+    if (facts !== undefined) header = { ...header, ...facts };
     if (header.chunk === undefined) throw new Error('Missing manifest');
     if (outcome === 'completed') {
       for await (const block of transcriptEntries(

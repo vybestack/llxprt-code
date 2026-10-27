@@ -7,8 +7,8 @@ import type {
   ArrivalRow,
   ArrivalStore,
 } from '../../journal/arrival-group.js';
-import { ROW_BLOCK_TYPE } from '../../journal/rowRecord.js';
-import { encodeContentRow } from './journalRowCodec.js';
+import { ROW_BLOCK_TYPE, ROW_FLAG } from '../../journal/rowRecord.js';
+import { encodeContentRow, flagsOf } from './journalRowCodec.js';
 import type { ContentBlock, ContentMetadata, IContent } from './IContent.js';
 import type { ToolArgumentDelta } from './tool-argument-delta.js';
 
@@ -34,6 +34,7 @@ class JournalResponseArrival implements ResponseArrival {
       }
     | undefined;
   private finished = false;
+  private flags = 0;
   private afcGeneration = 0;
   private afcCount = 0;
   private afcFinished = 0;
@@ -53,6 +54,10 @@ class JournalResponseArrival implements ResponseArrival {
   }
   append(block: ContentBlock): void | Promise<void> {
     if (this.finished) throw new Error('Response arrival is finished');
+    this.flags |= flagsOf(
+      { ...this.content, blocks: [block] },
+      { owner: this.owner },
+    );
     if (block.type === 'text' && this.current?.type === 'text')
       return this.recorder.appendTextDelta(this.current.block, block.text);
     return this.appendSlow(block);
@@ -103,6 +108,7 @@ class JournalResponseArrival implements ResponseArrival {
       await this.end();
       await this.finishAfc('superseded');
       await this.recorder.finishAttempt(this.row, 'superseded');
+      this.flags = 0;
       this.content = {
         ...this.content,
         metadata: { ...this.content.metadata, id },
@@ -133,6 +139,8 @@ class JournalResponseArrival implements ResponseArrival {
         delta.replacementArguments,
       );
     if (delta.complete === true) {
+      this.flags |=
+        ROW_FLAG.curated | ROW_FLAG.hasToolCall | ROW_FLAG.hasCacheableBlock;
       try {
         await this.recorder.endBlock(handle);
       } catch (error) {
@@ -149,7 +157,13 @@ class JournalResponseArrival implements ResponseArrival {
     this.afcGeneration++;
     for await (const content of contents) {
       const row = await this.recorder.beginRow(
-        encodeContentRow({ ...content, blocks: [] }, { owner: this.owner }),
+        {
+          ...encodeContentRow(
+            { ...content, blocks: [] },
+            { owner: this.owner },
+          ),
+          flags: flagsOf(content, { owner: this.owner }),
+        },
         {
           ...this.attempt,
           id: `${this.attempt.id}:afc:${this.afcGeneration}:${this.afcCount}`,
@@ -246,9 +260,19 @@ class JournalResponseArrival implements ResponseArrival {
     await this.end();
     await this.recorder.endRowBlocks(this.row);
     await this.finishAfc('completed', afterAuxiliary);
-    await this.recorder.sealRow(this.row, {
-      ...this.content.metadata,
-      ...metadata,
+    const completedMetadata = { ...this.content.metadata, ...metadata };
+    const draft = encodeContentRow(
+      { ...this.content, metadata: completedMetadata },
+      { owner: this.owner },
+    );
+    const parent =
+      completedMetadata.responsesStored === true &&
+      typeof completedMetadata.id === 'string' &&
+      completedMetadata.id !== '' &&
+      (this.flags & ROW_FLAG.curated) !== 0;
+    await this.recorder.sealRow(this.row, completedMetadata, {
+      flags: draft.flags | this.flags | (parent ? ROW_FLAG.responseParent : 0),
+      parentEndpoint: draft.parentEndpoint,
     });
     this.finished = true;
     await this.recorder.close();
