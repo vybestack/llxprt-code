@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { setImmediate } from 'node:timers/promises';
+import { DeferredMaintenance } from './deferred-maintenance.js';
+import { rootRef } from './groupSegments.js';
 import type { ArrivalStore } from './arrival-group.js';
 import {
   recordingMutations,
@@ -84,11 +85,7 @@ import { JournalMediaPins } from './journalMediaPins.js';
 import type { PinnedIdFacts } from './pinnedIdFacts.js';
 import type { RowEntry } from './rowEntry.js';
 import type { RightSpine, RowTreeAlgebra } from './rowTreeBuilder.js';
-import {
-  iterateRowEntries,
-  loadRightSpine,
-  type RowTreeRootRef,
-} from './rowTreeReader.js';
+import { iterateRowEntries, loadRightSpine } from './rowTreeReader.js';
 import {
   readRowIds,
   readStoredRow,
@@ -182,6 +179,10 @@ export class JournalStore {
   private rearmAt = 0;
   /** The compaction in progress; a pin or a read waits for it (design 10.1). */
   private compacting: Promise<SwapOutcome> | undefined;
+  private readonly maintenance = new DeferredMaintenance(
+    () => (this.tail = this.tail.then(() => this.compactWhenIdle())),
+    (error) => (this.compactionFailure = { error }),
+  );
   private compactionFailure: { readonly error: unknown } | undefined;
   private readonly fileOperations: FileOperations;
   private neutralRowFactsEnabled: boolean;
@@ -309,7 +310,7 @@ export class JournalStore {
       const { writer } = await openJournalForOwner(path, deps.journal);
       const store = new JournalStore(path, writer, deps, false, release);
       await interruptRecordingOrphans(store, () => store.requireAccess());
-      store.tail = store.compactWhenIdle();
+      store.maintenance.request();
       return store;
     } catch (error) {
       release();
@@ -374,18 +375,19 @@ export class JournalStore {
     return turn;
   }
 
-  /**
-   * Resolves when every commit and compaction submitted so far has finished,
-   * and throws what a compaction that failed on its own threw.
-   */
+  /** Settles durable writes without pulling deferred maintenance onto the commit path. */
   flushCommitted = (): Promise<void> =>
-    this.enqueueCommit(() => this.writer.flushCommitted());
+    this.enqueueCommit(() => {
+      assertCompactionUsable(this.compactionFailure);
+      return this.writer.flushCommitted();
+    });
 
+  /** Resolves after queued commits and automatic maintenance, reporting maintenance failures. */
   async idle(): Promise<void> {
     await this.tail;
-    if (this.compactionFailure !== undefined) {
+    await this.maintenance.settle();
+    if (this.compactionFailure !== undefined)
       throw this.compactionFailure.error;
-    }
   }
 
   /**
@@ -429,10 +431,7 @@ export class JournalStore {
       releaseVersion();
       if (!this.closing && this.pins === 0 && this.deferredByPin) {
         this.deferredByPin = false;
-        this.tail = this.tail.then(async () => {
-          await setImmediate();
-          await this.compactWhenIdle();
-        });
+        this.maintenance.request();
       }
       return this.mediaPins.afterReaderRelease(release);
     });
@@ -540,7 +539,10 @@ export class JournalStore {
   async *rows(from = 0): AsyncGenerator<RowEntry> {
     const read = await this.openRead();
     try {
-      const root = this.rowRootRef();
+      const root =
+        this.currentVersion === undefined
+          ? undefined
+          : rootRef(this.currentVersion);
       if (root === undefined || this.access === undefined) return;
       yield* iterateRowEntries(this.access, root, from);
     } finally {
@@ -623,9 +625,9 @@ export class JournalStore {
     return this.deps.createCache?.() ?? new BoundedIdNodeCache();
   }
 
-  private async afterCommit(): Promise<void> {
+  private afterCommit(): void {
     this.queued -= 1;
-    await this.compactWhenIdle();
+    if (!this.closing) this.maintenance.request();
   }
 
   /** The idle point of design 4.11: nothing queued, no pin, the queue held by the caller. */
@@ -660,6 +662,7 @@ export class JournalStore {
   }
 
   private runCompaction(): Promise<SwapOutcome> {
+    this.maintenance.consumeRequests();
     const running = this.compactOnce();
     this.compacting = running;
     return running.finally(() => {
@@ -882,13 +885,6 @@ export class JournalStore {
       throw new JournalFormatError('The journal has no committed group');
     }
     return this.access;
-  }
-
-  private rowRootRef(): RowTreeRootRef | undefined {
-    const version = this.currentVersion;
-    return version === undefined || version.roots.rowRoot === 0
-      ? undefined
-      : { offset: version.roots.rowRoot, rows: version.rows };
   }
 
   private planContext(): PlanContext {

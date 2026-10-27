@@ -540,7 +540,7 @@ export class JournalHistoryStore
     await this.startup;
     await this.queue;
     await this.mirrors.flush();
-    await this.session.store.idle();
+    await this.session.store.flushCommitted();
   }
 
   onRetired(listener: () => void): () => void {
