@@ -150,7 +150,7 @@ describe('stored Anthropic generations and pinned lifetime', () => {
       await session.close();
     }
   });
-  it('refuses unattached history edits before changing an acknowledged measured version', async () => {
+  it('refuses history edits for an unsupported incremental format before changing an acknowledged measured version', async () => {
     let session = await JournalSession.create(
       `${directory()}/unsupported-edits.llxj`,
       { journal: testJournalSeams().dependencies },
@@ -167,6 +167,10 @@ describe('stored Anthropic generations and pinned lifetime', () => {
           journal: testJournalSeams().dependencies,
         },
       );
+      await session.registerRowFormat({
+        ...anthropicLengthRegistration(settings),
+        incremental: 'unsupported',
+      });
       const pin = await session.store.snapshot();
       const entry = await pin.entryAt(0);
       const published = pin.version;
@@ -198,6 +202,58 @@ describe('stored Anthropic generations and pinned lifetime', () => {
         );
       expect(session.store.published).toBe(published);
       expect(await bytes(session)).toBeGreaterThan(0);
+    } finally {
+      await session.close();
+    }
+  });
+  it('permits detached appends after reopen while refusing stale measured lengths until refill', async () => {
+    const path = `${directory()}/detached-append.llxj`;
+    const options = { journal: testJournalSeams().dependencies };
+    let session = await JournalSession.create(path, options);
+    try {
+      await session.append([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'before' }] },
+      ]);
+      await register(session);
+      const measured = Buffer.byteLength(
+        JSON.stringify([{ role: 'user', content: 'before' }]),
+      );
+      expect(await bytes(session)).toBe(measured);
+      await session.close();
+      session = await JournalSession.open(path, options);
+      const old = await session.store.snapshot();
+      try {
+        await session.append([
+          { speaker: 'human', blocks: [{ type: 'text', text: 'after' }] },
+        ]);
+        const current = await session.store.snapshot();
+        try {
+          await expect(
+            planStoredAnthropicRequest(
+              current,
+              settings,
+              {},
+              { model: settings.model },
+            ),
+          ).rejects.toThrow(/stale|unmeasured/);
+          expect(
+            (
+              await planStoredAnthropicRequest(
+                old,
+                settings,
+                {},
+                { model: settings.model },
+              )
+            ).messagesBytes,
+          ).toBe(measured);
+        } finally {
+          await current.close();
+        }
+        await register(session);
+        expect(await bytes(session)).toBeGreaterThan(measured);
+      } finally {
+        await old.close();
+      }
     } finally {
       await session.close();
     }
