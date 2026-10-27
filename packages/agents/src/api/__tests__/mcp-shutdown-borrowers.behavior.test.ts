@@ -87,11 +87,19 @@ interface HeldDisposal {
 
 /**
  * Starts `operation`, waits until the fixture holds `method`, disposes with the
- * hold still armed, and releases only after `dispose` fulfills. Releasing on a
- * timer instead would race retirement: when the timer won, the fixture answered
- * a request production had already given up on, so the abandonment the test
- * asserts was overwritten by `released:<method>`. Retirement alone must end the
- * held request.
+ * hold still armed, and releases only after the fixture has observed the
+ * retirement. Releasing on a timer instead would race retirement: when the
+ * timer won, the fixture answered a request production had already given up on,
+ * so the abandonment the test asserts was overwritten by `released:<method>`.
+ * Retirement alone must end the held request.
+ *
+ * `dispose` fulfilling only means the client stopped waiting for the answer.
+ * The fixture records the abandonment from the socket EOF, which the server's
+ * event loop reads one turn later (measured: about a quarter of aborts under
+ * contention leave the server still holding the request when the client's
+ * abort settles). Releasing that early therefore erased the marker on some CI
+ * runs. Wait for the retirement the fixture can see before releasing; a
+ * production that never retires still fails the marker and the socket count.
  */
 async function disposeWhileHeld(
   fixture: NoAuthMcpFixture,
@@ -105,6 +113,7 @@ async function disposeWhileHeld(
   const first = fixture.events.length;
   const disposing = dispose().then(() => fixture.events.push('disposed'));
   await disposing;
+  await socketsClosed(fixture);
   fixture.release(method);
   const outcome = await settlement;
   await socketsClosed(fixture);
