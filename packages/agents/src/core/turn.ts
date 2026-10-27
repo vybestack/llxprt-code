@@ -9,13 +9,17 @@
  * Protocol types (AgentEventType, ServerAgentStreamEvent, etc.) remain in core.
  */
 
-import { createHash } from 'node:crypto';
+import {
+  emitThoughtContent,
+  emitTextContent,
+  filterBlocksByAllowedTools,
+  toolRequestFromBlock,
+} from './turnChunkEvents.js';
 import type {
   ModelStreamChunk,
   CanonicalFinishReason,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type {
-  IContent,
   ContentBlock,
   UsageStats,
   ToolCallBlock,
@@ -29,10 +33,6 @@ import {
   UnauthorizedError,
   toFriendlyError,
 } from '@vybestack/llxprt-code-core/utils/errors.js';
-import {
-  normalizeToolName,
-  canonicalizeToolName,
-} from '@vybestack/llxprt-code-tools';
 import type { ChatSession } from './chatSession.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -50,10 +50,6 @@ import {
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { ContextOverflowError } from '../compression/contextOverflowError.js';
 import {
-  parseThought,
-  type ThoughtSummary,
-} from '@vybestack/llxprt-code-core/utils/thoughtUtils.js';
-import {
   resolveStreamIdleTimeoutMsSource,
   resolveStreamFirstResponseTimeoutMsSource,
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
@@ -69,7 +65,6 @@ import {
   isAbortSignalActive,
   safeJsonStringify,
 } from './turnJsonUtils.js';
-import { buildCitationEvent } from './turnCitations.js';
 import { buildErrorReportContext } from './turnErrorReportContext.js';
 import { historySourceFailure } from './historySourceError.js';
 import {
@@ -97,33 +92,6 @@ interface IdleFlag {
   timedOut: boolean;
   fire: StreamWatchdogFire | undefined;
   livenessObserved: boolean;
-}
-
-/**
- * Filters ContentBlocks by hook-restricted allowed tool names.
- * Tool-call and tool-response blocks are kept only if their tool name is in
- * the allowed set; other block types (text, thinking, media, code) always pass.
- *
- * @issue #2348 — replaces the Part[]-based filterHookRestrictedParts for the
- * block-shaped pipeline.
- */
-function filterBlocksByAllowedTools(
-  blocks: ContentBlock[],
-  allowedToolNames: string[] | undefined,
-): ContentBlock[] {
-  if (allowedToolNames === undefined) {
-    return [...blocks];
-  }
-  const allowed = new Set(allowedToolNames.map(canonicalizeToolName));
-  return blocks.filter((block) => {
-    if (block.type === 'tool_call') {
-      return allowed.has(canonicalizeToolName(block.name));
-    }
-    if (block.type === 'tool_response') {
-      return allowed.has(canonicalizeToolName(block.toolName));
-    }
-    return true;
-  });
 }
 
 /**
@@ -278,8 +246,10 @@ export class Turn {
     );
     this.debugResponses.push(chunk, allowedBlocks);
 
-    yield* this.emitThoughtContent(allowedBlocks, traceId);
-    const text = yield* this.emitTextContent(allowedBlocks, traceId);
+    yield* emitThoughtContent(allowedBlocks, traceId);
+    const text = yield* emitTextContent(allowedBlocks, traceId, () =>
+      this.chat.shouldShowCitations(),
+    );
     const functionCalls = allowedBlocks.filter(
       (block): block is ToolCallBlock => block.type === 'tool_call',
     );
@@ -294,35 +264,18 @@ export class Turn {
     );
   }
 
-  private *emitThoughtContent(
-    blocks: ContentBlock[],
-    traceId: string | undefined,
-  ): Generator<ServerAgentStreamEvent> {
-    for (const block of blocks) {
-      if (block.type === 'thinking' && block.isHidden !== true) {
-        const thought: ThoughtSummary = {
-          ...parseThought(block.thought),
-          ...(block.streamId !== undefined ? { streamId: block.streamId } : {}),
-          ...(block.streamStatus !== undefined
-            ? { streamStatus: block.streamStatus }
-            : {}),
-        };
-        yield { type: AgentEventType.Thought, value: thought, traceId };
-      }
-    }
-  }
-
   private *emitFunctionCallRequests(
     functionCalls: ToolCallBlock[],
   ): Generator<ServerAgentStreamEvent> {
     for (const [functionCallIndex, functionCall] of functionCalls.entries()) {
-      const event = this.handlePendingFunctionCall(
+      const request = toolRequestFromBlock(
         functionCall,
         functionCallIndex,
+        this.prompt_id,
+        this.agentId,
       );
-      if (event) {
-        yield event;
-      }
+      this.pendingToolCalls.push(request);
+      yield { type: AgentEventType.ToolCallRequest, value: request };
     }
   }
 
@@ -355,30 +308,6 @@ export class Turn {
       chunk.usage,
       traceId,
     );
-  }
-
-  private *emitTextContent(
-    blocks: IContent['blocks'],
-    traceId: string | undefined,
-  ): Generator<ServerAgentStreamEvent, string> {
-    const text = blocks
-      .filter((block) => block.type === 'text')
-      .map((block) => (block as { text: string }).text)
-      .join('');
-    if (text !== '') {
-      yield { type: AgentEventType.Content, value: text, traceId };
-
-      if (text.trim() !== '') {
-        const citationEvent = buildCitationEvent(
-          this.chat.shouldShowCitations(),
-          'Response may contain information from external sources. Please verify important details independently.',
-        );
-        if (citationEvent) {
-          yield citationEvent;
-        }
-      }
-    }
-    return text;
   }
 
   private createEmptyResponseOutcome(): ResponseOutcome {
@@ -847,72 +776,6 @@ export class Turn {
       }
       throw error;
     }
-  }
-
-  private handlePendingFunctionCall(
-    fnCall: ToolCallBlock,
-    functionCallIndex: number,
-  ): ServerAgentStreamEvent | null {
-    const callId =
-      fnCall.id !== ''
-        ? fnCall.id
-        : this.createSyntheticFunctionCallId(fnCall, functionCallIndex);
-
-    // #3535: carry the raw name unchanged when it is absent or cannot be
-    // normalized. The doomed call must still dispatch so the existing
-    // TOOL_NOT_REGISTERED path returns a proper tool_response instead of the
-    // fabricated literal `undefined_tool_name` the parent cannot diagnose.
-    const name = this.resolveRawToolName(fnCall);
-
-    const params = fnCall.parameters;
-    const args: Record<string, unknown> =
-      typeof params === 'object' && params !== null
-        ? (params as Record<string, unknown>)
-        : {};
-
-    const toolCallRequest: ToolCallRequestInfo = {
-      callId,
-      name,
-      args,
-      isClientInitiated: false,
-      prompt_id: this.prompt_id,
-      agentId: (this.agentId as string | undefined) ?? DEFAULT_AGENT_ID,
-    };
-
-    this.pendingToolCalls.push(toolCallRequest);
-
-    return { type: AgentEventType.ToolCallRequest, value: toolCallRequest };
-  }
-
-  private resolveRawToolName(fnCall: ToolCallBlock): string {
-    const fnName: unknown = fnCall.name;
-    let rawName: string | undefined;
-    if (typeof fnName === 'string') {
-      rawName = fnName;
-    } else if (fnName != null) {
-      rawName = String(fnName);
-    }
-    const normalized = rawName?.trim() ? normalizeToolName(rawName) : null;
-    return normalized ?? rawName ?? '';
-  }
-
-  private createSyntheticFunctionCallId(
-    fnCall: ToolCallBlock,
-    functionCallIndex: number,
-  ): string {
-    const payload = safeJsonStringify({
-      promptId: this.prompt_id,
-      agentId: this.agentId,
-      functionCallIndex,
-      name: fnCall.name,
-      args: fnCall.parameters ?? {},
-    });
-    const digest = createHash('sha256')
-      .update(payload)
-      .digest('hex')
-      .slice(0, 16);
-    const name = this.resolveRawToolName(fnCall);
-    return `${name}-${functionCallIndex}-${digest}`;
   }
 
   getDebugResponses(): readonly ModelStreamChunk[] {

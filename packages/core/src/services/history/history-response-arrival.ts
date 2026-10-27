@@ -12,7 +12,13 @@ import { encodeContentRow, flagsOf } from './journalRowCodec.js';
 import type { ContentBlock, ContentMetadata, IContent } from './IContent.js';
 import type { ToolArgumentDelta } from './tool-argument-delta.js';
 
+export interface ResponseJournalIdentity {
+  readonly transcriptId: string;
+  readonly attemptId: string;
+}
+
 export interface ResponseArrival {
+  readonly identity: ResponseJournalIdentity;
   selectAttempt(id: string | undefined): Promise<void>;
   appendToolArguments(delta: ToolArgumentDelta): Promise<void>;
   replaceAfcHistory(contents: AsyncIterable<IContent>): Promise<void>;
@@ -39,13 +45,22 @@ class JournalResponseArrival implements ResponseArrival {
   private afcCount = 0;
   private afcFinished = 0;
   private toolAttemptId: string | undefined;
+  private rowAttemptId: string;
   constructor(
     private readonly recorder: JournalArrivalRecorder,
     private row: ArrivalRow,
     private content: IContent,
     private readonly owner: number,
     private readonly attempt: ArrivalAttempt,
-  ) {}
+  ) {
+    this.rowAttemptId = attempt.id;
+  }
+  get identity(): ResponseJournalIdentity {
+    return {
+      transcriptId: this.row.transcriptId.toString(),
+      attemptId: this.rowAttemptId,
+    };
+  }
   private async end(): Promise<void> {
     if (this.current === undefined) return;
     if (this.current.streamId === undefined)
@@ -117,6 +132,7 @@ class JournalResponseArrival implements ResponseArrival {
         encodeContentRow(this.content, { owner: this.owner }),
         { ...this.attempt, id },
       );
+      this.rowAttemptId = id;
     }
     this.toolAttemptId = id;
   }

@@ -1,6 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type Anthropic from '@anthropic-ai/sdk';
+import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { responseToolIdentity } from './responseArrival.js';
 import { processAnthropicStream } from '@vybestack/llxprt-code-providers/anthropic/AnthropicStreamProcessor.js';
 import { createSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
 import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
@@ -68,16 +70,24 @@ async function responseBlock(
 }
 
 async function finishToolStream(
-  stream: AsyncGenerator<unknown>,
+  stream: AsyncGenerator<ModelStreamChunk>,
   complete: boolean,
 ): Promise<void> {
   if (!complete) {
     await stream.return(undefined);
     return;
   }
-  for await (const _chunk of stream) {
-    /* Drain through terminal usage. */
+  let boundCalls = 0;
+  for await (const chunk of stream) {
+    for (const block of chunk.content.blocks) {
+      if (block.type !== 'tool_call') continue;
+      const identity = responseToolIdentity(block);
+      expect(identity?.transcriptId).toMatch(/^[1-9][0-9]*$/);
+      expect(identity?.attemptId.length).toBeGreaterThan(0);
+      boundCalls++;
+    }
   }
+  expect(boundCalls).toBeGreaterThan(0);
 }
 
 describe('production tool argument recording', () => {

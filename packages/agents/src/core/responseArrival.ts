@@ -1,6 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { randomUUID } from 'node:crypto';
-import type { ResponseArrival } from '@vybestack/llxprt-code-core/services/history/history-response-arrival.js';
+import type {
+  ResponseArrival,
+  ResponseJournalIdentity,
+} from '@vybestack/llxprt-code-core/services/history/history-response-arrival.js';
+import type { ToolCallBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -32,6 +36,9 @@ export async function prefetchResponseArrival(
     prefetched.set(first.value, pending);
     const stream = prependAsyncGenerator(first.value, converted);
     bindResponseArrival(stream, {
+      get identity() {
+        return arrival.identity;
+      },
       selectAttempt: (id) => arrival.selectAttempt(id),
       appendToolArguments: (delta) => arrival.appendToolArguments(delta),
       replaceAfcHistory: (contents) => arrival.replaceAfcHistory(contents),
@@ -64,12 +71,35 @@ export function appendResponseChunk(
   includeThoughts: boolean,
 ): void | Promise<void> {
   const id = chunk.content.responseAttemptId;
-  if (id === undefined)
-    return appendResponseChunkBlocks(arrival, chunk, includeThoughts);
-  return arrival
-    .selectAttempt(id)
-    .then(() => appendResponseChunkBlocks(arrival, chunk, includeThoughts));
+  const pending =
+    id === undefined
+      ? appendResponseChunkBlocks(arrival, chunk, includeThoughts)
+      : arrival
+          .selectAttempt(id)
+          .then(() =>
+            appendResponseChunkBlocks(arrival, chunk, includeThoughts),
+          );
+  if (pending !== undefined)
+    return pending.then(() => bindToolIdentities(arrival, chunk));
+  bindToolIdentities(arrival, chunk);
 }
+
+const toolIdentities = new WeakMap<ToolCallBlock, ResponseJournalIdentity>();
+
+export function responseToolIdentity(
+  block: ToolCallBlock,
+): ResponseJournalIdentity | undefined {
+  return toolIdentities.get(block);
+}
+
+function bindToolIdentities(
+  arrival: ResponseArrival,
+  chunk: ModelStreamChunk,
+): void {
+  for (const block of chunk.content.blocks)
+    if (block.type === 'tool_call') toolIdentities.set(block, arrival.identity);
+}
+
 function appendResponseChunkBlocks(
   arrival: ResponseArrival,
   chunk: ModelStreamChunk,

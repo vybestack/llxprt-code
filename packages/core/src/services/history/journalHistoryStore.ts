@@ -105,7 +105,8 @@ export class JournalHistoryStore
   protected readonly display = journalDisplayCommands({
     store: () => this.session.store,
     target: async (origin) =>
-      this.adopted !== undefined && this.mirrors.primaryOriginId() === origin
+      this.mirrors.size === 0 ||
+      (this.adopted !== undefined && this.mirrors.primaryOriginId() === origin)
         ? this.session.store
         : this.mirrors.displayTarget(origin),
     owners: () => this.owners,

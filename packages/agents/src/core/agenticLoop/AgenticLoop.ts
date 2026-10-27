@@ -52,6 +52,7 @@ import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { AgenticLoopEvent, AgenticLoopOptions } from './types.js';
 import { AgenticEventQueue } from './agenticEventQueue.js';
+import { persistToolPresentations } from './toolPresentationRecording.js';
 import {
   buildToolResponses,
   classifyCompletedTools,
@@ -437,6 +438,11 @@ export class AgenticLoop {
       };
     }
 
+    await persistToolPresentations(
+      completed,
+      this.agentClient.getHistoryService(),
+      recordingExecution?.historyOrigin,
+    );
     this.notifyAllToolCallsComplete(completed);
     yield { kind: 'tools_complete', completed };
     // Bun 1.3.14 does not unwrap a promised async-generator return value through yield*.
