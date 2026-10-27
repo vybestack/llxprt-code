@@ -144,7 +144,10 @@ describe('sealed row token estimates', () => {
             provider,
             logger,
           );
-        expect(estimated).toStrictEqual({ tokens: expected, rows: contents.length });
+        expect(estimated).toStrictEqual({
+          tokens: expected,
+          rows: contents.length,
+        });
       } finally {
         await snapshot.close();
       }
