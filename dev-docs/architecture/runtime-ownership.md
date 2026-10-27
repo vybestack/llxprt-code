@@ -145,8 +145,9 @@ Retained by classification, each with one owner and a stated reason:
 - `packages/providers/src/utils/toolNameNormalization.ts`: the Kimi family
   normalizer (different algorithm: trims the `functions` prefix and strips
   trailing digits). Consumers: OpenAI response parsing/streaming handlers.
-- `ToolCallNormalizer`'s private variant (`packages/providers/src/openai/ToolCallNormalizer.ts`)
-  : classified a distinct algorithm, not a duplicate: tested behavior differs
+- `ToolCallNormalizer`'s private variant in
+  `packages/providers/src/openai/ToolCallNormalizer.ts` uses a distinct algorithm:
+  tested behavior differs
   from the Kimi owner on suffixless `functionslist_directory` and
   underscore-delimited numeric suffixes (evidence on issue #2534).
   Unification requires a behavior decision, not a refactor.
