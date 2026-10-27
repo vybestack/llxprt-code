@@ -400,91 +400,20 @@ export function toPartListUnion(input: AgentInput): AgentMessageInput {
   return input.text;
 }
 
-/**
- * A session/recording lock the facade owns and releases on dispose. The
- * headless harness acquires none, so {@link OwnershipRecord.sessionLocks} is
- * empty by default and the release loop is a vacuous no-op (dispose.md lines
- * 81-83).
- * @plan:PLAN-20260617-COREAPI.P24
- * @requirement:REQ-016
- */
-export interface SessionLock {
-  release: () => Promise<void> | void;
-}
-
-/** Ownership record retained on the facade for disposal + T13 harness probes. */
+/** Ownership retained by the facade until shutdown. */
 export interface OwnershipRecord {
-  readonly disposeMcpRuntime?: () => Promise<void> | undefined;
+  readonly disposeMcpRuntime: () => Promise<void>;
   disposed: boolean;
-  runtimeHandle: {
-    cleanup: () => Promise<void> | void;
-  };
-  /**
-   * Scheduler handles created through a caller-injected
-   * {@link AgentSchedulerFactory} and retained by the facade. Agent.dispose()
-   * disposes each handle (dispose.md lines 40-47). Empty when no injected
-   * factory was supplied (the common case). The caller-owned factory FUNCTION
-   * is never disposed — only these created handle instances.
-   * @plan:PLAN-20260617-COREAPI.P23
-   * @requirement:REQ-016
-   */
-  injectedSchedulerHandles: AgentSchedulerHandle[];
-  /**
-   * Session/recording locks the facade owns; each is released on dispose
-   * (dispose.md lines 81-83). Empty in headless mode.
-   * @plan:PLAN-20260617-COREAPI.P24
-   * @requirement:REQ-016
-   */
-  sessionLocks: SessionLock[];
-  /**
-   * Completion marker set true after the NET-NEW session-lock release loop
-   * completes (dispose.md lines 81-83). With zero locks the marker still flips
-   * true (vacuously "all released"); this is the GREEN-reachable observable.
-   * @plan:PLAN-20260617-COREAPI.P24
-   * @requirement:REQ-016
-   */
-  sessionLocksReleased?: boolean;
-  /**
-   * The Config ownership origin. 'agent' when createAgent constructed the
-   * Config (Agent.dispose() tears it down); 'caller' when fromConfig adopted
-   * an external Config (Agent.dispose() SKIPS the Config.dispose()
-   * teardown so the caller retains the lifecycle).
-   * @plan:PLAN-20260621-COREAPIREMED.P09
-   * @requirement:REQ-001.3
-   */
-  configOwnership: 'agent' | 'caller';
+  readonly injectedSchedulerHandles: AgentSchedulerHandle[];
+  readonly configOwnership: 'agent' | 'caller';
 }
 
-/**
- * Builds the ownership record retained on the facade.
- * @pseudocode createAgent.md steps 150-153
- */
 export function recordOwnership(deps: {
-  readonly disposeMcpRuntime?: () => Promise<void> | undefined;
-  runtimeHandle: OwnershipRecord['runtimeHandle'];
-  injectedSchedulerHandles: AgentSchedulerHandle[];
-  sessionLocks?: SessionLock[];
-  // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001.3
-  // Optional for backward compatibility with existing callers that construct
-  // an agent-owned Config (the historical default); defaults to 'agent'.
-  configOwnership?: 'agent' | 'caller';
+  readonly disposeMcpRuntime: () => Promise<void>;
+  readonly injectedSchedulerHandles: AgentSchedulerHandle[];
+  readonly configOwnership: 'agent' | 'caller';
 }): OwnershipRecord {
-  return {
-    disposed: false,
-    disposeMcpRuntime: deps.disposeMcpRuntime,
-    runtimeHandle: deps.runtimeHandle,
-    injectedSchedulerHandles: deps.injectedSchedulerHandles,
-    // @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016
-    // Headless agents acquire no session locks; the release loop is a vacuous
-    // no-op that still flips sessionLocksReleased true (dispose.md lines 81-83).
-    sessionLocks: deps.sessionLocks ?? [],
-    // @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016
-    // Set true after the session-lock release loop completes (dispose.md
-    // line 83); false until then.
-    sessionLocksReleased: false,
-    // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001.3
-    configOwnership: deps.configOwnership ?? 'agent',
-  };
+  return { disposed: false, ...deps };
 }
 
 /** Result of draining stream() into a chat result. */

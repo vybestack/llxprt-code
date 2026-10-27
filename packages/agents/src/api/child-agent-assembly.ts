@@ -210,7 +210,6 @@ export class ChildAgentAssembly {
       model: this.data.activationProfile.model,
       initialSettings: this.settings.getAllGlobalSettings(),
     });
-    this.acquired.push(() => this.config.dispose());
     this.media = new SessionMediaOwner(
       this.config.projectTempDir,
       this.config.getMediaStoreQuotaByteLimit(),
@@ -501,7 +500,6 @@ export class ChildAgentAssembly {
       () =>
         disposeIsolatedMediaRuntime(
           () => this.providers.close(),
-          () => this.config.dispose(),
           () => this.media.dispose(),
           () => this.client.dispose(),
         ),

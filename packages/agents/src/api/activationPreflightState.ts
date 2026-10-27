@@ -392,7 +392,6 @@ export class AgentActivationBootstrap
             () => this.#disposeAcquisition(),
             () => this.#releaseForegroundProviders(),
             () => broker?.cleanupFailedConstruction(),
-            () => this.#config.dispose(),
           ]),
         mcp?.dispose.bind(mcp),
         undefined,

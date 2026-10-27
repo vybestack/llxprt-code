@@ -117,12 +117,11 @@ import {
 
 export async function disposeIsolatedMediaRuntime(
   closeRuntime: () => void | Promise<void>,
-  closeConfig: () => Promise<void>,
   closeMedia: () => Promise<void>,
   closeClient: (() => Promise<void>) | undefined,
 ): Promise<void> {
   const clients = await Promise.allSettled([closeClient?.()]);
-  const results = await Promise.allSettled([closeRuntime(), closeConfig()]);
+  const results = await Promise.allSettled([closeRuntime()]);
   const mediaResults = await Promise.allSettled([closeMedia()]);
   const failures = [...clients, ...results, ...mediaResults].flatMap(
     (result) => (result.status === 'rejected' ? [result.reason] : []),
@@ -283,7 +282,6 @@ export class PreferredAgentAssembly {
           : []),
       ],
     });
-    this.workspaceRelease.acquire('policy', () => config.dispose());
     this.config = config;
     this.trustPort = this.acquireWorkspaceTrust(raw);
     const policy = new RuntimePolicyOwner(config, this.trustPort);
@@ -443,7 +441,6 @@ export class PreferredAgentAssembly {
       await cleanupFailedCreatedAgent(
         primaryError,
         () => this.releaseProviders(),
-        this.config,
         this.preferredMediaOwner,
         this.preferredSessionClient,
         disposeMcpRuntime,
@@ -574,7 +571,6 @@ function facadeInputsForPreferred(
     runtimeId,
     readRuntimeKind: () => 'agent',
     ownership: recordOwnership({
-      runtimeHandle: { cleanup: closeRuntime },
       injectedSchedulerHandles: handles,
       configOwnership: 'agent',
       disposeMcpRuntime: () => runtime.dispose(),

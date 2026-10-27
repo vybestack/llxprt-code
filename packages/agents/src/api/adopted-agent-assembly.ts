@@ -692,7 +692,6 @@ function facadeInputsForAdopted(
 ): LeafFacadeValues {
   const closeRuntime = (): Promise<void> => release.close();
   const ownership = recordOwnership({
-    runtimeHandle: { cleanup: closeRuntime },
     injectedSchedulerHandles: handles,
     configOwnership: 'caller',
     disposeMcpRuntime: () => runtime.dispose(),

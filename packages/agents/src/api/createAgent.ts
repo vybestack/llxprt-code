@@ -315,14 +315,13 @@ function safeActiveModelName(selection: ModelSelectionOperations): string {
 export async function cleanupFailedCreatedAgent(
   primaryError: unknown,
   closeRuntime: () => void | Promise<void>,
-  config: Config,
   mediaOwner: SessionMediaOwner,
   sessionClient: SessionClientOwner | undefined,
   disposeMcpRuntime: (() => Promise<void>) | undefined,
 ): Promise<never> {
   const mcpCleanup = await Promise.allSettled([disposeMcpRuntime?.()]);
   const clientCleanup = await Promise.allSettled([sessionClient?.dispose()]);
-  const cleanup = await Promise.allSettled([closeRuntime(), config.dispose()]);
+  const cleanup = await Promise.allSettled([closeRuntime()]);
   const mediaCleanup = await Promise.allSettled([mediaOwner.dispose()]);
   const failures = [
     ...mcpCleanup,

@@ -9,13 +9,11 @@ import { deferred } from './helpers/shell-owner-gate.js';
 import { disposeIsolatedMediaRuntime } from '../agentRuntimeAssembly.js';
 
 describe('isolated runtime cleanup with explicit close operations', () => {
-  it('joins client cleanup before runtime/config cleanup and media cleanup last', async () => {
+  it('joins client cleanup before runtime cleanup and media cleanup last', async () => {
     const client = deferred<void>();
     const runtime = deferred<void>();
-    const config = deferred<void>();
     let clientClosed = false;
     let runtimeClosed = false;
-    let configClosed = false;
     let mediaClosed = false;
     const closing = disposeIsolatedMediaRuntime(
       async () => {
@@ -24,12 +22,7 @@ describe('isolated runtime cleanup with explicit close operations', () => {
         runtimeClosed = true;
       },
       async () => {
-        expect(clientClosed).toBe(true);
-        await config.promise;
-        configClosed = true;
-      },
-      async () => {
-        expect(runtimeClosed && configClosed).toBe(true);
+        expect(runtimeClosed).toBe(true);
         mediaClosed = true;
       },
       async () => {
@@ -40,13 +33,12 @@ describe('isolated runtime cleanup with explicit close operations', () => {
     expect(mediaClosed).toBe(false);
     client.resolve();
     runtime.resolve();
-    config.resolve();
     await closing;
     expect(mediaClosed).toBe(true);
   });
 
-  it('preserves every cleanup failure in client/runtime/config/media order', async () => {
-    const errors = ['client', 'runtime', 'config', 'media'].map(
+  it('preserves every cleanup failure in client/runtime/media order', async () => {
+    const errors = ['client', 'runtime', 'media'].map(
       (name) => new Error(name),
     );
     const closing = disposeIsolatedMediaRuntime(
@@ -55,9 +47,6 @@ describe('isolated runtime cleanup with explicit close operations', () => {
       },
       async () => {
         throw errors[2];
-      },
-      async () => {
-        throw errors[3];
       },
       async () => {
         throw errors[0];
@@ -79,12 +68,9 @@ describe('isolated runtime cleanup with explicit close operations', () => {
       async () => {
         remainingClosed += 1;
       },
-      async () => {
-        remainingClosed += 1;
-      },
       undefined,
     );
     await expect(closing).rejects.toBe(failure);
-    expect(remainingClosed).toBe(2);
+    expect(remainingClosed).toBe(1);
   });
 });

@@ -44,7 +44,6 @@ import {
   buildAgentResult,
   buildProviderInfos,
   buildToolInfos,
-  recordOwnership,
   AgentBootstrapError,
   runWrapSchedulerFactory,
   runWrapApprovalHandler,
@@ -460,30 +459,6 @@ describe('Agent bootstrap helpers @plan:PLAN-20260617-COREAPI.P15 @requirement:R
       });
       expect(observed.toolCallId).toBe('');
       expect(observed.name).toBe('');
-    });
-  });
-
-  describe('recordOwnership @requirement:REQ-016', () => {
-    it('initialises disposal flags false and defaults sessionLocks to [] @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-016', () => {
-      const runtimeHandle = { cleanup: (): void => {} };
-      const record = recordOwnership({
-        runtimeHandle,
-        injectedSchedulerHandles: [],
-      });
-      expect(record.disposed).toBe(false);
-      expect(record.sessionLocksReleased).toBe(false);
-      expect(record.sessionLocks).toStrictEqual([]);
-      expect(record.runtimeHandle).toBe(runtimeHandle);
-    });
-
-    it('retains a provided sessionLocks array verbatim @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-016', () => {
-      const locks = [{ release: (): void => {} }];
-      const record = recordOwnership({
-        runtimeHandle: { cleanup: (): void => {} },
-        injectedSchedulerHandles: [],
-        sessionLocks: locks,
-      });
-      expect(record.sessionLocks).toBe(locks);
     });
   });
 });

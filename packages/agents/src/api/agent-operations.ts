@@ -29,7 +29,6 @@ import {
   assembleAgentShutdown,
   collectDisposalError,
   disposeAgentObservers,
-  disposeConfigInfrastructure,
   disposeOAuthManager,
   disposeWorkspaceFacades,
   finishOwnedHooks,
@@ -398,7 +397,6 @@ export class AgentOperations {
               () => disposal.skills.dispose(),
               () => disposal.workspace.dispose(),
             ),
-          undefined,
           errors,
         );
         await collectDisposalError(errors, () =>
@@ -413,16 +411,11 @@ export class AgentOperations {
     const disposal = this.#disposal;
     await collectDisposalError(errors, () => disposal.session.dispose());
     await collectDisposalError(errors, () =>
-      disposal.ownership.disposeMcpRuntime?.(),
+      disposal.ownership.disposeMcpRuntime(),
     );
     await collectDisposalError(errors, disposal.closeRuntime);
-    await disposeConfigInfrastructure(
-      disposal.disposeConfig,
-      disposal.media?.dispose.bind(disposal.media),
-      errors,
-    );
-    for (const lock of disposal.ownership.sessionLocks)
-      await collectDisposalError(errors, () => lock.release());
-    disposal.ownership.sessionLocksReleased = true;
+    const media = disposal.media;
+    if (media !== undefined)
+      await collectDisposalError(errors, () => media.dispose());
   }
 }

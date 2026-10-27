@@ -81,20 +81,10 @@ export async function joinAgentWork(
   ]);
 }
 
-export async function disposeConfigInfrastructure(
-  disposeConfig: (() => Promise<void>) | undefined,
-  disposeMedia: (() => Promise<void>) | undefined,
-  errors: unknown[],
-): Promise<void> {
-  await collectDisposalError(errors, () => disposeConfig?.());
-  await collectDisposalError(errors, () => disposeMedia?.());
-}
-
 export async function disposeAgentObservers(
   schedulers: ReadonlyArray<{ dispose(): Promise<void> | void }>,
   detachHooks: () => void,
   disposeControls: () => Promise<void> | void,
-  subscriptions: ReadonlyArray<() => void> | undefined,
   errors: unknown[],
 ): Promise<void> {
   // @pseudocode dispose.md 40-47: CONDITIONAL T19 teardown. Dispose every
@@ -117,14 +107,6 @@ export async function disposeAgentObservers(
     detachHooks();
   });
   await collectDisposalError(errors, disposeControls);
-  const subs = subscriptions;
-  if (subs !== undefined) {
-    for (const unsubscribe of subs) {
-      collectSyncDisposalError(errors, () => {
-        unsubscribe();
-      });
-    }
-  }
 }
 
 export async function joinCapturedRun(
