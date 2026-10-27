@@ -14,7 +14,7 @@ import { createOwnedTokenStoreClose } from './index.js';
 
 import { afterEach, describe, it, expect, vi, mock } from 'bun:test';
 
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { useOwnedCredentials } from '../__tests__/helpers/owned-credential-fixture.js';
 
 import { NodeFileSystem } from './IFileSystem.js';
 

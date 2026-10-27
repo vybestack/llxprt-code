@@ -21,10 +21,10 @@
  */
 
 import { afterEach, describe, it, expect, vi, beforeEach } from 'bun:test';
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
-import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
+import { runCleanupSteps } from './helpers/cleanup.js';
 import {
   createOwnedOAuthManager,
   populateProviderManager,

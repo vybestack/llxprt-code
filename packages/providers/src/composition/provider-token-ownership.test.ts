@@ -9,7 +9,7 @@ import { OAuthManager } from '../auth/oauth-manager.js';
 import {
   runCleanupSteps,
   cleanupAfterFailure,
-} from '../../../agents/src/core/subagent-cleanup.js';
+} from '../__tests__/helpers/cleanup.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
