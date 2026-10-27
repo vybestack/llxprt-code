@@ -114,7 +114,7 @@ async function fillStoreFormats(
     appender,
     edits,
     policies.formats,
-    indexed.invalidated,
+    indexed.invalidated || indexed.deferred === true,
     policies.facts?.scope,
   );
 }

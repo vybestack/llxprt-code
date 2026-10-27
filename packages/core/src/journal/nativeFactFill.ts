@@ -66,15 +66,19 @@ export async function fillNativeFacts(
   registration: NativeFactIndexRegistration | undefined,
   edits: readonly VersionEdit[],
   refillAllowed = true,
-): Promise<{ built: BuiltGroup; invalidated: boolean }> {
+): Promise<{
+  built: BuiltGroup;
+  invalidated: boolean;
+  deferred?: true;
+}> {
   const explicit = edits.some((edit) => edit.kind === 'factIndex');
   const changed = edits.some(changesNativeSource);
   if (registration === undefined || (!explicit && !changed))
     return advanceCoverage(ctx, built, appender, changed);
-  // Keep the last complete prefix available for catch-up while its format
-  // writer is detached. Coverage stays behind the published version, so
-  // readers cannot mistake those prefix facts for a filled current index.
-  if (!explicit && !refillAllowed) return { built, invalidated: true };
+  // Preserve the complete prefix for catch-up, but do not run its retained
+  // format writer against facts that still cover only the older version.
+  if (!explicit && !refillAllowed)
+    return { built, invalidated: false, deferred: true };
   await appender.drain();
   const batch = new IdFactBatch(
     new IdTrieReader(ctx.readGroup(appender.nextOffset), ctx.idCache),
