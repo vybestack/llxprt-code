@@ -479,6 +479,7 @@
         "@ai-sdk/openai": "^4.0.50",
         "@anthropic-ai/sdk": "^0.55.1",
         "@dqbd/tiktoken": "1.0.22",
+        "@eslint-community/regexpp": "^4.12.2",
         "@vybestack/llxprt-code-auth": "file:../auth",
         "@vybestack/llxprt-code-core": "file:../core",
         "@vybestack/llxprt-code-mcp": "file:../mcp",

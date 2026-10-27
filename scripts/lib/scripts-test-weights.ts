@@ -9,9 +9,8 @@
  * root (issue #854). The scripts CI legs balance on these weights instead of
  * on file position, because the 8192-row BODY tests run 20 s to 350 s each
  * while the other ~330 files finish in about a second. Durations come from the
- * CI run of 2026-10-11 (the `scripts` shard legs); semantic-purge-production-body
- * is split per provider; its weights are the sum of the case timings from the
- * killed attempt.
+ * CI run of 2026-10-11 (the `scripts` shard legs). Provider-specific cases
+ * consolidated into one file retain the sum of their recorded costs.
  *
  * Only files at or above 20 s are listed. Every other file weighs
  * {@link DEFAULT_TEST_FILE_WEIGHT_SECONDS}. A listed file that no longer
@@ -21,9 +20,7 @@
 export const SCRIPTS_TEST_WEIGHTS_SECONDS: Readonly<Record<string, number>> = {
   'scripts/tests/highdensity-disk-body.test.ts': 351,
   'scripts/tests/provider-hardlimit-disk-body.test.ts': 299,
-  'scripts/tests/pending-window-disk-body-large-anthropic.test.ts': 212,
   'scripts/tests/client-array-body.test.ts': 209,
-  'scripts/tests/pending-window-disk-body-large-gemini.test.ts': 208,
   'scripts/tests/issue-2603-release-install.test.ts': 202,
   'scripts/tests/retained-array-body.test.ts': 195,
   'scripts/tests/provider-fallback-disk-body.test.ts': 178,
@@ -32,11 +29,7 @@ export const SCRIPTS_TEST_WEIGHTS_SECONDS: Readonly<Record<string, number>> = {
   'scripts/tests/provider-binding-bridge-body.test.ts': 153,
   'scripts/tests/checkpoint-save-body.test.ts': 152,
   'scripts/tests/purge-ranking-body.test.ts': 141,
-  'scripts/tests/semantic-purge-production-body-large-openai-responses.test.ts': 157,
-  'scripts/tests/pending-window-disk-body-large-openai-responses.test.ts': 139,
-  'scripts/tests/semantic-purge-production-body-large-anthropic.test.ts': 124,
   'scripts/tests/tool-truncation-body.test.ts': 121,
-  'scripts/tests/semantic-purge-production-body-large-gemini.test.ts': 119,
   'scripts/tests/middleout-disk-body.test.ts': 109,
   'scripts/tests/public-default-history-body.test.ts': 104,
   'scripts/tests/provider-curated-body.test.ts': 96,
@@ -61,7 +54,8 @@ export const SCRIPTS_TEST_WEIGHTS_SECONDS: Readonly<Record<string, number>> = {
   'scripts/tests/issue-3161-build-config.test.ts': 27,
   'scripts/tests/check-agents-api-surface.test.ts': 26,
   'scripts/tests/truncation-strategy-body.test.ts': 25,
-  'scripts/tests/semantic-purge-production-body.test.ts': 24,
+  'scripts/tests/semantic-purge-production-body.test.ts': 424,
+  'scripts/tests/pending-window-disk-body.test.ts': 559,
   'scripts/tests/raw-compression-body.test.ts': 24,
   'scripts/tests/publish-integrity.test.ts': 24,
   'scripts/tests/synchronous-ticket-memory.test.ts': 21,
