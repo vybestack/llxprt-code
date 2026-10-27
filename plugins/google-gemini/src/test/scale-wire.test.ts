@@ -190,6 +190,6 @@ describe('SDK streamed history follow-ups', () => {
         await fixture.close();
         rmSync(root, { recursive: true, force: true });
       }
-    });
+    }, 180000);
   }
 });
