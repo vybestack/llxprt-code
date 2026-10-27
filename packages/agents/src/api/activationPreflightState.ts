@@ -75,7 +75,7 @@ import type {
   McpRuntimeAcquisition,
   McpRuntimeOperations,
 } from './mcp-runtime-construction.js';
-import type { ForegroundMcpPort } from './mcpRuntimePorts.js';
+import type { ForegroundMcpPort, PublishedMcpPort } from './mcpRuntimePorts.js';
 import type { SessionMcpSettingsReads } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { type PreparedProfileFacade } from './profileApplicationAssembly.js';
 import { canonicalProviderActivationIntent } from './provider-activation-intent.js';
@@ -350,9 +350,10 @@ export class AgentActivationBootstrap
       assembly.assertOpen();
       const client = await this.#bindForegroundClient(broker, mcp);
       assembly.assertOpen();
+      const publishedMcp: PublishedMcpPort = mcp;
       assembly.acceptPreflightTransfer(
         {
-          mcp,
+          mcp: publishedMcp,
           mediaOwner: this.#mediaOwner,
           sessionClient: client,
           release: this.#releaseForegroundProviders,
