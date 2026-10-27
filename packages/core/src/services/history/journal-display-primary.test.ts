@@ -5,6 +5,7 @@ import { JournalSession } from './journalSession.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
 import { NativeJournalPageReader } from '../../journal/native-journal-page-reader.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
+import { JournalRecordingService } from '../../recording/journalRecordingService.js';
 
 async function assertDisplay(path: string, id: bigint): Promise<void> {
   const reader = await NativeJournalPageReader.open(path);
@@ -37,6 +38,40 @@ describe('primary journal presentation ownership', () => {
       expect(store.getLength()).toBe(0);
     } finally {
       await store.dispose();
+    }
+  });
+  it('keeps unrecorded-origin presentation on the primary while a peer records', async () => {
+    const path = join(directory(), 'shared-primary.llxj');
+    const store = new JournalHistoryStore(await JournalSession.create(path));
+    const recorder = JournalRecordingService.create({
+      sessionId: 'peer',
+      projectHash: 'peer',
+      chatsDir: directory(),
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    });
+    try {
+      await store.attachJournal(recorder, false, undefined, 'peer');
+      const display = await store.appendDisplay(
+        { type: 'info' },
+        'primary presentation',
+        'unrecorded',
+      );
+      await assertDisplay(path, display.transcriptId);
+      const mirror = await NativeJournalPageReader.open(
+        (await recorder.session()).path,
+      );
+      try {
+        for await (const row of mirror.entries())
+          expect(await mirror.presentation(row)).toBeUndefined();
+      } finally {
+        await mirror.close();
+      }
+      expect(store.getLength()).toBe(0);
+    } finally {
+      await store.dispose();
+      await recorder.dispose();
     }
   });
 });

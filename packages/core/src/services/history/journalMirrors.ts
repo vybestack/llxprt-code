@@ -71,7 +71,7 @@ export class JournalMirrors {
         return held.session.store;
       }
     }
-    throw new Error('No recording journal is bound for display output');
+    return this.primary;
   }
 
   get size(): number {
