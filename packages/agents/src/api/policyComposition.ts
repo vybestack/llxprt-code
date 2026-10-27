@@ -17,7 +17,7 @@ import type {
 import type { RuntimeSettingsState } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import {
   NodeFileSystem,
   type ProviderContributionRegistry,
@@ -25,7 +25,6 @@ import {
 import { populateProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { rethrowAfterCleanup } from '../session/session-client-cleanup.js';
-import { AgentBootstrapError } from './agentBootstrap.js';
 
 import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import type { SessionClientOwner } from '../session/session-client-owner.js';
@@ -109,20 +108,12 @@ export async function bindCreatedSessionClient(
 }
 
 export function registerProvidersOntoManager(
-  isolatedManager: RuntimeProviderManager,
+  isolatedManager: ProviderManager,
   settingsService: RuntimeSettingsState,
   config: Config,
-  oauthManager: OAuthManager | undefined,
+  oauthManager: OAuthManager,
   contributions: ProviderContributionRegistry | undefined,
 ): void {
-  if (!(isolatedManager instanceof ProviderManager))
-    throw new AgentBootstrapError(
-      'Owned provider registration requires its concrete manager',
-    );
-  if (oauthManager === undefined)
-    throw new AgentBootstrapError(
-      'Owned provider registration requires its OAuth manager',
-    );
   populateProviderManager(
     isolatedManager,
     oauthManager,

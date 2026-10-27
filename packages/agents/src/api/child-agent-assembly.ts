@@ -168,10 +168,7 @@ export class ChildAgentAssembly {
       this.acquired.push(() => this.scope.dispose());
       this.assertAdmission('Subagent launch aborted before completion.');
       return {
-        agentId:
-          typeof this.scope.getAgentId === 'function'
-            ? this.scope.getAgentId()
-            : `${this.data.subagent.name}-${this.data.runtimeId}`,
+        agentId: this.scope.getAgentId(),
         scope: this.scope,
         prompt: this.data.prompt,
         profile: this.data.profile,

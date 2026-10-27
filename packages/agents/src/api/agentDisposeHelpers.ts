@@ -21,9 +21,7 @@ import { AggregateDisposeError } from './disposeErrors.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 
 /**
- * Defensively disposes an OAuthManager if it exposes a dispose method. The
- * runtime context cleanup (dispose.md line 55) normally owns this teardown; this
- * guard covers managers that are not torn down there.
+ * Disposes the required OAuth manager.
  * @plan:PLAN-20260617-COREAPI.P24
  * @requirement:REQ-016
  * @pseudocode dispose.md 90-92
@@ -31,12 +29,7 @@ import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 export async function disposeOAuthManager(
   manager: OAuthManager,
 ): Promise<void> {
-  const holder = manager as unknown as {
-    dispose?: () => Promise<void> | void;
-  };
-  if (typeof holder.dispose === 'function') {
-    await holder.dispose();
-  }
+  await manager.dispose();
 }
 
 /**

@@ -36,9 +36,9 @@ import {
 } from './agentBootstrap.js';
 import type {
   AgentAuth,
+  AgentConfig,
   AgentSchedulerHandle,
   EditorCallbacks,
-  OAuthPromptHandler,
 } from './config-types.js';
 import {
   createAgentAuthState,
@@ -149,7 +149,7 @@ export interface AgentFacadeOwners {
   readonly ownership: OwnershipRecord;
   readonly sessionIdentityOwnership: 'config' | 'facade';
   readonly initialAuth: AgentAuth | undefined;
-  readonly onOAuthPrompt: OAuthPromptHandler | undefined;
+  readonly onOAuthPrompt: AgentConfig['onOAuthPrompt'];
   readonly closeRuntime: () => Promise<void> | void;
   readonly awaitMcpDiscovery: McpTeardownPort['awaitDiscovery'];
   readonly closeMcpAdmission: () => void;
@@ -490,7 +490,7 @@ export interface LeafFacadeValues {
   readonly readRuntimeKind: () => RuntimeKind;
   readonly ownership: OwnershipRecord;
   readonly sessionIdentityOwnership: 'config' | 'facade';
-  readonly onOAuthPrompt: OAuthPromptHandler | undefined;
+  readonly onOAuthPrompt: AgentConfig['onOAuthPrompt'];
   readonly closeRuntime: () => Promise<void> | void;
   readonly awaitMcpDiscovery: McpTeardownPort['awaitDiscovery'];
   readonly closeMcpAdmission: () => void;

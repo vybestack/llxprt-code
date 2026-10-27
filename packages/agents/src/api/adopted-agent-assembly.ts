@@ -87,7 +87,7 @@ import { acquireAdoptedMedia } from './session-image-assembly.js';
 import { DEFAULT_SKILL_OPERATIONS } from './workspace-skill-assembly.js';
 
 export interface AdoptedProviderResources {
-  manager: RuntimeProviderManager;
+  manager: ProviderManager;
   oauth: OAuthManager;
 }
 
@@ -290,7 +290,7 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
     await this.#adoptComplete();
   }
 
-  #adoptAcquireProviders(): RuntimeProviderManager {
+  #adoptAcquireProviders(): ProviderManager {
     const settingsOwner = new SessionSettingsOwner(this.#settingsService);
     this.#selectedSettings = settingsOwner;
     this.#release.acquire('settings', () => settingsOwner.dispose());
@@ -317,7 +317,7 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
     );
   }
 
-  #adoptAcquireOAuth(manager: RuntimeProviderManager): OAuthManager {
+  #adoptAcquireOAuth(manager: ProviderManager): OAuthManager {
     this.#tokenizer = configureProviderTokenizer(manager, undefined);
     this.#content = createRuntimeContentGeneratorFactory();
     this.#oAuthBus = this.#mcp.messageBus;
@@ -498,7 +498,7 @@ function acquireAdoptedProviderManager(
   selectedSettings: SessionSettingsOwner,
   authority: CredentialAuthority,
   runtimeId: string,
-): RuntimeProviderManager {
+): ProviderManager {
   const network = new OwnedFetch(config.getProxy());
   release.beforeRelease(() => network.closeAdmissionAndAbort());
   release.acquire('network', () => network.dispose());
@@ -554,14 +554,14 @@ function acquireAdoptedOAuth(
 async function activateAdoptedProviders(
   config: Config,
   selectedSettings: SessionSettingsOwner,
-  manager: RuntimeProviderManager,
+  manager: ProviderManager,
   oauth: OAuthManager,
   settingsService: SettingsService,
   tokenizer: RuntimeTokenizerFactory,
   runtimeId: string,
 ): Promise<void> {
   await selectedSettings.startTelemetry(config);
-  manager.setRetryOperationsFactory?.((providerName, profileId) =>
+  manager.setRetryOperationsFactory((providerName, profileId) =>
     oauth.composeRetryOperations(
       providerName,
       profileId ? { profileId } : undefined,
@@ -573,8 +573,6 @@ async function activateAdoptedProviders(
     settingsService,
     config,
   );
-  if (!(manager instanceof ProviderManager))
-    throw new Error('Owned provider population requires its concrete manager');
   populateProviderManager(
     manager,
     oauth,

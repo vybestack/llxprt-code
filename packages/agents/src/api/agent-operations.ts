@@ -424,6 +424,5 @@ export class AgentOperations {
     for (const lock of disposal.ownership.sessionLocks)
       await collectDisposalError(errors, () => lock.release());
     disposal.ownership.sessionLocksReleased = true;
-    await collectDisposalError(errors, disposal.disposeOAuth);
   }
 }
