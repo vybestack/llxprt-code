@@ -21,10 +21,11 @@ const resultSchema = z.object({
     .optional(),
 });
 
-async function runControl(
+async function runMeter(
   kind: string,
   retain: boolean,
   pinned: boolean,
+  lane: 'heap' | 'census',
 ): Promise<z.infer<typeof resultSchema>> {
   const root = resolve(
     import.meta.dir,
@@ -42,6 +43,7 @@ async function runControl(
       resolve(import.meta.dir, 'whole-product-meter-control.ts'),
       kind,
       retain ? 'retain' : 'release',
+      lane,
     ],
     { env, stdout: 'pipe', stderr: 'pipe' },
   );
@@ -51,7 +53,7 @@ async function runControl(
     child.exited,
   ]);
   const name = `${pinned ? 'pinned' : 'default'}-${kind}-${retain ? 'retain' : 'release'}`;
-  const directory = await mkdtemp(join(root, `${name}-`));
+  const directory = await mkdtemp(join(root, `${name}-${lane}-`));
   await writeFile(join(directory, 'result.json'), stdout);
   await writeFile(
     join(directory, 'runtime.log'),
@@ -60,6 +62,20 @@ ${stderr}`,
   );
   expect(exit).toBe(0);
   return resultSchema.parse(JSON.parse(stdout));
+}
+
+async function runControl(
+  kind: string,
+  retain: boolean,
+  pinned: boolean,
+): Promise<z.infer<typeof resultSchema>> {
+  const heap = await runMeter(kind, retain, pinned, 'heap');
+  if (pinned) return heap;
+  const census = await runMeter(kind, retain, pinned, 'census');
+  expect(census.inputHash).toBe(heap.inputHash);
+  expect(census.held).toBe(heap.held);
+  expect(census.ids).toBe(heap.ids);
+  return { ...heap, dataVerdict: census.dataVerdict };
 }
 
 function assertDefaultCensus(

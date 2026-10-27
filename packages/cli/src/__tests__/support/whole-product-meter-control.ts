@@ -60,9 +60,10 @@ function census(): ReturnType<typeof historyDataCensus> {
   return historyDataCensus(generateHeapSnapshot());
 }
 const mode = measurementMode();
+const measureCensus = process.argv[4] === 'census';
 for (let turn = 0; turn < 20; turn++) allocate(turn, false);
 const baseline = await point(0);
-const censusBefore = mode === 'default-jsc' ? census() : undefined;
+const censusBefore = measureCensus ? census() : undefined;
 const checkpoints = [];
 const dataCheckpoints = [];
 for (let turn = 1; turn <= 50; turn++) {
