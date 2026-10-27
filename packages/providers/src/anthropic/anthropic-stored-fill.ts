@@ -19,9 +19,13 @@ import type { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versio
 import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import {
   AnthropicStreamRepair,
-  numericRepairPiece,
+  type numericRepairPiece,
   type LazyRepairAtom,
 } from './anthropic-stream-repair.js';
+import type { NativeFactIndexReader } from '@vybestack/llxprt-code-core/journal/nativeFactIndex.js';
+import type { AnthropicAtom } from './anthropic-unit-facts.js';
+import { anthropicRepairScope } from './anthropic-repair-index.js';
+import { readAnthropicMeasurementFact } from './anthropic-measurement-facts.js';
 import { anthropicUnitTransfer } from './anthropic-unit-transfer.js';
 import {
   beginAnthropicCacheAtom,
@@ -45,17 +49,18 @@ function compose(
     throw new JournalFormatError('Missing Anthropic summary');
   return summary;
 }
-async function atomSummary(
+function atomSummary(
   atom: LazyRepairAtom,
-  redact: boolean,
+  pieces: readonly AnthropicAtom[],
   anchored: boolean,
   purge: boolean,
   observe: (fact: ReturnType<typeof numericRepairPiece>) => void,
-): Promise<AnthropicSummary> {
+): AnthropicSummary {
   let summary = identity();
   let emitted = false;
-  const add = (piece: Parameters<typeof numericRepairPiece>[0]): void => {
-    const fact = numericRepairPiece(piece, atom.role, anchored, purge);
+  const add = (piece: AnthropicAtom): void => {
+    const fact =
+      piece.form === 'string' ? { ...piece, anchored, purge } : piece;
     observe(fact);
     summary = compose(
       summary,
@@ -71,11 +76,11 @@ async function atomSummary(
       ),
     );
   };
-  for await (const piece of atom.openPieces(redact)) {
+  for (const piece of pieces) {
     emitted = true;
     add(piece);
   }
-  if (!emitted) add([]);
+  if (!emitted) add({ role: atom.role, form: 'array', blocks: [] });
   return summary;
 }
 interface FillState {
@@ -83,6 +88,7 @@ interface FillState {
   readonly settings: RowFormatSettings;
   readonly query: IndexedJournalRequestSnapshot;
   readonly engine: AnthropicStreamRepair;
+  readonly facts: NativeFactIndexReader;
   readonly iterator: AsyncGenerator<LazyRepairAtom>;
   pending: IteratorResult<LazyRepairAtom>;
   units: number;
@@ -110,25 +116,16 @@ async function summaries(
     state.settings.anthropic?.cacheFacts === true &&
     metadata?.cacheAnchor === true;
   const purge = metadata?.semanticMediaPurgeBoundary !== undefined;
-  const chain =
-    atom.chain === true ||
-    (atom.role === 'assistant' &&
-      atom.end === state.query.count - 1 &&
-      (await state.engine.source.describe(atom.end))?.chain === true);
-  const sameVariants =
-    atom.chain !== true &&
-    (atom.repair ||
-      (atom.end === Math.floor(atom.key / 4) &&
-        (await state.engine.source.row(atom.end))?.blocks.some(
-          (block) => block.type === 'thinking',
-        ) !== true));
+  const measured = await readAnthropicMeasurementFact(state.facts, atom.key);
+  const chain = measured.chain;
+  const sameVariants = measured.stripped === undefined;
   const previous = state.cache;
   state.cache = {
     kept: beginAnthropicCacheAtom(state.cache.kept, atom.role, chain),
     stripped: beginAnthropicCacheAtom(state.cache.stripped, atom.role, chain),
     corrected: beginAnthropicCacheAtom(state.cache.corrected, atom.role, chain),
   };
-  const kept = await atomSummary(atom, false, anchored, purge, (fact) => {
+  const kept = atomSummary(atom, measured.kept, anchored, purge, (fact) => {
     state.cache = {
       ...state.cache,
       kept: addAnthropicCachePiece(state.cache.kept, fact),
@@ -143,7 +140,7 @@ async function summaries(
   });
   const stripped = sameVariants
     ? kept
-    : await atomSummary(atom, true, anchored, purge, (fact) => {
+    : atomSummary(atom, measured.stripped, anchored, purge, (fact) => {
         state.cache = {
           ...state.cache,
           stripped: addAnthropicCachePiece(state.cache.stripped, fact),
@@ -239,6 +236,7 @@ export async function prepareAnthropicStoredFill(
       settings,
       query,
       engine,
+      facts: await snapshot.nativeFacts(anthropicRepairScope(settings)),
       iterator,
       pending: await iterator.next(),
       units: 0,

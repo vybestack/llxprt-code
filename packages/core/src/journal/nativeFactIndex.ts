@@ -1,6 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { ID_NS } from './idKeys.js';
 import { JournalFormatError } from './errors.js';
+import { ID_VALUE_MAX_BYTES } from './idTrieNode.js';
+import {
+  encodeNeutralRowFact,
+  decodeNeutralRowFact,
+} from './neutral-row-fact-codec.js';
+const BYTE_FACT_PAYLOAD_BYTES = ID_VALUE_MAX_BYTES - 4;
 import type { IdFactBatch } from './idFactBatch.js';
 import type { IdFactQueries } from './idFactQueries.js';
 import type { VersionSnapshot } from './versionSnapshot.js';
@@ -51,6 +57,43 @@ export class NativeFactIndexReader {
     private readonly facts: IdFactQueries,
     readonly scope: string,
   ) {}
+  async getBytes(key: NativeFactKey): Promise<Uint8Array | undefined> {
+    const encoded = await this.facts.getEntry(
+      NATIVE_FACT_NAMESPACE,
+      keyOf(this.scope, ['bytes', ...key]),
+    );
+    if (encoded === undefined) return undefined;
+    const head = decodeNeutralRowFact(encoded);
+    if (head.length < 4)
+      throw new JournalFormatError('Invalid native byte fact header');
+    const length = new DataView(
+      head.buffer,
+      head.byteOffset,
+      head.byteLength,
+    ).getUint32(0, true);
+    if (head.length !== Math.min(BYTE_FACT_PAYLOAD_BYTES, length + 4))
+      throw new JournalFormatError('Invalid native byte fact length');
+    const value = new Uint8Array(length);
+    value.set(head.subarray(4));
+    for (
+      let offset = BYTE_FACT_PAYLOAD_BYTES - 4;
+      offset < value.length;
+      offset += BYTE_FACT_PAYLOAD_BYTES
+    ) {
+      const part = await this.facts.getEntry(
+        NATIVE_FACT_NAMESPACE,
+        keyOf(this.scope, ['bytes', ...key, offset]),
+      );
+      if (
+        part === undefined ||
+        part.length !==
+          Math.min(BYTE_FACT_PAYLOAD_BYTES, value.length - offset) + 4
+      )
+        throw new JournalFormatError('Missing native byte fact fragment');
+      value.set(decodeNeutralRowFact(part), offset);
+    }
+    return value;
+  }
   async get(key: NativeFactKey): Promise<readonly number[] | undefined> {
     const value = await this.facts.getEntry(
       NATIVE_FACT_NAMESPACE,
@@ -72,6 +115,30 @@ export class NativeFactIndexWriter extends NativeFactIndexReader {
     scope: string,
   ) {
     super(batch.queries, scope);
+  }
+  async setBytes(key: NativeFactKey, value: Uint8Array): Promise<void> {
+    const head = new Uint8Array(
+      Math.min(BYTE_FACT_PAYLOAD_BYTES, value.length + 4),
+    );
+    new DataView(head.buffer).setUint32(0, value.length, true);
+    head.set(value.subarray(0, BYTE_FACT_PAYLOAD_BYTES - 4), 4);
+    await this.batch.setEntry(
+      NATIVE_FACT_NAMESPACE,
+      keyOf(this.scope, ['bytes', ...key]),
+      encodeNeutralRowFact(head),
+    );
+    for (
+      let offset = BYTE_FACT_PAYLOAD_BYTES - 4;
+      offset < value.length;
+      offset += BYTE_FACT_PAYLOAD_BYTES
+    )
+      await this.batch.setEntry(
+        NATIVE_FACT_NAMESPACE,
+        keyOf(this.scope, ['bytes', ...key, offset]),
+        encodeNeutralRowFact(
+          value.subarray(offset, offset + BYTE_FACT_PAYLOAD_BYTES),
+        ),
+      );
   }
   async set(key: NativeFactKey, values: readonly number[]): Promise<void> {
     if (values.length > 5)

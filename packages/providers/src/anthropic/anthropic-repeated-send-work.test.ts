@@ -35,18 +35,18 @@ const settings: RowFormatSettings = {
 
 async function verifySingleMeasurement(
   snapshot: import('@vybestack/llxprt-code-core/journal/versionSnapshot.js').VersionSnapshot,
-  count: number,
 ): Promise<void> {
   const lengths = spyOn(measuredMedia, 'anthropicBlockByteLength');
+  const reads = spyOn(IndexedJournalRequestSnapshot.prototype, 'readAt');
   const fill = await prepareAnthropicStoredFill(snapshot, settings);
   try {
     for await (const entry of snapshot.entries())
       await fill.measure(snapshot, entry, settings);
     await fill.finish();
-    expect(
-      lengths.mock.calls.filter(([block]) => block.type === 'tool_use').length,
-    ).toBe(count / 4);
+    expect(reads.mock.calls.length).toBe(0);
+    expect(lengths.mock.calls.length).toBe(0);
   } finally {
+    reads.mockRestore();
     lengths.mockRestore();
     await fill.close();
   }
@@ -75,12 +75,33 @@ describe('Anthropic repeated atom conversion', () => {
       await session.store.commit([
         { kind: 'replace', rows: encodedRows(rows(), 0) },
       ]);
-      await session.store.commit([
-        { kind: 'factIndex', registration: anthropicRepairFactIndex(settings) },
-      ]);
+      const coldReads = spyOn(
+        IndexedJournalRequestSnapshot.prototype,
+        'readAt',
+      );
+      const lengths = spyOn(measuredMedia, 'anthropicBlockByteLength');
+      let decoded = 0;
+      let toolMeasurements = 0;
+      try {
+        await session.store.commit([
+          {
+            kind: 'factIndex',
+            registration: anthropicRepairFactIndex(settings),
+          },
+        ]);
+        decoded = coldReads.mock.calls.length;
+        toolMeasurements = lengths.mock.calls.filter(
+          ([block]) => block.type === 'tool_use',
+        ).length;
+      } finally {
+        coldReads.mockRestore();
+        lengths.mockRestore();
+      }
       const snapshot = await session.store.snapshot();
       const query = await IndexedJournalRequestSnapshot.create(snapshot);
       try {
+        expect(decoded).toBe(count + 3);
+        expect(toolMeasurements).toBe(count / 4);
         const engine = await AnthropicStreamRepair.create(query, settings);
         let bytes = 0;
         for await (const piece of engine.serialize())
@@ -88,7 +109,7 @@ describe('Anthropic repeated atom conversion', () => {
         expect(bytes).toBeGreaterThan(count * 1000);
         expect(engine.source.work.unitReads).toBeLessThanOrEqual(count + 1);
         expect((await engine.measure()).bytes).toBe(bytes);
-        await verifySingleMeasurement(snapshot, count);
+        await verifySingleMeasurement(snapshot);
       } finally {
         await query.close();
         await snapshot.close();

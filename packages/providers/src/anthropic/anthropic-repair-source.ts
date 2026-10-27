@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { ROW_BLOCK_TYPE } from '@vybestack/llxprt-code-core/journal/rowRecord.js';
 import type {
   IContent,
   ContentBlock,
@@ -126,6 +127,42 @@ export class AnthropicRepairSource<
   }
   async describe(index: number): Promise<UnitDescription | undefined> {
     this.work.descriptions++;
+    if (this.normalized && this.query.planAt !== undefined) {
+      const plan = await this.query.planAt(index);
+      const types = plan.blocks.map((ref) => {
+        if (ref.kind === 'reconstructed') return ROW_BLOCK_TYPE.tool_call;
+        if (ref.kind !== 'source') return ROW_BLOCK_TYPE.tool_response;
+        const ids = plan.sourceIds?.(ref.at.label);
+        return ids?.header.blocks[ref.at.block].type;
+      });
+      if (
+        types.every(
+          (type) =>
+            type !== undefined &&
+            type !== ROW_BLOCK_TYPE.thinking &&
+            type !== ROW_BLOCK_TYPE.media,
+        )
+      ) {
+        const results = types.includes(ROW_BLOCK_TYPE.tool_response);
+        const onlyResults =
+          results &&
+          types.every(
+            (type) =>
+              type === ROW_BLOCK_TYPE.tool_response ||
+              type === ROW_BLOCK_TYPE.text ||
+              type === ROW_BLOCK_TYPE.code,
+          );
+        return {
+          speaker: plan.header.speaker,
+          results,
+          content:
+            plan.header.speaker === 'ai' ||
+            (plan.header.speaker === 'human' && !onlyResults),
+          chain: false,
+          thinking: false,
+        };
+      }
+    }
     const row = await this.row(index);
     if (row === undefined) return undefined;
     const results = row.blocks.some((block) => block.type === 'tool_response');

@@ -164,6 +164,15 @@ async function appendIndexedFacts(
       index,
     );
     await writeAtomFacts(index, engine, writer, previous.aggregate.units);
+    const rewind = (await writer.get(['append-rewind']))?.[0] ?? 0;
+    await writeAnthropicRecoveryFacts(
+      query,
+      writer,
+      settings,
+      index,
+      false,
+      rewind === 0 ? previous.aggregate.units : rewind - 1,
+    );
     await writeAnthropicCacheWindows(engine, writer, previous.aggregate.units);
     return true;
   } finally {

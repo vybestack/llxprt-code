@@ -14,6 +14,8 @@ import {
   type LazyRepairAtom,
 } from './anthropic-stream-repair.js';
 import type { RepairPiece } from './anthropic-repair-source.js';
+import type { AnthropicAtom } from './anthropic-unit-facts.js';
+import { writeAnthropicMeasurementFact } from './anthropic-measurement-facts.js';
 import type { AnthropicRequestRepairIndex } from './anthropic-repair-index.js';
 import {
   addAnthropicCachePiece,
@@ -72,12 +74,11 @@ function* recoveryPieceEvents(
   pieceAt: number,
   piece: RepairPiece,
   initial: AnthropicCacheState,
+  measured: AnthropicAtom = numericRepairPiece(piece, atom.role),
 ): Generator<RecoveryEvent, AnthropicCacheState> {
   if (typeof piece === 'string')
-    return addAnthropicCachePiece(
-      initial,
-      numericRepairPiece(piece, atom.role),
-    );
+    return addAnthropicCachePiece(initial, measured);
+  if (measured.form !== 'array') throw new Error('Expected block measurement');
   let state = initial;
   for (const [part, block] of piece.entries()) {
     const run = state.run;
@@ -100,10 +101,11 @@ function* recoveryPieceEvents(
           image: image.image,
         },
       };
-    state = addAnthropicCachePiece(
-      state,
-      numericRepairPiece([block], atom.role),
-    );
+    state = addAnthropicCachePiece(state, {
+      role: atom.role,
+      form: 'array',
+      blocks: [measured.blocks[part]],
+    });
   }
   return state;
 }
@@ -127,33 +129,81 @@ export async function* anthropicRecoveryEvents(
   if (state.run !== undefined) yield { kind: 'run', run: state.run };
 }
 
+async function persistRecoveryPiece(
+  writer: NativeFactIndexWriter,
+  events: Generator<RecoveryEvent, AnthropicCacheState>,
+  count: number,
+): Promise<{ state: AnthropicCacheState; count: number }> {
+  let event = events.next();
+  while (event.done !== true) {
+    if (event.value.kind === 'image') {
+      await writer.set(['recovery-source', count], event.value.fact.source);
+      await writer.set(['recovery-position', count], event.value.fact.position);
+      await writer.set(['recovery-image', count++], event.value.fact.image);
+    }
+    event = events.next();
+  }
+  return { state: event.value, count };
+}
 export async function writeAnthropicRecoveryFacts(
   query: IndexedJournalRequestSnapshot,
   writer: NativeFactIndexWriter,
   settings: RowFormatSettings,
   index: AnthropicRequestRepairIndex,
   hasMedia: boolean,
+  measurementsFrom?: number,
 ): Promise<void> {
   let count = 0;
-  if (hasMedia) {
-    const engine = await AnthropicStreamRepair.create(
-      query,
-      settings,
-      {},
-      index,
-    );
-    for await (const event of anthropicRecoveryEvents(engine)) {
-      if (event.kind === 'run') {
-        await writer.set(
-          ['recovery-run', event.run.ordinal],
-          [event.run.atoms, event.run.leading],
+  const engine = await AnthropicStreamRepair.create(query, settings, {}, index);
+  let state: AnthropicCacheState = {};
+  const saveRun = async (): Promise<void> => {
+    if (hasMedia && state.run !== undefined)
+      await writer.set(
+        ['recovery-run', state.run.ordinal],
+        [state.run.atoms, state.run.leading],
+      );
+  };
+  for await (const atom of engine.atoms((measurementsFrom ?? 0) * 4)) {
+    if (state.run !== undefined && state.run.role !== atom.role)
+      await saveRun();
+    state = beginAnthropicCacheAtom(state, atom.role);
+    const kept: AnthropicAtom[] = [];
+    let pieceAt = 0;
+    let thinking = atom.chain === true;
+    for await (const piece of atom.openPieces(false)) {
+      const fact = numericRepairPiece(piece, atom.role);
+      kept.push(fact);
+      thinking ||=
+        typeof piece !== 'string' &&
+        piece.some(
+          (block) =>
+            block.type === 'thinking' || block.type === 'redacted_thinking',
         );
-      } else {
-        await writer.set(['recovery-source', count], event.fact.source);
-        await writer.set(['recovery-position', count], event.fact.position);
-        await writer.set(['recovery-image', count++], event.fact.image);
+      if (hasMedia) {
+        const events = recoveryPieceEvents(atom, pieceAt, piece, state, fact);
+        ({ state, count } = await persistRecoveryPiece(writer, events, count));
       }
+      pieceAt++;
     }
+    const stripped: AnthropicAtom[] = [];
+    if (thinking) {
+      for await (const piece of atom.openPieces(true))
+        stripped.push(numericRepairPiece(piece, atom.role));
+    }
+    const assistantTail =
+      !atom.repair && atom.role === 'assistant' && atom.end === query.count - 1;
+    const chain =
+      atom.chain === true ||
+      (assistantTail &&
+        (await engine.source.describe(atom.end ?? Math.floor(atom.key / 4)))
+          ?.chain === true);
+    await writeAnthropicMeasurementFact(writer, atom.key, {
+      kept,
+      stripped: thinking ? stripped : undefined,
+      chain,
+    });
   }
-  await writer.set(['recovery-images'], [count]);
+  await saveRun();
+  if (measurementsFrom === undefined)
+    await writer.set(['recovery-images'], [count]);
 }
