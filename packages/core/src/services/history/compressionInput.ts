@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent, ToolCallBlock } from './IContent.js';
+import type { TokenRowInput } from './history-token-tickets.js';
 
 export interface DensityCallLookup {
   firstCall(id: string): Promise<ToolCallBlock | undefined>;
@@ -11,6 +12,7 @@ import type { HistoryDumpSource } from './historyDumpSnapshot.js';
 export interface CompressionRowSelection {
   readonly length: number;
   readRow(index: number): IContent | Promise<IContent>;
+  readTokenRow?(index: number): TokenRowInput | Promise<TokenRowInput>;
   chronologySelection?(start: number): Promise<CompressionChronologySelection>;
 }
 

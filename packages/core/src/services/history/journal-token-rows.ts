@@ -143,8 +143,8 @@ class TokenRowRange implements TokenRowSource {
     const content = decodeStoredRow(await snapshot.readMetadata(entry));
     return {
       metadata: content.metadata,
-      estimateTokens: (model, provider, logger) =>
-        estimateSealedTokens(snapshot, entry, model, provider, logger),
+      estimateTokens: (model, provider, logger, signal) =>
+        estimateSealedTokens(snapshot, entry, model, provider, logger, signal),
     };
   }
 

@@ -28,6 +28,7 @@ import type {
 import type { CompressionIndexedRows as HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import type { CompressionAttemptContext } from './compressionContextBuilder.js';
 import { adjustDiskToolBoundary } from './truncationDiskBoundary.js';
+import { compressionTokenSelection } from '@vybestack/llxprt-code-core/services/history/compression-token-selection.js';
 
 export interface DiskTruncationContext
   extends Omit<CompressionAttemptContext, 'history'> {
@@ -68,7 +69,9 @@ export class TopDownTruncationStrategy implements CompressionStrategy {
     let start = 0;
     // HistoryService estimates a sum of per-row costs, independent of membership.
     while (start < history.length - minKeep) {
-      tokens -= await context.estimateTokens([await history.readRow(start)]);
+      tokens -= await context.estimateTokens(
+        compressionTokenSelection(history, start, start + 1),
+      );
       start++;
       if (targetTokenCount !== undefined ? tokens <= target : tokens < target)
         break;

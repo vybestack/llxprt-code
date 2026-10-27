@@ -21,7 +21,7 @@ export async function estimateTokenRange(
       const content = await (source.readForTokens?.() ?? source.read());
       tokens +=
         'estimateTokens' in content
-          ? await content.estimateTokens(model, provider, logger)
+          ? await content.estimateTokens(model, provider, logger, signal)
           : await estimateContentTokens(
               content,
               model,

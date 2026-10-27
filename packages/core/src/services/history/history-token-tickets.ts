@@ -9,6 +9,7 @@ export interface SealedTokenRow {
     model: string,
     provider: TokenizerProvider,
     logger: DebugLogger,
+    signal?: AbortSignal,
   ): Promise<number>;
 }
 export type TokenRowInput = IContent | SealedTokenRow;

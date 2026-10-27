@@ -30,6 +30,9 @@ import { countDecodedRow } from './journalRowCounters.js';
 import { decodeStoredRow } from './journalRowCodec.js';
 import { HistoryReaderScope } from './historyReaderScope.js';
 import { snapshotRows } from './journalDetachedCapture.js';
+import { compressionTokenSelection } from './compression-token-selection.js';
+import { estimateSealedTokens } from './sealed-token-estimation.js';
+import type { TokenRowInput } from './history-token-tickets.js';
 
 /**
  * The rows of one published version for a dump. Nothing is copied: each read
@@ -147,6 +150,35 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
         this.resumeBoundary,
       );
     });
+  }
+
+  readTokenRow(index: number): Promise<TokenRowInput> {
+    return this.readers.read(async () => {
+      const entry = await this.snapshot.curatedAt(index);
+      const metadata = decodeStoredRow(
+        await this.snapshot.readMetadata(entry),
+      ).metadata;
+      return {
+        metadata,
+        estimateTokens: (model, provider, logger, signal) =>
+          this.readers.read(() =>
+            estimateSealedTokens(
+              this.snapshot,
+              entry,
+              model,
+              provider,
+              logger,
+              signal,
+            ),
+          ),
+      };
+    });
+  }
+
+  tokenRows(
+    signal?: AbortSignal,
+  ): AsyncGenerator<TokenRowInput, void, unknown> {
+    return this.readers.open(compressionTokenSelection(this).tokenRows(signal));
   }
 
   sourceOrdinalAt(index: number): Promise<number> {

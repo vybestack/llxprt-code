@@ -537,9 +537,14 @@ export class HistoryService extends HistoryServiceReads {
         // The clear invalidated token tickets for pending rows before they
         // became durable. Rebuild their accounting from restored membership.
         await this.runSerializedTokenOperation(async () => {
-          this.totalTokens = await this.estimateTokensForContents(
-            this.journal.streamRows(),
-          );
+          this.totalTokens = (
+            await estimateTokenRange(
+              this.captureTokenRow(0),
+              this.activeTokenizationModel,
+              this.tokenizerProvider(),
+              this.logger,
+            )
+          ).tokens;
         });
       },
     });

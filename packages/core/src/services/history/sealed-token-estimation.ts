@@ -4,7 +4,7 @@ import type { RowEntry } from '../../journal/rowEntry.js';
 import type { DirectoryBlock } from '../../journal/row-directory.js';
 import { ROW_BLOCK_TYPE } from '../../journal/rowRecord.js';
 import type { DebugLogger } from '../../debug/DebugLogger.js';
-import { decodeStoredBlock, decodeStoredRow } from './journalRowCodec.js';
+import { decodeStoredBlock } from './journalRowCodec.js';
 import {
   estimateContentTokens,
   type TokenizerProvider,
@@ -12,6 +12,17 @@ import {
 import { streamBlockField } from './stream-block-field.js';
 import { sealedMediaImageTokens } from './sealed-media-estimation.js';
 import { countSimpleTextStream } from '../../utils/simple-text-stream.js';
+
+async function collectBlock(block: DirectoryBlock): Promise<Uint8Array> {
+  const bytes = new Uint8Array(block.length);
+  let offset = 0;
+  for await (const part of block.parts()) {
+    bytes.set(part, offset);
+    offset += part.byteLength;
+  }
+  if (offset !== bytes.byteLength) throw new Error('Incomplete token block');
+  return bytes;
+}
 
 async function* toolCallText(
   block: DirectoryBlock,
@@ -71,10 +82,32 @@ async function countStreamedBlock(
   count: (parts: AsyncIterable<Uint8Array>) => Promise<number>,
   fallbackPolicy: 'allow' | 'deny' | undefined,
   logger: DebugLogger,
+  signal?: AbortSignal,
 ): Promise<number> {
   try {
-    return await count(parts);
+    const iterator = parts[Symbol.asyncIterator]();
+    try {
+      let first = await iterator.next();
+      while (first.done !== true && first.value.byteLength === 0)
+        first = await iterator.next();
+      if (first.done === true) return 0;
+      const head = first.value;
+      return await count(
+        (async function* () {
+          yield head;
+          for (
+            let next = await iterator.next();
+            next.done !== true;
+            next = await iterator.next()
+          )
+            yield next.value;
+        })(),
+      );
+    } finally {
+      await iterator.return?.();
+    }
   } catch (error) {
+    signal?.throwIfAborted();
     if (fallbackPolicy === 'deny') throw error;
     logger.debug(
       'Error counting streamed tokens for block, using fallback:',
@@ -92,19 +125,28 @@ export async function estimateSealedTokens(
   model: string,
   provider: TokenizerProvider,
   logger: DebugLogger,
+  signal?: AbortSignal,
 ): Promise<number> {
+  signal?.throwIfAborted();
   const tokenizer = provider.getTokenizerForModel(model);
-  if (tokenizer.countTokenStream === undefined)
-    return estimateContentTokens(
-      decodeStoredRow(await snapshot.readRow(entry)),
-      model,
-      provider,
-      logger,
-    );
   let total = 0;
-  for await (const block of snapshot.blocks(entry)) {
-    let parts = streamedBlock(block);
-    if (block.type === ROW_BLOCK_TYPE.media) {
+  for await (const source of snapshot.blocks(entry)) {
+    signal?.throwIfAborted();
+    const block: DirectoryBlock = {
+      ...source,
+      async *parts() {
+        for await (const part of source.parts()) {
+          signal?.throwIfAborted();
+          yield part;
+        }
+        signal?.throwIfAborted();
+      },
+    };
+    let parts =
+      tokenizer.countTokenStream === undefined
+        ? undefined
+        : streamedBlock(block);
+    if (parts !== undefined && block.type === ROW_BLOCK_TYPE.media) {
       const images = await sealedMediaImageTokens(
         block,
         provider.activeProvider,
@@ -113,26 +155,29 @@ export async function estimateSealedTokens(
       if (images !== undefined) total += images;
       else parts = undefined;
     }
-    if (parts !== undefined) {
+    if (parts !== undefined && tokenizer.countTokenStream !== undefined) {
       total += await countStreamedBlock(
         block,
         parts,
         tokenizer.countTokenStream.bind(tokenizer),
         tokenizer.fallbackPolicy,
         logger,
+        signal,
       );
     } else {
       const content = {
         speaker: 'ai',
-        blocks: [
-          decodeStoredBlock(
-            await snapshot.readBlock(entry, block.ordinal),
-            block.type,
-          ),
-        ],
+        blocks: [decodeStoredBlock(await collectBlock(block), block.type)],
       } satisfies Parameters<typeof estimateContentTokens>[0];
-      total += await estimateContentTokens(content, model, provider, logger);
+      total += await estimateContentTokens(
+        content,
+        model,
+        provider,
+        logger,
+        signal,
+      );
     }
   }
+  signal?.throwIfAborted();
   return total;
 }

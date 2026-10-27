@@ -12,6 +12,7 @@ import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/r
 import { estimateTokens as estimateTextTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { serializeWireContentForEstimate } from '@vybestack/llxprt-code-core/services/history/historyTokenEstimation.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { sourceTokenBlocks } from './source-token-blocks.js';
 import {
   buildInvalidContextBudgetError,
   InvalidContextBudgetError,
@@ -209,7 +210,9 @@ export async function estimateSourcePendingTokens(
   };
   try {
     return await historyService.estimateTokensForContents(
-      stream,
+      rows.native === undefined
+        ? stream
+        : sourceTokenBlocks(rows.native.indexed, signal),
       model,
       signal,
     );

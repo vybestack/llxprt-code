@@ -22,6 +22,7 @@ import type {
   ToolResponseBlock,
 } from './IContent.js';
 import type { DebugLogger } from '../../debug/index.js';
+import { hasTokenEstimationRows } from './compression-token-selection.js';
 import type { RuntimeTokenizer as ITokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
 import { parseImageDimensionsFromBase64 } from '@vybestack/llxprt-code-tools/utils/imageDimensions.js';
 import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
@@ -274,16 +275,27 @@ export async function estimateTokensForContents(
 ): Promise<number> {
   signal?.throwIfAborted();
   let total = 0;
-  for await (const content of contents) {
+  const source = hasTokenEstimationRows(contents)
+    ? contents.tokenRows(signal)
+    : contents;
+  for await (const content of source) {
     signal?.throwIfAborted();
     const effectiveModel = resolveModelName(content.metadata?.model, modelName);
-    total += await estimateContentTokens(
-      content,
-      effectiveModel,
-      tokenizerProvider,
-      logger,
-      signal,
-    );
+    total +=
+      'estimateTokens' in content
+        ? await content.estimateTokens(
+            effectiveModel,
+            tokenizerProvider,
+            logger,
+            signal,
+          )
+        : await estimateContentTokens(
+            content,
+            effectiveModel,
+            tokenizerProvider,
+            logger,
+            signal,
+          );
     signal?.throwIfAborted();
   }
   signal?.throwIfAborted();

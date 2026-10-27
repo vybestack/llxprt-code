@@ -21,6 +21,7 @@ import {
 } from './detachedHistoryAPI.js';
 import type { HistoryStorePort } from './historyStorePort.js';
 import type { TokenRowSource } from './history-token-tickets.js';
+import { estimateTokenRange } from './estimate-token-range.js';
 import { finalizeHistoryMutation } from './finalizeHistoryMutation.js';
 import { HistoryTokenTickets } from './history-token-tickets.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
@@ -1019,7 +1020,14 @@ export abstract class HistoryServiceCore
     failures: unknown[],
   ): Promise<number> {
     try {
-      return await this.estimateTokensForContents(this.journal.streamRows());
+      return (
+        await estimateTokenRange(
+          this.captureTokenRow(0),
+          this.activeTokenizationModel,
+          this.tokenizerProvider(),
+          this.logger,
+        )
+      ).tokens;
     } catch (estimateError: unknown) {
       failures.push(estimateError);
       return 0;
