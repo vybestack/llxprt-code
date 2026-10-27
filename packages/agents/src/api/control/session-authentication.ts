@@ -4,56 +4,55 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type {
-  OAuthAuthOutcome,
-  OAuthUICallback,
-} from '@vybestack/llxprt-code-auth';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { DiscoveredProvider } from './oauth-bucket-discovery.js';
 import { discoverProviderBuckets } from './oauth-bucket-discovery.js';
 
-export type AgentSessionAuthentication = Pick<
-  OAuthManager,
-  | 'attachInteractiveAuthMessages'
-  | 'bindInteractiveAuthHost'
-  | 'unbindInteractiveAuthHost'
-  | 'cancelInteractiveAuth'
-  | 'getInteractiveAuthSessions'
-  | 'takeAuthOutcome'
-  | 'getCodeRequest'
-  | 'clearCodeRequest'
-  | 'getDialog'
-  | 'subscribeDialog'
-  | 'dismissDialog'
-  | 'getAuthStatus'
-  | 'toggleOAuthEnabled'
-  | 'authenticate'
-  | 'getSupportedProviders'
-  | 'listBuckets'
-  | 'isOAuthEnabled'
-  | 'isAuthenticated'
-  | 'peekStoredToken'
-  | 'getHigherPriorityAuth'
-  | 'activateNamedLoginBucket'
-  | 'logoutAllBuckets'
-  | 'logout'
-  | 'clearSessionBucket'
-  | 'getAuthStatusWithBuckets'
-  | 'setSessionBucket'
-  | 'getSessionBucket'
-  | 'inspectAuthLock'
-  | 'forceRecoverAuthLock'
-  | 'recoverAuthLock'
-  | 'clearBrowserProfileAssociation'
-  | 'setBrowserProfileAssociation'
-  | 'resetBuckets'
-  | 'ensureBucketsAuthenticated'
-  | 'readFailoverBuckets'
-  | 'getAllAnthropicUsageInfo'
-  | 'getAllCodexUsageInfo'
-  | 'getAllCodexRateLimitResetCredits'
-> & {
+const OAUTH_OPERATIONS = [
+  'attachInteractiveAuthMessages',
+  'bindInteractiveAuthHost',
+  'unbindInteractiveAuthHost',
+  'cancelInteractiveAuth',
+  'getInteractiveAuthSessions',
+  'takeAuthOutcome',
+  'getCodeRequest',
+  'clearCodeRequest',
+  'getDialog',
+  'subscribeDialog',
+  'dismissDialog',
+  'getAuthStatus',
+  'toggleOAuthEnabled',
+  'authenticate',
+  'getSupportedProviders',
+  'listBuckets',
+  'isOAuthEnabled',
+  'isAuthenticated',
+  'peekStoredToken',
+  'getHigherPriorityAuth',
+  'activateNamedLoginBucket',
+  'logoutAllBuckets',
+  'logout',
+  'clearSessionBucket',
+  'getAuthStatusWithBuckets',
+  'setSessionBucket',
+  'getSessionBucket',
+  'inspectAuthLock',
+  'forceRecoverAuthLock',
+  'recoverAuthLock',
+  'clearBrowserProfileAssociation',
+  'setBrowserProfileAssociation',
+  'resetBuckets',
+  'ensureBucketsAuthenticated',
+  'readFailoverBuckets',
+  'getAllAnthropicUsageInfo',
+  'getAllCodexUsageInfo',
+  'getAllCodexRateLimitResetCredits',
+] as const satisfies ReadonlyArray<keyof OAuthManager>;
+
+type OAuthOperations = Pick<OAuthManager, (typeof OAUTH_OPERATIONS)[number]>;
+export type AgentSessionAuthentication = OAuthOperations & {
   hasCodexToken(): Promise<boolean>;
   clearProviderClientCache(provider: string): void;
   isAvailable(): boolean;
@@ -67,106 +66,30 @@ export type AgentSessionAuthentication = Pick<
   submitCode(provider: string, code: string): boolean;
 };
 
-function interactiveHostControl(
-  oauth: OAuthManager | undefined,
-): Pick<
-  AgentSessionAuthentication,
-  | 'attachInteractiveAuthMessages'
-  | 'bindInteractiveAuthHost'
-  | 'unbindInteractiveAuthHost'
-  | 'cancelInteractiveAuth'
-  | 'getInteractiveAuthSessions'
-  | 'takeAuthOutcome'
-  | 'getCodeRequest'
-  | 'clearCodeRequest'
-  | 'getDialog'
-  | 'subscribeDialog'
-  | 'dismissDialog'
-> {
-  const manager = (): OAuthManager => requireOAuthManager(oauth);
-  return {
-    attachInteractiveAuthMessages: (callback) =>
-      manager().attachInteractiveAuthMessages(callback),
-    bindInteractiveAuthHost: (handler) =>
-      manager().bindInteractiveAuthHost(handler),
-    unbindInteractiveAuthHost: () => manager().unbindInteractiveAuthHost(),
-    cancelInteractiveAuth: () => manager().cancelInteractiveAuth(),
-    getInteractiveAuthSessions: () => manager().getInteractiveAuthSessions(),
-    takeAuthOutcome: (): OAuthAuthOutcome => manager().takeAuthOutcome(),
-    getCodeRequest: () => manager().getCodeRequest(),
-    clearCodeRequest: () => manager().clearCodeRequest(),
-    getDialog: () => manager().getDialog(),
-    subscribeDialog: (listener) => manager().subscribeDialog(listener),
-    dismissDialog: (id) => manager().dismissDialog(id),
-  };
+function bindAuthenticationOperations(oauth: OAuthManager): OAuthOperations;
+function bindAuthenticationOperations(oauth: OAuthManager): object {
+  return Object.fromEntries(
+    OAUTH_OPERATIONS.map((name) => [name, oauth[name].bind(oauth)]),
+  );
 }
 
 export function assembleSessionAuthentication(
-  oauth: OAuthManager | undefined,
+  oauth: OAuthManager,
   clearProviderClientCache: (provider: string) => void,
 ): AgentSessionAuthentication {
-  const manager = (): OAuthManager => {
-    const current = oauth;
-    if (!(current instanceof OAuthManager))
-      throw new Error('OAuth runtime infrastructure is unavailable.');
-    return current;
-  };
   return {
-    ...interactiveHostControl(oauth),
+    ...bindAuthenticationOperations(oauth),
     clearProviderClientCache,
-    isAvailable: () => oauth instanceof OAuthManager,
-    discoverBuckets: (logger) => discoverProviderBuckets(manager(), logger),
+    isAvailable: () => true,
+    discoverBuckets: (logger) => discoverProviderBuckets(oauth, logger),
     ...storedTokenOperations((provider, bucket) =>
-      manager().getTokenStore().getToken(provider, bucket),
+      oauth.getTokenStore().getToken(provider, bucket),
     ),
-    getAuthStatus: () => manager().getAuthStatus(),
-    toggleOAuthEnabled: (provider) => manager().toggleOAuthEnabled(provider),
-    authenticate: (provider, bucket, options) =>
-      manager().authenticate(provider, bucket, options),
-    getSupportedProviders: () => manager().getSupportedProviders(),
-    listBuckets: (provider) => manager().listBuckets(provider),
-    isOAuthEnabled: (provider) => manager().isOAuthEnabled(provider),
-    isAuthenticated: (provider, bucket) =>
-      manager().isAuthenticated(provider, bucket),
-    peekStoredToken: (provider) => manager().peekStoredToken(provider),
-    getHigherPriorityAuth: (provider) =>
-      manager().getHigherPriorityAuth(provider),
-    activateNamedLoginBucket: (provider, bucket) =>
-      manager().activateNamedLoginBucket(provider, bucket),
-    logoutAllBuckets: (provider) => manager().logoutAllBuckets(provider),
-    logout: (provider, bucket) => manager().logout(provider, bucket),
-    clearSessionBucket: (provider) => manager().clearSessionBucket(provider),
-    getAuthStatusWithBuckets: (provider) =>
-      manager().getAuthStatusWithBuckets(provider),
-    setSessionBucket: (provider, bucket) =>
-      manager().setSessionBucket(provider, bucket),
-    getSessionBucket: (provider) => manager().getSessionBucket(provider),
-    inspectAuthLock: (provider, bucket) =>
-      manager().inspectAuthLock(provider, bucket),
-    forceRecoverAuthLock: (provider, bucket, options) =>
-      manager().forceRecoverAuthLock(provider, bucket, options),
-    recoverAuthLock: (provider, bucket) =>
-      manager().recoverAuthLock(provider, bucket),
-    clearBrowserProfileAssociation: (provider, bucket) =>
-      manager().clearBrowserProfileAssociation(provider, bucket),
-    setBrowserProfileAssociation: (provider, bucket, association) =>
-      manager().setBrowserProfileAssociation(provider, bucket, association),
-    getAllAnthropicUsageInfo: (requestFetch) =>
-      manager().getAllAnthropicUsageInfo(requestFetch),
-    getAllCodexUsageInfo: (requestFetch) =>
-      manager().getAllCodexUsageInfo(requestFetch),
-    getAllCodexRateLimitResetCredits: (requestFetch) =>
-      manager().getAllCodexRateLimitResetCredits(requestFetch),
-    resetBuckets: (provider, clearSession) =>
-      manager().resetBuckets(provider, clearSession),
-    ensureBucketsAuthenticated: (provider) =>
-      manager().ensureBucketsAuthenticated(provider),
-    readFailoverBuckets: (provider) => manager().readFailoverBuckets(provider),
-    hasCodexToken: async () => (await manager().getToken('codex')) !== null,
+    hasCodexToken: async () => (await oauth.getToken('codex')) !== null,
     attachProviderMessages: (callback) =>
-      manager().attachAddItemToProviders(callback),
+      oauth.attachAddItemToProviders(callback),
     submitCode: (provider, code) => {
-      const oauthProvider = manager().getProvider(provider);
+      const oauthProvider = oauth.getProvider(provider);
       if (
         !oauthProvider ||
         !('submitAuthCode' in oauthProvider) ||
@@ -177,12 +100,6 @@ export function assembleSessionAuthentication(
       return true;
     },
   };
-}
-
-function requireOAuthManager(oauth: OAuthManager | undefined): OAuthManager {
-  if (!(oauth instanceof OAuthManager))
-    throw new Error('OAuth runtime infrastructure is unavailable.');
-  return oauth;
 }
 
 export function clearProviderAuthenticationCache(provider: unknown): void {

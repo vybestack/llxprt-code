@@ -27,7 +27,7 @@ import {
   createAgentDisposalOwners,
   createAgentTurnOwners,
 } from './agent-operations.js';
-import { AgentImpl, type AgentFacadeComposition } from './agentImpl.js';
+import { createAgentFacade, type AgentFacadeComposition } from './agentImpl.js';
 import {
   buildFacadeState,
   type OwnershipRecord,
@@ -38,6 +38,7 @@ import type {
   AgentAuth,
   AgentSchedulerHandle,
   EditorCallbacks,
+  OAuthPromptHandler,
 } from './config-types.js';
 import {
   createAgentAuthState,
@@ -148,7 +149,7 @@ export interface AgentFacadeOwners {
   readonly ownership: OwnershipRecord;
   readonly sessionIdentityOwnership: 'config' | 'facade';
   readonly initialAuth: AgentAuth | undefined;
-  readonly onOAuthPrompt: unknown;
+  readonly onOAuthPrompt: OAuthPromptHandler | undefined;
   readonly closeRuntime: () => Promise<void> | void;
   readonly awaitMcpDiscovery: McpTeardownPort['awaitDiscovery'];
   readonly closeMcpAdmission: () => void;
@@ -459,7 +460,7 @@ export function publishAgentFacade(
     auth,
     published,
   );
-  return new AgentImpl(
+  return createAgentFacade(
     session.clients.createProviderFileOperations(() =>
       providerControl.coordinator.assertSettingsAdmission(),
     ),
@@ -489,7 +490,7 @@ export interface LeafFacadeValues {
   readonly readRuntimeKind: () => RuntimeKind;
   readonly ownership: OwnershipRecord;
   readonly sessionIdentityOwnership: 'config' | 'facade';
-  readonly onOAuthPrompt: unknown;
+  readonly onOAuthPrompt: OAuthPromptHandler | undefined;
   readonly closeRuntime: () => Promise<void> | void;
   readonly awaitMcpDiscovery: McpTeardownPort['awaitDiscovery'];
   readonly closeMcpAdmission: () => void;

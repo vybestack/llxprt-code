@@ -86,17 +86,3 @@ export class SessionProviderFileBinding {
     );
   }
 }
-
-export abstract class AgentProviderFileDomain
-  implements AgentProviderFileOperations
-{
-  readonly retainProviderFile: AgentProviderFileOperations['retainProviderFile'];
-  readonly captureProviderFiles: AgentProviderFileOperations['captureProviderFiles'];
-  readonly retryProviderFileDeletions: AgentProviderFileOperations['retryProviderFileDeletions'];
-
-  protected constructor(operations: AgentProviderFileOperations) {
-    this.retainProviderFile = operations.retainProviderFile;
-    this.captureProviderFiles = operations.captureProviderFiles;
-    this.retryProviderFileDeletions = operations.retryProviderFileDeletions;
-  }
-}
