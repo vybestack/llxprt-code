@@ -19,6 +19,15 @@ import { draftRow, plainPlanner } from './storeFixtures.js';
 import type { PlannedRow } from '../../groupEdits.js';
 import type { RowDraft } from '../../rowDraft.js';
 import type { RowEntry } from '../../rowEntry.js';
+import { createRecordAccess, type RecordAccess } from '../../recordAccess.js';
+import type { PositionalReader } from '../../positionalFile.js';
+import type { RecordAppender } from '../../groupAppender.js';
+import { TranscriptTreeWriter } from '../../transcript-tree.js';
+import {
+  TRANSCRIPT_HEAD_KEY,
+  encodeTranscriptHead,
+  encodeMembership,
+} from '../../transcript-head.js';
 
 const UTF8 = new TextEncoder();
 /** The Mistral id mapper keeps one mapped id per format slot; the fixture uses slot 0. */
@@ -68,6 +77,69 @@ function fixtureRows(
   };
 }
 
+async function writeTranscript(
+  file: string,
+  reader: PositionalReader,
+  appender: RecordAppender,
+  entries: readonly RowEntry[],
+  meta: KeyedMapBatch,
+  state: KeyedMapBatch,
+): Promise<void> {
+  const access = (): RecordAccess =>
+    createRecordAccess(file, reader, {
+      selfOffset: 0,
+      durableEnd: appender.nextOffset,
+    });
+  const transcript = new TranscriptTreeWriter(
+    access,
+    appender,
+    'transcript',
+  ).appendGroup(0);
+  const membership = new TranscriptTreeWriter(access, appender, 'membership');
+  for (const entry of entries) {
+    const admission = {
+      transcriptId: entry.transcriptId,
+      rowRef: entry.recordOffset,
+      recordLength: entry.recordLength,
+      label: entry.label,
+      revision: 1,
+      audience: 0,
+      status: 1,
+      attemptRef: 0,
+      supersedesId: 0n,
+      presentationRef: 0,
+    };
+    await transcript.append(admission);
+    const occurrencesRoot = await membership.insert(0, {
+      ...admission,
+      transcriptId: entry.label,
+      recordLength: 0,
+    });
+    meta.set(
+      `member:${entry.transcriptId}`,
+      encodeMembership({
+        count: 1,
+        label: entry.label,
+        rowRef: entry.recordOffset,
+        occurrencesRoot,
+      }),
+    );
+  }
+  state.set(
+    TRANSCRIPT_HEAD_KEY,
+    encodeTranscriptHead({
+      root: await transcript.finish(),
+      count: entries.length,
+      nextId: BigInt(entries.length + 1),
+      openRoot: 0,
+      reachableBytes: entries.reduce(
+        (bytes, entry) => bytes + entry.recordLength + 64,
+        0,
+      ),
+    }),
+  );
+}
+
 /**
  * Writes a one-version journal the way a Mistral session would leave it:
  * rows with call and response ids, an id fact for each id whose `mappedRef`
@@ -91,10 +163,8 @@ export async function writeMistralSource(
     const lens = await appender.append(plainRecord(RECORD_KIND.LENS, 5, 48));
     for (const [at, row] of planned.rows.entries()) {
       const encoded = encodeRowDraft(row.label, row.draft);
-      const entry = entryForNewRow(
-        encoded,
-        await appender.append(encoded.record),
-      );
+      const offset = await appender.append(encoded.record);
+      const entry = entryForNewRow(encoded, offset, BigInt(at + 1));
       entries.push(at === 0 ? { ...entry, lensRef: [lens, 0, 0] } : entry);
     }
     const batch = new IdFactBatch(undefined, 0, deps, 0);
@@ -132,6 +202,7 @@ export async function writeMistralSource(
     );
     for (const [key, value] of SESSION_STATE)
       state.set(key, UTF8.encode(value));
+    await writeTranscript(file, writer.reader, appender, entries, meta, state);
     const last = entries[entries.length - 1];
     return {
       parent: 0,
