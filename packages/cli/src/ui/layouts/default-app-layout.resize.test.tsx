@@ -49,7 +49,9 @@ const { wrapWithProviders, createMockSettings } = await import(
   '../../__tests__/render.js'
 );
 const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
-const { buildUiRuntimeFromSource } = await import('../cliUiRuntime.js');
+const { buildUiRuntimeFromSource } = await import(
+  '../../__tests__/ui-runtime-composition-fixture.js'
+);
 const { buildLayoutRuntimeForTest } = await import(
   '../../__tests__/slash-command-runtime-fixture.js'
 );

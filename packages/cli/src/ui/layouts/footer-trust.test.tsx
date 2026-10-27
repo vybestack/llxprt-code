@@ -36,7 +36,9 @@ const { renderWithProviders, createMockSettings } = await import(
 const { FooterRegion } = await import('./DefaultAppLayoutRegions.js');
 const { useFolderTrust } = await import('../hooks/useFolderTrust.js');
 const { Config, coreEvents } = await import('@vybestack/llxprt-code-core');
-const { buildUiRuntimeFromSource } = await import('../cliUiRuntime.js');
+const { buildUiRuntimeFromSource } = await import(
+  '../../__tests__/ui-runtime-composition-fixture.js'
+);
 const { buildLayoutRuntimeForTest } = await import(
   '../../__tests__/slash-command-runtime-fixture.js'
 );

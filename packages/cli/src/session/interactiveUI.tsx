@@ -1,3 +1,4 @@
+import { InteractiveApplication } from './interactiveApplication.js';
 import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFeatures.js';
 
 import {
@@ -69,11 +70,8 @@ import {
 } from './interactiveUiLifecycle.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { InteractiveContextHost } from '../runtime/InteractiveContextHost.js';
-import { buildUiRuntimeFromSource } from '../ui/cliUiRuntime.js';
-import {
-  buildInteractiveCommandPorts,
-  type InteractiveCommandPorts,
-} from '../ui/cliCommandPorts.js';
+import { buildInteractiveUiPorts } from './interactiveUiPorts.js';
+import { type InteractiveCommandPorts } from '../ui/cliCommandPorts.js';
 
 /**
  * Module-level reference to the latest rendered Ink instance.
@@ -312,59 +310,62 @@ function buildRenderElement(
   );
   return renderInteractiveShell(
     <AppWrapper
-      containerApp={commandPorts.containerApp}
-      containerSession={commandPorts.containerSession}
-      containerTerminal={commandPorts.containerTerminal}
-      containerMemory={commandPorts.containerMemory}
-      containerInput={commandPorts.containerInput}
-      inputPolicy={commandPorts.inputPolicy}
-      commandRegistry={commandPorts.commandRegistry}
-      fileCommands={commandPorts.fileCommands}
-      workspaceCommands={commandPorts.workspaceCommands}
-      chatCommands={commandPorts.chatCommands}
-      keyCommands={commandPorts.keyCommands}
-      approval={commandPorts.approval}
-      browserSession={commandPorts.browserSession}
-      emojiFilter={commandPorts.emojiFilter}
-      containerRuntime={commandPorts.containerRuntime}
-      slashCommandPorts={commandPorts.slashCommandPorts}
-      layoutRuntime={commandPorts.layoutRuntime}
-      dialogsRuntime={commandPorts.dialogsRuntime}
-      agent={agent}
-      renderRuntime={contextHost.renderRuntime}
-      detectProviderQuota={contextHost.detectProviderQuota}
-      fetch={contextHost.fetch}
-      getActiveModelName={contextHost.getActiveModelName}
-      getActiveProviderAliasConfig={contextHost.getActiveProviderAliasConfig}
-      getActiveProviderName={contextHost.getActiveProviderName}
-      getActiveToolFormatState={contextHost.getActiveToolFormatState}
-      getEphemeralSetting={contextHost.getEphemeralSetting}
-      getEphemeralSettings={contextHost.getEphemeralSettings}
-      listSavedProfiles={contextHost.listSavedProfiles}
-      providerStatus={contextHost.providerStatus}
-      saveLoadBalancerProfile={contextHost.saveLoadBalancerProfile}
-      setActiveModel={contextHost.setActiveModel}
-      setActiveToolFormatOverride={contextHost.setActiveToolFormatOverride}
-      setEphemeralSetting={contextHost.setEphemeralSetting}
-      updateActiveProviderApiKey={contextHost.updateActiveProviderApiKey}
-      providerAliasRefresh={agent.providerReads.refreshAliases}
-      oauthControl={agent.authentication}
-      settings={settings}
-      startupWarnings={startupWarnings}
-      version={version}
-      terminalBackgroundColor={commandPorts.containerTerminal.getTerminalBackground()}
-      {...(recordingOwner === 'agent'
-        ? { recordingOwner, resumedHistory, suppressStartupWelcome }
-        : {
-            recordingIntegration,
-            recordingOwner,
-            resumedHistory,
-            initialRecordingService,
-            initialLockHandle,
-            suppressStartupWelcome,
-          })}
-      operationLifecycle={perfOwner?.registry}
-      memoryController={perfOwner?.memoryController ?? undefined}
+      {...new InteractiveApplication({
+        containerApp: commandPorts.containerApp,
+        containerSession: commandPorts.containerSession,
+        containerTerminal: commandPorts.containerTerminal,
+        containerMemory: commandPorts.containerMemory,
+        containerInput: commandPorts.containerInput,
+        inputPolicy: commandPorts.inputPolicy,
+        commandRegistry: commandPorts.commandRegistry,
+        fileCommands: commandPorts.fileCommands,
+        workspaceCommands: commandPorts.workspaceCommands,
+        chatCommands: commandPorts.chatCommands,
+        keyCommands: commandPorts.keyCommands,
+        approval: commandPorts.approval,
+        browserSession: commandPorts.browserSession,
+        emojiFilter: commandPorts.emojiFilter,
+        containerRuntime: commandPorts.containerRuntime,
+        slashCommandPorts: commandPorts.slashCommandPorts,
+        layoutRuntime: commandPorts.layoutRuntime,
+        dialogsRuntime: commandPorts.dialogsRuntime,
+        agent,
+        renderRuntime: contextHost.renderRuntime,
+        detectProviderQuota: contextHost.detectProviderQuota,
+        fetch: contextHost.fetch,
+        getActiveModelName: contextHost.getActiveModelName,
+        getActiveProviderAliasConfig: contextHost.getActiveProviderAliasConfig,
+        getActiveProviderName: contextHost.getActiveProviderName,
+        getActiveToolFormatState: contextHost.getActiveToolFormatState,
+        getEphemeralSetting: contextHost.getEphemeralSetting,
+        getEphemeralSettings: contextHost.getEphemeralSettings,
+        listSavedProfiles: contextHost.listSavedProfiles,
+        providerStatus: contextHost.providerStatus,
+        saveLoadBalancerProfile: contextHost.saveLoadBalancerProfile,
+        setActiveModel: contextHost.setActiveModel,
+        setActiveToolFormatOverride: contextHost.setActiveToolFormatOverride,
+        setEphemeralSetting: contextHost.setEphemeralSetting,
+        updateActiveProviderApiKey: contextHost.updateActiveProviderApiKey,
+        providerAliasRefresh: agent.providerReads.refreshAliases,
+        oauthControl: agent.authentication,
+        settings,
+        startupWarnings,
+        version,
+        terminalBackgroundColor:
+          commandPorts.containerTerminal.getTerminalBackground(),
+        ...(recordingOwner === 'agent'
+          ? { recordingOwner, resumedHistory, suppressStartupWelcome }
+          : {
+              recordingIntegration,
+              recordingOwner,
+              resumedHistory,
+              initialRecordingService,
+              initialLockHandle,
+              suppressStartupWelcome,
+            }),
+        operationLifecycle: perfOwner?.registry,
+        memoryController: perfOwner?.memoryController ?? undefined,
+      }).createAppProps()}
     />,
     settings,
   );
@@ -530,8 +531,7 @@ function buildTerminalRollbackCapabilities(mouseEventsEnabled: boolean): {
  */
 export interface InteractiveStartupPorts {
   readonly renderOptions: typeof inkRenderOptions;
-  readonly buildUiRuntime: typeof buildUiRuntimeFromSource;
-  readonly buildCommandPorts: typeof buildInteractiveCommandPorts;
+  readonly buildCommandPorts: typeof buildInteractiveUiPorts;
   readonly debugAppend: (line: string) => void;
   readonly setupTerminal: typeof setupTerminalExitHandlers;
   readonly isMouseEnabled: typeof isMouseEventsEnabled;
@@ -550,8 +550,7 @@ export interface InteractiveStartupPorts {
  */
 const defaultStartupPorts: InteractiveStartupPorts = {
   renderOptions: inkRenderOptions,
-  buildUiRuntime: buildUiRuntimeFromSource,
-  buildCommandPorts: buildInteractiveCommandPorts,
+  buildCommandPorts: buildInteractiveUiPorts,
   debugAppend: appendInteractiveUiDebug,
   setupTerminal: setupTerminalExitHandlers,
   isMouseEnabled: isMouseEventsEnabled,
@@ -684,14 +683,11 @@ function startupCommandRuntimes(
   ports: InteractiveStartupPorts,
   operations: ReturnType<typeof startupBucketOperations>,
 ) {
-  const uiRuntime = ports.buildUiRuntime(
-    args.config,
-    args.agent,
-    operations,
-    args.runtimeSettings,
-  );
   const commandPorts = ports.buildCommandPorts({
-    runtime: uiRuntime,
+    source: args.config,
+    agent: args.agent,
+    bucketFailover: operations,
+    telemetrySettings: args.runtimeSettings,
     providerKeys: args.providerKeys,
     describeToolConfiguration: () => args.agent.tools.describeConfiguration(),
     restartExtension: args.restartExtension,

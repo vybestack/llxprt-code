@@ -113,7 +113,9 @@ import type { HistoryItem } from '../types.js';
 import { SettingsProfileProvider } from '../stores/settings/SettingsContext.js';
 import { createSettingsProfileStore } from '../stores/settings/settingsStore.js';
 import { VimModeProvider } from '../contexts/VimModeContext.js';
-const { buildUiRuntimeFromSource } = await import('../cliUiRuntime.js');
+const { buildUiRuntimeFromSource } = await import(
+  '../../__tests__/ui-runtime-composition-fixture.js'
+);
 const { buildLayoutRuntimeForTest } = await import(
   '../../__tests__/slash-command-runtime-fixture.js'
 );

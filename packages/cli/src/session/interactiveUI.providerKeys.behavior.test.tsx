@@ -27,7 +27,8 @@ import {
   runExitCleanup,
 } from '../utils/cleanup.js';
 import { AppWrapper } from '../ui/App.js';
-import type { KeyCommandReads } from '../ui/cliCommandPorts.js';
+import type { SlashCommand } from '../ui/commands/types.js';
+import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 import {
   __resetInteractiveUIStateForTesting,
   __setRenderForTesting,
@@ -58,12 +59,18 @@ function installRender(
   return rendered;
 }
 
-function keyCommandsOf(root: React.ReactElement): KeyCommandReads {
+function keyCommandsOf(root: React.ReactElement): SlashCommand {
   let node: React.ReactNode = root;
   while (React.isValidElement<{ children?: React.ReactNode }>(node)) {
     if (node.type === AppWrapper) {
-      return (node.props as React.ComponentProps<typeof AppWrapper>)
-        .keyCommands;
+      return (
+        node.props as React.ComponentProps<typeof AppWrapper>
+      ).registerCredentials(
+        () => 0,
+        () => {},
+        undefined,
+        'agent',
+      ).keyCommand;
     }
     node = node.props.children;
   }
@@ -230,23 +237,25 @@ describe('interactive UI key handle ownership', () => {
 
     await commit(storeA);
     const commandsA = keyCommandsOf(roots[0]);
-    await commandsA.getProviderKeys().saveKey('only-in-a', 'secret-a');
-    commandsA.invalidateKeyCompletion();
-    expect(await commandsA.listKeyCompletionNames()).toStrictEqual([
-      'only-in-a',
-    ]);
+    if (!commandsA.action) throw new Error('Missing key command action');
+    await commandsA.action(
+      createMockCommandContext(),
+      'save only-in-a secret-a',
+    );
+    expect(await storeA.listKeys()).toStrictEqual(['only-in-a']);
 
     await replacePreviousInstanceAndOwner();
     expect(storeA.closeCount).toBe(1);
 
     await commit(storeB);
     const commandsB = keyCommandsOf(roots[1]);
-    expect(await commandsB.listKeyCompletionNames()).toStrictEqual([]);
-    await commandsB.getProviderKeys().saveKey('only-in-b', 'secret-b');
-    commandsB.invalidateKeyCompletion();
-    expect(await commandsB.listKeyCompletionNames()).toStrictEqual([
-      'only-in-b',
-    ]);
+    expect(await storeB.listKeys()).toStrictEqual([]);
+    if (!commandsB.action) throw new Error('Missing key command action');
+    await commandsB.action(
+      createMockCommandContext(),
+      'save only-in-b secret-b',
+    );
+    expect(await storeB.listKeys()).toStrictEqual(['only-in-b']);
     expect(await storeA.listKeys()).toStrictEqual(['only-in-a']);
     expect(storeB.closeCount).toBe(0);
   });

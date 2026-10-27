@@ -32,7 +32,7 @@ import {
   type DialogKind,
   type DialogStore,
 } from '../stores/dialog/dialogStore.js';
-import { buildUiRuntimeFromSource } from '../cliUiRuntime.js';
+import { buildUiRuntimeFromSource } from '../../__tests__/ui-runtime-composition-fixture.js';
 import { buildLayoutRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 
 const DIALOG_MANAGER_SENTINEL = 'DIALOG_MANAGER_RENDERED';

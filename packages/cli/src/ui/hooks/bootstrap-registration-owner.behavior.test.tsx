@@ -15,7 +15,7 @@ import {
   waitFor,
 } from '../../__tests__/render.js';
 import { useAppStores } from '../AppContainerRuntime.js';
-import { buildUiRuntimeFromSource } from '../cliUiRuntime.js';
+import { buildUiRuntimeFromSource } from '../../__tests__/ui-runtime-composition-fixture.js';
 import { buildUiPortsForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { RuntimeContextProvider } from '../../__tests__/runtime-context-fixture.js';
 import { OAuthControlProvider } from '../contexts/OAuthControlContext.js';

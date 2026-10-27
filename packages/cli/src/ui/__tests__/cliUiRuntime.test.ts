@@ -8,10 +8,8 @@ import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 import { describe, it, expect } from 'bun:test';
 import { ApprovalMode } from '@vybestack/llxprt-code-agents';
 import { Config, Logger, MessageSenderType } from '@vybestack/llxprt-code-core';
-import {
-  buildUiRuntimeFromSource,
-  type UiRuntimeBareSource,
-} from '../cliUiRuntime.js';
+import { buildUiRuntimeFromSource } from '../../__tests__/ui-runtime-composition-fixture.js';
+import type { UiRuntimeBareSource } from '../cliUiRuntime.js';
 import { buildUiPortsForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';

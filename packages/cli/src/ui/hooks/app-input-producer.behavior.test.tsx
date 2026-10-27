@@ -1,3 +1,4 @@
+import { InteractiveApplication } from '../../session/interactiveApplication.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -158,17 +159,19 @@ function renderApplication(
   return render(
     <SettingsContext.Provider value={settings}>
       <AppWrapper
-        agent={owner}
-        {...ports}
-        settings={createMockSettings({
-          folderTrust: false,
-          ui: { theme: 'Default' },
-        })}
-        version="test"
-        {...runtimeAppFixture(owner, runtimeApi, owner.sessionClient.fetch)}
-        providerAliasRefresh={async () => {}}
-        oauthControl={oauthControl}
-        suppressStartupWelcome
+        {...new InteractiveApplication({
+          agent: owner,
+          ...ports,
+          settings: createMockSettings({
+            folderTrust: false,
+            ui: { theme: 'Default' },
+          }),
+          version: 'test',
+          ...runtimeAppFixture(owner, runtimeApi, owner.sessionClient.fetch),
+          providerAliasRefresh: async () => {},
+          oauthControl,
+          suppressStartupWelcome: true,
+        }).createAppProps()}
       />
     </SettingsContext.Provider>,
   );

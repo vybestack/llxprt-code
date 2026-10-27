@@ -1,3 +1,5 @@
+import { buildInteractiveUiPorts } from './interactiveUiPorts.js';
+import { createMockSettings } from '../__tests__/render.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -28,7 +30,6 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { useCommandOwners as installCommandOwners } from '../__tests__/command-owner-fixture.js';
 const makeTransactionAgent = installCommandOwners();
-import type { LoadedSettings } from '../config/settings.js';
 import {
   __resetInteractiveUIStateForTesting,
   type InteractiveStartupPorts,
@@ -91,7 +92,7 @@ let testConfig: Config;
 let runtimeSettings: SessionSettingsOwner;
 
 let testAgent: Agent;
-const testSettings = {} as unknown as LoadedSettings;
+const testSettings = createMockSettings({});
 
 /**
  * Base noop ports. Every port returns a minimal stub or is a no-op. Each test
@@ -105,14 +106,7 @@ function noopPorts(): InteractiveStartupPorts {
       incrementalRendering: false,
       stdout: { columns: 80, rows: 24 },
     })) as never,
-    buildUiRuntime: (() => ({})) as never,
-    // The terminal background is read while the render element is built,
-    // before `render` runs. Every other command port is read only when React
-    // renders that element, and these tests stub `render`, so the element is
-    // never mounted.
-    buildCommandPorts: (() => ({
-      containerTerminal: { getTerminalBackground: () => '' },
-    })) as never,
+    buildCommandPorts: buildInteractiveUiPorts,
     debugAppend: () => {},
     setupTerminal: () => {},
     isMouseEnabled: () => false,
@@ -226,37 +220,6 @@ describe('Finding B — transactional interactive startup', () => {
     expect(caught).not.toBe(null);
     expect(
       errorMessages(caught).some((m) => m.includes('render-options-boom')),
-    ).toBe(true);
-    assertOwnerDisposed(owner, scheduler);
-  });
-
-  it('ui-runtime failure: owner disposed, no mouse staged', async () => {
-    const scheduler = new CountingScheduler();
-    const owner = await makeStartedOwner(scheduler);
-    const ports = {
-      ...noopPorts(),
-      buildUiRuntime: (() => {
-        throw new Error('ui-runtime-boom');
-      }) as never,
-    };
-
-    let caught: unknown = null;
-    try {
-      await commitInteractiveStartupForTest({
-        config: testConfig,
-        runtimeSettings,
-        agent: testAgent,
-        settings: testSettings,
-        perfOwner: owner,
-        version: 'test',
-        startupWarnings: [],
-        ports,
-      });
-    } catch (err) {
-      caught = err;
-    }
-    expect(
-      errorMessages(caught).some((m) => m.includes('ui-runtime-boom')),
     ).toBe(true);
     assertOwnerDisposed(owner, scheduler);
   });

@@ -12,7 +12,7 @@ import {
   wrapWithProviders,
   createMockSettings,
 } from '../../__tests__/render.js';
-import { buildUiRuntimeFromSource } from '../cliUiRuntime.js';
+import { buildUiRuntimeFromSource } from '../../__tests__/ui-runtime-composition-fixture.js';
 import { buildLayoutRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { StreamingState } from '../types.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';

@@ -1,3 +1,5 @@
+import { buildInteractiveUiPorts } from '../session/interactiveUiPorts.js';
+import { buildUiRuntimeFromSource } from './ui-runtime-composition-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -13,7 +15,6 @@ import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFea
 import { InMemoryProviderKeyHandle } from './provider-key-handle-fixture.js';
 import type { PerfSnapshotCapability } from '../ui/commands/perfCommand.js';
 import {
-  buildUiRuntimeFromSource,
   type BucketFailoverRuntime,
   type CheckpointRuntime,
   type FileWorkspaceState,
@@ -24,10 +25,7 @@ import {
   type UiRuntimeDeclarationSource,
 } from '../ui/cliUiRuntime.js';
 import { createKeyCommandReads } from '../ui/commands/key-completion-owner.js';
-import {
-  buildInteractiveCommandPorts,
-  type InteractiveCommandPorts,
-} from '../ui/cliCommandPorts.js';
+import { type InteractiveCommandPorts } from '../ui/cliCommandPorts.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LayoutRuntime } from '../ui/layouts/DefaultAppLayoutHelpers.js';
 import type { AppDialogsRuntime } from '../ui/containers/AppContainer/hooks/useAppDialogs.js';
@@ -160,13 +158,11 @@ export function buildUiPortsForTest(
     restartExtension,
     telemetrySettings,
   ] = args;
-  return buildInteractiveCommandPorts({
-    runtime: buildUiRuntimeFromSource(
-      source,
-      agent,
-      bucketFailover,
-      telemetrySettings,
-    ),
+  return buildInteractiveUiPorts({
+    source,
+    agent,
+    bucketFailover: bucketFailover ?? {},
+    telemetrySettings,
     providerKeys: new InMemoryProviderKeyHandle(),
     describeToolConfiguration: () => agent.tools.describeConfiguration(),
     restartExtension,

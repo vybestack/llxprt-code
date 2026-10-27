@@ -1,10 +1,7 @@
-import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFeatures.js';
-
 import type {
   UserPromptEvent,
   SlashCommandEvent,
 } from '@vybestack/llxprt-code-telemetry';
-import { buildSettingsRuntime } from '../runtime/createRuntimeOwnerFeatures.js';
 
 /**
  * @license
@@ -261,7 +258,7 @@ export interface EphemeralSettingsRuntime {
 /**
  * MCP discovery and configured-server state exposed to CLI consumers.
  */
-type McpUiSelection = Pick<
+export type McpUiSelection = Pick<
   Agent['mcp'],
   | 'listPrompts'
   | 'listResources'
@@ -370,11 +367,6 @@ export interface StreamRuntime {
  * extension and app capability slices. Built once at the CLI composition root,
  * which projects it onto narrow ports; it never reaches a component.
  */
-export interface UiComposition extends StreamRuntime {
-  approval: ApprovalState;
-  extensions: ExtensionRuntime;
-  app: AppStateRuntime;
-}
 
 /**
  * Bare structural source satisfying all focused capability interfaces
@@ -459,7 +451,7 @@ export type UiRuntimeDeclarationSource = Omit<
   | 'getEphemeralSetting'
 >;
 
-function buildSessionRuntime(
+export function buildSessionRuntime(
   source: StreamRuntimeDeclarationSource,
 ): SessionIdentity {
   return {
@@ -475,7 +467,7 @@ function buildSessionRuntime(
   };
 }
 
-function buildModelRuntime(
+export function buildModelRuntime(
   agent: Pick<Agent, 'getModel' | 'getProvider'>,
 ): ModelState {
   return {
@@ -484,7 +476,9 @@ function buildModelRuntime(
   };
 }
 
-function buildShellRuntime(source: StreamRuntimeDeclarationSource): ShellState {
+export function buildShellRuntime(
+  source: StreamRuntimeDeclarationSource,
+): ShellState {
   return {
     getShouldUseNodePtyShell: () => source.getShouldUseNodePtyShell(),
     getEnableInteractiveShell: () => source.getEnableInteractiveShell(),
@@ -498,25 +492,9 @@ function buildShellRuntime(source: StreamRuntimeDeclarationSource): ShellState {
   };
 }
 
-function buildFilesRuntime(
+export function buildFilesRuntime(
   source: StreamRuntimeDeclarationSource,
-  workspace: Pick<
-    Agent,
-    | 'workspace'
-    | 'memory'
-    | 'sessionClient'
-    | 'getModel'
-    | 'getProvider'
-    | 'getEphemeralSetting'
-    | 'getEphemeralSettings'
-    | 'setEphemeralSetting'
-    | 'getActiveProfileName'
-    | 'onStats'
-    | 'getApprovalMode'
-    | 'setApprovalMode'
-  > & {
-    mcp: McpUiSelection;
-  },
+  workspace: Pick<Agent, 'workspace'>,
 ): FileWorkspaceState {
   return {
     initializeSearch: (directory, options) =>
@@ -553,25 +531,9 @@ function buildFilesRuntime(
   };
 }
 
-function buildMemoryRuntime(
+export function buildMemoryRuntime(
   source: StreamRuntimeDeclarationSource,
-  workspace: Pick<
-    Agent,
-    | 'workspace'
-    | 'memory'
-    | 'sessionClient'
-    | 'getModel'
-    | 'getProvider'
-    | 'getEphemeralSetting'
-    | 'getEphemeralSettings'
-    | 'setEphemeralSetting'
-    | 'getActiveProfileName'
-    | 'onStats'
-    | 'getApprovalMode'
-    | 'setApprovalMode'
-  > & {
-    mcp: McpUiSelection;
-  },
+  workspace: Pick<Agent, 'memory'>,
 ): MemoryState {
   return {
     getUserMemory: () => workspace.memory.getMemory(),
@@ -589,7 +551,7 @@ function buildMemoryRuntime(
   };
 }
 
-function buildHooksRuntime(
+export function buildHooksRuntime(
   source: StreamRuntimeDeclarationSource,
   hooks: Pick<
     Agent['hooks'],
@@ -607,7 +569,7 @@ function buildHooksRuntime(
   };
 }
 
-function buildMcpRuntime(
+export function buildMcpRuntime(
   source: StreamRuntimeDeclarationSource,
   mcp: McpUiSelection,
 ): McpState {
@@ -623,7 +585,7 @@ function buildMcpRuntime(
   };
 }
 
-function buildAppEventRuntime(
+export function buildAppEventRuntime(
   mcp: Pick<Agent['mcp'], 'subscribeStatus'>,
 ): AppEventRuntime {
   return {
@@ -631,156 +593,78 @@ function buildAppEventRuntime(
   };
 }
 
-/**
- * Builds the streaming composition from a runtime source at the composition
- * edge. Each field is a concrete focused adapter so the nested composition
- * does not expose the flat source object below the composition edge.
- */
-function buildStreamWorkspaceRuntime(
-  source: StreamRuntimeDeclarationSource,
+export function buildApprovalRuntime(
+  source: Pick<ApprovalState, 'getCoreTools' | 'getExcludeTools'>,
+  workspace: Pick<Agent, 'getApprovalMode' | 'setApprovalMode'>,
+): ApprovalState {
+  return {
+    getApprovalMode: () => workspace.getApprovalMode(),
+    setApprovalMode: (mode) => workspace.setApprovalMode(mode),
+    getCoreTools: () => source.getCoreTools(),
+    getExcludeTools: () => source.getExcludeTools(),
+  };
+}
+export function buildExtensionRuntime(
+  source: ExtensionRuntime,
+): ExtensionRuntime {
+  return {
+    getExtensions: () => source.getExtensions(),
+    isExtensionEnabled: (extensionName) =>
+      source.isExtensionEnabled(extensionName),
+    extensionEnablementManager: source.extensionEnablementManager,
+  };
+}
+export function buildAppRuntime(
+  source: Pick<
+    UiRuntimeDeclarationSource,
+    | 'getAccessibility'
+    | 'getScreenReader'
+    | 'getDebugMode'
+    | 'isRestrictiveSandbox'
+    | 'getFolderTrust'
+    | 'getQuestion'
+    | 'getConversationLogPath'
+    | 'getEnablePromptCompletion'
+    | 'getUtilityModel'
+    | 'isJitContextEnabled'
+    | 'updateSystemInstructionIfInitialized'
+  >,
   workspace: Pick<
     Agent,
-    | 'hooks'
-    | 'workspace'
-    | 'memory'
-    | 'sessionClient'
-    | 'getModel'
-    | 'getProvider'
-    | 'getEphemeralSetting'
-    | 'getEphemeralSettings'
-    | 'setEphemeralSetting'
-    | 'getActiveProfileName'
-    | 'onStats'
-    | 'getApprovalMode'
-    | 'setApprovalMode'
-  > & {
-    mcp: McpUiSelection;
-  },
-  telemetrySettings?: SessionSettingsOperations,
-): StreamRuntime {
-  return {
-    session: buildSessionRuntime(source),
-    model: buildModelRuntime(workspace),
-    shell: buildShellRuntime(source),
-    files: buildFilesRuntime(source, workspace),
-    memory: buildMemoryRuntime(source, workspace),
-    hooks: buildHooksRuntime(source, workspace.hooks),
-    mcp: buildMcpRuntime(source, workspace.mcp),
-    settings: buildSettingsRuntime(source, workspace, telemetrySettings),
-    events: buildAppEventRuntime(workspace.mcp),
-    bucketFailover: {
-      resetBuckets: source.resetBuckets?.bind(source),
-      resetBucketSession: source.resetBucketSession?.bind(source),
-      ensureBucketsAuthenticated:
-        source.ensureBucketsAuthenticated?.bind(source),
-      readFailoverBuckets: source.readFailoverBuckets?.bind(source),
-      readCurrentBucket: source.readCurrentBucket?.bind(source),
-    },
-    checkpoint: {
-      checkpoints: workspace.workspace.checkpoints,
-      getCheckpointingEnabled: () => source.getCheckpointingEnabled(),
-    },
-    sessionLimits: { getMaxSessionTurns: () => source.getMaxSessionTurns() },
-    interactive: { isInteractive: () => source.isInteractive() },
-    ephemeral: {
-      getEphemeralSetting: (key) => workspace.getEphemeralSetting(key),
-    },
-    projectTempDir: source.projectTempDir,
-    projectChatsDir: source.projectChatsDir,
-    projectCheckpointsDir: source.projectCheckpointsDir,
-    historyFilePath: source.historyFilePath,
-    userCommandsDir: source.userCommandsDir,
-    projectCommandsDir: source.projectCommandsDir,
-  };
-}
-
-function buildUiWorkspaceRuntime(
-  source: UiRuntimeDeclarationSource,
-  workspace: Parameters<typeof buildStreamWorkspaceRuntime>[1] &
-    Pick<Agent, 'getApprovalMode' | 'setApprovalMode' | 'ide'> & {
-      tools: Pick<Agent['tools'], 'get'>;
-    },
-  bucketFailover?: BucketFailoverRuntime,
-  telemetrySettings?: SessionSettingsOperations,
-): UiComposition {
-  return {
-    ...buildStreamWorkspaceRuntime(source, workspace, telemetrySettings),
-    ...(bucketFailover ? { bucketFailover } : {}),
-    approval: {
-      getApprovalMode: () => workspace.getApprovalMode(),
-      setApprovalMode: (mode) => workspace.setApprovalMode(mode),
-      getCoreTools: () => source.getCoreTools(),
-      getExcludeTools: () => source.getExcludeTools(),
-    },
-    extensions: {
-      getExtensions: () => source.getExtensions(),
-      isExtensionEnabled: (extensionName) =>
-        source.isExtensionEnabled(extensionName),
-      extensionEnablementManager: source.extensionEnablementManager,
-    },
-    app: {
-      getAccessibility: () => source.getAccessibility(),
-      getScreenReader: () => source.getScreenReader(),
-      getDebugMode: () => source.getDebugMode(),
-      isRestrictiveSandbox: () => source.isRestrictiveSandbox(),
-      isTrustedFolder: () => workspace.ide.isTrustedFolder(),
-      setTrustedFolderLive: (trusted) =>
-        workspace.ide.setTrustedFolderLive(trusted),
-      getFolderTrust: () => source.getFolderTrust(),
-      getQuestion: () => source.getQuestion(),
-      getConversationLogPath: () => source.getConversationLogPath(),
-      getEnablePromptCompletion: () => source.getEnablePromptCompletion(),
-      getUtilityModel: () => source.getUtilityModel(),
-      isJitContextEnabled: () => source.isJitContextEnabled(),
-      getEphemeralSettings: () => workspace.getEphemeralSettings(),
-      setEphemeralSetting: (key, value) =>
-        workspace.setEphemeralSetting(key, value),
-      getSubagentManager: () => workspace.workspace.subagentDefinitions,
-      // @plan PLAN-20260731-GHBROKER.P16
-      githubCompletion: {
-        readReport: async (op, params, signal) =>
-          readGitHubCompletionReport(
-            workspace.tools.get('github'),
-            op,
-            params,
-            signal,
-          ),
-      },
-      updateSystemInstructionIfInitialized: () =>
-        source.updateSystemInstructionIfInitialized(),
-    },
-  };
-}
-
-export function buildUiRuntimeFromSource(
-  source: UiRuntimeDeclarationSource,
-  agent: Pick<
-    Agent,
-    | 'ide'
-    | 'getApprovalMode'
-    | 'setApprovalMode'
-    | 'sessionClient'
-    | 'hooks'
-    | 'workspace'
-    | 'memory'
-    | 'getModel'
-    | 'getProvider'
-    | 'getEphemeralSetting'
-    | 'getEphemeralSettings'
-    | 'setEphemeralSetting'
-    | 'getActiveProfileName'
-    | 'onStats'
+    'ide' | 'getEphemeralSettings' | 'setEphemeralSetting' | 'workspace'
   > & {
     tools: Pick<Agent['tools'], 'get'>;
-    mcp: McpUiSelection;
   },
-  bucketFailover?: BucketFailoverRuntime,
-  telemetrySettings?: SessionSettingsOperations,
-): UiComposition {
-  return buildUiWorkspaceRuntime(
-    source,
-    agent,
-    bucketFailover,
-    telemetrySettings,
-  );
+): AppStateRuntime {
+  return {
+    getAccessibility: () => source.getAccessibility(),
+    getScreenReader: () => source.getScreenReader(),
+    getDebugMode: () => source.getDebugMode(),
+    isRestrictiveSandbox: () => source.isRestrictiveSandbox(),
+    isTrustedFolder: () => workspace.ide.isTrustedFolder(),
+    setTrustedFolderLive: (trusted) =>
+      workspace.ide.setTrustedFolderLive(trusted),
+    getFolderTrust: () => source.getFolderTrust(),
+    getQuestion: () => source.getQuestion(),
+    getConversationLogPath: () => source.getConversationLogPath(),
+    getEnablePromptCompletion: () => source.getEnablePromptCompletion(),
+    getUtilityModel: () => source.getUtilityModel(),
+    isJitContextEnabled: () => source.isJitContextEnabled(),
+    getEphemeralSettings: () => workspace.getEphemeralSettings(),
+    setEphemeralSetting: (key, value) =>
+      workspace.setEphemeralSetting(key, value),
+    getSubagentManager: () => workspace.workspace.subagentDefinitions,
+    // @plan PLAN-20260731-GHBROKER.P16
+    githubCompletion: {
+      readReport: async (op, params, signal) =>
+        readGitHubCompletionReport(
+          workspace.tools.get('github'),
+          op,
+          params,
+          signal,
+        ),
+    },
+    updateSystemInstructionIfInitialized: () =>
+      source.updateSystemInstructionIfInitialized(),
+  };
 }

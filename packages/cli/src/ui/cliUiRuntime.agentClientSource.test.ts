@@ -28,7 +28,7 @@ import { createGenerationProvider } from '../../../agents/src/api/__tests__/help
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { openRouteBPreflight } from '../../../agents/src/api/__tests__/helpers/route-b-preflight.js';
 import { fetchGitHubSuggestions } from './hooks/githubAtCompletion.js';
-import { buildUiRuntimeFromSource } from './cliUiRuntime.js';
+import { buildUiRuntimeFromSource } from '../__tests__/ui-runtime-composition-fixture.js';
 import { buildUiPortsForTest } from '../__tests__/slash-command-runtime-fixture.js';
 
 const MULTI_TURN_REPLAY = fileURLToPath(

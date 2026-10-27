@@ -16,13 +16,25 @@ import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import type { CliSessionPersistencePort } from '../cliSessionPersistence.js';
 import type { PerfSnapshotCapability } from './commands/perfCommand.js';
 import type {
+  SessionIdentity,
+  ModelState,
+  FileWorkspaceState,
+  MemoryState,
+  SettingsTelemetryState,
+  AppEventRuntime,
+  BucketFailoverRuntime,
+  CheckpointRuntime,
+  SessionLimitsRuntime,
+  InteractiveRuntime,
+  EphemeralSettingsRuntime,
+  ApprovalState,
+  ExtensionRuntime,
   AppStateRuntime,
   ExtensionEnablementSource,
   HookSkillState,
   McpState,
   RefreshMemoryResult,
   ShellState,
-  UiComposition,
   UiSubagentManager,
   UiToolRegistryInfo,
 } from './cliUiRuntime.js';
@@ -48,9 +60,7 @@ export interface CommandRegistryReads {
   isAdminSkillsEnabled(): boolean;
   readonly extensionEnablementManager?: ExtensionEnablementSource;
   getMcpServers(): Record<string, MCPServerConfig> | undefined;
-  listPrompts(
-    serverName: string,
-  ): ReturnType<UiComposition['mcp']['listPrompts']>;
+  listPrompts(serverName: string): ReturnType<McpState['listPrompts']>;
 }
 
 /**
@@ -162,21 +172,6 @@ export interface ContainerInputReads {
 }
 
 /**
- * The inputs only the CLI composition root holds: the runtime it just
- * composed, the provider-key handle, the agent tool registry, and the optional
- * perf/skill/extension/persistence owners.
- */
-export interface CliPortSources {
-  readonly runtime: UiComposition;
-  readonly providerKeys: ProviderKeyStorageLike;
-  readonly describeToolConfiguration: () => UiToolRegistryInfo;
-  readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
-  readonly skillOperations?: SkillsCommandRuntime;
-  readonly sessionPersistence?: CliSessionPersistencePort;
-  readonly perfSnapshotCapability?: PerfSnapshotCapability | null;
-}
-
-/**
  * The composition root's forwarding record. Every field is a projection built
  * for one consumer family (the command registry loaders, the file-command
  * loader, the workspace/chat/key command owners, the slash processor's ports,
@@ -205,43 +200,15 @@ export interface InteractiveCommandPorts {
   readonly dialogsRuntime: AppDialogsRuntime;
 }
 
-/**
- * Builds every port the interactive UI consumes. Called once at the CLI
- * composition root, whose caller spreads the fields into the component props
- * so no consumer receives the runtime or this record as a whole.
- */
-export function buildInteractiveCommandPorts(
-  sources: CliPortSources,
-): InteractiveCommandPorts {
-  const { runtime, providerKeys, describeToolConfiguration } = sources;
-  return {
-    commandRegistry: buildCommandRegistryReads(runtime),
-    containerApp: buildContainerAppReads(runtime),
-    containerSession: buildContainerSessionReads(runtime),
-    containerTerminal: buildContainerTerminalReads(runtime),
-    containerMemory: buildContainerMemoryReads(runtime),
-    containerInput: buildContainerInputReads(runtime),
-    inputPolicy: buildInputStreamPolicyReads(runtime),
-    fileCommands: buildFileCommandReads(runtime),
-    workspaceCommands: buildWorkspaceCommandPorts(runtime),
-    chatCommands: buildChatCommandReads(runtime, sources.sessionPersistence),
-    keyCommands: buildKeyCommandReads(runtime, providerKeys),
-    approval: { getApprovalMode: runtime.approval.getApprovalMode },
-    browserSession: buildBrowserResumeRuntime(
-      runtime,
-      sources.sessionPersistence,
-    ),
-    emojiFilter: { getEphemeralSetting: runtime.ephemeral.getEphemeralSetting },
-    containerRuntime: buildContainerRuntimeReads(runtime),
-    slashCommandPorts: buildSlashCommandPorts(sources),
-    layoutRuntime: buildLayoutRuntime(runtime, describeToolConfiguration),
-    dialogsRuntime: buildDialogsRuntime(runtime),
-  };
-}
-
-export function buildContainerAppReads(
-  runtime: UiComposition,
-): ContainerAppReads {
+export function buildContainerAppReads(runtime: {
+  app: Pick<
+    AppStateRuntime,
+    | 'getAccessibility'
+    | 'getDebugMode'
+    | 'getScreenReader'
+    | 'getSubagentManager'
+  >;
+}): ContainerAppReads {
   const { app } = runtime;
   return {
     getScreenReader: app.getScreenReader,
@@ -251,9 +218,9 @@ export function buildContainerAppReads(
   };
 }
 
-export function buildContainerSessionReads(
-  runtime: UiComposition,
-): ContainerSessionReads {
+export function buildContainerSessionReads(runtime: {
+  session: Pick<SessionIdentity, 'getSessionId' | 'getTargetDir'>;
+}): ContainerSessionReads {
   const { session } = runtime;
   return {
     getSessionId: session.getSessionId,
@@ -261,9 +228,9 @@ export function buildContainerSessionReads(
   };
 }
 
-export function buildContainerTerminalReads(
-  runtime: UiComposition,
-): ContainerTerminalReads {
+export function buildContainerTerminalReads(runtime: {
+  shell: Pick<ShellState, 'getTerminalBackground' | 'setPtyTerminalSize'>;
+}): ContainerTerminalReads {
   const { shell } = runtime;
   return {
     setPtyTerminalSize: shell.setPtyTerminalSize,
@@ -271,9 +238,9 @@ export function buildContainerTerminalReads(
   };
 }
 
-export function buildContainerMemoryReads(
-  runtime: UiComposition,
-): ContainerMemoryReads {
+export function buildContainerMemoryReads(runtime: {
+  memory: Pick<MemoryState, 'getCoreMemoryFileCount' | 'getLlxprtMdFileCount'>;
+}): ContainerMemoryReads {
   const { memory } = runtime;
   return {
     getLlxprtMdFileCount: memory.getLlxprtMdFileCount,
@@ -281,9 +248,12 @@ export function buildContainerMemoryReads(
   };
 }
 
-export function buildContainerInputReads(
-  runtime: UiComposition,
-): ContainerInputReads {
+export function buildContainerInputReads(runtime: {
+  app: Pick<AppStateRuntime, 'getQuestion'>;
+  hooks: Pick<HookSkillState, 'endHookSession'>;
+  mcp: Pick<McpState, 'getMcpServers'>;
+  shell: Pick<ShellState, 'getEnableInteractiveShell'>;
+}): ContainerInputReads {
   return {
     hooks: { endHookSession: runtime.hooks.endHookSession },
     app: { getQuestion: runtime.app.getQuestion },
@@ -294,9 +264,40 @@ export function buildContainerInputReads(
   };
 }
 
-export function buildInputStreamPolicyReads(
-  runtime: UiComposition,
-): StreamPolicyReads {
+export function buildInputStreamPolicyReads(runtime: {
+  bucketFailover: BucketFailoverRuntime;
+  checkpoint: CheckpointRuntime;
+  ephemeral: EphemeralSettingsRuntime;
+  events: AppEventRuntime;
+  files: Pick<
+    FileWorkspaceState,
+    | 'contains'
+    | 'directories'
+    | 'getEnableRecursiveFileSearch'
+    | 'getFileFilteringOptions'
+    | 'ignore'
+  >;
+  model: ModelState;
+  projectCheckpointsDir: string;
+  projectTempDir: string;
+  session: Pick<SessionIdentity, 'getSessionId' | 'getTargetDir'>;
+  sessionLimits: SessionLimitsRuntime;
+  settings: Pick<
+    SettingsTelemetryState,
+    | 'logUserPrompt'
+    | 'readCitations'
+    | 'readProfileName'
+    | 'readSelectedProvider'
+  >;
+  shell: Pick<
+    ShellState,
+    | 'getEnableInteractiveShell'
+    | 'getPtyTerminalHeight'
+    | 'getPtyTerminalWidth'
+    | 'getShellExecutionConfig'
+    | 'getShouldUseNodePtyShell'
+  >;
+}): StreamPolicyReads {
   const { session, events, model, ephemeral, shell, checkpoint } = runtime;
   const { files, settings, bucketFailover, sessionLimits } = runtime;
   return {
@@ -335,9 +336,14 @@ export function buildInputStreamPolicyReads(
   };
 }
 
-export function buildCommandRegistryReads(
-  runtime: UiComposition,
-): CommandRegistryReads {
+export function buildCommandRegistryReads(runtime: {
+  extensions: Pick<ExtensionRuntime, 'extensionEnablementManager'>;
+  hooks: Pick<
+    HookSkillState,
+    'getEnableHooksUI' | 'isAdminSkillsEnabled' | 'isSkillsSupportEnabled'
+  >;
+  mcp: Pick<McpState, 'getMcpServers' | 'listPrompts'>;
+}): CommandRegistryReads {
   return {
     getEnableHooksUI: runtime.hooks.getEnableHooksUI,
     isSkillsSupportEnabled: runtime.hooks.isSkillsSupportEnabled,
@@ -348,9 +354,23 @@ export function buildCommandRegistryReads(
   };
 }
 
-export function buildFileCommandReads(
-  runtime: UiComposition,
-): FileCommandReads {
+export function buildFileCommandReads(runtime: {
+  app: Pick<AppStateRuntime, 'getFolderTrust' | 'isTrustedFolder'>;
+  approval: Pick<
+    ApprovalState,
+    'getApprovalMode' | 'getCoreTools' | 'getExcludeTools'
+  >;
+  extensions: Pick<ExtensionRuntime, 'getExtensions'>;
+  projectCommandsDir: string;
+  session: Pick<SessionIdentity, 'getProjectRoot' | 'getTargetDir'>;
+  shell: Pick<
+    ShellState,
+    | 'getShellExecutionConfig'
+    | 'getShellReplacement'
+    | 'getShouldUseNodePtyShell'
+  >;
+  userCommandsDir: string;
+}): FileCommandReads {
   const { session, approval, app, extensions, shell } = runtime;
   return {
     userCommandsDir: runtime.userCommandsDir,
@@ -369,9 +389,26 @@ export function buildFileCommandReads(
   };
 }
 
-export function buildWorkspaceCommandPorts(
-  runtime: UiComposition,
-): WorkspaceCommandRuntime {
+export function buildWorkspaceCommandPorts(runtime: {
+  app: Pick<
+    AppStateRuntime,
+    | 'getFolderTrust'
+    | 'isRestrictiveSandbox'
+    | 'updateSystemInstructionIfInitialized'
+  >;
+  files: Pick<FileWorkspaceState, 'addDirectory' | 'directories'>;
+  memory: Pick<
+    MemoryState,
+    | 'getLlxprtMdFileCount'
+    | 'getLlxprtMdFilePaths'
+    | 'getUserMemory'
+    | 'refreshMemory'
+    | 'shouldLoadMemoryFromIncludeDirectories'
+  >;
+  model: Pick<ModelState, 'getModel'>;
+  session: Pick<SessionIdentity, 'getTargetDir' | 'getWorkingDir'>;
+  settings: Pick<SettingsTelemetryState, 'getBugCommand'>;
+}): WorkspaceCommandRuntime {
   const { session, memory, model, app, files, settings } = runtime;
   return {
     memory: {
@@ -401,7 +438,13 @@ export function buildWorkspaceCommandPorts(
 }
 
 export function buildChatCommandReads(
-  runtime: UiComposition,
+  runtime: {
+    interactive: Pick<InteractiveRuntime, 'isInteractive'>;
+    model: Pick<ModelState, 'getModel'>;
+    projectChatsDir: string;
+    projectTempDir: string;
+    session: Pick<SessionIdentity, 'getProjectRoot'>;
+  },
   sessionPersistence?: CliSessionPersistencePort,
 ): ChatCommandReads {
   return {
@@ -415,7 +458,10 @@ export function buildChatCommandReads(
 }
 
 export function buildKeyCommandReads(
-  runtime: UiComposition,
+  runtime: {
+    app: Pick<AppStateRuntime, 'setEphemeralSetting'>;
+    interactive: Pick<InteractiveRuntime, 'isInteractive'>;
+  },
   providerKeys: ProviderKeyStorageLike,
 ): KeyCommandReads {
   return {
@@ -425,9 +471,13 @@ export function buildKeyCommandReads(
   };
 }
 
-export function buildContainerRuntimeReads(
-  runtime: UiComposition,
-): ContainerRuntimeReads {
+export function buildContainerRuntimeReads(runtime: {
+  app: Pick<AppStateRuntime, 'getDebugMode'>;
+  extensions: Pick<ExtensionRuntime, 'getExtensions'>;
+  memory: Pick<MemoryState, 'refreshMemory'>;
+  model: Pick<ModelState, 'getModel'>;
+  session: Pick<SessionIdentity, 'getWorkingDir'>;
+}): ContainerRuntimeReads {
   return {
     getModel: runtime.model.getModel,
     refreshMemory: runtime.memory.refreshMemory,
@@ -438,7 +488,19 @@ export function buildContainerRuntimeReads(
 }
 
 export function buildBrowserResumeRuntime(
-  runtime: UiComposition,
+  runtime: {
+    ephemeral: Pick<EphemeralSettingsRuntime, 'getEphemeralSetting'>;
+    files: Pick<FileWorkspaceState, 'directories'>;
+    model: Pick<ModelState, 'getModel' | 'getProvider'>;
+    session: Pick<
+      SessionIdentity,
+      | 'adoptSessionId'
+      | 'getProjectRoot'
+      | 'getProjectTempDir'
+      | 'getSessionId'
+      | 'getSessionRecordingQueueByteLimit'
+    >;
+  },
   sessionPersistence?: CliSessionPersistencePort,
 ): BrowserResumeRuntime {
   return {
@@ -449,7 +511,18 @@ export function buildBrowserResumeRuntime(
 }
 
 function buildBrowserSessionReads(
-  runtime: UiComposition,
+  runtime: {
+    files: Pick<FileWorkspaceState, 'directories'>;
+    model: Pick<ModelState, 'getModel' | 'getProvider'>;
+    session: Pick<
+      SessionIdentity,
+      | 'adoptSessionId'
+      | 'getProjectRoot'
+      | 'getProjectTempDir'
+      | 'getSessionId'
+      | 'getSessionRecordingQueueByteLimit'
+    >;
+  },
   sessionPersistence?: CliSessionPersistencePort,
 ): BrowserSessionReads {
   const { session, model, files } = runtime;
@@ -467,8 +540,61 @@ function buildBrowserSessionReads(
   };
 }
 
+interface SlashCommandSources {
+  runtime: {
+    app: Pick<
+      AppStateRuntime,
+      | 'getConversationLogPath'
+      | 'getDebugMode'
+      | 'getEphemeralSettings'
+      | 'getFolderTrust'
+      | 'getScreenReader'
+      | 'isTrustedFolder'
+      | 'setTrustedFolderLive'
+    >;
+    approval: Pick<ApprovalState, 'getApprovalMode'>;
+    bucketFailover: Pick<
+      BucketFailoverRuntime,
+      'readCurrentBucket' | 'readFailoverBuckets'
+    >;
+    checkpoint: Pick<
+      CheckpointRuntime,
+      'checkpoints' | 'getCheckpointingEnabled'
+    >;
+    ephemeral: Pick<EphemeralSettingsRuntime, 'getEphemeralSetting'>;
+    extensions: Pick<ExtensionRuntime, 'getExtensions'>;
+    files: Pick<FileWorkspaceState, 'directories'>;
+    mcp: Pick<McpState, 'getMcpServerCommand' | 'getMcpServers'>;
+    memory: Pick<MemoryState, 'getLlxprtMdFileCount' | 'getUserMemory'>;
+    model: Pick<ModelState, 'getModel' | 'getProvider'>;
+    projectCheckpointsDir: string;
+    session: Pick<
+      SessionIdentity,
+      | 'adoptSessionId'
+      | 'getProjectRoot'
+      | 'getProjectTempDir'
+      | 'getSessionId'
+      | 'getSessionRecordingQueueByteLimit'
+      | 'getTargetDir'
+      | 'getWorkingDir'
+    >;
+    settings: Pick<
+      SettingsTelemetryState,
+      | 'logSlashCommand'
+      | 'getProxy'
+      | 'getRedactionConfig'
+      | 'getTelemetrySettings'
+      | 'updateTelemetrySettings'
+    >;
+  };
+  restartExtension?: (extension: LlxprtExtension) => Promise<void>;
+  skillOperations?: SkillsCommandRuntime;
+  sessionPersistence?: CliSessionPersistencePort;
+  perfSnapshotCapability?: PerfSnapshotCapability | null;
+}
+
 export function buildSlashCommandPorts(
-  sources: Omit<CliPortSources, 'providerKeys' | 'describeToolConfiguration'>,
+  sources: SlashCommandSources,
 ): SlashCommandProcessorPorts {
   const {
     runtime,
@@ -534,7 +660,46 @@ export function buildSlashCommandPorts(
 }
 
 export function buildLayoutRuntime(
-  runtime: UiComposition,
+  runtime: {
+    app: Pick<
+      AppStateRuntime,
+      | 'getDebugMode'
+      | 'getEnablePromptCompletion'
+      | 'getFolderTrust'
+      | 'getScreenReader'
+      | 'getSubagentManager'
+      | 'getUtilityModel'
+      | 'githubCompletion'
+      | 'isTrustedFolder'
+      | 'setTrustedFolderLive'
+    >;
+    extensions: Pick<ExtensionRuntime, 'isExtensionEnabled'>;
+    files: Pick<
+      FileWorkspaceState,
+      | 'directories'
+      | 'getEnableRecursiveFileSearch'
+      | 'getFileFilteringDisableFuzzySearch'
+      | 'getFileFilteringOptions'
+      | 'ignore'
+      | 'initializeSearch'
+      | 'search'
+    >;
+    historyFilePath: string;
+    mcp: Pick<
+      McpState,
+      'getBlockedMcpServers' | 'getMcpServers' | 'listResources'
+    >;
+    memory: Pick<MemoryState, 'getLlxprtMdFileCount'>;
+    session: Pick<
+      SessionIdentity,
+      | 'getProjectRoot'
+      | 'getProjectTempDir'
+      | 'getSessionId'
+      | 'getTargetDir'
+      | 'getWorkingDir'
+    >;
+    shell: Pick<ShellState, 'getEnableInteractiveShell'>;
+  },
   describeToolConfiguration: () => UiToolRegistryInfo,
 ): LayoutRuntime {
   const { session, shell, files, memory, mcp, app, extensions } = runtime;
@@ -572,7 +737,20 @@ export function buildLayoutRuntime(
   };
 }
 
-export function buildDialogsRuntime(runtime: UiComposition): AppDialogsRuntime {
+export function buildDialogsRuntime(runtime: {
+  app: Pick<
+    AppStateRuntime,
+    | 'getEphemeralSettings'
+    | 'getScreenReader'
+    | 'isTrustedFolder'
+    | 'setEphemeralSetting'
+    | 'setTrustedFolderLive'
+  >;
+  ephemeral: Pick<EphemeralSettingsRuntime, 'getEphemeralSetting'>;
+  model: Pick<ModelState, 'getModel'>;
+  session: Pick<SessionIdentity, 'getWorkingDir'>;
+  settings: Pick<SettingsTelemetryState, 'subscribeModelSelection'>;
+}): AppDialogsRuntime {
   const { session, model, app, settings, ephemeral } = runtime;
   return {
     getWorkingDir: session.getWorkingDir,

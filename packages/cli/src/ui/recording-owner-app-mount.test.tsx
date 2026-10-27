@@ -1,3 +1,4 @@
+import { InteractiveApplication } from '../session/interactiveApplication.js';
 import { runtimeAppFixture } from '../__tests__/runtime-context-fixture.js';
 import { useFakeResponsesReplay } from '../../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
@@ -232,39 +233,41 @@ describe('interactive Agent owner AppWrapper', () => {
     const settings = createMockSettings({ ui: { theme: 'Default' } });
     const view = renderWithProviders(
       <AppWrapper
-        {...buildUiPortsForTest(
-          config,
-          agent,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          settingsOwner,
-        )}
-        agent={agent}
-        {...runtimeAppFixture(
-          agent,
-          createRuntimeOwnerFeatures(
-            agent.providerReads.inspection,
-            fixturePaths().directories,
-            createSessionModelCommand(agent),
+        {...new InteractiveApplication({
+          ...buildUiPortsForTest(
+            config,
+            agent,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
             settingsOwner,
-            agent.workspace,
-            agent.modelParameters,
-            agent.settings,
-            agent.toolFormat,
-            agent.providerReads,
-            agent.auth.keys,
-            () => agent.providerReads.readOpenAIInfo(),
           ),
-          agent.sessionClient.fetch,
-        )}
-        providerAliasRefresh={() => agent.providerReads.refreshAliases()}
-        oauthControl={agent.authentication}
-        settings={settings}
-        version="test-owner"
-        recordingOwner="agent"
+          agent,
+          ...runtimeAppFixture(
+            agent,
+            createRuntimeOwnerFeatures(
+              agent.providerReads.inspection,
+              fixturePaths().directories,
+              createSessionModelCommand(agent),
+              settingsOwner,
+              agent.workspace,
+              agent.modelParameters,
+              agent.settings,
+              agent.toolFormat,
+              agent.providerReads,
+              agent.auth.keys,
+              () => agent.providerReads.readOpenAIInfo(),
+            ),
+            agent.sessionClient.fetch,
+          ),
+          providerAliasRefresh: () => agent.providerReads.refreshAliases(),
+          oauthControl: agent.authentication,
+          settings,
+          version: 'test-owner',
+          recordingOwner: 'agent',
+        }).createAppProps()}
       />,
       { settings },
     );
