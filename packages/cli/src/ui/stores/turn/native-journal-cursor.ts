@@ -343,7 +343,10 @@ export class NativeJournalCursor {
     return withToolPresentations(
       this.reader,
       first,
-      iContentToHistoryItems([page, ...responses.values()]),
+      iContentToHistoryItems(
+        [page, ...responses.values()],
+        this.options.emojiFilterMode,
+      ),
     );
   }
   private async *projectGroup(
@@ -353,6 +356,8 @@ export class NativeJournalCursor {
     tailCount = Number.POSITIVE_INFINITY,
   ): AsyncGenerator<LocatedEntry> {
     const first = await this.reader.entryAt(from);
+    const status = await this.reader.status(first);
+    if (status === 5 || status === 6) return;
     const presentation = await this.reader.presentation(first);
     if (presentation !== undefined) {
       const display = await this.projectNotice(from, first, presentation);

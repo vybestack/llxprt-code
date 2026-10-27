@@ -97,6 +97,10 @@ export class NativeJournalPageReader {
     return this.transcript.member(entry);
   }
 
+  status(entry: NativeJournalEntry): Promise<number> {
+    return this.display.status(entry);
+  }
+
   presentation(entry: NativeJournalEntry) {
     return this.display.presentation(entry);
   }

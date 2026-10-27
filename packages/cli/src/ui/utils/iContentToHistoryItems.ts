@@ -306,7 +306,7 @@ function processAiContent(
   }
   const combinedText = combineMarkdownSegments(segments);
 
-  if (combinedText) {
+  if (combinedText || thinkingBlocks.length > 0) {
     items.push({
       type: 'gemini',
       text: combinedText,

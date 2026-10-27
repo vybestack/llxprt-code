@@ -43,6 +43,9 @@ export class NativeDisplayReader {
       throw new Error('Missing display transcript identity');
     return entry;
   }
+  async status(row: RowEntry): Promise<number> {
+    return (await this.entry(row.transcriptId)).status;
+  }
   async presentation(
     row: RowEntry,
   ): Promise<NativeJournalPresentation | undefined> {
