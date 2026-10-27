@@ -140,6 +140,10 @@ describe('closed declaration proof', () => {
           `declare class Owner<T> { private state: T; get(): T; next(): Owner<{ value: T }> }\ntype Bag = Owner<Config>;`,
       ),
     ).toEqual([
+      expect.objectContaining({
+        rule: 'runtime-service-analysis-resource-limit',
+        line: 2,
+      }),
       expect.objectContaining({ rule: 'runtime-service-bundle', line: 3 }),
     ]);
   });

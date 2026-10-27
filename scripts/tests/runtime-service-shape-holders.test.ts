@@ -11,11 +11,30 @@ describe('runtime service shape guard stored and aggregate shapes', () => {
     'class Owner { private bag!: { clock: Scheduler; context: Context }; }',
     'class Owner { protected bag!: { clock: Scheduler; context: Context }; }',
     'class Owner { #bag!: { clock: Scheduler; context: Context }; }',
-    'class Owner { public bag!: { clock: Scheduler; context: Context }; }',
     'class Owner { static bag: { clock: Scheduler; context: Context } = { clock: new Scheduler(), context: new Context() }; }',
   ])('rejects a bundle stored in a class field: %s', (declaration) => {
     expect(scan(imports + declaration)).toEqual([
       expect.objectContaining({ rule: 'runtime-service-bundle', line: 2 }),
+    ]);
+  });
+
+  it('rejects both a public bag field and the class surface exposing it', () => {
+    expect(
+      scan(
+        imports +
+          'class Owner { public bag!: { clock: Scheduler; context: Context }; }',
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        rule: 'runtime-service-bundle',
+        line: 2,
+        column: 1,
+      }),
+      expect.objectContaining({
+        rule: 'runtime-service-bundle',
+        line: 2,
+        column: 15,
+      }),
     ]);
   });
 
@@ -83,6 +102,11 @@ describe('runtime service shape guard stored and aggregate shapes', () => {
 class Owner { private readonly services!: Services; }`,
       ),
     ).toEqual([
+      expect.objectContaining({
+        rule: 'runtime-service-bundle',
+        line: 2,
+        column: 1,
+      }),
       expect.objectContaining({ rule: 'runtime-service-bundle', line: 3 }),
     ]);
   });
@@ -99,6 +123,11 @@ class Owner { private readonly services!: Services; }`,
 class Owner { private readonly services!: Services; }`,
       ),
     ).toEqual([
+      expect.objectContaining({
+        rule: 'runtime-service-bundle',
+        line: 2,
+        column: 1,
+      }),
       expect.objectContaining({ rule: 'runtime-service-bundle', line: 7 }),
     ]);
   });
@@ -115,6 +144,11 @@ class Owner { private readonly services!: Services; }`,
 class Owner { private readonly services!: Services; }`,
       ),
     ).toEqual([
+      expect.objectContaining({
+        rule: 'runtime-service-bundle',
+        line: 2,
+        column: 1,
+      }),
       expect.objectContaining({ rule: 'runtime-service-bundle', line: 7 }),
     ]);
   });
@@ -203,7 +237,6 @@ function consume(owner: Owner): void {}`,
     'class Owner { protected clock!: Scheduler; protected context!: Context; }',
     'class Owner { #clock = new Scheduler(); #context = new Context(); }',
     'class Owner { constructor(private clock: Scheduler, private context: Context) {} }',
-    'class Base { clock!: Scheduler } class Owner extends Base { context!: Context }',
   ])(
     'allows an owner that keeps several single-service fields: %s',
     (declaration) => {
@@ -211,7 +244,22 @@ function consume(owner: Owner): void {}`,
     },
   );
 
-  it('allows an owner whose fields each reach one capability', () => {
+  it('rejects public services combined through class inheritance', () => {
+    expect(
+      scan(
+        imports +
+          'class Base { clock!: Scheduler } class Owner extends Base { context!: Context }',
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        rule: 'runtime-service-bundle',
+        line: 2,
+        column: 34,
+      }),
+    ]);
+  });
+
+  it('rejects an owner whose public methods expose two capabilities', () => {
     expect(
       scan(
         imports +
@@ -225,7 +273,13 @@ function consume(owner: Owner): void {}`,
         context(): Context { return this.contextSource.context(); }
       }`,
       ),
-    ).toEqual([]);
+    ).toEqual([
+      expect.objectContaining({
+        rule: 'runtime-service-bundle',
+        line: 5,
+        column: 7,
+      }),
+    ]);
   });
 
   it.each([
