@@ -547,7 +547,7 @@ export async function prepareAnthropicRequestRows(
     rows.callerOwned !== true
   )
     throw new Error(
-      'Anthropic requires an indexed or caller-owned request selection',
+      'Anthropic requires a native or caller-owned request selection',
     );
   if (rows.callerOwned === true || rows.index?.toolFree === true)
     return prepareCallerOwnedAnthropic(params, rows, mediaStage, options);

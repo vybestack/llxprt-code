@@ -156,7 +156,7 @@ function requireDiskTextRows(
     rows.callerOwned !== true
   )
     throw new Error(
-      'Responses requires an indexed or caller-owned request selection',
+      'Responses requires a native or caller-owned request selection',
     );
   return rows;
 }
