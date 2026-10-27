@@ -485,6 +485,8 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     this.atFileEnd = false;
     this.error = null;
     this.resumeFirstDisplayOffset = null;
+    this.publishedEnd = undefined;
+    this.watermark = undefined;
     this.clearPurgeTimer();
     await this.dropCursor();
   }

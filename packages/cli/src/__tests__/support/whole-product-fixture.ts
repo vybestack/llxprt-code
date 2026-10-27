@@ -12,6 +12,7 @@ import { processSlashCommand } from '../../ui/hooks/slashCommandHandlers.js';
 import type { HistoryItemWithoutId, Message } from '../../ui/types.js';
 import { createMockCommandContext } from '../mockCommandContext.js';
 import { commandDeps } from '../native-command-fixture.js';
+import { NativeJournalCursor } from '../../ui/stores/turn/native-journal-cursor.js';
 
 const environmentKeys = ['LLXPRT_FAKE_RESPONSES', 'LLXPRT_LOG_HOME'] as const;
 
@@ -110,6 +111,20 @@ function dispatcher(
       expect(
         await processSlashCommand(deps, text, undefined, undefined, false),
       ).toStrictEqual({ type: 'handled' });
+      await live.session.flushRecording();
+      const path = live.session.getRecording().path;
+      if (path === undefined) throw new Error('Missing command journal');
+      const cursor = await NativeJournalCursor.open(path, {}, 16);
+      try {
+        const page = await cursor.pageBack(16);
+        for (const entry of page.entries) {
+          if (entry.kind === 'projected' && entry.item.type === 'error') {
+            throw new Error(entry.item.text);
+          }
+        }
+      } finally {
+        await cursor.close();
+      }
       expect(errors).toStrictEqual([]);
     },
   };

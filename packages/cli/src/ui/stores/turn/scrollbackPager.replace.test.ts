@@ -140,14 +140,32 @@ describe('production pager applies replace transactions', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it('shows only the new rows once the transaction commits', async () => {
+  it('retains prior rows out of context once the replacement commits', async () => {
     await replace([4, 5, 6]);
-    expect(await shown()).toStrictEqual(['row-4', 'row-5', 'row-6']);
+    expect(await shown()).toStrictEqual([
+      'row-1',
+      'row-2',
+      'row-4',
+      'row-5',
+      'row-6',
+    ]);
+    expect(
+      stores
+        .at(-1)
+        ?.getState()
+        .rows.map((row) => row.contextState),
+    ).toStrictEqual([
+      'purged',
+      'purged',
+      'in-context',
+      'in-context',
+      'in-context',
+    ]);
   });
-  it('reports a committed replacement as a clear boundary', async () => {
+  it('keeps the transcript floor at file start after replacement', async () => {
     await replace([4]);
     const summary = await open().resumeFromJournal();
-    expect(summary.atClearBoundary).toBe(true);
+    expect(summary.atClearBoundary).toBe(false);
   });
   it.each<Stage>([
     'at begin',
@@ -209,14 +227,44 @@ describe('production pager applies replace transactions', () => {
     await writeNativeEdits(file, [row(7)], true);
     await store.invalidate();
     await walkToFloor(store);
-    expect(texts(store)).toStrictEqual(['row-4', 'row-5', 'row-7']);
+    expect(texts(store)).toStrictEqual([
+      'row-1',
+      'row-2',
+      'row-4',
+      'row-5',
+      'row-7',
+    ]);
+    expect(store.getState().rows.map((row) => row.contextState)).toStrictEqual([
+      'purged',
+      'purged',
+      'in-context',
+      'in-context',
+      'in-context',
+    ]);
   });
   it('pages a committed replacement across restarts', async () => {
     await replace([4, 5, 6, 7]);
     for (const pageRows of [3, 1]) {
       const store = open(pageRows);
       await walkToFloor(store);
-      expect(texts(store)).toStrictEqual(['row-4', 'row-5', 'row-6', 'row-7']);
+      expect(texts(store)).toStrictEqual([
+        'row-1',
+        'row-2',
+        'row-4',
+        'row-5',
+        'row-6',
+        'row-7',
+      ]);
+      expect(
+        store.getState().rows.map((row) => row.contextState),
+      ).toStrictEqual([
+        'purged',
+        'purged',
+        'in-context',
+        'in-context',
+        'in-context',
+        'in-context',
+      ]);
     }
   });
 });

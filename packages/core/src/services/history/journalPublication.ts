@@ -32,11 +32,15 @@ export function replacementEditBuilder(
 export function preparedDetachedEdit(
   prepare: GroupPreparation,
   ownerEdits: readonly VersionEdit[],
+  appendOnly: boolean,
 ): VersionEdit {
   return {
     kind: 'prepared',
     prepare,
-    admission: [...ownerEdits, { kind: 'replace', rows: [] }],
+    admission: [
+      ...ownerEdits,
+      { kind: appendOnly ? 'append' : 'replace', rows: [] },
+    ],
   };
 }
 

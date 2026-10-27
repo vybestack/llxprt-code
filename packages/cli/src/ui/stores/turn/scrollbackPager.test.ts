@@ -33,6 +33,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { encodeContentRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
 import {
   createScrollbackPagerStore,
   type ScrollbackPagerStore,
@@ -65,7 +66,7 @@ interface Fixture {
   filePath: string;
   add(content: IContent): Promise<number>;
   addUser(seq: number, padChars?: number): Promise<number>;
-  addCompressed(seq: number): Promise<number>;
+  addCompressed(seq: number): Promise<void>;
   addRewind(seq: number): Promise<void>;
   stageUser(seq: number): Promise<() => Promise<void>>;
 }
@@ -104,12 +105,30 @@ async function createJournalFixture(): Promise<Fixture> {
     async addUser(seq: number, padChars: number = ROW_PAD_CHARS) {
       return fixture.add(userText(`r-${seq}${'x'.repeat(padChars)}`, seq));
     },
-    async addCompressed(seq: number) {
-      return fixture.add({
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'summary' }],
-        metadata: { isSummary: true, chronology: chronology(seq) },
-      });
+    async addCompressed(seq: number): Promise<void> {
+      const session = await JournalSession.open(filePath);
+      try {
+        const version = session.store.published;
+        if (version === undefined)
+          throw new Error('Missing compression prefix');
+        await session.store.commit([
+          {
+            kind: 'compress',
+            retainFromLabel: version.nextLabel,
+            expectedReplaced: version.rows,
+            summary: encodeContentRow(
+              {
+                speaker: 'ai',
+                blocks: [{ type: 'text', text: 'summary' }],
+                metadata: { isSummary: true, chronology: chronology(seq) },
+              },
+              { owner: 0 },
+            ),
+          },
+        ]);
+      } finally {
+        await session.close();
+      }
     },
     async addRewind(_seq: number): Promise<void> {
       const session = await JournalSession.open(filePath);
@@ -127,9 +146,18 @@ async function createJournalFixture(): Promise<Fixture> {
     },
     async stageUser(seq: number): Promise<() => Promise<void>> {
       const before = (await fs.stat(filePath)).size;
-      await fixture.addUser(seq);
-      const bytes = await fs.readFile(filePath);
-      await fs.truncate(filePath, before);
+      const staged = `${filePath}.staged`;
+      await fs.copyFile(filePath, staged);
+      const writer = await JournalSession.open(staged);
+      try {
+        await writer.append([
+          userText(`r-${seq}${'x'.repeat(ROW_PAD_CHARS)}`, seq),
+        ]);
+      } finally {
+        await writer.close();
+      }
+      const bytes = await fs.readFile(staged);
+      await fs.rm(staged);
       await fs.appendFile(filePath, bytes.subarray(before, bytes.length - 1));
       return async (): Promise<void> => {
         await fs.appendFile(filePath, bytes.subarray(bytes.length - 1));
@@ -454,10 +482,11 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
     });
     await store.pageForward();
 
-    const committedIdentity = rowIdentity(
-      { kind: 'journal', offset: committedOffset },
-      'text',
-    );
+    const committedIdentity = store
+      .getState()
+      .rows.find((row) => row.offset === committedOffset)?.identity;
+    if (committedIdentity === undefined)
+      throw new Error('Missing paged committed row');
     const resolved = store.commitPendingRow('turn-1:0', committedIdentity, {
       ...pendingItem,
       text: 'committed-live-text',
@@ -571,7 +600,7 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
   beforeEach(() => setupPagerFixture());
   afterEach(() => cleanupPagerFixture());
 
-  it('applies a suffix rewind: removed rows never resurrect and the surviving prefix pages back', async () => {
+  it('retains the rewound suffix in transcript order with context markers', async () => {
     for (let seq = 1; seq <= 4; seq += 1) {
       await fixture.addUser(seq);
     }
@@ -581,21 +610,33 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
     }
     const store = makeStore({ pageRows: 2 });
 
-    await store.pageBack();
-    await store.pageBack();
-    await store.pageBack();
+    for (let page = 0; page < 5; page++) await store.pageBack();
 
     const state = store.getState();
     expect(state.atVisibilityFloor).toBe(true);
     const texts = rowTexts(store);
-    expect(texts).toContain('r-1');
-    for (let seq = 2; seq <= 4; seq += 1) {
-      expect(texts).not.toContain(`r-${seq}`);
-    }
-    for (let seq = 6; seq <= 9; seq += 1) {
-      expect(texts).toContain(`r-${seq}`);
-    }
-
+    expect(texts).toStrictEqual([
+      'r-1',
+      'r-2',
+      'r-3',
+      'r-4',
+      '[context changed: 2]',
+      'r-6',
+      'r-7',
+      'r-8',
+      'r-9',
+    ]);
+    expect(state.rows.map((row) => row.contextState)).toStrictEqual([
+      'in-context',
+      'purged',
+      'purged',
+      'purged',
+      'purged',
+      'in-context',
+      'in-context',
+      'in-context',
+      'in-context',
+    ]);
     await store.pageBack();
     expect(store.getState().rows).toHaveLength(state.rows.length);
   });
@@ -629,7 +670,21 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
     for (let seq = 1; seq <= 4; seq += 1) {
       expect(texts).toContain(`r-${seq}`);
     }
-    expect(texts.some((text) => text.includes('compressed'))).toBe(true);
+    expect(texts).toStrictEqual([
+      'r-1',
+      'r-2',
+      'r-3',
+      'r-4',
+      '[compressed] summary',
+      'r-6',
+      'r-7',
+      'r-8',
+      'r-9',
+    ]);
+    expect(state.rows.map((row) => row.contextState)).toStrictEqual([
+      ...Array(4).fill('purged'),
+      ...Array(5).fill('in-context'),
+    ]);
   });
 
   it('survives a cursor close during an in-flight read via the generation guard', async () => {

@@ -19,6 +19,9 @@ import {
 } from './session-media-package.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import { SESSION_KEYS, encodeSessionFact } from './sessionMetaKeys.js';
+import { JournalArrivalRecorder } from '../journal/arrival-recorder.js';
+import { ROW_BLOCK_TYPE } from '../journal/rowRecord.js';
+import { encodeContentRow } from '../services/history/journalRowCodec.js';
 
 describe('native recording export', () => {
   let root = '';
@@ -81,6 +84,57 @@ describe('native recording export', () => {
       destination: join(root, 'package'),
     };
   }
+
+  it.each(['completed', 'cancelled'])(
+    'exports ended media from %s arrival rows without parsing unfinished progress blocks',
+    async (outcome) => {
+      const f = await fixture();
+      const reference = await f.media.admit({
+        bytes: new Uint8Array([13, 21, 34]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      });
+      const arrival = new JournalArrivalRecorder(f.session.store);
+      try {
+        const row = await arrival.beginRow(
+          encodeContentRow({ speaker: 'ai', blocks: [] }, { owner: 0 }),
+          { id: 'media-arrival', submissionId: 'prompt' },
+        );
+        const media = await arrival.beginBlock(row, ROW_BLOCK_TYPE.media);
+        const bytes = new TextEncoder().encode(JSON.stringify(reference));
+        await arrival.appendField(media, bytes.subarray(0, 8));
+        await arrival.flush();
+        await arrival.appendField(media, bytes.subarray(8));
+        await arrival.endBlock(media);
+        const text = await arrival.beginBlock(row, ROW_BLOCK_TYPE.text);
+        await arrival.flush();
+        if (outcome === 'completed') {
+          await arrival.appendField(
+            text,
+            new TextEncoder().encode(
+              JSON.stringify({ type: 'text', text: 'completed response' }),
+            ),
+          );
+          await arrival.endBlock(text);
+          await arrival.sealRow(row);
+        } else {
+          await arrival.appendField(text, new TextEncoder().encode('{"type":'));
+          await arrival.finishAttempt(row, 'cancelled');
+        }
+      } finally {
+        await arrival.close();
+        await f.recording.dispose();
+      }
+      await exportSessionMediaPackage(
+        f.path,
+        'project',
+        f.media,
+        f.destination,
+      );
+      const validated = await validateSessionMediaPackage(f.destination);
+      expect(validated.references).toStrictEqual([f.reference, reference]);
+    },
+  );
 
   it('exports a closed recording with checkpoint media then validates imports and resumes it', async () => {
     const f = await fixture();

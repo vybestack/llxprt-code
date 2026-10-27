@@ -158,14 +158,18 @@ export class JournalDetachedPublication {
   ): Promise<void> {
     try {
       this.admittedCount++;
-      this.lastAck = await this.store.prepareDetached(async (group) => {
-        this.prepared = group;
-        try {
-          await prepare(group);
-        } finally {
-          this.prepared = undefined;
-        }
-      }, ownerEdits);
+      this.lastAck = await this.store.prepareDetached(
+        async (group) => {
+          this.prepared = group;
+          try {
+            await prepare(group);
+          } finally {
+            this.prepared = undefined;
+          }
+        },
+        ownerEdits,
+        this.submissionId !== undefined,
+      );
     } catch (error) {
       this.failure = error;
       throw error;

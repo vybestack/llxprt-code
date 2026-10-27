@@ -152,10 +152,22 @@ export class MemoryCommand {
     await this.pager.resumeFromJournal();
     verifyWindow(
       this.pager.getState().rows.map((row) => row.item),
-      workload === 'compressed' ? 1 : MEMORY_PAGE,
+      MEMORY_PAGE,
       count,
       workload === 'compressed' ? '[compressed] ' : '',
     );
+    if (workload === 'compressed') {
+      const rows = this.pager.getState().rows;
+      if (
+        rows.some(
+          (row, index) =>
+            row.contextState !==
+            (index === rows.length - 1 ? 'in-context' : 'purged'),
+        )
+      ) {
+        throw new Error('Incorrect compressed transcript context markers');
+      }
+    }
     verifyWindow(this.uiHistory, workload === 'compressed' ? 1 : 400, count);
     this.pagerDecoded = this.counters.snapshot().recordsDecoded - beforePager;
   }

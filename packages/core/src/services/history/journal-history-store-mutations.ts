@@ -156,11 +156,14 @@ export abstract class JournalHistoryStoreMutations extends JournalHistoryStoreRe
   async prepareDetached(
     prepare: GroupPreparation,
     ownerEdits: readonly VersionEdit[],
+    appendOnly: boolean,
   ): Promise<CommitAck> {
     this.assertUsable();
     return this.requireAck(
       this.enqueueTurn(undefined, () =>
-        Promise.resolve([preparedDetachedEdit(prepare, ownerEdits)]),
+        Promise.resolve([
+          preparedDetachedEdit(prepare, ownerEdits, appendOnly),
+        ]),
       ),
     );
   }

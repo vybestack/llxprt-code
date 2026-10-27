@@ -9,8 +9,19 @@ import {
 } from '../journal/journalReader.js';
 import { stateReaderOf } from '../journal/journalReaderState.js';
 import { RECORD_KIND } from '../journal/recordKinds.js';
-import { decodeRowHeader } from '../journal/rowRecord.js';
+import {
+  decodeRowHeader,
+  ROW_BLOCK_TYPE,
+  type RowBlockEntry,
+  type RowHeader,
+} from '../journal/rowRecord.js';
 import { storedRowFromBody } from '../journal/rowReads.js';
+import {
+  chunkBlock,
+  chunkValue,
+  hydrateChunkHeader,
+  readChunkBlock,
+} from '../journal/chunk-row.js';
 import { FRAME_HEAD_BYTES, type FrameHead } from '../journal/frame.js';
 import { crc32 } from '../journal/bytes.js';
 import {
@@ -30,6 +41,7 @@ async function scanRow(
   reader: JournalReader,
   head: FrameHead,
   hash: Hash,
+  contentReader: JournalReader,
 ): Promise<IContent> {
   const header = decodeRowHeader(head.kindHeader);
   const singleChunk = head.bodyLen <= HASH_CHUNK_BYTES;
@@ -42,10 +54,37 @@ async function scanRow(
     else body.set(chunk, offset);
     offset += chunk.length;
   }
-  const content = decodeStoredRow(
-    storedRowFromBody(reader, head, header, body),
-  );
-  return content;
+  return header.chunk === undefined
+    ? decodeStoredRow(storedRowFromBody(reader, head, header, body))
+    : scanChunkMedia(contentReader, header);
+}
+
+async function scanChunkMedia(
+  reader: JournalReader,
+  header: RowHeader,
+): Promise<IContent> {
+  const manifest = header.chunk;
+  if (manifest === undefined) throw new Error('Missing chunk manifest');
+  const hydrated = await hydrateChunkHeader(reader, header);
+  const blocks: Uint8Array[] = [];
+  const directory: RowBlockEntry[] = [];
+  for (let ordinal = 0; ordinal < manifest.blockCount; ordinal++) {
+    const entry = hydrated.blocks[ordinal];
+    if (entry.type !== ROW_BLOCK_TYPE.media) continue;
+    const block = await chunkBlock(reader, manifest, ordinal);
+    // Progress manifests can contain unfinished JSON. Only ended media blocks
+    // publish references; later manifests retain them after cancellation too.
+    if (block.ended) {
+      blocks.push(await readChunkBlock(reader, manifest, ordinal));
+      directory.push(entry);
+    }
+  }
+  return decodeStoredRow({
+    header: { ...hydrated, blocks: directory },
+    rawIds: [],
+    meta: await chunkValue(reader, manifest.metaRef),
+    blocks,
+  });
 }
 
 async function* hashBody(
@@ -132,7 +171,7 @@ async function scanFrames(
     hash.update(bodies.frameHead);
     hash.update(head.kindHeader);
     if (head.kind === RECORD_KIND.ROW) {
-      onContents([await scanRow(scanReader, head, hash)]);
+      onContents([await scanRow(scanReader, head, hash, reader)]);
     } else {
       for await (const chunk of hashBody(scanReader, head, hash)) {
         void chunk;

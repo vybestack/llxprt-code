@@ -78,7 +78,8 @@ function open(pageRows: number): ScrollbackPagerStore {
 
 /** One label per row; a tool call is `id=done` once its result shows. */
 function shape(store: ScrollbackPagerStore): string[] {
-  return store.getState().rows.map(({ item }) => {
+  return store.getState().rows.map(({ item, contextState }) => {
+    expect(contextState).toBe(item.type === 'gemini' ? 'purged' : 'in-context');
     if (item.type === 'user') return item.text;
     if (item.type !== 'tool_group') return item.type;
     const calls = item.tools.map((tool) =>
@@ -126,7 +127,7 @@ describe('production pager rewinds through a projected tool group', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it('keeps the surviving call when the only result is rewound', async () => {
+  it('keeps the answered call visible when its result leaves context', async () => {
     await writeNativeEdits(file, [
       human(1),
       opener(2, ['c1']),
@@ -135,29 +136,41 @@ describe('production pager rewinds through a projected tool group', () => {
     ]);
     const store = open(10);
     await store.resumeFromJournal();
-    expect(shape(store)).toStrictEqual(['row-1', 'tools:c1=open']);
+    expect(shape(store)).toStrictEqual(['row-1', 'tools:c1=done', 'gemini']);
   });
 
-  it('keeps answered calls and reopens the one whose result was cut', async () => {
+  it('keeps all answered calls visible when the last result leaves context', async () => {
     await writeNativeEdits(file, [
       ...OPEN_AND_RESULTS,
       result(5, 'c3'),
       rewind(6, 1, 5),
     ]);
     for (const rows of await shapesAcrossRestart())
-      expect(rows).toStrictEqual(['row-1', 'tools:c1=done,c2=done,c3=open']);
+      expect(rows).toStrictEqual([
+        'row-1',
+        'tools:c1=done,c2=done,c3=done',
+        'gemini',
+      ]);
   });
 
-  it('shows every call unanswered when the cut lands right after the opener', async () => {
+  it('retains answers when the cut lands right after the opener', async () => {
     await writeNativeEdits(file, [...OPEN_AND_RESULTS, rewind(5, 2, 3)]);
     for (const rows of await shapesAcrossRestart())
-      expect(rows).toStrictEqual(['row-1', 'tools:c1=open,c2=open,c3=open']);
+      expect(rows).toStrictEqual([
+        'row-1',
+        'tools:c1=done,c2=done,c3=open',
+        'gemini',
+      ]);
   });
 
   it('cuts inside the group by removed-row count when there is no cutSeq', async () => {
     await writeNativeEdits(file, [...OPEN_AND_RESULTS, rewind(5, 1)]);
     for (const rows of await shapesAcrossRestart())
-      expect(rows).toStrictEqual(['row-1', 'tools:c1=done,c2=open,c3=open']);
+      expect(rows).toStrictEqual([
+        'row-1',
+        'tools:c1=done,c2=done,c3=open',
+        'gemini',
+      ]);
   });
 
   it('pages back from a resumed tail through a prefix and a cut group', async () => {
@@ -172,15 +185,17 @@ describe('production pager rewinds through a projected tool group', () => {
     await writeNativeEdits(file, body);
     const store = open(5);
     await store.resumeFromJournal();
-    const tail = 'tools:c1=done,c2=open';
+    const tail = 'tools:c1=done,c2=done';
     const resumed = shape(store);
-    expect(resumed.at(-1)).toBe(tail);
-    expect(resumed.at(-2)).toBe('row-40');
+    expect(resumed.at(-1)).toBe('gemini');
+    expect(resumed.at(-2)).toBe(tail);
+    expect(resumed.at(-3)).toBe('row-40');
     await store.pageBack();
     const older = shape(store);
     expect(older.length).toBeGreaterThan(resumed.length);
-    expect(older.at(-1)).toBe(tail);
-    expect(older.at(-2)).toBe('row-40');
+    expect(older.at(-1)).toBe('gemini');
+    expect(older.at(-2)).toBe(tail);
+    expect(older.at(-3)).toBe('row-40');
     expect(store.getState().atVisibilityFloor).toBe(false);
   });
 
@@ -197,7 +212,8 @@ describe('production pager rewinds through a projected tool group', () => {
     await walkToFloor(store);
     expect(shape(store)).toStrictEqual([
       'row-1',
-      'tools:c1=done,c2=open,c3=open',
+      'tools:c1=done,c2=done,c3=open',
+      'gemini',
       'row-6',
     ]);
   });

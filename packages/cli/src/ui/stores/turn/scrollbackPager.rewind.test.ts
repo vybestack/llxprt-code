@@ -78,11 +78,17 @@ describe('production pager applies rewind membership', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it('shows the two surviving rows when the last of three is rewound', async () => {
+  it('retains the rewound row with its context marker', async () => {
     await writeNativeEdits(file, [row(1), row(2), row(3), rewind(4, 1, 3)]);
     const store = open(10);
     const summary = await store.resumeFromJournal();
-    expect(texts(store)).toStrictEqual(['row-1', 'row-2']);
+    expect(texts(store)).toStrictEqual(['row-1', 'row-2', 'row-3', 'gemini']);
+    expect(store.getState().rows.map((row) => row.contextState)).toStrictEqual([
+      'in-context',
+      'in-context',
+      'purged',
+      'purged',
+    ]);
     expect(summary.atClearBoundary).toBe(false);
   });
 
@@ -98,8 +104,16 @@ describe('production pager applies rewind membership', () => {
     for (const attempt of [open(25), open(7)]) {
       await walkToFloor(attempt);
       expect(texts(attempt)).toStrictEqual([
-        ...labels(1, prefix),
+        ...labels(1, prefix + 50),
+        'gemini',
         ...labels(prefix + 52, prefix + 54),
+      ]);
+      expect(
+        attempt.getState().rows.map((row) => row.contextState),
+      ).toStrictEqual([
+        ...Array(prefix).fill('in-context'),
+        ...Array(51).fill('purged'),
+        ...Array(3).fill('in-context'),
       ]);
     }
   });
@@ -111,13 +125,13 @@ describe('production pager applies rewind membership', () => {
     await writeNativeEdits(file, body);
     const store = open(10);
     await store.resumeFromJournal();
-    expect(texts(store)).toStrictEqual(labels(21, 30));
+    expect(texts(store)).toStrictEqual([...labels(32, 40), 'gemini']);
     await store.pageBack();
-    expect(texts(store)).toStrictEqual(labels(11, 30));
+    expect(texts(store)).toStrictEqual([...labels(22, 40), 'gemini']);
     expect(store.getState().atVisibilityFloor).toBe(false);
   });
 
-  it('treats a rewind that cuts the first row as a full clear', async () => {
+  it('keeps the full transcript after a rewind cuts the first context row', async () => {
     await writeNativeEdits(file, [
       row(1),
       row(2),
@@ -128,16 +142,36 @@ describe('production pager applies rewind membership', () => {
     ]);
     const store = open(10);
     const summary = await store.resumeFromJournal();
-    expect(texts(store)).toStrictEqual(['row-5', 'row-6']);
-    expect(summary.atClearBoundary).toBe(true);
+    expect(texts(store)).toStrictEqual([
+      'row-1',
+      'row-2',
+      'row-3',
+      'gemini',
+      'row-5',
+      'row-6',
+    ]);
+    expect(store.getState().rows.map((row) => row.contextState)).toStrictEqual([
+      'purged',
+      'purged',
+      'purged',
+      'purged',
+      'in-context',
+      'in-context',
+    ]);
+    expect(summary.atClearBoundary).toBe(false);
     expect(store.getState().atVisibilityFloor).toBe(true);
   });
 
-  it('shows nothing after a clear with no later rows', async () => {
+  it('keeps cleared rows visible and marked out of context', async () => {
     await writeNativeEdits(file, [row(1), row(2), rewind(3, 2, 1)]);
     const store = open(10);
     await store.resumeFromJournal();
-    expect(texts(store)).toStrictEqual([]);
+    expect(texts(store)).toStrictEqual(['row-1', 'row-2', 'gemini']);
+    expect(store.getState().rows.map((row) => row.contextState)).toStrictEqual([
+      'purged',
+      'purged',
+      'purged',
+    ]);
     expect(store.getState().atVisibilityFloor).toBe(true);
   });
 
@@ -151,7 +185,20 @@ describe('production pager applies rewind membership', () => {
     ]);
     const store = open(10);
     await walkToFloor(store);
-    expect(texts(store)).toStrictEqual(['row-1', 'row-5']);
+    expect(texts(store)).toStrictEqual([
+      'row-1',
+      'row-2',
+      'row-3',
+      'gemini',
+      'row-5',
+    ]);
+    expect(store.getState().rows.map((row) => row.contextState)).toStrictEqual([
+      'in-context',
+      'purged',
+      'purged',
+      'purged',
+      'in-context',
+    ]);
   });
 
   it('applies a rewind appended after the pager opened', async () => {
@@ -161,6 +208,19 @@ describe('production pager applies rewind membership', () => {
     await writeNativeEdits(file, [rewind(4, 1, 3), row(5)], true);
     await store.invalidate();
     await walkToFloor(store);
-    expect(texts(store)).toStrictEqual(['row-1', 'row-2', 'row-5']);
+    expect(texts(store)).toStrictEqual([
+      'row-1',
+      'row-2',
+      'row-3',
+      'gemini',
+      'row-5',
+    ]);
+    expect(store.getState().rows.map((row) => row.contextState)).toStrictEqual([
+      'in-context',
+      'in-context',
+      'purged',
+      'purged',
+      'in-context',
+    ]);
   });
 });

@@ -313,7 +313,7 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
     );
   });
 
-  it('resume equivalence applies the rewind membership: the resumed walk equals the replay', async () => {
+  it('resume preserves the transcript while marking rewound rows out of context', async () => {
     await fixture.addSessionStart();
     for (let seq = 1; seq <= 4; seq += 1) {
       await fixture.addUser(seq);
@@ -326,8 +326,26 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
     await walkToFloor(store);
 
     const walked = journalRowLabels(store);
-    expect(walked.map((row) => row.seq)).toStrictEqual([1, 2, 6, 7, 8, 9]);
-    expect(walked).toStrictEqual(await nativeReference(fixture.filePath));
+    expect(walked.map((row) => row.seq)).toStrictEqual([
+      1, 2, 3, 4, 0, 6, 7, 8, 9,
+    ]);
+    expect(store.getState().rows.map((row) => row.contextState)).toStrictEqual([
+      'in-context',
+      'in-context',
+      'purged',
+      'purged',
+      'purged',
+      'in-context',
+      'in-context',
+      'in-context',
+      'in-context',
+    ]);
+    expect(
+      journalRowLabels(store).filter(
+        (_, index) =>
+          store.getState().rows[index]?.contextState === 'in-context',
+      ),
+    ).toStrictEqual(await nativeReference(fixture.filePath));
   });
 
   it('pageBack after resume yields only rows older than the seeded page', async () => {
@@ -403,7 +421,7 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
     expect(seqs[seqs.length - 1]).toBe(6);
   });
 
-  it('a native full clear exposes only its successor rows and no physical boundary', async () => {
+  it('a native full clear seeds successors and leaves earlier transcript rows pageable', async () => {
     await fixture.addSessionStart();
     for (let seq = 1; seq <= 4; seq += 1) {
       await fixture.addUser(seq);
@@ -419,6 +437,15 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
       6, 7, 8, 9,
     ]);
     expect(summary.atClearBoundary).toBe(false);
+    expect(store.getState().atVisibilityFloor).toBe(false);
+    await walkToFloor(store);
+    expect(store.getState().rows.map((row) => row.seq)).toStrictEqual([
+      1, 2, 3, 4, 0, 6, 7, 8, 9,
+    ]);
+    expect(store.getState().rows.map((row) => row.contextState)).toStrictEqual([
+      ...Array(5).fill('purged'),
+      ...Array(4).fill('in-context'),
+    ]);
     expect(store.getState().atVisibilityFloor).toBe(true);
   });
 
