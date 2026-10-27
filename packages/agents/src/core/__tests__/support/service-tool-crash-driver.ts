@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { RecordingIntegration } from '@vybestack/llxprt-code-core/recording/RecordingIntegration.js';
+import { RECORD_KIND } from '@vybestack/llxprt-code-core/journal/recordKinds.js';
 import {
   JournalResumeBoot,
   resumePointOf,
@@ -122,10 +123,12 @@ try {
   });
   await nextGate.promise;
   const selected = primary;
-  const writes = selected.seams.events.filter(
-    (event) => event.type === 'write',
-  ).length;
-  if (role !== 'none') selected.failures.gateWriteAt = writes + 1;
+  const trailers = (): number =>
+    selected.seams.events.filter(
+      (event) => event.type === 'write' && event.kind === RECORD_KIND.TRAILER,
+    ).length;
+  const beforeTrailers = trailers();
+  if (role !== 'none') selected.failures.gateTrailerAt = beforeTrailers;
   setup.chat.recordCompletedToolCalls(modelName, [completedTool()]);
   nextStarted = true;
   const send = (async (): Promise<void> => {
@@ -139,12 +142,7 @@ try {
   void send.catch((error: unknown) =>
     report('send-error', { error: String(error) }),
   );
-  while (
-    selected.seams.events.filter((event) => event.type === 'write').length <=
-      writes + 1 &&
-    entries < 2
-  )
-    await Bun.sleep(5);
+  while (trailers() === beforeTrailers && entries < 2) await Bun.sleep(5);
   report('held', {
     ...facts(),
     disk: await Promise.all(files.map(diskToolState)),

@@ -48,7 +48,7 @@ export function recordingConfig(
   };
 }
 export async function observedRecording(directory: string, name: string) {
-  const failures: Failures = {};
+  const failures: Failures = { recordKinds: true };
   const seams = testJournalSeams(failures);
   const fullFlush = await loadFlushRecords();
   let flushes = 0;

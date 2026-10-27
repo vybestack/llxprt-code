@@ -96,10 +96,10 @@ async function scenario(mode: 'crash' | 'clean'): Promise<unknown> {
     rig.send('release');
     const entry = await rig.wait('transport-entry');
     expect(numbers(entry, 'seqs')).toStrictEqual(
-      numbers(ready, 'seqs').map((seq) => seq + 1),
+      numbers(ready, 'seqs').map((seq) => seq + 4),
     );
     expect(numbers(entry, 'flushes')).toStrictEqual(
-      numbers(ready, 'flushes').map((count) => count + 1),
+      numbers(ready, 'flushes').map((count) => count + 7),
     );
     const request = await rig.wait('transport-request');
     const committed = await Promise.all(files.map(diskToolState));

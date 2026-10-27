@@ -54,10 +54,10 @@ describe('native tool crash front-door resume', () => {
       }
       const counts = z.array(z.number()).length(1);
       expect(counts.parse(entry.details.flushes)).toStrictEqual(
-        counts.parse(ready.details.flushes).map((count) => count + 1),
+        counts.parse(ready.details.flushes).map((count) => count + 7),
       );
       expect(counts.parse(entry.details.seqs)).toStrictEqual(
-        counts.parse(ready.details.seqs).map((seq) => seq + 1),
+        counts.parse(ready.details.seqs).map((seq) => seq + 4),
       );
       await writeFile(
         join(rig.directory, 'proof.json'),
