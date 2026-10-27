@@ -81,16 +81,30 @@ export class JournalDisplayWriter {
     const draft = encodeContentRow({ speaker: 'ai', blocks: [] }, { owner: 0 });
     let row: ArrivalRow | undefined;
     try {
+      if (typeof source === 'string')
+        return await mutateDisplay(this.store, {
+          draft,
+          presentation: new TextEncoder().encode(JSON.stringify(descriptor)),
+          text: source,
+          ...(descriptor.type === 'tool-result' ||
+          descriptor.type === 'tool-approval'
+            ? {
+                relationKey: (descriptor.type === 'tool-result'
+                  ? displayRelationKey
+                  : approvalRelationKey)(
+                  descriptor.attemptId,
+                  descriptor.callId,
+                ),
+              }
+            : {}),
+        });
       row = await mutateDisplay(this.store, {
         draft,
         presentation: new TextEncoder().encode(JSON.stringify(descriptor)),
       });
       const block = await recorder.beginNamedBlock(row, 0);
-      if (typeof source === 'string')
-        await recorder.appendText(block, 'text', source);
-      else
-        for await (const piece of source)
-          await recorder.appendText(block, 'text', piece);
+      for await (const piece of source)
+        await recorder.appendText(block, 'text', piece);
       await recorder.endBlock(block);
       await mutateDisplay(this.store, {
         row,

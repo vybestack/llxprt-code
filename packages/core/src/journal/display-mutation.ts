@@ -5,6 +5,7 @@ import {
   type ArrivalRow,
 } from './arrival-group.js';
 import type { RowDraft } from './rowDraft.js';
+import { encodeTextSuffix } from './chunk-fields.js';
 import type { RecordAccess } from './recordAccess.js';
 import type { RecordAppender } from './groupAppender.js';
 import { KeyedMapReader, KeyedMapBatch } from './keyedMap.js';
@@ -24,6 +25,7 @@ interface DisplayMutation {
   readonly row?: ArrivalRow;
   readonly draft?: RowDraft;
   readonly presentation?: Uint8Array;
+  readonly text?: string;
   readonly retract?: boolean;
   readonly relationKey?: string;
 }
@@ -51,7 +53,7 @@ async function rewriteHead(
           operation.presentation,
         );
   let status = 1;
-  if (creating) status = 0;
+  if (creating && operation.text === undefined) status = 0;
   else if (operation.retract === true) status = 6;
   const updated = {
     ...entry,
@@ -90,6 +92,14 @@ export async function mutateDisplay(
             submissionId: '',
           });
     if (row === undefined) throw new Error('Missing display row identity');
+    if (operation.text !== undefined) {
+      const block = await group.beginBlock(row, 0, true);
+      for (const bytes of encodeTextSuffix(operation.text, 0, false))
+        await group.appendNamed(block, 'text', bytes);
+      if (operation.text.length === 0)
+        await group.appendNamed(block, 'text', new Uint8Array());
+      await group.endBlock(block);
+    }
     const mutation = await group.complete(row);
     await target.drain();
     const access = () => ctx.readGroup(target.nextOffset);
