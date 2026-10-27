@@ -87,12 +87,7 @@ export type {
 } from './interactive-auth-coordinator.js';
 
 // ─── Sandbox Proxy Lifecycle ─────────────────────────────────────────────────
-export {
-  createAndStartProxy,
-  stopProxy,
-  getProxySocketPath,
-  getProxyCapabilityToken,
-} from './proxy/sandbox-proxy-lifecycle.js';
+export { createAndStartProxy } from './proxy/sandbox-proxy-lifecycle.js';
 export type {
   SandboxProxyConfig,
   SandboxProxyHandle,

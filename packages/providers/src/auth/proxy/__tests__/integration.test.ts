@@ -37,9 +37,7 @@ import { CredentialProxyServer } from '../credential-proxy-server.js';
 
 import {
   createAndStartProxy,
-  stopProxy,
-  getProxySocketPath,
-  getProxyCapabilityToken,
+  type SandboxProxyHandle,
 } from '../sandbox-proxy-lifecycle.js';
 
 const isWindows = process.platform === 'win32';
@@ -177,6 +175,7 @@ describe('proxy integration (phase 31)', () => {
   let tmpDir: string;
   let priorSocketEnv: string | undefined;
   let priorCapabilityFdEnv: string | undefined;
+  const proxies: SandboxProxyHandle[] = [];
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-'));
@@ -187,11 +186,7 @@ describe('proxy integration (phase 31)', () => {
   });
 
   afterEach(async () => {
-    try {
-      await stopProxy();
-    } catch {
-      // best-effort cleanup during red-state TDD phase
-    }
+    await Promise.all(proxies.splice(0).map((proxy) => proxy.stop()));
 
     if (priorSocketEnv === undefined) {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
@@ -346,10 +341,12 @@ describe('proxy integration (phase 31)', () => {
     // @scenario Lifecycle helper should create and return a stop-capable proxy handle.
     const handle = await createAndStartProxy(
       {
+        tokenStore: new InMemoryTokenStore(),
         socketPath: path.join(tmpDir, 'lifecycle.sock'),
       },
       globalThis.fetch,
     );
+    proxies.push(handle);
     expect(typeof handle.stop).toBe('function');
   });
 
@@ -358,27 +355,31 @@ describe('proxy integration (phase 31)', () => {
     // @scenario Lifecycle helper should start then stop proxy without leaking resources.
     const handle = await createAndStartProxy(
       {
+        tokenStore: new InMemoryTokenStore(),
         socketPath: path.join(tmpDir, 'lifecycle-stop.sock'),
       },
       globalThis.fetch,
     );
-    await stopProxy();
+    proxies.push(handle);
+    await handle.stop();
     await expect(handle.stop()).resolves.toBeUndefined();
   });
 
   it('generates and exposes a capability token after proxy start', async () => {
     // @scenario Lifecycle should generate a per-session capability token.
-    await createAndStartProxy(
+    const handle = await createAndStartProxy(
       {
+        tokenStore: new InMemoryTokenStore(),
         socketPath: path.join(tmpDir, 'capability-token.sock'),
       },
       globalThis.fetch,
     );
-    const token = getProxyCapabilityToken();
+    proxies.push(handle);
+    const token = handle.capabilityToken;
     expect(typeof token).toBe('string');
     expect(token).toMatch(/^[0-9a-f]{64}$/); // 32 bytes hex-encoded
-    expect(getProxySocketPath()).toBeDefined();
-    await stopProxy();
+    expect(handle.socketPath).toBeDefined();
+    await handle.stop();
   });
 
   describe.skipIf(isWindows)('POSIX factory capability transport', () => {
@@ -466,35 +467,42 @@ describe('proxy integration (phase 31)', () => {
     });
   });
 
-  it('clears capability token after proxy stop', async () => {
-    // @scenario Lifecycle should clear the capability token on stop.
-    await createAndStartProxy(
+  it('rejects connections using retired capability details after proxy stop', async () => {
+    const handle = await createAndStartProxy(
       {
+        tokenStore: new InMemoryTokenStore(),
         socketPath: path.join(tmpDir, 'capability-token-clear.sock'),
       },
       globalThis.fetch,
     );
-    expect(getProxyCapabilityToken()).toBeDefined();
-    await stopProxy();
-    expect(getProxyCapabilityToken()).toBeUndefined();
+    proxies.push(handle);
+    await handle.stop();
+    const client = new ProxySocketClient(
+      handle.socketPath,
+      handle.capabilityToken,
+    );
+    try {
+      await expect(client.ensureConnected()).rejects.toThrow(
+        /connect|ENOENT|ECONNREFUSED/i,
+      );
+    } finally {
+      client.close();
+    }
   });
 
   describe.skipIf(isWindows)('Unix socket lifecycle', () => {
-    it('clears capability token when start() fails', async () => {
-      // @scenario If serverInstance.start() throws (e.g. socket path under a
-      // regular file), the capability token must be cleared to prevent a stale
-      // token from being reused by a subsequent proxy session.
+    it('rejects startup when the socket directory is a regular file', async () => {
       const blockingFile = path.join(tmpDir, 'blocking-file');
       fs.writeFileSync(blockingFile, '');
       await expect(
         createAndStartProxy(
           {
+            tokenStore: new InMemoryTokenStore(),
             socketPath: path.join(blockingFile, 'subdir', 'fail.sock'),
           },
           globalThis.fetch,
         ),
       ).rejects.toThrow(/ENOTDIR|ENOENT|EACCES|EADDRINUSE|EINVAL/i);
-      expect(getProxyCapabilityToken()).toBeUndefined();
     });
 
     it('creates socket file on server start and removes it on server stop', async () => {
