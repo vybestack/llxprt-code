@@ -38,25 +38,47 @@ const generateContentStreamMock = vi.fn();
 // The provider releases the SDK `Content[]` once the call settles (issue #854
 // WP09), so requests are snapshotted at call time for later assertions.
 interface SentRequest {
-  contents: Array<{ role: string; parts: Array<Record<string, unknown>> }>;
+  contents: Array<{ role: string; parts: Part[] }>;
 }
 let sentRequests: SentRequest[] = [];
 
-const googleGenAIConstructor = vi.fn().mockImplementation(() => ({
+const googleGenAIConstructor = vi.fn((options: GeminiApiClientOptions) => ({
   models: {
-    generateContentStream: (request: SentRequest) => {
-      sentRequests.push(structuredClone(request));
-      return generateContentStreamMock(request);
+    async generateContent(): Promise<GenerateContentResponse> {
+      throw new Error('Unexpected non-streaming test request');
+    },
+    async generateContentStream(
+      request: GenerateContentParameters,
+    ): Promise<AsyncIterable<GenerateContentResponse>> {
+      const contents: Content[] = [];
+      if (options.requestContents !== undefined)
+        for await (const content of options.requestContents())
+          contents.push(content);
+      const converted = { ...request, contents };
+      sentRequests.push({
+        contents: structuredClone(contents).map((content) => {
+          if (content.role === undefined || content.parts === undefined)
+            throw new Error('Expected converted Gemini content');
+          return { role: content.role, parts: content.parts };
+        }),
+      });
+      return generateContentStreamMock(converted);
     },
   },
 }));
 
-import type { CreateGeminiApiClient } from '../gemini/GeminiProvider.js';
-// The factory is injected into GeminiProvider rather than module-mocked:
-// `vi.mock` registers process-wide and bun hoists it ahead of the whole
-// run, so the stub leaked into every suite loaded alongside this one.
-const injectedClientFactory =
-  googleGenAIConstructor as unknown as CreateGeminiApiClient;
+const injectedClientFactory = async (
+  options: GeminiApiClientOptions,
+): Promise<GeminiApiClient> => googleGenAIConstructor(options);
+
+import type {
+  GeminiApiClientOptions,
+  GenerateContentParameters,
+  GenerateContentResponse,
+  Content,
+  GeminiApiClient,
+  Part,
+} from '../gemini/geminiWireTypes.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
@@ -602,8 +624,12 @@ async function preservesGenerationAndReleaseFailures(): Promise<void> {
     },
   };
   const mediaResolver: RequestMediaResolutionService = {
-    resolve: async () => request,
-    openReservations: () => ({ release: async () => {} }),
+    resolve: async () => ({ ...request, release: async () => {} }),
+    openReservations: () => ({
+      release: async () => {
+        throw new Error('media release failed');
+      },
+    }),
   };
   generateContentStreamMock.mockResolvedValueOnce({
     [Symbol.asyncIterator]: () => ({
@@ -644,7 +670,10 @@ async function preservesGenerationAndReleaseFailures(): Promise<void> {
   );
   expect(error.errors).toStrictEqual([
     new Error('stream generation failed'),
-    new Error('media release failed'),
+    new AggregateError(
+      [new Error('media release failed')],
+      'Failed to release media request',
+    ),
   ]);
 }
 
