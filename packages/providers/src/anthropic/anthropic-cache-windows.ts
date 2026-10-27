@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { NativeFactIndexWriter } from '@vybestack/llxprt-code-core/journal/nativeFactIndex.js';
 import { ROW_BLOCK_TYPE } from '@vybestack/llxprt-code-core/journal/rowRecord.js';
+import type { NativeFactIndexWriter } from '@vybestack/llxprt-code-core/journal/nativeFactIndex.js';
+import { readAnthropicMeasurementFact } from './anthropic-measurement-facts.js';
 import type {
   AnthropicStreamRepair,
   LazyRepairAtom,
@@ -9,6 +10,7 @@ import type {
 async function purgeWindow(
   engine: AnthropicStreamRepair,
   atom: LazyRepairAtom,
+  writer: NativeFactIndexWriter,
 ): Promise<boolean> {
   if (atom.repair) return false;
   const at = atom.end ?? Math.floor(atom.key / 4);
@@ -18,24 +20,20 @@ async function purgeWindow(
   let media = false;
   for (let unit = Math.floor(atom.key / 4); unit <= at && !media; unit++) {
     const plan = unit === at ? tail : await engine.source.query.planAt(unit);
-    media = plan.blocks.some((ref) => {
-      if (ref.kind !== 'source') return false;
-      const ids = plan.sourceIds?.(ref.at.label);
-      // A plan only exposes directories already held for its own source row.
-      return (
-        ids === undefined ||
-        ids.header.blocks[ref.at.block].type === ROW_BLOCK_TYPE.media
-      );
-    });
+    media = plan.blocks.some(
+      (ref) =>
+        ref.kind === 'source' &&
+        (plan.sourceIds?.(ref.at.label)?.header.blocks[ref.at.block].type ??
+          ROW_BLOCK_TYPE.media) === ROW_BLOCK_TYPE.media,
+    );
   }
   if (!media) return false;
-  for await (const piece of atom.openPieces())
-    if (
-      typeof piece !== 'string' &&
-      piece.some((block) => block.type === 'image')
-    )
-      return true;
-  return false;
+  const measured = await readAnthropicMeasurementFact(writer, atom.key);
+  return measured.kept.some(
+    (piece) =>
+      piece.form === 'array' &&
+      piece.blocks.some((block) => block.kind === 'image'),
+  );
 }
 
 async function counter(
@@ -73,7 +71,7 @@ export async function writeAnthropicCacheWindows(
       start = at;
     }
     end = (atom.end ?? at) + 1;
-    if (await purgeWindow(engine, atom))
+    if (await purgeWindow(engine, atom, writer))
       await writer.set(['cache-purge-window', purgeWindows++], [at, end]);
     if (
       !atom.repair &&

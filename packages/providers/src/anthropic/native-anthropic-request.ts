@@ -338,6 +338,9 @@ async function requestFromStored(
 ): Promise<NativeAnthropicRequest> {
   const query = engine.source.query;
   const settings = measured.settings;
+  engine.measurementFacts = await snapshot.nativeFacts(
+    anthropicRepairScope(settings),
+  );
   const cache =
     measured.cache !== undefined && plan.wantMediaPurgeCacheAnchor
       ? applyAnthropicPurgeCache(

@@ -94,6 +94,7 @@ export class AnthropicRepairSource<
     messageWalks: 0,
     groupQueries: 0,
     chainSearchUnits: 0,
+    media: false,
   };
   constructor(
     readonly query: Query,
@@ -135,12 +136,10 @@ export class AnthropicRepairSource<
         const ids = plan.sourceIds?.(ref.at.label);
         return ids?.header.blocks[ref.at.block].type;
       });
+      this.work.media ||= types.includes(ROW_BLOCK_TYPE.media);
       if (
         types.every(
-          (type) =>
-            type !== undefined &&
-            type !== ROW_BLOCK_TYPE.thinking &&
-            type !== ROW_BLOCK_TYPE.media,
+          (type) => type !== undefined && type !== ROW_BLOCK_TYPE.thinking,
         )
       ) {
         const results = types.includes(ROW_BLOCK_TYPE.tool_response);

@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { NativeAnthropicEstimateProjection } from './native-anthropic-estimate.js';
+import { getO200kBaseEncoder } from '../tokenizers/o200kBaseCounter.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as measuredMedia from './anthropic-measured-media.js';
 import { prepareAnthropicStoredFill } from './anthropic-stored-fill.js';
@@ -100,7 +102,7 @@ describe('Anthropic repeated atom conversion', () => {
       const snapshot = await session.store.snapshot();
       const query = await IndexedJournalRequestSnapshot.create(snapshot);
       try {
-        expect(decoded).toBe(count + 3);
+        expect(decoded).toBe(count + 1);
         expect(toolMeasurements).toBe(count / 4);
         const engine = await AnthropicStreamRepair.create(query, settings);
         let bytes = 0;
@@ -109,6 +111,35 @@ describe('Anthropic repeated atom conversion', () => {
         expect(bytes).toBeGreaterThan(count * 1000);
         expect(engine.source.work.unitReads).toBeLessThanOrEqual(count + 1);
         expect((await engine.measure()).bytes).toBe(bytes);
+        const projection = new NativeAnthropicEstimateProjection(engine, {
+          messages: [],
+        });
+        const encoder = await getO200kBaseEncoder();
+        const request = {
+          activeProvider: 'anthropic',
+          canonicalModel: settings.model,
+          protocol: 'anthropic-messages',
+          wireMethod: 'messages/v1',
+          finalizedProjection: projection,
+          projectionRevision: 4,
+          legacyEstimate: async () => 0,
+        } satisfies import('@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js').RuntimePromptEstimateRequest;
+        const oracle = new NativeAnthropicEstimateProjection(
+          { serialize: engine.serialize.bind(engine) },
+          { messages: [] },
+        );
+        const expected = await oracle.measure(request, encoder);
+        await oracle.dispose();
+        const reads = spyOn(IndexedJournalRequestSnapshot.prototype, 'readAt');
+        try {
+          const estimate = await projection.measure(request, encoder);
+          expect(estimate).toStrictEqual(expected);
+          expect(estimate.baseTokens).toBeGreaterThan(count);
+          expect(reads.mock.calls.length).toBe(0);
+        } finally {
+          reads.mockRestore();
+          await projection.dispose();
+        }
         await verifySingleMeasurement(snapshot);
       } finally {
         await query.close();

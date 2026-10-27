@@ -1,4 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  estimatePieceFactSchema,
+  encodeEstimatePieceFact,
+  type EstimatePieceFact,
+} from './anthropic-estimate-facts.js';
 import { z } from 'zod';
 import type { AnthropicAtom } from './anthropic-unit-facts.js';
 import type {
@@ -38,11 +43,15 @@ const atom = z.discriminatedUnion('form', [
 const measurement = z.object({
   kept: z.array(atom),
   stripped: z.array(atom).optional(),
+  estimates: z.array(estimatePieceFactSchema),
+  strippedEstimates: z.array(estimatePieceFactSchema).optional(),
   chain: z.boolean(),
 });
 export interface AnthropicMeasurementFact {
   readonly kept: readonly AnthropicAtom[];
   readonly stripped?: readonly AnthropicAtom[];
+  readonly estimates: readonly EstimatePieceFact[];
+  readonly strippedEstimates?: readonly EstimatePieceFact[];
   readonly chain: boolean;
 }
 export async function writeAnthropicMeasurementFact(
@@ -52,7 +61,13 @@ export async function writeAnthropicMeasurementFact(
 ): Promise<void> {
   await writer.setBytes(
     ['measurement', key],
-    new TextEncoder().encode(JSON.stringify(fact)),
+    new TextEncoder().encode(
+      JSON.stringify({
+        ...fact,
+        estimates: fact.estimates.map(encodeEstimatePieceFact),
+        strippedEstimates: fact.strippedEstimates?.map(encodeEstimatePieceFact),
+      }),
+    ),
   );
 }
 export async function readAnthropicMeasurementFact(

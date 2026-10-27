@@ -61,6 +61,20 @@ export interface ChunkedCountTuning {
   readonly blockBytes: number;
 }
 
+export function hasOversizedO200kPiece(text: string): boolean {
+  const pieces = new RegExp(O200K_PIECES_SOURCE, O200K_PIECES_FLAGS);
+  for (const match of text.matchAll(pieces))
+    if (match[0].length > DEFAULT_CHUNKED_TUNING.wasmPieceChars) return true;
+  return false;
+}
+
+export function trailingO200kPiece(text: string): string {
+  const pieces = new RegExp(O200K_PIECES_SOURCE, O200K_PIECES_FLAGS);
+  let tail = '';
+  for (const match of text.matchAll(pieces)) tail = match[0];
+  return tail;
+}
+
 export const DEFAULT_CHUNKED_TUNING: ChunkedCountTuning = Object.freeze({
   chunkChars: 64 * 1024,
   wasmPieceChars: 16 * 1024,

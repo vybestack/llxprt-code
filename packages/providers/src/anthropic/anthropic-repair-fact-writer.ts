@@ -192,12 +192,7 @@ export function anthropicRepairFactIndex(
       const query = await IndexedJournalRequestSnapshot.create(snapshot);
       try {
         const ledger = anthropicMediaLedgerWriter(writer, settings);
-        const source = new AnthropicRepairSource(
-          query,
-          settings,
-          undefined,
-          ledger.observe,
-        );
+        const source = new AnthropicRepairSource(query, settings);
         let messages = 0;
         let last = -1;
         let thinking = 0;
@@ -212,7 +207,6 @@ export function anthropicRepairFactIndex(
           }
         }
         await writer.set(['thinking-count'], [thinking]);
-        await ledger.finish();
         await writer.set(['messages'], [messages, last + 1]);
         const index = await AnthropicRepairIndex.prepared(writer, generation);
         let tailChain = false;
@@ -239,14 +233,17 @@ export function anthropicRepairFactIndex(
           index,
         );
         await writeAtomFacts(index, engine, writer);
-        await writeAnthropicCacheWindows(engine, writer);
         await writeAnthropicRecoveryFacts(
           query,
           writer,
           settings,
           index,
-          ledger.hasMedia(),
+          source.work.media,
+          undefined,
+          ledger.observe,
         );
+        await ledger.finish();
+        await writeAnthropicCacheWindows(engine, writer);
       } finally {
         await query.close();
       }

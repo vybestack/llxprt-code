@@ -4,58 +4,26 @@ import type {
   RuntimePromptEstimateResult,
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
+import type { ProjectionImageEntry } from '../runtime/promptEnvelopeProjections.js';
 import {
-  canonicalizePromptValue,
-  type ProjectionImageEntry,
-} from '../runtime/promptEnvelopeProjections.js';
+  canonicalAnthropicEstimateValue as canonicalMediaValue,
+  type EstimateTextFact,
+} from './anthropic-estimate-facts.js';
+import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
-import { countO200kBaseTokensFromChunks } from '../tokenizers/o200k-chunked-source.js';
+import { measureAnthropicPieces } from './anthropic-estimate-counter.js';
 import {
   getO200kBaseEncoder,
   type O200kBaseEncoder,
 } from '../tokenizers/o200kBaseCounter.js';
 import {
-  addClaudeContentFeatures,
   extractClaudeContentFeatures,
   type ClaudeContentFeatureExtractor,
   type ClaudeContentFeatures,
 } from '../tokenizers/claude/claudeContentFeatures.js';
-import type { AnthropicStreamRepair } from './anthropic-stream-repair.js';
+import { AnthropicStreamRepair } from './anthropic-stream-repair.js';
 import type { AnthropicMessage } from './AnthropicMessageNormalizer.js';
 import type { AnthropicCachePlan } from './anthropic-cache-facts.js';
-import { anthropicWireMedia } from './anthropic-measured-media.js';
-
-function canonicalMediaValue(
-  value: unknown,
-  key: string,
-  observe: (image: ProjectionImageEntry) => void,
-): unknown {
-  if (Array.isArray(value))
-    return value.map((item) => canonicalMediaValue(item, key, observe));
-  if (typeof value === 'object' && value !== null) {
-    const media = anthropicWireMedia(value);
-    if (media === undefined && !('type' in value && value.type === 'base64'))
-      return Object.fromEntries(
-        Object.entries(value).map(([childKey, child]) => [
-          childKey,
-          canonicalMediaValue(child, childKey, observe),
-        ]),
-      );
-    const images: ProjectionImageEntry[] = [];
-    const canonical = canonicalizePromptValue(value, key, images);
-    for (const image of images)
-      observe(
-        media?.encoding === 'reference'
-          ? { dimensions: media.dimensions }
-          : image,
-      );
-    return canonical;
-  }
-  const images: ProjectionImageEntry[] = [];
-  const canonical = canonicalizePromptValue(value, key, images);
-  for (const image of images) observe(image);
-  return canonical;
-}
 
 export class NativeAnthropicEstimateProjection {
   readonly protocol = 'anthropic-messages';
@@ -70,7 +38,7 @@ export class NativeAnthropicEstimateProjection {
 
   private async *pieces(
     observeImage: (image: ProjectionImageEntry) => void,
-  ): AsyncGenerator<string> {
+  ): AsyncGenerator<string | EstimateTextFact> {
     this.requireOpen();
     let separator = '{';
     for (const key of ['system', 'messages', 'tools']) {
@@ -79,9 +47,18 @@ export class NativeAnthropicEstimateProjection {
       yield `${separator}${JSON.stringify(key)}:`;
       const canonical = (item: unknown): unknown =>
         canonicalMediaValue(item, key, observeImage);
-      if (key === 'messages')
-        yield* this.engine.serialize(canonical, this.prefix, this.cache);
-      else yield JSON.stringify(canonical(value));
+      if (key === 'messages') {
+        if (
+          this.engine instanceof AnthropicStreamRepair &&
+          this.engine.source.query instanceof IndexedJournalRequestSnapshot &&
+          this.engine.source.query.viewPlan.changedSources.length === 0
+        )
+          yield* await this.engine.numericEstimatePieces(
+            this.prefix,
+            this.cache,
+          );
+        else yield* this.engine.serialize(canonical, this.prefix, this.cache);
+      } else yield JSON.stringify(canonical(value));
       separator = ',';
     }
     yield '}';
@@ -106,37 +83,20 @@ export class NativeAnthropicEstimateProjection {
         dimensions: image.dimensions,
       });
     };
-    let features = extractFeatures('');
-    let carry = '';
-    let special = false;
-    let length = 0;
-    const observe = async function* (
-      pieces: AsyncIterable<string>,
-    ): AsyncGenerator<string> {
-      for await (const piece of pieces) {
-        features = addClaudeContentFeatures(features, extractFeatures(piece));
-        length += piece.length;
-        const window = carry + piece;
-        special ||=
-          window.includes('<|endoftext|>') ||
-          window.includes('<|endofprompt|>');
-        carry = window.slice(-16);
-        yield piece;
-      }
-    };
-    const baseTokens = await countO200kBaseTokensFromChunks(
-      observe(this.pieces(observeImage)),
+    const numeric =
+      this.engine instanceof AnthropicStreamRepair &&
+      this.engine.source.query instanceof IndexedJournalRequestSnapshot &&
+      this.engine.source.query.viewPlan.changedSources.length === 0;
+    const measured = await measureAnthropicPieces(
+      this.pieces(observeImage),
       encoder,
+      extractFeatures,
+      numeric,
+      observeImage,
       this.signal,
     );
     this.requireOpen();
-    return {
-      baseTokens,
-      features,
-      special,
-      length,
-      imageTokens,
-    };
+    return { ...measured, imageTokens };
   }
 
   estimate(

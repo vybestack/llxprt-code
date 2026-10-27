@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NativeFactIndexWriter } from '@vybestack/llxprt-code-core/journal/nativeFactIndex.js';
 import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
@@ -16,6 +17,10 @@ import {
 import type { RepairPiece } from './anthropic-repair-source.js';
 import type { AnthropicAtom } from './anthropic-unit-facts.js';
 import { writeAnthropicMeasurementFact } from './anthropic-measurement-facts.js';
+import {
+  estimatePieceFact,
+  type EstimatePieceFact,
+} from './anthropic-estimate-facts.js';
 import type { AnthropicRequestRepairIndex } from './anthropic-repair-index.js';
 import {
   addAnthropicCachePiece,
@@ -152,9 +157,16 @@ export async function writeAnthropicRecoveryFacts(
   index: AnthropicRequestRepairIndex,
   hasMedia: boolean,
   measurementsFrom?: number,
+  observeRow?: (row: IContent, at: number) => Promise<void>,
 ): Promise<void> {
   let count = 0;
-  const engine = await AnthropicStreamRepair.create(query, settings, {}, index);
+  const engine = await AnthropicStreamRepair.create(
+    query,
+    settings,
+    {},
+    index,
+    observeRow,
+  );
   let state: AnthropicCacheState = {};
   const saveRun = async (): Promise<void> => {
     if (hasMedia && state.run !== undefined)
@@ -168,11 +180,13 @@ export async function writeAnthropicRecoveryFacts(
       await saveRun();
     state = beginAnthropicCacheAtom(state, atom.role);
     const kept: AnthropicAtom[] = [];
+    const estimates: EstimatePieceFact[] = [];
     let pieceAt = 0;
     let thinking = atom.chain === true;
     for await (const piece of atom.openPieces(false)) {
       const fact = numericRepairPiece(piece, atom.role);
       kept.push(fact);
+      estimates.push(await estimatePieceFact(piece, atom.role));
       thinking ||=
         typeof piece !== 'string' &&
         piece.some(
@@ -186,9 +200,12 @@ export async function writeAnthropicRecoveryFacts(
       pieceAt++;
     }
     const stripped: AnthropicAtom[] = [];
+    const strippedEstimates: EstimatePieceFact[] = [];
     if (thinking) {
-      for await (const piece of atom.openPieces(true))
+      for await (const piece of atom.openPieces(true)) {
         stripped.push(numericRepairPiece(piece, atom.role));
+        strippedEstimates.push(await estimatePieceFact(piece, atom.role));
+      }
     }
     const assistantTail =
       !atom.repair && atom.role === 'assistant' && atom.end === query.count - 1;
@@ -200,6 +217,8 @@ export async function writeAnthropicRecoveryFacts(
     await writeAnthropicMeasurementFact(writer, atom.key, {
       kept,
       stripped: thinking ? stripped : undefined,
+      estimates,
+      strippedEstimates: thinking ? strippedEstimates : undefined,
       chain,
     });
   }

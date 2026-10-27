@@ -1,4 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { NativeFactIndexReader } from '@vybestack/llxprt-code-core/journal/nativeFactIndex.js';
+import { numericAnthropicPieces } from './anthropic-numeric-estimate.js';
+import type { EstimateTextFact } from './anthropic-estimate-facts.js';
 import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import {
@@ -62,6 +66,7 @@ export interface LazyRepairAtom {
   readonly role: 'assistant' | 'user';
   readonly repair: boolean;
   readonly results?: boolean;
+  readonly redacted?: boolean;
   openPieces(redact?: boolean): AsyncGenerator<RepairPiece>;
 }
 interface Run {
@@ -110,6 +115,7 @@ export function numericRepairPiece(
 export class AnthropicStreamRepair<
   Query extends AnthropicRepairRows = IndexedJournalRequestSnapshot,
 > {
+  measurementFacts: NativeFactIndexReader | undefined;
   private constructor(
     readonly source: AnthropicRepairSource<Query>,
     readonly tools: AnthropicToolRepair<Query>,
@@ -121,6 +127,7 @@ export class AnthropicStreamRepair<
     settings: RowFormatSettings,
     policy: RepairPolicy = {},
     preparedIndex?: AnthropicRequestRepairIndex,
+    observeRow?: (row: IContent, at: number) => Promise<void>,
   ): Promise<AnthropicStreamRepair> {
     projectAnthropicUnit({ speaker: 'human', blocks: [] }, settings);
     const index =
@@ -128,7 +135,12 @@ export class AnthropicStreamRepair<
       (await AnthropicRepairIndex.read(
         await query.nativeFacts(anthropicRepairScope(settings)),
       ));
-    const source = new AnthropicRepairSource(query, settings, index);
+    const source = new AnthropicRepairSource(
+      query,
+      settings,
+      index,
+      observeRow,
+    );
     const last =
       policy.strip === 'allButLast' && policy.includeInContext !== false
         ? await source.lastThinking()
@@ -176,6 +188,7 @@ export class AnthropicStreamRepair<
           role: message.role,
           repair: false,
           results: message.slot === 'results',
+          redacted: this.redact(message),
           openPieces: (redact = this.redact(message)) =>
             this.tools.kept(message, redact),
         };
@@ -477,6 +490,27 @@ export class AnthropicStreamRepair<
         ),
       );
     else yield ']';
+  }
+  numericEstimatePieces(
+    this: AnthropicStreamRepair,
+    prefix?: AnthropicMessage,
+    cache?: AnthropicCachePlan,
+  ): Promise<AsyncIterable<string | EstimateTextFact>> {
+    return Promise.resolve(
+      this.measurementFacts ??
+        this.source.query.nativeFacts(
+          anthropicRepairScope(this.source.settings),
+        ),
+    ).then((facts) =>
+      numericAnthropicPieces(
+        this.runs(),
+        (run) => this.runAtoms(run),
+        facts,
+        this.source.settings,
+        prefix,
+        cache,
+      ),
+    );
   }
   async *serialize(
     transform: (value: unknown) => unknown = (value) => value,

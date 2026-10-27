@@ -68,7 +68,7 @@ describe('native Anthropic cache discovery', () => {
                   expect(
                     await writer.get(['cache-purge-windows']),
                   ).toStrictEqual([Number(image)]);
-                  expect(engine.source.work.unitReads).toBe(Number(image));
+                  expect(engine.source.work.unitReads).toBe(0);
                   let body = '';
                   for await (const piece of engine.serialize()) body += piece;
                   expect(body).toContain('cache discovery payload 39');
