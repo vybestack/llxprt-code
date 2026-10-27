@@ -91,7 +91,7 @@ async function commitFinalizedStreamHistory(
   );
   try {
     await options.conversationManager.recordHistory(
-      prepared.historyUserInput,
+      [],
       [],
       undefined,
       terminal.usage,
