@@ -424,9 +424,9 @@ describe('real noninteractive CLI profile authentication parity (#3448, #3629, #
         const source =
           transport === 'http'
             ? `await fetch('${endpoint}', { method: 'POST', body: JSON.stringify({model: 'gpt-5.2-codex'}) });`
-            : `const { WebSocket } = await import('undici');
+            : `const { default: WebSocket } = await import('${new URL('../../../providers/src/openai-responses/responses-ws-module.ts', import.meta.url).href}');
                const socket = new WebSocket('${endpoint}', { headers: { Authorization: 'Bearer ${probeCredential}' } });
-               socket.addEventListener('open', () => socket.send(JSON.stringify({model: 'gpt-5.2-codex'})));`;
+               socket.on('open', () => socket.send(Buffer.from(JSON.stringify({model: 'gpt-5.2-codex'})), { fin: true }, () => {}));`;
         const result = await probe(source);
         expect(result.outcome.exitCode).toBe(1);
         expect(result.outcome.stderr).toContain('Unexpected network endpoint');

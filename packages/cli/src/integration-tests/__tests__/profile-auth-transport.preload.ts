@@ -8,7 +8,7 @@ import { mock } from 'bun:test';
 import { scryptSync } from 'node:crypto';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import * as undici from 'undici';
+import { EventEmitter } from 'node:events';
 import { z } from 'zod';
 
 const dir = process.env.PROFILE_PARITY_DIR;
@@ -165,7 +165,7 @@ function responseEvents(): ReadonlyArray<Record<string, unknown>> {
   ];
 }
 
-class IsolatedWebSocket extends EventTarget {
+class IsolatedWebSocket extends EventEmitter {
   static readonly CONNECTING = 0;
   static readonly OPEN = 1;
   readonly CONNECTING = 0;
@@ -173,6 +173,7 @@ class IsolatedWebSocket extends EventTarget {
   readyState = 0;
   private readonly url: string;
   private readonly headers: Headers;
+  private readonly fragments: Uint8Array[] = [];
 
   constructor(url: string, options: { headers: Record<string, string> }) {
     super();
@@ -187,31 +188,43 @@ class IsolatedWebSocket extends EventTarget {
     this.headers = new Headers(options.headers);
     queueMicrotask(() => {
       this.readyState = 1;
-      this.dispatchEvent(new Event('open'));
+      this.emit('open');
     });
   }
 
-  send(data: string | Uint8Array): void {
-    const body =
-      typeof data === 'string' ? data : new TextDecoder().decode(data);
+  send(
+    data: Uint8Array,
+    options: { fin: boolean },
+    callback: (error?: Error) => void,
+  ): void {
+    this.fragments.push(data);
+    if (!options.fin) {
+      callback();
+      return;
+    }
+    const body = Buffer.concat(this.fragments).toString('utf8');
+    this.fragments.splice(0);
     observe(this.url, this.headers, body);
+    callback();
     queueMicrotask(() => {
       for (const event of responseEvents())
-        this.dispatchEvent(
-          new MessageEvent('message', { data: JSON.stringify(event) }),
-        );
+        this.emit('message', Buffer.from(JSON.stringify(event)), false);
     });
   }
 
   close(): void {
     this.readyState = 3;
   }
+
+  terminate(): void {
+    this.close();
+  }
 }
 
-await mock.module('undici', () => ({
-  ...undici,
-  WebSocket: IsolatedWebSocket,
-}));
+await mock.module(
+  '../../../../providers/src/openai-responses/responses-ws-module.js',
+  () => ({ default: IsolatedWebSocket }),
+);
 
 function anthropicStream(model: string): string {
   const events = [

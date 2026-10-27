@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 
-import WebSocket from 'ws';
+import WebSocket from './responses-ws-module.js';
 import type {
   SocketCloseInfo,
   TransportSocket,
