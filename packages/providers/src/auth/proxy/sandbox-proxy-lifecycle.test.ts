@@ -94,34 +94,37 @@ describe('sandbox credential proxy ownership', () => {
     },
   );
 
-  it('leaves another owner usable when startup fails', async () => {
-    const directory = await mkdtemp(path.join(os.tmpdir(), 'proxy-startup-'));
-    const invalid = path.join(directory, 'file');
-    await writeFile(invalid, 'not a socket directory');
-    const owner = await createAndStartProxy(
-      { socketPath: directory, tokenStore: new MemoryTokenStore() },
-      fetch,
-    );
-    const client = new ProxySocketClient(
-      owner.socketPath,
-      owner.capabilityToken,
-    );
-    try {
-      await expect(
-        createAndStartProxy(
-          { socketPath: invalid, tokenStore: new MemoryTokenStore() },
-          fetch,
-        ),
-      ).rejects.toThrow(/EEXIST|ENOTDIR/);
-      const response = await client.request('list_providers', {});
-      expect(response.ok).toBe(true);
-      expect((await readdir(directory)).sort()).toStrictEqual(
-        ['file', path.basename(owner.socketPath)].sort(),
+  it.skipIf(process.platform === 'win32')(
+    'leaves another owner usable when its POSIX socket directory prevents startup',
+    async () => {
+      const directory = await mkdtemp(path.join(os.tmpdir(), 'proxy-startup-'));
+      const invalid = path.join(directory, 'file');
+      await writeFile(invalid, 'not a socket directory');
+      const owner = await createAndStartProxy(
+        { socketPath: directory, tokenStore: new MemoryTokenStore() },
+        fetch,
       );
-    } finally {
-      client.close();
-      await owner.stop();
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
+      const client = new ProxySocketClient(
+        owner.socketPath,
+        owner.capabilityToken,
+      );
+      try {
+        await expect(
+          createAndStartProxy(
+            { socketPath: invalid, tokenStore: new MemoryTokenStore() },
+            fetch,
+          ),
+        ).rejects.toThrow(/EEXIST|ENOTDIR/);
+        const response = await client.request('list_providers', {});
+        expect(response.ok).toBe(true);
+        expect((await readdir(directory)).sort()).toStrictEqual(
+          ['file', path.basename(owner.socketPath)].sort(),
+        );
+      } finally {
+        client.close();
+        await owner.stop();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 });
