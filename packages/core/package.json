@@ -708,6 +708,7 @@
       "import": "./dist/src/policy/policy-owner.js"
     },
     "./policy/owner-policy-evaluation.js": {
+      "types": "./dist/src/policy/owner-policy-evaluation.d.ts",
       "bun": "./src/policy/owner-policy-evaluation.ts",
       "import": "./dist/src/policy/owner-policy-evaluation.js"
     },

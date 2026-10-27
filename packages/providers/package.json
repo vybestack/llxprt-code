@@ -214,7 +214,6 @@
     "@vybestack/llxprt-code-core": "file:../core",
     "@vybestack/llxprt-code-mcp": "file:../mcp",
     "@vybestack/llxprt-code-settings": "file:../settings",
-    "@vybestack/llxprt-code-telemetry": "file:../telemetry",
     "@vybestack/llxprt-code-tools": "file:../tools",
     "ai": "^7.0.83",
     "comment-json": "^4.5.0",
@@ -227,6 +226,7 @@
     "@ai-sdk/provider-utils": "^5.0.32",
     "@types/node": "^24.2.1",
     "@vybestack/llxprt-code-test-utils": "file:../test-utils",
+    "@vybestack/llxprt-code-telemetry": "file:../telemetry",
     "fast-check": "^4.3.0",
     "typescript": "^5.3.3"
   },
