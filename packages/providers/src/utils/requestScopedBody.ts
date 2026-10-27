@@ -17,7 +17,6 @@
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { closeSync, openSync, readSync, rmSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
-import { AsyncLocalStorage } from 'node:async_hooks';
 
 export type RequestRepresentationKind =
   | 'neutral'
@@ -26,27 +25,15 @@ export type RequestRepresentationKind =
   | 'envelope'
   | 'serialized'
   | 'buffer';
-type RequestRepresentationObserver = (
-  kind: RequestRepresentationKind,
-  value: unknown,
-) => void;
-const representationObserver =
-  new AsyncLocalStorage<RequestRepresentationObserver>();
-
 /** Request-local allocation census without retaining the observed values. */
 export function observeRequestRepresentation<T>(
   kind: RequestRepresentationKind,
   value: T,
+  metadata?: Record<string, unknown>,
 ): T {
-  representationObserver.getStore()?.(kind, value);
+  const observer = metadata?.['requestRepresentationObserver'];
+  if (typeof observer === 'function') observer(kind, value);
   return value;
-}
-
-export function withRequestRepresentationObserver<T>(
-  observer: RequestRepresentationObserver,
-  operation: () => T,
-): T {
-  return representationObserver.run(observer, operation);
 }
 import { deserialize, serialize } from 'node:v8';
 import { createScratchDirSync } from '@vybestack/llxprt-code-core/storage/scratch-root.js';

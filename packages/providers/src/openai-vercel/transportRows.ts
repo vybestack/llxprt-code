@@ -62,12 +62,13 @@ export async function* transportMessages(
         count === lastThinking ? 'none' : rowStrip,
       );
       const mapper = await mapping.rowIds?.(row, count);
-      observeRequestRepresentation('neutral', row);
+      observeRequestRepresentation('neutral', row, options.metadata);
       yield* observeRequestRepresentation(
         'converted',
         convertToVercelMessages(contents, mapper?.(), {
           includeReasoningInContext: reasoning.includeInContext,
         }),
+        options.metadata,
       );
       count++;
     }

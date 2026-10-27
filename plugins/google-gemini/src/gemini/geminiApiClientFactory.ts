@@ -84,6 +84,7 @@ export async function createGeminiApiClient(
             ? params['systemInstruction']
             : undefined,
           options.onRequestBytes,
+          options.requestMetadata,
         ),
       ),
     }).languageModel(params.model);

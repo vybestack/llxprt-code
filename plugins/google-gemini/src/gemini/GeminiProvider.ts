@@ -482,6 +482,7 @@ export class GeminiProvider extends BaseProvider {
         (bytes) => reportRequestSize(metadata, bytes),
       ),
       requestContents: setup.requestContents,
+      requestMetadata: metadata,
     });
     return client.models;
   }

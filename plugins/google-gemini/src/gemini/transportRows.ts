@@ -47,7 +47,7 @@ export async function* transportContents(
   let count = 0;
   for await (const row of rows.openReader(signal)) {
     signal?.throwIfAborted();
-    observeRequestRepresentation('neutral', row);
+    observeRequestRepresentation('neutral', row, options.metadata);
     const resolved = await resolveRequestMedia(
       {
         ...media,
@@ -81,7 +81,11 @@ export async function* transportContents(
           if (first !== undefined && !first.thoughtSignature)
             first.thoughtSignature = SYNTHETIC_THOUGHT_SIGNATURE;
         }
-        yield observeRequestRepresentation('converted', content);
+        yield observeRequestRepresentation(
+          'converted',
+          content,
+          options.metadata,
+        );
       }
     } finally {
       await resolved.release();

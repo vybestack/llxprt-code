@@ -114,15 +114,17 @@ export function createStreamedGeminiFetch(
   model: string,
   systemInstruction: string | undefined,
   onRequestBytes?: (bytes: number) => void,
+  metadata?: Record<string, unknown>,
 ): FetchFunction {
   return Object.assign(
     async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       if (typeof init?.body !== 'string')
         throw new Error('Expected Gemini SDK envelope');
-      observeRequestRepresentation('serialized', init.body);
+      observeRequestRepresentation('serialized', init.body, metadata);
       const envelope = observeRequestRepresentation(
         'envelope',
         record(JSON.parse(init.body)),
+        metadata,
       );
       let bytes = 0;
       const pieces = async function* (): AsyncGenerator<Uint8Array> {
@@ -149,11 +151,12 @@ export function createStreamedGeminiFetch(
                 wire.parts?.unshift({ text: systemInstruction + '\n\n' });
               if (comma) yield Buffer.from(',');
               comma = true;
-              observeRequestRepresentation('wire', wire);
+              observeRequestRepresentation('wire', wire, metadata);
               yield Buffer.from(
                 observeRequestRepresentation(
                   'serialized',
                   JSON.stringify(wire),
+                  metadata,
                 ),
               );
             }
@@ -174,7 +177,7 @@ export function createStreamedGeminiFetch(
               }
               bytes += next.value.byteLength;
               controller.enqueue(
-                observeRequestRepresentation('buffer', next.value),
+                observeRequestRepresentation('buffer', next.value, metadata),
               );
             } catch (error) {
               controller.error(error);

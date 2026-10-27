@@ -108,6 +108,7 @@ async function* wireMessages(
 async function* envelopeBytes(
   envelope: Record<string, unknown>,
   messages: () => AsyncIterable<ModelMessage>,
+  metadata: Record<string, unknown>,
 ): AsyncIterable<Uint8Array> {
   const initial = envelope['messages'];
   if (!Array.isArray(initial))
@@ -127,7 +128,9 @@ async function* envelopeBytes(
     for await (const wire of wireMessages(initial, messages)) {
       if (comma) yield Buffer.from(',');
       comma = true;
-      yield* jsonValueBytes(observeRequestRepresentation('wire', wire));
+      yield* jsonValueBytes(
+        observeRequestRepresentation('wire', wire, metadata),
+      );
     }
     yield Buffer.from(']');
   }
@@ -144,16 +147,17 @@ export function createStreamedVercelFetch(
     async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       if (typeof init?.body !== 'string')
         throw new Error('Expected SDK request envelope');
-      observeRequestRepresentation('serialized', init.body);
+      observeRequestRepresentation('serialized', init.body, metadata);
       const envelope = observeRequestRepresentation(
         'envelope',
         record(JSON.parse(init.body)),
+        metadata,
       );
       let bytes = 0;
       const body = new ProgressiveJsonBody(async function* () {
-        for await (const chunk of envelopeBytes(envelope, messages)) {
+        for await (const chunk of envelopeBytes(envelope, messages, metadata)) {
           bytes += chunk.byteLength;
-          yield observeRequestRepresentation('buffer', chunk);
+          yield observeRequestRepresentation('buffer', chunk, metadata);
         }
       });
       const handle = body.createStreamHandle();

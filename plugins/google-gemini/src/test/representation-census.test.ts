@@ -4,10 +4,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import {
-  withRequestRepresentationObserver,
-  type RequestRepresentationKind,
-} from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
+import { type RequestRepresentationKind } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { OpenAIVercelProvider } from '@vybestack/llxprt-code-providers';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 
@@ -144,16 +141,20 @@ describe('SDK streamed history follow-ups', () => {
         streaming: false,
       },
     });
-    await withRequestRepresentationObserver(observe, async () => {
+    {
       const provider = gemini
         ? new GeminiProvider('test')
         : new OpenAIVercelProvider('test');
       for await (const chunk of provider.generateChatCompletion({
         ...options,
+        metadata: {
+          ...options.metadata,
+          requestRepresentationObserver: observe,
+        },
         requestRows,
       }))
         void chunk;
-    });
+    }
     expect(pulled).toBe(count);
     const kinds: RequestRepresentationKind[] = [
       'neutral',

@@ -23,7 +23,7 @@ import {
   type SessionPayloadOwner,
   type SessionWireDigest,
 } from '@vybestack/llxprt-code-test-utils/core/session-memory-protocol.js';
-import { withRequestRepresentationObserver } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
+import type { RequestRepresentationKind } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import { convertGeminiRow } from '../gemini/GeminiMessageConverter.js';
 import { geminiWireContents } from '../gemini/streamed-request.js';
@@ -241,28 +241,28 @@ async function runSend(
     { preconnect() {} },
   );
   await probe.checkpoint('conversion');
-  await withRequestRepresentationObserver(
-    (kind, value) => {
-      if (kind === 'wire') {
-        owner.retain(JSON.stringify(value));
-        progress.rows++;
-      }
-      if (
-        kind === 'buffer' &&
-        (progress.rows % 512 === 0 ||
-          (value instanceof Uint8Array && value.byteLength > 1024 * 1024))
-      )
-        probe.sample('conversion');
-    },
-    async () => {
-      for await (const chunk of provider.generateChatCompletion({
-        ...base,
-        requestRows: selection,
-        contentCount: selection.count,
-      }))
-        void chunk;
-    },
-  );
+  const requestRepresentationObserver = (
+    kind: RequestRepresentationKind,
+    value: unknown,
+  ): void => {
+    if (kind === 'wire') {
+      owner.retain(JSON.stringify(value));
+      progress.rows++;
+    }
+    if (
+      kind === 'buffer' &&
+      (progress.rows % 512 === 0 ||
+        (value instanceof Uint8Array && value.byteLength > 1024 * 1024))
+    )
+      probe.sample('conversion');
+  };
+  for await (const chunk of provider.generateChatCompletion({
+    ...base,
+    metadata: { ...base.metadata, requestRepresentationObserver },
+    requestRows: selection,
+    contentCount: selection.count,
+  }))
+    void chunk;
   if (progress.rows !== selection.count)
     throw new Error(`Converted ${progress.rows} rows`);
   if (uploaded === undefined) throw new Error('Missing upload');
