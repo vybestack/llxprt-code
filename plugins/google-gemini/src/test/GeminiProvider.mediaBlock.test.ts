@@ -624,6 +624,7 @@ async function preservesGenerationAndReleaseFailures(): Promise<void> {
     },
   };
   const mediaResolver: RequestMediaResolutionService = {
+    verify: async () => {},
     resolve: async () => ({ ...request, release: async () => {} }),
     openReservations: () => ({
       release: async () => {
