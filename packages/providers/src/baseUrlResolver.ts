@@ -43,12 +43,8 @@ function getReportedBaseUrl(
     return undefined;
   }
 
-  try {
-    const reported = maybeHasBaseUrl.getBaseURL();
-    return reported && reported.trim() !== '' ? reported.trim() : undefined;
-  } catch {
-    return undefined;
-  }
+  const reported = maybeHasBaseUrl.getBaseURL();
+  return reported && reported.trim() !== '' ? reported.trim() : undefined;
 }
 
 /**
@@ -175,11 +171,7 @@ function extractProviderGetBaseUrl(
   if (typeof getter !== 'function') {
     return undefined;
   }
-  try {
-    return normalizeProviderBaseUrl(getter());
-  } catch {
-    return undefined;
-  }
+  return normalizeProviderBaseUrl(getter.call(provider));
 }
 
 /**
