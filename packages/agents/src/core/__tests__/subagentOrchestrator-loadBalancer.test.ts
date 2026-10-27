@@ -41,6 +41,7 @@ import {
   createRuntimeBundle,
   createOrchestratorForTurns,
   extractRunConfig,
+  launchForTest,
 } from './subagentOrchestrator-test-helpers.js';
 
 describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
@@ -184,7 +185,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     });
 
     // Before the fix this rejected with RuntimeStateError: provider.missing.
-    const result = await orchestrator.launch({
+    const result = await launchForTest(orchestrator, {
       name: loadBalancerSubagent.name,
     });
 
@@ -234,7 +235,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       messageBus: new MessageBus(),
     });
 
-    const result = await orchestrator.launch({
+    const result = await launchForTest(orchestrator, {
       name: loadBalancerSubagent.name,
     });
 
@@ -486,7 +487,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
         }),
       });
 
-      await orchestrator.launch({ name: 'lb-default-turns-helper' });
+      await launchForTest(orchestrator, { name: 'lb-default-turns-helper' });
 
       const runConfigArg = extractRunConfig(factory);
 
@@ -546,7 +547,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
         }),
       });
 
-      await orchestrator.launch({ name: 'lb-profile-turns-helper' });
+      await launchForTest(orchestrator, { name: 'lb-profile-turns-helper' });
 
       const runConfigArg = extractRunConfig(factory);
       // 400 from the LB profile wins — not 7 from the member, not 55 from the

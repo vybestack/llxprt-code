@@ -38,9 +38,22 @@ import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import { type SubAgentScope as SubAgentScopeInstance } from '../subagent.js';
 
 const foregroundConfigs: Config[] = [];
+const histories: HistoryService[] = [];
+const launches: Array<{ dispose(): Promise<void> }> = [];
 afterEach(async () => {
+  for (const launch of launches.splice(0)) await launch.dispose();
+  for (const history of histories.splice(0)) await history.dispose();
   for (const config of foregroundConfigs.splice(0)) await config.dispose();
 });
+
+export async function launchForTest(
+  orchestrator: SubagentOrchestrator,
+  request: Parameters<SubagentOrchestrator['launch']>[0],
+): ReturnType<SubagentOrchestrator['launch']> {
+  const result = await orchestrator.launch(request);
+  launches.push(result);
+  return result;
+}
 
 export function makeForegroundConfig(
   initialSettings: Readonly<Record<string, unknown>> = {},
@@ -163,6 +176,7 @@ export function createRuntimeBundle(
   label = 'bundle',
   ownedHistory = new HistoryService(),
 ) {
+  histories.push(ownedHistory);
   const history = {
     clear: vi.fn(() => ownedHistory.clear()),
     setTokenizerFactory: ownedHistory.setTokenizerFactory.bind(ownedHistory),

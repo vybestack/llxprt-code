@@ -4,7 +4,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  isMediaReferenceBlock,
+  type IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
@@ -41,20 +44,33 @@ describe('session history admission release', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it('removes the media index scratch even when releasing a reservation fails', async () => {
+  it('removes the media index scratch after retrying a failed reservation release', async () => {
     const store = new LocalMediaStore({
       rootDirectory: join(directory, 'media'),
       quotaBytes: 1024,
     });
     const admission = new MediaAdmissionService(store);
     const admitted = admitSessionHistory([imageRow], admission, 'scope-1');
-    for await (const row of admitted.rows) expect(row.blocks).toHaveLength(1);
+    let contentId = '';
+    for await (const row of admitted.rows) {
+      expect(row.blocks).toHaveLength(1);
+      const block = row.blocks[0];
+      if (!isMediaReferenceBlock(block))
+        throw new Error('Expected an admitted media reference');
+      contentId = block.contentId;
+    }
+    expect(await store.hasReservations(contentId)).toBe(true);
     expect(mediaIndexDirectories()).toHaveLength(1);
 
+    const releaseReference = admission.releaseReference.bind(admission);
     admission.releaseReference = (): Promise<void> =>
       Promise.reject(new Error('release failed'));
 
     await expect(admitted.release()).rejects.toThrow('release failed');
+    expect(mediaIndexDirectories()).toHaveLength(1);
+    admission.releaseReference = releaseReference;
+    await admitted.release();
     expect(mediaIndexDirectories()).toStrictEqual([]);
+    expect(await store.hasReservations(contentId)).toBe(false);
   });
 });
