@@ -98,3 +98,48 @@ These failures are disclosed rather than counted as a clean full-suite pass.
 No source changes were made to those components. A successful main CI run is
 insufficient to establish that the failures are pre-existing; no such claim is
 made here. PR CI results are the final remote verification gate.
+
+## CI remediation: provider shard (run 40577107344)
+
+Every remote check passed except `Test (ubuntu-latest) [providers 1of1]`. The
+failures were four success cases in
+`openai-responses-provider.codex-keyring-transient-null.test.ts`. Each differed
+from expectation only in the `authorization` header; `accountId` was correct.
+Fallback-account, genuine-absence, and logout cases passed. GitHub masked both
+bearer values as `***`.
+
+**Cause (test isolation, no production defect).** The CI shard step exports
+`OPENAI_API_KEY` from repository secrets. `OpenAIResponsesProviderBase` declares
+`envKeyNames: ['OPENAI_API_KEY']`, and the auth precedence chain ranks that
+environment key above the stored Codex OAuth token. The new test never cleared
+the variable, so the ambient key became the bearer token. The three passing
+cases never reach a successful header assertion, so they were insensitive to it.
+
+**Local reproduction.** With `OPENAI_API_KEY=ci-dummy-key` (plus the other
+variables the CI step sets, using dummy values) the same four cases failed with
+`Bearer ci-dummy-key` received instead of `Bearer codex-access-token-3965`.
+No user credentials were read.
+
+**Fix (test only).** The suite clears `OPENAI_API_KEY` in `beforeEach` with the
+established `setEnv` helper from `@vybestack/llxprt-code-test-utils` and restores
+it in `afterEach` with `restoreEnv`. The assertions are unchanged: they still
+compare the exact bearer token and account ID through the real SecureStore,
+KeyringTokenStore, OAuthManager, and provider graph, with the same read-count
+scheduling of nulls.
+
+**Results.** RED (dummy key set, before fix): 4 failed, 3 passed. GREEN (after
+fix): 7 passed with a dummy key set, with the key set empty, and with the key
+unset.
+
+**Review.** The remote OCR workflow's review preflight was unavailable (HTTP
+401), so no remote OCR review is claimed. This change is test-only; it is
+covered by self-review against the typescript-test-writing rules, not an
+additional review round.
+
+### Final remediation verification
+
+After isolating the ambient environment, full `npm run test` completed with
+**exit 0**, including all 829 CLI files and all provider/storage suites.
+The full lint, typecheck, build, format check, actual formatter, test audit,
+and live `gpt-luna-high` smoke also passed. No audit findings were added.
+The initial failures above remain recorded as historical verification results.

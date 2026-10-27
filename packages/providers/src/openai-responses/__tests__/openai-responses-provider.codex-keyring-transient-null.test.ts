@@ -37,6 +37,7 @@ import {
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { OAuthManager } from '../../auth/oauth-manager.js';
@@ -255,6 +256,10 @@ describe('Codex requests with transient native-keyring null reads (issue #3965)'
   }
 
   beforeEach(() => {
+    // The auth precedence chain ranks an ambient OPENAI_API_KEY (set in CI and
+    // on developer machines) above the stored OAuth token, which would replace
+    // the bearer token these tests assert on.
+    setEnv('OPENAI_API_KEY', undefined);
     oauthManagers = [];
     root = mkdtempSync(join(tmpdir(), 'codex-keyring-3965-'));
     fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async () =>
@@ -266,6 +271,7 @@ describe('Codex requests with transient native-keyring null reads (issue #3965)'
     await Promise.all(oauthManagers.map((manager) => manager.dispose()));
     fetchSpy.mockRestore();
     rmSync(root, { recursive: true, force: true });
+    restoreEnv();
   });
 
   /**
