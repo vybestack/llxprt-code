@@ -559,7 +559,7 @@ describe('Vertex metadata credentials through the owner transport', () => {
     expect(a.requests).toHaveLength(0);
   });
 
-  it('races the default hosts, aborts the slower one and requests the token from the primary', async () => {
+  it('races the default hosts, aborts the slower one and requests the token from the responding host', async () => {
     const a = await transportFor('a');
     let primaryDiscoveryAborted = false;
     let primaryHeld = false;
@@ -591,7 +591,7 @@ describe('Vertex metadata credentials through the owner transport', () => {
     const metadata = requestsOf(a, 'metadata');
     expect(metadata.map((request) => request.url)).toEqual([
       `http://metadata.google.internal./${INSTANCE_URL}`,
-      `http://169.254.169.254/${INSTANCE_URL}/service-accounts/default/token?${TOKEN_QUERY}`,
+      `http://metadata.google.internal./${INSTANCE_URL}/service-accounts/default/token?${TOKEN_QUERY}`,
     ]);
     expect(modelRequest(a).headers['authorization']).toBe('Bearer meta-a');
   });
@@ -616,11 +616,11 @@ describe('Vertex metadata credentials through the owner transport', () => {
       return withResponder(transport, (request) => {
         const url = new URL(request.url);
         const action = behavior[url.hostname];
-        if (url.pathname !== `/${INSTANCE_URL}` || action === undefined) {
-          return undefined;
-        }
         if (action === 'fail') {
           return Promise.reject(unreachable());
+        }
+        if (url.pathname !== `/${INSTANCE_URL}` || action === undefined) {
+          return undefined;
         }
         return new Promise((resolve) => setTimeout(resolve, SLOW_PEER_MS)).then(
           () => transport.fetch(request),

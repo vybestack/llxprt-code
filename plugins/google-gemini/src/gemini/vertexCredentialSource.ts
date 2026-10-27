@@ -418,7 +418,7 @@ interface MetadataBases {
 }
 
 type MetadataProbe =
-  | { readonly present: true }
+  | { readonly present: true; readonly base: string }
   | { readonly present: false; readonly cause: unknown };
 
 function metadataBases(host: string | undefined): MetadataBases {
@@ -492,7 +492,7 @@ async function probeMetadataBase(
     });
     const mismatch = missingMetadataFlavor(response);
     return mismatch === null
-      ? { present: true }
+      ? { present: true, base }
       : { present: false, cause: mismatch };
   } catch (error) {
     if (timeout?.aborted || isNotFound(error) || isConnectionFailure(error)) {
@@ -576,18 +576,18 @@ async function metadataServerPresent(
   }
   switch (mode) {
     case 'assume-present':
-      return { present: true };
+      return { present: true, base: bases.primary };
     case 'none':
       return { present: false, cause: undefined };
     case 'bios-only':
       return gcpMetadata.getGCPResidency()
-        ? { present: true }
+        ? { present: true, base: bases.primary }
         : { present: false, cause: undefined };
     case 'ping-only':
       return probeMetadataServer(transporter, bases);
     default:
       return gcpMetadata.getGCPResidency()
-        ? { present: true }
+        ? { present: true, base: bases.primary }
         : probeMetadataServer(transporter, bases);
   }
 }
@@ -662,7 +662,7 @@ async function selectMetadataClient(
   if (!probe.present) {
     throw new Error(NO_ADC_FOUND, { cause: probe.cause });
   }
-  return new OwnerMetadataClient(bases.primary, transporter);
+  return new OwnerMetadataClient(probe.base, transporter);
 }
 
 function withEnvironmentQuotaProject(
