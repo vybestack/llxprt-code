@@ -63,6 +63,21 @@ describe('bounded neutral text tokenization', () => {
         expect(streamed(text, size)).toBe(oracle.encode(text, [], []).length);
   });
 
+  it('preserves accepted prefixes when long alternatives stop or backtrack', () => {
+    for (const length of [63, 64, 65, 511, 512, 513, 2049])
+      for (const suffix of [
+        "'RE next",
+        String.fromCharCode(10, 32, 9) + ' word',
+        '雪ABCdef',
+        '123 /',
+      ]) {
+        const text = 'a'.repeat(length) + suffix;
+        const expected = oracle.encode(text, [], []).length;
+        for (const size of [1, 128, 65536])
+          expect(streamed(text, size)).toBe(expected);
+      }
+  });
+
   it('matches generated mixed-category corpora at every byte-sized seam', () => {
     const fragments = [
       'abc',

@@ -22,7 +22,7 @@ function characterData(value: string): {
 }
 
 interface Accepted {
-  readonly count: number;
+  count?: number;
   suffix?: NeutralLexemeStream;
 }
 
@@ -79,29 +79,43 @@ class NeutralLexemeStream {
     if (prefix === undefined || prefix.length > 64) return undefined;
     return {
       states: this.states,
-      counts: this.accepted.map((value) => value?.count),
+      counts: this.accepted.map((value) =>
+        value === undefined ? undefined : this.acceptedCount(value),
+      ),
       prefix,
     };
   }
 
+  private acceptedCount(accepted: Accepted): number {
+    return (accepted.count ??= this.piece?.count ?? 0);
+  }
+
   append(value: string, bytes: Buffer, key: string): void {
-    const before = this.piece?.count ?? 0;
     const next = this.states.map((state, index) =>
       neutralPatternMachines[index].advance(state, value, key),
     );
+    const accepting = neutralPatternMachines.map((machine, index) =>
+      machine.lookaheadWhitespace
+        ? machine.accepting(this.states[index]) && isNeutralWhitespace(value)
+        : machine.accepting(next[index]),
+    );
+    // Freeze only alternatives whose accepted prefix stops here. Continuing
+    // alternatives replace their prefix, so counting every character is wasted.
+    for (const [index, saved] of this.accepted.entries())
+      if (saved !== undefined && !accepting[index]) this.acceptedCount(saved);
+    const lookaheadCount = neutralPatternMachines.some(
+      (machine, index) => machine.lookaheadWhitespace && accepting[index],
+    )
+      ? (this.piece?.count ?? 0)
+      : undefined;
     if (next.some((state) => state >= 0)) {
       this.piece ??= new NeutralPrefixCount();
       this.piece.append(bytes);
     }
     for (const [index, machine] of neutralPatternMachines.entries()) {
-      const accepts = machine.lookaheadWhitespace
-        ? machine.accepting(this.states[index]) && isNeutralWhitespace(value)
-        : machine.accepting(next[index]);
-      if (accepts) {
+      if (accepting[index]) {
         const saved: Accepted = {
-          count: machine.lookaheadWhitespace
-            ? before
-            : (this.piece?.count ?? 0),
+          count: machine.lookaheadWhitespace ? lookaheadCount : undefined,
         };
         this.accepted[index] = saved;
         if (machine.lookaheadWhitespace) {
@@ -129,7 +143,9 @@ class NeutralLexemeStream {
     const chosen = this.accepted.find((value) => value !== undefined);
     return (
       this.total +
-      (chosen === undefined ? 0 : chosen.count + (chosen.suffix?.finish() ?? 0))
+      (chosen === undefined
+        ? 0
+        : this.acceptedCount(chosen) + (chosen.suffix?.finish() ?? 0))
     );
   }
 
@@ -138,7 +154,7 @@ class NeutralLexemeStream {
     if (chosen === undefined)
       throw new Error('Neutral pattern did not cover input');
     const suffix = chosen.suffix ?? new NeutralLexemeStream();
-    this.total += chosen.count + suffix.total;
+    this.total += this.acceptedCount(chosen) + suffix.total;
     this.states = suffix.states;
     this.accepted = suffix.accepted;
     this.piece = suffix.piece;
