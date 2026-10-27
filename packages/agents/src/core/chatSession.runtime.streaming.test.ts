@@ -44,7 +44,7 @@ import {
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
-import { waitForCondition } from '../test-utils/eventLoop.js';
+import { deferred } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 
 describe('ChatSession runtime streaming and abort behavior', () => {
   let settingsService: SettingsService;
@@ -194,12 +194,14 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       // Set explicit timeout via ephemeral setting
       settingsService.set('stream-idle-timeout-ms', testTimeoutMs);
 
+      const entered = deferred();
       let capturedSignal: AbortSignal | undefined;
       const generateChatCompletionMock = vi.fn(async function* (
         options: GenerateChatOptions | IContent[],
       ): AsyncIterableIterator<IContent> {
         if (Array.isArray(options)) throw new Error('Expected request options');
         capturedSignal = options.invocation?.signal;
+        entered.resolve();
         yield {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'partial' }],
@@ -275,14 +277,13 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         },
         (error) => {
           expect(error).toMatchObject({
-            name: 'AbortError',
+            name: 'StreamIdleTimeoutError',
           });
         },
       );
 
-      expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
-        true,
-      );
+      await entered.promise;
+      expect(capturedSignal).toBeDefined();
       await advanceTimersByTimeAsync(testTimeoutMs + 1);
 
       await rejection;
@@ -301,12 +302,14 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       // Set explicit timeout via ephemeral setting
       settingsService.set('stream-idle-timeout-ms', testTimeoutMs);
 
+      const entered = deferred();
       let capturedSignal: AbortSignal | undefined;
       const generateChatCompletionMock = vi.fn(async function* (
         options: GenerateChatOptions | IContent[],
       ): AsyncIterableIterator<IContent> {
         if (Array.isArray(options)) throw new Error('Expected request options');
         capturedSignal = options.invocation?.signal;
+        entered.resolve();
         yield {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'partial direct' }],
@@ -387,9 +390,8 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         },
       );
 
-      expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
-        true,
-      );
+      await entered.promise;
+      expect(capturedSignal).toBeDefined();
       await advanceTimersByTimeAsync(testTimeoutMs + 1);
 
       await rejection;
