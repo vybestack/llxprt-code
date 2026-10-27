@@ -242,9 +242,9 @@ async function exerciseCleanup(
       runtimeSettings: settingsOwner,
       hasActiveProvider: () => route.preflight.hasActiveProvider(),
       isTrustedFolder: () => route.trust.isTrustedFolder(),
-      acquireAgent: () =>
+      acquireAgent: async () =>
         route.createAgent(
-          buildNonInteractiveActivationIntent(route.config, settings),
+          await buildNonInteractiveActivationIntent(route.config),
         ),
     });
   } catch (error) {

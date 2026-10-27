@@ -112,9 +112,8 @@ async function runWithMcpBus(
           mockRuntimeSettings.store,
           {
             sessionId: params.config.getSessionId(),
-            activation: buildNonInteractiveActivationIntent(
+            activation: await buildNonInteractiveActivationIntent(
               params.config,
-              params.settings,
             ),
           },
           mockCredentialAuthority,

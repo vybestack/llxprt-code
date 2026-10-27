@@ -414,15 +414,12 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
     await runNonInteractive({
       hasActiveProvider: () => providerManager.hasActiveProvider(),
-      acquireAgent: () =>
+      acquireAgent: async () =>
         fromConfig(
           config,
           runtimeSettings.store,
           {
-            activation: buildNonInteractiveActivationIntent(
-              config,
-              makeSettings(),
-            ),
+            activation: await buildNonInteractiveActivationIntent(config),
           },
           credentialAuthority,
         ),
@@ -452,15 +449,12 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
     await runNonInteractive({
       hasActiveProvider: () => providerManager.hasActiveProvider(),
-      acquireAgent: () =>
+      acquireAgent: async () =>
         fromConfig(
           config,
           runtimeSettings.store,
           {
-            activation: buildNonInteractiveActivationIntent(
-              config,
-              makeSettings(),
-            ),
+            activation: await buildNonInteractiveActivationIntent(config),
           },
           credentialAuthority,
         ),

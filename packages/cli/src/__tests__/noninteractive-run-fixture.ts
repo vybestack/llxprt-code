@@ -3,13 +3,14 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { PLACEHOLDER_MODEL, type Config } from '@vybestack/llxprt-code-core';
+import { type Config } from '@vybestack/llxprt-code-core';
 import type {
   Agent,
   ProviderActivationIntent,
 } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
-import type { BootstrapProfileArgs } from '../config/profileBootstrap.js';
+import { activateConfiguredProvider } from '../cliProviderInit.js';
+import type { ParsedCliArgs } from '../cliBootstrap.js';
 import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFeatures.js';
 import { captureNonInteractiveRun } from './captured-headless-run-fixture.js';
 import { acquireNonInteractiveRun } from '../nonInteractiveCliAcquisition.js';
@@ -64,108 +65,73 @@ export async function runNonInteractive(
     params.deferTelemetryShutdown ?? false,
   );
 }
-type ConfigWithBootstrapArgs = Config & {
-  readonly _bootstrapArgs?: BootstrapProfileArgs;
-  readonly _profileModelParams?: Record<string, unknown>;
-  readonly _cliModelParams?: Record<string, unknown>;
-};
+const noCliOverrides: ParsedCliArgs = Object.freeze({
+  model: undefined,
+  sandbox: undefined,
+  sandboxImage: undefined,
+  sandboxEngine: undefined,
+  sandboxProfileLoad: undefined,
+  jspBootstrap: undefined,
+  jspBootstrapInternalEnvPath: undefined,
+  debug: undefined,
+  prompt: undefined,
+  promptInteractive: undefined,
+  outputFormat: undefined,
+  quiet: undefined,
+  showMemoryUsage: undefined,
+  yolo: undefined,
+  approvalMode: undefined,
+  telemetry: undefined,
+  checkpointing: undefined,
+  telemetryLogPrompts: undefined,
+  telemetryOutfile: undefined,
+  allowedMcpServerNames: undefined,
+  allowedTools: undefined,
+  experimentalAcp: undefined,
+  experimentalUi: undefined,
+  extensions: undefined,
+  listExtensions: undefined,
+  provider: undefined,
+  key: undefined,
+  keyfile: undefined,
+  baseurl: undefined,
+  proxy: undefined,
+  includeDirectories: undefined,
+  profileLoad: undefined,
+  profile: undefined,
+  loadMemoryFromIncludeDirectories: undefined,
+  ideMode: undefined,
+  screenReader: undefined,
+  sessionSummary: undefined,
+  dumponerror: undefined,
+  promptWords: undefined,
+  query: undefined,
+  set: undefined,
+  continue: undefined,
+  nobrowser: undefined,
+  listSessions: undefined,
+  deleteSession: undefined,
+  imageInput: undefined,
+  imageOutput: undefined,
+  imagePrompt: undefined,
+});
 
-function readBootstrapArgs(
-  config: ConfigWithBootstrapArgs,
-): BootstrapProfileArgs | undefined {
-  return config._bootstrapArgs;
-}
-
-function buildActivationCliOverrides(
-  bootstrapArgs: BootstrapProfileArgs | undefined,
-): ProviderActivationIntent['cliOverrides'] | undefined {
-  if (bootstrapArgs === undefined) {
-    return undefined;
-  }
-  const overrides = {
-    ...(bootstrapArgs.keyOverride !== null
-      ? { key: bootstrapArgs.keyOverride }
-      : {}),
-    ...(bootstrapArgs.keyfileOverride !== null
-      ? { keyfile: bootstrapArgs.keyfileOverride }
-      : {}),
-    ...(bootstrapArgs.keyNameOverride !== null
-      ? { keyName: bootstrapArgs.keyNameOverride }
-      : {}),
-    ...(bootstrapArgs.baseurlOverride !== null
-      ? { baseUrl: bootstrapArgs.baseurlOverride }
-      : {}),
-    ...(bootstrapArgs.setOverrides !== null
-      ? { set: bootstrapArgs.setOverrides }
-      : {}),
-  };
-  return Object.keys(overrides).length > 0 ? overrides : undefined;
-}
-
-function collectActivationModelParams(
-  profileParams: Record<string, unknown> | undefined,
-  cliParams: Record<string, unknown> | undefined,
-): ProviderActivationIntent['modelParams'] | undefined {
-  const mergedModelParams: Record<string, unknown> = {};
-
-  // Profile model params apply regardless of provider source. A CLI provider
-  // override suppresses the profile's provider/model selection, not its model
-  // params (see profileResolution.ts contract).
-  if (profileParams) {
-    Object.assign(mergedModelParams, profileParams);
-  }
-  if (cliParams) {
-    Object.assign(mergedModelParams, cliParams);
-  }
-
-  return Object.keys(mergedModelParams).length > 0
-    ? mergedModelParams
-    : undefined;
-}
-
-function buildActivationIntent(
-  useExternalAuth: boolean,
-  bootstrapArgs: BootstrapProfileArgs | undefined,
-  modelParams: ProviderActivationIntent['modelParams'],
-  configModel: string,
-  selectedProvider: string | undefined,
-  readDefaultProvider: () => string | undefined,
-): ProviderActivationIntent {
-  const cliOverrides = buildActivationCliOverrides(bootstrapArgs);
-  const resolvedModel =
-    bootstrapArgs?.modelOverride ??
-    (configModel !== PLACEHOLDER_MODEL ? configModel : undefined);
-  const configProvider =
-    selectedProvider ?? bootstrapArgs?.providerOverride ?? undefined;
-  const activeProvider =
-    configProvider === undefined ? readDefaultProvider() : undefined;
-  return {
-    ...(configProvider !== undefined ? { provider: configProvider } : {}),
-    ...(activeProvider !== undefined
-      ? { defaultProvider: activeProvider }
-      : {}),
-    authMode: useExternalAuth ? 'none' : 'auto',
-    ...(typeof resolvedModel === 'string' && resolvedModel.trim().length > 0
-      ? { model: resolvedModel.trim() }
-      : {}),
-    ...(modelParams !== undefined ? { modelParams } : {}),
-    ...(cliOverrides !== undefined ? { cliOverrides } : {}),
-  };
-}
-
-export function buildNonInteractiveActivationIntent(
-  config: ConfigWithBootstrapArgs,
-  settings: LoadedSettings,
-): ProviderActivationIntent {
-  return buildActivationIntent(
-    settings.merged.useExternalAuth === true,
-    readBootstrapArgs(config),
-    collectActivationModelParams(
-      config._profileModelParams,
-      config._cliModelParams,
-    ),
-    config.getModel(),
-    config.getProvider(),
-    () => config.getProvider(),
+export async function buildNonInteractiveActivationIntent(
+  config: Config,
+): Promise<ProviderActivationIntent> {
+  let intent: ProviderActivationIntent | undefined;
+  await activateConfiguredProvider(
+    config,
+    { getActiveProviderName: () => config.getProvider() },
+    noCliOverrides,
+    {
+      preflight: async (assembled) => {
+        intent = assembled;
+        return { authFailed: false, infoMessages: [] };
+      },
+    },
   );
+  if (intent === undefined)
+    throw new Error('Production activation did not publish an intent');
+  return intent;
 }
