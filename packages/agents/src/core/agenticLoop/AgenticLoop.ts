@@ -53,6 +53,8 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { AgenticLoopEvent, AgenticLoopOptions } from './types.js';
 import { AgenticEventQueue } from './agenticEventQueue.js';
 import { persistToolPresentations } from './toolPresentationRecording.js';
+import { ApprovalPublicationError } from '@vybestack/llxprt-code-core/scheduler/approval-lifecycle.js';
+import { persistApprovalLifecycle } from './approvalLifecycleRecording.js';
 import {
   buildToolResponses,
   classifyCompletedTools,
@@ -151,7 +153,10 @@ function wrapCompletionTask(
 ): Promise<CompletedToolCall[] | null> {
   return completionPromise
     .then((c) => c)
-    .catch(() => null)
+    .catch((error: unknown) => {
+      if (error instanceof ApprovalPublicationError) throw error;
+      return null;
+    })
     .finally(() => {
       state.completionSettled = true;
     });
@@ -567,6 +572,10 @@ export class AgenticLoop {
         }
       })
       .catch((error: unknown) => {
+        if (error instanceof ApprovalPublicationError) {
+          rejectCompletion(error);
+          return;
+        }
         logger.debug(
           () =>
             `scheduler.schedule rejected; ending tool turn: ${
@@ -641,6 +650,8 @@ export class AgenticLoop {
     };
 
     const owner = this.createSchedulerOwner({
+      persistApproval: (record) =>
+        persistApprovalLifecycle(record, this.agentClient.getHistoryService()),
       outputUpdateHandler: (callId, update) => {
         if (!forwardingState.active) {
           return;

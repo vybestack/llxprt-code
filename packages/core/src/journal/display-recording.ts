@@ -16,7 +16,7 @@ export type JournalDisplayDescriptor =
         | 'ui-item';
     }
   | {
-      readonly type: 'tool-result';
+      readonly type: 'tool-result' | 'tool-approval';
       readonly attemptId: string;
       readonly callId: string;
       readonly format: 'text' | 'json';
@@ -24,6 +24,10 @@ export type JournalDisplayDescriptor =
 
 export function displayRelationKey(attemptId: string, callId: string): string {
   return `display:tool:${attemptId.length}:${attemptId}${callId}`;
+}
+
+export function approvalRelationKey(attemptId: string, callId: string): string {
+  return `approval:tool:${attemptId.length}:${attemptId}${callId}`;
 }
 
 export function decodeDisplayDescriptor(
@@ -43,6 +47,7 @@ export function decodeDisplayDescriptor(
     case 'ui-item':
       return { type };
     case 'tool-result':
+    case 'tool-approval':
       if (!('attemptId' in value) || typeof value.attemptId !== 'string')
         throw new Error('Invalid display attempt id');
       if (!('callId' in value) || typeof value.callId !== 'string')
@@ -89,12 +94,12 @@ export class JournalDisplayWriter {
       await recorder.endBlock(block);
       await mutateDisplay(this.store, {
         row,
-        ...(descriptor.type === 'tool-result'
+        ...(descriptor.type === 'tool-result' ||
+        descriptor.type === 'tool-approval'
           ? {
-              relationKey: displayRelationKey(
-                descriptor.attemptId,
-                descriptor.callId,
-              ),
+              relationKey: (descriptor.type === 'tool-result'
+                ? displayRelationKey
+                : approvalRelationKey)(descriptor.attemptId, descriptor.callId),
             }
           : {}),
       });

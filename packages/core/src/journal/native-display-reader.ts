@@ -10,6 +10,7 @@ import { decodeStoredRow } from '../services/history/journalRowCodec.js';
 import {
   decodeDisplayDescriptor,
   displayRelationKey,
+  approvalRelationKey,
   type JournalDisplayDescriptor,
 } from './display-recording.js';
 
@@ -79,11 +80,22 @@ export class NativeDisplayReader {
     }
     return { transcriptId: row.transcriptId.toString(), attemptId };
   }
-  async toolPresentation(row: RowEntry, callId: string) {
+  toolPresentation(row: RowEntry, callId: string) {
+    return this.toolRelation(row, callId, 'tool-result', displayRelationKey);
+  }
+  toolApproval(row: RowEntry, callId: string) {
+    return this.toolRelation(row, callId, 'tool-approval', approvalRelationKey);
+  }
+  private async toolRelation(
+    row: RowEntry,
+    callId: string,
+    type: 'tool-result' | 'tool-approval',
+    relationKey: (attemptId: string, callId: string) => string,
+  ) {
     const { attemptId } = await this.toolRequestIdentity(row);
     const bytes = await this.state.get(
       this.journal.trailer?.stateRoot ?? 0,
-      displayRelationKey(attemptId, callId),
+      relationKey(attemptId, callId),
     );
     if (bytes === undefined) return undefined;
     const entry = await this.entry(BigInt(new TextDecoder().decode(bytes)));
@@ -91,11 +103,7 @@ export class NativeDisplayReader {
     const descriptor = decodeDisplayDescriptor(
       await chunkValue(this.journal, entry.presentationRef),
     );
-    if (
-      entry.audience !== 2 ||
-      entry.status !== 1 ||
-      descriptor.type !== 'tool-result'
-    )
+    if (entry.audience !== 2 || entry.status !== 1 || descriptor.type !== type)
       throw new Error('Invalid tool display relation');
     if (descriptor.attemptId !== attemptId || descriptor.callId !== callId)
       throw new Error('Mismatched tool display relation');

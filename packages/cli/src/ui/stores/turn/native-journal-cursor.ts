@@ -376,7 +376,8 @@ export class NativeJournalCursor {
   ): Promise<LocatedEntry | undefined> {
     if (
       presentation.status === 6 ||
-      presentation.descriptor.type === 'tool-result'
+      presentation.descriptor.type === 'tool-result' ||
+      presentation.descriptor.type === 'tool-approval'
     )
       return undefined;
     const opener = await this.read(first);

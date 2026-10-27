@@ -18,6 +18,7 @@ import type {
   ToolCallsUpdateHandler,
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { ToolGovernance } from './toolGovernance.js';
+import type { ApprovalLifecycleWriter } from '@vybestack/llxprt-code-core/scheduler/approval-lifecycle.js';
 
 /**
  * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
@@ -36,6 +37,7 @@ export interface CoreToolSchedulerOptions {
   outputUpdateHandler?: OutputUpdateHandler;
   onAllToolCallsComplete?: AllToolCallsCompleteHandler;
   onToolCallsUpdate?: ToolCallsUpdateHandler;
+  persistApproval?: ApprovalLifecycleWriter;
   getPreferredEditor: () => EditorType | undefined;
   onEditorClose: () => void;
   onEditorOpen?: () => void;

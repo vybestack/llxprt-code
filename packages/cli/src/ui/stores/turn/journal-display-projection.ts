@@ -7,6 +7,7 @@ import type {
   ToolResultDisplay,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../../types.js';
+import { withPersistedApproval } from './journal-approval-projection.js';
 
 const metadata = z.record(z.unknown()).optional();
 const fileRead = z.object({
@@ -69,7 +70,8 @@ export async function withToolPresentations(
     }
     const tools = [];
     const journalIdentity = await reader.toolRequestIdentity(row);
-    for (const tool of item.tools) {
+    for (const original of item.tools) {
+      const tool = await withPersistedApproval(reader, row, original);
       const presentation = await reader.toolPresentation(row, tool.callId);
       if (presentation === undefined) {
         tools.push({ ...tool, journalIdentity });

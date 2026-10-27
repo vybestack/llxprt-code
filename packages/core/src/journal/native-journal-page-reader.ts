@@ -105,6 +105,10 @@ export class NativeJournalPageReader {
     return this.display.toolPresentation(entry, callId);
   }
 
+  toolApproval(entry: NativeJournalEntry, callId: string) {
+    return this.display.toolApproval(entry, callId);
+  }
+
   toolRequestIdentity(entry: NativeJournalEntry) {
     return this.display.toolRequestIdentity(entry);
   }
