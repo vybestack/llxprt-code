@@ -5,6 +5,7 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 export async function persistApprovalLifecycle(
   record: ApprovalLifecycleRecord,
   history: Pick<HistoryService, 'appendDisplay'> | null,
+  origin?: object,
 ): Promise<void> {
   const identity = record.request.journalIdentity;
   if (identity === undefined) return;
@@ -26,5 +27,6 @@ export async function persistApprovalLifecycle(
         journalIdentity: identity,
       },
     }),
+    origin,
   );
 }

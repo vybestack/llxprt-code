@@ -789,6 +789,7 @@ function createDefaultToolSchedulerFactory(options: {
       config: schedulerOptions.config,
       readExecutionPolicy: schedulerOptions.readExecutionPolicy,
       readApprovalMode: schedulerOptions.readApprovalMode,
+      persistApproval: schedulerOptions.persistApproval,
       getToolGovernance: schedulerOptions.getToolGovernance,
       messageBus: schedulerOptions.messageBus,
       toolRegistry: registry,

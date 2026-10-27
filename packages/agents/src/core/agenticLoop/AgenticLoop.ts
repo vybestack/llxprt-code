@@ -55,6 +55,7 @@ import { AgenticEventQueue } from './agenticEventQueue.js';
 import { persistToolPresentations } from './toolPresentationRecording.js';
 import { ApprovalPublicationError } from '@vybestack/llxprt-code-core/scheduler/approval-lifecycle.js';
 import { persistApprovalLifecycle } from './approvalLifecycleRecording.js';
+import type { ApprovalLifecycleRecord } from '@vybestack/llxprt-code-core/scheduler/approval-lifecycle.js';
 import {
   buildToolResponses,
   classifyCompletedTools,
@@ -427,6 +428,7 @@ export class AgenticLoop {
         dedupedRequests,
         signal,
         recordingExecution?.hookOwner,
+        recordingExecution?.historyOrigin,
       );
       completed = result.completed;
     } finally {
@@ -534,6 +536,7 @@ export class AgenticLoop {
     requests: ToolCallRequestInfo[],
     signal: AbortSignal,
     hookOwner?: AgentChatRecordingExecution['hookOwner'],
+    historyOrigin?: object,
   ): AsyncGenerator<AgenticLoopEvent, TurnToolResult> {
     const queue = new AgenticEventQueue();
 
@@ -551,6 +554,7 @@ export class AgenticLoop {
       () => {
         acceptedToolUpdateSeen = true;
       },
+      historyOrigin,
     );
 
     const state: TurnState = { completionSettled: false };
@@ -624,12 +628,24 @@ export class AgenticLoop {
     });
   }
 
+  private persistApproval(
+    record: ApprovalLifecycleRecord,
+    origin?: object,
+  ): Promise<void> {
+    return persistApprovalLifecycle(
+      record,
+      this.agentClient.getHistoryService(),
+      origin,
+    );
+  }
+
   private async createSchedulerWithCallbacks(
     queue: AgenticEventQueue,
     resolveCompletion: (calls: CompletedToolCall[]) => void,
     rejectCompletion: (error: unknown) => void,
     forwardingState: { active: boolean },
     markAcceptedUpdate: () => void,
+    historyOrigin?: object,
   ): Promise<SchedulerLease> {
     const display = this.displayCallbacks;
     const pushQueueEvent = (event: AgenticLoopEvent): boolean => {
@@ -650,8 +666,7 @@ export class AgenticLoop {
     };
 
     const owner = this.createSchedulerOwner({
-      persistApproval: (record) =>
-        persistApprovalLifecycle(record, this.agentClient.getHistoryService()),
+      persistApproval: (record) => this.persistApproval(record, historyOrigin),
       outputUpdateHandler: (callId, update) => {
         if (!forwardingState.active) {
           return;
