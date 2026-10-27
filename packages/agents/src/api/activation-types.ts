@@ -16,7 +16,7 @@ export interface AgentActivationOperation {
     intent: ProviderActivationIntent,
   ): Promise<AgentActivationPreflightResult>;
   dispose(): void | Promise<void>;
-  readHistory(): ReturnType<SessionClientOwner['readHistory']>;
+  readHistory(): ReturnType<SessionClientOwner['clients']['readHistory']>;
   readonly sessionClient: {
     runImageOperation: SessionClientOwner['runImageOperation'];
     workspaceDirectories(): readonly string[];

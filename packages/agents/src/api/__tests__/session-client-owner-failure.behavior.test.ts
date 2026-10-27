@@ -67,14 +67,18 @@ function createCountingClient(
 }
 
 async function createReplacementOwner(
-  builtConfig: Parameters<typeof SessionClientOwner.create>[0],
+  builtConfig: Parameters<typeof SessionClientOwner.create>[0]['config'],
   builtSettings: SettingsService,
-  builtManager: Parameters<typeof SessionClientOwner.create>[2],
+  builtManager: Parameters<typeof SessionClientOwner.create>[1]['manager'],
   builtMedia: SessionMediaOwner,
   builtMcp: McpRuntimeOwner,
   builtSettingsOwner: SessionSettingsOwner,
-  builtContent: NonNullable<Parameters<typeof SessionClientOwner.create>[8]>,
-  builtTokenizer: NonNullable<Parameters<typeof SessionClientOwner.create>[9]>,
+  builtContent: NonNullable<
+    Parameters<typeof SessionClientOwner.create>[1]['contentGeneratorFactory']
+  >,
+  builtTokenizer: NonNullable<
+    Parameters<typeof SessionClientOwner.create>[1]['tokenizerFactory']
+  >,
   builtFiles: ProviderFileLifecycle,
   builtOAuth: ReturnType<typeof acquirePreferredOAuth>,
   failFromClient: number,
@@ -105,7 +109,7 @@ async function createReplacementOwner(
     builtContent,
     builtTokenizer,
   );
-  owner.bindProviderFiles(
+  owner.clients.bindProviderFiles(
     builtFiles,
     (provider) => builtOAuth.composeRetryOperations(provider),
     async (scope) => {
@@ -242,7 +246,7 @@ describe('Session client replacement failure', () => {
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();
-      await builtOwner.refreshAuth();
+      await builtOwner.clients.refreshAuth();
       await (await currentOwnerClient(builtOwner)).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
@@ -266,18 +270,18 @@ describe('Session client replacement failure', () => {
       scopeCleanups,
     );
     try {
-      await owner.refreshAuth();
+      await owner.clients.refreshAuth();
       const previous = await currentOwnerClient(owner);
       expect(clients).toHaveLength(2);
 
-      await expect(owner.refreshAuth()).rejects.toThrow('refresh boom');
+      await expect(owner.clients.refreshAuth()).rejects.toThrow('refresh boom');
 
       const abandoned = clients[2];
       expect(clients).toHaveLength(3);
       expect(abandoned.disposals).toBe(1);
       expect(await currentOwnerClient(owner)).toBe(previous);
       expect(clients[1].disposals).toBe(0);
-      await expect(owner.refreshAuth()).rejects.toThrow('refresh boom');
+      await expect(owner.clients.refreshAuth()).rejects.toThrow('refresh boom');
       expect(clients[3].disposals).toBe(1);
       expect(abandoned.disposals).toBe(1);
     } finally {
@@ -411,7 +415,7 @@ describe('Session client replacement failure', () => {
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();
-      await builtOwner.refreshAuth();
+      await builtOwner.clients.refreshAuth();
       await (await currentOwnerClient(builtOwner)).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
@@ -435,11 +439,11 @@ describe('Session client replacement failure', () => {
       scopeCleanups,
     );
     try {
-      await owner.refreshAuth();
+      await owner.clients.refreshAuth();
       const previous = await currentOwnerClient(owner);
 
       await expect(
-        owner.prepareProfileActivation(new AbortController().signal),
+        owner.clients.prepareProfileActivation(new AbortController().signal),
       ).rejects.toThrow('refresh boom');
 
       expect(clients[2].disposals).toBe(1);
@@ -598,7 +602,7 @@ describe('Session client owner policy persistence at disposal', () => {
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();
-      await builtOwner.refreshAuth();
+      await builtOwner.clients.refreshAuth();
       await (await currentOwnerClient(builtOwner)).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);

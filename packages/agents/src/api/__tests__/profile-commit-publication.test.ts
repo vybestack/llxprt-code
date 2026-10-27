@@ -182,7 +182,7 @@ describe('profile-commit-publication', () => {
       builtCallerTokenizer,
     );
     builtCallerOwner.bindMcpRuntime(builtCallerMcp);
-    builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
+    builtCallerOwner.clients.bindProviderFiles(builtCallerFiles, (provider) =>
       builtCallerOAuth.composeRetryOperations(provider),
     );
     builtCallerOwner.bindHooks();
@@ -279,12 +279,12 @@ describe('profile-commit-publication', () => {
         builtCallerManager,
         builtCallerOAuth,
         () => 'agent',
-        () => builtCallerOwner.refreshAuth(),
+        () => builtCallerOwner.clients.refreshAuth(),
         builtCallerSettingsOwner,
       ),
       builtCallerSettings,
       builtCallerManager,
-      (method) => builtCallerOwner.refreshAuth(method),
+      (method) => builtCallerOwner.clients.refreshAuth(method),
       assembleModelSelection(builtCallerSettingsOwner),
     );
     requireCallerActivation(activation);
@@ -378,7 +378,7 @@ describe('profile-commit-publication', () => {
       await prior.startChat();
       expect(prior.hasChatInitialized()).toBe(true);
 
-      await builtCallerOwner.refreshAuth();
+      await builtCallerOwner.clients.refreshAuth();
 
       const replacement = lastBuiltCallerClient();
       expect(replacement).not.toBe(prior);
@@ -425,12 +425,12 @@ describe('profile-commit-publication', () => {
   it('keeps the previous real loop runnable after replacement construction fails', async () => {
     await openbuiltCaller('plain-text.jsonl');
     try {
-      const previous = builtCallerOwner.initializeExecution(
+      const previous = builtCallerOwner.clients.initializeExecution(
         undefined,
         undefined,
         undefined,
       );
-      const rebuild = (): void => builtCallerOwner.rebuildExecution();
+      const rebuild = (): void => builtCallerOwner.clients.rebuildExecution();
       const controller = new AbortController();
       const failure = new Error('replacement loop configuration failed');
       const interactive = vi

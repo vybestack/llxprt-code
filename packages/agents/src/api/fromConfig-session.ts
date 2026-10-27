@@ -195,7 +195,7 @@ async function acquireActivationClient(
     },
   );
   release.acquire('manager', () => client.dispose());
-  client.adoptProviderLifetime(activation.providerLifetime);
+  client.clients.adoptProviderLifetime(activation.providerLifetime);
   return client;
 }
 
@@ -220,12 +220,12 @@ function bindActivationClient(
     auth.oauth,
     providers.settings,
   );
-  client.bindProviderFiles(
+  client.clients.bindProviderFiles(
     files,
     (provider) => auth.oauth.composeRetryOperations(provider),
     (scope) => cleanupProviderScope(files, scope),
   );
-  client.bindDefinitionReads(
+  client.clients.bindDefinitionReads(
     definitions.profileReads,
     definitions.subagentReads,
   );
@@ -236,7 +236,7 @@ function bindActivationClient(
     providers.manager,
     auth.oauth,
     activation.readKind,
-    () => client.refreshAuth(),
+    () => client.clients.refreshAuth(),
     settingsOwner,
   );
 }
@@ -255,7 +255,7 @@ export async function executeActivationSession(
     switcher,
     providers.settings,
     providers.manager,
-    (method) => resources.sessionClient.refreshAuth(method),
+    (method) => resources.sessionClient.clients.refreshAuth(method),
     assembleModelSelection(resources.settingsOwner),
   );
 }

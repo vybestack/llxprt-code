@@ -264,7 +264,7 @@ describe('adoption cleanup with explicit close operations', () => {
     try {
       await entered;
       expect(settled).toBe(false);
-      expect(() => owner.refreshAuth()).toThrow('disposed');
+      expect(() => owner.clients.refreshAuth()).toThrow('disposed');
       signalRelease();
       const error = await result;
       if (!(error instanceof AggregateError))

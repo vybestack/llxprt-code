@@ -220,7 +220,9 @@ export class AgentActivationBootstrap
       workspaceDirectories: () =>
         resources.workspaceFilesystem.paths.directories(),
       refreshAuth: (method) =>
-        this.#admitPublic(() => resources.sessionClient.refreshAuth(method)),
+        this.#admitPublic(() =>
+          resources.sessionClient.clients.refreshAuth(method),
+        ),
       runImageOperation: (input) =>
         this.#admitPublic(() =>
           resources.sessionClient.runImageOperation(input),
@@ -245,9 +247,9 @@ export class AgentActivationBootstrap
       name,
     );
   }
-  readHistory(): ReturnType<SessionClientOwner['readHistory']> {
+  readHistory(): ReturnType<SessionClientOwner['clients']['readHistory']> {
     return this.#admitPublic(() =>
-      this.#sessionResources.sessionClient.readHistory(),
+      this.#sessionResources.sessionClient.clients.readHistory(),
     );
   }
   #foregroundAgent: Agent | undefined;
@@ -486,7 +488,7 @@ export class AgentActivationBootstrap
     return this.#admitPublic(async () => {
       signal.throwIfAborted();
       const replacement =
-        await this.#sessionResources.sessionClient.prepareProfileActivation(
+        await this.#sessionResources.sessionClient.clients.prepareProfileActivation(
           signal,
         );
       try {

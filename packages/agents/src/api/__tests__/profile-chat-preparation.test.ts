@@ -347,7 +347,7 @@ describe('profile-chat-preparation', () => {
         builtCallerTokenizer,
       );
       builtCallerOwner.bindMcpRuntime(builtCallerMcp);
-      builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
+      builtCallerOwner.clients.bindProviderFiles(builtCallerFiles, (provider) =>
         builtCallerOAuth.composeRetryOperations(provider),
       );
       builtCallerOwner.bindHooks();
@@ -437,12 +437,12 @@ describe('profile-chat-preparation', () => {
           builtCallerManager,
           builtCallerOAuth,
           () => 'agent',
-          () => builtCallerOwner.refreshAuth(),
+          () => builtCallerOwner.clients.refreshAuth(),
           builtCallerSettingsOwner,
         ),
         builtCallerSettings,
         builtCallerManager,
-        (method) => builtCallerOwner.refreshAuth(method),
+        (method) => builtCallerOwner.clients.refreshAuth(method),
         assembleModelSelection(builtCallerSettingsOwner),
       );
       if (activation.authFailed) throw activation.authError;
@@ -483,7 +483,11 @@ describe('profile-chat-preparation', () => {
       async (mode) => {
         await openbuiltCaller();
         try {
-          builtCallerOwner.initializeExecution(undefined, undefined, undefined);
+          builtCallerOwner.clients.initializeExecution(
+            undefined,
+            undefined,
+            undefined,
+          );
           const subscriptions = trackModelSubscriptions(
             builtCallerSettingsOwner,
           );
@@ -501,7 +505,7 @@ describe('profile-chat-preparation', () => {
             });
           try {
             await expect(
-              builtCallerOwner.prepareProfileExecution(
+              builtCallerOwner.clients.prepareProfileExecution(
                 true,
                 controller.signal,
                 async () => undefined,

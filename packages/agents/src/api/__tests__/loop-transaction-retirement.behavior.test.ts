@@ -720,8 +720,8 @@ describe('real loop replacement transaction retirement', () => {
           },
         );
         const owner = clientOwner.owner;
-        owner.initializeExecution(undefined, undefined, undefined);
-        const selected = owner.resolveExecution();
+        owner.clients.initializeExecution(undefined, undefined, undefined);
+        const selected = owner.clients.resolveExecution();
         if (selected.loop === undefined)
           throw new Error(selected.error.message);
         const execution = selected.loop;
@@ -746,7 +746,7 @@ describe('real loop replacement transaction retirement', () => {
         ]);
         let priorRetirement: (() => Promise<void>) | undefined;
         if (generation === 'published-before-retirement') {
-          const prepared = await owner.prepareProfileExecution(
+          const prepared = await owner.clients.prepareProfileExecution(
             false,
             new AbortController().signal,
             async (releasePrior) => {
@@ -756,7 +756,7 @@ describe('real loop replacement transaction retirement', () => {
           prepared.publish();
           await prepared.retire();
         }
-        expect(owner.isCurrentExecution(execution)).toBe(
+        expect(owner.clients.isCurrentExecution(execution)).toBe(
           generation === 'current',
         );
         closing = owner.dispose();

@@ -163,21 +163,16 @@ function buildFakeClient(seed: readonly IContent[] = []): FakeClient {
   };
 }
 
-class ConcurrencyConversation extends SessionConversationBinding {
-  constructor(client: AgentClientContract) {
-    super();
-    this.client = client;
-  }
-  protected assertConversationOpen(): void {}
-}
-
 function createSessionControl(
   config: FakeConfig,
   client: AgentClientContract,
   sessionId: string,
   mediaStore: LocalMediaStore,
 ): SessionControl {
-  const conversation = new ConcurrencyConversation(client);
+  const conversation = new SessionConversationBinding({
+    readClient: () => client,
+    assertOpen: () => {},
+  });
   return new SessionControl(
     {
       storageRoot: config.getProjectRoot(),

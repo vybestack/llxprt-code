@@ -29,7 +29,7 @@ describe('SessionClientOwner.generateText with empty input', () => {
       async ({ owner, clients }) => {
         const built = clients.length;
         expect(
-          await owner.generateText(
+          await owner.clients.generateText(
             [],
             { writeHistory: true },
             generationRecording,
@@ -39,7 +39,7 @@ describe('SessionClientOwner.generateText with empty input', () => {
         expect(provider.requests).toStrictEqual([]);
 
         expect(
-          await owner.generateText(
+          await owner.clients.generateText(
             'real input',
             undefined,
             generationRecording,

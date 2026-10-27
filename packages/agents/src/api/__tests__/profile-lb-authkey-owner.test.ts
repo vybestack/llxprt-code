@@ -177,7 +177,7 @@ describe('Load balancer member credentials at use time', () => {
       callerTokenizer,
     );
     callerOwner.bindMcpRuntime(callerMcp);
-    callerOwner.bindProviderFiles(callerFiles, (provider) =>
+    callerOwner.clients.bindProviderFiles(callerFiles, (provider) =>
       callerOAuth.composeRetryOperations(provider),
     );
     callerOwner.bindHooks();
@@ -264,12 +264,12 @@ describe('Load balancer member credentials at use time', () => {
         callerManager,
         callerOAuth,
         () => 'agent',
-        () => callerOwner.refreshAuth(),
+        () => callerOwner.clients.refreshAuth(),
         callerSettingsOwner,
       ),
       callerSettings,
       callerManager,
-      (method) => callerOwner.refreshAuth(method),
+      (method) => callerOwner.clients.refreshAuth(method),
       assembleModelSelection(callerSettingsOwner),
     );
     requireCallerActivation(activation);
@@ -323,7 +323,7 @@ describe('Load balancer member credentials at use time', () => {
       callerManager,
       profileOAuth,
       () => undefined,
-      () => callerOwner.refreshAuth(),
+      () => callerOwner.clients.refreshAuth(),
       callerSettingsOwner,
     );
     profileApplication = assembleProfileApplication(

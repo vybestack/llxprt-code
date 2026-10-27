@@ -21,6 +21,8 @@ import {
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { extractModelParams } from '@vybestack/llxprt-code-providers/model-parameter-data.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { SessionClientAcquisitionOwner } from '../session/session-client-acquisition-owner.js';
+import type { SessionConversationBinding } from '../session/session-conversation-binding.js';
 import type { SessionClientOwner } from '../session/session-client-owner.js';
 import type {
   Agent,
@@ -294,11 +296,21 @@ export type SessionProviderAssemblyValues = Omit<
   'coordinator' | 'selectModel'
 >;
 
+export type SessionProviderOperations = Pick<
+  SessionClientAcquisitionOwner,
+  | 'rebuildExecution'
+  | 'refreshAuth'
+  | 'isCurrentExecution'
+  | 'prepareProfileExecution'
+> &
+  Pick<SessionConversationBinding, 'restoreChatVisibility'> &
+  Pick<SessionClientOwner, 'subscribeBucketConsent' | 'respondToBucketConsent'>;
+
 export function createSessionProviderControl(
   settings: ProviderControlSettings,
   providers: RuntimeProviderManager,
   oauth: OAuthManager,
-  session: SessionClientOwner,
+  session: SessionProviderOperations,
   values: SessionProviderAssemblyValues,
 ): SessionProviderControl {
   return new SessionProviderControl(settings, providers, oauth, session, {
@@ -336,7 +348,7 @@ export class SessionProviderControl {
   readonly #settings: ProviderControlSettings;
   readonly #providers: RuntimeProviderManager;
   readonly #oauth: OAuthManager;
-  readonly #session: SessionClientOwner;
+  readonly #session: SessionProviderOperations;
   readonly #context: SessionProviderContext;
   readonly #providerState: AgentProviderState;
   readonly #readConfiguredModel: () => string;
@@ -346,7 +358,7 @@ export class SessionProviderControl {
     settings: ProviderControlSettings,
     providers: RuntimeProviderManager,
     oauth: OAuthManager,
-    session: SessionClientOwner,
+    session: SessionProviderOperations,
     context: SessionProviderContext,
   ) {
     this.#settings = settings;

@@ -197,7 +197,7 @@ describe('production filesystem roots', () => {
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();
-      await builtOwner.refreshAuth();
+      await builtOwner.clients.refreshAuth();
       await (await currentOwnerClient(builtOwner)).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtClose);
@@ -209,9 +209,9 @@ describe('production filesystem roots', () => {
     const before = await currentOwnerClient(builtOwner);
     try {
       builtMcp.workspaceFilesystem.addDirectory(directory);
-      await builtOwner.refreshAuth();
+      await builtOwner.clients.refreshAuth();
       expect(before).not.toBe(await currentOwnerClient(builtOwner));
-      expect(builtOwner.workspaceDirectories()).toContain(directory);
+      expect(builtOwner.clients.workspaceDirectories()).toContain(directory);
       await (await currentOwnerClient(builtOwner)).startChat();
       const generate = FakeProvider.prototype.generateChatCompletion;
       const instructions: string[] = [];
@@ -236,8 +236,10 @@ describe('production filesystem roots', () => {
       expect(instructions.join('\n')).toContain(directory);
       instructions.length = 0;
       builtMcp.workspaceFilesystem.setDirectories([builtConfig.getTargetDir()]);
-      await builtOwner.refreshAuth();
-      expect(builtOwner.workspaceDirectories()).not.toContain(directory);
+      await builtOwner.clients.refreshAuth();
+      expect(builtOwner.clients.workspaceDirectories()).not.toContain(
+        directory,
+      );
       await (await currentOwnerClient(builtOwner)).startChat();
       for await (const event of (
         await currentOwnerClient(builtOwner)

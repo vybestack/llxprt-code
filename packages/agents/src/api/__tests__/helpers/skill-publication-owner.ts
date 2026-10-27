@@ -168,12 +168,12 @@ async function activateAndStart(
       manager,
       oauth,
       () => 'agent',
-      () => owner.refreshAuth(),
+      () => owner.clients.refreshAuth(),
       settingsOwner,
     ),
     settings,
     manager,
-    (method) => owner.refreshAuth(method),
+    (method) => owner.clients.refreshAuth(method),
     assembleModelSelection(settingsOwner),
   );
   if (result.authFailed) throw result.authError;
@@ -217,7 +217,7 @@ export async function openSkillPublicationOwner(
     stack.tokenizer,
   );
   owner.bindMcpRuntime(mcp);
-  owner.bindProviderFiles(stack.files, (provider) =>
+  owner.clients.bindProviderFiles(stack.files, (provider) =>
     stack.oauth.composeRetryOperations(provider),
   );
   owner.bindHooks();

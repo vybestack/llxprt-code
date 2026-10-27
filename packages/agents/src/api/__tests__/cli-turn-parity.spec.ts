@@ -292,8 +292,9 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
           builtRefCallerTokenizer,
         );
         builtRefCallerOwner.bindMcpRuntime(builtRefCallerMcp);
-        builtRefCallerOwner.bindProviderFiles(builtRefCallerFiles, (provider) =>
-          builtRefCallerOAuth.composeRetryOperations(provider),
+        builtRefCallerOwner.clients.bindProviderFiles(
+          builtRefCallerFiles,
+          (provider) => builtRefCallerOAuth.composeRetryOperations(provider),
         );
         builtRefCallerOwner.bindHooks();
         const builtRefCallerClose = settleEngineRelease.bind(
@@ -332,12 +333,12 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
               builtRefCallerManager,
               builtRefCallerOAuth,
               () => 'agent',
-              () => builtRefCallerOwner.refreshAuth(),
+              () => builtRefCallerOwner.clients.refreshAuth(),
               builtRefCallerSettingsOwner,
             ),
             builtRefCallerSettings,
             builtRefCallerManager,
-            (method) => builtRefCallerOwner.refreshAuth(method),
+            (method) => builtRefCallerOwner.clients.refreshAuth(method),
             assembleModelSelection(builtRefCallerSettingsOwner),
           );
           requireCallerActivation(activation);

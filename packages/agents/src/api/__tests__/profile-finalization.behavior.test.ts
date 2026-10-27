@@ -188,7 +188,7 @@ describe('Profile finalization', () => {
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();
-      await builtOwner.refreshAuth();
+      await builtOwner.clients.refreshAuth();
       await (await currentOwnerClient(builtOwner)).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtClose);
@@ -233,7 +233,7 @@ describe('Profile finalization', () => {
                 manager,
                 null,
                 () => undefined,
-                () => builtOwner.refreshAuth(),
+                () => builtOwner.clients.refreshAuth(),
                 builtSettingsOwner,
               )(name, { ...options, clientReplacement: 'deferred' }),
             builtSettingsOwner,

@@ -208,7 +208,7 @@ async function openRoot(
     hold === undefined ? tokenizer : hold.wrap(tokenizer),
   );
   owner.bindMcpRuntime(mcp);
-  owner.bindProviderFiles(files, (provider) =>
+  owner.clients.bindProviderFiles(files, (provider) =>
     oauth.composeRetryOperations(provider),
   );
   owner.bindHooks();
@@ -250,12 +250,12 @@ async function openRoot(
         manager,
         oauth,
         () => 'agent',
-        () => owner.refreshAuth(),
+        () => owner.clients.refreshAuth(),
         settingsOwner,
       ),
       settings,
       manager,
-      (method) => owner.refreshAuth(method),
+      (method) => owner.clients.refreshAuth(method),
       assembleModelSelection(settingsOwner),
     );
     if (activation.authFailed) throw activation.authError;
@@ -334,7 +334,7 @@ describe('provider switch transaction ownership', () => {
         a.manager,
         a.oauth,
         () => 'agent',
-        () => a.owner.refreshAuth(),
+        () => a.owner.clients.refreshAuth(),
         a.settingsOwner,
       );
       const switchB = assembleProviderSwitch(
@@ -343,7 +343,7 @@ describe('provider switch transaction ownership', () => {
         b.manager,
         b.oauth,
         () => 'subagent',
-        () => b.owner.refreshAuth(),
+        () => b.owner.clients.refreshAuth(),
         b.settingsOwner,
       );
       const pending = switchA('replacement');

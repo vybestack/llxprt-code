@@ -76,14 +76,18 @@ function createCountedClient(
 }
 
 async function bindingOwner(
-  builtConfig: Parameters<typeof SessionClientOwner.create>[0],
+  builtConfig: Parameters<typeof SessionClientOwner.create>[0]['config'],
   builtSettings: SettingsService,
-  builtManager: Parameters<typeof SessionClientOwner.create>[2],
+  builtManager: Parameters<typeof SessionClientOwner.create>[1]['manager'],
   builtMedia: SessionMediaOwner,
   builtMcp: McpRuntimeOwner,
   builtSettingsOwner: SessionSettingsOwner,
-  builtContent: NonNullable<Parameters<typeof SessionClientOwner.create>[8]>,
-  builtTokenizer: NonNullable<Parameters<typeof SessionClientOwner.create>[9]>,
+  builtContent: NonNullable<
+    Parameters<typeof SessionClientOwner.create>[1]['contentGeneratorFactory']
+  >,
+  builtTokenizer: NonNullable<
+    Parameters<typeof SessionClientOwner.create>[1]['tokenizerFactory']
+  >,
   clients: CountedClient[],
   gate: ReturnType<typeof createGate>,
   entered: ReturnType<typeof createGate>,
@@ -259,7 +263,7 @@ async function checkRollback(
     );
     await builtMcp.initialize();
     await builtOwner.initializeTools();
-    await builtOwner.refreshAuth();
+    await builtOwner.clients.refreshAuth();
     await (await currentOwnerClient(builtOwner)).startChat();
   } catch (primary) {
     await cleanupAfterFailure(primary, closeEngine);
@@ -347,14 +351,14 @@ describe('Session candidate binding rollback', () => {
   it('joins replacement cleanup and reports both failures without replacing the live client', async () => {
     expect(
       await checkRollback(credentials().authority, (owner) =>
-        owner.refreshAuth(),
+        owner.clients.refreshAuth(),
       ),
     ).toStrictEqual([1, 1]);
   }, 30000);
   it('joins profile-candidate cleanup and reports both failures without replacing the live client', async () => {
     expect(
       await checkRollback(credentials().authority, (owner) =>
-        owner.prepareProfileActivation(new AbortController().signal),
+        owner.clients.prepareProfileActivation(new AbortController().signal),
       ),
     ).toStrictEqual([1, 1]);
   }, 30000);
@@ -363,7 +367,7 @@ describe('Session candidate binding rollback', () => {
       await checkRollback(
         credentials().authority,
         (owner) =>
-          owner.generateText('held-detached', undefined, {
+          owner.clients.generateText('held-detached', undefined, {
             transcriptPath: () => undefined,
             persistSemanticMediaPurge: async () => {},
           }),

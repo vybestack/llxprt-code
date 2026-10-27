@@ -215,7 +215,7 @@ async function withChildOwner(
     );
     await builtMcp.initialize();
     await builtOwner.initializeTools();
-    await builtOwner.refreshAuth();
+    await builtOwner.clients.refreshAuth();
     await currentClient(builtOwner).startChat();
   } catch (primary) {
     await cleanupAfterFailure(primary, builtClose);

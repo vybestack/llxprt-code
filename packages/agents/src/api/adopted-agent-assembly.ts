@@ -372,7 +372,7 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
       this.#providers.oauth,
       this.#config.getSessionId(),
     );
-    client.bindProviderFiles(
+    client.clients.bindProviderFiles(
       bindings.files,
       bindings.retryOperations,
       bindings.cleanupScope,
@@ -464,8 +464,12 @@ function adoptedClientBindings(
   mainScope: string,
 ): {
   files: ProviderFileLifecycle;
-  retryOperations: Parameters<SessionClientOwner['bindProviderFiles']>[1];
-  cleanupScope: Parameters<SessionClientOwner['bindProviderFiles']>[2];
+  retryOperations: Parameters<
+    SessionClientOwner['clients']['bindProviderFiles']
+  >[1];
+  cleanupScope: Parameters<
+    SessionClientOwner['clients']['bindProviderFiles']
+  >[2];
   interactiveAuth: Parameters<
     SessionClientOwner['bindInteractiveAuthRequests']
   >[0];
@@ -656,7 +660,7 @@ async function activateAdoptedSession(
     manager,
     oauth,
     () => 'agent',
-    () => client.refreshAuth(),
+    () => client.clients.refreshAuth(),
     selectedSettings,
   );
   const activation = intent.activation;
@@ -667,7 +671,7 @@ async function activateAdoptedSession(
       switchProvider,
       settingsService,
       manager,
-      (method) => client.refreshAuth(method),
+      (method) => client.clients.refreshAuth(method),
       assembleModelSelection(selectedSettings),
     );
     if (result.authFailed) {
@@ -677,8 +681,8 @@ async function activateAdoptedSession(
         { cause: underlying },
       );
     }
-  } else if (!client.isClientInitialized()) {
-    await client.refreshAuth(undefined);
+  } else if (!client.clients.conversationBinding.isClientInitialized()) {
+    await client.clients.refreshAuth(undefined);
   }
 }
 

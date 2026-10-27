@@ -25,12 +25,13 @@ import { SubAgentScope } from '../core/subagent.js';
 import { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import type { ChildToolDisplay } from './childToolDisplay.js';
 import { recordToolCompletions } from './record-tool-completions.js';
-import { SessionClientAcquisitionOwner } from './session-client-acquisition-owner.js';
-
 import {
-  requireSessionPolicy,
-  type SessionClientFactory,
-} from './session-client-binding.js';
+  SessionClientAcquisitionOwner,
+  type SessionClientEnvironment,
+  type SessionClientFactories,
+} from './session-client-acquisition-owner.js';
+
+import { requireSessionPolicy } from './session-client-binding.js';
 import { finishCleanup } from './session-client-cleanup.js';
 import { SessionImageAdmission } from './session-image-admission.js';
 
@@ -42,23 +43,17 @@ import { acceptSkillPublication } from './session-skill-publication.js';
  */
 
 import type {
-  ContentGenerator,
   ProfileDefinitionReads,
-  RuntimeContentGeneratorFactory,
-  RuntimeProviderManager,
-  RuntimeTokenizerFactory,
   SubagentDefinitionReads,
   WorkspaceTrustControlPort,
 } from '@vybestack/llxprt-code-core';
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import type { HostGitHubBrokerOwner } from '../api/host-github-broker-owner.js';
 
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { RegistryPolicy } from '@vybestack/llxprt-code-tools';
 
 import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import { createTaskRegistration } from '../api/runtimeFactories.js';
 import { SessionToolCatalogOwner } from './session-tool-catalog-owner.js';
 
@@ -66,8 +61,6 @@ import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clien
 
 import { SessionPolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import type { Agent } from '../api/agent.js';
 import type {
   ChildTaskInheritancePort,
@@ -93,7 +86,10 @@ interface ChildTaskComposition {
   readonly subagents: SubagentDefinitionReads;
 }
 
-export class SessionClientOwner extends SessionClientAcquisitionOwner {
+export class SessionClientOwner {
+  readonly clients: SessionClientAcquisitionOwner;
+  private boundWorkspace: SessionMcpBindingPort | undefined;
+  private sessionPolicy: SessionPolicyOwner | undefined;
   readonly subscribeBucketConsent = (
     listener: (request: BucketAuthConsentRequest) => void,
   ): Unsubscribe =>
@@ -127,13 +123,13 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     keys: AgentToolKeyControl,
   ): ToolControl {
     return new ToolControl(
-      (...args) => this.openClientToolChannel(...args),
+      (...args) => this.clients.openClientToolChannel(...args),
       assertSessionAdmission,
       childDisplay,
       (...args) => this.messageBus.respondToConfirmation(...args),
       () => this.toolCatalog.listToolInfos(),
       (name) => this.toolCatalog.getToolHandle(name),
-      (names) => this.settingsOwner.setAllowedTools(names),
+      (names) => this.environment.settingsOwner.setAllowedTools(names),
       () => this.toolCatalog.describeConfiguration(),
       editorCallbacksHolder,
       displayCallbacksHolder,
@@ -153,29 +149,29 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
   ): SessionControl {
     return new SessionControl(
       {
-        storageRoot: this.config.storageRoot,
-        projectTempDir: this.config.projectTempDir,
-        projectChatsDir: this.config.projectChatsDir,
-        projectRoot: this.config.getProjectRoot(),
+        storageRoot: this.environment.config.storageRoot,
+        projectTempDir: this.environment.config.projectTempDir,
+        projectChatsDir: this.environment.config.projectChatsDir,
+        projectRoot: this.environment.config.getProjectRoot(),
         persistenceQueueBytes:
-          this.config.getSessionPersistenceQueueByteLimit(),
+          this.environment.config.getSessionPersistenceQueueByteLimit(),
       },
-      this.mediaStore,
+      this.environment.mediaStore,
       () =>
-        this.settingsOwner.readRecordingQueueLimit(
-          this.config.getSessionRecordingQueueByteLimit(),
+        this.environment.settingsOwner.readRecordingQueueLimit(
+          this.environment.config.getSessionRecordingQueueByteLimit(),
         ),
-      this.workspaceDirectories,
+      this.clients.workspaceDirectories,
       identityOwnership,
       sessionId,
-      this.nativeHistory,
+      this.clients.conversationBinding.nativeHistory,
       transition,
       closeAdmission,
-      (id) => this.prepareNewSession(id, rebuild),
+      (id) => this.clients.prepareNewSession(id, rebuild),
       readProvider,
       readModel,
-      () => this.config.getSessionId(),
-      (id) => this.config.adoptSessionId(id),
+      () => this.environment.config.getSessionId(),
+      (id) => this.environment.config.adoptSessionId(id),
     );
   }
   createHookControl(session: SessionControl) {
@@ -192,7 +188,7 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
           listener,
         ),
       () => session.getSessionId(),
-      () => this.config.getTargetDir(),
+      () => this.environment.config.getTargetDir(),
       () => session.getRecording().path ?? undefined,
     );
   }
@@ -227,7 +223,7 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
   addSessionPolicyRule(
     rule: Parameters<SessionPolicyOwner['confirmation']['addRule']>[0],
   ): void {
-    this.assertConversationOpen();
+    this.clients.getAgentClient();
     requireSessionPolicy(this.sessionPolicy).confirmation.addRule(rule);
   }
   get policyInspection() {
@@ -247,16 +243,16 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
   }
 
   readonly runImageOperation: ImageOperationRunner = async (input) => {
-    this.assertConversationOpen();
+    this.clients.getAgentClient();
     return this.images.run(input);
   };
 
   readonly closeImageAdmission = this.images.close.bind(this.images);
 
   readonly operations: Agent['sessionClient'] = {
-    fetch: (input, init) => this.fetch(input, init),
-    refreshAuth: (method) => this.refreshAuth(method),
-    publishTools: () => this.publishTools(),
+    fetch: (input, init) => this.clients.fetch(input, init),
+    refreshAuth: (method) => this.clients.refreshAuth(method),
+    publishTools: () => this.clients.publishTools(),
     runImageOperation: (input) => this.runImageOperation(input),
   };
   private closing: Promise<void> | undefined;
@@ -264,20 +260,16 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
   readonly modelRegistry: ModelRegistry;
 
   private constructor(
-    protected readonly config: Config,
-    protected readonly readTaskSchemaPolicy: () => RegistryPolicy,
-    protected readonly manager: RuntimeProviderManager,
-    protected readonly factory: SessionClientFactory,
-    protected readonly mediaStore: LocalMediaStore,
-    protected readMcpInstructions: () => string | undefined,
-    protected readonly workspacePaths: WorkspacePathOperations,
-    protected readonly settingsOwner: SessionSettingsOwner,
-    readonly contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
-    readonly tokenizerFactory: RuntimeTokenizerFactory,
-    private readonly authority: CredentialAuthority,
-    protected readonly borrowedBus?: MessageBus,
+    private readonly environment: SessionClientEnvironment,
+    factories: SessionClientFactories,
+    private readonly composition: {
+      readonly readTaskSchemaPolicy: () => RegistryPolicy;
+      readonly authority: CredentialAuthority;
+      readonly borrowedBus: MessageBus | undefined;
+    },
   ) {
-    super();
+    const { config, settingsOwner } = environment;
+    this.readMcpInstructions = environment.readMcpInstructions;
     this.hookComposition = new SessionHookComposition(
       config,
       () => settingsOwner.telemetry,
@@ -289,17 +281,26 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
           reload,
         ),
     );
-    this.initializeTextGeneration();
-    this.modelRegistry = new ModelRegistry(this.fetch);
-    manager.bindModelRegistry?.(this.modelRegistry);
+    this.modelRegistry = new ModelRegistry(factories.manager.fetchNetwork);
+    factories.manager.bindModelRegistry?.(this.modelRegistry);
     this.toolCatalog = new SessionToolCatalogOwner(
       config,
-      this.readTaskSchemaPolicy,
-      () => this.settingsOwner.readToolExecutionPolicy(),
-      this.fetch,
+      composition.readTaskSchemaPolicy,
+      () => settingsOwner.readToolExecutionPolicy(),
+      factories.manager.fetchNetwork,
     );
-    this.initializeClientRuntime();
+    this.clients = new SessionClientAcquisitionOwner(
+      { ...environment, readMcpInstructions: () => this.readMcpInstructions() },
+      factories,
+      {
+        toolCatalog: this.toolCatalog,
+        modelRegistry: this.modelRegistry,
+        readWorkspace: () => this.boundWorkspace,
+        readPolicy: () => this.sessionPolicy,
+      },
+    );
   }
+  private readMcpInstructions: () => string | undefined;
 
   /**
    * Acquires and binds the initial client. Binding is fallible and a failed
@@ -308,34 +309,16 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
    * A disposal failure is joined to the binding error, never substituted.
    */
   static async create(
-    config: Config,
-    readTaskSchemaPolicy: () => RegistryPolicy,
-    manager: RuntimeProviderManager,
-    factory: SessionClientFactory,
-    mediaStore: LocalMediaStore,
-    readMcpInstructions: () => string | undefined,
-    workspacePaths: WorkspacePathOperations,
-    settingsOwner: SessionSettingsOwner,
-    contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
-    tokenizerFactory: RuntimeTokenizerFactory,
-    authority: CredentialAuthority,
-    borrowedBus?: MessageBus,
+    environment: SessionClientEnvironment,
+    factories: SessionClientFactories,
+    composition: {
+      readonly readTaskSchemaPolicy: () => RegistryPolicy;
+      readonly authority: CredentialAuthority;
+      readonly borrowedBus: MessageBus | undefined;
+    },
   ): Promise<SessionClientOwner> {
-    const owner = new SessionClientOwner(
-      config,
-      readTaskSchemaPolicy,
-      manager,
-      factory,
-      mediaStore,
-      readMcpInstructions,
-      workspacePaths,
-      settingsOwner,
-      contentGeneratorFactory,
-      tokenizerFactory,
-      authority,
-      borrowedBus,
-    );
-    await owner.initializeInitialClientBinding();
+    const owner = new SessionClientOwner(environment, factories, composition);
+    await owner.clients.initializeInitialClientBinding();
     return owner;
   }
   private requestInteractiveAuth: InteractiveAuthPromptOperation | undefined;
@@ -344,8 +327,10 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
   }
 
   bindWorkspaceInstructions(workspace: WorkspaceMemoryOwner): void {
-    this.instructions.bindWorkspace(workspace, this.config, (instructions) =>
-      this.publishInstructions(instructions),
+    this.clients.instructions.bindWorkspace(
+      workspace,
+      this.environment.config,
+      (instructions) => this.clients.publishInstructions(instructions),
     );
   }
 
@@ -358,11 +343,11 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     if (this.boundWorkspace !== undefined)
       throw new Error('Session already has workspace policy composition');
     this.boundWorkspace = workspace;
-    this.client.bindIdeContext?.(
+    this.clients.currentClient.bindIdeContext?.(
       () => workspace.ide.readContext(),
       () => workspace.ide.isEnabled(),
     );
-    this.bindDefinitionReads(profiles, subagents);
+    this.clients.bindDefinitionReads(profiles, subagents);
     this.bindWorkspaceInstructions(workspace.workspaceMemory);
     const sessionApproval = this.bindSessionApproval(workspace);
     const policy = requireSessionPolicy(this.sessionPolicy);
@@ -391,25 +376,27 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
           }),
           summarize: bindToolOutputSummary(
             () => {
-              this.assertConversationOpen();
-              return this.client;
+              this.clients.getAgentClient();
+              return this.clients.currentClient;
             },
-            () => this.config.getUtilityModel(),
+            () => this.environment.config.getUtilityModel(),
           ),
           approval: sessionApproval,
-          telemetry: this.settingsOwner.telemetry,
+          telemetry: this.environment.settingsOwner.telemetry,
         },
       );
     workspace.bindSessionClient(
-      this.config,
+      this.environment.config,
       this.mcpBindingToken,
-      () => this.client,
-      () => this.publishTools(),
-      () => this.publishInstructions(this.instructionReads),
+      () => this.clients.currentClient,
+      () => this.clients.publishTools(),
+      () => this.clients.publishInstructions(this.clients.instructionReads),
       (read, release) => this.bindMcpInstructions(read, release),
       () =>
-        acceptSkillPublication(this.client, this.toolCatalog, (operation) =>
-          this.work.enqueueAccepted(operation),
+        acceptSkillPublication(
+          this.clients.currentClient,
+          this.toolCatalog,
+          (operation) => this.clients.work.enqueueAccepted(operation),
         ),
     );
   }
@@ -420,19 +407,21 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     const { workspace, policy, profiles, subagents } = composition;
     const bus = policy.messageBus;
     const orchestrator = new SubagentOrchestrator({
-      readSessionId: () => this.config.getSessionId(),
+      readSessionId: () => this.environment.config.getSessionId(),
       profileManager: profiles,
       subagentManager: subagents,
-      readRunPolicy: () => this.settingsOwner.readSubagentRunPolicy(),
+      readRunPolicy: () =>
+        this.environment.settingsOwner.readSubagentRunPolicy(),
       assembleChild: (data) => {
-        if (this.admissionClosed)
+        if (this.clients.admissionClosed)
           throw new Error('Session client admission is closed');
         return new ChildAgentAssembly(
           data,
           {
-            authority: this.authority,
-            createChildSettings: () => this.settingsOwner.createChildStore(),
-            foregroundConfig: this.config,
+            authority: this.composition.authority,
+            createChildSettings: () =>
+              this.environment.settingsOwner.createChildStore(),
+            foregroundConfig: this.environment.config,
           },
           {
             runtimeLoader: loadAgentRuntime,
@@ -444,8 +433,8 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
             requestInteractiveAuth: this.requestInteractiveAuth,
             profileReads: profiles,
             subagentReads: subagents,
-            telemetry: this.settingsOwner.telemetry,
-            instructions: this.instructionReads,
+            telemetry: this.environment.settingsOwner.telemetry,
+            instructions: this.clients.instructionReads,
             workspacePaths: workspace.workspacePaths,
             readMcpInstructions: workspace.readInstructions,
             trust: workspace.trust,
@@ -455,10 +444,10 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
         ).assemble();
       },
     });
-    return createTaskRegistration(this.config, {
+    return createTaskRegistration(this.environment.config, {
       launchChild: orchestrator.launch.bind(orchestrator),
       messageBus: bus,
-      readTaskPolicy: () => this.settingsOwner.readTaskPolicy(),
+      readTaskPolicy: () => this.environment.settingsOwner.readTaskPolicy(),
       readGovernance: () => this.toolCatalog.readGovernance(),
       toolRegistry: this.toolCatalog.selection,
     });
@@ -466,16 +455,19 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
 
   private bindSessionApproval(workspace: SessionPolicyCompositionPort) {
     const policy =
-      this.borrowedBus === undefined
-        ? new SessionPolicyOwner(workspace.policyOwner.workspace, this.config)
+      this.composition.borrowedBus === undefined
+        ? new SessionPolicyOwner(
+            workspace.policyOwner.workspace,
+            this.environment.config,
+          )
         : workspace.policyOwner.session;
-    this.ownsSessionPolicy = this.borrowedBus === undefined;
+    this.ownsSessionPolicy = this.composition.borrowedBus === undefined;
     this.sessionPolicy = policy;
     return this.policyWrites.bind(
       policy,
       (...args) => workspace.policyOwner.session.decisions.evaluate(...args),
       () => {
-        this.assertConversationOpen();
+        this.clients.getAgentClient();
       },
     );
   }
@@ -495,7 +487,7 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     read: () => string | undefined,
     release: () => void,
   ): void {
-    this.assertConversationOpen();
+    this.clients.getAgentClient();
     if (this.releaseMcpBinding !== undefined)
       throw new Error('Session client already has an MCP binding');
     this.readMcpInstructions = read;
@@ -503,8 +495,12 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
   }
 
   recordCompletedToolCalls(completed: readonly CompletedToolCall[]): void {
-    this.assertConversationOpen();
-    recordToolCompletions(this.client, () => this.config.getModel(), completed);
+    this.clients.getAgentClient();
+    recordToolCompletions(
+      this.clients.currentClient,
+      () => this.environment.config.getModel(),
+      completed,
+    );
   }
 
   async initializeTools(): Promise<void> {
@@ -514,8 +510,8 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
   }
 
   dispose(): Promise<void> {
-    this.closeAdmission();
-    const executionClosing = this.disposeSessionExecution();
+    this.clients.closeAdmission();
+    const executionClosing = this.clients.disposeSessionExecution();
     void executionClosing?.catch(() => undefined);
     this.closeHookAdmission();
     this.githubOwner?.closeAdmission();
@@ -523,7 +519,7 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     void imagesClosing.catch(() => undefined);
     const toolsClosing = this.toolCatalog.closeAdmission();
     void toolsClosing.catch(() => undefined);
-    const auxiliaryClosing = this.closeAuxiliaryAdmission();
+    const auxiliaryClosing = this.clients.closeAuxiliaryAdmission();
     if (this.closing !== undefined) return this.closing;
     const bindingClosing = Promise.resolve().then(() =>
       this.releaseMcpBinding?.(),
@@ -534,23 +530,23 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
       executionClosing,
     ]).then(async (binding) => {
       const hooks = await Promise.allSettled([this.disposeHooks()]);
-      await this.work.join();
+      await this.clients.work.join();
       const instructions = await Promise.allSettled([
-        this.instructions.dispose(),
+        this.clients.instructions.dispose(),
       ]);
       const services = await Promise.allSettled([
         this.toolCatalog.dispose(),
         this.githubOwner?.dispose(),
         imagesClosing,
       ]);
-      const clients = await this.settleClientReleases();
+      const clients = await this.clients.settleClientReleases();
       this.modelRegistry.dispose();
       const writes = await this.policyWrites.settleWrites();
       const policy = await Promise.allSettled([
         this.ownsSessionPolicy ? this.sessionPolicy?.dispose() : undefined,
       ]);
       finishCleanup(
-        await Promise.allSettled([this.closeProviderLifetime()]),
+        await Promise.allSettled([this.clients.closeProviderLifetime()]),
         hooks,
         instructions,
         services,

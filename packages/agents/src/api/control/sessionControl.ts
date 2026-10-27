@@ -119,10 +119,8 @@ export interface SessionRecordingPaths {
   readonly projectRoot: string;
   readonly persistenceQueueBytes: number;
 }
-export class SessionControl
-  extends SessionRecordingLifetime
-  implements AgentSessionControl
-{
+export class SessionControl implements AgentSessionControl {
+  private readonly recordingLifetime: SessionRecordingLifetime;
   /**
    * Promise-chain mutex (FINDING A1) serializing the state-mutating public
    * operations (resume, setRecording enable/disable, dispose) so they never
@@ -150,7 +148,7 @@ export class SessionControl
     private readonly directories: () => readonly string[],
     private readonly sessionIdentityOwnership: 'config' | 'facade',
     sessionId: () => string,
-    protected readonly nativeHistory: SessionNativeHistory,
+    private readonly nativeHistory: SessionNativeHistory,
     private readonly withSessionTransition: (
       operation: () => Promise<void>,
     ) => Promise<void>,
@@ -164,7 +162,6 @@ export class SessionControl
     private readonly adoptOwnedSessionId: (sessionId: string) => void,
     persistence?: AgentSessionPersistence,
   ) {
-    super();
     const selectedMedia = mediaStore;
     if (selectedMedia === undefined)
       throw new Error('Agent client requires explicit media store');
@@ -177,7 +174,11 @@ export class SessionControl
         selectedMedia,
         paths.persistenceQueueBytes,
       );
-    this.recordingSessionId = sessionId();
+    this.recordingLifetime = new SessionRecordingLifetime(
+      nativeHistory,
+      sessionId(),
+      this,
+    );
   }
 
   private getCheckpointService(): CheckpointService {
@@ -260,7 +261,7 @@ export class SessionControl
           options?.startup,
           options?.onStartupRestoreFailure,
         );
-      await this.ensureSubscribed();
+      await this.recordingLifetime.ensureSubscribed();
       const targets = await this.continueTargets();
       const resolved = SessionDiscovery.resolveContinueRef(target, targets);
       if ('error' in resolved) {
@@ -309,7 +310,7 @@ export class SessionControl
     startup = false,
     onStartupRestoreFailure?: (sessionId: string, reason: string) => void,
   ): Promise<readonly IContent[]> {
-    await this.ensureSubscribed();
+    await this.recordingLifetime.ensureSubscribed();
     const request: ResumeRequest = {
       continueRef: target === 'latest' ? CONTINUE_LATEST : target,
       projectHash: this.persistenceProjectHash(),
@@ -343,11 +344,12 @@ export class SessionControl
     startup = false,
     onStartupRestoreFailure?: (sessionId: string, reason: string) => void,
   ): Promise<void> {
-    const priorRecording = this.recording;
-    const priorIntegration = this.integration;
-    const priorLockHandle = this.currentLockHandle;
-    const priorNeedsSubscribe = this.integrationNeedsSubscribe;
-    const priorSessionId = this.recordingSessionId;
+    const priorRecording = this.recordingLifetime.recording;
+    const priorIntegration = this.recordingLifetime.integration;
+    const priorLockHandle = this.recordingLifetime.currentLockHandle;
+    const priorNeedsSubscribe =
+      this.recordingLifetime.integrationNeedsSubscribe;
+    const priorSessionId = this.recordingLifetime.recordingSessionId;
     const { priorHistory, integration } = await this.prepareRecording(
       recording,
       lockHandle,
@@ -373,10 +375,10 @@ export class SessionControl
           adoptionAttempted = true;
         },
       );
-      this.recording = recording;
-      this.integration = integration;
-      this.currentLockHandle = lockHandle;
-      this.recordingSessionId = recording.getSessionId();
+      this.recordingLifetime.recording = recording;
+      this.recordingLifetime.integration = integration;
+      this.recordingLifetime.currentLockHandle = lockHandle;
+      this.recordingLifetime.recordingSessionId = recording.getSessionId();
     } catch (error: unknown) {
       const failures = await rollbackPreparedSessionArtifacts({
         integration,
@@ -384,11 +386,11 @@ export class SessionControl
         lockHandle,
       });
       await this.undoIdentity(priorSessionId, adoptionAttempted, failures);
-      this.recording = priorRecording;
-      this.integration = priorIntegration;
-      this.integrationNeedsSubscribe = priorNeedsSubscribe;
-      this.currentLockHandle = priorLockHandle;
-      await this.restoreRecordingHistory(
+      this.recordingLifetime.recording = priorRecording;
+      this.recordingLifetime.integration = priorIntegration;
+      this.recordingLifetime.integrationNeedsSubscribe = priorNeedsSubscribe;
+      this.recordingLifetime.currentLockHandle = priorLockHandle;
+      await this.recordingLifetime.restoreRecordingHistory(
         priorHistory,
         startup,
         historyReplacementAttempted,
@@ -463,7 +465,8 @@ export class SessionControl
     adoptionStarted: () => void,
   ): void {
     integration.rememberRecordedHistory(history);
-    this.integrationNeedsSubscribe = !this.attachHistory(integration);
+    this.recordingLifetime.integrationNeedsSubscribe =
+      !this.recordingLifetime.attachHistory(integration);
     adoptRecordingSessionId(
       this.readOwnedSessionId,
       this.adoptOwnedSessionId,
@@ -476,9 +479,9 @@ export class SessionControl
 
   flushRecording = (event?: SessionRecordingEvent): Promise<void> =>
     this.runExclusive(async () => {
-      await this.ensureSubscribed();
-      recordSessionEvent(this.integration, event);
-      await this.integration?.flushAtTurnBoundary();
+      await this.recordingLifetime.ensureSubscribed();
+      recordSessionEvent(this.recordingLifetime.integration, event);
+      await this.recordingLifetime.integration?.flushAtTurnBoundary();
     });
 
   recordRecordingEvent = this.flushRecording;
@@ -488,12 +491,12 @@ export class SessionControl
     options?: { readonly overwrite?: boolean },
   ): Promise<CheckpointInfo> {
     return this.runExclusive(async () => {
-      await this.ensureSubscribed();
-      if (this.recording === null) {
+      await this.recordingLifetime.ensureSubscribed();
+      if (this.recordingLifetime.recording === null) {
         await this.startRecording();
       }
-      const recording = this.requireRecording();
-      await this.integration?.flushAtTurnBoundary();
+      const recording = this.recordingLifetime.requireRecording();
+      await this.recordingLifetime.integration?.flushAtTurnBoundary();
       const created = await this.getCheckpointService().createCheckpoint(
         recording,
         this.persistenceProjectHash(),
@@ -511,7 +514,7 @@ export class SessionControl
 
   async forkFromCheckpoint(ref: string): Promise<SessionInfo> {
     return this.runExclusive(async () => {
-      await this.ensureSubscribed();
+      await this.recordingLifetime.ensureSubscribed();
       const target = await this.resolveCheckpointTarget(ref);
       return this.forkTarget(target);
     });
@@ -534,7 +537,7 @@ export class SessionControl
     await this.runExclusive(async () =>
       this.getCheckpointService().renameCheckpointTarget(
         await this.resolveCheckpointTarget(ref),
-        this.recording,
+        this.recordingLifetime.recording,
         this.persistenceProjectHash(),
         this.chatsDir(),
         name,
@@ -547,7 +550,7 @@ export class SessionControl
     await this.runExclusive(async () =>
       this.getCheckpointService().deleteCheckpointTarget(
         await this.resolveCheckpointTarget(ref),
-        this.recording,
+        this.recordingLifetime.recording,
         this.persistenceProjectHash(),
         this.chatsDir(),
       ),
@@ -559,8 +562,9 @@ export class SessionControl
     options?: { readonly overwrite?: boolean },
   ): Promise<void> {
     await this.runExclusive(async () => {
-      if (this.recording === null) await this.startRecording();
-      const recording = this.requireRecording();
+      if (this.recordingLifetime.recording === null)
+        await this.startRecording();
+      const recording = this.recordingLifetime.requireRecording();
       const normalizedName = name.trim();
       const replay = await this.replayRecording(recording);
       if (replay.sessionName === normalizedName) return;
@@ -605,7 +609,7 @@ export class SessionControl
       await deleteDiscoveredSession(
         ref,
         await this.continueTargets(),
-        this.recording?.getSessionId(),
+        this.recordingLifetime.recording?.getSessionId(),
         this.chatsDir(),
         this.persistenceProjectHash(),
       );
@@ -620,8 +624,8 @@ export class SessionControl
         await this.discoverContinueTargets(),
         this.persistenceProjectHash(),
         this.mediaStore,
-        this.recording,
-        this.integration,
+        this.recordingLifetime.recording,
+        this.recordingLifetime.integration,
       ),
     );
   }
@@ -646,14 +650,14 @@ export class SessionControl
     readonly itemsRemoved: number;
   }> {
     return this.runExclusive(async () => {
-      await this.ensureSubscribed();
+      await this.recordingLifetime.ensureSubscribed();
       return restoreOwnerTurns(
         turns,
         this.nativeHistory,
-        this.requireRecording(),
-        this.integration,
+        this.recordingLifetime.requireRecording(),
+        this.recordingLifetime.integration,
         this,
-        () => this.resubscribeIntegration(),
+        () => this.recordingLifetime.resubscribeIntegration(),
       );
     });
   }
@@ -669,7 +673,7 @@ export class SessionControl
   readonly replaceHistory = (history: readonly IContent[]): Promise<void> =>
     this.runExclusive(() =>
       this.nativeHistory.replaceNativeHistory(history, this, () =>
-        this.ensureSubscribed(),
+        this.recordingLifetime.ensureSubscribed(),
       ),
     );
 
@@ -701,7 +705,7 @@ export class SessionControl
   getHistory = (): Promise<readonly IContent[]> =>
     this.runExclusive(() => this.nativeHistory.getHistory());
 
-  getSessionId = (): string => this.recordingSessionId;
+  getSessionId = (): string => this.recordingLifetime.recordingSessionId;
 
   startNewSession = (): Promise<void> =>
     this.withSessionTransition(() =>
@@ -737,14 +741,14 @@ export class SessionControl
         candidate.attachRecording(integration, this);
       }
       retirementStarted = true;
-      await this.teardownActiveSession();
+      await this.recordingLifetime.teardownActiveSession();
       await candidate.retire();
       candidate.publish();
       if (ownsConfig) this.adoptOwnedSessionId(nextSessionId);
-      this.recordingSessionId = nextSessionId;
+      this.recordingLifetime.recordingSessionId = nextSessionId;
       this.adoptedPath = null;
-      this.recording = recording;
-      this.integration = integration;
+      this.recordingLifetime.recording = recording;
+      this.recordingLifetime.integration = integration;
     } catch (error) {
       if (retirementStarted) {
         this.closeAdmission();
@@ -769,11 +773,11 @@ export class SessionControl
     await this.runExclusive(() =>
       clearOwnerHistory(
         this.nativeHistory,
-        this.requireRecording(),
-        this.integration,
+        this.recordingLifetime.requireRecording(),
+        this.recordingLifetime.integration,
         this,
         this.mediaStore,
-        () => this.resubscribeIntegration(),
+        () => this.recordingLifetime.resubscribeIntegration(),
       ),
     );
   }
@@ -795,7 +799,7 @@ export class SessionControl
         await this.startRecording();
         return;
       }
-      await this.teardownActiveSession();
+      await this.recordingLifetime.teardownActiveSession();
     });
   }
 
@@ -807,18 +811,21 @@ export class SessionControl
    * @requirement:REQ-010
    */
   getRecording(): SessionRecordingState {
-    return readRecordingState(this.recording, RECORDING_FORMAT);
+    return readRecordingState(
+      this.recordingLifetime.recording,
+      RECORDING_FORMAT,
+    );
   }
 
   getRecordingTitle(): string | null | undefined {
-    return this.recording?.getSessionMetadataTitle();
+    return this.recordingLifetime.recording?.getSessionMetadataTitle();
   }
 
   async recordRecordingTitle(title: string | null): Promise<void> {
     await this.runExclusive(async () => {
-      if (this.recording?.isActive() !== true) return;
-      this.recording.recordSessionMetadata(title);
-      await this.recording.flush();
+      if (this.recordingLifetime.recording?.isActive() !== true) return;
+      this.recordingLifetime.recording.recordSessionMetadata(title);
+      await this.recordingLifetime.recording.flush();
     });
   }
 
@@ -858,12 +865,16 @@ export class SessionControl
     startup = false,
     onStartupRestoreFailure?: (sessionId: string, reason: string) => void,
   ): Promise<SessionInfo> {
-    if (this.recording?.getSessionId() === target.source.sessionId) {
-      await this.recording.flush();
+    if (
+      this.recordingLifetime.recording?.getSessionId() ===
+      target.source.sessionId
+    ) {
+      await this.recordingLifetime.recording.flush();
     }
     const activeSource =
-      this.recording?.getSessionId() === target.source.sessionId
-        ? this.recording
+      this.recordingLifetime.recording?.getSessionId() ===
+      target.source.sessionId
+        ? this.recordingLifetime.recording
         : undefined;
     const result = await new SessionTransitionService({
       mediaStore: this.mediaStore,
@@ -890,7 +901,7 @@ export class SessionControl
 
   private async currentSessionInfo(): Promise<SessionInfo> {
     return currentSessionInfo(
-      this.requireRecording(),
+      this.recordingLifetime.requireRecording(),
       await this.continueTargets(),
       this.persistenceProjectHash(),
       this.mediaStore,
@@ -931,10 +942,10 @@ export class SessionControl
     // FINDING A3: re-attach any previously-dead integration before replacing it,
     // so a pending-subscribe flag from an earlier null-history enable does not
     // survive across the fresh service swap.
-    await this.ensureSubscribed();
-    await this.teardownActiveSession();
+    await this.recordingLifetime.ensureSubscribed();
+    await this.recordingLifetime.teardownActiveSession();
     const service = await SessionRecordingService.createLocked({
-      sessionId: this.recordingSessionId,
+      sessionId: this.recordingLifetime.recordingSessionId,
       projectHash: this.persistenceProjectHash(),
       chatsDir: this.chatsDir(),
       workspaceDirs: this.workspaceDirs(),
@@ -962,10 +973,10 @@ export class SessionControl
       // HistoryService (set before the chat starts) reaches the service later,
       // when the chat starts; the integration must treat it as recorded then.
       integration.rememberRecordedHistory(history);
-      const subscribed = this.attachHistory(integration);
-      this.recording = service;
-      this.integration = integration;
-      this.integrationNeedsSubscribe = !subscribed;
+      const subscribed = this.recordingLifetime.attachHistory(integration);
+      this.recordingLifetime.recording = service;
+      this.recordingLifetime.integration = integration;
+      this.recordingLifetime.integrationNeedsSubscribe = !subscribed;
     } catch (error: unknown) {
       const cleanupFailures = await cleanupSessionResources(
         integration,
@@ -986,7 +997,11 @@ export class SessionControl
     history: readonly IContent[],
     frontier: SemanticMediaPurgeFrontier,
   ): Promise<void> {
-    return persistPurge(this.requireRecording(), history, frontier);
+    return persistPurge(
+      this.recordingLifetime.requireRecording(),
+      history,
+      frontier,
+    );
   }
 
   // ─── Surface teardown ──────────────────────────────────────────────────────
@@ -1010,7 +1025,7 @@ export class SessionControl
     // races a concurrent resume()/setRecording() adopting resources it is
     // releasing (double-dispose / released-then-adopted lock).
     return (this.disposalPromise ??= this.opChain
-      .then(() => this.teardownActiveSession())
+      .then(() => this.recordingLifetime.teardownActiveSession())
       .finally(() => this.persistence.close()));
   }
 

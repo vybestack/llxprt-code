@@ -56,14 +56,18 @@ function createGate(): Gate {
 }
 
 function createOwnerWithClient(
-  builtConfig: Parameters<typeof SessionClientOwner.create>[0],
+  builtConfig: Parameters<typeof SessionClientOwner.create>[0]['config'],
   builtSettings: SettingsService,
-  builtManager: Parameters<typeof SessionClientOwner.create>[2],
+  builtManager: Parameters<typeof SessionClientOwner.create>[1]['manager'],
   builtMedia: SessionMediaOwner,
   builtMcp: McpRuntimeOwner,
   builtSettingsOwner: SessionSettingsOwner,
-  builtContent: NonNullable<Parameters<typeof SessionClientOwner.create>[8]>,
-  builtTokenizer: NonNullable<Parameters<typeof SessionClientOwner.create>[9]>,
+  builtContent: NonNullable<
+    Parameters<typeof SessionClientOwner.create>[1]['contentGeneratorFactory']
+  >,
+  builtTokenizer: NonNullable<
+    Parameters<typeof SessionClientOwner.create>[1]['tokenizerFactory']
+  >,
   createClient: (
     ...args: ConstructorParameters<typeof AgentClient>
   ) => AgentClient,
@@ -218,7 +222,7 @@ describe('Factory-created session client acquisition', () => {
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();
-      await builtOwner.refreshAuth();
+      await builtOwner.clients.refreshAuth();
       await (await currentOwnerClient(builtOwner)).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
@@ -406,7 +410,7 @@ describe('Factory-created session client acquisition', () => {
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();
-      await builtOwner.refreshAuth();
+      await builtOwner.clients.refreshAuth();
       await (await currentOwnerClient(builtOwner)).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);

@@ -182,17 +182,19 @@ function logger(): DebugLogger {
   return new DebugLogger('llxprt:agents:session-control');
 }
 
-export abstract class SessionRecordingLifetime {
-  protected abstract readonly nativeHistory: SessionNativeHistory;
-
-  protected recordingSessionId!: string;
+export class SessionRecordingLifetime {
+  constructor(
+    private readonly nativeHistory: SessionNativeHistory,
+    public recordingSessionId: string,
+    private readonly origin: object,
+  ) {}
   /**
    * The live recording service when recording is enabled, or null when it is
    * disabled. getRecording reflects this directly.
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  protected recording: SessionRecordingService | null = null;
+  recording: SessionRecordingService | null = null;
 
   /**
    * The live RecordingIntegration bridging the client's HistoryService
@@ -205,7 +207,7 @@ export abstract class SessionRecordingLifetime {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  protected integration: RecordingIntegration | null = null;
+  integration: RecordingIntegration | null = null;
 
   /**
    * The on-disk session lock acquired by a successful resume, or null when no
@@ -214,7 +216,7 @@ export abstract class SessionRecordingLifetime {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  protected currentLockHandle: LockHandle | null = null;
+  currentLockHandle: LockHandle | null = null;
 
   /**
    * True when {@link integration} is committed as the live integration but its
@@ -226,7 +228,7 @@ export abstract class SessionRecordingLifetime {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  protected integrationNeedsSubscribe = false;
+  integrationNeedsSubscribe = false;
 
   /**
    * Re-attempts a previously-deferred integration subscription (FINDING A3).
@@ -242,9 +244,9 @@ export abstract class SessionRecordingLifetime {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  protected recordingHistoryVersion = -1;
+  recordingHistoryVersion = -1;
 
-  protected async ensureSubscribed(): Promise<void> {
+  async ensureSubscribed(): Promise<void> {
     if (
       !this.integrationNeedsSubscribe &&
       this.recordingHistoryVersion === this.nativeHistory.historyRevision()
@@ -260,7 +262,7 @@ export abstract class SessionRecordingLifetime {
       return;
     }
     try {
-      this.nativeHistory.subscribeRecording(integration, this);
+      this.nativeHistory.subscribeRecording(integration, this.origin);
       this.recordingHistoryVersion = this.nativeHistory.historyRevision();
       this.integrationNeedsSubscribe = false;
     } catch (error) {
@@ -284,11 +286,11 @@ export abstract class SessionRecordingLifetime {
     }
   }
 
-  protected requireRecording(): SessionRecordingService {
+  requireRecording(): SessionRecordingService {
     return requireActiveRecording(this.recording);
   }
 
-  protected resubscribeIntegration(): Error | undefined {
+  resubscribeIntegration(): Error | undefined {
     const integration = this.integration;
     if (integration === null) return undefined;
     try {
@@ -313,8 +315,8 @@ export abstract class SessionRecordingLifetime {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  protected attachHistory(integration: RecordingIntegration): boolean {
-    if (this.nativeHistory.subscribeRecording(integration, this)) {
+  attachHistory(integration: RecordingIntegration): boolean {
+    if (this.nativeHistory.subscribeRecording(integration, this.origin)) {
       this.recordingHistoryVersion = this.nativeHistory.historyRevision();
       return true;
     }
@@ -339,7 +341,7 @@ export abstract class SessionRecordingLifetime {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  protected async releaseRecording(): Promise<void> {
+  async releaseRecording(): Promise<void> {
     this.recordingHistoryVersion = -1;
     const integration = this.integration;
     const service = this.recording;
@@ -359,7 +361,7 @@ export abstract class SessionRecordingLifetime {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  protected async releaseLockHandle(): Promise<void> {
+  async releaseLockHandle(): Promise<void> {
     const handle = this.currentLockHandle;
     if (handle === null) {
       return;
@@ -376,7 +378,7 @@ export abstract class SessionRecordingLifetime {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  protected async teardownActiveSession(): Promise<void> {
+  async teardownActiveSession(): Promise<void> {
     const errors: unknown[] = [];
     await captureRollbackFailure(errors, () => this.releaseRecording());
     await captureRollbackFailure(errors, () => this.releaseLockHandle());
@@ -385,7 +387,7 @@ export abstract class SessionRecordingLifetime {
       throw new AggregateError(errors, 'Session teardown failed');
     }
   }
-  protected async restoreRecordingHistory(
+  async restoreRecordingHistory(
     priorHistory: readonly IContent[],
     startup: boolean,
     replacementAttempted: boolean,

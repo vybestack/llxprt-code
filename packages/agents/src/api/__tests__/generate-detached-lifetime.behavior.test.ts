@@ -31,7 +31,8 @@ const generate = async (
   owner: SessionClientOwner,
   input: string,
   options?: GenerateOptions,
-): Promise<string> => owner.generateText(input, options, generationRecording);
+): Promise<string> =>
+  owner.clients.generateText(input, options, generationRecording);
 
 describe('Agent.generate lifetimes', () => {
   useRecordingPrompts();
@@ -440,7 +441,7 @@ describe('Agent.generate lifetimes', () => {
           await entered.promise;
           try {
             settingsOwner.chooseModel('replacement-model');
-            const replacement = owner.refreshAuth();
+            const replacement = owner.clients.refreshAuth();
             await ready.promise;
             held.release();
             expect(await pending).toBe('turn one reply');

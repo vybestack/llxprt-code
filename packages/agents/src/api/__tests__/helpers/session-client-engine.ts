@@ -232,7 +232,7 @@ export async function openSessionClientEngine(
     );
     await mcp.initialize();
     await owner.initializeTools();
-    await owner.refreshAuth();
+    await owner.clients.refreshAuth();
     const clients = ownerClients(owner);
     const client = clients[clients.length - 1];
     await client.startChat();

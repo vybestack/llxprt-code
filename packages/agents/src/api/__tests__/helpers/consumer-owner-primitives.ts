@@ -87,14 +87,22 @@ export function createConsumerContentGenerator(): RuntimeContentGeneratorFactory
 export function createConsumerSessionClient(
   config: Config,
   settings: SettingsService,
-  manager: Parameters<typeof SessionClientOwner.create>[2],
-  clientFactory: Parameters<typeof SessionClientOwner.create>[3],
-  media: Parameters<typeof SessionClientOwner.create>[4],
-  instructions: Parameters<typeof SessionClientOwner.create>[5],
-  workspacePaths: Parameters<typeof SessionClientOwner.create>[6],
+  manager: Parameters<typeof SessionClientOwner.create>[1]['manager'],
+  clientFactory: Parameters<typeof SessionClientOwner.create>[1]['factory'],
+  media: Parameters<typeof SessionClientOwner.create>[0]['mediaStore'],
+  instructions: Parameters<
+    typeof SessionClientOwner.create
+  >[0]['readMcpInstructions'],
+  workspacePaths: Parameters<
+    typeof SessionClientOwner.create
+  >[0]['workspacePaths'],
   settingsOwner: SessionSettingsOwner,
-  contentGenerator: Parameters<typeof SessionClientOwner.create>[8],
-  tokenizer: Parameters<typeof SessionClientOwner.create>[9],
+  contentGenerator: Parameters<
+    typeof SessionClientOwner.create
+  >[1]['contentGeneratorFactory'],
+  tokenizer: Parameters<
+    typeof SessionClientOwner.create
+  >[1]['tokenizerFactory'],
 ): Promise<SessionClientOwner> {
   return createCapturedSessionOwner(
     config,

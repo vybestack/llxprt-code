@@ -302,11 +302,11 @@ export class ChildAgentAssembly {
       },
     );
     this.acquired.push(() => this.client.dispose());
-    this.client.bindDefinitionReads(
+    this.client.clients.bindDefinitionReads(
       this.operations.profileReads,
       this.operations.subagentReads,
     );
-    this.client.bindInheritedInstructions(this.operations.instructions);
+    this.client.clients.bindInheritedInstructions(this.operations.instructions);
     this.client.bindHooks(
       this.operations.hooks,
       this.operations.messageBus,
@@ -356,7 +356,7 @@ export class ChildAgentAssembly {
       this.oauth,
       this.settingsOwner,
       () => 'agent',
-      (method) => this.client.refreshAuth(method),
+      (method) => this.client.clients.refreshAuth(method),
       this.operations.profileReads,
       this.data.activationProfile,
       this.data.subagent.profile,

@@ -100,7 +100,7 @@ export class ForegroundAssembly {
     const model =
       this.#settings.settingsOwner.readSelectedModel() ??
       this.#config.getModel();
-    await this.#transfer.sessionClient.tokenizerFactory.prepareTokenizer?.(
+    await this.#transfer.sessionClient.clients.factories.tokenizerFactory.prepareTokenizer?.(
       provider,
       model,
     );
@@ -128,7 +128,7 @@ export class ForegroundAssembly {
     try {
       const editors = { editorCallbacks: {} };
       sessionClient.toolCatalog.bindChildExecution(child, tasks, shell);
-      sessionClient.initializeExecution(
+      sessionClient.clients.initializeExecution(
         withChildToolDisplay(
           publication.scheduler ??
             ((options) => new CoreToolScheduler(options)),
@@ -139,7 +139,7 @@ export class ForegroundAssembly {
         undefined,
         createStableDisplayCallbacks(editors, display),
       );
-      sessionClient.initializeConversation();
+      sessionClient.clients.conversationBinding.initializeConversation();
       return publishLeafFacade(
         mcp,
         this.#config,

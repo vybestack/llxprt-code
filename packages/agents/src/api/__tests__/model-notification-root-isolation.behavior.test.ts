@@ -160,7 +160,7 @@ describe('session-owned model notifications', () => {
       aCallerTokenizer,
     );
     aCallerOwner.bindMcpRuntime(aCallerMcp);
-    aCallerOwner.bindProviderFiles(aCallerFiles, (provider) =>
+    aCallerOwner.clients.bindProviderFiles(aCallerFiles, (provider) =>
       aCallerOAuth.composeRetryOperations(provider),
     );
     aCallerOwner.bindHooks();
@@ -250,12 +250,12 @@ describe('session-owned model notifications', () => {
         aCallerManager,
         aCallerOAuth,
         () => 'agent',
-        () => aCallerOwner.refreshAuth(),
+        () => aCallerOwner.clients.refreshAuth(),
         aCallerSettingsOwner,
       ),
       aCallerSettings,
       aCallerManager,
-      (method) => aCallerOwner.refreshAuth(method),
+      (method) => aCallerOwner.clients.refreshAuth(method),
       assembleModelSelection(aCallerSettingsOwner),
     );
     requireCallerActivation(activation);
@@ -307,7 +307,7 @@ describe('session-owned model notifications', () => {
       aCallerManager,
       aProfileOAuth,
       () => undefined,
-      () => aCallerOwner.refreshAuth(),
+      () => aCallerOwner.clients.refreshAuth(),
       aCallerSettingsOwner,
     );
     assembleProfileApplication(
@@ -385,7 +385,7 @@ describe('session-owned model notifications', () => {
       bCallerTokenizer,
     );
     bCallerOwner.bindMcpRuntime(bCallerMcp);
-    bCallerOwner.bindProviderFiles(bCallerFiles, (provider) =>
+    bCallerOwner.clients.bindProviderFiles(bCallerFiles, (provider) =>
       bCallerOAuth.composeRetryOperations(provider),
     );
     bCallerOwner.bindHooks();
@@ -475,12 +475,12 @@ describe('session-owned model notifications', () => {
         bCallerManager,
         bCallerOAuth,
         () => 'agent',
-        () => bCallerOwner.refreshAuth(),
+        () => bCallerOwner.clients.refreshAuth(),
         bCallerSettingsOwner,
       ),
       bCallerSettings,
       bCallerManager,
-      (method) => bCallerOwner.refreshAuth(method),
+      (method) => bCallerOwner.clients.refreshAuth(method),
       assembleModelSelection(bCallerSettingsOwner),
     );
     requireCallerActivation(activation);
@@ -532,7 +532,7 @@ describe('session-owned model notifications', () => {
       bCallerManager,
       bProfileOAuth,
       () => undefined,
-      () => bCallerOwner.refreshAuth(),
+      () => bCallerOwner.clients.refreshAuth(),
       bCallerSettingsOwner,
     );
     assembleProfileApplication(

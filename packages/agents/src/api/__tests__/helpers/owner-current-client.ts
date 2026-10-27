@@ -30,7 +30,7 @@ export async function currentOwnerClient(
     };
   });
   try {
-    await owner.conversation.getHistory();
+    await owner.clients.conversationBinding.conversation.getHistory();
   } finally {
     for (const restore of restores) restore();
   }

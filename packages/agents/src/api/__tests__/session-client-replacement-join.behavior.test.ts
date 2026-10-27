@@ -103,7 +103,7 @@ describe('Session owner cleanup joining', () => {
           };
         }),
       );
-      const pending = owner.refreshAuth();
+      const pending = owner.clients.refreshAuth();
       await entered.promise;
       let closed = false;
       const closing = owner.dispose().then(() => {

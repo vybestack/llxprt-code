@@ -64,7 +64,7 @@ describe('SessionClientOwner compressHistory without a chat history service', ()
       chat.getHistoryService = () => null;
 
       await expect(
-        opened.owner.compressHistory(
+        opened.owner.clients.conversationBinding.compressHistory(
           'missing-history',
           session,
           opened.owner.hookOperations,

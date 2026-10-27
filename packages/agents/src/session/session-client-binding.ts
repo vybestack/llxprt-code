@@ -204,18 +204,24 @@ export async function acquireSessionClient(
 ): Promise<SessionClientOwner> {
   const { config, messageBus, readInstructions, workspacePaths } = target;
   const client = await SessionClientOwner.create(
-    config,
-    assembleTaskSchemaPolicy(settings.settings),
-    providerManager,
-    construction.clientFactory ?? buildAgentClientFactory(),
-    construction.mediaStore,
-    readInstructions,
-    workspacePaths,
-    settings.settingsOwner,
-    construction.contentGeneratorFactory,
-    construction.tokenizerFactory,
-    construction.authority,
-    messageBus,
+    {
+      config,
+      mediaStore: construction.mediaStore,
+      readMcpInstructions: readInstructions,
+      workspacePaths,
+      settingsOwner: settings.settingsOwner,
+    },
+    {
+      manager: providerManager,
+      factory: construction.clientFactory ?? buildAgentClientFactory(),
+      contentGeneratorFactory: construction.contentGeneratorFactory,
+      tokenizerFactory: construction.tokenizerFactory,
+    },
+    {
+      readTaskSchemaPolicy: assembleTaskSchemaPolicy(settings.settings),
+      authority: construction.authority,
+      borrowedBus: messageBus,
+    },
   );
   try {
     if (oauth !== undefined)
@@ -231,7 +237,7 @@ export async function acquireSessionClient(
       target.imageOperation,
     );
     const mainScope = config.getSessionId();
-    client.bindProviderFiles(
+    client.clients.bindProviderFiles(
       construction.providerFiles,
       (provider) => oauth?.composeRetryOperations(provider) ?? {},
       (scope) =>

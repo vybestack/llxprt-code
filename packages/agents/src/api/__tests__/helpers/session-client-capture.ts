@@ -17,17 +17,17 @@ type AcquireArgs = Parameters<typeof acquireSessionClient>;
 
 /** `SessionClientOwner.create` without the credential authority. */
 export type CapturedOwnerArgs = [
-  config: CreateArgs[0],
-  readTaskSchemaPolicy: CreateArgs[1],
-  manager: CreateArgs[2],
-  factory: CreateArgs[3],
-  mediaStore: CreateArgs[4],
-  readMcpInstructions: CreateArgs[5],
-  workspacePaths: CreateArgs[6],
-  settingsOwner: CreateArgs[7],
-  contentGeneratorFactory: CreateArgs[8],
-  tokenizerFactory: CreateArgs[9],
-  messageBus?: CreateArgs[11],
+  config: CreateArgs[0]['config'],
+  readTaskSchemaPolicy: CreateArgs[2]['readTaskSchemaPolicy'],
+  manager: CreateArgs[1]['manager'],
+  factory: CreateArgs[1]['factory'],
+  mediaStore: CreateArgs[0]['mediaStore'],
+  readMcpInstructions: CreateArgs[0]['readMcpInstructions'],
+  workspacePaths: CreateArgs[0]['workspacePaths'],
+  settingsOwner: CreateArgs[0]['settingsOwner'],
+  contentGeneratorFactory: CreateArgs[1]['contentGeneratorFactory'],
+  tokenizerFactory: CreateArgs[1]['tokenizerFactory'],
+  messageBus?: CreateArgs[2]['borrowedBus'],
 ];
 
 /** `acquireSessionClient` without the credential authority. */
@@ -89,18 +89,18 @@ export async function createCapturedSessionOwner(
     messageBus,
   ] = args;
   const owner = await createSessionOwner(
-    config,
-    readTaskSchemaPolicy,
-    manager,
-    recordingFactory(factory, built),
-    mediaStore,
-    readMcpInstructions,
-    workspacePaths,
-    settingsOwner,
-    contentGeneratorFactory,
-    tokenizerFactory,
-    new CredentialAuthority(),
-    messageBus,
+    { config, mediaStore, readMcpInstructions, workspacePaths, settingsOwner },
+    {
+      manager,
+      factory: recordingFactory(factory, built),
+      contentGeneratorFactory,
+      tokenizerFactory,
+    },
+    {
+      readTaskSchemaPolicy,
+      authority: new CredentialAuthority(),
+      borrowedBus: messageBus,
+    },
   );
   builtClients.set(owner, built);
   return owner;

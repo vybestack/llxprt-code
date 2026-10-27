@@ -175,7 +175,7 @@ describe('profile candidate operations', () => {
       firstCallerTokenizer,
     );
     firstCallerOwner.bindMcpRuntime(firstCallerMcp);
-    firstCallerOwner.bindProviderFiles(firstCallerFiles, (provider) =>
+    firstCallerOwner.clients.bindProviderFiles(firstCallerFiles, (provider) =>
       firstCallerOAuth.composeRetryOperations(provider),
     );
     firstCallerOwner.bindHooks();
@@ -215,12 +215,12 @@ describe('profile candidate operations', () => {
           firstCallerManager,
           firstCallerOAuth,
           () => 'agent',
-          () => firstCallerOwner.refreshAuth(),
+          () => firstCallerOwner.clients.refreshAuth(),
           firstCallerSettingsOwner,
         ),
         firstCallerSettings,
         firstCallerManager,
-        (method) => firstCallerOwner.refreshAuth(method),
+        (method) => firstCallerOwner.clients.refreshAuth(method),
         assembleModelSelection(firstCallerSettingsOwner),
       );
       requireCallerActivation(activation);
@@ -339,7 +339,7 @@ describe('profile candidate operations', () => {
       secondCallerTokenizer,
     );
     secondCallerOwner.bindMcpRuntime(secondCallerMcp);
-    secondCallerOwner.bindProviderFiles(secondCallerFiles, (provider) =>
+    secondCallerOwner.clients.bindProviderFiles(secondCallerFiles, (provider) =>
       secondCallerOAuth.composeRetryOperations(provider),
     );
     secondCallerOwner.bindHooks();
@@ -379,12 +379,12 @@ describe('profile candidate operations', () => {
           secondCallerManager,
           secondCallerOAuth,
           () => 'agent',
-          () => secondCallerOwner.refreshAuth(),
+          () => secondCallerOwner.clients.refreshAuth(),
           secondCallerSettingsOwner,
         ),
         secondCallerSettings,
         secondCallerManager,
-        (method) => secondCallerOwner.refreshAuth(method),
+        (method) => secondCallerOwner.clients.refreshAuth(method),
         assembleModelSelection(secondCallerSettingsOwner),
       );
       requireCallerActivation(activation);
@@ -428,7 +428,7 @@ describe('profile candidate operations', () => {
           providerManager,
           null,
           () => undefined,
-          () => sessionClient.refreshAuth(),
+          () => sessionClient.clients.refreshAuth(),
           settingsOwner,
         ),
         assembleModelSelection(settingsOwner),

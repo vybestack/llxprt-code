@@ -206,7 +206,7 @@ describe('tool catalog publication and cleanup ownership', () => {
       builtCallerTokenizer,
     );
     owner.bindMcpRuntime(builtCallerMcp);
-    owner.bindProviderFiles(builtCallerFiles, (provider) =>
+    owner.clients.bindProviderFiles(builtCallerFiles, (provider) =>
       builtCallerOAuth.composeRetryOperations(provider),
     );
     owner.bindHooks();
@@ -280,12 +280,12 @@ describe('tool catalog publication and cleanup ownership', () => {
         builtCallerManager,
         builtCallerOAuth,
         () => 'agent',
-        () => builtCallerOwner.refreshAuth(),
+        () => builtCallerOwner.clients.refreshAuth(),
         builtCallerSettingsOwner,
       ),
       builtCallerSettings,
       builtCallerManager,
-      (method) => builtCallerOwner.refreshAuth(method),
+      (method) => builtCallerOwner.clients.refreshAuth(method),
       assembleModelSelection(builtCallerSettingsOwner),
     );
     requireCallerActivation(activation);
@@ -533,7 +533,7 @@ describe('tool catalog publication and cleanup ownership', () => {
     await openbuiltCaller('plain-text.jsonl');
     const first = builtCallerOwner;
     const second = await createCallerOwner();
-    await second.refreshAuth();
+    await second.clients.refreshAuth();
     await second.initializeTools();
     await callerClient(second).startChat();
     const entered = engineGate();

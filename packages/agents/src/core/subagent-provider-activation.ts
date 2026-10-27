@@ -25,7 +25,7 @@ export async function activateChildProvider(
   oauthManager: OAuthManager,
   settingsOwner: SessionSettingsOwner,
   readRuntimeKind: Parameters<typeof assembleProviderSwitch>[4],
-  refreshAuth: SessionClientOwner['refreshAuth'],
+  refreshAuth: SessionClientOwner['clients']['refreshAuth'],
   profileReads: Pick<ProfileDefinitionReads, 'loadProfile'>,
   profile: Profile,
   profileName: string,

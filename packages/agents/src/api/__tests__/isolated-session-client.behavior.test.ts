@@ -175,7 +175,7 @@ describe('Isolated session client collaborators', () => {
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();
-      await builtOwner.refreshAuth();
+      await builtOwner.clients.refreshAuth();
       await (await currentOwnerClient(builtOwner)).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
@@ -240,7 +240,7 @@ describe('Isolated session client collaborators', () => {
         owner.bindMcpRuntime(builtMcp);
         owner.bindHooks();
         await owner.initializeTools();
-        await owner.refreshAuth();
+        await owner.clients.refreshAuth();
         const client = await currentOwnerClient(owner);
         await client.startChat();
         await client.addHistory({
@@ -258,7 +258,7 @@ describe('Isolated session client collaborators', () => {
           ),
         ).toHaveLength(0);
         await owner.dispose();
-        await builtOwner.refreshAuth();
+        await builtOwner.clients.refreshAuth();
         await (await currentOwnerClient(builtOwner)).startChat();
         expect(builtManager.getActiveProviderName()).toBe('fake');
         expect(await builtMedia.store.getStoredByteLength()).toBe(0);

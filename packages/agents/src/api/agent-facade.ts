@@ -126,7 +126,7 @@ export function assembleWorkspaceFacade(
       runtime.reload.bind(runtime),
       (server) => auth.mcpAuth.has(server),
       (server) => auth.mcpAuth.add(server),
-      () => session.refreshToolDefinitions(),
+      () => session.clients.refreshToolDefinitions(),
       runtime.subscribeStatus.bind(runtime),
       runtime.findResource.bind(runtime),
       runtime.readResource.bind(runtime),
@@ -223,7 +223,7 @@ function buildSessionControl(
       () => providerControl.assertProfileIdle(),
     ),
     () => providerControl.coordinator.closeAdmission(),
-    () => owners.session.rebuildExecution(),
+    () => owners.session.clients.rebuildExecution(),
     () => providerControl.getProvider(),
     () => providerControl.getModel(),
   );
@@ -271,7 +271,17 @@ function buildOperations(
   const { session, config } = owners;
   return new AgentOperations(
     createAgentTurnOwners(
-      session,
+      {
+        hookOperations: session.hookOperations,
+        resolveExecution: () => session.clients.resolveExecution(),
+        generateText: (...args) => session.clients.generateText(...args),
+        generateJson: (...args) => session.clients.generateJson(...args),
+        generateEmbedding: (...args) =>
+          session.clients.generateEmbedding(...args),
+        resetChat: session.clients.conversationBinding.conversation.resetChat,
+        compressHistory: (...args) =>
+          session.clients.conversationBinding.compressHistory(...args),
+      },
       providerControl,
       scoped.session,
       scoped.tools,
@@ -283,7 +293,15 @@ function buildOperations(
     createAgentDisposalOwners(
       {
         ownership: owners.ownership,
-        session,
+        session: {
+          closeAdmission: () => session.clients.closeAdmission(),
+          closeHookAdmission: session.closeHookAdmission,
+          joinAuxiliaryShutdown: () => session.clients.joinAuxiliaryShutdown(),
+          closeImageAdmission: session.closeImageAdmission,
+          closeToolAdmission: () => session.toolCatalog.closeAdmission(),
+          abortExecution: () => session.clients.abortExecution(),
+          dispose: () => session.dispose(),
+        },
         coordinator: providerControl.coordinator,
         tasks: owners.tasks,
         shell: owners.shell,
@@ -327,9 +345,10 @@ function composeAgent(
     execution: providerControl.execution,
     modelParameters: providerControl.modelParameters,
     settings: providerControl.settings,
-    conversation: session.conversation,
-    getStats: () => session.readStats(metrics),
-    onStats: (cb) => session.observeStats(cb, metrics),
+    conversation: session.clients.conversationBinding.conversation,
+    getStats: () => session.clients.conversationBinding.readStats(metrics),
+    onStats: (cb) =>
+      session.clients.conversationBinding.observeStats(cb, metrics),
     toolFormat: providerControl.toolFormat,
     metrics,
     providerReads: providerControl.providerReads,
@@ -339,7 +358,7 @@ function composeAgent(
     sessionClient: idleClient(
       session.operations,
       providerControl.coordinator,
-      () => session.rebuildExecution(),
+      () => session.clients.rebuildExecution(),
     ),
     captureProfile: profilePersistence.captureProfile,
     saveProfileSnapshot: profilePersistence.saveProfileSnapshot,
@@ -355,7 +374,7 @@ function composeAgent(
     hooks: scoped.hooks,
     policy: scoped.policy,
     tasks: createTasksControl(owners.tasks, owners.shell),
-    memory: session.memoryOperations,
+    memory: session.clients.memoryOperations,
     skills: scoped.skills,
     injectSteer: operations.injectSteer.bind(operations),
     stream: operations.stream.bind(operations),
@@ -397,7 +416,18 @@ export function publishAgentFacade(
     },
     providers.providers,
     auth.oauth,
-    session,
+    {
+      rebuildExecution: () => session.clients.rebuildExecution(),
+      refreshAuth: () => session.clients.refreshAuth(),
+      restoreChatVisibility: () =>
+        session.clients.conversationBinding.restoreChatVisibility(),
+      isCurrentExecution: (execution) =>
+        session.clients.isCurrentExecution(execution),
+      prepareProfileExecution: (...args) =>
+        session.clients.prepareProfileExecution(...args),
+      subscribeBucketConsent: session.subscribeBucketConsent,
+      respondToBucketConsent: session.respondToBucketConsent,
+    },
     {
       config,
       authState: controls.authState,
@@ -430,7 +460,7 @@ export function publishAgentFacade(
     published,
   );
   return new AgentImpl(
-    session.createProviderFileOperations(() =>
+    session.clients.createProviderFileOperations(() =>
       providerControl.coordinator.assertSettingsAdmission(),
     ),
     composeAgent(owners, controls, settings, published, operations),

@@ -264,7 +264,7 @@ async function openSelectedGeneratorOwner(
       () => policy.dispose(),
     ]));
   await mcp.initialize();
-  await owner.refreshAuth();
+  await owner.clients.refreshAuth();
   await owner.initializeTools();
   const clients = ownerClients(owner);
   await clients[clients.length - 1].startChat();
@@ -498,7 +498,7 @@ describe('public provider factory authority', () => {
         for (const [index, { owner }] of opened.entries()) {
           const clients = ownerClients(owner);
           const primary = clients[clients.length - 1];
-          await owner.generateText(
+          await owner.clients.generateText(
             'Physical temporary generation',
             { readHistory: true },
             DETACHED_RECORDING,
@@ -514,7 +514,7 @@ describe('public provider factory authority', () => {
           expect(counted.totalTokens).toBe(index === 0 ? 8 : 28);
         }
         await opened[0].close();
-        await opened[1].owner.generateText(
+        await opened[1].owner.clients.generateText(
           'Physical surviving temporary',
           { readHistory: true },
           DETACHED_RECORDING,

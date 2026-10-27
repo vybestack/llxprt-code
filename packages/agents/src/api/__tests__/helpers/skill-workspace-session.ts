@@ -196,12 +196,12 @@ async function activateAndStart(
       manager,
       oauth,
       () => 'agent',
-      () => owner.refreshAuth(),
+      () => owner.clients.refreshAuth(),
       settingsOwner,
     ),
     settings,
     manager,
-    (method) => owner.refreshAuth(method),
+    (method) => owner.clients.refreshAuth(method),
     assembleModelSelection(settingsOwner),
   );
   if (activation.authFailed) throw activation.authError;
@@ -261,7 +261,7 @@ export async function openSkillWorkspaceSession(
     providers.tokenizer,
   );
   owner.bindMcpRuntime(mcp);
-  owner.bindProviderFiles(providers.files, (provider) =>
+  owner.clients.bindProviderFiles(providers.files, (provider) =>
     providers.oauth.composeRetryOperations(provider),
   );
   owner.bindHooks();

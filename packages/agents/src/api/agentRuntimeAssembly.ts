@@ -504,7 +504,7 @@ export class PreferredAgentAssembly {
         tasks,
         shell,
       );
-      this.preferredSessionClient.initializeExecution(
+      this.preferredSessionClient.clients.initializeExecution(
         withChildToolDisplay(
           scheduler ?? ((options) => new CoreToolScheduler(options)),
           child,
@@ -514,7 +514,7 @@ export class PreferredAgentAssembly {
         this.onApproval ? wrapApprovalHandler(this.onApproval) : undefined,
         createStableDisplayCallbacks(editors, display),
       );
-      this.preferredSessionClient.initializeConversation();
+      this.preferredSessionClient.clients.conversationBinding.initializeConversation();
       const construction = {
         parsed,
         baseUrl,

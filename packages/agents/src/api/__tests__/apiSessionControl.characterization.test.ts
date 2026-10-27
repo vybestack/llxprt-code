@@ -92,16 +92,12 @@ function createSessionControl(
 ): SessionControl {
   let ownedSessionId = id;
   let closed = false;
-  class CharacterizationConversation extends SessionConversationBinding {
-    constructor() {
-      super();
-      this.client = client;
-    }
-    protected assertConversationOpen(): void {
+  const conversation = new SessionConversationBinding({
+    readClient: () => client,
+    assertOpen: () => {
       if (closed) throw new Error('Characterization session is closed');
-    }
-  }
-  const conversation = new CharacterizationConversation();
+    },
+  });
   return new SessionControl(
     makeRecordingPaths(),
     new LocalMediaStore({

@@ -189,7 +189,7 @@ describe('MCP extension lifetime ownership', () => {
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();
-      await builtOwner.refreshAuth();
+      await builtOwner.clients.refreshAuth();
       const clients = ownerClients(builtOwner);
       await clients[clients.length - 1].startChat();
     } catch (primary) {

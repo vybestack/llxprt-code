@@ -12,6 +12,8 @@ import {
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import type { SessionClientAcquisitionOwner } from '../session/session-client-acquisition-owner.js';
+import type { SessionConversationBinding } from '../session/session-conversation-binding.js';
 import type { SessionClientOwner } from '../session/session-client-owner.js';
 import type { ShellJobOwner } from '../session/shell-job-owner.js';
 import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
@@ -61,8 +63,25 @@ import type {
   SessionLifecycle,
 } from './sessionLifecycle.js';
 
+export type SessionTurnOperations = Pick<
+  SessionClientAcquisitionOwner,
+  'resolveExecution' | 'generateText' | 'generateJson' | 'generateEmbedding'
+> &
+  Pick<SessionConversationBinding, 'compressHistory'> &
+  Pick<SessionClientOwner, 'hookOperations'> & {
+    readonly resetChat: () => Promise<void>;
+  };
+export type SessionShutdownOperations = Pick<
+  SessionClientAcquisitionOwner,
+  'closeAdmission' | 'joinAuxiliaryShutdown' | 'abortExecution'
+> &
+  Pick<
+    SessionClientOwner,
+    'closeHookAdmission' | 'closeImageAdmission' | 'dispose'
+  > & { readonly closeToolAdmission: () => Promise<void> };
+
 export interface AgentTurnOwners {
-  readonly session: SessionClientOwner;
+  readonly session: SessionTurnOperations;
   readonly coordinator: AgentExecutionCoordinator;
   readonly providerAdmission: DirectProviderAdmission;
   readonly recording: SessionControl;
@@ -83,7 +102,7 @@ export interface AgentApprovalOwner {
 
 export interface AgentDisposalOwners {
   readonly ownership: OwnershipRecord;
-  readonly session: SessionClientOwner;
+  readonly session: SessionShutdownOperations;
   readonly coordinator: AgentExecutionCoordinator;
   readonly tasks: TaskLaunchOwner;
   readonly shell: ShellJobOwner;
@@ -134,7 +153,7 @@ export function createAgentApprovalOwner(
 }
 
 export function createAgentTurnOwners(
-  session: SessionClientOwner,
+  session: SessionTurnOperations,
   providers: SessionProviderControl,
   recording: SessionControl,
   tools: ToolControl,
@@ -229,7 +248,7 @@ export class AgentOperations {
     const turns = this.#turns;
     turns.providers.assertProfileIdle();
     await resetIdleChat(turns.coordinator, turns.recording, () =>
-      turns.session.conversation.resetChat(),
+      turns.session.resetChat(),
     );
   }
 
@@ -351,7 +370,7 @@ export class AgentOperations {
       [
         () => disposal.session.joinAuxiliaryShutdown(),
         () => disposal.session.closeImageAdmission(),
-        () => disposal.session.toolCatalog.closeAdmission(),
+        () => disposal.session.closeToolAdmission(),
         () => disposal.tools.dispose(),
       ],
       [() => run?.controller.abort(), () => disposal.session.abortExecution()],

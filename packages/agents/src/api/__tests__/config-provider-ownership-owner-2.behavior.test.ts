@@ -197,7 +197,7 @@ describe('explicit session authentication lifecycle', () => {
       builtCallerTokenizer,
     );
     builtCallerOwner.bindMcpRuntime(builtCallerMcp);
-    builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
+    builtCallerOwner.clients.bindProviderFiles(builtCallerFiles, (provider) =>
       builtCallerOAuth.composeRetryOperations(provider),
     );
     builtCallerOwner.bindHooks();
@@ -296,12 +296,12 @@ describe('explicit session authentication lifecycle', () => {
         builtCallerManager,
         builtCallerOAuth,
         () => 'agent',
-        () => builtCallerOwner.refreshAuth(),
+        () => builtCallerOwner.clients.refreshAuth(),
         builtCallerSettingsOwner,
       ),
       builtCallerSettings,
       builtCallerManager,
-      (method) => builtCallerOwner.refreshAuth(method),
+      (method) => builtCallerOwner.clients.refreshAuth(method),
       assembleModelSelection(builtCallerSettingsOwner),
     );
     requireCallerActivation(activation);
@@ -330,7 +330,7 @@ describe('explicit session authentication lifecycle', () => {
   ];
   it('initializes a replacement without conversation history', async () => {
     await withSession(async () => {
-      await builtCallerOwner.refreshAuth();
+      await builtCallerOwner.clients.refreshAuth();
       await sessionClient().startChat(await sessionClient().getHistory());
       expect(sessionClient().isInitialized()).toBe(true);
       expect(await sessionClient().getHistory()).toStrictEqual([]);
@@ -422,10 +422,10 @@ describe('explicit session authentication lifecycle', () => {
           throw new Error('Unexpected OAuth login');
         },
       });
-      builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
+      builtCallerOwner.clients.bindProviderFiles(builtCallerFiles, (provider) =>
         oauth.composeRetryOperations(provider),
       );
-      await builtCallerOwner.refreshAuth();
+      await builtCallerOwner.clients.refreshAuth();
       await sessionClient().startChat(await sessionClient().getHistory());
       expect(sessionClient().isInitialized()).toBe(true);
       expect(logins).toBe(0);
@@ -438,10 +438,10 @@ describe('explicit session authentication lifecycle', () => {
       const oauth = new OAuthManager(new MemoryTokenStore(), undefined, {
         config: builtCallerConfig,
       });
-      builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
+      builtCallerOwner.clients.bindProviderFiles(builtCallerFiles, (provider) =>
         oauth.composeRetryOperations(provider),
       );
-      await builtCallerOwner.refreshAuth();
+      await builtCallerOwner.clients.refreshAuth();
       await sessionClient().startChat(await sessionClient().getHistory());
       expect(
         (await sessionClient().getHistory()).map(({ speaker, blocks }) => ({

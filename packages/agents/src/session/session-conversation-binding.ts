@@ -26,12 +26,19 @@ import { executeCompression } from '../api/compression-execution.js';
 import type { SessionControl } from '../api/control/sessionControl.js';
 import { createCompressionRecordingOptions } from '../api/recordingExecution.js';
 
-export abstract class SessionConversationBinding {
-  protected client!: AgentClientContract;
+export class SessionConversationBinding {
+  constructor(
+    private readonly access: {
+      readonly readClient: () => AgentClientContract;
+      readonly assertOpen: () => void;
+    },
+  ) {}
+  private get client(): AgentClientContract {
+    return this.access.readClient();
+  }
   private initialHistory: HistoryService | undefined;
-  protected abstract assertConversationOpen(): void;
   initializeConversation(): void {
-    this.assertConversationOpen();
+    this.access.assertOpen();
     this.initialHistory =
       this.client.getHistoryService() ?? new HistoryService();
     this.client.storeHistoryServiceForReuse(this.initialHistory);
@@ -39,7 +46,7 @@ export abstract class SessionConversationBinding {
   private observedHistory: HistoryService | null = null;
   private historyVersion = 0;
   get #activeClient(): AgentClientContract {
-    this.assertConversationOpen();
+    this.access.assertOpen();
     return this.client;
   }
   readonly nativeHistory = {
@@ -142,11 +149,11 @@ export abstract class SessionConversationBinding {
       history: readonly IContent[],
       options?: { readonly historyOrigin?: object },
     ) => {
-      this.assertConversationOpen();
+      this.access.assertOpen();
       return this.#activeClient.setHistory(history, options);
     },
     restoreHistory: (history: readonly IContent[], origin?: object) => {
-      this.assertConversationOpen();
+      this.access.assertOpen();
       return this.#activeClient.restoreHistory([...history], origin);
     },
     resetChat: () => this.conversation.resetChat(),
@@ -184,52 +191,52 @@ export abstract class SessionConversationBinding {
   };
   readonly conversation = {
     getHistory: async (): Promise<readonly AgentMessage[]> => {
-      this.assertConversationOpen();
+      this.access.assertOpen();
       return this.client.getHistory();
     },
     setHistory: async (
       history: readonly AgentMessage[],
       opts?: { readonly stripThoughts?: boolean },
     ): Promise<void> => {
-      this.assertConversationOpen();
+      this.access.assertOpen();
       await this.client.setHistory([...history], opts);
     },
     addHistory: async (message: AgentMessage): Promise<void> => {
-      this.assertConversationOpen();
+      this.access.assertOpen();
       await this.client.addHistory(message);
     },
     restoreHistory: async (
       items: readonly AgentHistoryItem[],
     ): Promise<void> => {
-      this.assertConversationOpen();
+      this.access.assertOpen();
       await this.client.restoreHistory([...items]);
     },
     resetChat: async (): Promise<void> => {
-      this.assertConversationOpen();
+      this.access.assertOpen();
       await this.client.resetChat();
     },
     updateSystemInstruction: async (): Promise<void> => {
-      this.assertConversationOpen();
+      this.access.assertOpen();
       await this.client.updateSystemInstruction();
     },
     addDirectoryContext: async (): Promise<void> => {
-      this.assertConversationOpen();
+      this.access.assertOpen();
       await this.client.addDirectoryContext();
     },
     getCurrentSequenceModel: (): string | null => {
-      this.assertConversationOpen();
+      this.access.assertOpen();
       return this.client.getCurrentSequenceModel() ?? null;
     },
   };
   async restoreChatVisibility(): Promise<void> {
-    this.assertConversationOpen();
+    this.access.assertOpen();
     if (!this.client.hasChatInitialized()) {
       const history = await this.client.getHistory();
       await this.client.startChat(history.length > 0 ? history : undefined);
     }
   }
   isClientInitialized(): boolean {
-    this.assertConversationOpen();
+    this.access.assertOpen();
     return this.client.isInitialized();
   }
   readStats(metrics: SessionMetricReads): ReturnType<Agent['getStats']> {

@@ -81,63 +81,80 @@ import { publishWorkspaceInstructions } from './session-skill-publication.js';
 import { SessionTextGeneration } from './session-text-generation.js';
 import type { SessionToolCatalogOwner } from './session-tool-catalog-owner.js';
 
-export abstract class SessionClientAcquisitionOwner extends SessionConversationBinding {
-  protected abstract readonly config: Config;
-  protected abstract readonly manager: RuntimeProviderManager;
-  protected abstract readonly factory: SessionClientFactory;
-  protected abstract readonly mediaStore: LocalMediaStore;
-  protected abstract readMcpInstructions: () => string | undefined;
-  protected abstract readonly workspacePaths: WorkspacePathOperations;
-  protected abstract readonly settingsOwner: SessionSettingsOwner;
-  abstract readonly contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>;
-  abstract readonly tokenizerFactory: RuntimeTokenizerFactory;
-  abstract readonly toolCatalog: SessionToolCatalogOwner;
-  abstract readonly modelRegistry: ModelRegistry;
-  protected get fetch(): NetworkFetch {
-    return this.manager.fetchNetwork;
-  }
-  protected initializeTextGeneration(): void {
+export interface SessionClientEnvironment {
+  readonly config: Config;
+  readonly mediaStore: LocalMediaStore;
+  readonly readMcpInstructions: () => string | undefined;
+  readonly workspacePaths: WorkspacePathOperations;
+  readonly settingsOwner: SessionSettingsOwner;
+}
+export interface SessionClientFactories {
+  readonly manager: RuntimeProviderManager;
+  readonly factory: SessionClientFactory;
+  readonly contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>;
+  readonly tokenizerFactory: RuntimeTokenizerFactory;
+}
+export interface SessionClientBindings {
+  readonly toolCatalog: SessionToolCatalogOwner;
+  readonly modelRegistry: ModelRegistry;
+  readonly readWorkspace: () => SessionWorkspaceAuthorityPort | undefined;
+  readonly readPolicy: () => SessionPolicyOwner | undefined;
+}
+export class SessionClientAcquisitionOwner {
+  private client: AgentClientContract;
+  readonly conversationBinding: SessionConversationBinding;
+  constructor(
+    private readonly environment: SessionClientEnvironment,
+    readonly factories: SessionClientFactories,
+    private readonly bindings: SessionClientBindings,
+  ) {
+    this.runtimeState = this.captureRuntimeState(
+      environment.config.getSessionId() || `runtime-${randomUUID()}`,
+      environment.config.getSessionId(),
+    );
+    this.client = this.acquireClient(this.runtimeState);
     this.textGeneration = new SessionTextGeneration(
-      this.settingsOwner,
-      () => this.manager.getActiveProvider(),
-      () => captureGenerationState(this.settingsOwner, this.runtimeState),
-      this.tokenizerFactory,
-      this.contentGeneratorFactory,
+      environment.settingsOwner,
+      () => factories.manager.getActiveProvider(),
+      () =>
+        captureGenerationState(environment.settingsOwner, this.runtimeState),
+      factories.tokenizerFactory,
+      factories.contentGeneratorFactory,
       (state) => this.createClient(state),
       this.ownedClients,
       this.fetch,
       this.auxiliary,
     );
+    this.conversationBinding = new SessionConversationBinding({
+      readClient: () => this.client,
+      assertOpen: () => {
+        this.getAgentClient();
+      },
+    });
   }
-  protected initializeClientRuntime(): void {
-    this.runtimeState = this.captureRuntimeState(
-      this.config.getSessionId() || `runtime-${randomUUID()}`,
-      this.config.getSessionId(),
-    );
-    this.client = this.acquireClient(this.runtimeState);
+  get fetch(): NetworkFetch {
+    return this.factories.manager.fetchNetwork;
   }
-  protected async initializeInitialClientBinding(): Promise<void> {
+  async initializeInitialClientBinding(): Promise<void> {
     if (!this.initialBindingComplete) {
       await initializeClientBinding(
         () => this.bindCreatedClient(this.client, this.runtimeState),
         () => this.ownedClients.dispose(this.client),
         () => {
-          this.modelRegistry.dispose();
+          this.bindings.modelRegistry.dispose();
           return Promise.resolve();
         },
       );
       this.initialBindingComplete = true;
     }
   }
-  protected settleClientReleases(): ReturnType<
-    OwnedClientLedger['settleOwnedClients']
-  > {
+  settleClientReleases(): ReturnType<OwnedClientLedger['settleOwnedClients']> {
     return this.ownedClients.settleOwnedClients();
   }
-  protected disposeSessionExecution(): Promise<void> | undefined {
+  disposeSessionExecution(): Promise<void> | undefined {
     return this.execution?.dispose();
   }
-  protected closeProviderLifetime(): Promise<void> {
+  closeProviderLifetime(): Promise<void> {
     return this.providerLife.close();
   }
 
@@ -147,7 +164,7 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     assertAdmission: () => void,
   ): AgentProviderFileOperations {
     return this.fileBinding.operations(
-      this.config.getSessionId(),
+      this.environment.config.getSessionId(),
       assertAdmission,
     );
   }
@@ -160,7 +177,7 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     this.fileBinding.bind(this.client, lifecycle, retry, cleanup);
   }
 
-  protected readonly instructions = new SessionInstructionBinding();
+  readonly instructions = new SessionInstructionBinding();
 
   readonly instructionReads = this.instructions.reads;
 
@@ -172,10 +189,6 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     this.instructions,
   );
 
-  protected boundWorkspace: SessionWorkspaceAuthorityPort | undefined;
-
-  protected sessionPolicy: SessionPolicyOwner | undefined;
-
   private execution: SessionExecutionOwner | undefined;
 
   initializeExecution(
@@ -184,7 +197,7 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     display: LoopTypes.DisplayCallbacks | undefined,
   ): SessionExecution {
     this.getAgentClient();
-    const workspace = this.boundWorkspace;
+    const workspace = this.bindings.readWorkspace();
     if (workspace === undefined)
       throw new AgentBootstrapError(
         'Loop construction requires workspace policy composition',
@@ -192,11 +205,11 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     if (this.execution !== undefined)
       throw new Error('Session execution is already initialized');
     const execution = new SessionExecutionOwner(
-      this.config,
-      this.settingsOwner,
-      requireSessionPolicy(this.sessionPolicy).messageBus,
-      this.toolCatalog.selection,
-      () => this.toolCatalog.readGovernance(),
+      this.environment.config,
+      this.environment.settingsOwner,
+      requireSessionPolicy(this.bindings.readPolicy()).messageBus,
+      this.bindings.toolCatalog.selection,
+      () => this.bindings.toolCatalog.readGovernance(),
       workspace.trust,
       scheduler,
       approval,
@@ -259,7 +272,7 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
    */
   private readonly auxiliary = new AuxiliaryWork();
 
-  private textGeneration!: SessionTextGeneration;
+  private readonly textGeneration: SessionTextGeneration;
 
   generateText(
     input: AgentInput,
@@ -304,37 +317,35 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     await Promise.allSettled([this.closeAuxiliaryAdmission()]);
   }
 
-  private runtimeState!: AgentRuntimeState;
+  private runtimeState: AgentRuntimeState;
 
-  protected readonly providerLife = new ProviderLifetimeOwnership();
+  readonly providerLife = new ProviderLifetimeOwnership();
 
   adoptProviderLifetime(close: 'borrowed' | (() => Promise<void>)): void {
     if (close !== 'borrowed') this.providerLife.adopt(close);
   }
 
-  protected admissionClosed = false;
+  admissionClosed = false;
 
-  protected readonly work = new SessionClientWorkQueue(() =>
-    this.getAgentClient(),
-  );
+  readonly work = new SessionClientWorkQueue(() => this.getAgentClient());
 
   private readonly ownedClients = new OwnedClientLedger(async (scope) => {
     await this.fileBinding.cleanupScope(scope);
   });
 
   readonly workspaceDirectories = (): readonly string[] =>
-    this.workspacePaths.directories();
+    this.environment.workspacePaths.directories();
 
   readonly readHistory = (): Promise<readonly AgentMessage[]> =>
     this.work.enqueue(() => this.client.getHistory());
 
   private initialBindingComplete = false;
 
-  protected assertConversationOpen(): void {
-    this.getAgentClient();
+  get currentClient(): AgentClientContract {
+    return this.client;
   }
 
-  private getAgentClient(): AgentClientContract {
+  getAgentClient(): AgentClientContract {
     if (!this.initialBindingComplete)
       throw new Error('Session client owner is not initialized');
     if (this.admissionClosed)
@@ -346,10 +357,10 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     runtimeId: string,
     sessionId: string,
   ) =>
-    captureSessionRuntimeState(this.settingsOwner, {
+    captureSessionRuntimeState(this.environment.settingsOwner, {
       runtimeId,
       sessionId,
-      proxyUrl: this.config.getProxy(),
+      proxyUrl: this.environment.config.getProxy(),
     });
 
   private profileDefinitions:
@@ -374,12 +385,12 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
    * obligation exists from this point, before any fallible validation or binding.
    */
   private acquireClient(state: typeof this.runtimeState): AgentClientContract {
-    const client = this.factory(
-      this.config,
+    const client = this.factories.factory(
+      this.environment.config,
       state,
-      () => this.readMcpInstructions(),
-      this.mediaStore,
-      this.workspacePaths,
+      () => this.environment.readMcpInstructions(),
+      this.environment.mediaStore,
+      this.environment.workspacePaths,
       this.instructionReads,
     );
     if (client === undefined)
@@ -404,28 +415,41 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     client: AgentClientContract,
     state: typeof this.runtimeState,
   ): void {
-    assertClientOwnership(client, this.config, this.mediaStore);
+    assertClientOwnership(
+      client,
+      this.environment.config,
+      this.environment.mediaStore,
+    );
     bindClientDefinitions(
       client,
       this.profileDefinitions,
       this.subagentDefinitions,
     );
     client.bindIdeContext?.(
-      () => this.boundWorkspace?.ide.readContext(),
-      () => this.boundWorkspace?.ide.isEnabled() ?? false,
+      () => this.bindings.readWorkspace()?.ide.readContext(),
+      () => this.bindings.readWorkspace()?.ide.isEnabled() ?? false,
     );
-    client.bindToolSelection(this.toolCatalog.selection);
-    bindTelemetry(client, this.config, this.settingsOwner, this.manager);
+    client.bindToolSelection(this.bindings.toolCatalog.selection);
+    bindTelemetry(
+      client,
+      this.environment.config,
+      this.environment.settingsOwner,
+      this.factories.manager,
+    );
     bindClientSettings(
       client,
-      this.config,
-      this.settingsOwner,
+      this.environment.config,
+      this.environment.settingsOwner,
       state.runtimeId,
       state.sessionId,
       this.fetch,
     );
     this.fileBinding.bindClient(client);
-    bindClientModels(client, this.manager, this.tokenizerFactory);
+    bindClientModels(
+      client,
+      this.factories.manager,
+      this.factories.tokenizerFactory,
+    );
   }
 
   refreshAuth(_authMethod?: string): Promise<void> {
@@ -439,9 +463,9 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     const prepared = await this.work.enqueue(() =>
       prepareNewSessionClient(
         this.captureRuntimeState(`${sessionId}#client`, sessionId),
-        this.tokenizerFactory,
-        this.contentGeneratorFactory,
-        this.settingsOwner,
+        this.factories.tokenizerFactory,
+        this.factories.contentGeneratorFactory,
+        this.environment.settingsOwner,
         this.client,
         this.ownedClients,
         (state) => this.acquireClient(state),
@@ -449,7 +473,7 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
         (client, state) => {
           this.runtimeState = state;
           this.client = client;
-          this.config.setFallbackMode(false);
+          this.environment.config.setFallbackMode(false);
           onPublish();
         },
       ),
@@ -473,15 +497,15 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     await replaceSessionClient(
       previous,
       this.captureRuntimeState(this.runtimeState.runtimeId, sessionId),
-      this.contentGeneratorFactory,
-      this.tokenizerFactory,
+      this.factories.contentGeneratorFactory,
+      this.factories.tokenizerFactory,
       this.ownedClients,
       (state) => this.acquireClient(state),
       (client, state) => this.bindCreatedClient(client, state),
       (client, state) => {
         this.client = client;
         this.runtimeState = state;
-        this.config.setFallbackMode(false);
+        this.environment.config.setFallbackMode(false);
       },
     );
   }
@@ -511,11 +535,11 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
       this.runtimeState.sessionId,
     );
     const prepared = await prepareBoundProfileClient(
-      this.config,
+      this.environment.config,
       previous,
       selectedState,
-      this.tokenizerFactory,
-      this.contentGeneratorFactory,
+      this.factories.tokenizerFactory,
+      this.factories.contentGeneratorFactory,
       (state) => this.acquireClient(state),
       (client, state) => this.bindCreatedClient(client, state),
       this.ownedClients,
@@ -531,7 +555,7 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
           );
         this.client = prepared.client;
         this.runtimeState = prepared.runtimeState;
-        this.config.setFallbackMode(false);
+        this.environment.config.setFallbackMode(false);
       },
       retire: () => this.work.enqueueAccepted(() => ledger.dispose(previous)),
       discard: () =>
@@ -539,13 +563,11 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     };
   }
 
-  protected publishInstructions(
-    instructions: InstructionReadOperations,
-  ): Promise<void> {
+  publishInstructions(instructions: InstructionReadOperations): Promise<void> {
     return publishWorkspaceInstructions(
       this.client,
       instructions,
-      () => this.boundWorkspace?.isStopped() === true,
+      () => this.bindings.readWorkspace()?.isStopped() === true,
       (operation) => this.work.enqueueAccepted(operation),
     );
   }

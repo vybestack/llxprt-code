@@ -189,7 +189,7 @@ describe('explicit session authentication lifecycle', () => {
       builtCallerTokenizer,
     );
     builtCallerOwner.bindMcpRuntime(builtCallerMcp);
-    builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
+    builtCallerOwner.clients.bindProviderFiles(builtCallerFiles, (provider) =>
       builtCallerOAuth.composeRetryOperations(provider),
     );
     builtCallerOwner.bindHooks();
@@ -288,12 +288,12 @@ describe('explicit session authentication lifecycle', () => {
         builtCallerManager,
         builtCallerOAuth,
         () => 'agent',
-        () => builtCallerOwner.refreshAuth(),
+        () => builtCallerOwner.clients.refreshAuth(),
         builtCallerSettingsOwner,
       ),
       builtCallerSettings,
       builtCallerManager,
-      (method) => builtCallerOwner.refreshAuth(method),
+      (method) => builtCallerOwner.clients.refreshAuth(method),
       assembleModelSelection(builtCallerSettingsOwner),
     );
     requireCallerActivation(activation);
@@ -315,7 +315,7 @@ describe('explicit session authentication lifecycle', () => {
       const previousListeners = builtCallerSettingsOwner[
         'modelNotifications'
       ].listeners(CoreEvent.ModelChanged);
-      await builtCallerOwner.refreshAuth();
+      await builtCallerOwner.clients.refreshAuth();
       expect(previous).not.toBe(sessionClient());
       expect(
         builtCallerSettingsOwner['modelNotifications']

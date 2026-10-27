@@ -154,7 +154,7 @@ describe('Profile alias default ownership', () => {
       callerTokenizer,
     );
     callerOwner.bindMcpRuntime(callerMcp);
-    callerOwner.bindProviderFiles(callerFiles, (provider) =>
+    callerOwner.clients.bindProviderFiles(callerFiles, (provider) =>
       callerOAuth.composeRetryOperations(provider),
     );
     callerOwner.bindHooks();
@@ -241,12 +241,12 @@ describe('Profile alias default ownership', () => {
         callerManager,
         callerOAuth,
         () => 'agent',
-        () => callerOwner.refreshAuth(),
+        () => callerOwner.clients.refreshAuth(),
         callerSettingsOwner,
       ),
       callerSettings,
       callerManager,
-      (method) => callerOwner.refreshAuth(method),
+      (method) => callerOwner.clients.refreshAuth(method),
       assembleModelSelection(callerSettingsOwner),
     );
     requireCallerActivation(activation);
@@ -302,7 +302,7 @@ describe('Profile alias default ownership', () => {
       callerManager,
       profileOAuth,
       () => undefined,
-      () => callerOwner.refreshAuth(),
+      () => callerOwner.clients.refreshAuth(),
       callerSettingsOwner,
     );
     profileApplication = assembleProfileApplication(

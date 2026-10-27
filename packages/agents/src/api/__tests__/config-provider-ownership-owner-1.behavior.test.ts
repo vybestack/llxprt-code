@@ -189,7 +189,7 @@ describe('explicit session authentication lifecycle', () => {
       builtCallerTokenizer,
     );
     builtCallerOwner.bindMcpRuntime(builtCallerMcp);
-    builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
+    builtCallerOwner.clients.bindProviderFiles(builtCallerFiles, (provider) =>
       builtCallerOAuth.composeRetryOperations(provider),
     );
     builtCallerOwner.bindHooks();
@@ -288,12 +288,12 @@ describe('explicit session authentication lifecycle', () => {
         builtCallerManager,
         builtCallerOAuth,
         () => 'agent',
-        () => builtCallerOwner.refreshAuth(),
+        () => builtCallerOwner.clients.refreshAuth(),
         builtCallerSettingsOwner,
       ),
       builtCallerSettings,
       builtCallerManager,
-      (method) => builtCallerOwner.refreshAuth(method),
+      (method) => builtCallerOwner.clients.refreshAuth(method),
       assembleModelSelection(builtCallerSettingsOwner),
     );
     requireCallerActivation(activation);
@@ -347,7 +347,7 @@ describe('explicit session authentication lifecycle', () => {
           },
         ]);
         process.env.GOOGLE_API_KEY = 'local-vertex-metadata-only';
-        await builtCallerOwner.refreshAuth();
+        await builtCallerOwner.clients.refreshAuth();
         const retained = await sessionClient().getHistory();
         expect(
           retained
@@ -373,7 +373,7 @@ describe('explicit session authentication lifecycle', () => {
       const previous = sessionClient();
       builtCallerSettingsOwner.chooseModel('replacement-model');
       builtCallerConfig.setFallbackMode(true);
-      await builtCallerOwner.refreshAuth();
+      await builtCallerOwner.clients.refreshAuth();
       expect(sessionClient().getContentGeneratorConfig()?.model).toBe(
         'replacement-model',
       );
@@ -385,7 +385,7 @@ describe('explicit session authentication lifecycle', () => {
   it('preserves conversation history when refreshing authentication', async () => {
     await withSession(async () => {
       await sessionClient().setHistory(history);
-      await builtCallerOwner.refreshAuth();
+      await builtCallerOwner.clients.refreshAuth();
       await sessionClient().startChat(await sessionClient().getHistory());
       expect(
         (await sessionClient().getHistory()).map(({ speaker, blocks }) => ({
@@ -398,10 +398,10 @@ describe('explicit session authentication lifecycle', () => {
 
   it('preserves carried history before chat initialization (#2500)', async () => {
     await withSession(async () => {
-      await builtCallerOwner.refreshAuth();
+      await builtCallerOwner.clients.refreshAuth();
       expect(sessionClient().hasChatInitialized()).toBe(false);
       await sessionClient().storeHistoryForLaterUse(history);
-      await builtCallerOwner.refreshAuth();
+      await builtCallerOwner.clients.refreshAuth();
       await sessionClient().startChat(await sessionClient().getHistory());
       expect(
         (await sessionClient().getHistory()).map(({ speaker, blocks }) => ({
@@ -421,7 +421,7 @@ describe('explicit session authentication lifecycle', () => {
           throw new Error('Idle history must not be awaited');
         });
       try {
-        await builtCallerOwner.refreshAuth();
+        await builtCallerOwner.clients.refreshAuth();
         await sessionClient().startChat(await sessionClient().getHistory());
         expect(
           (await sessionClient().getHistory()).map(({ speaker, blocks }) => ({

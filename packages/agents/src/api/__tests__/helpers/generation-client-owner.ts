@@ -53,7 +53,7 @@ export function ownerTextGenerator(
   owner: SessionClientOwner,
 ): (input: string, options?: GenerateOptions) => Promise<string> {
   return async (input, options) =>
-    owner.generateText(input, options, generationRecording);
+    owner.clients.generateText(input, options, generationRecording);
 }
 
 /**

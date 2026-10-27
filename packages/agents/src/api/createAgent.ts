@@ -151,7 +151,7 @@ export async function activateCreatedSession(
     settings,
     mcpRuntime,
     providerManager,
-    (method) => client.refreshAuth(method),
+    (method) => client.clients.refreshAuth(method),
     assembleModelSelection(settingsOwner),
     () => settingsOwner.readSelectedProvider(),
   );
