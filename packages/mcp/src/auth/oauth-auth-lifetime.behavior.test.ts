@@ -13,10 +13,9 @@ import { join } from 'node:path';
 import { MCPOAuthTokenStorage } from './oauth-token-storage.js';
 import { FileTokenStorage } from './token-storage/file-token-storage.js';
 import { createHash } from 'node:crypto';
-import { EventEmitter } from 'node:events';
 import {
   MCPOAuthProvider,
-  OAUTH_DISPLAY_MESSAGE_EVENT,
+  type OAuthDisplaySink,
   type MCPOAuthConfig,
 } from './oauth-provider.js';
 
@@ -83,20 +82,19 @@ async function requestCallback(
 }
 
 function captureAuthorization(): {
-  events: EventEmitter;
+  events: OAuthDisplaySink;
   url: Promise<URL>;
   messages: () => readonly string[];
 } {
-  const events = new EventEmitter();
   const url = deferred<URL>();
   let messages: readonly string[] = [];
-  events.on(OAUTH_DISPLAY_MESSAGE_EVENT, (message: string) => {
+  const events = (message: string): void => {
     messages = [...messages, message];
     const line = message
       .split('\n')
       .find((part) => part.startsWith('https://'));
     if (line !== undefined) url.resolve(new URL(line));
-  });
+  };
   return { events, url: url.promise, messages: () => messages };
 }
 

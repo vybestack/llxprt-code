@@ -6,10 +6,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as http from 'node:http';
-import { EventEmitter, getEventListeners } from 'node:events';
+import { getEventListeners } from 'node:events';
 import {
   MCPOAuthProvider,
-  OAUTH_DISPLAY_MESSAGE_EVENT,
+  type OAuthDisplaySink,
   type MCPOAuthConfig,
 } from './oauth-provider.js';
 import { MCPOAuthTokenStorage } from './oauth-token-storage.js';
@@ -37,20 +37,19 @@ const network: {
 } = globalThis;
 
 function authorization(): {
-  events: EventEmitter;
+  events: OAuthDisplaySink;
   url: Promise<URL>;
   messages: () => readonly string[];
 } {
-  const events = new EventEmitter();
   const url = deferred<URL>();
   let messages: readonly string[] = [];
-  events.on(OAUTH_DISPLAY_MESSAGE_EVENT, (message: string) => {
+  const events = (message: string): void => {
     messages = [...messages, message];
     const line = message
       .split('\n')
       .find((part) => part.startsWith('https://'));
     if (line) url.resolve(new URL(line));
-  });
+  };
   return { events, url: url.promise, messages: () => messages };
 }
 async function callback(url: URL): Promise<void> {
@@ -386,9 +385,6 @@ describe('MCP request-local authentication cancellation', () => {
     const controller = new AbortController();
     const reason = new Error('display cancelled');
     const display = authorization();
-    display.events.on(OAUTH_DISPLAY_MESSAGE_EVENT, () =>
-      controller.abort(reason),
-    );
     const work = observe(
       MCPOAuthProvider.authenticate(
         {
@@ -398,7 +394,10 @@ describe('MCP request-local authentication cancellation', () => {
         'display',
         { ...config },
         undefined,
-        display.events,
+        async (message) => {
+          await display.events(message);
+          controller.abort(reason);
+        },
         controller.signal,
       ),
     );

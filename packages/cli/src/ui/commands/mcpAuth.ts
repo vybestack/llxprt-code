@@ -16,6 +16,7 @@ import { getErrorMessage } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import type { RuntimeMcpServers } from './mcpDisplay.js';
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 
 export const mcpAuthSchema: CommandArgumentSchema = [
   {
@@ -91,38 +92,22 @@ export async function performMcpOAuth(
   context: CommandContext,
   serverName: string,
 ): Promise<MessageActionReturn> {
-  const displayListener = (message: string) => {
-    context.ui.addItem({ type: 'info', text: message });
-  };
-
-  try {
-    context.ui.addItem(
-      {
-        type: 'info',
-        text: `Starting OAuth authentication for MCP server '${serverName}'...`,
-      },
-      Date.now(),
+  const displayListener = async (message: string): Promise<void> => {
+    await writeCommandOutput(
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
+      { type: 'info', text: message },
     );
-
+  };
+  await displayListener(
+    `Starting OAuth authentication for MCP server '${serverName}'...`,
+  );
+  try {
     const agent = context.services.agent;
     if (!agent) throw new Error('Agent is not available.');
     await agent.mcp.authenticate(serverName, displayListener);
-
-    context.ui.addItem(
-      {
-        type: 'info',
-        text: `✅ Successfully authenticated with MCP server '${serverName}'!`,
-      },
-      Date.now(),
-    );
-
-    context.ui.reloadCommands();
-
-    return {
-      type: 'message',
-      messageType: 'info',
-      content: `Successfully authenticated and refreshed tools for '${serverName}'.`,
-    };
   } catch (error) {
     return {
       type: 'message',
@@ -130,6 +115,15 @@ export async function performMcpOAuth(
       content: `Failed to authenticate with MCP server '${serverName}': ${getErrorMessage(error)}`,
     };
   }
+  await displayListener(
+    `\u2705 Successfully authenticated with MCP server '${serverName}'!`,
+  );
+  context.ui.reloadCommands();
+  return {
+    type: 'message',
+    messageType: 'info',
+    content: `Successfully authenticated and refreshed tools for '${serverName}'.`,
+  };
 }
 
 export { CommandKind };

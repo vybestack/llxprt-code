@@ -641,7 +641,7 @@ export interface AgentMcpControl {
   // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
   authenticate(
     server: string,
-    onDisplayMessage?: (message: string) => void,
+    onDisplayMessage?: (message: string) => void | Promise<void>,
   ): Promise<McpServerAuthStatus>;
   // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
   details(opts?: McpDetailsOptions): Promise<McpDetailStatus>;

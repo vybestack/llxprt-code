@@ -149,7 +149,7 @@ export interface McpControlDeps {
     oauthConfig: MCPOAuthConfig,
     mcpServerUrl: string | undefined,
     signal: AbortSignal,
-    onDisplayMessage?: (message: string) => void,
+    onDisplayMessage?: (message: string) => void | Promise<void>,
   ) => Promise<void>;
   /**
    * @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md line 02
@@ -510,7 +510,7 @@ export class McpControl implements AgentMcpControl {
    */
   authenticate(
     server: string,
-    onDisplayMessage?: (message: string) => void,
+    onDisplayMessage?: (message: string) => void | Promise<void>,
   ): Promise<McpServerAuthStatus> {
     if (this.closed) {
       return Promise.reject(
@@ -534,7 +534,7 @@ export class McpControl implements AgentMcpControl {
   private async authenticateOperation(
     server: string,
     signal: AbortSignal,
-    onDisplayMessage?: (message: string) => void,
+    onDisplayMessage?: (message: string) => void | Promise<void>,
   ): Promise<McpServerAuthStatus> {
     const serverConfig = this.serverDeclarations().get(server);
     const performOAuth = this.deps?.performOAuth;
