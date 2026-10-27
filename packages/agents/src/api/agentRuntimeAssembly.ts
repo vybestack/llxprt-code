@@ -202,7 +202,6 @@ export class PreferredAgentAssembly {
       await this.initializeWorkspace(input, authority);
       await this.acquireProviders();
       await this.finish();
-      return this.agent;
     } catch (primary) {
       const failures: unknown[] = [];
       for (const cleanup of [
@@ -223,6 +222,7 @@ export class PreferredAgentAssembly {
         );
       throw primary;
     }
+    return startAgentSession(this.agent);
   }
 
   private async initializeWorkspace(
@@ -482,7 +482,7 @@ export class PreferredAgentAssembly {
       this.schedulerHandles,
       this.schedulerFactory,
     );
-    this.agent = await startAgentSession(agent);
+    this.agent = agent;
   }
 
   async #acquireFacade(
