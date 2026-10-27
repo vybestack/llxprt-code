@@ -1,8 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IContent } from './IContent.js';
-import type { TokenRowSource } from './history-token-tickets.js';
+import type { TokenRowInput, TokenRowSource } from './history-token-tickets.js';
 import { decodeStoredRow } from './journalRowCodec.js';
+import { estimateSealedTokens } from './sealed-token-estimation.js';
 
 interface TokenRowHost {
   snapshot(): Promise<VersionSnapshot>;
@@ -127,6 +128,24 @@ class TokenRowRange implements TokenRowSource {
     return decodeStoredRow(
       await snapshot.readRow(await snapshot.entryAt(index)),
     );
+  }
+
+  async readForTokens(): Promise<TokenRowInput> {
+    if (this.closing !== undefined)
+      throw new Error('The token row source is closed');
+    const snapshot = await this.batch.seal();
+    const index = this.index++;
+    const sequence = this.sequence;
+    if (this.sequence !== undefined) this.sequence++;
+    const draft = this.host.takeDraft(sequence);
+    if (draft !== undefined) return draft;
+    const entry = await snapshot.entryAt(index);
+    const content = decodeStoredRow(await snapshot.readMetadata(entry));
+    return {
+      metadata: content.metadata,
+      estimateTokens: (model, provider, logger) =>
+        estimateSealedTokens(snapshot, entry, model, provider, logger),
+    };
   }
 
   close(): Promise<void> {

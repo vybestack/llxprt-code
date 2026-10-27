@@ -168,12 +168,18 @@ export abstract class HistoryServiceCore
     (execute) =>
       this.observeTokenizerOperation(this.serializeTokenOperation(execute)),
     async ({ content, modelName, generation }) => {
-      this.mutationOwnership?.retain(content);
+      const draft = 'estimateTokens' in content ? undefined : content;
+      if (draft !== undefined) this.mutationOwnership?.retain(draft);
       try {
-        const contentTokens = await this.estimateContentTokens(
-          content,
-          modelName ?? this.activeTokenizationModel,
-        );
+        const model = modelName ?? this.activeTokenizationModel;
+        const contentTokens =
+          'estimateTokens' in content
+            ? await content.estimateTokens(
+                model,
+                this.tokenizerProvider(),
+                this.logger,
+              )
+            : await this.estimateContentTokens(content, model);
         if (generation !== this.syncGeneration) return;
         this.totalTokens += contentTokens;
         this.emit('tokensUpdated', {
@@ -182,7 +188,7 @@ export abstract class HistoryServiceCore
           contentId: content.metadata?.id,
         });
       } finally {
-        this.mutationOwnership?.release(content);
+        if (draft !== undefined) this.mutationOwnership?.release(draft);
       }
     },
     (error) => {

@@ -46,7 +46,7 @@ import type {
   ResumeBoot,
   StagedProfileAdoption,
 } from './historyStorePort.js';
-import { estimateContentTokens as estimateContentTokensImpl } from './historyTokenEstimation.js';
+import { estimateTokenRange } from './estimate-token-range.js';
 import type { IContent } from './IContent.js';
 import { streamProviderContentSnapshot } from './provider-request-snapshot.js';
 export type { HistoryJsonSink } from './history-export.js';
@@ -382,21 +382,13 @@ export class HistoryService extends HistoryServiceReads {
   ): Promise<void> {
     return this.runSerializedTokenOperation(async () => {
       signal?.throwIfAborted();
-      let newTotal = 0;
-      let entryCount = 0;
-      const tokenizerProvider = this.tokenizerProvider(activeProvider);
-      for await (const entry of this.journal.streamRows(undefined, signal)) {
-        const entryTokens = await estimateContentTokensImpl(
-          entry,
-          modelName,
-          tokenizerProvider,
-          this.logger,
-          signal,
-        );
-        signal?.throwIfAborted();
-        newTotal += entryTokens;
-        entryCount += 1;
-      }
+      const { tokens: newTotal, rows: entryCount } = await estimateTokenRange(
+        this.captureTokenRow(0),
+        modelName,
+        this.tokenizerProvider(activeProvider),
+        this.logger,
+        signal,
+      );
       signal?.throwIfAborted();
 
       const previousTotal = this.totalTokens;
@@ -664,15 +656,13 @@ export class HistoryService extends HistoryServiceReads {
   ): Promise<void> {
     return this.runSerializedTokenOperation(async () => {
       signal?.throwIfAborted();
-      let newTotal = 0;
-      for await (const content of this.journal.streamRows(undefined, signal)) {
-        newTotal += await this.estimateContentTokens(
-          content,
-          defaultModel,
-          signal,
-        );
-        signal?.throwIfAborted();
-      }
+      const { tokens: newTotal } = await estimateTokenRange(
+        this.captureTokenRow(0),
+        defaultModel,
+        this.tokenizerProvider(),
+        this.logger,
+        signal,
+      );
       signal?.throwIfAborted();
 
       const oldTotal = this.totalTokens;

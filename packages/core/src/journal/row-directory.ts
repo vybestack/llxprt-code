@@ -10,6 +10,7 @@ export interface DirectoryBlock {
   readonly ordinal: number;
   readonly type: number;
   readonly length: number;
+  readonly normalizedJson?: boolean;
   parts(): AsyncGenerator<Uint8Array>;
 }
 
@@ -35,6 +36,7 @@ export async function* rowDirectory(
       yield {
         ordinal: index,
         type: block.type,
+        normalizedJson: block.named !== true,
         length:
           block.named === true
             ? await namedBlockLength(access, block)
@@ -49,6 +51,7 @@ export async function* rowDirectory(
       ordinal,
       type: block.type,
       length: block.length,
+      normalizedJson: true,
       parts: () => streamRowPiece(access, head, block.offset, block.length),
     };
   }

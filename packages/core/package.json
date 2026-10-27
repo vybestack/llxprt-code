@@ -434,6 +434,10 @@
       "bun": "./src/utils/secure-browser-launcher.ts",
       "import": "./dist/src/utils/secure-browser-launcher.js"
     },
+    "./utils/neutral-text-stream.js": {
+      "bun": "./src/utils/neutral-text-stream.ts",
+      "import": "./dist/src/utils/neutral-text-stream.js"
+    },
     "./utils/neutral-long-piece.js": {
       "bun": "./src/utils/neutral-long-piece.ts",
       "import": "./dist/src/utils/neutral-long-piece.js"

@@ -1,14 +1,27 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from './IContent.js';
+import type { DebugLogger } from '../../debug/DebugLogger.js';
+import type { TokenizerProvider } from './historyTokenEstimation.js';
+
+export interface SealedTokenRow {
+  readonly metadata?: IContent['metadata'];
+  estimateTokens(
+    model: string,
+    provider: TokenizerProvider,
+    logger: DebugLogger,
+  ): Promise<number>;
+}
+export type TokenRowInput = IContent | SealedTokenRow;
 
 export interface TokenRowSource {
   read(): Promise<IContent>;
+  readForTokens?(): Promise<TokenRowInput>;
   close(): Promise<void>;
   merge?(source: TokenRowSource): boolean;
   hasNext?(): boolean;
 }
 interface TokenTicket {
-  readonly content: IContent;
+  readonly content: TokenRowInput;
   readonly modelName?: string;
   readonly generation: number;
 }
@@ -62,7 +75,8 @@ export class HistoryTokenTickets {
       try {
         if (!this.closed) {
           do {
-            const read = ticket.source.read();
+            const read =
+              ticket.source.readForTokens?.() ?? ticket.source.read();
             this.reading = read.then(
               () => undefined,
               () => undefined,
