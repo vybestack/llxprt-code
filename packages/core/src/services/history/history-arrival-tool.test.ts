@@ -3,6 +3,42 @@ import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 
 describe('incremental tool argument arrival', () => {
+  it('preserves provider-normalized JSON when replacing raw arguments', async () => {
+    const history = new HistoryService();
+    const arrival = await history.openResponseArrival({
+      id: 'replace',
+      submissionId: 'prompt',
+    });
+    try {
+      await arrival.appendToolArguments({
+        sourceId: 'a',
+        id: 'call_a',
+        name: 'lookup',
+        arguments: '{"count":"2"}',
+      });
+      await arrival.appendToolArguments({
+        sourceId: 'a',
+        id: 'call_a',
+        name: 'lookup',
+        arguments: '',
+        complete: true,
+        replacementArguments: '{"count":2,"path":"a\\nb"}',
+      });
+      await arrival.seal({});
+      const rows = await Array.fromAsync(history.streamRawHistory());
+      expect(rows[0].blocks).toStrictEqual([
+        {
+          type: 'tool_call',
+          id: 'call_a',
+          name: 'lookup',
+          parameters: { count: 2, path: 'a\nb' },
+        },
+      ]);
+    } finally {
+      await arrival.interrupt('cancelled');
+      await history.dispose();
+    }
+  });
   it('assembles interleaved source arguments into their original blocks', async () => {
     const history = new HistoryService();
     try {

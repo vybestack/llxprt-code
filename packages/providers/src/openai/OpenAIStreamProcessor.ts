@@ -378,11 +378,11 @@ async function* handleTextDelta(
  * Fragments surface only in the terminal chunk, so each fragment-bearing
  * delta fires the raw-timing signal (issue #3473 AC-4).
  */
-function processDeltaToolCalls(
+function* processDeltaToolCalls(
   choice: OpenAI.Chat.Completions.ChatCompletionChunk.Choice,
   deps: StreamProcessorDeps,
   notify: () => void,
-): void {
+): Generator<IContent> {
   let addedFragments = false;
   // Cast to allow for runtime undefined delta (external API boundary)
   const delta = choice.delta as ChunkDelta | undefined;
@@ -392,11 +392,12 @@ function processDeltaToolCalls(
       const deltaToolCallIndex = deltaToolCall.index as number | undefined;
       if (deltaToolCallIndex === undefined) continue;
 
-      deps.toolCallPipeline.addFragment(deltaToolCallIndex, {
+      const arrival = deps.toolCallPipeline.addFragment(deltaToolCallIndex, {
         id: deltaToolCall.id,
         name: deltaToolCall.function?.name,
         args: deltaToolCall.function?.arguments,
       });
+      if (arrival !== undefined) yield arrival;
       addedFragments = true;
     }
   }
@@ -408,18 +409,16 @@ function processDeltaToolCalls(
   ).message;
   const messageToolCalls = choiceMessage?.tool_calls;
   if (messageToolCalls && messageToolCalls.length > 0) {
-    messageToolCalls.forEach((toolCall, index) => {
-      if (toolCall.type !== 'function') {
-        return;
-      }
-
-      deps.toolCallPipeline.addFragment(index, {
+    for (const [index, toolCall] of messageToolCalls.entries()) {
+      if (toolCall.type !== 'function') continue;
+      const arrival = deps.toolCallPipeline.addFragment(index, {
         id: toolCall.id,
         name: toolCall.function?.name,
         args: toolCall.function?.arguments,
       });
+      if (arrival !== undefined) yield arrival;
       addedFragments = true;
-    });
+    }
   }
 
   if (addedFragments) {
@@ -530,7 +529,7 @@ async function* processStreamingChunk(
     );
   }
 
-  processDeltaToolCalls(choice, deps, notifyRawDelta);
+  yield* processDeltaToolCalls(choice, deps, notifyRawDelta);
 }
 
 /**

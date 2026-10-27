@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type {
   ContentBlock,
   IContent,
+  ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponseArrival } from '@vybestack/llxprt-code-core/services/history/history-response-arrival.js';
 import type { DirectoryBlock } from '@vybestack/llxprt-code-core/journal/row-directory.js';
@@ -14,7 +15,7 @@ import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journal
 import { TranscriptReader } from '@vybestack/llxprt-code-core/journal/transcript-reader.js';
 import { sha256KeyHash } from '@vybestack/llxprt-code-core/journal/idKeys.js';
 export const pieces = ['{"path":"a', '\\nb","count":', '2}'];
-export const expected: ContentBlock = {
+export const expected: ToolCallBlock = {
   type: 'tool_call',
   id: 'call_frozen',
   name: 'lookup',

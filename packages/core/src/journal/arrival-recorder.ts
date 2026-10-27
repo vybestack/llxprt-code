@@ -223,7 +223,9 @@ export class JournalArrivalRecorder {
     for (const bytes of encodeTextSuffix(
       value,
       0,
-      name === 'isHidden' || name === 'providerMetadata',
+      name === 'parameters' ||
+        name === 'isHidden' ||
+        name === 'providerMetadata',
     )) {
       await this.enqueuePiece({ block, name, bytes, replace });
       replace = false;
