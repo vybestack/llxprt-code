@@ -58,6 +58,15 @@ describe('AFC journal row staging', () => {
       );
       expect(observed).toStrictEqual(['ai', 'tool', 'ai']);
       expect(history.getTotalTokens()).toBe(ordinary.getTotalTokens());
+      expect(
+        (await Array.fromAsync(history.getCuratedForProviderStream())).map(
+          (row) => row.blocks,
+        ),
+      ).toStrictEqual(
+        (await Array.fromAsync(ordinary.getCuratedForProviderStream())).map(
+          (row) => row.blocks,
+        ),
+      );
       expect(rows[0].metadata?.model).toBe('fixture-model');
       expect(rows[0].metadata?.providerBaseURL).toBe('https://fixture.invalid');
       expect(
