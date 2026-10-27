@@ -26,13 +26,12 @@ describe('journal commit settlement', () => {
       expect(settled).toBe(false);
       expect(store.published).toBeUndefined();
       seams.release();
-      const ack = await commit;
-      const flushes = seams.events.filter((event) => event.type === 'flush');
+      await commit;
       await settlement;
-      expect(store.published?.commitSeq).toBe(ack.commitSeq);
+      expect(store.published?.commitSeq).toBe(1);
       expect(
         seams.events.filter((event) => event.type === 'flush'),
-      ).toStrictEqual(flushes);
+      ).toHaveLength(1);
     } finally {
       seams.release();
       await store.close();
@@ -47,14 +46,14 @@ describe('journal commit settlement', () => {
     );
     try {
       await store.commit([{ kind: 'append', rows: [draftRow()] }]);
-      const before = store.published;
       await expect(
         store.commit([
           { kind: 'append', rows: [draftRow({ text: 'failed' })] },
         ]),
       ).rejects.toThrow('injected write failure');
       await store.settleCommitted();
-      expect(store.published).toBe(before);
+      expect(store.published?.commitSeq).toBe(1);
+      expect(store.published?.rows).toBe(1);
       await expect(store.flushCommitted()).rejects.toThrow(
         'injected write failure',
       );
