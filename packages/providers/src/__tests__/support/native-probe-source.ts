@@ -19,6 +19,7 @@ export interface ProbeJob {
 interface ProbeSampler {
   trackRow(row: IContent): void;
   sample(): Promise<void>;
+  progress(completed: bigint, total: bigint): Promise<void>;
 }
 
 interface NativeSelectionHandle {
@@ -110,8 +111,8 @@ export class NativeProbeSources {
       let index = 0;
       for await (const row of selection.openReader(signal)) {
         sampler?.trackRow(row);
-        if (sample && index % 2048 === 0) await sampler?.sample();
         index += 1;
+        if (sample) await sampler?.progress(BigInt(index), BigInt(job.count));
         yield row;
       }
       if (sample) await sampler?.sample();

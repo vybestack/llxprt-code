@@ -7,14 +7,18 @@ if (route === undefined || process.send === undefined)
   throw new Error('Hash sink worker requires a route and IPC');
 let continueSample: (() => void) | undefined;
 let chunks = 0;
-const sink = await localWireHashSink(route, async (_bytes, receivedChunks) => {
-  chunks = receivedChunks;
-  const continued = new Promise<void>((resolve) => {
-    continueSample = resolve;
-  });
-  process.send?.({ kind: 'sample' });
-  await continued;
-});
+const sink = await localWireHashSink(
+  route,
+  async (_bytes, receivedChunks) => {
+    chunks = receivedChunks;
+    const continued = new Promise<void>((resolve) => {
+      continueSample = resolve;
+    });
+    process.send?.({ kind: 'sample' });
+    await continued;
+  },
+  8,
+);
 let reported = false;
 const timer = setInterval(() => {
   if (!reported && sink.requests.length > 0) {

@@ -16,8 +16,9 @@
  * probe never holds a history. The transport is a stub at the global `fetch`
  * seam: it hashes the request body as it streams and keeps nothing. While a
  * send is running the probe samples the settled heap, the ArrayBuffer total
- * and the resident set size, at every 2048th row read, at the first body byte,
- * at every MiB of body streamed and at the end of the body. The baseline of
+ * and the resident set size at eight evenly spaced row/byte checkpoints per
+ * preparation, estimate and HTTP operation, including their boundaries.
+ * No timer repeatedly forces collection while journal I/O is running. The baseline of
  * each send is the quiet reading after the previous one.
  *
  * Per shape, one unmeasured send of the small size warms the code paths once
@@ -33,6 +34,7 @@
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { openSendPeakSampleLog } from './send-peak-sample-log.js';
 import { join } from 'node:path';
+import { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   estimatePromptEnvelope,
@@ -184,6 +186,24 @@ class MemorySampler {
   private peakRss = 0;
   private samples = 0;
   private peakLive = 0;
+  private checkpoint = 1;
+  private observingProgress = true;
+
+  resetProgress(): void {
+    this.checkpoint = 1;
+    this.observingProgress = true;
+  }
+
+  stopProgress(): void {
+    this.observingProgress = false;
+  }
+
+  async progress(label: bigint, end: bigint): Promise<void> {
+    if (!this.observingProgress || label * 8n < end * BigInt(this.checkpoint))
+      return;
+    this.checkpoint = Number((label * 8n) / end) + 1;
+    await this.sample('progress');
+  }
 
   trackRow(row: IContent): void {
     this.recentRows.push(new WeakRef(row));
@@ -315,19 +335,9 @@ async function estimateWhileSampling(
       ? undefined
       : await armSendTrap(estimateTrap, handle.rows());
   try {
+    sampler?.resetProgress();
     await sampler?.sample('estimate-start');
-    const state = { settled: false };
-    const estimating = estimatePromptEnvelope(
-      provider.name,
-      projection,
-      tokenizerFactory,
-    ).finally(() => {
-      state.settled = true;
-    });
-    if (sampler !== undefined) {
-      while (!state.settled) await sampler.sample('estimate');
-    }
-    await estimating;
+    await estimatePromptEnvelope(provider.name, projection, tokenizerFactory);
     await sampler?.sample('estimate-end');
   } finally {
     hold?.release();
@@ -368,13 +378,24 @@ async function send(
   sampler: MemorySampler | undefined,
 ): Promise<BodyEvidence> {
   const evidence = emptyEvidence();
+  const blocks = VersionSnapshot.prototype.blocks;
+  if (sampler !== undefined)
+    VersionSnapshot.prototype.blocks = async function* (entry) {
+      for await (const block of blocks.call(this, entry)) {
+        yield block;
+        const end = this.version?.nextLabel;
+        if (end !== undefined) await sampler.progress(entry.label, end);
+      }
+    };
   const local = await isolatedWireHashSink(wireRoute, async () => {
+    sampler?.stopProgress();
     await sampler?.sample('http');
   });
   const restore = redirectToLocalHttp(local.route.baseURL);
   const observed = observeNativeRoute();
   try {
     await handle.arm();
+    await sampler?.sample('send-start');
     const provider = wireRoute.createProvider();
     const contents = {
       [Symbol.asyncIterator]: () => handle.selection.openReader(),
@@ -398,6 +419,7 @@ async function send(
     const promptEnvelopeTransportToken = plan.estimate
       ? await projectAndEstimate(wireRoute, provider, options, handle, sampler)
       : undefined;
+    if (plan.estimate) sampler?.stopProgress();
     for await (const chunk of provider.generateChatCompletion({
       ...options,
       ...(promptEnvelopeTransportToken === undefined
@@ -417,6 +439,7 @@ async function send(
       evidence.modelRequests = seen.entries;
     }
   } finally {
+    VersionSnapshot.prototype.blocks = blocks;
     observed.restore();
     restore();
     await local.close();

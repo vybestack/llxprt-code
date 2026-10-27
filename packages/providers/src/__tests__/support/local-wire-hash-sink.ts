@@ -16,9 +16,21 @@ export interface LocalWireHashSink {
   close(): Promise<void>;
 }
 
+function samplingInterval(
+  length: string | undefined,
+  checkpoints?: number,
+): number {
+  if (checkpoints === undefined) return 1024 * 1024;
+  const interval = Math.max(1, Math.ceil(Number(length) / checkpoints));
+  if (!Number.isFinite(interval))
+    throw new Error('Missing measured body length');
+  return interval;
+}
+
 export async function localWireHashSink(
   route: WireRoute,
   onBytes?: (bytes: number, chunks: number) => Promise<void>,
+  checkpoints?: number,
 ): Promise<LocalWireHashSink> {
   const requests: HashedWireBody[] = [];
   let entries = 0;
@@ -31,14 +43,21 @@ export async function localWireHashSink(
       const hash = createHash('sha256');
       let bytes = 0;
       let chunks = 0;
-      let sampledAt = -1024 * 1024;
+      const interval = samplingInterval(
+        request.headers['content-length'],
+        checkpoints,
+      );
+      let nextSample = 0;
       for await (const chunk of request) {
         if (!Buffer.isBuffer(chunk)) throw new Error('Expected socket bytes');
         chunks++;
         hash.update(chunk);
         bytes += chunk.byteLength;
-        if (bytes - sampledAt >= 1024 * 1024) {
-          sampledAt = bytes;
+        if (bytes >= nextSample) {
+          nextSample =
+            checkpoints === undefined
+              ? bytes + interval
+              : (Math.floor(bytes / interval) + 1) * interval;
           await onBytes?.(bytes, chunks);
         }
       }
