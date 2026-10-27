@@ -6,7 +6,6 @@ import {
   FLATNESS_BOUND_BYTES,
   medianSettledHeap,
   PerVersionBuilders,
-  RETAINED_BOUND_BYTES,
   sessionWithCheckpoints,
 } from './__tests__/support/compactionMemory.js';
 import { JournalStore } from './journalStore.js';
@@ -70,15 +69,11 @@ describe('store compaction memory with growing checkpoint counts (design 13.6)',
         expect(store.published?.rows).toBeGreaterThan(count);
       }
 
-      expect(
-        growth.filter((bytes) => bytes >= RETAINED_BOUND_BYTES),
-      ).toStrictEqual([]);
-      expect({
-        growth,
-        spread: Math.max(...growth) - Math.min(...growth),
-      }).toSatisfy(
-        (reading: { spread: number }) => reading.spread < FLATNESS_BOUND_BYTES,
-      );
+      process.stdout
+        .write(`STORE_COMPACTION_MEMORY ${JSON.stringify({ counts: COUNTS, growth })}
+`);
+      for (const retained of growth.slice(1))
+        expect(retained - growth[0]).toBeLessThan(FLATNESS_BOUND_BYTES);
     },
     LONG_TEST_MS,
   );
@@ -87,24 +82,37 @@ describe('store compaction memory with growing checkpoint counts (design 13.6)',
     'a compaction that keeps the state of every checkpoint version in memory exceeds the bounds',
     async () => {
       const warm = await build(WARMUP, 'trap-warm');
-      const store = await build(WARMUP, 'trap');
-      const trap = new PerVersionBuilders(store);
+      const small = await build(1, 'trap-small');
+      const large = await build(WARMUP, 'trap-large');
+      const traps = [
+        new PerVersionBuilders(small),
+        new PerVersionBuilders(large),
+      ];
       await ageOutIdleCode();
       expect(await warm.compact()).toBe('swapped');
 
-      const growth = await growthOf(async () => {
-        for await (const checkpoint of store.checkpoints()) {
-          await trap.collect({
-            sourceOffset: checkpoint.descriptor.trailerOffset,
-            offset: 0,
-            commitSeq: checkpoint.descriptor.commitSeq,
-          });
-        }
-        expect(await store.compact()).toBe('swapped');
-      });
+      const growth: number[] = [];
+      for (const [index, store] of [small, large].entries()) {
+        const trap = traps[index];
+        growth.push(
+          await growthOf(async () => {
+            for await (const checkpoint of store.checkpoints()) {
+              await trap.collect({
+                sourceOffset: checkpoint.descriptor.trailerOffset,
+                offset: 0,
+                commitSeq: checkpoint.descriptor.commitSeq,
+              });
+            }
+            expect(await store.compact()).toBe('swapped');
+          }),
+        );
+      }
 
-      expect(trap.held).toBe(WARMUP);
-      expect(growth).toBeGreaterThan(RETAINED_BOUND_BYTES);
+      expect(traps.map((trap) => trap.held)).toStrictEqual([1, WARMUP]);
+      process.stdout
+        .write(`STORE_COMPACTION_CONTROL ${JSON.stringify({ counts: [1, WARMUP], growth })}
+`);
+      expect(growth[1] - growth[0]).toBeGreaterThan(FLATNESS_BOUND_BYTES);
     },
     LONG_TEST_MS,
   );

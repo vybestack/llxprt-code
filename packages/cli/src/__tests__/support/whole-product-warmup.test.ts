@@ -4,22 +4,25 @@ import { wholeProductWarmup } from './whole-product-warmup.js';
 
 interface WarmupRun {
   readonly turns: readonly number[];
+  readonly payloadBytes: readonly number[];
   readonly result: Awaited<ReturnType<typeof wholeProductWarmup>>;
 }
 
 async function measureWarmup(growing: boolean): Promise<WarmupRun> {
   const turns: number[] = [];
+  const payloadBytes: number[] = [];
   let samples = 0;
   const result = await wholeProductWarmup(
-    async (turn): Promise<void> => {
+    async (turn, bytes): Promise<void> => {
       turns.push(turn);
+      payloadBytes.push(bytes);
     },
     async (): Promise<number> => {
       samples++;
       return growing ? samples * 1_048_576 : 1_048_576;
     },
   );
-  return { turns, result };
+  return { turns, payloadBytes, result };
 }
 
 describe('whole-product warmup workload', () => {
@@ -29,6 +32,10 @@ describe('whole-product warmup workload', () => {
       expect(measured.turns).toStrictEqual(
         Array.from({ length: 530 }, (_, index) => index),
       );
+      expect(measured.payloadBytes).toStrictEqual([
+        ...Array.from({ length: 350 }, () => 4096),
+        ...Array.from({ length: 180 }, () => 65_536),
+      ]);
       expect(measured.result.turns).toBe(measured.turns.length);
       expect(
         measured.result.samples.map((sample) => sample.turn),

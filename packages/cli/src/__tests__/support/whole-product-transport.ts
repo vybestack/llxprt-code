@@ -8,8 +8,8 @@ const requestSchema = z.object({
   messages: z.array(z.object({ role: z.string(), content: z.unknown() })),
 });
 
-export function heapText(turn: number): string {
-  return `W24 turn ${turn}\n${mixedText(turn, 65_536)}`;
+export function heapText(turn: number, payloadBytes = 65_536): string {
+  return `W24 turn ${turn}\n${mixedText(turn, payloadBytes)}`;
 }
 
 function response(root: string, turn: number, tool: boolean): string {

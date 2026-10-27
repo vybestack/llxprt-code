@@ -13,11 +13,12 @@ import {
 export async function heapTurn(
   fixture: WholeProductFixture,
   turn: number,
+  payloadBytes = 65_536,
 ): Promise<void> {
   let done = 0;
   let calls = 0;
   let results = 0;
-  for await (const event of fixture.live.stream(heapText(turn))) {
+  for await (const event of fixture.live.stream(heapText(turn, payloadBytes))) {
     if (event.type === 'error') throw new Error(event.error.message);
     if (event.type === 'done') {
       expect(event.reason).toBe('stop');
@@ -55,8 +56,8 @@ export async function heapTurn(
 export function warmUp(
   fixture: WholeProductFixture,
 ): Promise<WholeProductWarmup> {
-  return wholeProductWarmup(async (turn): Promise<void> => {
-    await heapTurn(fixture, turn);
+  return wholeProductWarmup(async (turn, payloadBytes): Promise<void> => {
+    await heapTurn(fixture, turn, payloadBytes);
     if ((turn + 1) % 50 === 0)
       process.stdout.write(`W24 warmup completed ${turn + 1}\n`);
   }, settledHeap);
