@@ -13,6 +13,8 @@ import { z } from 'zod';
 import { type Agent, type AgentConfig } from '@vybestack/llxprt-code-agents';
 import {
   PolicyDecision,
+  escapeShellArg,
+  getShellConfiguration,
   type CompletedToolCall,
   type ToolCallRequestInfo,
 } from '@vybestack/llxprt-code-core';
@@ -246,7 +248,39 @@ async function openMcpGate(
   };
 }
 
-const SHELL_POLL = 'while [ ! -e "$RELEASE" ]; do sleep 0.05; done';
+/**
+ * The held child runs this script file through the runtime hosting the test,
+ * so the command carries no shell syntax of its own. It prints the streamed
+ * line, records that it was entered, then polls for the release file and
+ * exits. The gate previously sent a `VAR=value` assignment, `printf`, an
+ * `[ -e ]` test and a `while` loop. cmd/PowerShell cannot parse those, so on
+ * Windows the shell tool rejected the command and the child finished without
+ * ever writing the entered file.
+ */
+const SHELL_GATE_SCRIPT = [
+  "const { appendFileSync, existsSync } = require('node:fs');",
+  'const [text, enteredFile, releaseFile] = process.argv.slice(2);',
+  "process.stdout.write(text + '\\n');",
+  "appendFileSync(enteredFile, 'entered\\n');",
+  'const timer = setInterval(() => {',
+  '  if (existsSync(releaseFile)) clearInterval(timer);',
+  '}, 25);',
+  '',
+].join('\n');
+
+/**
+ * Builds the child command for the shell the tool runs on this platform, with
+ * each argument escaped for that shell. PowerShell needs the `&` call
+ * operator: a line that starts with a quoted path is parsed in expression mode
+ * there, and `tree-sitter-pwsh` reports the bare form as a syntax error.
+ */
+function shellGateCommand(script: string, args: readonly string[]): string {
+  const { shell } = getShellConfiguration();
+  const invocation = [process.execPath, script, ...args]
+    .map((part) => escapeShellArg(part, shell))
+    .join(' ');
+  return shell === 'powershell' ? `& ${invocation}` : invocation;
+}
 
 async function openStreamingShellGate(
   text: string,
@@ -256,8 +290,14 @@ async function openStreamingShellGate(
   steps.push(() => rm(directory, { recursive: true, force: true }));
   const enteredFile = join(directory, 'entered');
   const releaseFile = join(directory, 'release');
+  const gateScript = join(directory, 'gate.cjs');
   await writeFile(enteredFile, '');
-  const command = `RELEASE='${releaseFile}'; printf '%s\\n' '${text}'; echo entered >> '${enteredFile}'; ${SHELL_POLL}`;
+  await writeFile(gateScript, SHELL_GATE_SCRIPT);
+  const command = shellGateCommand(gateScript, [
+    text,
+    enteredFile,
+    releaseFile,
+  ]);
   const replay = join(directory, 'replay.jsonl');
   const turns = [
     {
