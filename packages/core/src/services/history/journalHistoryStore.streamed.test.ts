@@ -144,61 +144,62 @@ describe('the transform cannot run ahead of the writer', () => {
     }
   }
 
-  it('holds one row at most between the transform and the writer, and nothing after', async () => {
+  async function measure(size: number, retain: boolean): Promise<number> {
     const store = new JournalHistoryStore(
-      await JournalSession.create(path.join(directory(), 'bounded.llxj')),
-    );
-    try {
-      const gauge = leadGauge();
-      const baseline = await settledHeap();
-
-      await store.replaceStreamed(
-        counted(
-          pulledRows<IContent>(async (put) => {
-            for (let seq = 1; seq <= ROWS; seq++) {
-              const content = bigRow(seq);
-              gauge.made();
-              await put(content);
-            }
-          }),
-          gauge,
+      await JournalSession.create(
+        path.join(
+          directory(),
+          `${retain ? 'control' : 'bounded'}-${size}.llxj`,
         ),
-      );
-      const after = await settledHeap();
-
-      expect(gauge.state.written).toBe(ROWS);
-      expect(gauge.state.maxLead).toBe(1);
-      expect(store.getLength()).toBe(ROWS);
-      expect(after - baseline).toBeLessThan(RETAINED_BOUND);
-    } finally {
-      await store.dispose();
-    }
-  });
-
-  it('control: a channel that buffers what the transform makes shows the lead and the retained rows', async () => {
-    const store = new JournalHistoryStore(
-      await JournalSession.create(path.join(directory(), 'control.llxj')),
+      ),
     );
     try {
       const gauge = leadGauge();
       const baseline = await settledHeap();
       const buffer: IContent[] = [];
-      for (let seq = 1; seq <= ROWS; seq++) {
-        buffer.push(bigRow(seq));
-        gauge.made();
+      if (retain) {
+        for (let seq = 1; seq <= size; seq++) {
+          buffer.push(bigRow(seq));
+          gauge.made();
+        }
       }
       async function* drained(): AsyncGenerator<IContent> {
-        for (const content of buffer) yield content;
+        yield* buffer;
       }
-
-      await store.replaceStreamed(counted(drained(), gauge));
-      const withBuffer = await settledHeap();
-
-      expect(buffer).toHaveLength(ROWS);
-      expect(gauge.state.maxLead).toBe(ROWS);
-      expect(withBuffer - baseline).toBeGreaterThan(ROWS * ROW_BYTES * 0.5);
+      const source = retain
+        ? drained()
+        : pulledRows<IContent>(async (put) => {
+            for (let seq = 1; seq <= size; seq++) {
+              const content = bigRow(seq);
+              gauge.made();
+              await put(content);
+            }
+          });
+      await store.replaceStreamed(counted(source, gauge));
+      const growth = (await settledHeap()) - baseline;
+      process.stdout.write(
+        `STREAMED_GROWTH ${JSON.stringify({ size, retain, growth })}\n`,
+      );
+      expect(gauge.state.written).toBe(size);
+      expect(gauge.state.maxLead).toBe(retain ? size : 1);
+      expect(store.getLength()).toBe(size);
+      expect(buffer).toHaveLength(retain ? size : 0);
+      if (retain) expect(growth).toBeGreaterThan(size * ROW_BYTES * 0.5);
+      return growth;
     } finally {
       await store.dispose();
     }
+  }
+
+  it('holds one row at most between producer and writer with bounded retained growth at 20 and 40 rows', async () => {
+    const small = await measure(ROWS / 2, false);
+    const large = await measure(ROWS, false);
+    expect(large - small).toBeLessThan(RETAINED_BOUND);
+  });
+
+  it('control: buffering the producer exceeds the same retained-growth bound', async () => {
+    const small = await measure(ROWS / 2, true);
+    const large = await measure(ROWS, true);
+    expect(large - small).toBeGreaterThan(RETAINED_BOUND);
   });
 });
