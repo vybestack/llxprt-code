@@ -273,7 +273,7 @@ export const productionPolicy: AuditPolicy = {
       file: 'packages/providers/src/BaseProvider.ts',
       declaration: 'BaseProvider.activeCallContext',
       reason:
-        'Per-provider call-option scope carries NormalizedGenerateChatOptions during generation; it does not select an active runtime identity. No other ALS declaration is exempt.',
+        'Per-provider call-option scope carries NormalizedGenerateChatOptions during generation; it does not select an active runtime identity. This is the only exemption within the derived ALS roots: agents, cli, core, providers and settings src. Other packages, including a2a-server request transport scope, are outside this ALS audit.',
     },
   ],
 };
