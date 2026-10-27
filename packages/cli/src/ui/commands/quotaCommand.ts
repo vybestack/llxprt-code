@@ -12,6 +12,7 @@ import {
   type ConfirmActionReturn,
 } from './types.js';
 import { MessageType } from '../types.js';
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import { fetchAllQuotaInfo } from './statsQuota.js';
 import {
   CodexRateLimitResetCreditsResponseSchema,
@@ -106,12 +107,26 @@ function resolveBaseUrl(context: CommandContext): string | undefined {
   return trimmed === '' ? undefined : trimmed;
 }
 
-function addInfo(context: CommandContext, text: string): void {
-  context.ui.addItem({ type: MessageType.INFO, text }, Date.now());
+async function addInfo(context: CommandContext, text: string): Promise<void> {
+  await writeCommandOutput(
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
+    { type: MessageType.INFO, text },
+    Date.now(),
+  );
 }
 
-function addError(context: CommandContext, text: string): void {
-  context.ui.addItem({ type: MessageType.ERROR, text }, Date.now());
+async function addError(context: CommandContext, text: string): Promise<void> {
+  await writeCommandOutput(
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
+    { type: MessageType.ERROR, text },
+    Date.now(),
+  );
 }
 
 /**
@@ -126,17 +141,17 @@ async function statusAction(context: CommandContext): Promise<void> {
     );
 
     if (quotaLines.length === 0) {
-      addInfo(
+      await addInfo(
         context,
         'No quota information available. Supported providers: Claude Code (OAuth), Codex (OAuth), Z.ai, Synthetic, Chutes, Kimi.',
       );
       return;
     }
 
-    addInfo(context, quotaLines.join('\n'));
+    await addInfo(context, quotaLines.join('\n'));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    addError(context, `Failed to retrieve quota information: ${msg}`);
+    await addError(context, `Failed to retrieve quota information: ${msg}`);
   }
 }
 
@@ -216,7 +231,7 @@ function formatAllResetCreditsLines(
 async function creditsAction(context: CommandContext): Promise<void> {
   const oauthManager = resolveOAuthManager(context);
   if (!oauthManager) {
-    addInfo(context, NO_RESET_CREDITS_MSG);
+    await addInfo(context, NO_RESET_CREDITS_MSG);
     return;
   }
 
@@ -224,20 +239,20 @@ async function creditsAction(context: CommandContext): Promise<void> {
     const creditsMap = await oauthManager.getAllCodexRateLimitResetCredits();
 
     if (creditsMap.size === 0) {
-      addInfo(context, NO_RESET_CREDITS_MSG);
+      await addInfo(context, NO_RESET_CREDITS_MSG);
       return;
     }
 
     const lines = formatAllResetCreditsLines(creditsMap);
     if (lines.length === 0) {
-      addInfo(context, NO_RESET_CREDITS_MSG);
+      await addInfo(context, NO_RESET_CREDITS_MSG);
       return;
     }
 
-    addInfo(context, lines.join('\n'));
+    await addInfo(context, lines.join('\n'));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    addError(context, `Failed to retrieve reset credits: ${msg}`);
+    await addError(context, `Failed to retrieve reset credits: ${msg}`);
   }
 }
 
@@ -368,7 +383,7 @@ async function redeemResetCredit(
   );
 
   if (consumeResult === null) {
-    addError(
+    await addError(
       context,
       'Failed to reset rate-limit window. Please try again later.',
     );
@@ -376,9 +391,9 @@ async function redeemResetCredit(
   }
 
   if (consumeResult.code === 'reset') {
-    addInfo(context, 'Rate-limit window reset successfully.');
+    await addInfo(context, 'Rate-limit window reset successfully.');
   } else {
-    addInfo(context, 'Credit already redeemed.');
+    await addInfo(context, 'Credit already redeemed.');
   }
 
   // fetchAllQuotaInfo has its own internal error handling and returns [] on
@@ -386,7 +401,7 @@ async function redeemResetCredit(
   const runtimeApi = context.runtimeApi;
   const quotaLines = await fetchAllQuotaInfo(runtimeApi, context.oauthControl);
   if (quotaLines.length > 0) {
-    addInfo(context, quotaLines.join('\n'));
+    await addInfo(context, quotaLines.join('\n'));
   }
 }
 
@@ -404,30 +419,30 @@ async function resetAction(
   const provider = tokens[0] ?? '';
 
   if (provider !== '' && provider !== 'codex') {
-    addError(context, "Only 'codex' supports reset.");
+    await addError(context, "Only 'codex' supports reset.");
     return undefined;
   }
   if (tokens.length > 1) {
-    addError(context, 'Too many arguments. Usage: /quota reset [codex]');
+    await addError(context, 'Too many arguments. Usage: /quota reset [codex]');
     return undefined;
   }
 
   const oauthManager = resolveOAuthManager(context);
   if (!oauthManager) {
-    addInfo(context, NOT_AUTHED_CODEX_MSG);
+    await addInfo(context, NOT_AUTHED_CODEX_MSG);
     return undefined;
   }
 
   try {
     const authed = await isCodexAuthed(oauthManager);
     if (!authed) {
-      addInfo(context, NOT_AUTHED_CODEX_MSG);
+      await addInfo(context, NOT_AUTHED_CODEX_MSG);
       return undefined;
     }
 
     const redeemableCredits = await findRedeemableCredits(oauthManager);
     if (redeemableCredits.length === 0) {
-      addInfo(context, NO_REDEEMABLE_CREDITS_MSG);
+      await addInfo(context, NO_REDEEMABLE_CREDITS_MSG);
       return undefined;
     }
 
@@ -436,7 +451,7 @@ async function resetAction(
       redeemableCredits,
     );
     if (redeemable === null) {
-      addError(
+      await addError(
         context,
         'Codex credentials for all credit-bearing buckets are unavailable or expired. Run /auth codex to re-authenticate.',
       );
@@ -460,7 +475,7 @@ async function resetAction(
     return undefined;
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    addError(context, `Failed to reset rate-limit window: ${msg}`);
+    await addError(context, `Failed to reset rate-limit window: ${msg}`);
     return undefined;
   }
 }

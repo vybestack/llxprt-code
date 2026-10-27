@@ -13,6 +13,7 @@
 import type { SlashCommand, CommandContext } from './types.js';
 import { CommandKind } from './types.js';
 import { MessageType } from '../types.js';
+import { writeCommandOutput } from '../hooks/command-journal-output.js';
 import type {
   Agent,
   AgentTaskInfo,
@@ -98,16 +99,30 @@ function getRunningTaskIds(context: CommandContext): string[] {
   return [];
 }
 
-function reportTaskNotFound(context: CommandContext, taskId: string): void {
-  context.ui.addItem(
+async function reportTaskNotFound(
+  context: CommandContext,
+  taskId: string,
+): Promise<void> {
+  await writeCommandOutput(
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
     { type: MessageType.ERROR, text: `Task not found: ${taskId}` },
     Date.now(),
   );
 }
 
-function reportAmbiguous(context: CommandContext, candidates: string[]): void {
+async function reportAmbiguous(
+  context: CommandContext,
+  candidates: string[],
+): Promise<void> {
   const candidateList = candidates.map((c) => `  ${c}`).join('\n');
-  context.ui.addItem(
+  await writeCommandOutput(
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
     {
       type: MessageType.ERROR,
       text: `Ambiguous task ID. Did you mean:\n${candidateList}`,
@@ -116,12 +131,16 @@ function reportAmbiguous(context: CommandContext, candidates: string[]): void {
   );
 }
 
-function reportCancelResult(
+async function reportCancelResult(
   context: CommandContext,
   taskId: string,
   cancelled: boolean,
-): void {
-  context.ui.addItem(
+): Promise<void> {
+  await writeCommandOutput(
+    () => context.services.agent?.agentClient.getHistoryService() ?? null,
+    context.services.agent?.session,
+    context.recordingOwner,
+    context.ui.addItem,
     cancelled
       ? { type: MessageType.INFO, text: `Cancelled task: ${taskId}` }
       : {
@@ -145,7 +164,7 @@ async function endTaskViaAgent(
     if (prefixMatches.length === 1) {
       task = prefixMatches[0];
     } else if (prefixMatches.length > 1) {
-      reportAmbiguous(
+      await reportAmbiguous(
         context,
         prefixMatches.map((t) => t.id),
       );
@@ -153,11 +172,15 @@ async function endTaskViaAgent(
     }
   }
   if (!task) {
-    reportTaskNotFound(context, taskId);
+    await reportTaskNotFound(context, taskId);
     return;
   }
   if (task.status !== 'running') {
-    context.ui.addItem(
+    await writeCommandOutput(
+      () => context.services.agent?.agentClient.getHistoryService() ?? null,
+      context.services.agent?.session,
+      context.recordingOwner,
+      context.ui.addItem,
       {
         type: MessageType.ERROR,
         text: `Task ${task.id} is already ${task.status}.`,
@@ -166,7 +189,7 @@ async function endTaskViaAgent(
     );
     return;
   }
-  reportCancelResult(context, task.id, await agent.tasks.cancel(task.id));
+  await reportCancelResult(context, task.id, await agent.tasks.cancel(task.id));
 }
 
 export const taskCommand: SlashCommand = {
@@ -178,21 +201,31 @@ export const taskCommand: SlashCommand = {
       name: 'list',
       description: 'List all async background tasks',
       kind: CommandKind.BUILT_IN,
-      action: (context: CommandContext) => {
+      action: async (context: CommandContext) => {
         const agent = context.services.agent;
         const tasks: readonly AgentTaskInfo[] | undefined = agent
           ? agent.tasks.list()
           : undefined;
 
         if (!tasks) {
-          context.ui.addItem(
+          await writeCommandOutput(
+            () =>
+              context.services.agent?.agentClient.getHistoryService() ?? null,
+            context.services.agent?.session,
+            context.recordingOwner,
+            context.ui.addItem,
             { type: MessageType.ERROR, text: 'Agent tasks not available' },
             Date.now(),
           );
           return;
         }
         if (tasks.length === 0) {
-          context.ui.addItem(
+          await writeCommandOutput(
+            () =>
+              context.services.agent?.agentClient.getHistoryService() ?? null,
+            context.services.agent?.session,
+            context.recordingOwner,
+            context.ui.addItem,
             { type: MessageType.INFO, text: 'No async tasks.' },
             Date.now(),
           );
@@ -204,7 +237,11 @@ export const taskCommand: SlashCommand = {
           lines.push(formatTask(task));
           lines.push('');
         }
-        context.ui.addItem(
+        await writeCommandOutput(
+          () => context.services.agent?.agentClient.getHistoryService() ?? null,
+          context.services.agent?.session,
+          context.recordingOwner,
+          context.ui.addItem,
           { type: MessageType.INFO, text: lines.join('\n') },
           Date.now(),
         );
@@ -229,7 +266,12 @@ export const taskCommand: SlashCommand = {
       action: async (context: CommandContext, args: string) => {
         const taskId = args.trim();
         if (!taskId) {
-          context.ui.addItem(
+          await writeCommandOutput(
+            () =>
+              context.services.agent?.agentClient.getHistoryService() ?? null,
+            context.services.agent?.session,
+            context.recordingOwner,
+            context.ui.addItem,
             { type: MessageType.ERROR, text: 'Usage: /task end <task_id>' },
             Date.now(),
           );
@@ -240,7 +282,11 @@ export const taskCommand: SlashCommand = {
           await endTaskViaAgent(context, agent, taskId);
           return;
         }
-        context.ui.addItem(
+        await writeCommandOutput(
+          () => context.services.agent?.agentClient.getHistoryService() ?? null,
+          context.services.agent?.session,
+          context.recordingOwner,
+          context.ui.addItem,
           { type: MessageType.ERROR, text: 'Agent tasks not available' },
           Date.now(),
         );
