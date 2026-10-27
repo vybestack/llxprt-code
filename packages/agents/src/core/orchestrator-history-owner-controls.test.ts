@@ -21,7 +21,7 @@ for (const size of [512]) {
               expect(await sendHistoryTurn(client)).toContain(
                 'a plain text reply',
               );
-              expect(history.consumer.snapshot().peakRows).toBe(size);
+              expect(history.consumer.snapshot().peakRows).toBe(size + 1);
               expect(history.consumer.snapshot().peakRows).toBeGreaterThan(
                 bounds.rows,
               );

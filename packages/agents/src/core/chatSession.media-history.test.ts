@@ -458,7 +458,7 @@ async function testMediaHistory13(): Promise<void> {
 
   expect(
     mediaHistoryShape(await collectHistoryFixture(fixture.chat.getHistory())),
-  ).toStrictEqual(['reference', 'url', 'text']);
+  ).toStrictEqual(['reference', 'url']);
   await fixture.recording.dispose();
 }
 
@@ -490,7 +490,7 @@ async function testMediaHistory14(): Promise<void> {
 
   expect(
     mediaHistoryShape(await collectHistoryFixture(fixture.chat.getHistory())),
-  ).toStrictEqual(['reference', 'url', 'text']);
+  ).toStrictEqual(['reference', 'url']);
   await fixture.recording.dispose();
 }
 
@@ -512,7 +512,7 @@ async function testMediaHistory15(): Promise<void> {
 
   expect(
     mediaHistoryShape(await collectHistoryFixture(fixture.chat.getHistory())),
-  ).toStrictEqual(['reference', 'url', 'text']);
+  ).toStrictEqual(['reference', 'url']);
   await fixture.recording.dispose();
 }
 
@@ -689,7 +689,7 @@ async function testMediaHistory19(): Promise<void> {
 
   expect(
     mediaHistoryShape(await collectHistoryFixture(fixture.chat.getHistory())),
-  ).toStrictEqual(['reference', 'url', 'text']);
+  ).toStrictEqual(['reference', 'url']);
   expect(fixture.requests).toHaveLength(1);
   await fixture.recording.dispose();
 }

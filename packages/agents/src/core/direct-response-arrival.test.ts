@@ -178,7 +178,9 @@ describe('direct provider response arrivals', () => {
       0,
     );
     const processor = directProcessor(setup);
+    let promptPublished = false;
     setup.provider.generateChatCompletion = async function* () {
+      promptPublished = await setup.history.hasPromptSubmission('failure');
       yield {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'abandoned response' }],
@@ -189,7 +191,8 @@ describe('direct provider response arrivals', () => {
       await expect(
         processor.sendMessage({ message: 'first' }, 'failure'),
       ).rejects.toThrow('provider interrupted');
-      expect(await setup.history.countCuratedRows()).toBe(1);
+      expect(await setup.history.countCuratedRows()).toBe(0);
+      expect(promptPublished).toBe(true);
       setup.provider.generateChatCompletion = async function* () {
         yield {
           speaker: 'ai',
@@ -207,7 +210,7 @@ describe('direct provider response arrivals', () => {
         { type: 'text', text: 'accepted response' },
       ]);
       expect(rows.filter((row) => row.speaker === 'ai')).toHaveLength(1);
-      expect(rows).toHaveLength(3);
+      expect(rows).toHaveLength(2);
     } finally {
       await setup.history.dispose();
       await setup.config.dispose();
