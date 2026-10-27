@@ -114,10 +114,11 @@ export class AnthropicRepairIndex {
   async *messages(from: number): AsyncGenerator<RepairMessage> {
     for await (const entry of this.messageEntries(from)) yield entry.message;
   }
-  async *messageEntries(from: number): AsyncGenerator<{
-    readonly ordinal: number;
-    readonly message: RepairMessage;
-  }> {
+  private seek: { readonly from: number; readonly ordinal: number } | undefined;
+
+  private async seekOrdinal(from: number): Promise<number> {
+    if (from === 0) return 1;
+    if (this.seek?.from === from) return this.seek.ordinal;
     let low = 1;
     let high = this.count + 1;
     while (low < high) {
@@ -125,7 +126,19 @@ export class AnthropicRepairIndex {
       if ((await this.message(mid)).end < from) low = mid + 1;
       else high = mid;
     }
-    for (let ordinal = low; ordinal <= this.count; ordinal++)
+    this.seek = { from, ordinal: low };
+    return low;
+  }
+
+  async *messageEntries(from: number): AsyncGenerator<{
+    readonly ordinal: number;
+    readonly message: RepairMessage;
+  }> {
+    for (
+      let ordinal = await this.seekOrdinal(from);
+      ordinal <= this.count;
+      ordinal++
+    )
       yield { ordinal, message: await this.message(ordinal) };
   }
   async decision(

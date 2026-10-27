@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { mkdtemp, open, rm, stat } from 'node:fs/promises';
+import { copyFile, mkdtemp, open, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import { JournalProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/journal-provider-request.js';
@@ -143,11 +143,40 @@ async function seedNativeSession(
     },
   ]);
 }
+function observedRegistration(
+  registration: RowFormatRegistration,
+  probe: () => SessionProbe | undefined,
+): RowFormatRegistration {
+  const prepare = registration.prepare;
+  return {
+    ...registration,
+    measure: observedMeasure(registration.measure, probe),
+    ...(prepare === undefined
+      ? {}
+      : {
+          prepare: async (snapshot, settings) =>
+            observedFill(await prepare(snapshot, settings), probe),
+        }),
+  };
+}
+
+export async function seedNativeJournal(
+  file: string,
+  stateful: boolean,
+): Promise<void> {
+  const session = await JournalSession.create(file);
+  try {
+    await seedNativeSession(session, {}, stateful);
+  } finally {
+    await session.close();
+  }
+}
 
 export async function realisticNativeFixture(
   root: string,
   options: RealisticSessionOptions = {},
   stateful = false,
+  seed?: string,
 ): Promise<{
   readonly selection: JournalProviderRequestSnapshot;
   readonly journalBytes: number;
@@ -160,7 +189,10 @@ export async function realisticNativeFixture(
   let kimiFilling = false;
   let kimiReadBytes = 0;
   let nextKimiCheckpoint = 16 * 1024 * 1024;
-  const session = await JournalSession.create(file, {
+  if (seed !== undefined) await copyFile(seed, file);
+  const openSession =
+    seed === undefined ? JournalSession.create : JournalSession.open;
+  const session = await openSession(file, {
     journal: {
       open: observedJournalOpen(async (bytes): Promise<void> => {
         if (!kimiFilling) return;
@@ -175,7 +207,7 @@ export async function realisticNativeFixture(
       }),
     },
   });
-  await seedNativeSession(session, options, stateful);
+  if (seed === undefined) await seedNativeSession(session, options, stateful);
   const snapshot = await session.store.snapshot();
   const selection = await JournalProviderRequestSnapshot.create(
     snapshot,
@@ -184,22 +216,10 @@ export async function realisticNativeFixture(
     undefined,
     () => snapshot.close(),
     (pin, registration) =>
-      session.store.prepareSnapshotFormat(pin, {
-        ...registration,
-        measure: observedMeasure(registration.measure, () => activeProbe),
-        ...(registration.prepare === undefined
-          ? {}
-          : {
-              prepare: async (snapshot, settings) => {
-                if (registration.prepare === undefined)
-                  throw new Error('Missing fill');
-                return observedFill(
-                  await registration.prepare(snapshot, settings),
-                  () => activeProbe,
-                );
-              },
-            }),
-      }),
+      session.store.prepareSnapshotFormat(
+        pin,
+        observedRegistration(registration, () => activeProbe),
+      ),
     undefined,
     async (pin) => {
       kimiFilling = true;

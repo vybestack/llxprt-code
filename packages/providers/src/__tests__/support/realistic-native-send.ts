@@ -33,7 +33,7 @@ export const NATIVE_SESSION_ROUTES = [
   'openai-responses-stateful',
   'anthropic-cache-off',
 ];
-const ROOT = join(import.meta.dir, '../../../../../tmp/r10-retained');
+const ROOT = join(import.meta.dir, '../../../../../tmp/accept-speed');
 
 function routeOf(id: string): WireRoute {
   const route = WIRE_ROUTES.find(
@@ -222,29 +222,38 @@ async function retainSelectedRows(
   if (selectedRows !== 25_000) throw new Error(`Selected ${selectedRows} rows`);
 }
 
-export function nativeSessionAdapter(id: string): SessionRouteAdapter {
+async function warmNativeSend(
+  route: WireRoute,
+  stateful: boolean,
+  provider: ReturnType<WireRoute['createProvider']>,
+): Promise<void> {
+  await mkdir(ROOT, { recursive: true });
+  const fixture = await realisticNativeFixture(
+    ROOT,
+    { rowCount: 8, payloadBytes: 8192 },
+    stateful,
+  );
+  try {
+    await hashSend(route, fixture.selection, stateful, provider);
+  } finally {
+    await fixture.close();
+  }
+}
+
+export function nativeSessionAdapter(
+  id: string,
+  seed?: string,
+): SessionRouteAdapter {
   const route = routeOf(id);
   const stateful = id === 'openai-responses-stateful';
   const provider = route.createProvider();
   return {
     routeId: id,
     operation: 'send',
-    async warmup(): Promise<void> {
-      await mkdir(ROOT, { recursive: true });
-      const fixture = await realisticNativeFixture(
-        ROOT,
-        { rowCount: 8, payloadBytes: 8192 },
-        stateful,
-      );
-      try {
-        await hashSend(route, fixture.selection, stateful, provider);
-      } finally {
-        await fixture.close();
-      }
-    },
+    warmup: () => warmNativeSend(route, stateful, provider),
     async prepare() {
       const summary = realisticSessionSummary();
-      const fixture = await realisticNativeFixture(ROOT, {}, stateful);
+      const fixture = await realisticNativeFixture(ROOT, {}, stateful, seed);
       const started = performance.now();
       let reads = 0;
       process.stdout.write(

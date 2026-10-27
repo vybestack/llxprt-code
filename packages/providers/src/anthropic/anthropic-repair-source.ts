@@ -110,11 +110,19 @@ export class AnthropicRepairSource<
       logger,
     };
   }
+  private currentRow:
+    | { readonly index: number; readonly value: IContent | undefined }
+    | undefined;
+
   async row(index: number): Promise<IContent | undefined> {
+    if (this.currentRow?.index === index) return this.currentRow.value;
+    this.currentRow = undefined;
     this.work.unitReads++;
     const row = await this.query.readAt(index);
     await this.observeRow?.(row, index);
-    return projectAnthropicUnit(row, this.settings, this.normalized);
+    const value = projectAnthropicUnit(row, this.settings, this.normalized);
+    this.currentRow = { index, value };
+    return value;
   }
   async describe(index: number): Promise<UnitDescription | undefined> {
     this.work.descriptions++;

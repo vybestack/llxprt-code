@@ -137,7 +137,9 @@ export async function statefulResponsesSummary(
         const row = await indexed.readAt(index + offset);
         const pairs = await responsesUnitPairs(row, indexed, skipRows);
         const kept = responsesUnitLength(row, settings, true, pairs, true);
-        const removed = responsesUnitLength(row, settings, false, pairs, true);
+        const removed = row.blocks.some((block) => block.type === 'thinking')
+          ? responsesUnitLength(row, settings, false, pairs, true)
+          : kept;
         summary = composeSlotSummaries(summary, {
           kind: 'responses',
           variants: [responsesUnitSummary(kept), responsesUnitSummary(removed)],
