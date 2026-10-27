@@ -9,16 +9,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { resolveProviderFilePolicy } from '@vybestack/llxprt-code-providers';
 
-import type { Agent } from '../../../agents/src/api/agent.js';
-import { fromConfig } from '../../../agents/src/api/fromConfig.js';
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
-import { resolveProviderFilePolicy } from '../providerFilePolicy.js';
-import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
+import type { Agent } from '../agent.js';
+import { fromConfig } from '../fromConfig.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
 import {
   runCleanupSteps,
   cleanupAfterFailure,
-} from '../../../agents/src/core/subagent-cleanup.js';
+} from '../../core/subagent-cleanup.js';
 
 function retainedFile(
   agent: Agent,
@@ -252,7 +252,7 @@ describe('foreground Agent provider-file ownership', () => {
     await expect(second.dispose()).resolves.toBeUndefined();
   });
   it('does not expose ambient runtime identity through its public factory', async () => {
-    const factory = await import('../../../agents/src/api/index.js');
+    const factory = await import('../index.js');
     expect(Object.keys(factory)).not.toContain('enterRuntimeScope');
   });
 });

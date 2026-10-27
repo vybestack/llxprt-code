@@ -10,7 +10,6 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { mkdtemp, rm, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import {
   MemoryTokenStore,
@@ -20,7 +19,16 @@ import {
 describe('owner OAuth interactive authentication timeout', () => {
   const retiring: Array<() => void | Promise<void>> = [];
   afterEach(async () => {
-    await runCleanupSteps(retiring.splice(0).reverse());
+    const errors: unknown[] = [];
+    for (const step of retiring.splice(0).reverse()) {
+      try {
+        await step();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Fixture cleanup failed');
   });
   afterEach(async () => {
     vi.restoreAllMocks();
