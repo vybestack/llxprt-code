@@ -19,6 +19,7 @@ import {
 import type { SlashCommandProcessorActions } from '../ui/hooks/slashCommandProcessor.js';
 import type { HistoryItemWithoutId, Message } from '../ui/types.js';
 import { createMockCommandContext } from './mockCommandContext.js';
+import { NativeJournalCursor } from '../ui/stores/turn/native-journal-cursor.js';
 const actions: SlashCommandProcessorActions = {
   openAuthDialog: () => {},
   openThemeDialog: () => {},
@@ -99,6 +100,25 @@ export interface NativeCommandFixture {
   close(): Promise<void>;
 }
 
+async function collectJournalNotices(
+  path: string,
+  items: HistoryItemWithoutId[],
+): Promise<void> {
+  const cursor = await NativeJournalCursor.open(path, {}, 16);
+  try {
+    const page = await cursor.pageBack(16);
+    items.push(
+      ...page.entries.flatMap((entry) =>
+        entry.kind === 'projected' && entry.contextState === 'n/a'
+          ? [entry.item]
+          : [],
+      ),
+    );
+  } finally {
+    await cursor.close();
+  }
+}
+
 export async function nativeCommandFixture(): Promise<NativeCommandFixture> {
   const saved = { ...process.env };
   const root = await mkdtemp(join(tmpdir(), 'w23-cli-fault-'));
@@ -162,6 +182,8 @@ export async function nativeCommandFixture(): Promise<NativeCommandFixture> {
       expect(
         await processSlashCommand(deps, text, undefined, undefined, false),
       ).toStrictEqual({ type: 'handled' });
+      const path = live.session.getRecording().path;
+      if (path !== undefined) await collectJournalNotices(path, items);
     },
     close: async (): Promise<void> => {
       try {
