@@ -139,6 +139,8 @@ Two outcomes are kept apart. A frame that does not fit in the file, or whose `fr
 | 0x04 | `LENS` | Per-block serialized lengths of one row for one format slot and variant (Section 8). Immutable; a newer one supersedes through the row entry. |
 | 0x05 | `VALUE` | A small value referenced from the meta map or the state map: session title, name, provider and model, workspace dirs, checkpoint descriptors, owner dictionary, mapped tool ids. JSON body. |
 | 0x06 | `EVENT` | An audit event with no effect on history state: provider switch, session event, directories changed. JSON body. Nothing reads these to derive state. |
+| 0x07 | `PIECE` | A bounded payload fragment referenced by a chunk-backed row (Section 16.1). |
+| 0x08 | `TNODE` | A transcript, membership, block or piece index node (Section 16.1). |
 | 0x7F | `TRAILER` | The commit record. Carries the running-state header. |
 
 The JSONL record types `replace_begin`, `replace_commit`, `replace_abort`, `rewind`, `compressed`, `compression_detail`, `density_mutation`, `synthetic_insert`, `chronology_bind` and `semantic_media_purge` have no counterpart. Each is a mutation expressed as a commit group (Section 4), and `trailer.mutation` names which one it was. A whole-history snapshot line (`semantic_media_purge`, bounded by `MAX_PURGE_SNAPSHOT_BYTES` in `resolverProjection.ts`) is no longer possible: a purge writes the changed rows.
@@ -316,6 +318,7 @@ Every other bit is zero.
 | 4 | LENS |
 | 5 | VALUE |
 | 6 | EVENT |
+| 7 | PIECE |
 | 8 | TNODE |
 | 127 | TRAILER |
 
