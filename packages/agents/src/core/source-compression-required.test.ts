@@ -38,9 +38,12 @@ async function historyDigest(
 
 async function legacyFinalized(
   setup: Awaited<ReturnType<typeof processorFixture>>,
+  includePending = true,
 ) {
   const projection = await setup.provider.projectPromptEnvelope({
-    contents: setup.history.getCuratedForProviderStream([pending]),
+    contents: setup.history.getCuratedForProviderStream(
+      includePending ? [pending] : [],
+    ),
     invocation: setup.runtime.prepareProviderInvocation(setup.provider.name),
     systemInstruction: projectionInstructions,
   });
@@ -97,7 +100,7 @@ async function requiredCompression(spec: RequiredCase): Promise<void> {
     // The legacy collecting projection of a >10 MiB row does not finish in
     // test time; it is an array-route cost that WP16 deletes, so the large
     // rows are checked against the source estimate and the sent body instead.
-    const oracle = large ? undefined : await legacyFinalized(setup);
+    const oracle = large ? undefined : await legacyFinalized(setup, false);
     for await (const _chunk of stream) {
       /* Drain real HTTP and commit its lifecycle. */
     }

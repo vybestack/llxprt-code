@@ -4,6 +4,7 @@ import { setImmediate } from 'node:timers/promises';
 import {
   expectedHistoryDigest,
   sendHistoryTurn,
+  observeResponsePublications,
   withOrchestratorHistory,
 } from './__tests__/support/orchestrator-history-test-helpers.js';
 
@@ -71,13 +72,7 @@ for (const size of [65]) {
         history.pauseAfter = 31;
         history.fault = fault;
         const events: string[] = [];
-        for (const event of [
-          'contentAdded',
-          'contentBatchAdded',
-          'tokensUpdated',
-          'contextRangeChanged',
-        ])
-          history.on(event, () => events.push(event));
+        observeResponsePublications(history, events);
         const result = sendHistoryTurn(client).then(
           () => undefined,
           (error: unknown) => error,

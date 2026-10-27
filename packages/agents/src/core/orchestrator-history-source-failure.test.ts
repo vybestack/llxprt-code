@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import {
   sendHistoryTurn,
+  observeResponsePublications,
   withOrchestratorHistory,
 } from './__tests__/support/orchestrator-history-test-helpers.js';
 import {
@@ -17,13 +18,7 @@ for (const position of [1, 3, 5]) {
         await withOrchestratorHistory(5, async (client, history, reader) => {
           const failure = new Error('request producer failed');
           const events: string[] = [];
-          for (const event of [
-            'contentAdded',
-            'contentBatchAdded',
-            'tokensUpdated',
-            'contextRangeChanged',
-          ])
-            history.on(event, () => events.push(event));
+          observeResponsePublications(history, events);
           history.pauseAfter = position;
           history.fault = failure;
           const operation = streaming

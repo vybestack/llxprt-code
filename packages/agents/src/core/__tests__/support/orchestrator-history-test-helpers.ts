@@ -66,13 +66,15 @@ export class ControlledOrchestratorHistory extends HistoryService {
     const hash = createHash('sha256');
     let count = 0;
     for await (const row of super.streamRawHistory(signal)) {
-      count++;
-      hash.update(
-        JSON.stringify({
-          ...row,
-          metadata: { chronology: row.metadata?.chronology, ...row.metadata },
-        }),
-      );
+      if (row.metadata?.promptId === undefined) {
+        count++;
+        hash.update(
+          JSON.stringify({
+            ...row,
+            metadata: { chronology: row.metadata?.chronology, ...row.metadata },
+          }),
+        );
+      }
       if (first && this.retaining !== undefined) {
         const owned = this.retaining === 'copy' ? structuredClone(row) : row;
         this.consumer.retain(owned);
@@ -104,6 +106,39 @@ export function expectedHistoryDigest(size: number, bytes = 2048): string {
   for (let index = 0; index < size; index++)
     hash.update(JSON.stringify(accountingRow(index, bytes)));
   return hash.digest('hex');
+}
+
+export function observeResponsePublications(
+  history: HistoryService,
+  events: string[],
+): void {
+  let responsePublished = false;
+  history.on('contentSealed', () => {
+    responsePublished = true;
+    events.push('contentSealed');
+  });
+  history.on('contentAdded', (row) => {
+    if (row.speaker === 'ai') {
+      responsePublished = true;
+      events.push('contentAdded');
+    }
+  });
+  history.on('contentBatchAdded', (batch) => {
+    void (async () => {
+      for await (const row of batch.rows()) {
+        if (row.speaker === 'ai') {
+          responsePublished = true;
+          events.push('contentBatchAdded');
+        }
+      }
+    })().catch((error: unknown) => {
+      events.push(`publication read failed: ${String(error)}`);
+    });
+  });
+  for (const event of ['tokensUpdated', 'contextRangeChanged'])
+    history.on(event, () => {
+      if (responsePublished) events.push(event);
+    });
 }
 
 export async function sendHistoryTurn(
