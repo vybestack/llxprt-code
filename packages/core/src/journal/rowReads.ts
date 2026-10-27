@@ -27,6 +27,24 @@ export interface RowIds {
   readonly rawIds: readonly string[];
 }
 
+export type RowReferenceValidator = (entry: RowEntry) => Promise<boolean>;
+
+export async function validateRowReference(
+  entry: RowEntry,
+  header: RowHeader,
+  validate?: RowReferenceValidator,
+): Promise<void> {
+  if (header.label === entry.label) return;
+  if (
+    entry.transcriptId !== 0n &&
+    (validate === undefined || (await validate(entry)))
+  )
+    return;
+  throw new JournalFormatError(
+    `Row at offset ${entry.recordOffset} has label ${header.label}, its entry says ${entry.label}`,
+  );
+}
+
 /**
  * Reads the header and id piece of the row an entry points at, in one read
  * for an ordinary row and a second for one whose pieces are larger than the
@@ -36,6 +54,7 @@ export interface RowIds {
 export async function readRowIds(
   access: RecordAccess,
   entry: RowEntry,
+  validate?: RowReferenceValidator,
 ): Promise<RowIds> {
   const { head, bodyPrefix } = await access.readRecordStart(
     entry.recordOffset,
@@ -51,13 +70,9 @@ export async function readRowIds(
     access,
     decodeRowHeader(head.kindHeader),
   );
-  if (entry.transcriptId === 0n && header.label !== entry.label) {
-    throw new JournalFormatError(
-      `Row at offset ${entry.recordOffset} has label ${header.label}, its entry says ${entry.label}`,
-    );
-  }
+  await validateRowReference(entry, header, validate);
   validateRowAgainstBody(header, head.bodyLen);
-  header = { ...header, label: entry.label, owner: entry.owner };
+  header = { ...header, label: entry.label };
   if (header.chunk !== undefined) {
     const rawIds: string[] = [];
     const ids = [];
@@ -153,6 +168,7 @@ export async function readStoredRow(
   access: RecordAccess,
   entry: RowEntry,
   knownHead?: FrameHead,
+  validate?: RowReferenceValidator,
 ): Promise<StoredRow> {
   const head =
     knownHead ?? (await access.readRecordHead(entry.recordOffset, 'ROW'));
@@ -165,12 +181,8 @@ export async function readStoredRow(
     access,
     decodeRowHeader(head.kindHeader),
   );
-  if (entry.transcriptId === 0n && header.label !== entry.label) {
-    throw new JournalFormatError(
-      `Row at offset ${entry.recordOffset} has label ${header.label}, its entry says ${entry.label}`,
-    );
-  }
-  header = { ...header, label: entry.label, owner: entry.owner };
+  await validateRowReference(entry, header, validate);
+  header = { ...header, label: entry.label };
   if (header.chunk !== undefined) {
     const blocks: Uint8Array[] = [];
     for (let ordinal = 0; ordinal < header.chunk.blockCount; ordinal++)

@@ -253,11 +253,52 @@ describe('invalid selected range references', () => {
     await integrityRow(
       `${directory()}/identity.llxj`,
       async (snapshot, entry) => {
-        await expect(
-          snapshot.readBlock({ ...entry, label: entry.label + 1n }, 0),
-        ).rejects.toThrow(
-          `Row at offset ${entry.recordOffset} has label ${entry.label}, its entry says ${entry.label + 1n}`,
-        );
+        const wrong = { ...entry, label: entry.label + 1n };
+        const ids = await snapshot.readIds(entry);
+        for (const read of [
+          () => snapshot.readBlock(wrong, 0),
+          () => snapshot.readBlock(wrong, 0, ids),
+          () => snapshot.readIds(wrong),
+          () => snapshot.readRow(wrong),
+          () => snapshot.readMetadata(wrong),
+          () => snapshot.readMetadata(wrong, ids),
+        ]) {
+          await expect(read()).rejects.toThrow(
+            `Row at offset ${entry.recordOffset} has label ${entry.label}, its entry says ${wrong.label}`,
+          );
+        }
+      },
+    );
+  });
+  it('reads a reused physical body through its new snapshot label', async () => {
+    await integrityRow(
+      `${directory()}/reused.llxj`,
+      async (snapshot, entry, _head, session) => {
+        await session.store.commit([
+          { kind: 'replace', rows: [snapshot.sourceRow(entry)] },
+        ]);
+        const replaced = await session.store.snapshot();
+        try {
+          const reused = await replaced.entryAt(0);
+          expect(reused.recordOffset).toBe(entry.recordOffset);
+          expect(reused.label).not.toBe(entry.label);
+          const ids = await replaced.readIds(reused);
+          expect(ids.header.label).toBe(reused.label);
+          for (const block of [
+            await replaced.readBlock(reused, 0),
+            await replaced.readBlock(reused, 0, ids),
+            (await replaced.readRow(reused)).blocks[0],
+          ]) {
+            expect(new TextDecoder().decode(block)).toBe(
+              '{"type":"text","text":"selected payload"}',
+            );
+          }
+          expect((await replaced.readMetadata(reused, ids)).header.label).toBe(
+            reused.label,
+          );
+        } finally {
+          await replaced.close();
+        }
       },
     );
   });

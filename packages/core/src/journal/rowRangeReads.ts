@@ -6,7 +6,14 @@ import type { FrameHead } from './frame.js';
 import type { RecordAccess } from './recordAccess.js';
 import { RECORD_KIND } from './recordKinds.js';
 import type { RowEntry } from './rowEntry.js';
-import { readRowIds, type RowIds, type StoredRow } from './rowReads.js';
+import {
+  readRowIds,
+  validateRowReference,
+  type RowIds,
+  type StoredRow,
+  type RowReferenceValidator,
+} from './rowReads.js';
+
 import {
   decodeRowHeader,
   validateRowAgainstBody,
@@ -16,6 +23,7 @@ import {
 async function rowHead(
   access: RecordAccess,
   entry: RowEntry,
+  validate?: RowReferenceValidator,
 ): Promise<{ readonly head: FrameHead; readonly header: RowHeader }> {
   const head = await access.readRecordHead(entry.recordOffset, 'ROW');
   if (head.kind !== RECORD_KIND.ROW)
@@ -26,14 +34,11 @@ async function rowHead(
     access,
     decodeRowHeader(head.kindHeader),
   );
-  if (entry.transcriptId === 0n && header.label !== entry.label)
-    throw new JournalFormatError(
-      `Row at offset ${entry.recordOffset} has label ${header.label}, its entry says ${entry.label}`,
-    );
+  await validateRowReference(entry, header, validate);
   validateRowAgainstBody(header, head.bodyLen);
   return {
     head,
-    header: { ...header, label: entry.label, owner: entry.owner },
+    header: { ...header, label: entry.label },
   };
 }
 
@@ -42,11 +47,18 @@ export async function readStoredBlock(
   entry: RowEntry,
   index: number,
   ids?: RowIds,
+  validate?: RowReferenceValidator,
 ): Promise<Uint8Array> {
   const { head, header } =
     ids?.head === undefined
-      ? await rowHead(access, entry)
+      ? await rowHead(access, entry, validate)
       : { head: ids.head, header: ids.header };
+  if (ids?.head !== undefined)
+    await validateRowReference(
+      entry,
+      decodeRowHeader(head.kindHeader),
+      validate,
+    );
   if (!Number.isInteger(index) || index < 0 || index >= header.blocks.length)
     throw new JournalFormatError(
       `Row ${entry.label} at offset ${entry.recordOffset}: block ${index} is absent`,
@@ -61,12 +73,19 @@ export async function readStoredMetadata(
   access: RecordAccess,
   entry: RowEntry,
   known?: RowIds,
+  validate?: RowReferenceValidator,
 ): Promise<StoredRow> {
-  const ids = known ?? (await readRowIds(access, entry));
+  const ids = known ?? (await readRowIds(access, entry, validate));
   const { head, header } =
     ids.head === undefined
-      ? await rowHead(access, entry)
+      ? await rowHead(access, entry, validate)
       : { head: ids.head, header: ids.header };
+  if (known?.head !== undefined)
+    await validateRowReference(
+      entry,
+      decodeRowHeader(head.kindHeader),
+      validate,
+    );
   const { rawIds } = ids;
   if (header.chunk !== undefined)
     return {

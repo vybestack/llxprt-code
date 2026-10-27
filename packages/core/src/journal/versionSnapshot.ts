@@ -592,12 +592,17 @@ export class VersionSnapshot {
   }
 
   readIds(entry: RowEntry): Promise<RowIds> {
-    return readRowIds(this.read.access, entry);
+    return readRowIds(this.read.access, entry, this.matchesRowReference);
   }
 
   /** The whole row an entry of this snapshot points at. */
   readRow(entry: RowEntry): Promise<StoredRow> {
-    return readStoredRow(this.read.access, entry);
+    return readStoredRow(
+      this.read.access,
+      entry,
+      undefined,
+      this.matchesRowReference,
+    );
   }
 
   async *blocks(entry: RowEntry): AsyncGenerator<DirectoryBlock> {
@@ -623,13 +628,35 @@ export class VersionSnapshot {
 
   readBlock(entry: RowEntry, index: number, ids?: RowIds): Promise<Uint8Array> {
     this.requireOpen();
-    return readStoredBlock(this.read.access, entry, index, ids);
+    return readStoredBlock(
+      this.read.access,
+      entry,
+      index,
+      ids,
+      this.matchesRowReference,
+    );
   }
 
   readMetadata(entry: RowEntry, ids?: RowIds): Promise<StoredRow> {
     this.requireOpen();
-    return readStoredMetadata(this.read.access, entry, ids);
+    return readStoredMetadata(
+      this.read.access,
+      entry,
+      ids,
+      this.matchesRowReference,
+    );
   }
+
+  private readonly matchesRowReference = async (
+    entry: RowEntry,
+  ): Promise<boolean> => {
+    const stored = await this.entryByLabel(entry.label);
+    return (
+      stored !== undefined &&
+      stored.recordOffset === entry.recordOffset &&
+      stored.transcriptId === entry.transcriptId
+    );
+  };
 
   requireOpen(): void {
     this.read.requireOpen();
