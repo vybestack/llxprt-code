@@ -42,7 +42,10 @@ import {
 import { responsesRequestParts } from './responses-disk-body.js';
 import { responsesInputContext } from './responses-request-fields.js';
 import { sanitizeDiagnosticData } from '../utils/mediaDiagnostics.js';
-import { resolveRowsMedia } from './responses-row-media.js';
+import {
+  resolveRowsMedia,
+  ResponsesMediaBudget,
+} from './responses-row-media.js';
 import { PROJECTION_REVISION } from '../runtime/promptEnvelopeProjections.js';
 import { NativeResponsesEstimateProjection } from './native-responses-estimate.js';
 import {
@@ -448,6 +451,7 @@ async function historyByteLength(
       rows,
       selection.skipRows,
       options.pdfEnabled,
+      new ResponsesMediaBudget(options.mediaBudgetBytes),
     ),
   };
 }
@@ -462,12 +466,14 @@ async function callerOwnedByteLength(
   const query = rows.index ?? (await CallerOwnedToolQuery.create(rows));
   const settings = nativeSettings(options);
   const unsupportedMedia = new UnsupportedMediaSummary();
+  const mediaBudget = new ResponsesMediaBudget(options.mediaBudgetBytes);
   let pdfBytes = 0;
   let bytes = 2;
   let items = 0;
   let generatedIds = 0;
   for (let at = selection.skipRows; at < rows.count; at++) {
     const row = await rows.readAt(at, options.invocation.signal);
+    mediaBudget.include(row);
     unsupportedMedia.addAll(unsupportedMediaForRow(row, options.pdfEnabled));
     const pairs = await responsesUnitPairs(row, query, selection.skipRows);
     const measured = responsesUnitLength(

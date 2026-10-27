@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { journalSendFixture } from '../__tests__/support/journal-send-fixture.js';
 import { statefulUnsupportedMedia } from './native-responses-selection.js';
+import { ResponsesMediaBudget } from './responses-row-media.js';
 
 const toolRows: readonly IContent[] = [
   {
@@ -48,6 +49,33 @@ describe('Responses unsupported-media discovery', () => {
   });
 
   for (const pending of [false, true]) {
+    it(`validates aggregate ${pending ? 'pending' : 'persisted'} media budget while discovering descriptors`, async () => {
+      const second = { ...audio, metadata: { turnId: 'second-media-turn' } };
+      const fixture = await journalSendFixture(
+        pending ? [audio] : [audio, second],
+        pending ? [second] : [],
+      );
+      try {
+        await expect(
+          statefulUnsupportedMedia(
+            fixture.selection,
+            0,
+            false,
+            new ResponsesMediaBudget(7),
+          ),
+        ).rejects.toThrow('second-media-turn');
+        expect(
+          await statefulUnsupportedMedia(
+            fixture.selection,
+            1,
+            false,
+            new ResponsesMediaBudget(4),
+          ),
+        ).toHaveLength(1);
+      } finally {
+        await fixture.close();
+      }
+    });
     it(`finds unsupported ${pending ? 'pending' : 'persisted'} media alongside tool rows`, async () => {
       const fixture = await journalSendFixture(
         pending ? toolRows : [...toolRows, audio],

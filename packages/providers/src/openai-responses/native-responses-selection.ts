@@ -17,6 +17,7 @@ import {
 import { unitCount } from '@vybestack/llxprt-code-core/journal/unitContributions.js';
 import { UnsupportedMediaSummary } from '../utils/unsupported-media-summary.js';
 import { classifyMediaBlock } from '../utils/mediaUtils.js';
+import type { ResponsesMediaBudget } from './responses-row-media.js';
 import {
   responsesUnitLength,
   responsesUnitPairs,
@@ -27,6 +28,7 @@ export async function statefulUnsupportedMedia(
   rows: ProviderRequestRows,
   skipRows: number,
   pdfEnabled: boolean,
+  mediaBudget?: ResponsesMediaBudget,
 ): Promise<readonly UnsupportedMediaEntry[]> {
   const indexed = rows.native?.indexed;
   if (
@@ -52,9 +54,16 @@ export async function statefulUnsupportedMedia(
       continue;
     if (indexed === undefined) {
       const row = await rows.readAt(index);
+      mediaBudget?.include(row);
       unsupported.addAll(unsupportedMediaForRow(row, pdfEnabled));
     } else {
-      await unsupportedMediaForPlan(indexed, index, pdfEnabled, unsupported);
+      await unsupportedMediaForPlan(
+        indexed,
+        index,
+        pdfEnabled,
+        unsupported,
+        mediaBudget,
+      );
     }
   }
   return unsupported.entries();
@@ -65,13 +74,15 @@ async function unsupportedMediaForPlan(
   index: number,
   pdfEnabled: boolean,
   unsupported: UnsupportedMediaSummary,
+  mediaBudget: ResponsesMediaBudget | undefined,
 ): Promise<void> {
   const plan = await indexed.planAt(index);
   for await (const block of plan.openBlocks()) {
-    if (block.type === 'media')
-      unsupported.addAll(
-        unsupportedMediaForRow({ ...plan.header, blocks: [block] }, pdfEnabled),
-      );
+    if (block.type === 'media') {
+      const row = { ...plan.header, blocks: [block] };
+      mediaBudget?.include(row);
+      unsupported.addAll(unsupportedMediaForRow(row, pdfEnabled));
+    }
   }
 }
 

@@ -439,7 +439,13 @@ function registerProviderBehavior5(tempDirectory: () => string): void {
 
 function registerProviderBehavior6(tempDirectory: () => string): void {
   describe('provider fixture 6', () => {
-    it.each(['missing', 'corrupt', 'hash-mismatch', 'over-budget'])(
+    it.each([
+      'missing',
+      'corrupt',
+      'hash-mismatch',
+      'over-budget',
+      'malformed',
+    ])(
       'fails %s post-parent media before Codex socket or HTTP submission',
       async (failure) => {
         const store = new LocalMediaStore({
@@ -476,7 +482,13 @@ function registerProviderBehavior6(tempDirectory: () => string): void {
 
         const error = await runRequest(
           provider,
-          history(beforeParent, invalid, CODEX_BASE_URL),
+          history(
+            beforeParent,
+            failure === 'malformed'
+              ? { ...invalid, normalizedBase64Length: -1 }
+              : invalid,
+            CODEX_BASE_URL,
+          ),
           resolver,
           budget,
         ).catch((reason: unknown) => reason);

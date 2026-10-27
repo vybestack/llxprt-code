@@ -1,9 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  isMediaReferenceBlock,
+  type IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NativeProviderFormat } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
 import {
   assertRequestMediaBudget,
   DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
+  RequestMediaResolutionError,
   type RequestMediaReservations,
   type ResolvedMediaRequest,
 } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
@@ -19,6 +23,30 @@ function hasReference(row: IContent): boolean {
   return row.blocks.some(
     (block) => block.type === 'media' && block.encoding === 'reference',
   );
+}
+export class ResponsesMediaBudget {
+  private used = 0;
+
+  constructor(private readonly budget = DEFAULT_REQUEST_MEDIA_BUDGET_BYTES) {}
+
+  include(row: IContent): void {
+    const turnId = row.metadata?.turnId ?? row.metadata?.id ?? 'unknown-turn';
+    for (const block of row.blocks) {
+      const candidate: unknown = block;
+      if (
+        block.type === 'media' &&
+        block.encoding === 'reference' &&
+        !isMediaReferenceBlock(candidate)
+      )
+        throw new RequestMediaResolutionError(
+          block.contentId,
+          turnId,
+          'metadata validation',
+        );
+    }
+    assertRequestMediaBudget([row], turnId, this.budget - this.used);
+    this.used += rowMediaBytes(row);
+  }
 }
 
 /** Normalized base64 characters the row contributes to the request budget. */
