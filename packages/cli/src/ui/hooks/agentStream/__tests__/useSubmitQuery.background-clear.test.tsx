@@ -163,7 +163,11 @@ const CHILD_FAILURE = 'Physical child failure';
 
 const SHELL_COMMANDS: Record<string, string> = {
   'shell completed': 'printf idle-recovered-shell',
-  'shell failed': 'exit 7',
+  // A real program, not a shell builtin: the public tool validates that the
+  // command has an identifiable root before running it, and `exit` has none
+  // under the PowerShell parser. node exits 7 on POSIX and non-zero on
+  // Windows, so the job still reaches the failed state on both.
+  'shell failed': 'node -e "process.exit(7)"',
   'shell cancelled': 'sleep 30',
 };
 
