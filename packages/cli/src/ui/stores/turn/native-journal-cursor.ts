@@ -55,6 +55,7 @@ export class NativeJournalCursor {
   private responseIndex: NativeResponseIndex;
   private group: { readonly start: number; readonly end: number } | undefined;
   private publishedEnd: number | undefined;
+  private readonly orphanBeforeOffset: number;
 
   private constructor(
     private reader: NativeJournalPageReader,
@@ -67,6 +68,7 @@ export class NativeJournalCursor {
         : this.controller.signal,
     };
     this.publishedEnd = options.publishedEnd;
+    this.orphanBeforeOffset = options.orphanBeforeOffset ?? reader.size;
     this.start = { row: this.rows, item: 0 };
     this.end = this.start;
     this.responseIndex = new NativeResponseIndex(reader);
@@ -359,6 +361,7 @@ export class NativeJournalCursor {
         [page, ...responses.values()],
         this.options.emojiFilterMode,
       ),
+      first.recordOffset < this.orphanBeforeOffset,
     );
   }
   private async *projectGroup(

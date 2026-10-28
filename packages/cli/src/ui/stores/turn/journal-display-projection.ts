@@ -71,6 +71,7 @@ export async function withToolPresentations(
   reader: NativeJournalPageReader,
   row: NativeJournalEntry,
   items: HistoryItem[],
+  orphanedApproval = false,
 ): Promise<HistoryItem[]> {
   const result: HistoryItem[] = [];
   for (const item of items) {
@@ -81,7 +82,12 @@ export async function withToolPresentations(
     const tools = [];
     const journalIdentity = await reader.toolRequestIdentity(row);
     for (const original of item.tools) {
-      const tool = await withPersistedApproval(reader, row, original);
+      const tool = await withPersistedApproval(
+        reader,
+        row,
+        original,
+        orphanedApproval,
+      );
       const presentation = await reader.toolPresentation(row, tool.callId);
       if (presentation === undefined) {
         tools.push({ ...tool, journalIdentity });

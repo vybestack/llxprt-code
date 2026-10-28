@@ -13,6 +13,8 @@ export interface NativeJournalOptions {
   readonly signal?: AbortSignal;
   readonly journal?: NativeJournalReadDependencies;
   readonly publishedEnd?: number;
+  /** Requests recorded before this boundary have no live approval owner. */
+  readonly orphanBeforeOffset?: number;
 }
 
 export type NativeDisplayEntry =

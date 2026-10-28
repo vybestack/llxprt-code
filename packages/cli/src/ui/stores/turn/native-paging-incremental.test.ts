@@ -9,6 +9,8 @@ import { createRowCounters } from '../../../../../core/src/recording/journalCoun
 import { NativeJournalCursor } from './native-journal-cursor.js';
 import { createScrollbackPagerStore } from './scrollbackPager.js';
 
+import { JournalDisplayWriter } from '@vybestack/llxprt-code-core/journal/display-recording.js';
+
 function human(seq: number): IContent {
   return {
     speaker: 'human',
@@ -31,6 +33,28 @@ async function fixture(
 }
 
 describe('native incremental paging', () => {
+  it('follows a notice committed after a displayed slash command', async () => {
+    await fixture(async (session) => {
+      const writer = new JournalDisplayWriter(session.store);
+      await writer.append({ type: 'user' }, '/model fake-model');
+      const cursor = await NativeJournalCursor.open(session.path, {}, 16);
+      try {
+        await cursor.pageBack(16);
+        await writer.append(
+          { type: 'slash' },
+          "Switched model in provider 'fake'",
+        );
+        const page = await cursor.pageForward(16);
+        expect(
+          page.entries.flatMap((entry) =>
+            entry.kind === 'projected' ? [entry.item.text] : [],
+          ),
+        ).toContain("Switched model in provider 'fake'");
+      } finally {
+        await cursor.close();
+      }
+    });
+  });
   it('decodes only appended rows rather than rebuilding the journal', async () => {
     await fixture(async (session) => {
       const large = 1500;

@@ -36,6 +36,7 @@ import {
 import type { SlashCommandRuntime, UiRuntime } from '../cliUiRuntime.js';
 import { themeManager } from '../themes/theme-manager.js';
 import { JournalStandardTranscript } from './journal-standard-transcript.js';
+import { QuitBoundary } from './quit-boundary.js';
 
 /**
  * P02e: pager store paired with the reporter the viewport component shares
@@ -86,7 +87,14 @@ function QuittingBoundary({
 }: React.PropsWithChildren<DefaultAppLayoutProps>) {
   const { store } = useTurnStore();
   const quitting = useStoreSelector(store, (s) => s.quittingMessages !== null);
-  return quitting ? <QuittingRegion {...props} /> : children;
+  return (
+    <QuitBoundary
+      quitting={quitting}
+      quitDisplay={<QuittingRegion {...props} />}
+    >
+      {children}
+    </QuitBoundary>
+  );
 }
 
 function QuittingRegion(props: DefaultAppLayoutProps) {

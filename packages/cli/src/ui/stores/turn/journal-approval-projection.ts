@@ -20,6 +20,7 @@ export async function withPersistedApproval(
   reader: NativeJournalPageReader,
   row: NativeJournalEntry,
   tool: IndividualToolCallDisplay,
+  orphaned: boolean,
 ): Promise<IndividualToolCallDisplay> {
   const record = await reader.toolApproval(row, tool.callId);
   if (record === undefined) return tool;
@@ -32,8 +33,9 @@ export async function withPersistedApproval(
     row.transcriptId.toString()
   )
     throw new Error('Mismatched approval transcript identity');
-  return approval.status === 'cancelled' &&
-    tool.status !== ToolCallStatus.Pending
+  if (tool.status === ToolCallStatus.Pending)
+    return orphaned ? { ...tool, status: ToolCallStatus.Canceled } : tool;
+  return approval.status === 'cancelled'
     ? { ...tool, status: ToolCallStatus.Canceled }
     : tool;
 }

@@ -23,6 +23,7 @@
 import { spawnSync } from 'node:child_process';
 import {
   mkdirSync,
+  existsSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -35,6 +36,7 @@ import { afterAll, describe, expect, it } from 'bun:test';
 import { parseSamples } from '../memory/sample.ts';
 import { assertBoundedPostClearRetention } from './memory/retention-checkpoints.ts';
 import { withShortUiWorkspace } from '../short-ui-workspace.js';
+import { cleanupScenarioProcessGroup } from '../interactive-ui-process-group.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../..');
@@ -97,7 +99,7 @@ function runHarness(
   artifactDirs.push(artifactDir);
 
   const result = spawnSync(
-    'bun',
+    process.execPath,
     [
       harnessPath,
       '--script',
@@ -120,6 +122,15 @@ function runHarness(
     },
   );
 
+  cleanupScenarioProcessGroup(artifactDir);
+  const exitFile = path.join(artifactDir, 'scenario-exit-code');
+  if (
+    result.status === 0 &&
+    (!existsSync(exitFile) || readFileSync(exitFile, 'utf8') !== '0')
+  )
+    throw new Error(
+      `Scenario CLI failed: ${readFileSync(exitFile, 'utf8')}; artifacts: ${artifactDir}`,
+    );
   return {
     stdout: result.stdout ?? '',
     stderr: result.stderr ?? '',
@@ -151,6 +162,7 @@ function assertHarnessSuccess(result: HarnessResult): void {
 }
 
 afterAll(() => {
+  for (const directory of artifactDirs) cleanupScenarioProcessGroup(directory);
   if (artifactDirs.length > 0) {
     console.log('Interactive UI artifact directories:');
     for (const dir of artifactDirs) {

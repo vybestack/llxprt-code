@@ -14,17 +14,7 @@ import { StreamingState } from '../types.js';
 import type { SlashCommandRuntime } from '../cliUiRuntime.js';
 import { SCROLLBACK_VIEWPORT_POLL_MS } from '../../constants/scrollbackLimits.js';
 
-function completed(row: ScrollbackRow): boolean {
-  return (
-    row.item.type !== 'tool_group' ||
-    row.item.tools.every(
-      (tool) =>
-        tool.status === 'Success' ||
-        tool.status === 'Error' ||
-        tool.status === 'Canceled',
-    )
-  );
-}
+import { settledTranscriptPrefix } from './journal-emission-rows.js';
 
 interface Emission {
   readonly serial: number;
@@ -72,9 +62,7 @@ function useJournalEmission(
   }, [store]);
   useEffect(() => {
     const candidates = responding ? frame.rows.slice(0, -1) : frame.rows;
-    const incomplete = candidates.findIndex((row) => !completed(row));
-    const stable =
-      incomplete < 0 ? candidates : candidates.slice(0, incomplete);
+    const stable = settledTranscriptPrefix(candidates, responding);
     const rows = stable.filter((row) => unprinted(row, printed.current));
     if (rows.length === 0) return;
     for (const row of rows) {
@@ -139,7 +127,7 @@ export function JournalStandardTranscript({
   );
   const responding = useStoreSelector(
     turn.store,
-    (state) => state.streamingState === StreamingState.Responding,
+    (state) => state.streamingState !== StreamingState.Idle,
   );
   const { emission, live, printed } = useJournalEmission(
     store,

@@ -197,6 +197,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   private readonly subscription: JournalPagerSubscription;
   private publishedEnd: number | undefined;
   private watermark: JournalCommitWatermark | undefined;
+  private orphanBeforeOffset: number | undefined;
   private resumed = false;
   private cursor: NativeJournalCursor | null = null;
   private openPromise: Promise<NativeJournalCursor | null> | null = null;
@@ -712,6 +713,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
         signal: this.controller.signal,
         publishedEnd: this.publishedEnd,
         journal: this.options.journal,
+        orphanBeforeOffset: this.orphanBeforeOffset,
         emojiFilterMode: this.options.emojiFilterMode,
       };
       const opening = NativeJournalCursor.open(
@@ -725,6 +727,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
             await cursor.close();
             return null;
           }
+          this.orphanBeforeOffset ??= cursor.size();
           this.cursor = cursor;
           return cursor;
         },

@@ -94,7 +94,7 @@ describe('cancelled tool presentation', () => {
       await session.close();
     }
   });
-  it.each(['scheduled', 'cancelled'])(
+  it.each(['awaiting_approval', 'scheduled', 'cancelled', 'modifying'])(
     'keeps a %s approval pending until its tool result arrives',
     async (status) => {
       const path = join(directory(), 'scheduled.llxj');
@@ -128,7 +128,11 @@ describe('cancelled tool presentation', () => {
             status,
           }),
         );
-        const cursor = await NativeJournalCursor.open(path, {}, 16);
+        const cursor = await NativeJournalCursor.open(
+          path,
+          { orphanBeforeOffset: 0 },
+          16,
+        );
         try {
           const entries = (await cursor.pageBack(16)).entries;
           const tools = entries.flatMap((entry) =>

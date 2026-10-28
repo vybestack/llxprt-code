@@ -47,7 +47,7 @@
     {
       "type": "waitFor",
       "scope": "scrollback",
-      "contains": "Skill **pr-creator** activated.",
+      "contains": "Skill pr-creator activated.",
       "timeoutMs": 30000
     },
     { "type": "capture", "label": "after-approval", "scope": "screen" },

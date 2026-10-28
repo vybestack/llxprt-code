@@ -19,6 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { quote } from 'shell-quote';
 import { execFileSync } from 'node:child_process';
+import { cleanupScenarioProcessGroup } from './interactive-ui-process-group.ts';
 import {
   compileMatcher,
   matchText,
@@ -408,7 +409,14 @@ function startTmuxSession(
     '-k',
     '-t',
     sessionName,
-    `${buildTmuxStartCommand(startArgs, outDir)}; exit`,
+    `${quote([
+      resolveBunExecutable(),
+      fileURLToPath(
+        new URL('./interactive-ui-process-group.ts', import.meta.url),
+      ),
+      outDir,
+      buildTmuxStartCommand(startArgs, outDir),
+    ])}; exit`,
   ]);
 }
 
@@ -626,13 +634,33 @@ async function runMain(options: HarnessOptions): Promise<void> {
 }
 
 async function main() {
-  const options = parseArgs(process.argv.slice(2));
+  const parsed = parseArgs(process.argv.slice(2));
+  const outDir = path.resolve(
+    parsed.outDir ??
+      path.join(
+        os.tmpdir(),
+        `llxprt-tmux-harness-${process.pid}-${Date.now()}`,
+      ),
+  );
+  const options = { ...parsed, outDir };
+  const cleanup = (): void => {
+    if (!options.keepSession) {
+      cleanupScenarioProcessGroup(outDir);
+      cleanupTmuxSocketDir();
+    }
+  };
+  const terminate = (): void => {
+    cleanup();
+    process.exit(143);
+  };
+  process.once('SIGTERM', terminate);
+  process.once('SIGINT', terminate);
   try {
     await runMain(options);
   } finally {
-    if (!options.keepSession) {
-      cleanupTmuxSocketDir();
-    }
+    process.removeListener('SIGTERM', terminate);
+    process.removeListener('SIGINT', terminate);
+    cleanup();
   }
 }
 
