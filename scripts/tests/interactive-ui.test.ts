@@ -37,7 +37,7 @@ import { parseSamples } from '../memory/sample.ts';
 import { assertBoundedPostClearRetention } from './memory/retention-checkpoints.ts';
 import { withShortUiWorkspace } from '../short-ui-workspace.js';
 import { cleanupScenarioProcessGroup } from '../interactive-ui-process-group.ts';
-import memoryRetentionScript from '../tmux-script.issue3386-memory-retention.fake.json';
+import memoryRetentionScript from '../tmux-script.issue3386-memory-retention.fake.json' with { type: 'json' };
 import { synchronizeShellInput } from './interactive-ui-input.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
