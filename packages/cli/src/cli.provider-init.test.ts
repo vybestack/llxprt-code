@@ -40,6 +40,7 @@ import {
   type Agent,
 } from '@vybestack/llxprt-code-agents';
 import { createTestSessionMediaConfig } from './__tests__/sessionMediaConfig.js';
+import { createLoadedSettings } from './__tests__/loaded-settings-fixture.js';
 
 const fakeResponses = fileURLToPath(
   new URL(
@@ -51,17 +52,13 @@ const fakeResponses = fileURLToPath(
 const actual = { ...(await import('./config/settings.js')) };
 void vi.mock('./config/settings.js', () => ({
   ...actual,
-  loadSettings: vi.fn(() => ({
-    merged: {
+  loadSettings: vi.fn(() =>
+    createLoadedSettings({
       extensions: { disabled: [] },
-      advanced: {},
       security: { auth: {} },
       ui: { autoConfigureMaxOldSpaceSize: false, customThemes: {} },
-    },
-    errors: [],
-    setValue: vi.fn(),
-    forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-  })),
+    }),
+  ),
   migrateDeprecatedSettings: vi.fn(),
 }));
 
