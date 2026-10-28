@@ -30,12 +30,14 @@ async function measureFixture(
   io: Io,
   retention: Retention,
   trap: boolean,
+  warmed?: () => Promise<void>,
 ): Promise<boolean> {
   fixture.live.setEphemeralSetting('context-limit', 2_000_000);
   await fixture.live.session.setRecording({ enabled: true });
   await fixture.live.session.recordRecordingTitle('W24 heap and I/O');
   const path = await lockedRecordingPath(fixture.live);
   const warmup = await warmUp(fixture);
+  await warmed?.();
   const baseline = await heapBaseline(fixture);
   const beforeTransport = server.receipt();
   const beforeIo = io.snapshot();
@@ -86,7 +88,10 @@ async function measureFixture(
   return verdict.pass;
 }
 
-export async function wholeProductHeap(trap: boolean): Promise<boolean> {
+export async function wholeProductHeap(
+  trap: boolean,
+  warmed?: () => Promise<void>,
+): Promise<boolean> {
   measurementMode();
   const server = startWholeProductTransport();
   const browserWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
@@ -99,7 +104,7 @@ export async function wholeProductHeap(trap: boolean): Promise<boolean> {
     const fixture = await wholeProductFixture(server);
     const retention = observeWholeProductRetention(trap);
     try {
-      return await measureFixture(fixture, server, io, retention, trap);
+      return await measureFixture(fixture, server, io, retention, trap, warmed);
     } finally {
       retention.restore();
       await fixture.close();
