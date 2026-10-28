@@ -36,9 +36,12 @@ import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.j
 import { RetainedHistoryAdmissions } from './retainedHistoryAdmissions.js';
 import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
 
-const { gcAndSweep }: { gcAndSweep(): void } = createRequire(import.meta.url)(
-  'bun:jsc',
-);
+const {
+  gcAndSweep,
+  releaseWeakRefs,
+}: { gcAndSweep(): void; releaseWeakRefs(): void } = createRequire(
+  import.meta.url,
+)('bun:jsc');
 
 const RED_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
@@ -180,6 +183,9 @@ async function referencedIds(chat: ChatSession): Promise<string[]> {
 async function collectGarbage(): Promise<void> {
   for (let index = 0; index < 4; index++) {
     await setImmediate();
+    // The census's WeakRefs keep newly observed rows alive for the current job.
+    // Release that engine-owned keepalive, not any production ownership.
+    releaseWeakRefs();
     gcAndSweep();
   }
 }
