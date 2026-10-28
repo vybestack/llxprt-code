@@ -72,6 +72,7 @@ import { CoreShellToolHostAdapter } from '../tools-adapters/CoreShellToolHostAda
 import { CoreStorageServiceAdapter } from '../tools-adapters/CoreStorageServiceAdapter.js';
 import { CoreTodoServiceAdapter } from '../tools-adapters/CoreTodoServiceAdapter.js';
 import { CoreToolHostAdapter } from '../tools-adapters/CoreToolHostAdapter.js';
+import { ToolKeyStorage } from '../tools/tool-key-storage.js';
 import { CoreToolKeyStorageAdapter } from '../tools-adapters/CoreToolKeyStorageAdapter.js';
 import { CoreToolRegistryHostAdapter } from '../tools-adapters/CoreToolRegistryHostAdapter.js';
 import { SubagentCatalog } from '../tools-adapters/subagentCatalog.js';
@@ -456,7 +457,9 @@ function registerStandardTools(
     ide?.openDiff.bind(ide),
     ide?.readConnection.bind(ide),
   );
-  const toolKeyStorageAdapter = new CoreToolKeyStorageAdapter();
+  const toolKeyStorageAdapter = new CoreToolKeyStorageAdapter(
+    new ToolKeyStorage(),
+  );
   const messageBusAdapter = new CoreMessageBusAdapter(messageBus);
   const todoServiceAdapter = new CoreTodoServiceAdapter(
     () => config.globalDataRoot,

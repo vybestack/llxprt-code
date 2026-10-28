@@ -479,7 +479,6 @@ export {
 export * from './tools-adapters/index.js';
 export {
   ToolKeyStorage,
-  getToolKeyStorage,
   type ToolKeyStorageOptions,
 } from './tools/tool-key-storage.js';
 export {
