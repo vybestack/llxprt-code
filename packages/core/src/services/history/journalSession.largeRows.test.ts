@@ -2,7 +2,8 @@
 import { createHash } from 'node:crypto';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import { describe, expect, it } from 'bun:test';
+import { tmpdir } from 'node:os';
+import { beforeAll, describe, expect, it } from 'bun:test';
 import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { MIB } from '../../journal/__tests__/support/streamedBody.js';
@@ -68,6 +69,23 @@ const SIZES = [17, 40, 200] as const;
 
 describe('rows of 17, 40 and 200 MiB through the journal session (defect 5)', () => {
   const directory = useTempDir('journal-large-session-');
+
+  beforeAll(async () => {
+    const warmDirectory = await fsp.mkdtemp(
+      path.join(tmpdir(), 'session-warm-'),
+    );
+    try {
+      const file = path.join(warmDirectory, 'warm.llxj');
+      const session = await JournalSession.create(file);
+      await appendRow(session, 1024);
+      await session.close();
+      const reopened = await JournalSession.open(file);
+      await readDigest(reopened);
+      await reopened.close();
+    } finally {
+      await fsp.rm(warmDirectory, { recursive: true, force: true });
+    }
+  });
 
   for (const mebibytes of SIZES) {
     it(`writes, reopens and reads a ${mebibytes} MiB row, and holds none of it afterwards`, async () => {
