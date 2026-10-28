@@ -1572,5 +1572,9 @@
   "packages/core/src/services/history/token-accounting-memory-legacy.test.ts": 73,
   "packages/core/src/services/history/token-accounting-memory-retaining-trap.test.ts": 75,
   "packages/core/src/services/history/token-accounting-memory-legacy-retaining-trap.test.ts": 40,
-  "packages/core/src/services/history/token-accounting-memory-fixture.test.ts": 7
+  "packages/core/src/services/history/token-accounting-memory-fixture.test.ts": 7,
+  "packages/providers/src/openai/native-chat-tokenizer-work.test.ts": 24,
+  "packages/providers/src/openai/native-mistral-cold-fill-text.test.ts": 64,
+  "packages/providers/src/openai/native-mistral-cold-fill-tools.test.ts": 110,
+  "packages/providers/src/openai/native-mistral-cold-fill-collisions.test.ts": 66
 }
