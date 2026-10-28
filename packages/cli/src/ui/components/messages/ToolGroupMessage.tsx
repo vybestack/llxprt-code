@@ -304,7 +304,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
 
   const { borderColor, borderDimColor } = deriveBorderColors(filteredToolCalls);
   const staticHeight = 2 + 1;
-  const innerWidth = terminalWidth;
+  const innerWidth = Math.max(1, terminalWidth - 3);
 
   const availableTerminalHeightPerToolMessage = computeAvailableHeightPerTool(
     availableTerminalHeight,
@@ -316,7 +316,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
     <Box
       flexDirection="column"
       borderStyle={getBorderStyle('round')}
-      width="100%"
+      width={Math.max(1, terminalWidth - 1)}
       marginLeft={1}
       borderDimColor={borderDimColor}
       borderColor={borderColor}
