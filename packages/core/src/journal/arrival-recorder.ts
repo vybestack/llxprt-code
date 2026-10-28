@@ -22,6 +22,7 @@ import {
 } from './arrival-group.js';
 import { MAX_ARRIVAL_PIECE_BYTES } from './chunk-row.js';
 import { ArrivalTextBuffer } from './arrival-text-buffer.js';
+import { ArrivalRecordCache } from './arrival-record-cache.js';
 
 export const RECORDING_QUEUE_BYTES = 256 * 1024;
 const WRITE_BUFFER_CHARGE = 96 * 1024;
@@ -29,6 +30,7 @@ const PIECE_CHARGE = 256;
 export class JournalArrivalRecorder {
   // The lifetime pin prevents offset reuse; a failed group poisons this recorder.
   private readonly treeCache = new BoundedIdNodeCache();
+  private readonly recordCache = new ArrivalRecordCache();
   private readonly textBuffer = new ArrivalTextBuffer();
   private pending: ArrivalPiece[] = [];
   private pendingBytes = 0;
@@ -70,10 +72,25 @@ export class JournalArrivalRecorder {
     try {
       const result = await this.store.mutateRecording(
         async (ctx: BuildContext, target: RecordAppender) => {
+          const pinned = this.release !== undefined;
+          const cached = pinned
+            ? {
+                ...ctx,
+                access:
+                  ctx.access === undefined
+                    ? undefined
+                    : this.recordCache.access(
+                        ctx.access,
+                        ctx.published?.durableEnd ?? 0,
+                      ),
+                readGroup: (end: number) =>
+                  this.recordCache.access(ctx.readGroup(end), end),
+              }
+            : ctx;
           const group = await ArrivalGroup.start(
-            ctx,
-            target,
-            this.release === undefined ? undefined : this.treeCache,
+            cached,
+            pinned ? this.recordCache.appender(target) : target,
+            pinned ? this.treeCache : undefined,
           );
           return group.complete(await run(group));
         },

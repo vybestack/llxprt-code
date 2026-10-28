@@ -44,7 +44,9 @@ describe('arrival recording physical read cost', () => {
       const payload = new TextEncoder().encode('arrival payload');
       try {
         const before = counter.reads;
+        let lastRowReads = 0;
         for (let index = 0; index < size; index++) {
+          const rowStart = counter.reads;
           const row = await recorder.beginRow(
             { ...draftRow(), blocks: [] },
             { id: `attempt-${index}`, submissionId: 'submission' },
@@ -53,10 +55,13 @@ describe('arrival recording physical read cost', () => {
           await recorder.appendField(block, payload);
           await recorder.endBlock(block);
           await recorder.sealRow(row);
+          lastRowReads = counter.reads - rowStart;
         }
         const recordingReads = counter.reads - before;
-        const depth = Math.ceil(Math.log(size) / Math.log(16));
-        expect(recordingReads / size).toBeLessThanOrEqual(16 * depth + 32);
+        const depth = Math.ceil(Math.log(size * 2) / Math.log(16));
+        const readBound = 4 * depth + 8;
+        expect(recordingReads / size).toBeLessThanOrEqual(readBound);
+        expect(lastRowReads).toBeLessThanOrEqual(readBound);
         expect(store.published?.rows).toBe(size);
         await assertPayloads(store, size, payload);
       } finally {
