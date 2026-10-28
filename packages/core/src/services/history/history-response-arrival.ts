@@ -19,7 +19,7 @@ export interface ResponseJournalIdentity {
 
 export interface ResponseArrival {
   readonly identity: ResponseJournalIdentity;
-  selectAttempt(id: string | undefined): Promise<void>;
+  selectAttempt(id: string | undefined, source?: 'transport'): Promise<void>;
   appendToolArguments(delta: ToolArgumentDelta): Promise<void>;
   replaceAfcHistory(contents: AsyncIterable<IContent>): Promise<void>;
   append(block: ContentBlock): void | Promise<void>;
@@ -45,6 +45,7 @@ class JournalResponseArrival implements ResponseArrival {
   private afcCount = 0;
   private afcFinished = 0;
   private toolAttemptId: string | undefined;
+  private transportSelected = false;
   private rowAttemptId: string;
   constructor(
     private readonly recorder: JournalArrivalRecorder,
@@ -117,9 +118,17 @@ class JournalResponseArrival implements ResponseArrival {
       await this.appendThinkingMetadata(block, this.current.block);
     }
   }
-  async selectAttempt(id: string | undefined): Promise<void> {
-    if (id === undefined) return;
-    if (this.toolAttemptId !== undefined && this.toolAttemptId !== id) {
+  async selectAttempt(
+    id: string | undefined,
+    source?: 'transport',
+  ): Promise<void> {
+    if (id === undefined || (source === undefined && this.transportSelected))
+      return;
+    if (source === 'transport') this.transportSelected = true;
+    if (
+      (source === 'transport' || this.toolAttemptId !== undefined) &&
+      this.rowAttemptId !== id
+    ) {
       await this.end();
       await this.finishAfc('superseded');
       await this.recorder.finishAttempt(this.row, 'superseded');

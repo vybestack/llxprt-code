@@ -39,7 +39,7 @@ export async function prefetchResponseArrival(
       get identity() {
         return arrival.identity;
       },
-      selectAttempt: (id) => arrival.selectAttempt(id),
+      selectAttempt: (id, source) => arrival.selectAttempt(id, source),
       appendToolArguments: (delta) => arrival.appendToolArguments(delta),
       replaceAfcHistory: (contents) => arrival.replaceAfcHistory(contents),
       append: (block) => arrival.append(block),

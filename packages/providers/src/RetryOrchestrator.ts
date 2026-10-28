@@ -21,7 +21,7 @@
  * - Works with BucketFailoverHandler from config
  * - Respects ephemeral settings (retries, retrywait)
  */
-
+import { recordTransportAttempt } from './transportArrival.js';
 import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import {
   type IProvider,
@@ -444,6 +444,8 @@ export class RetryOrchestrator implements IProvider {
       providerOwnsTransportAttempts(this.wrappedProvider),
       attemptOptions,
     );
+    if (!providerOwnsTransportAttempts(this.wrappedProvider))
+      await recordTransportAttempt(attemptOptions, 'wrapper');
     const stream = this.wrappedProvider.generateChatCompletion(attemptOptions);
     const producedContent =
       this.config.streamingTimeoutMs > 0

@@ -26,6 +26,7 @@ export function copyProviderRequestOptions(
     promptEnvelopeTransportToken: input.promptEnvelopeTransportToken,
     onProviderError: input.onProviderError,
     onStreamLiveness: input.onStreamLiveness,
+    onTransportAttempt: input.onTransportAttempt,
     readRetryAuthToken: input.readRetryAuthToken,
     handleAuthError: input.handleAuthError,
     tryBucketFailover: input.tryBucketFailover,

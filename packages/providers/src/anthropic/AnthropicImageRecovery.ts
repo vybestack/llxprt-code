@@ -3,7 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
+import { recordTransportAttempt } from '../transportArrival.js';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { ImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
@@ -121,6 +121,7 @@ export async function executeImageDimensionRecovery(
       '[AnthropicProvider] Image dimension 400: replaced oversized image block(s), retrying once',
   );
   const retryRequest = sendRequestFromSpool(retry);
+  await recordTransportAttempt(options, 'wrapper');
   const retryResult = await deps.execute(
     options,
     retryRequest,

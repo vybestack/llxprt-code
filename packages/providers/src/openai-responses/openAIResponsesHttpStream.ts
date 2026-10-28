@@ -35,6 +35,7 @@ import {
   isNetworkTransientError,
 } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { recordTransportAttempt, recordingOnly } from '../transportArrival.js';
 import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
 import { getDelayDuration, hasRetryAfterHeader } from '../retryDelayPolicy.js';
 import {
@@ -302,6 +303,7 @@ async function* fetchStreamWithRetries(
       throw lastError;
     }
 
+    await recordTransportAttempt(params.normalizedOptions);
     const yieldedForAttempt: { value: boolean } = { value: false };
     try {
       const response = await fetchResponse(params);
@@ -385,7 +387,7 @@ async function* parseSuccessfulResponse(
     response.body,
     streamOptions,
   )) {
-    yieldedMarker.value = true;
+    if (!recordingOnly(message)) yieldedMarker.value = true;
     yield message;
   }
 }

@@ -3,7 +3,11 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
+import {
+  recordTransportAttempt,
+  recordingOnly,
+  TransportRecordingError,
+} from '../transportArrival.js';
 /**
  * Codex Responses WebSocket transport.
  *
@@ -106,6 +110,7 @@ export interface TransportLogger {
   debug(messageFactory: (() => string) | string): void;
 }
 export interface StreamResponseOptions {
+  readonly onTransportAttempt?: (boundary?: 'wrapper') => Promise<void>;
   readonly responsesURL: string;
   readonly headers: Readonly<Record<string, string>>;
   readonly abortSignal?: AbortSignal;
@@ -588,6 +593,7 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
       // #2771: at most one fresh-connection retry per request.
       for (;;) {
         throwIfAborted(options.abortSignal);
+        await recordTransportAttempt(options);
         socket = await this.acquireConnection(options);
         throwIfAborted(options.abortSignal);
         this.renewalPending = false;
@@ -672,7 +678,7 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
         if (prefix.quarantine(message)) continue;
         yield* prefix.publish(() => source.throwIfFailed());
         source.throwIfFailed();
-        state.contentYielded = true;
+        if (!recordingOnly(message)) state.contentYielded = true;
         yield message;
       }
       if (!source.didReceiveAcceptedTerminal()) {
@@ -872,7 +878,7 @@ export async function* streamOverWebSocketOrFallback(
       request,
       streamOptions,
     )) {
-      contentYielded = true;
+      if (!recordingOnly(message)) contentYielded = true;
       yield message;
     }
     // A clean completion means the WebSocket served the whole response, so the
@@ -880,6 +886,7 @@ export async function* streamOverWebSocketOrFallback(
     // client treating a successful stream as proof the transport is healthy).
     onSuccess?.();
   } catch (error) {
+    if (error instanceof TransportRecordingError) throw error;
     // Abort always wins and never falls back, regardless of yielded content.
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;

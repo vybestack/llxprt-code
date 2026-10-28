@@ -3,7 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
+import { recordTransportAttempt } from '../transportArrival.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
@@ -95,6 +95,7 @@ async function resolveBackendDelegate(
   );
   const resolvedOptions = deps.buildResolvedOptions(subProfile, options);
   requireTransportAttempt(resolvedOptions);
+  await recordTransportAttempt(resolvedOptions, 'wrapper');
   return { resolvedOptions, delegateProvider, subProfile };
 }
 

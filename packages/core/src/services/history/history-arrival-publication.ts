@@ -28,7 +28,7 @@ export function withArrivalPublication<T>(
     get identity() {
       return arrival.identity;
     },
-    selectAttempt: (id) => arrival.selectAttempt(id),
+    selectAttempt: (id, source) => arrival.selectAttempt(id, source),
     appendToolArguments: (delta) => arrival.appendToolArguments(delta),
     replaceAfcHistory: (contents) =>
       arrival.replaceAfcHistory(

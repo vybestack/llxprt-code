@@ -150,7 +150,9 @@ export class DirectResponseArrival {
 }
 
 export async function consumeDirectResponse(input: {
-  readonly stream: AsyncIterable<IContent>;
+  readonly stream:
+    | AsyncIterable<IContent>
+    | ((arrival: ResponseArrival) => AsyncIterable<IContent>);
   readonly runtime: AgentRuntimeContext;
   readonly history: HistoryService;
   readonly promptId: string;
@@ -175,7 +177,9 @@ export async function consumeDirectResponse(input: {
     input.turnId,
     input.allowedNames,
   );
-  const iterator = input.stream[Symbol.asyncIterator]();
+  const stream =
+    typeof input.stream === 'function' ? input.stream(arrival) : input.stream;
+  const iterator = stream[Symbol.asyncIterator]();
   const timeout = resolveStreamIdleTimeoutMs(
     input.runtime.readStreamTimeoutPolicy(),
   );

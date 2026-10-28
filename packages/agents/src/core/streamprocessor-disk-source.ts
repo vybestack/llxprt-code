@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { responseTransportSource } from './response-transport-source.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -154,39 +155,42 @@ export async function streamDiskSource(
       sourcePendingMembership(rebuilt),
     );
   };
-  return enforceAndStreamSourcePromptEnvelopeRetries({
-    provider: input.provider,
-    source,
-    signal: input.signal,
-    fallbackEstimate: sourceFallbackEstimate(input),
-    tokenizerFactory: input.runtime.promptEstimator,
-    buildOptions: (rows) => ({
-      ...input.buildOptions(
-        { [Symbol.asyncIterator]: () => rows.openReader(input.signal) },
-        rows.count,
-      ),
-      requestRows: rows,
-      contentCount: rows.count,
+  return responseTransportSource(input, (onTransportAttempt) =>
+    enforceAndStreamSourcePromptEnvelopeRetries({
+      provider: input.provider,
+      source,
+      signal: input.signal,
+      fallbackEstimate: sourceFallbackEstimate(input),
+      tokenizerFactory: input.runtime.promptEstimator,
+      buildOptions: (rows) => ({
+        ...input.buildOptions(
+          { [Symbol.asyncIterator]: () => rows.openReader(input.signal) },
+          rows.count,
+        ),
+        onTransportAttempt,
+        requestRows: rows,
+        contentCount: rows.count,
+      }),
+      enforce: (_rows, estimate) =>
+        input.compression.enforceProviderSource(
+          input.provider,
+          input.promptId,
+          source,
+          estimate,
+          reopen,
+          source.pendingSelection !== undefined,
+          pending,
+          {
+            transcriptPathProvider: input.recordingExecution?.transcriptPath,
+            historyOrigin: input.recordingExecution?.historyOrigin,
+            hookOwner,
+            modelParameters: input.modelParameters,
+          },
+        ),
+      onPrepared: input.onPrepared,
+      send: input.send,
+      onReleased: input.onReleased,
+      shouldRetryOnError: input.shouldRetryOnError ?? (() => false),
     }),
-    enforce: (_rows, estimate) =>
-      input.compression.enforceProviderSource(
-        input.provider,
-        input.promptId,
-        source,
-        estimate,
-        reopen,
-        source.pendingSelection !== undefined,
-        pending,
-        {
-          transcriptPathProvider: input.recordingExecution?.transcriptPath,
-          historyOrigin: input.recordingExecution?.historyOrigin,
-          hookOwner,
-          modelParameters: input.modelParameters,
-        },
-      ),
-    onPrepared: input.onPrepared,
-    send: input.send,
-    onReleased: input.onReleased,
-    shouldRetryOnError: input.shouldRetryOnError ?? (() => false),
-  });
+  );
 }

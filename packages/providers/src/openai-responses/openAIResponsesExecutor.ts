@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+import { recordingOnly } from '../transportArrival.js';
 /**
  * Package-internal stateless executor for the OpenAI Responses API.
  *
@@ -240,15 +240,15 @@ export async function* executeOpenAIResponsesRequest(
   };
 
   // #3134 Fix 1: one-shot recovery when previous_response_id is rejected.
-  // The safe replay boundary is "no IContent has been yielded to the consumer"
-  // — if even one chunk escaped we cannot retry without duplicating output.
+  // Recording-only argument pieces are retained in the superseded attempt.
+  // Semantic output still makes parent recovery unsafe.
   let contentYielded = false;
   let rejectedParentId: string | undefined;
   let outcome: MediaRequestOutcome = { status: 'succeeded' };
   try {
     try {
       for await (const content of streamResponses(streamParams, deps)) {
-        contentYielded = true;
+        contentYielded = contentYielded || !recordingOnly(content);
         yield content;
       }
       return;

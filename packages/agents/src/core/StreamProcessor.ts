@@ -3,7 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
+import { sourceResponseArrival } from './response-transport-source.js';
 import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
 import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import type {
@@ -433,14 +433,16 @@ export class StreamProcessor {
     owner?: HookExecutionOwner,
     origin?: object,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
-    const arrival = await openResponseArrival(
-      this.historyService,
-      this.runtimeContext,
-      promptId,
-      this.turnIdByPromptId.get(promptId) ??
-        this.historyService.generateTurnKey(),
-      origin,
-    );
+    const arrival =
+      sourceResponseArrival(streamResponse) ??
+      (await openResponseArrival(
+        this.historyService,
+        this.runtimeContext,
+        promptId,
+        this.turnIdByPromptId.get(promptId) ??
+          this.historyService.generateTurnKey(),
+        origin,
+      ));
     const convertedStream = this._convertIContentStream(
       streamResponse,
       requestPayload,

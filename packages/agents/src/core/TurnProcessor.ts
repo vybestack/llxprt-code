@@ -3,7 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
+import { responseTransportAttempts } from './response-transport-source.js';
 import { TurnAdmission } from './turn-admission.js';
 import {
   consumeDirectResponse,
@@ -730,7 +730,11 @@ export class TurnProcessor {
       if (this.currentTurnId === null)
         throw new Error('Missing direct turn identity');
       return await consumeDirectResponse({
-        stream: provider.generateChatCompletion(transport.options),
+        stream: (arrival) =>
+          provider.generateChatCompletion({
+            ...transport.options,
+            onTransportAttempt: responseTransportAttempts(arrival),
+          }),
         runtime: this.runtimeContext,
         history: this.historyService,
         promptId,

@@ -163,6 +163,7 @@ async function buildWebSocketStreamOptions(
     includeThinkingInResponse: params.includeThinkingInResponse,
     responsesStored: params.responsesStored,
     onStreamLiveness: params.normalizedOptions.onStreamLiveness,
+    onTransportAttempt: params.normalizedOptions.onTransportAttempt,
     requestFrameBytes: params.streamWebSocketFrame,
     requestFrameByteLength: await webSocketFrameLength(params),
   };

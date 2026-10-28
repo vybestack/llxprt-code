@@ -24,6 +24,7 @@ export interface ResponsesRequest {
   readonly tools?: ProviderToolset;
   readonly systemInstruction?: string;
   readonly metadata: Record<string, unknown>;
+  readonly onTransportAttempt?: (boundary?: 'wrapper') => Promise<void>;
   readonly onStreamLiveness?: (event: StreamLivenessEvent) => void;
   readonly resolved: {
     readonly model: string;
@@ -80,6 +81,7 @@ export function captureResponsesRequest(
     systemInstruction: options.systemInstruction,
     metadata: options.metadata,
     onStreamLiveness: options.onStreamLiveness,
+    onTransportAttempt: options.onTransportAttempt,
     resolved: Object.freeze({
       model: options.resolved.model || defaultModel,
       baseURL,

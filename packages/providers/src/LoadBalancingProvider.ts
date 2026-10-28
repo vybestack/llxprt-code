@@ -3,7 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
+import { recordTransportAttempt } from './transportArrival.js';
 import { ProviderMediaFileAdapter } from '@vybestack/llxprt-code-core/runtime/provider-media-file-adapter.js';
 import type {
   IProvider,
@@ -470,6 +470,7 @@ export class LoadBalancingProvider
       subProfile,
     );
     requireTransportAttempt(resolvedOptions);
+    await recordTransportAttempt(resolvedOptions, 'wrapper');
     await assertMemberAuthCurrent(
       subProfile,
       preparedTarget.authenticatedSubProfile,
