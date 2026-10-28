@@ -1,4 +1,4 @@
-import { getToolKeyStorage } from '@vybestack/llxprt-code-core';
+import { ToolKeyStorage } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -112,18 +112,16 @@ export class ToolKeysControl implements AgentToolKeyControl {
 }
 
 export function assembleToolKeys(): ToolKeysControl {
+  const storage = new ToolKeyStorage();
   return new ToolKeysControl(
-    async (name) => {
-      const storage = getToolKeyStorage();
-      return {
-        key: await storage.getKey(name),
-        keyFile: await storage.getKeyfilePath(name),
-      };
-    },
-    (name, key) => getToolKeyStorage().saveKey(name, key),
-    (name) => getToolKeyStorage().deleteKey(name),
-    (name, file) => getToolKeyStorage().setKeyfilePath(name, file),
-    (name) => getToolKeyStorage().clearKeyfilePath(name),
-    (name) => getToolKeyStorage().getKeyfilePath(name),
+    async (name) => ({
+      key: await storage.getKey(name),
+      keyFile: await storage.getKeyfilePath(name),
+    }),
+    (name, key) => storage.saveKey(name, key),
+    (name) => storage.deleteKey(name),
+    (name, file) => storage.setKeyfilePath(name, file),
+    (name) => storage.clearKeyfilePath(name),
+    (name) => storage.getKeyfilePath(name),
   );
 }

@@ -34,7 +34,7 @@ import { buildToolInfos, projectRegistryTool } from '../agentBootstrap.js';
 import { McpControl } from '../control/mcpControl.js';
 import type { McpControlDeps } from '../control/mcpControl.js';
 import type { EditorCallbacks } from '../config-types.js';
-import { getToolKeyStorage } from '@vybestack/llxprt-code-core';
+import { ToolKeyStorage } from '@vybestack/llxprt-code-core';
 
 const noopEditorCallbacks: EditorCallbacks = {
   getPreferredEditor: () => undefined,
@@ -53,6 +53,7 @@ function buildDepsWithRealTools(
   opts: { readonly enabledNames?: readonly string[] } = {},
 ): ToolControl {
   const fixture = fixtureRoot(tools, { enabledNames: opts.enabledNames });
+  const storage = new ToolKeyStorage();
   return new ToolControl(
     () => {
       throw new Error('Tool projection does not acquire a client channel');
@@ -86,18 +87,15 @@ function buildDepsWithRealTools(
       );
     },
     new ToolKeysControl(
-      async (name) => {
-        const storage = getToolKeyStorage();
-        return {
-          key: await storage.getKey(name),
-          keyFile: await storage.getKeyfilePath(name),
-        };
-      },
-      (name, key) => getToolKeyStorage().saveKey(name, key),
-      (name) => getToolKeyStorage().deleteKey(name),
-      (name, file) => getToolKeyStorage().setKeyfilePath(name, file),
-      (name) => getToolKeyStorage().clearKeyfilePath(name),
-      (name) => getToolKeyStorage().getKeyfilePath(name),
+      async (name) => ({
+        key: await storage.getKey(name),
+        keyFile: await storage.getKeyfilePath(name),
+      }),
+      (name, key) => storage.saveKey(name, key),
+      (name) => storage.deleteKey(name),
+      (name, file) => storage.setKeyfilePath(name, file),
+      (name) => storage.clearKeyfilePath(name),
+      (name) => storage.getKeyfilePath(name),
     ),
   );
 }

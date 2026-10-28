@@ -30,7 +30,7 @@ import {
 } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
-import { getToolKeyStorage } from '@vybestack/llxprt-code-core';
+import { ToolKeyStorage } from '@vybestack/llxprt-code-core';
 import type {
   ToolConfirmationOutcome,
   ToolConfirmationPayload,
@@ -259,19 +259,17 @@ function readFixtureAllowedTools(
 }
 
 function createFixtureToolKeys(): ToolKeysControl {
+  const storage = new ToolKeyStorage();
   return new ToolKeysControl(
-    async (name) => {
-      const storage = getToolKeyStorage();
-      return {
-        key: await storage.getKey(name),
-        keyFile: await storage.getKeyfilePath(name),
-      };
-    },
-    (name, key) => getToolKeyStorage().saveKey(name, key),
-    (name) => getToolKeyStorage().deleteKey(name),
-    (name, file) => getToolKeyStorage().setKeyfilePath(name, file),
-    (name) => getToolKeyStorage().clearKeyfilePath(name),
-    (name) => getToolKeyStorage().getKeyfilePath(name),
+    async (name) => ({
+      key: await storage.getKey(name),
+      keyFile: await storage.getKeyfilePath(name),
+    }),
+    (name, key) => storage.saveKey(name, key),
+    (name) => storage.deleteKey(name),
+    (name, file) => storage.setKeyfilePath(name, file),
+    (name) => storage.clearKeyfilePath(name),
+    (name) => storage.getKeyfilePath(name),
   );
 }
 
