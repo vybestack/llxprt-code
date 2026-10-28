@@ -829,6 +829,8 @@ durableEnd > 2 * (liveBytes + ckptBytes + rows * 1550) + 64 MiB
 
 `liveBytes` is the `Aggregate` sum of the record lengths of live `ROW` and `LENS` records. `rows * 1550` stands for the entry (1,112 bytes), its share of internal nodes (about 170 bytes) and its id facts (about 250 bytes: the namespace 0 and 4 entries and the namespace 1 and 2 count and occurrence entries). `ckptBytes` is the trailer field that sums the same estimate over retained checkpoint versions. The factor 2 and the 64 MiB floor are tuned by the write budget test (13.6) and nowhere else. A session below the floor never compacts. When the condition holds the store sets `compactionDue`. Compaction runs at the next idle point: queue empty, pin count zero, mutation FIFO held. It never runs during a send, so a session in a continuous tool loop compacts at the end of the turn.
 
+An active agentic turn owns a maintenance suspension across model sends, tool scheduling and synchronous tool-history appends. It acquires that suspension before admitting work, draining a copy already in progress, and releases it only when the whole loop finishes or unwinds. Individual sends retain their own scopes for callers without a loop. Automatic compaction resumes after the final active scope closes, so a gap between sends is not an idle point while tools are still running.
+
 **Procedure.** The FIFO is held, so no group is accepted while it runs, and a send's `settle()` waits behind it.
 1. Create `<file>.compact` in the same directory with exclusive create. Owner open deletes a stale one first.
 2. Write a header with a new `fileId` and `syncMarker`.

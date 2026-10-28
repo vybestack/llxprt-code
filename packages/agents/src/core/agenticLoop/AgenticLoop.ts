@@ -33,6 +33,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { suspendJournalMaintenance } from '@vybestack/llxprt-code-core/journal/deferred-maintenance.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -331,7 +332,9 @@ export class AgenticLoop {
     }
     this.isRunning = true;
     const unsubscribe = this.wireApprovalHandler();
+    let resumeMaintenance: (() => void) | undefined;
     try {
+      resumeMaintenance = await suspendJournalMaintenance();
       let currentMessage = message;
       const initialPromptId = promptId ?? this.generateInitialPromptId();
       let currentPromptId = initialPromptId;
@@ -374,6 +377,7 @@ export class AgenticLoop {
       );
       throw error;
     } finally {
+      resumeMaintenance?.();
       unsubscribe();
       this.isRunning = false;
       this.pendingSteer = [];
