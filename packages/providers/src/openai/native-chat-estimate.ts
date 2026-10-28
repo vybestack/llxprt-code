@@ -66,9 +66,8 @@ function unitEstimator(
 function unitCounter(
   estimate: ReturnType<typeof unitEstimator>,
 ): ChatUnitTokenMeasurer {
-  return async (messages) => {
+  return async (messages, countTokens = createUnitTokenCounter()) => {
     if (messages.length === 0) return 0;
-    const countTokens = createUnitTokenCounter();
     const single = await estimate(messages, undefined, countTokens);
     const repeated = await estimate(
       [...messages, ...messages],

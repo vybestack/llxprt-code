@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { requestFormatSlot } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
+import { createUnitTokenCounter } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type OpenAI from 'openai';
 import {
   mistralRowIds,
@@ -59,6 +60,7 @@ import {
 export const PLAIN_CHAT_FORMAT_REV = 2;
 export type ChatUnitTokenMeasurer = (
   messages: readonly unknown[],
+  countTokens?: (text: string) => number,
 ) => Promise<number>;
 const jsonBytes = (value: unknown): number =>
   Buffer.byteLength(JSON.stringify(value), 'utf8');
@@ -265,13 +267,16 @@ async function chatUnit(
           allowOrphans,
         )
       : kept;
-  const keptTokens = await count?.(kept.messages);
+  // Both variants belong to this unit; never retain payload counts across rows.
+  const countTokens =
+    count === undefined ? undefined : createUnitTokenCounter();
+  const keptTokens = await count?.(kept.messages, countTokens);
   const removedTokens =
     removed === kept ||
     (count !== undefined &&
       JSON.stringify(removed.messages) === JSON.stringify(kept.messages))
       ? keptTokens
-      : await count?.(removed.messages);
+      : await count?.(removed.messages, countTokens);
   return {
     unit: {
       kind: 'chat',
