@@ -36,10 +36,7 @@ import {
 import { type ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { type SettingsService } from '@vybestack/llxprt-code-settings';
 
-import {
-  cleanupAfterFailure,
-  runCleanupSteps,
-} from '../core/subagent-cleanup.js';
+import { runCleanupSteps } from '../core/subagent-cleanup.js';
 import { type SessionClientOwner } from '../session/session-client-owner.js';
 import {
   type ActivationPreflight,
@@ -47,10 +44,7 @@ import {
   type AgentActivationOperation,
   type AgentActivationPreflightResult,
 } from './activation-types.js';
-import {
-  AdoptedAgentAssembly,
-  type AdoptionLifecyclePort,
-} from './adopted-agent-assembly.js';
+import { AdoptedAgentAssembly } from './adopted-agent-assembly.js';
 import { type Agent } from './agent.js';
 import { AgentBootstrapError } from './agentBootstrap.js';
 import {
@@ -62,8 +56,7 @@ import { retireActivationOwners } from './activationOwnerRetirement.js';
 import {
   acquireActivationSession,
   executeActivationSession,
-  type ActivationSessionAuth,
-  type ActivationSessionReceiver,
+  type ActivationSessionClient,
   type ActivationSessionResources,
 } from './fromConfig-session.js';
 import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
@@ -124,13 +117,10 @@ function assertAdoptionConfig(config: unknown): asserts config is Config {
     throw new AgentBootstrapError('fromConfig requires an existing Config');
 }
 
-export class AgentActivationBootstrap
-  implements AgentActivationOperation, AdoptionLifecyclePort
-{
+export class AgentActivationBootstrap implements AgentActivationOperation {
   readonly #config: Config;
   #assembly: AdoptedAgentAssembly | undefined;
-  #manager: RuntimeProviderManager | undefined;
-  #execute!: (
+  readonly #execute: (
     intent: ProviderActivationIntent,
   ) => Promise<ProviderActivationResult>;
   #attempt = 0;
@@ -147,106 +137,95 @@ export class AgentActivationBootstrap
       }
     | undefined;
 
-  sessionClient!: AgentActivationOperation['sessionClient'];
-  #activation!: PreflightActivationInput;
-  #settings!: PreflightSettingsInput;
-  #providers!: PreflightProviderInput;
-  #auth!: PreflightAuthInput;
-  #switcher!: ProviderSwitcher;
-  #sessionResources!: ActivationSessionResources;
-  #sessionClient!: SessionClientOwner;
-  #sessionAuth!: ActivationSessionAuth;
+  readonly sessionClient: AgentActivationOperation['sessionClient'];
+  readonly #providers: PreflightProviderInput;
+  readonly #auth: PreflightAuthInput;
+  readonly #sessionResources: ActivationSessionResources;
+  readonly #sessionClient: SessionClientOwner;
   #mcp: ForegroundMcpPort | undefined;
   #mediaOwner: SessionMediaOwner | undefined;
-  #releaseForegroundProviders!: () => Promise<void>;
-  #ownsFilesystem = false;
-  #trustCleanupOwnership = { owned: false };
-  #ownsDefinitions = false;
-  #ownsMemory = false;
+  readonly #releaseForegroundProviders: () => Promise<void>;
+  #ownsFilesystem = true;
+  #trustCleanupOwnership = { owned: true };
+  #ownsDefinitions = true;
+  #ownsMemory = true;
   #ownsSessionClient = true;
   #ownsSettings = true;
-  constructor(config: Config) {
+  private constructor(
+    input: {
+      readonly config: Config;
+      readonly activation: PreflightActivationInput;
+    },
+    providers: PreflightProviderInput,
+    auth: PreflightAuthInput,
+    resources: ActivationSessionResources,
+    session: ActivationSessionClient,
+  ) {
+    const { config, activation } = input;
+    const { client, switcher } = session;
     this.#config = config;
+    this.#assembly = AdoptedAgentAssembly.forPreflight(config);
+    this.#providers = providers;
+    this.#auth = auth;
+    this.#policy = activation.policy;
+    this.#runtimeContext = activation.runtimeContext;
+    this.#releaseForegroundProviders = activation.releaseForegroundProviders;
+    this.#sessionResources = resources;
+    this.#mediaOwner = resources.media;
+    this.#sessionClient = client;
+    this.sessionClient = {
+      workspaceDirectories: () =>
+        resources.workspaceFilesystem.paths.directories(),
+      refreshAuth: (method) =>
+        this.#admitPublic(() => client.clients.refreshAuth(method)),
+      runImageOperation: (operation) =>
+        this.#admitPublic(() => client.runImageOperation(operation)),
+    };
+    this.#execute = (intent) =>
+      executeActivationSession(config, intent, switcher, providers, {
+        settingsOwner: resources.settingsOwner,
+        refreshAuth: (method) => client.clients.refreshAuth(method),
+      });
   }
+
   static forPreflight(
     config: Config,
     activation: PreflightActivationInput,
     settings: PreflightSettingsInput,
     providers: PreflightProviderInput,
     auth: PreflightAuthInput,
-  ): AgentActivationBootstrap {
-    const bootstrap = new AgentActivationBootstrap(config);
-    bootstrap.#assembly = AdoptedAgentAssembly.forPreflight(config);
-    bootstrap.#activation = activation;
-    bootstrap.#settings = settings;
-    bootstrap.#providers = providers;
-    bootstrap.#auth = auth;
-    bootstrap.#policy = activation.policy;
-    bootstrap.#runtimeContext = activation.runtimeContext;
-    bootstrap.#releaseForegroundProviders =
-      activation.releaseForegroundProviders;
-    return bootstrap;
-  }
-
-  async preparePreflight(): Promise<ProviderSwitcher> {
-    const receiver: ActivationSessionReceiver = {
-      resources: (acquired) => this.#acceptSessionResources(acquired),
-      client: (client) => {
-        this.#sessionClient = client;
-      },
-      auth: (acquired) => {
-        this.#sessionAuth = acquired;
-      },
-    };
-    const switcher = await acquireActivationSession(
-      this.#config,
-      this.#activation,
-      this.#settings,
-      this.#providers,
-      this.#auth,
-      receiver,
+  ): {
+    readonly prepared: Promise<{
+      readonly activation: AgentActivationBootstrap;
+      readonly switcher: ProviderSwitcher;
+    }>;
+    dispose(): Promise<void>;
+  } {
+    const prepared = acquireActivationSession(
+      config,
+      activation,
+      settings,
+      providers,
+      auth,
+      (resources, session) => ({
+        activation: new AgentActivationBootstrap(
+          { config, activation },
+          providers,
+          auth,
+          resources,
+          session,
+        ),
+        switcher: session.switcher,
+      }),
     );
-    try {
-      this.#switcher = switcher;
-      this.#initializePreparedActivation();
-    } catch (error) {
-      return cleanupAfterFailure(error, () => this.dispose());
-    }
-    return switcher;
-  }
-
-  #acceptSessionResources(acquired: ActivationSessionResources): void {
-    this.#sessionResources = acquired;
-    this.#mediaOwner = acquired.media;
-    this.#ownsFilesystem = true;
-    this.#trustCleanupOwnership.owned = true;
-    this.#ownsMemory = true;
-    this.#ownsDefinitions = true;
-  }
-
-  #initializePreparedActivation(): void {
-    const resources = this.#sessionResources;
-    const client = this.#sessionClient;
-    this.sessionClient = {
-      workspaceDirectories: () =>
-        resources.workspaceFilesystem.paths.directories(),
-      refreshAuth: (method) =>
-        this.#admitPublic(() => client.clients.refreshAuth(method)),
-      runImageOperation: (input) =>
-        this.#admitPublic(() => client.runImageOperation(input)),
+    return {
+      prepared,
+      dispose: () =>
+        prepared.then(
+          ({ activation: acquired }) => acquired.dispose(),
+          () => undefined,
+        ),
     };
-    this.#manager = this.#providers.manager;
-    this.#execute = (intent) =>
-      executeActivationSession(
-        this.#config,
-        intent,
-        this.#switcher,
-        this.#providers,
-        {
-          settingsOwner: resources.settingsOwner,
-          refreshAuth: (method) => client.clients.refreshAuth(method),
-        },
-      );
   }
 
   listProfiles() {
@@ -263,9 +242,8 @@ export class AgentActivationBootstrap
   #foregroundAgent: Agent | undefined;
   #foregroundPending: Promise<Agent> | undefined;
   #publicClosing: Promise<void> | undefined;
-  #foregroundHost!: AgentForegroundHost;
-  #policy: RuntimePolicyOwner | undefined;
-  #runtimeContext!: ProviderRuntimeContext;
+  readonly #policy: RuntimePolicyOwner;
+  readonly #runtimeContext: ProviderRuntimeContext;
 
   closeForegroundAdmission(): void {
     this.#assembly?.closeConstructionAdmission();
@@ -290,20 +268,15 @@ export class AgentActivationBootstrap
       this.#providers.manager,
       this.#providers.settings,
     );
-    if (this.#sessionAuth.oauth !== this.#auth.oauth)
-      throw new AgentBootstrapError(
-        'Foreground OAuth differs from the acquired owner',
-      );
     this.#providers.manager.setRuntimeContext(
       this.#runtimeContext,
       this.#sessionResources.settingsOwner,
       this.#providers.settings,
       this.#config,
     );
-    this.#foregroundHost = host;
     this.#publicClosed = true;
     this.#foregroundPending = this.#trackConstruction(
-      this.#completeForeground(assembly, token, intent),
+      this.#completeForeground(assembly, token, intent, host),
     );
     return this.#foregroundPending;
   }
@@ -331,6 +304,7 @@ export class AgentActivationBootstrap
     assembly: AdoptedAgentAssembly,
     token: ActivationPreflightToken,
     intent: ProviderActivationIntent,
+    host: AgentForegroundHost,
   ): Promise<Agent> {
     let broker: ReturnType<typeof assembleHostGitHubBroker>;
     try {
@@ -343,10 +317,8 @@ export class AgentActivationBootstrap
         this.#providers.manager,
         this.#providers.settings,
       );
-      broker = assembleHostGitHubBroker(this.#foregroundHost);
-      await this.#constructForegroundMcp();
-      const mcp = this.#mcp;
-      if (mcp === undefined) throw new Error('Foreground MCP is not acquired');
+      broker = assembleHostGitHubBroker(host);
+      const mcp = await this.#constructForegroundMcp(host);
       assembly.assertOpen();
       const client = await this.#bindForegroundClient(broker, mcp);
       assembly.assertOpen();
@@ -369,8 +341,8 @@ export class AgentActivationBootstrap
       this.#mediaOwner = undefined;
       assembly.assertOpen();
       await this.#disposeAcquisition();
-      this.#foregroundHost.onSkills?.(mcp.workspaceSkills.operations);
-      this.#foregroundHost.onExtensionRestart?.(
+      host.onSkills?.(mcp.workspaceSkills.operations);
+      host.onExtensionRestart?.(
         mcp.extensionOperations.restart.bind(mcp.extensionOperations),
       );
       return agent;
@@ -416,14 +388,12 @@ export class AgentActivationBootstrap
     return client;
   }
 
-  async #constructForegroundMcp(): Promise<void> {
-    const transport = this.#foregroundHost.mcpHost;
+  async #constructForegroundMcp(
+    host: AgentForegroundHost,
+  ): Promise<ForegroundMcpPort> {
+    const transport = host.mcpHost;
     const feedback = transport?.emitFeedback ?? defaultFeedbackSink;
     const policyOwner = this.#policy;
-    if (policyOwner === undefined)
-      throw new Error(
-        'Foreground MCP construction requires the preflight policy owner',
-      );
     const acquisition: McpRuntimeAcquisition = {
       oauth: {
         getAuthProviderFactory: transport?.getAuthProviderFactory,
@@ -469,11 +439,9 @@ export class AgentActivationBootstrap
         kind: 'supplied',
         capability: {
           reloadPolicy:
-            this.#foregroundHost.skillPolicy ??
-            DEFAULT_SKILL_OPERATIONS.reloadPolicy,
+            host.skillPolicy ?? DEFAULT_SKILL_OPERATIONS.reloadPolicy,
           registerTools:
-            this.#foregroundHost.registerSkillTools ??
-            DEFAULT_SKILL_OPERATIONS.registerTools,
+            host.registerSkillTools ?? DEFAULT_SKILL_OPERATIONS.registerTools,
         },
       },
       mcpSettings: this.#readMcpSettingsCapability(),
@@ -484,6 +452,7 @@ export class AgentActivationBootstrap
     const mcp = await McpRuntimeOwner.create(acquisition, operations);
     this.#trustCleanupOwnership.owned = false;
     this.#mcp = mcp;
+    return mcp;
   }
 
   #readMcpSettingsCapability(): McpCapability<SessionMcpSettingsReads> {
@@ -662,7 +631,7 @@ export class AgentActivationBootstrap
       throw new AgentBootstrapError(
         'Activation preflight belongs to a different Config',
       );
-    if (operation.#manager !== manager)
+    if (operation.#providers.manager !== manager)
       throw new AgentBootstrapError(
         'Activation preflight belongs to a different ProviderManager',
       );
@@ -718,38 +687,29 @@ export class AgentActivationBootstrap
     intent: AgentAdoptionIntent,
     credentialAuthority: CredentialAuthority,
   ): Promise<Agent> {
-    const operation = new AgentActivationBootstrap(config);
     const assembly = AdoptedAgentAssembly.forAdoption(
       { config, settingsService, intent, credentialAuthority },
-      operation,
+      {
+        validateIdentity: () => assertAdoptionConfig(config),
+        publish: async (agent) => {
+          try {
+            assembly.assertOpen();
+          } catch (primary) {
+            try {
+              await agent.dispose();
+            } catch (cleanup) {
+              throw new AggregateError(
+                [primary, cleanup],
+                'Adoption publication and cleanup failed',
+              );
+            }
+            throw primary;
+          }
+          return agent;
+        },
+      },
     );
-    operation.#assembly = assembly;
-    operation.#foregroundPending = operation.#trackConstruction(
-      assembly.assembleAdoption(),
-    );
-    return operation.#foregroundPending;
-  }
-
-  validateIdentity(): void {
-    assertAdoptionConfig(this.#config);
-  }
-
-  async publish(agent: Agent): Promise<Agent> {
-    this.#foregroundAgent = agent;
-    try {
-      this.#requireAssembly().assertOpen();
-    } catch (primary) {
-      try {
-        await agent.dispose();
-      } catch (cleanup) {
-        throw new AggregateError(
-          [primary, cleanup],
-          'Adoption publication and cleanup failed',
-        );
-      }
-      throw primary;
-    }
-    return agent;
+    return assembly.assembleAdoption();
   }
 }
 

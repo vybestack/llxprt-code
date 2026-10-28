@@ -77,7 +77,7 @@ export async function acquirePreferredFiles(
   return files;
 }
 
-export function acquirePreferredProviderRuntime(
+export function acquirePreferredProviderRuntime<T>(
   release: AcquisitionRelease,
   inputs: {
     readonly config: Config;
@@ -93,8 +93,8 @@ export function acquirePreferredProviderRuntime(
     readonly profileReads: Pick<ProfileManager, 'loadProfile'> | undefined;
     readonly oauthSettings: IOAuthSettingsProvider | null | undefined;
   },
-  publishOAuth: (oauth: OAuthManager) => void,
-): ProviderManager {
+  complete: (manager: ProviderManager, oauth: OAuthManager) => T,
+): T {
   const { config, settings, settingsOwner, files, runtimeId, authority } =
     inputs;
   const { suppliedStore, messageBus, profileReads, oauthSettings } =
@@ -126,7 +126,7 @@ export function acquirePreferredProviderRuntime(
       readIdentity: () => ({ runtimeId, runtimeKind: 'agent' }),
       requestInteractiveAuth: undefined,
     },
-    publishOAuth,
+    complete,
   );
 }
 

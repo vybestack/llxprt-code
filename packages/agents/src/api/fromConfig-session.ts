@@ -19,7 +19,6 @@ import {
   configureProviderTokenizer,
   createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { acquireSessionClient } from '../session/session-client-binding.js';
 import { cleanupProviderScope } from '../session/session-client-cleanup.js';
 import type { SessionClientOwner } from '../session/session-client-owner.js';
@@ -49,29 +48,27 @@ export interface ActivationSessionResources {
   workspaceDefinitions: WorkspaceDefinitionOwner;
 }
 
-export interface ActivationSessionAuth {
-  oauth: OAuthManager | undefined;
-}
-
-export interface ActivationSessionReceiver {
-  resources(acquired: ActivationSessionResources): void;
-  client(acquired: SessionClientOwner): void;
-  auth(acquired: ActivationSessionAuth): void;
+export interface ActivationSessionClient {
+  readonly client: SessionClientOwner;
+  readonly switcher: ProviderSwitcher;
 }
 
 /**
  * Acquires the session resources of a preflight activation. On failure it
- * rolls back what it acquired; on success the receiver owns retirement of the
- * delivered resources, so nothing here closes them.
+ * rolls back what it acquired; on success the caller owns retirement of the
+ * returned resources, so nothing here closes them.
  */
-export async function acquireActivationSession(
+export async function acquireActivationSession<T>(
   config: Config,
   activation: PreflightActivationInput,
   settings: PreflightSettingsInput,
   providers: PreflightProviderInput,
   auth: PreflightAuthInput,
-  receiver: ActivationSessionReceiver,
-): Promise<ProviderSwitcher> {
+  complete: (
+    resources: ActivationSessionResources,
+    session: ActivationSessionClient,
+  ) => T,
+): Promise<T> {
   const release = new AcquisitionRelease();
   try {
     if (activation.trustCleanup !== undefined)
@@ -101,19 +98,19 @@ export async function acquireActivationSession(
       definitions,
       client,
     );
-    receiver.resources({
-      workspaceTrust: activation.trust,
-      trustCleanup: activation.trustCleanup,
-      settingsOwner: settings.settingsOwner,
-      settingsOwnership: settings.settingsOwnership,
-      media,
-      workspaceFilesystem: activation.filesystem,
-      workspaceMemory: activation.memory,
-      workspaceDefinitions: definitions,
-    });
-    receiver.client(client);
-    receiver.auth({ oauth: auth.oauth });
-    return switcher;
+    return complete(
+      {
+        workspaceTrust: activation.trust,
+        trustCleanup: activation.trustCleanup,
+        settingsOwner: settings.settingsOwner,
+        settingsOwnership: settings.settingsOwnership,
+        media,
+        workspaceFilesystem: activation.filesystem,
+        workspaceMemory: activation.memory,
+        workspaceDefinitions: definitions,
+      },
+      { client, switcher },
+    );
   } catch (error) {
     try {
       await release.rollback();

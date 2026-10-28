@@ -127,7 +127,7 @@ export function acquireRuntimeOAuth(
   return oauth;
 }
 
-export function acquireProviderRuntime(
+export function acquireProviderRuntime<T>(
   release: AcquisitionRelease,
   inputs: ProviderManagerInputs & {
     readonly authority: Pick<
@@ -136,8 +136,8 @@ export function acquireProviderRuntime(
     >;
   },
   selection: ProviderOAuthInputs,
-  publishOAuth: (oauth: OAuthManager) => void,
-): ProviderManager {
+  complete: (manager: ProviderManager, oauth: OAuthManager) => T,
+): T {
   const manager = acquireRuntimeProviderManager(release, inputs);
   const oauth = acquireRuntimeOAuth(release, {
     provider: {
@@ -149,8 +149,7 @@ export function acquireProviderRuntime(
     authority: inputs.authority,
     oauth: selection,
   });
-  publishOAuth(oauth);
-  return manager;
+  return complete(manager, oauth);
 }
 
 export function readProviderAuthIdentity(

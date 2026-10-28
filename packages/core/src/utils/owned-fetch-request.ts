@@ -14,105 +14,103 @@ const packageRequire = createRequire(
 );
 const { interceptors }: typeof Undici = packageRequire('./');
 
-export function dispatchOwnedFetch(
+export async function dispatchOwnedFetch(
   dispatcher: Dispatcher,
   request: Request,
   signal: AbortSignal,
   replayableBody: string | Uint8Array | undefined,
   headersTimeoutMs: number | undefined,
 ): Promise<Response> {
-  return new OwnedFetchRequest(
-    request,
-    signal,
-    replayableBody,
-    headersTimeoutMs,
-  ).dispatch(dispatcher);
+  const transport: ResponseTransport = {
+    controller: undefined,
+    cancelled: false,
+  };
+  const { stream, body } = await acquireResponseStream(transport);
+  return new Promise<Response>((resolve, reject) => {
+    new OwnedFetchRequest({
+      request,
+      signal,
+      replayableBody,
+      headersTimeoutMs,
+      stream,
+      body,
+      transport,
+      resolve,
+      reject,
+    }).dispatch(dispatcher);
+  });
+}
+
+interface ResponseTransport {
+  controller: Dispatcher.DispatchController | undefined;
+  cancelled: boolean;
+}
+
+interface OwnedFetchInput {
+  readonly request: Request;
+  readonly signal: AbortSignal;
+  readonly replayableBody: string | Uint8Array | undefined;
+  readonly headersTimeoutMs: number | undefined;
+  readonly stream: ReadableStream<Uint8Array>;
+  readonly body: ReadableStreamDefaultController<Uint8Array>;
+  readonly transport: ResponseTransport;
+  readonly resolve: (response: Response) => void;
+  readonly reject: (error: unknown) => void;
 }
 
 class OwnedFetchRequest implements Dispatcher.DispatchHandler {
-  private resolveResponse!: (response: Response) => void;
-  private rejectResponse!: (error: unknown) => void;
-  private readonly result = new Promise<Response>((resolve, reject) => {
-    this.resolveResponse = resolve;
-    this.rejectResponse = reject;
-  });
-  private controller: Dispatcher.DispatchController | undefined;
-  private body!: ReadableStreamDefaultController<Uint8Array>;
   private ended = false;
-  private cancelled = false;
   private responseUrl: string;
   private redirected = false;
-  private readonly stream = new ReadableStream<Uint8Array>(
-    {
-      start: (controller) => {
-        this.body = controller;
-      },
-      pull: () => {
-        this.controller?.resume();
-      },
-      cancel: () => {
-        this.cancelled = true;
-        this.controller?.abort(
-          new DOMException('Response body was cancelled', 'AbortError'),
-        );
-      },
-    },
-    { highWaterMark: 65536, size: (chunk) => chunk?.byteLength ?? 0 },
-  );
 
-  constructor(
-    private readonly request: Request,
-    private readonly signal: AbortSignal,
-    private readonly replayableBody: string | Uint8Array | undefined,
-    private readonly headersTimeoutMs: number | undefined,
-  ) {
-    this.responseUrl = request.url;
+  constructor(private readonly input: OwnedFetchInput) {
+    this.responseUrl = input.request.url;
   }
 
-  dispatch(dispatcher: Dispatcher): Promise<Response> {
-    if (this.signal.aborted) {
-      this.fail(this.signal.reason);
-      return this.result;
+  dispatch(dispatcher: Dispatcher): void {
+    if (this.input.signal.aborted) {
+      this.fail(this.input.signal.reason);
+      return;
     }
     const tracked = dispatcher.compose((dispatch) => (options, handler) => {
       const next = new URL(options.path, options.origin).href;
-      this.redirected ||= next !== this.request.url;
+      this.redirected ||= next !== this.input.request.url;
       this.responseUrl = next;
       return dispatch(options, handler);
     });
     const route = tracked.compose(
       interceptors.redirect({
-        maxRedirections: this.request.redirect === 'follow' ? 20 : 0,
+        maxRedirections: this.input.request.redirect === 'follow' ? 20 : 0,
       }),
       interceptors.decompress({ skipErrorResponses: false }),
     );
-    const url = new URL(this.request.url);
-    this.signal.addEventListener('abort', this.abort, { once: true });
+    const url = new URL(this.input.request.url);
+    this.input.signal.addEventListener('abort', this.abort, { once: true });
     try {
       route.dispatch(
         {
           origin: url.origin,
           path: `${url.pathname}${url.search}`,
-          method: this.request.method,
-          headers: Object.fromEntries(this.request.headers),
-          headersTimeout: this.headersTimeoutMs,
+          method: this.input.request.method,
+          headers: Object.fromEntries(this.input.request.headers),
+          headersTimeout: this.input.headersTimeoutMs,
           body:
-            this.replayableBody ??
-            (this.request.body === null
+            this.input.replayableBody ??
+            (this.input.request.body === null
               ? null
-              : Readable.from(uploadBody(this.request.body))),
+              : Readable.from(uploadBody(this.input.request.body))),
         },
         this,
       );
     } catch (error) {
       this.fail(error);
     }
-    return this.result;
+    return;
   }
 
   onRequestStart(controller: Dispatcher.DispatchController): void {
-    this.controller = controller;
-    if (this.signal.aborted) this.abort();
+    this.input.transport.controller = controller;
+    if (this.input.signal.aborted) this.abort();
   }
 
   onResponseStart(
@@ -123,7 +121,7 @@ class OwnedFetchRequest implements Dispatcher.DispatchHandler {
   ): void {
     if (status < 200) return;
     if (
-      this.request.redirect === 'error' &&
+      this.input.request.redirect === 'error' &&
       [301, 302, 303, 307, 308].includes(status) &&
       values.location !== undefined
     ) {
@@ -131,7 +129,7 @@ class OwnedFetchRequest implements Dispatcher.DispatchHandler {
       return;
     }
     if (
-      this.request.redirect === 'follow' &&
+      this.input.request.redirect === 'follow' &&
       [301, 302, 303, 307, 308].includes(status) &&
       values.location !== undefined
     ) {
@@ -145,12 +143,12 @@ class OwnedFetchRequest implements Dispatcher.DispatchHandler {
         headers.append(key, entry);
     }
     const response = new Response(
-      this.request.method === 'HEAD' || [204, 205, 304].includes(status)
+      this.input.request.method === 'HEAD' || [204, 205, 304].includes(status)
         ? null
-        : this.stream,
+        : this.input.stream,
       { status, statusText, headers },
     );
-    this.resolveResponse(
+    this.input.resolve(
       withResponseMetadata(response, this.responseUrl, this.redirected),
     );
   }
@@ -159,16 +157,16 @@ class OwnedFetchRequest implements Dispatcher.DispatchHandler {
     controller: Dispatcher.DispatchController,
     chunk: Buffer,
   ): void {
-    if (this.ended || this.cancelled) return;
-    this.body.enqueue(new Uint8Array(chunk));
-    if ((this.body.desiredSize ?? 0) <= 0) controller.pause();
+    if (this.ended || this.input.transport.cancelled) return;
+    this.input.body.enqueue(new Uint8Array(chunk));
+    if ((this.input.body.desiredSize ?? 0) <= 0) controller.pause();
   }
 
   onResponseEnd(): void {
     if (this.ended) return;
     this.ended = true;
-    this.signal.removeEventListener('abort', this.abort);
-    if (!this.cancelled) this.body.close();
+    this.input.signal.removeEventListener('abort', this.abort);
+    if (!this.input.transport.cancelled) this.input.body.close();
   }
 
   onResponseError(
@@ -179,8 +177,8 @@ class OwnedFetchRequest implements Dispatcher.DispatchHandler {
   }
 
   private readonly abort = (): void => {
-    const reason: unknown = this.signal.reason;
-    this.controller?.abort(
+    const reason: unknown = this.input.signal.reason;
+    this.input.transport.controller?.abort(
       reason instanceof Error
         ? reason
         : new DOMException('Request was aborted', 'AbortError'),
@@ -191,10 +189,35 @@ class OwnedFetchRequest implements Dispatcher.DispatchHandler {
   private fail(error: unknown): void {
     if (this.ended) return;
     this.ended = true;
-    this.signal.removeEventListener('abort', this.abort);
-    if (!this.cancelled) this.body.error(error);
-    this.rejectResponse(error);
+    this.input.signal.removeEventListener('abort', this.abort);
+    if (!this.input.transport.cancelled) this.input.body.error(error);
+    this.input.reject(error);
   }
+}
+
+function acquireResponseStream(transport: ResponseTransport): Promise<{
+  readonly stream: ReadableStream<Uint8Array>;
+  readonly body: ReadableStreamDefaultController<Uint8Array>;
+}> {
+  return new Promise((resolve) => {
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        start: async (body) => {
+          // start runs synchronously, before the stream constructor returns.
+          await Promise.resolve();
+          resolve({ stream, body });
+        },
+        pull: () => transport.controller?.resume(),
+        cancel: () => {
+          transport.cancelled = true;
+          transport.controller?.abort(
+            new DOMException('Response body was cancelled', 'AbortError'),
+          );
+        },
+      },
+      { highWaterMark: 65536, size: (chunk) => chunk?.byteLength ?? 0 },
+    );
+  });
 }
 
 function withResponseMetadata(

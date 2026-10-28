@@ -96,7 +96,7 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
   #closing: Promise<void> | undefined;
   #sessionSettings: SessionSettingsOwner | undefined;
   #activation: AgentActivationBootstrap | undefined;
-  #provisionalActivation: AgentActivationBootstrap | undefined;
+  #provisionalActivation: { dispose(): Promise<void> } | undefined;
   #preparation: Promise<void> | undefined;
   #switch: ProviderSwitcher | undefined;
   #profiles: AgentProfileApplication | undefined;
@@ -172,7 +172,7 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     oauthSettings: IOAuthSettingsProvider | undefined,
     fakeResponses: string | undefined,
   ): void {
-    const manager = acquireProviderRuntime(
+    acquireProviderRuntime(
       this.#release,
       {
         files: this.#files,
@@ -191,11 +191,12 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
         readIdentity: readProviderAuthIdentity,
         requestInteractiveAuth: undefined,
       },
-      (oauth) => {
+      (manager, oauth) => {
+        this.#manager = manager;
         this.#oauth = oauth;
       },
     );
-    this.#manager = manager;
+    const manager = this.#manager;
     const oauth = this.#oauth;
     populateProviderManager(
       manager,
@@ -660,7 +661,7 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
       settingsOwner,
       this.#ownsSettings,
     );
-    const activation = AgentActivationBootstrap.forPreflight(
+    const acquisition = AgentActivationBootstrap.forPreflight(
       config,
       {
         ...capabilities,
@@ -684,10 +685,9 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
       { settings: this.#settings, manager },
       { oauth: this.#oauth },
     );
-    this.#provisionalActivation = activation;
-    const switching = await activation
-      .preparePreflight()
-      .catch((error: unknown) => {
+    this.#provisionalActivation = acquisition;
+    const { activation, switcher: switching } =
+      await acquisition.prepared.catch((error: unknown) => {
         this.#provisionalActivation = undefined;
         throw error;
       });

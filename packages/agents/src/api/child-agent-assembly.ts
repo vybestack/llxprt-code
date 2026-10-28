@@ -127,21 +127,35 @@ export interface ChildAgentOperations {
   readonly hooks: SessionHookOwner;
 }
 
+interface ChildWorkspace {
+  readonly settings: SettingsService;
+  readonly settingsOwner: SessionSettingsOwner;
+  readonly config: Config;
+  readonly media: SessionMediaOwner;
+}
+
+interface ChildProvider {
+  readonly files: ProviderFileLifecycle;
+  readonly manager: ProviderManager;
+  readonly tokenizer: RuntimeTokenizerFactory;
+  readonly content: RuntimeContentGeneratorFactory<ContentGenerator>;
+}
+
+interface ChildAuth {
+  readonly oauth: OAuthManager;
+}
+
+interface ActivatedChildClient {
+  readonly activated: SessionClientOwner;
+}
+
+interface ChildProviderStage {
+  assemble(fakeResponses: string | undefined): Promise<SubagentLaunchResult>;
+}
+
 export class ChildAgentAssembly {
   private readonly providers = new AcquisitionRelease();
   private readonly acquired: Array<() => void | Promise<void>> = [];
-  private settings!: SettingsService;
-  private settingsOwner!: SessionSettingsOwner;
-  private config!: Config;
-  private media!: SessionMediaOwner;
-  private files!: ProviderFileLifecycle;
-  private manager!: ProviderManager;
-  private oauth!: OAuthManager;
-  private tokenizer!: RuntimeTokenizerFactory;
-  private content!: RuntimeContentGeneratorFactory<ContentGenerator>;
-  private client!: SessionClientOwner;
-  private loaded!: ToolSelectedRuntimeLoaderResult;
-  private scope!: ChildAgentScope;
   private closing: Promise<void> | undefined;
 
   constructor(
@@ -155,85 +169,66 @@ export class ChildAgentAssembly {
   async assemble(): Promise<SubagentLaunchResult> {
     const fakeResponses = process.env.LLXPRT_FAKE_RESPONSES;
     try {
-      this.acquireWorkspace();
-      this.acquireProviders();
-      await this.prepareClient();
-      await this.activate(fakeResponses);
-      await this.load();
-      this.assertAdmission(
-        'Subagent launch aborted after runtime assembly completed.',
-      );
-      this.scope = await this.createScope();
-      this.acquired.push(() => this.scope.dispose());
-      this.assertAdmission('Subagent launch aborted before completion.');
-      return {
-        agentId: this.scope.getAgentId(),
-        scope: this.scope,
-        prompt: this.data.prompt,
-        profile: this.data.profile,
-        config: this.data.subagent,
-        identity: Object.freeze({
-          runtimeId: this.loaded.runtimeContext.state.runtimeId,
-          sessionId: this.loaded.runtimeContext.state.sessionId,
-          provider: this.loaded.runtimeContext.state.provider,
-          model: this.loaded.runtimeContext.state.model,
-        }),
-        dispose: () => this.close(),
-      };
+      const workspace = this.acquireWorkspace();
+      const providers = this.acquireProviders(workspace);
+      return await providers.assemble(fakeResponses);
     } catch (primary) {
       return cleanupAfterFailure(primary, () => this.rollback());
     }
   }
 
-  private acquireWorkspace(): void {
-    this.settings = this.acquisition.createChildSettings();
+  private acquireWorkspace(): ChildWorkspace {
+    const settings = this.acquisition.createChildSettings();
     const profile = this.data.runtimeStateProfile;
     if (isLoadBalancerProfile(this.data.activationProfile)) {
-      this.settings.setCurrentProfileName(this.data.subagent.profile);
-      this.settings.set('activeProvider', 'load-balancer');
-      this.settings.set('providers.load-balancer.model', 'load-balancer');
+      settings.setCurrentProfileName(this.data.subagent.profile);
+      settings.set('activeProvider', 'load-balancer');
+      settings.set('providers.load-balancer.model', 'load-balancer');
     } else {
       populatePreActivationSettings(
-        this.settings.set.bind(this.settings),
-        this.settings.setCurrentProfileName.bind(this.settings),
+        settings.set.bind(settings),
+        settings.setCurrentProfileName.bind(settings),
         profile,
         this.data.subagent.profile,
       );
     }
-    this.config = new Config({
+    const config = new Config({
       sessionId: this.data.runtimeId,
       targetDir: this.acquisition.foregroundConfig.getTargetDir(),
       debugMode: false,
       cwd: this.acquisition.foregroundConfig.getWorkingDir(),
       proxy: this.acquisition.foregroundConfig.getProxy(),
       model: this.data.activationProfile.model,
-      initialSettings: this.settings.getAllGlobalSettings(),
+      initialSettings: settings.getAllGlobalSettings(),
     });
-    this.media = new SessionMediaOwner(
-      this.config.projectTempDir,
-      this.config.getMediaStoreQuotaByteLimit(),
+    const media = new SessionMediaOwner(
+      config.projectTempDir,
+      config.getMediaStoreQuotaByteLimit(),
     );
-    this.acquired.push(() => this.media.dispose());
+    this.acquired.push(() => media.dispose());
     this.acquired.push(() => this.providers.rollback());
-    this.settingsOwner = new SessionSettingsOwner(this.settings);
-    this.providers.acquire('settings', () => this.settingsOwner.dispose());
-    this.settingsOwner.bindTelemetry(this.config, this.operations.telemetry);
+    const settingsOwner = new SessionSettingsOwner(settings);
+    this.providers.acquire('settings', () => settingsOwner.dispose());
+    settingsOwner.bindTelemetry(config, this.operations.telemetry);
+    return { settings, config, media, settingsOwner };
   }
 
-  private acquireProviders(): void {
-    this.files = acquireProviderFiles(this.providers, {
-      proxy: this.config.getProxy(),
-      scopeIds: [this.data.runtimeId, this.config.getSessionId()],
+  private acquireProviders(workspace: ChildWorkspace): ChildProviderStage {
+    const { config, settings, settingsOwner } = workspace;
+    const files = acquireProviderFiles(this.providers, {
+      proxy: config.getProxy(),
+      scopeIds: [this.data.runtimeId, config.getSessionId()],
     });
     const runtimeId = this.data.runtimeId;
-    this.manager = acquireProviderRuntime(
+
+    return acquireProviderRuntime(
       this.providers,
       {
-        files: this.files,
-        config: this.config,
-        proxy: this.config.getProxy(),
-        settings: this.settings,
-        settingsOwner: this.settingsOwner,
+        files,
+        config,
+        proxy: config.getProxy(),
+        settings,
+        settingsOwner,
         authority: this.acquisition.authority,
         context: createSubagentProviderRuntime(
           this.data.runtimeId,
@@ -251,62 +246,112 @@ export class ChildAgentAssembly {
         }),
         requestInteractiveAuth: this.operations.requestInteractiveAuth,
       },
-      (oauth) => {
-        this.oauth = oauth;
+      (manager, oauth) => {
+        const tokenizer = configureProviderTokenizer(manager);
+        const content = createRuntimeContentGeneratorFactory();
+        return {
+          assemble: (fakeResponses) =>
+            this.assembleAcquired(
+              workspace,
+              { files, manager, tokenizer, content },
+              { oauth },
+              fakeResponses,
+            ),
+        };
       },
     );
-    this.tokenizer = configureProviderTokenizer(this.manager);
-    this.content = createRuntimeContentGeneratorFactory();
   }
 
-  private async prepareClient(): Promise<void> {
-    this.client = await acquireSessionClient(
+  private async assembleAcquired(
+    workspace: ChildWorkspace,
+    provider: ChildProvider,
+    auth: ChildAuth,
+    fakeResponses: string | undefined,
+  ): Promise<SubagentLaunchResult> {
+    const client = await this.prepareClient(workspace, provider, auth);
+    const activated = await this.activate(
+      workspace,
+      provider,
+      auth,
+      client,
+      fakeResponses,
+    );
+    const loaded = await this.load(workspace, provider, activated);
+    this.assertAdmission(
+      'Subagent launch aborted after runtime assembly completed.',
+    );
+    const scope = await this.createScope(
+      workspace,
+      provider,
+      auth,
+      client,
+      loaded,
+    );
+    return this.publishScope(workspace, client, loaded, scope);
+  }
+
+  private async prepareClient(
+    workspace: ChildWorkspace,
+    provider: ChildProvider,
+    auth: ChildAuth,
+  ): Promise<SessionClientOwner> {
+    const { config, settings, settingsOwner, media } = workspace;
+    const { manager, content, tokenizer, files } = provider;
+    const { oauth } = auth;
+    const client = await acquireSessionClient(
       {
-        config: this.config,
+        config,
         messageBus: this.operations.messageBus,
         workspacePaths: this.operations.workspacePaths,
         readInstructions: this.operations.readMcpInstructions,
         imageOperation: undefined,
       },
-      { settings: this.settings, settingsOwner: this.settingsOwner },
-      this.manager,
-      this.oauth,
+      { settings, settingsOwner },
+      manager,
+      oauth,
       {
-        contentGeneratorFactory: this.content,
-        tokenizerFactory: this.tokenizer,
-        providerFiles: this.files,
-        mediaStore: this.media.store,
+        contentGeneratorFactory: content,
+        tokenizerFactory: tokenizer,
+        providerFiles: files,
+        mediaStore: media.store,
         authority: this.acquisition.authority,
         clientFactory: this.clientFactory,
       },
     );
-    this.acquired.push(() => this.client.dispose());
-    this.client.clients.bindDefinitionReads(
+    this.acquired.push(() => client.dispose());
+    client.clients.bindDefinitionReads(
       this.operations.profileReads,
       this.operations.subagentReads,
     );
-    this.client.clients.bindInheritedInstructions(this.operations.instructions);
-    this.client.bindHooks(
+    client.clients.bindInheritedInstructions(this.operations.instructions);
+    client.bindHooks(
       this.operations.hooks,
       this.operations.messageBus,
       this.operations.trust,
     );
-    this.client.bindInheritedTools(
+    client.bindInheritedTools(
       this.operations.tools,
       this.operations.messageBus,
       this.operations.trust,
     );
+    return client;
   }
 
-  private async activate(fakeResponses: string | undefined): Promise<void> {
-    await this.settingsOwner.startTelemetry(this.config);
-    this.manager.setRetryOperationsFactory((name, profileId) =>
-      this.oauth.composeRetryOperations(
-        name,
-        profileId ? { profileId } : undefined,
-      ),
+  private async activate(
+    workspace: ChildWorkspace,
+    provider: ChildProvider,
+    auth: ChildAuth,
+    client: SessionClientOwner,
+    fakeResponses: string | undefined,
+  ): Promise<ActivatedChildClient> {
+    const { config, settings, settingsOwner } = workspace;
+    const { manager, tokenizer } = provider;
+    const { oauth } = auth;
+    await settingsOwner.startTelemetry(config);
+    manager.setRetryOperationsFactory((name, profileId) =>
+      oauth.composeRetryOperations(name, profileId ? { profileId } : undefined),
     );
-    this.manager.setRuntimeContext(
+    manager.setRuntimeContext(
       createProviderRuntimeContext({
         runtimeId: this.data.runtimeId,
         runtimeKind: 'agent',
@@ -315,43 +360,50 @@ export class ChildAgentAssembly {
           subagent: this.data.subagent.name,
         },
       }),
-      this.settingsOwner,
-      this.settings,
-      this.config,
+      settingsOwner,
+      settings,
+      config,
     );
     registerProvidersOntoManager(
-      this.manager,
-      this.settings,
-      this.config,
-      this.oauth,
+      manager,
+      settings,
+      config,
+      oauth,
       undefined,
       fakeResponses,
     );
-    this.manager.setTokenizerFactory(this.tokenizer);
-    this.manager.setConfig(this.config);
+    manager.setTokenizerFactory(tokenizer);
+    manager.setConfig(config);
     await activateChildProvider(
-      this.config,
-      this.settings,
-      this.manager,
-      this.oauth,
-      this.settingsOwner,
+      config,
+      settings,
+      manager,
+      oauth,
+      settingsOwner,
       () => 'agent',
-      (method) => this.client.clients.refreshAuth(method),
+      (method) => client.clients.refreshAuth(method),
       this.operations.profileReads,
       this.data.activationProfile,
       this.data.subagent.profile,
       isLoadBalancerProfile(this.data.activationProfile),
     );
     populatePostActivationSettings(
-      this.settings.set.bind(this.settings),
-      this.settings.setCurrentProfileName.bind(this.settings),
+      settings.set.bind(settings),
+      settings.setCurrentProfileName.bind(settings),
       this.data.runtimeStateProfile,
       this.data.subagent.profile,
       this.data.disabledTools,
     );
+    return { activated: client };
   }
 
-  private async load(): Promise<void> {
+  private async load(
+    workspace: ChildWorkspace,
+    provider: ChildProvider,
+    _activated: ActivatedChildClient,
+  ): Promise<ToolSelectedRuntimeLoaderResult> {
+    const { config: workspaceConfig, settingsOwner, media } = workspace;
+    const { manager, tokenizer, content } = provider;
     const settingsSnapshot = createSettingsSnapshot(
       this.data.effectiveProfile,
       this.data.disabledTools,
@@ -368,12 +420,12 @@ export class ChildAgentAssembly {
       ]),
     };
     const options = buildSubagentRuntimeLoaderOptions(
-      this.config,
-      this.settingsOwner,
-      this.media.store,
-      this.manager,
-      this.tokenizer,
-      this.content,
+      workspaceConfig,
+      settingsOwner,
+      media.store,
+      manager,
+      tokenizer,
+      content,
       this.operations.tools,
       this.data.state,
       settingsSnapshot,
@@ -384,26 +436,36 @@ export class ChildAgentAssembly {
       config,
       this.data.signal,
     );
-    await this.tokenizer.prepareTokenizer?.(
+    await tokenizer.prepareTokenizer?.(
       this.data.state.provider,
       this.data.state.model,
     );
-    this.loaded = await this.factories.runtimeLoader(options);
-    this.acquired.push(() => disposeHistoryLike(this.loaded.history));
-    this.loaded.history.setTokenizerFactory({
+    const loaded = await this.factories.runtimeLoader(options);
+    this.acquired.push(() => disposeHistoryLike(loaded.history));
+    loaded.history.setTokenizerFactory({
       getTokenizer: (provider, model) =>
-        this.tokenizer.getTokenizer(provider, model),
+        tokenizer.getTokenizer(provider, model),
     });
-    this.loaded.history.setActiveTokenizationTarget(
+    loaded.history.setActiveTokenizationTarget(
       this.data.state.model,
       this.data.state.provider,
     );
+    return loaded;
   }
 
-  private createScope(): Promise<ChildAgentScope> {
-    const retry = this.oauth.composeRetryOperations(
-      this.loaded.runtimeContext.state.provider,
-      { profileId: this.settings.getCurrentProfileName() ?? undefined },
+  private createScope(
+    workspace: ChildWorkspace,
+    provider: ChildProvider,
+    auth: ChildAuth,
+    client: SessionClientOwner,
+    loaded: ToolSelectedRuntimeLoaderResult,
+  ): Promise<ChildAgentScope> {
+    const { settings } = workspace;
+    const { manager, files } = provider;
+    const { oauth } = auth;
+    const retry = oauth.composeRetryOperations(
+      loaded.runtimeContext.state.provider,
+      { profileId: settings.getCurrentProfileName() ?? undefined },
     );
     return this.factories.scopeFactory(
       {
@@ -416,12 +478,12 @@ export class ChildAgentAssembly {
         parentSignal: this.data.signal,
       },
       {
-        admittedRuntime: this.loaded.runtimeContext,
-        contentGenerator: this.loaded.contentGenerator,
-        telemetry: this.loaded.telemetryRoot,
-        toolRegistry: this.loaded.toolRegistry,
-        toolsView: this.loaded.runtimeContext.tools,
-        settingsSnapshot: this.loaded.settingsSnapshot,
+        admittedRuntime: loaded.runtimeContext,
+        contentGenerator: loaded.contentGenerator,
+        telemetry: loaded.telemetryRoot,
+        toolRegistry: loaded.toolRegistry,
+        toolsView: loaded.runtimeContext.tools,
+        settingsSnapshot: loaded.settingsSnapshot,
         foregroundConfig: this.acquisition.foregroundConfig,
       },
       {
@@ -439,21 +501,21 @@ export class ChildAgentAssembly {
             ? this.acquisition.foregroundConfig.getApprovalMode()
             : ApprovalMode.DEFAULT,
         admitModelParameters: () => {
-          const provider = this.loaded.runtimeContext.state.provider;
+          const provider = loaded.runtimeContext.state.provider;
           return provider === 'load-balancer'
             ? admitLoadBalancerModelParameters(
-                this.manager.getActiveProvider(),
-                this.settings,
+                manager.getActiveProvider(),
+                settings,
               )
             : admitModelParameters(
-                this.settings.getAllGlobalSettings(),
-                this.settings.getProviderSettings(provider),
+                settings.getAllGlobalSettings(),
+                settings.getProviderSettings(provider),
                 provider,
               );
         },
-        providerFiles: this.files,
-        hooks: this.client.hookOperations.execution({
-          sessionId: () => this.loaded.runtimeContext.state.sessionId,
+        providerFiles: files,
+        hooks: client.hookOperations.execution({
+          sessionId: () => loaded.runtimeContext.state.sessionId,
           transcriptPath: () => undefined,
           signal: this.data.signal,
         }),
@@ -462,6 +524,49 @@ export class ChildAgentAssembly {
         dependencies: {},
       },
     );
+  }
+
+  private close(
+    workspace: ChildWorkspace,
+    client: SessionClientOwner,
+    loaded: ToolSelectedRuntimeLoaderResult,
+    scope: ChildAgentScope,
+  ): Promise<void> {
+    const { media } = workspace;
+    this.closing ??= runCleanupSteps([
+      () => scope.dispose(),
+      () => disposeHistoryLike(loaded.history),
+      () =>
+        disposeIsolatedMediaRuntime(
+          () => this.providers.close(),
+          () => media.dispose(),
+          () => client.dispose(),
+        ),
+    ]);
+    return this.closing;
+  }
+  private publishScope(
+    workspace: ChildWorkspace,
+    client: SessionClientOwner,
+    loaded: ToolSelectedRuntimeLoaderResult,
+    scope: ChildAgentScope,
+  ): SubagentLaunchResult {
+    this.acquired.push(() => scope.dispose());
+    this.assertAdmission('Subagent launch aborted before completion.');
+    return {
+      agentId: scope.getAgentId(),
+      scope,
+      prompt: this.data.prompt,
+      profile: this.data.profile,
+      config: this.data.subagent,
+      identity: Object.freeze({
+        runtimeId: loaded.runtimeContext.state.runtimeId,
+        sessionId: loaded.runtimeContext.state.sessionId,
+        provider: loaded.runtimeContext.state.provider,
+        model: loaded.runtimeContext.state.model,
+      }),
+      dispose: () => this.close(workspace, client, loaded, scope),
+    };
   }
 
   private assertAdmission(message: string): void {
@@ -474,20 +579,6 @@ export class ChildAgentAssembly {
 
   private rollback(): Promise<void> {
     this.closing ??= runCleanupSteps([...this.acquired].reverse());
-    return this.closing;
-  }
-
-  private close(): Promise<void> {
-    this.closing ??= runCleanupSteps([
-      () => this.scope.dispose(),
-      () => disposeHistoryLike(this.loaded.history),
-      () =>
-        disposeIsolatedMediaRuntime(
-          () => this.providers.close(),
-          () => this.media.dispose(),
-          () => this.client.dispose(),
-        ),
-    ]);
     return this.closing;
   }
 }

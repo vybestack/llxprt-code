@@ -296,10 +296,15 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
       proxy: config.getProxy(),
       scopeIds: [runtimeId, config.getSessionId()],
     });
-    // The retained settings and identity closures share this lexical environment.
-    // Keep the synchronous publication callback from capturing the assembly.
-    let acquiredOAuth!: OAuthManager;
-    this.#manager = acquireProviderRuntime(
+    function acceptProviders(
+      this: AdoptedAgentAssembly,
+      manager: ProviderManager,
+      oauth: OAuthManager,
+    ): void {
+      this.#manager = manager;
+      this.#oauth = oauth;
+    }
+    acquireProviderRuntime(
       this.#release,
       {
         files: this.#files,
@@ -318,11 +323,8 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
         readIdentity: () => ({ runtimeId, runtimeKind: 'agent' }),
         requestInteractiveAuth: undefined,
       },
-      (oauth) => {
-        acquiredOAuth = oauth;
-      },
+      acceptProviders.bind(this),
     );
-    this.#oauth = acquiredOAuth;
   }
 
   async #adoptComplete(): Promise<void> {
