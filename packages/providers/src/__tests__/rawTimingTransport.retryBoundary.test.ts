@@ -272,7 +272,8 @@ function hasNoVisiblePayload(chunk: IContent): boolean {
   return (
     chunk.blocks.length === 0 &&
     chunk.metadata?.usage === undefined &&
-    chunk.metadata?.finishReason === undefined
+    chunk.metadata?.finishReason === undefined &&
+    chunk.toolArgumentDelta === undefined
   );
 }
 
@@ -374,6 +375,19 @@ describe('issue #3473 F2: raw timing transport at retry and LB boundaries', () =
       chunk.blocks.some((block) => block.type === 'tool_call'),
     );
     expect(toolCallChunks).toHaveLength(1);
+    expect(results).toHaveLength(2);
+    expect(results[0].blocks).toStrictEqual([]);
+    expect(results[0].toolArgumentDelta).toMatchObject({
+      sourceId: '0',
+      name: 'get_weather',
+      arguments: '{"city":"SF',
+    });
+    expect(toolCallChunks[0].toolArgumentDelta).toMatchObject({
+      sourceId: '0',
+      name: 'get_weather',
+      complete: true,
+      arguments: '',
+    });
     expect(results.filter(hasNoVisiblePayload)).toHaveLength(0);
   });
 
