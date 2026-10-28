@@ -29,12 +29,18 @@ interface Publication {
 async function replaceRow(
   row: IContent,
   label: bigint,
+  ordinal: number,
   publication: Publication,
 ): Promise<{ readonly row: IContent; readonly replaced: number }> {
   const blocks = [...row.blocks];
   let replaced = 0;
   for (const [index, block] of row.blocks.entries()) {
-    if (block.type !== 'tool_response' || isAlreadyStubbed(block)) continue;
+    if (
+      ordinal < publication.firstHistory ||
+      block.type !== 'tool_response' ||
+      isAlreadyStubbed(block)
+    )
+      continue;
     const rank = await publication.tree.position(label, index);
     if (
       rank !== undefined &&
@@ -59,13 +65,20 @@ export async function publishNativeToolResponses(
   await deps.historyService.detachedValues.transform(
     async (_source, sink) => {
       let ordinal = 0;
+      let sourceOrdinal = 0;
       for await (const entry of publication.snapshot.entries()) {
+        const sourceIndex = sourceOrdinal++;
         deps.signal?.throwIfAborted();
         const row = decodeStoredRow(await publication.snapshot.readRow(entry));
         if (row.speaker === 'ai' && row.blocks.length === 0) {
           if (!publication.filtered) ordinal++;
         } else {
-          const result = await replaceRow(row, entry.label, publication);
+          const result = await replaceRow(
+            row,
+            entry.label,
+            sourceIndex,
+            publication,
+          );
           replaced += result.replaced;
           if (result.replaced > 0 && publication.replacement === 'density')
             await sink.appendReplacement(ordinal, result.row);

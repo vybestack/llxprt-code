@@ -62,38 +62,40 @@ describe('pending-token native ranking immutable policy parity', () => {
                 success: expected.success,
               });
             }, true);
+            // Keep maintenance out of parity reads, just as the request pin keeps
+            // it out of compression. Closing here starts four competing copies.
+            const actual = await Array.fromAsync(history.streamRawHistory());
+            expect(expected.replacedCount).toBe(2);
+            expect(actual).toStrictEqual([...expected.rows]);
+            expect(await Array.fromAsync(old.streamRawHistory())).toStrictEqual(
+              [...expected.rows],
+            );
+            expect(resets).toBe(2);
+            expect(oldResets).toBe(2);
+            expect(history.getTotalTokens()).toBe(old.getTotalTokens());
+            expect(history.getContextRange()).toStrictEqual(
+              old.getContextRange(),
+            );
+            expect(await durable()).toStrictEqual(
+              await compressionValueDigest(expected.rows),
+            );
+            await recorder.flush();
+            expect(await durableRowsOf(recorder)).toStrictEqual([
+              ...expected.rows,
+            ]);
+            expect(files).toStrictEqual({ directories: [], files: [] });
+            expect(JSON.stringify(input)).toBe(original);
+            expect(
+              owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
+            ).toBe(true);
+            expect(owners.snapshot().liveRows).toBe(0);
+            process.stdout.write(
+              `PENDING_PARITY ${JSON.stringify({ size, replaced: expected.replacedCount, projected: expected.projected })}\n`,
+            );
           } finally {
             await requestPin.close();
             await oldPin.close();
           }
-          const actual = await Array.fromAsync(history.streamRawHistory());
-          expect(expected.replacedCount).toBe(2);
-          expect(actual).toStrictEqual([...expected.rows]);
-          expect(await Array.fromAsync(old.streamRawHistory())).toStrictEqual([
-            ...expected.rows,
-          ]);
-          expect(resets).toBe(2);
-          expect(oldResets).toBe(2);
-          expect(history.getTotalTokens()).toBe(old.getTotalTokens());
-          expect(history.getContextRange()).toStrictEqual(
-            old.getContextRange(),
-          );
-          expect(await durable()).toStrictEqual(
-            await compressionValueDigest(expected.rows),
-          );
-          await recorder.flush();
-          expect(await durableRowsOf(recorder)).toStrictEqual([
-            ...expected.rows,
-          ]);
-          expect(files).toStrictEqual({ directories: [], files: [] });
-          expect(JSON.stringify(input)).toBe(original);
-          expect(
-            owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
-          ).toBe(true);
-          expect(owners.snapshot().liveRows).toBe(0);
-          process.stdout.write(
-            `PENDING_PARITY ${JSON.stringify({ size, replaced: expected.replacedCount, projected: expected.projected })}\n`,
-          );
         });
       });
     },
