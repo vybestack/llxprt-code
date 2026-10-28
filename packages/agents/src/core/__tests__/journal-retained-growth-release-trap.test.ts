@@ -1,9 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import {
-  RETAINED_ALLOWANCE_BYTES,
-  evaluateRetainedGrowth,
-} from './support/journal-retained-growth-predicate.js';
+import { RETAINED_ALLOWANCE_BYTES } from './support/journal-retained-growth-predicate.js';
+import { evaluateRetainedSizes } from './support/journal-retained-size-predicate.js';
 import { RELEASE_AFTER_CHECKPOINTS } from './support/journal-retained-growth-plan.js';
 import {
   WORKER_TEST_TIMEOUT_MS,
@@ -23,7 +21,7 @@ describe('retained growth trap: context held between compressions then released'
       // RELEASE_AFTER_CHECKPOINTS checkpoints, so nothing is held when the run
       // ends.
       expect(result.retainedRows).toBe(0);
-      const verdict = evaluateRetainedGrowth(
+      const verdict = evaluateRetainedSizes(
         result.baseline,
         result.checkpoints,
       );

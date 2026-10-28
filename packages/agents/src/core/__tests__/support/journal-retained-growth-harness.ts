@@ -10,7 +10,7 @@ import {
   MEASURED_TURNS,
   MIN_COMPRESSIONS,
 } from './journal-retained-growth-plan.js';
-import { evaluateRetainedGrowth } from './journal-retained-growth-predicate.js';
+import { evaluateRetainedSizes } from './journal-retained-size-predicate.js';
 
 /**
  * Per-test budget. The runner kills a whole test file at 300 s; each file
@@ -83,14 +83,14 @@ export async function runWorker(
 }
 
 export function report(result: RetainedGrowthResult): string {
-  const verdict = evaluateRetainedGrowth(result.baseline, result.checkpoints);
+  const verdict = evaluateRetainedSizes(result.baseline, result.checkpoints);
   const warmup = result.warmup
     .map((sample) => `${sample.turn}:${sample.heapBytes}`)
     .join(' ');
   const samples = [result.baseline, ...result.checkpoints]
     .map((point) => `turn ${point.turn}: [${point.readings.join(', ')}]`)
     .join('\n');
-  return `${result.mode} retained=${verdict.retainedBytes} deltas=${verdict.checkpointDeltas.join(',')} intervals=${verdict.intervalGrowth.join(',')} lateFitted=${Math.round(verdict.lateFittedGrowthBytes)} lateEndpoint=${verdict.lateEndpointGrowthBytes} requests=${result.requests} compressions=${result.compressions}\nwarmup ${warmup}\n${samples}`;
+  return `${result.mode} retained=${verdict.retainedBytes} deltas=${verdict.checkpointDeltas.join(',')} twoSizeGrowth=${verdict.growthBytes} requests=${result.requests} compressions=${result.compressions}\nwarmup ${warmup}\n${samples}`;
 }
 
 /** The run really sent every turn, compressed repeatedly, and wrote a journal. */
