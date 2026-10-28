@@ -54,8 +54,8 @@ function measure(size: number, trap: boolean): z.infer<typeof schema> {
   return result;
 }
 function pair(trap: boolean): PairedDelta {
-  const small = measure(512, trap);
-  const large = measure(8192, trap);
+  const small = measure(65, trap);
+  const large = measure(512, trap);
   return {
     heap: large.heap - small.heap,
     external: large.external - small.external,
@@ -80,9 +80,9 @@ describe('AgentClient admitted restore suspended after durable acknowledgement',
     expect(estimate.median.heap).toBeGreaterThan(RETAINED_ALLOWANCE_BYTES);
   }, 300_000);
   it('charges input, stored and returned values against the unchanged 440/eight MiB checkpoints', () => {
-    const positive = measure(8192, false);
-    const trap = measure(8192, true);
-    expect(positive.preRows).toBe(8192);
+    const positive = measure(512, false);
+    const trap = measure(512, true);
+    expect(positive.preRows).toBe(512);
     expect(positive.preBytes).toBeGreaterThan(8 * 1024 * 1024);
     expect(positive.callerRows).toBe(0);
     expect(positive.returnedRows).toBe(0);
@@ -91,7 +91,7 @@ describe('AgentClient admitted restore suspended after durable acknowledgement',
     expect(positive.storedRows).toBe(0);
     expect(positive.heldRows).toBeLessThanOrEqual(440);
     expect(positive.heldBytes).toBeLessThanOrEqual(8 * 1024 * 1024);
-    expect(trap.callerRows).toBe(8192);
+    expect(trap.callerRows).toBe(512);
     expect(trap.callerBytes).toBeGreaterThan(8 * 1024 * 1024);
     expect(trap.heldRows).toBeGreaterThan(440);
     expect(trap.heldBytes).toBeGreaterThan(8 * 1024 * 1024);

@@ -43,7 +43,9 @@ function submit(
   pre: ReturnType<RowOwnership['snapshot']>;
 } {
   const caller = new RowOwnership();
-  const held = { rows: clientArrayRows(size) };
+  // 512 distinct 32 KiB rows preserve the full 16 MiB retaining signal and
+  // exceed both the 440-row and eight-MiB gates without 8192 journal entries.
+  const held = { rows: clientArrayRows(size, 32_768) };
   for (const row of held.rows) {
     fixture.owners.retain(row);
     caller.retain(row);
