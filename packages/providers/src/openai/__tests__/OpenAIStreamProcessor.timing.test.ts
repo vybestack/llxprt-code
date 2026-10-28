@@ -171,15 +171,19 @@ async function collectResults(
 function expectReasoningToolOutput(results: readonly IContent[]): void {
   expect(
     results.map((chunk) => chunk.blocks.map((block) => block.type)),
-  ).toStrictEqual([[], ['thinking'], ['tool_call']]);
+  ).toStrictEqual([[], ['thinking', 'tool_call']]);
   expect(results[0].toolArgumentDelta).toMatchObject({
     sourceId: '0',
     name: 'get_weather',
     arguments: '{"city":"SF"}',
   });
   expect(results[0].metadata).toBeUndefined();
-  expect(results[1].toolArgumentDelta).toBeUndefined();
-  expect(results[2].toolArgumentDelta).toMatchObject({
+  expect(results[1].blocks[1]).toMatchObject({
+    type: 'tool_call',
+    name: 'get_weather',
+    parameters: { city: 'SF' },
+  });
+  expect(results[1].toolArgumentDelta).toMatchObject({
     sourceId: '0',
     name: 'get_weather',
     complete: true,
@@ -384,7 +388,7 @@ describe('issue #3473: OpenAI stream timing at raw token-bearing deltas', () => 
       createProviderStream(chunks, 5, 'openai'),
     );
 
-    expect(results).toHaveLength(3);
+    expect(results).toHaveLength(2);
     expectReasoningToolOutput(results);
   });
 
