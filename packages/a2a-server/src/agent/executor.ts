@@ -339,13 +339,13 @@ export class CoderAgentExecutor implements AgentExecutor {
     taskId: string,
     abortController: AbortController,
     abortSignal: AbortSignal,
-  ): void {
+  ): () => void {
     const store = requestStorage.getStore();
     if (!store) {
       logger.error(
         '[CoderAgentExecutor] Could not get request from async local storage. Cancellation on socket close will not be handled for this request.',
       );
-      return;
+      return () => {};
     }
 
     const socket = store.req.socket;
@@ -359,13 +359,16 @@ export class CoderAgentExecutor implements AgentExecutor {
       socket.removeListener('end', onClientEnd);
     };
 
-    socket.on('end', onClientEnd);
-    abortSignal.addEventListener('abort', () => {
+    const cleanup = (): void => {
       socket.removeListener('end', onClientEnd);
-    });
+      abortSignal.removeEventListener('abort', cleanup);
+    };
+    socket.on('end', onClientEnd);
+    abortSignal.addEventListener('abort', cleanup);
     logger.info(
       `[CoderAgentExecutor] Socket close handler set up for task ${taskId}.`,
     );
+    return cleanup;
   }
 
   #publishHydrationFailure(
@@ -821,57 +824,64 @@ export class CoderAgentExecutor implements AgentExecutor {
 
     const abortController = new AbortController();
     const abortSignal = abortController.signal;
-    this.#setupSocketCloseHandler(taskId, abortController, abortSignal);
-
-    const wrapper = await this.#resolveTaskWrapper(
+    const cleanupSocket = this.#setupSocketCloseHandler(
       taskId,
-      contextId,
-      userMessage,
-      sdkTask,
-      eventBus,
+      abortController,
+      abortSignal,
     );
-
-    const currentTask = wrapper.task;
-
-    if (['canceled', 'failed', 'completed'].includes(currentTask.taskState)) {
-      logger.warn(
-        `[CoderAgentExecutor] Attempted to execute task ${taskId} which is already in state ${currentTask.taskState}. Ignoring.`,
-      );
-      return;
-    }
-
-    if (this.executingTasks.has(taskId)) {
-      logger.info(
-        `[CoderAgentExecutor] Task ${taskId} has a pending execution. Processing message and yielding.`,
-      );
-
-      for await (const _event of currentTask.acceptUserMessage(
-        requestContext,
-        abortController.signal,
-      )) {
-        logger.info(
-          `[CoderAgentExecutor] Processing user message ${userMessage.messageId} in secondary execution loop for task ${taskId}.`,
-        );
-      }
-      return;
-    }
-
-    logger.info(
-      `[CoderAgentExecutor] Starting main execution for message ${userMessage.messageId} for task ${taskId}.`,
-    );
-    this.executingTasks.add(taskId);
-
     try {
-      await this.#processAgentTurnLoop(
-        currentTask,
-        requestContext,
-        abortSignal,
+      const wrapper = await this.#resolveTaskWrapper(
+        taskId,
+        contextId,
+        userMessage,
+        sdkTask,
+        eventBus,
       );
-    } catch (error) {
-      this.#handleExecutionError(currentTask, abortSignal, error);
+
+      const currentTask = wrapper.task;
+
+      if (['canceled', 'failed', 'completed'].includes(currentTask.taskState)) {
+        logger.warn(
+          `[CoderAgentExecutor] Attempted to execute task ${taskId} which is already in state ${currentTask.taskState}. Ignoring.`,
+        );
+        return;
+      }
+
+      if (this.executingTasks.has(taskId)) {
+        logger.info(
+          `[CoderAgentExecutor] Task ${taskId} has a pending execution. Processing message and yielding.`,
+        );
+
+        for await (const _event of currentTask.acceptUserMessage(
+          requestContext,
+          abortController.signal,
+        )) {
+          logger.info(
+            `[CoderAgentExecutor] Processing user message ${userMessage.messageId} in secondary execution loop for task ${taskId}.`,
+          );
+        }
+        return;
+      }
+
+      logger.info(
+        `[CoderAgentExecutor] Starting main execution for message ${userMessage.messageId} for task ${taskId}.`,
+      );
+      this.executingTasks.add(taskId);
+
+      try {
+        await this.#processAgentTurnLoop(
+          currentTask,
+          requestContext,
+          abortSignal,
+        );
+      } catch (error) {
+        this.#handleExecutionError(currentTask, abortSignal, error);
+      } finally {
+        this.executingTasks.delete(taskId);
+        await this.#saveFinalTaskState(wrapper);
+      }
     } finally {
-      this.executingTasks.delete(taskId);
-      await this.#saveFinalTaskState(wrapper);
+      cleanupSocket();
     }
   }
 }
