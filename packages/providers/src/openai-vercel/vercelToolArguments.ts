@@ -51,6 +51,7 @@ export function toolInputArrival(
         id: normalizeToHistoryToolId(normalizeToOpenAIToolId(call.toolCallId)),
         name: call.toolName,
         arguments: part.delta,
+        contextOrder: 'finalized',
       },
     },
   ];

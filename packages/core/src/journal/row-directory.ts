@@ -41,7 +41,13 @@ export async function* rowDirectory(
           block.named === true
             ? await namedBlockLength(access, block)
             : block.length,
-        parts: () => chunkBlockParts(access, manifest, index, block),
+        parts: () =>
+          chunkBlockParts(
+            access,
+            manifest,
+            entry.label === 0n ? index : Number(entry.label - 1n),
+            block,
+          ),
       };
     }
     return;

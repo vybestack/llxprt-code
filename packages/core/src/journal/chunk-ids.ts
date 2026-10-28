@@ -139,8 +139,15 @@ export async function* chunkIds(
     if (block.named !== true) {
       yield await completeBlockId(access, manifest, index, block.type);
     } else {
-      const rawId = await textField(access, manifest, index, block, 'id');
-      const name = await textField(access, manifest, index, block, 'name');
+      const sourceIndex = entry.label === 0n ? index : Number(entry.label - 1n);
+      const rawId = await textField(access, manifest, sourceIndex, block, 'id');
+      const name = await textField(
+        access,
+        manifest,
+        sourceIndex,
+        block,
+        'name',
+      );
       yield {
         rawId,
         kind: ROW_ID_KIND.call,

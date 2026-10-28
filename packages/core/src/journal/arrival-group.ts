@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
+import { finalizedBlocksRoot } from './arrival-block-order.js';
 import type { BuildContext, BuiltGroup } from './groupBuildShared.js';
 import { mapReader } from './groupBuildShared.js';
 import type { RecordAppender } from './groupAppender.js';
@@ -264,6 +265,15 @@ export class ArrivalGroup {
     this.binding = { key, bytes };
     return handle;
   }
+  async orderBlock(handle: ArrivalBlock, index: number): Promise<void> {
+    await this.find(handle);
+    const bytes = new Uint8Array(4);
+    new DataView(bytes.buffer).setUint32(0, handle.ordinal);
+    this.binding = {
+      key: `arrival-order:${handle.transcriptId}:${index}`,
+      bytes,
+    };
+  }
   async bindRow(
     parent: ArrivalRow,
     key: string,
@@ -499,6 +509,23 @@ export class ArrivalGroup {
     if (facts !== undefined) header = { ...header, ...facts };
     if (header.chunk === undefined) throw new Error('Missing manifest');
     if (outcome === 'completed') {
+      header = {
+        ...header,
+        chunk: {
+          ...header.chunk,
+          blocksRoot: await finalizedBlocksRoot(
+            () => this.access(),
+            this.target,
+            header.chunk,
+            (index) =>
+              mapReader(this.ctx, 'state').get(
+                this.built.state.stateRoot,
+                `arrival-order:${row.transcriptId}:${index}`,
+              ),
+          ),
+        },
+      };
+      if (header.chunk === undefined) throw new Error('Missing manifest');
       for await (const block of transcriptEntries(
         this.access(),
         header.chunk.blocksRoot,

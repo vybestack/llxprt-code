@@ -425,6 +425,7 @@ export const RECORD_FIELDS: Record<RecordName, Record<string, FieldDecl>> = {
     blockCount: 'count',
   } satisfies Record<keyof ChunkManifest, FieldDecl>,
   ChunkBlock: {
+    sourceOrdinal: 'derived',
     piecesRoot: OFFSET.blockPieces,
     length: 'size',
     type: 'code',

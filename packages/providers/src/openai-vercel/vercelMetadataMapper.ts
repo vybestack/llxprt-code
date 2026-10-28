@@ -159,6 +159,8 @@ export function* emitStreamToolCallsAndMetadata(
           name: block.name,
           arguments: '',
           complete: true,
+          contextOrder: 'finalized',
+          finalizedIndex: index,
           replacementArguments: JSON.stringify(block.parameters),
         },
         ...(index === blocks.length - 1 && metadata !== undefined

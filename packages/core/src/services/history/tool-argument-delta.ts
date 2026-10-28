@@ -7,5 +7,7 @@ export interface ToolArgumentDelta {
   readonly nameMode?: 'replace';
   readonly arguments: string;
   readonly complete?: boolean;
+  readonly contextOrder?: 'finalized';
+  readonly finalizedIndex?: number;
   readonly replacementArguments?: string;
 }

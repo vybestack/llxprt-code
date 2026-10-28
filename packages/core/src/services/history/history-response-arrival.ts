@@ -139,7 +139,8 @@ class JournalResponseArrival implements ResponseArrival {
   async appendToolArguments(delta: ToolArgumentDelta): Promise<void> {
     if (this.finished) throw new Error('Response arrival is finished');
     await this.selectAttempt(delta.attemptId);
-    await this.end();
+    if (delta.contextOrder !== 'finalized' || delta.complete === true)
+      await this.end();
     const handle = await this.recorder.indexedBlock(
       this.row,
       ROW_BLOCK_TYPE.tool_call,
@@ -161,6 +162,8 @@ class JournalResponseArrival implements ResponseArrival {
         ROW_FLAG.curated | ROW_FLAG.hasToolCall | ROW_FLAG.hasCacheableBlock;
       try {
         await this.recorder.endBlock(handle);
+        if (delta.finalizedIndex !== undefined)
+          await this.recorder.orderBlock(handle, delta.finalizedIndex);
       } catch (error) {
         this.finished = true;
         await this.recorder.close();

@@ -17,6 +17,7 @@ export interface ChunkManifest {
   readonly blockCount: number;
 }
 export interface ChunkBlock {
+  readonly sourceOrdinal?: number;
   readonly piecesRoot: number;
   readonly length: number;
   readonly type: number;
@@ -120,7 +121,10 @@ export async function chunkBlock(
     'blocks',
     BigInt(ordinal + 1),
   );
-  return decodeChunkBlock(await chunkValue(access, entry.rowRef));
+  return {
+    ...decodeChunkBlock(await chunkValue(access, entry.rowRef)),
+    ...(entry.label === 0n ? {} : { sourceOrdinal: Number(entry.label - 1n) }),
+  };
 }
 export async function hydrateChunkHeader(
   access: RecordAccess,
@@ -155,8 +159,20 @@ export async function* chunkBlockParts(
   const block = known ?? (await chunkBlock(access, manifest, ordinal));
   if (block.named === true) {
     const { namedBlockParts } = await import('./chunk-fields.js');
-    yield* namedBlockParts(access, manifest, ordinal, block);
-  } else yield* chunkFieldParts(access, manifest, ordinal, block, 0);
+    yield* namedBlockParts(
+      access,
+      manifest,
+      block.sourceOrdinal ?? ordinal,
+      block,
+    );
+  } else
+    yield* chunkFieldParts(
+      access,
+      manifest,
+      block.sourceOrdinal ?? ordinal,
+      block,
+      0,
+    );
 }
 export async function* chunkFieldParts(
   access: RecordAccess,

@@ -325,6 +325,11 @@ export function processStreamPart(
         if (existing !== undefined) {
           existing.input = part.input;
           existing.argumentsComplete = true;
+          state.collectedToolCalls.splice(
+            state.collectedToolCalls.indexOf(existing),
+            1,
+          );
+          state.collectedToolCalls.push(existing);
         } else
           state.collectedToolCalls.push({
             toolCallId: String(part.toolCallId),

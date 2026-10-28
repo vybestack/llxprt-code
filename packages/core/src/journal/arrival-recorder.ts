@@ -125,6 +125,10 @@ export class JournalArrivalRecorder {
     await this.flush();
     return this.mutate((group) => group.indexedBlock(row, type, sourceId));
   }
+  async orderBlock(block: ArrivalBlock, index: number): Promise<void> {
+    await this.flush();
+    await this.mutate((group) => group.orderBlock(block, index));
+  }
   async bindRow(
     parent: ArrivalRow,
     key: string,
