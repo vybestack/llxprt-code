@@ -15,9 +15,10 @@ import {
 import type { RecordAccess } from './recordAccess.js';
 import { RECORD_KIND } from './recordKinds.js';
 
-// Random paths cannot use the adjacent-node window. Level-three buckets can
-// hold eight full facts; deeper sparse leaves and internal nodes need less.
+// Random paths cannot use the adjacent-node window. Level-three buckets
+// need more room than deeper sparse leaves, but not a full sequential window.
 const RANDOM_NODE_PREFETCH_BYTES = 512;
+const RANDOM_BUCKET_PREFETCH_BYTES = 768;
 
 /**
  * Reads nodes of the id trie through a record access and a node cache. The
@@ -43,12 +44,12 @@ export class IdTrieReader {
       this.cache.put(offset, cached, depth < 3 && node.kind === 'internal');
       return node;
     }
+    const randomPrefetch =
+      depth === 3 ? RANDOM_BUCKET_PREFETCH_BYTES : RANDOM_NODE_PREFETCH_BYTES;
     const head = await this.access.readRecordHead(
       offset,
       'ITNODE',
-      readAhead || depth === 3
-        ? ID_TRIE_PREFETCH_BYTES
-        : RANDOM_NODE_PREFETCH_BYTES,
+      readAhead ? ID_TRIE_PREFETCH_BYTES : randomPrefetch,
       readAhead,
     );
     if (head.kind !== RECORD_KIND.ITNODE || head.bodyLen !== 0) {
