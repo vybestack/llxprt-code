@@ -164,6 +164,7 @@ export interface PreparedResponsesRequestContext {
    * carries `contents` instead of `requestRows` may use this context.
    */
   readonly rowsStagedFromContents?: boolean;
+  readonly stagedRows?: { close(): Promise<void> };
 }
 
 export interface RebuildMode {

@@ -301,6 +301,19 @@ describe('Responses source route stateful accounting', () => {
     expect(body['store']).toBe(false);
   }, 60000);
 
+  it('rebuilds a projected contents-only request after its parent is rejected', async () => {
+    const list = histories['a parent with observed usage'];
+    rejectParent = 'resp_parent';
+    const options = withEphemerals(setup, setup.options(rowsOf(list)), {
+      'responses-stateful': true,
+    });
+    await send(setup, options, true);
+    expect(bodies).toHaveLength(2);
+    expect(JSON.parse(bodies[1])).not.toHaveProperty('previous_response_id');
+    expect(bodies[1]).toContain('one');
+    expect(bodies[1]).toContain('two');
+  });
+
   it('retires a rejected parent and replays full history like the array route', async () => {
     const list = histories['a parent with observed usage'];
     rejectParent = 'resp_parent';

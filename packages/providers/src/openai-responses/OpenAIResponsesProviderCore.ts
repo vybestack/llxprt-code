@@ -243,6 +243,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     try {
       await prepared?.mediaRequest.release();
     } finally {
+      await prepared?.stagedRows?.close();
       delete options.requestRows;
       delete options.promptEnvelopeTransportToken;
     }
@@ -274,11 +275,15 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
         preparedRequestContext,
       );
     if (token !== undefined) this.preparedPromptEnvelopes.delete(token);
-    yield* executeOpenAIResponsesRequest(
-      request,
-      this.buildExecutorDeps(),
-      preparedRequestContext,
-    );
+    try {
+      yield* executeOpenAIResponsesRequest(
+        request,
+        this.buildExecutorDeps(),
+        preparedRequestContext,
+      );
+    } finally {
+      await preparedRequestContext.stagedRows?.close();
+    }
   }
 
   private async projectDiskTextEnvelope(
@@ -288,21 +293,21 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       this.captureRequest(normalized),
       this.buildExecutorDeps(),
     );
-    // Rows the provider staged from `contents` stay open for the stateful
-    // rebuilds until the request's media is released.
     const { stagedRows } = normalized;
     const prepared: PreparedResponsesRequestContext =
       stagedRows === undefined
         ? built
-        : { ...built, rowsStagedFromContents: true };
-    if (stagedRows !== undefined)
-      prepared.mediaRequest.registerCleanup(() => stagedRows.close());
+        : { ...built, rowsStagedFromContents: true, stagedRows };
     const token = Object.freeze({});
     this.preparedPromptEnvelopes.set(token, prepared);
     try {
       return diskTextProjection(prepared, token, async () => {
         if (!this.preparedPromptEnvelopes.delete(token)) return;
-        await prepared.mediaRequest.release();
+        try {
+          await prepared.mediaRequest.release();
+        } finally {
+          await stagedRows?.close();
+        }
       });
     } catch (error) {
       this.preparedPromptEnvelopes.delete(token);
