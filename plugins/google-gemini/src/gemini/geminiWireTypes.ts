@@ -17,6 +17,8 @@
  * the provider preserves fields it does not itself interpret.
  */
 
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
 /** Schema type discriminants, mirroring the API's `Type` enum values. */
 export const SchemaType = {
   TYPE_UNSPECIFIED: 'TYPE_UNSPECIFIED',
@@ -198,6 +200,7 @@ export interface GenerateContentResponseUsageMetadata {
 }
 
 export interface GenerateContentResponse {
+  toolArgumentDelta?: IContent['toolArgumentDelta'];
   candidates?: Candidate[];
   automaticFunctionCallingHistory?: Content[];
   usageMetadata?: GenerateContentResponseUsageMetadata;

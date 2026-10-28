@@ -170,6 +170,11 @@
       "bun": "./src/BaseProvider.ts",
       "import": "./dist/src/BaseProvider.js"
     },
+    "./streamProtocolErrors.js": {
+      "types": "./dist/src/streamProtocolErrors.d.ts",
+      "bun": "./src/streamProtocolErrors.ts",
+      "import": "./dist/src/streamProtocolErrors.js"
+    },
     "./IModel.js": {
       "bun": "./src/IModel.ts",
       "import": "./dist/src/IModel.js"

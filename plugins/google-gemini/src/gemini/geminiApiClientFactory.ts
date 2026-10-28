@@ -7,8 +7,9 @@
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import type {
   LanguageModelV4CallOptions,
-  LanguageModelV4Content,
+  LanguageModelV4StreamPart,
 } from '@ai-sdk/provider';
+import { StreamTruncatedError } from '@vybestack/llxprt-code-providers/streamProtocolErrors.js';
 import { createPatternPreservingFetch } from './gemini-pattern-fetch.js';
 import { createStreamedGeminiFetch } from './streamed-request.js';
 import {
@@ -123,22 +124,25 @@ export async function createGeminiApiClient(
 /**
  * Reprojects the AI SDK part stream into Gemini response chunks.
  *
- * Text and reasoning arrive as incremental deltas keyed by id, while tool
- * calls arrive whole. Each delta becomes its own chunk so callers still see
- * incremental output; usage and finish reason arrive on the terminal part and
- * are emitted as a final chunk.
+ * Text, reasoning, and tool arguments retain their SDK arrival boundaries.
+ * Only active tool names are kept here; the SDK owns argument assembly.
  */
 async function* streamToGeminiChunks(
-  stream: ReadableStream<unknown>,
+  stream: ReadableStream<LanguageModelV4StreamPart>,
 ): AsyncIterable<GenerateContentResponse> {
   const reader = stream.getReader();
+  const activeTools = new Map<string, string>();
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) {
+        if (activeTools.size > 0)
+          throw new StreamTruncatedError(
+            'Gemini ended without a completed tool call',
+          );
         return;
       }
-      const chunk = streamPartToChunk(value);
+      const chunk = streamPartToChunk(value, activeTools);
       if (chunk !== undefined) {
         yield chunk;
       }
@@ -150,18 +154,45 @@ async function* streamToGeminiChunks(
 
 /** Maps one AI SDK stream part to a Gemini chunk, or nothing if it carries none. */
 function streamPartToChunk(
-  value: unknown,
+  part: LanguageModelV4StreamPart,
+  activeTools: Map<string, string>,
 ): GenerateContentResponse | undefined {
-  const part = value as { type?: string } & Record<string, unknown>;
   switch (part.type) {
     case 'text-delta':
-      return textDeltaChunk(part['delta'], false);
+      return textDeltaChunk(part.delta, false);
     case 'reasoning-delta':
-      return textDeltaChunk(part['delta'], true);
-    case 'tool-call':
-      return chunkFromParts(
-        toParts([part as unknown as LanguageModelV4Content]),
-      );
+      return textDeltaChunk(part.delta, true);
+    case 'tool-input-start':
+      activeTools.set(part.id, part.toolName);
+      return undefined;
+    case 'tool-input-delta': {
+      const name = activeTools.get(part.id);
+      if (name === undefined) throw new Error('Gemini tool delta has no start');
+      return {
+        toolArgumentDelta: {
+          sourceId: part.id,
+          id: part.id,
+          name,
+          arguments: part.delta,
+        },
+      };
+    }
+    case 'tool-call': {
+      const started = activeTools.delete(part.toolCallId);
+      const chunk = chunkFromParts(toParts([part]));
+      if (started)
+        chunk.toolArgumentDelta = {
+          sourceId: part.toolCallId,
+          id: part.toolCallId,
+          name: part.toolName,
+          arguments: '',
+          complete: true,
+          replacementArguments: part.input,
+        };
+      return chunk;
+    }
+    case 'error':
+      throw part.error;
     case 'finish':
       return finishChunk(part);
     default:

@@ -39,6 +39,7 @@ async function recordedParameters(path: string): Promise<string> {
 export async function runDiskArrival(
   factory: (gate: (index: number) => Promise<void>) => AsyncIterable<IContent>,
   retain: boolean,
+  argumentPieces: readonly string[] = pieces,
 ): Promise<ContentBlock[]> {
   const directory = await mkdtemp(join(tmpdir(), 'responses-tool-arrival-'));
   const history = new HistoryService();
@@ -62,7 +63,7 @@ export async function runDiskArrival(
       const path = recording.getFilePath();
       if (path === null) throw new Error('Missing recording');
       const bytes = await recordedParameters(path);
-      const prefix = pieces.slice(0, index + 1).join('');
+      const prefix = argumentPieces.slice(0, index + 1).join('');
       if (!bytes.includes(`"parameters":${prefix}`))
         throw new Error('Argument disk-progress gate failed');
     });

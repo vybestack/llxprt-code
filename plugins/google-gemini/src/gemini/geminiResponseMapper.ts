@@ -114,6 +114,7 @@ function pushTextAndToolCallChunks(
   text: string,
   functionCalls: FunctionCall[],
   usageMetadata?: GeminiUsageMetadata,
+  toolArgumentDelta?: IContent['toolArgumentDelta'],
 ): void {
   if (text) {
     const textContent: IContent = {
@@ -135,7 +136,11 @@ function pushTextAndToolCallChunks(
       name: call.name ?? 'unknown_function',
       parameters: call.args ?? {},
     }));
-    const toolCallContent: IContent = { speaker: 'ai', blocks };
+    const toolCallContent: IContent = {
+      speaker: 'ai',
+      blocks,
+      ...(toolArgumentDelta === undefined ? {} : { toolArgumentDelta }),
+    };
     const usage = buildUsageMetadata(usageMetadata);
     if (usage) {
       toolCallContent.metadata = usage;
@@ -236,6 +241,14 @@ export function createGeminiResponseMapper(): ResponseToChunksMapper {
     response: GenerateContentResponse,
     includeThoughts = true,
   ): IContent[] => {
+    if (response.toolArgumentDelta && !response.toolArgumentDelta.complete)
+      return [
+        {
+          speaker: 'ai',
+          blocks: [],
+          toolArgumentDelta: response.toolArgumentDelta,
+        },
+      ];
     const chunks: IContent[] = [];
     const parts = response.candidates?.[0]?.content?.parts ?? [];
     const { thoughtParts, nonThoughtTextParts, thoughtSignature } =
@@ -265,7 +278,13 @@ export function createGeminiResponseMapper(): ResponseToChunksMapper {
       }
       chunks.push({ speaker: 'ai', blocks: [thinkingBlock] });
     }
-    pushTextAndToolCallChunks(chunks, text, functionCalls, usageMetadata);
+    pushTextAndToolCallChunks(
+      chunks,
+      text,
+      functionCalls,
+      usageMetadata,
+      response.toolArgumentDelta,
+    );
     pushFallbackChunks(chunks, text, functionCalls, usageMetadata);
     attachAfcHistory(chunks, response.automaticFunctionCallingHistory);
     const rawStopReason = response.candidates?.[0]?.finishReason;
