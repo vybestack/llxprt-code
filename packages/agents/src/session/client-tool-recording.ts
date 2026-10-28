@@ -12,11 +12,13 @@ export async function recordClientRequests(
   if (history === null)
     throw new Error('Client tools require initialized session history');
   const calls = Array.isArray(requests) ? requests : [requests];
+  const initiated = calls.filter((call) => call.isClientInitiated);
+  if (initiated.length === 0) return calls;
   const arrival = await history.openResponseArrival({
     id: `client-${randomUUID()}`,
     submissionId: 'client-tools',
   });
-  for (const call of calls)
+  for (const call of initiated)
     await arrival.append({
       type: 'tool_call',
       id: call.callId,
@@ -24,5 +26,9 @@ export async function recordClientRequests(
       parameters: call.args,
     });
   await arrival.seal({});
-  return calls.map((call) => ({ ...call, journalIdentity: arrival.identity }));
+  return calls.map((call) =>
+    call.isClientInitiated
+      ? { ...call, journalIdentity: arrival.identity }
+      : call,
+  );
 }
