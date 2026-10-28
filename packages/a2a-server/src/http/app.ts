@@ -25,7 +25,7 @@ import { logger } from '../utils/logger.js';
 import type { AgentSettings } from '../types.js';
 import { GCSTaskStore, NoOpTaskStore } from '../persistence/gcs.js';
 import { CoderAgentExecutor } from '../agent/executor.js';
-import { requestStorage } from './requestStorage.js';
+import { createRequestCancellationUser } from './request-cancellation.js';
 import {
   GitService,
   debugLogger,
@@ -162,11 +162,10 @@ export async function createApp(dependencies: CreateAppDependencies = {}) {
     );
 
     let expressApp = express();
-    expressApp.use((req, res, next) => {
-      requestStorage.run({ req }, next);
-    });
-
-    const appBuilder = new A2AExpressApp(requestHandler);
+    const appBuilder = new A2AExpressApp(
+      requestHandler,
+      createRequestCancellationUser,
+    );
     expressApp = appBuilder.setupRoutes(expressApp, '');
     expressApp.use(express.json());
 

@@ -29,7 +29,7 @@ import {
 } from '../types.js';
 import { acquireTaskSession } from './task-session-owner.js';
 import type { Task } from './task.js';
-import { requestStorage } from '../http/requestStorage.js';
+import { readRequestAbortSignal } from '../http/request-cancellation.js';
 
 function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) {
@@ -288,39 +288,6 @@ export class CoderAgentExecutor implements AgentExecutor {
       this.#publishCancellationError(eventBus, taskId, task, errorMessage);
     }
   };
-
-  #setupSocketCloseHandler(
-    taskId: string,
-    abortController: AbortController,
-    abortSignal: AbortSignal,
-  ): void {
-    const store = requestStorage.getStore();
-    if (!store) {
-      logger.error(
-        '[CoderAgentExecutor] Could not get request from async local storage. Cancellation on socket close will not be handled for this request.',
-      );
-      return;
-    }
-
-    const socket = store.req.socket;
-    const onClientEnd = () => {
-      logger.info(
-        `[CoderAgentExecutor] Client socket closed for task ${taskId}. Cancelling execution.`,
-      );
-      if (!abortController.signal.aborted) {
-        abortController.abort();
-      }
-      socket.removeListener('end', onClientEnd);
-    };
-
-    socket.on('end', onClientEnd);
-    abortSignal.addEventListener('abort', () => {
-      socket.removeListener('end', onClientEnd);
-    });
-    logger.info(
-      `[CoderAgentExecutor] Socket close handler set up for task ${taskId}.`,
-    );
-  }
 
   #publishHydrationFailure(
     eventBus: ExecutionEventBus,
@@ -773,9 +740,7 @@ export class CoderAgentExecutor implements AgentExecutor {
       logger.info('[EventBus event]: ', event),
     );
 
-    const abortController = new AbortController();
-    const abortSignal = abortController.signal;
-    this.#setupSocketCloseHandler(taskId, abortController, abortSignal);
+    const abortSignal = readRequestAbortSignal(requestContext);
 
     const wrapper = await this.#resolveTaskWrapper(
       taskId,
@@ -801,7 +766,7 @@ export class CoderAgentExecutor implements AgentExecutor {
 
       for await (const _event of currentTask.acceptUserMessage(
         requestContext,
-        abortController.signal,
+        abortSignal,
       )) {
         logger.info(
           `[CoderAgentExecutor] Processing user message ${userMessage.messageId} in secondary execution loop for task ${taskId}.`,
