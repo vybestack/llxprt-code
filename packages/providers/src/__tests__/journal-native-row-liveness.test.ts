@@ -100,6 +100,7 @@ function watchedSelection(
       await census.sample();
       const row = await read(index, signal);
       census.track(row);
+      await census.sample();
       return row;
     };
     indexed.retain = (facts): IndexedJournalRequestSnapshot => {
@@ -153,7 +154,14 @@ async function sendWithCensus(
         yield {
           speaker: 'human',
           blocks: [
-            { type: 'text', text: `${index}:` + 'x'.repeat(ROW_TEXT_BYTES) },
+            {
+              type: 'text',
+              text:
+                `${index}:` +
+                'row payload '
+                  .repeat(Math.ceil(ROW_TEXT_BYTES / 'row payload '.length))
+                  .slice(0, ROW_TEXT_BYTES),
+            },
             ...(includeMedia ? [{ ...reference }] : []),
           ],
         };
