@@ -21,6 +21,7 @@ import { AggregateDisposeError } from '../api/disposeErrors.js';
  * @pseudocode agent-runtime-context.md lines 92-101
  */
 import { assembleSchedulerOwner } from '../session/assembleSchedulerOwner.js';
+import { persistApprovalLifecycle } from './agenticLoop/approvalLifecycleRecording.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
@@ -562,6 +563,8 @@ export class SubAgentScope {
             this.toolExecutorContext.readExecutionPolicy(),
           toolContextInteractiveMode: true,
           ...callbacks,
+          persistApproval: (record) =>
+            persistApprovalLifecycle(record, this.runtimeContext.history),
         });
       },
       onMessage: this.onMessage,
