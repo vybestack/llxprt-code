@@ -25,6 +25,7 @@ import {
 } from './chunk-row.js';
 import { decodeRowHeader } from './rowRecord.js';
 import { mapReader } from './groupBuildShared.js';
+import { CommittedIdNodes } from './committed-id-nodes.js';
 
 export async function readRecordingField(
   ctx: BuildContext,
@@ -69,7 +70,10 @@ export function recordingMutations(seams: {
   readonly enqueue: <T>(run: () => Promise<T>) => Promise<T>;
   readonly writer: () => JournalGroupWriter;
   readonly context: () => BuildContext;
-  readonly installed: (result: RecordingMutation<unknown>) => void;
+  readonly installed: (
+    result: RecordingMutation<unknown>,
+    written: CommittedIdNodes,
+  ) => void;
 }): <T>(
   build: (
     ctx: BuildContext,
@@ -84,13 +88,18 @@ export function recordingMutations(seams: {
   ) =>
     seams.enqueue(async () => {
       let result: RecordingMutation<T> | undefined;
-      const ack = await seams.writer().prepareGroup(async (target) => {
-        result = await build(seams.context(), target);
-        return result.built.state;
-      }, true);
+      const written = new CommittedIdNodes();
+      const ack = await written.prepareGroup(
+        seams.writer(),
+        async (target) => {
+          result = await build(seams.context(), target);
+          return result.built.state;
+        },
+        true,
+      );
       if (result === undefined || ack === undefined)
         throw new Error('Recording left no commit');
-      seams.installed(result);
+      seams.installed(result, written);
       return { value: result.value, ack };
     });
 }

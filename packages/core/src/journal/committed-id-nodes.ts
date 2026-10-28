@@ -27,8 +27,12 @@ export class CommittedIdNodes {
   prepareGroup(
     writer: JournalGroupWriter,
     build: (appender: RecordAppender) => Promise<TrailerState | undefined>,
+    forceBoundary = false,
   ): Promise<CommitAck | undefined> {
-    return writer.prepareGroup((target) => build(this.appender(target)));
+    return writer.prepareGroup(
+      (target) => build(this.appender(target)),
+      forceBoundary,
+    );
   }
 
   publish(

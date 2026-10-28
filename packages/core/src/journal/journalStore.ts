@@ -355,9 +355,9 @@ export class JournalStore {
     enqueue: (run) => this.enqueueCommit(run),
     writer: () => this.writer,
     context: () => this.buildContext(),
-    installed: (result) => {
+    installed: (result, written) => {
       const trailer = this.writer.published?.trailer;
-      this.install(trailer);
+      this.install(trailer, written);
       if (trailer !== undefined)
         this.chain = result.built.chainBase.push(trailer.selfOffset);
       if (result.built.spine !== undefined && trailer !== undefined)
@@ -365,8 +365,6 @@ export class JournalStore {
           rowRoot: trailer.rowRoot,
           spine: result.built.spine,
         };
-      this.metaCache = this.makeCache();
-      this.stateCache = this.makeCache();
     },
   });
 
