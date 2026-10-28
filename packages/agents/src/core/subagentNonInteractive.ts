@@ -537,7 +537,10 @@ export async function dispatchNonInteractiveTurnResult(
       abortController,
       promptId,
       {
-        history: ctx.runtimeContext.history,
+        history: {
+          appendDisplay: (...args) =>
+            ctx.runtimeContext.history.appendDisplay(...args),
+        },
         output: ctx.output,
         ...(ctx.outputConfig === undefined
           ? {}
