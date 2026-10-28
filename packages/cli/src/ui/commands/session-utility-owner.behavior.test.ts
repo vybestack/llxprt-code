@@ -85,28 +85,22 @@ describe('registered session utility owners', () => {
   });
 
   it('keeps the registered debug configuration when another configuration is acquired', async () => {
-    ConfigurationManager.resetForTesting();
-    try {
-      const owner = ConfigurationManager.create();
-      owner.setEphemeralConfig({ enabled: false, namespaces: [] });
-      const command = await registered('debug', {
-        ...createUnconfiguredBuiltinOwners(),
-        debugCommand: createDebugCommand(bindDebugCommand(owner)),
-      });
-      ConfigurationManager.resetForTesting();
-      const sibling = ConfigurationManager.create();
-      sibling.setEphemeralConfig({ enabled: false, namespaces: [] });
-      const enable = command.subCommands?.find(
-        (entry) => entry.name === 'enable',
-      )?.action;
-      if (!enable) throw new Error('Missing debug enable');
-      await enable(createMockCommandContext(), 'llxprt:registered');
-      expect(owner.getEffectiveConfig().namespaces).toContain(
-        'llxprt:registered',
-      );
-      expect(sibling.getEffectiveConfig().namespaces).toStrictEqual([]);
-    } finally {
-      ConfigurationManager.resetForTesting();
-    }
+    const owner = ConfigurationManager.create();
+    owner.setEphemeralConfig({ enabled: false, namespaces: [] });
+    const command = await registered('debug', {
+      ...createUnconfiguredBuiltinOwners(),
+      debugCommand: createDebugCommand(bindDebugCommand(owner)),
+    });
+    const sibling = ConfigurationManager.create();
+    sibling.setEphemeralConfig({ enabled: false, namespaces: [] });
+    const enable = command.subCommands?.find(
+      (entry) => entry.name === 'enable',
+    )?.action;
+    if (!enable) throw new Error('Missing debug enable');
+    await enable(createMockCommandContext(), 'llxprt:registered');
+    expect(owner.getEffectiveConfig().namespaces).toContain(
+      'llxprt:registered',
+    );
+    expect(sibling.getEffectiveConfig().namespaces).toStrictEqual([]);
   });
 });
