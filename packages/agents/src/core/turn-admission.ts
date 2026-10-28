@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { suspendJournalMaintenance } from '@vybestack/llxprt-code-core/journal/deferred-maintenance.js';
+
 /** Owns the send slot before prompt publication or purge snapshots can start. */
 export class TurnAdmission {
   private tail: Promise<void> = Promise.resolve();
@@ -9,7 +11,11 @@ export class TurnAdmission {
       release = resolve;
     });
     await previous;
-    return release;
+    const resumeMaintenance = await suspendJournalMaintenance();
+    return () => {
+      resumeMaintenance();
+      release();
+    };
   }
   async run<T>(execute: () => Promise<T>): Promise<T> {
     const release = await this.reserve();

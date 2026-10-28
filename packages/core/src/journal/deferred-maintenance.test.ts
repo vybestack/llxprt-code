@@ -1,6 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { DeferredMaintenance } from './deferred-maintenance.js';
+import {
+  DeferredMaintenance,
+  suspendJournalMaintenance,
+} from './deferred-maintenance.js';
 
 function gate(): { promise: Promise<void>; release: () => void } {
   let release = (): void => undefined;
@@ -15,6 +18,58 @@ function fail(error: unknown): never {
 }
 
 describe('deferred journal maintenance', () => {
+  it('drains active maintenance and defers every journal until the request closes', async () => {
+    const entered = gate();
+    const resume = gate();
+    const events: string[] = [];
+    const first = new DeferredMaintenance(async () => {
+      entered.release();
+      await resume.promise;
+      events.push('first');
+    }, fail);
+    const second = new DeferredMaintenance(async () => {
+      events.push('second');
+    }, fail);
+    first.request();
+    await entered.promise;
+    let acquired = false;
+    const acquiring = suspendJournalMaintenance().then((release) => {
+      acquired = true;
+      return release;
+    });
+    second.request();
+    await second.settle();
+    expect(acquired).toBe(false);
+    expect(events).toStrictEqual([]);
+    resume.release();
+    const release = await acquiring;
+    try {
+      second.request();
+      await second.settle();
+      expect(events).toStrictEqual(['first']);
+    } finally {
+      release();
+    }
+    await second.settle();
+    expect(events).toStrictEqual(['first', 'second']);
+  });
+
+  it('keeps maintenance deferred until the last overlapping request closes', async () => {
+    let runs = 0;
+    const maintenance = new DeferredMaintenance(async () => {
+      runs++;
+    }, fail);
+    const releaseFirst = await suspendJournalMaintenance();
+    const releaseSecond = await suspendJournalMaintenance();
+    maintenance.request();
+    releaseFirst();
+    await maintenance.settle();
+    expect(runs).toBe(0);
+    releaseSecond();
+    await maintenance.settle();
+    expect(runs).toBe(1);
+  });
+
   it('coalesces requests without entering maintenance in the current turn', async () => {
     let runs = 0;
     const maintenance = new DeferredMaintenance(async () => {

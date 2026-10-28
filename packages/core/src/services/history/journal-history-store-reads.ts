@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { suspendJournalMaintenance } from '../../journal/deferred-maintenance.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import { observeSealedRow } from './sealed-history-row.js';
 import type { JournalDisplayHandle } from './journal-display-commands.js';
@@ -213,19 +214,28 @@ export abstract class JournalHistoryStoreReads {
   async openDumpSnapshot(): Promise<JournalDumpSnapshot> {
     this.assertUsable();
     await this.waitForDurable();
-    const dump: JournalDumpSnapshot = new JournalDumpSnapshot(
-      await this.requireOpen().session.store.snapshot(),
-      this.resumeBoundary,
-      this.options.counters,
-      () => this.openDumps.delete(dump),
-      (snapshot, registration) =>
-        this.requireOpen().session.store.prepareSnapshotFacts(
-          snapshot,
-          registration,
-        ),
-    );
-    this.openDumps.add(dump);
-    return dump;
+    const resumeMaintenance = await suspendJournalMaintenance();
+    try {
+      const dump: JournalDumpSnapshot = new JournalDumpSnapshot(
+        await this.requireOpen().session.store.snapshot(),
+        this.resumeBoundary,
+        this.options.counters,
+        () => {
+          this.openDumps.delete(dump);
+          resumeMaintenance();
+        },
+        (snapshot, registration) =>
+          this.requireOpen().session.store.prepareSnapshotFacts(
+            snapshot,
+            registration,
+          ),
+      );
+      this.openDumps.add(dump);
+      return dump;
+    } catch (error) {
+      resumeMaintenance();
+      throw error;
+    }
   }
 
   /**

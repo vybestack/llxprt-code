@@ -780,6 +780,11 @@
       "bun": "./src/services/history/detachedHistoryJournal.ts",
       "import": "./dist/src/services/history/detachedHistoryJournal.js"
     },
+    "./journal/deferred-maintenance.js": {
+      "types": "./dist/src/journal/deferred-maintenance.d.ts",
+      "bun": "./src/journal/deferred-maintenance.ts",
+      "import": "./dist/src/journal/deferred-maintenance.js"
+    },
     "./journal/journalStore.js": {
       "types": "./dist/src/journal/journalStore.d.ts",
       "bun": "./src/journal/journalStore.ts",
