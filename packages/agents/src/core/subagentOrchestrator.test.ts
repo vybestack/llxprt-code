@@ -23,6 +23,7 @@ import { SubagentOrchestrator } from './subagentOrchestrator.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   makeForegroundConfig,
+  launchForTest,
   createRuntimeBundle,
   createOrchestratorForTurns,
   createScopeFactory,
@@ -70,7 +71,7 @@ async function launchAndExtract(
   factory: ReturnType<typeof createScopeFactory>['factory'],
   subagentName: string,
 ): Promise<RunConfig> {
-  await orchestrator.launch({ name: subagentName });
+  await launchForTest(orchestrator, { name: subagentName });
   return extractRunConfig(factory);
 }
 
@@ -131,7 +132,7 @@ describe('SubagentOrchestrator - token-usage identity (issue #3130)', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({ name: subagentConfig.name });
+    await launchForTest(orchestrator, { name: subagentConfig.name });
 
     expect(runtimeLoader).toHaveBeenCalledTimes(1);
     const loaderOptions = runtimeLoader.mock.calls[0][0];
@@ -274,7 +275,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     });
 
     const extraPrompt = 'Prioritize API surface summaries before examples.';
-    const runResult = await orchestrator.launch({
+    const runResult = await launchForTest(orchestrator, {
       name: subagentConfig.name,
       runConfig: defaultRunConfig,
       behaviourPrompts: [extraPrompt],
@@ -349,7 +350,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({ name: subagentConfig.name });
+    await launchForTest(orchestrator, { name: subagentConfig.name });
 
     const [, , , , runConfigArg] = factory.mock.calls[0];
     expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
@@ -404,7 +405,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({ name: subagentConfig.name });
+    await launchForTest(orchestrator, { name: subagentConfig.name });
 
     const [, , , , runConfigArg] = factory.mock.calls[0];
     expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
@@ -470,7 +471,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({ name: subagentConfig.name });
+    await launchForTest(orchestrator, { name: subagentConfig.name });
 
     const [, , , , runConfigArg] = factory.mock.calls[0];
     expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
@@ -524,14 +525,14 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({ name: subagentConfig.name });
+    await launchForTest(orchestrator, { name: subagentConfig.name });
 
     foregroundSettings2.settingsOwner.writeUserParameter(
       'maxTurnsPerPrompt',
       250,
     );
 
-    await orchestrator.launch({ name: subagentConfig.name });
+    await launchForTest(orchestrator, { name: subagentConfig.name });
 
     const [, , , , firstRunConfig] = factory.mock.calls[0];
     expect(firstRunConfig.max_turns).toBe(50);
@@ -585,7 +586,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({
+    await launchForTest(orchestrator, {
       name: subagentConfig.name,
       runConfig: { max_turns: 10 },
     });
@@ -647,7 +648,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({ name: subagentConfig.name });
+    await launchForTest(orchestrator, { name: subagentConfig.name });
 
     const [, , , , runConfigArg] = factory.mock.calls[0];
     expect(runConfigArg.max_turns).toBe(500);
@@ -698,7 +699,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({ name: subagentConfig.name });
+    await launchForTest(orchestrator, { name: subagentConfig.name });
 
     const [, , , , runConfigArg] = factory.mock.calls[0];
     expect(runConfigArg.max_turns).toBeUndefined();
@@ -772,7 +773,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       foregroundConfig: configWithForegroundCap,
     });
 
-    await orchestrator.launch({
+    await launchForTest(orchestrator, {
       name: 'task-unlimited-helper',
       runConfig: { max_turns: -1 },
     });
@@ -862,7 +863,7 @@ describe('SubagentOrchestrator - MessageBus threading (Issue #2312)', () => {
       messageBus: sessionMessageBus,
     });
 
-    await orchestrator.launch({ name: messageBusSubagentConfig.name });
+    await launchForTest(orchestrator, { name: messageBusSubagentConfig.name });
 
     expect(factory).toHaveBeenCalledTimes(1);
     const factoryCall = factory.mock.calls[0];
