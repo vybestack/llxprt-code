@@ -602,27 +602,6 @@
           "minimum": 512,
           "multipleOf": 1
         },
-        "historyMaxItems": {
-          "title": "History Max Items",
-          "description": "Maximum number of history items to keep.",
-          "markdownDescription": "Maximum number of history items to keep.\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `100`",
-          "default": 100,
-          "type": "number"
-        },
-        "historyMaxBytes": {
-          "title": "History Max Bytes",
-          "description": "Maximum size of history in bytes.",
-          "markdownDescription": "Maximum size of history in bytes.\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `1048576`",
-          "default": 1048576,
-          "type": "number"
-        },
-        "scrollbackPagerEnabled": {
-          "title": "Scrollback Pager",
-          "description": "Serve transcript history from the bounded scrollback pager over the session journal (alternate screen buffer). Read once at startup; a live toggle applies on restart.",
-          "markdownDescription": "Serve transcript history from the bounded scrollback pager over the session journal (alternate screen buffer). Read once at startup; a live toggle applies on restart.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `false`",
-          "default": false,
-          "type": "boolean"
-        },
         "scrollbackMarginViewports": {
           "title": "Scrollback Margin Viewports",
           "description": "Scrollback pager residency margin, in viewports beyond the visible window, kept before off-screen rows are evicted. Read once at startup.",
