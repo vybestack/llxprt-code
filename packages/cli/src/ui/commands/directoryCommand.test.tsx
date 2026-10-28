@@ -61,8 +61,9 @@ function rejectDirectory(
 async function createDirectoryOwner() {
   const owner = await createUiSessionOwner();
   const { sessionClient } = uiFixtureResources(owner);
+  const { conversation } = sessionClient.clients.conversationBinding;
   return {
-    addDirectoryContext: () => sessionClient.conversation.addDirectoryContext(),
+    addDirectoryContext: conversation.addDirectoryContext,
   };
 }
 
