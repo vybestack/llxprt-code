@@ -18,7 +18,7 @@ runs:
         TMUX_SHA256: 'e79c699c7e949dccd0a4a125e17b8d1261e311b16979dbc8eb34542f3966d82e'
       run: |
         set -euo pipefail
-        brew install libevent ncurses jemalloc pkgconf
+        brew install libevent ncurses jemalloc pkgconf utf8proc
         source_dir="$RUNNER_TEMP/tmux-source"
         install_dir="$RUNNER_TEMP/tmux-install"
         mkdir -p "$source_dir"
@@ -27,8 +27,8 @@ runs:
         printf '%s  %s\n' "$TMUX_SHA256" "$source_dir/tmux.tar.gz" | shasum -a 256 --check
         tar -xzf "$source_dir/tmux.tar.gz" -C "$source_dir"
         cd "$source_dir/tmux-$TMUX_VERSION"
-        export PKG_CONFIG_PATH="$(brew --prefix libevent)/lib/pkgconfig:$(brew --prefix ncurses)/lib/pkgconfig:$(brew --prefix jemalloc)/lib/pkgconfig"
-        ./configure --prefix="$install_dir" --enable-jemalloc
+        export PKG_CONFIG_PATH="$(brew --prefix libevent)/lib/pkgconfig:$(brew --prefix ncurses)/lib/pkgconfig:$(brew --prefix jemalloc)/lib/pkgconfig:$(brew --prefix utf8proc)/lib/pkgconfig"
+        ./configure --prefix="$install_dir" --enable-jemalloc --enable-utf8proc
         make
         make install
         test "$("$install_dir/bin/tmux" -V)" = "tmux $TMUX_VERSION"
