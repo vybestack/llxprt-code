@@ -337,7 +337,7 @@ export class JournalDetachedPublication {
     const feed = await this.submissionFeedFor(origin);
     const owner = await this.store.resolveOwner(origin);
     await feed.put({
-      ...encodeAppended(this.store.writes, content, origin),
+      ...encodeAppended(this.store.writes, content, origin, true),
       owner: owner.id,
     });
   }

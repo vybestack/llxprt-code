@@ -11,6 +11,7 @@ import {
   ROW_SPEAKER,
 } from '../../journal/rowRecord.js';
 import { sanitizeParams } from './historyCloneUtils.js';
+import { promptTextSource } from './prompt-text-source.js';
 import { isCuratedContent } from './historyCuration.js';
 import {
   invalidateResponsesStatefulChain,
@@ -38,6 +39,7 @@ export const UNOWNED_ROW = 0;
 export interface EncodeRowOptions {
   /** The owner dictionary id the row is written with. */
   readonly owner: number;
+  readonly streamPromptText?: boolean;
   /**
    * The row was written after a rewrite that broke the Responses stateful
    * chain; reading it back then drops `responsesStored`
@@ -273,7 +275,11 @@ export function encodeContentRow(
             },
       ),
     ),
-    blocks: content.blocks.map(encodeContentBlock),
+    blocks: content.blocks.map((block) =>
+      options.streamPromptText === true && block.type === 'text'
+        ? promptTextSource(block)
+        : encodeContentBlock(block),
+    ),
   };
 }
 

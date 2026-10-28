@@ -95,8 +95,12 @@ export function encodeAppended(
   host: JournalWriteHost,
   content: IContent,
   origin: string | undefined,
+  streamPromptText = false,
 ): RowDraft {
-  const draft = encodeContentRow(content, { owner: UNOWNED_ROW });
+  const draft = encodeContentRow(content, {
+    owner: UNOWNED_ROW,
+    streamPromptText,
+  });
   host.offerPreview(content, origin);
   return draft;
 }

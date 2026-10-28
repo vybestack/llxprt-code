@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { crc32, putU32, viewOf } from './bytes.js';
 import { JournalFrameError } from './errors.js';
-import type { FrameHead } from './frame.js';
+import type { FrameBody, FrameHead } from './frame.js';
 import type { RecordAccess } from './recordAccess.js';
 
 export const ROW_PIECE_CRC_BYTES = 4;
@@ -14,6 +14,25 @@ export function* rowPieceParts(
     const suffix = new Uint8Array(ROW_PIECE_CRC_BYTES);
     putU32(viewOf(suffix), 0, 'row piece CRC', crc32(piece));
     yield piece;
+    yield suffix;
+  }
+}
+
+export async function* rowSourceParts(
+  sources: Iterable<FrameBody>,
+): AsyncGenerator<Uint8Array> {
+  for (const source of sources) {
+    let checksum = 0;
+    let length = 0;
+    for await (const bytes of source.chunks) {
+      checksum = crc32(bytes, checksum);
+      length += bytes.length;
+      yield bytes;
+    }
+    if (length !== source.length)
+      throw new Error('ROW byte source length mismatch');
+    const suffix = new Uint8Array(ROW_PIECE_CRC_BYTES);
+    putU32(viewOf(suffix), 0, 'row piece CRC', checksum);
     yield suffix;
   }
 }

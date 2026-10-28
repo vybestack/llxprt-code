@@ -1,6 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { frameLength } from './frame.js';
-import { ROW_PIECE_CRC_BYTES, rowPieceParts } from './rowPiece.js';
+import {
+  ROW_PIECE_CRC_BYTES,
+  rowSourceParts,
+  rowPieceParts,
+} from './rowPiece.js';
 import type { FrameBody } from './frame.js';
 import type { GroupRecord } from './groupAppender.js';
 import { RECORD_KIND } from './recordKinds.js';
@@ -28,6 +32,8 @@ export interface DraftId {
 export interface DraftBlock {
   readonly type: number;
   readonly bytes: Uint8Array;
+  /** A cold, bounded byte source replaces inline bytes for an expanded prompt. */
+  readonly source?: FrameBody;
 }
 
 /**
@@ -61,8 +67,9 @@ function blockDirectory(
 ): RowBlockEntry[] {
   let offset = start;
   return blocks.map((block) => {
-    const entry = { offset, length: block.bytes.length, type: block.type };
-    offset += block.bytes.length + ROW_PIECE_CRC_BYTES;
+    const length = block.source?.length ?? block.bytes.length;
+    const entry = { offset, length, type: block.type };
+    offset += length + ROW_PIECE_CRC_BYTES;
     return entry;
   });
 }
@@ -98,13 +105,27 @@ export function encodeRowDraft(label: bigint, draft: RowDraft): EncodedRow {
     ),
     ids: draft.ids.map(tupleOf),
   };
-  const chunks = [idPiece, draft.meta, ...draft.blocks.map((b) => b.bytes)];
+  const inline = (bytes: Uint8Array): FrameBody => ({
+    length: bytes.length,
+    chunks: [bytes],
+  });
+  const sources = [
+    inline(idPiece),
+    inline(draft.meta),
+    ...draft.blocks.map((block) => block.source ?? inline(block.bytes)),
+  ];
   const body: FrameBody = {
-    length: chunks.reduce(
-      (total, chunk) => total + chunk.length + ROW_PIECE_CRC_BYTES,
+    length: sources.reduce(
+      (total, source) => total + source.length + ROW_PIECE_CRC_BYTES,
       0,
     ),
-    chunks: rowPieceParts(chunks),
+    chunks: draft.blocks.some((block) => block.source !== undefined)
+      ? rowSourceParts(sources)
+      : rowPieceParts([
+          idPiece,
+          draft.meta,
+          ...draft.blocks.map((block) => block.bytes),
+        ]),
   };
   const kindHeader = encodeRowHeader(header);
   return {
