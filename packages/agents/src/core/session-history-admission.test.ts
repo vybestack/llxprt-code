@@ -347,4 +347,22 @@ describe('deferred array admission ownership handle', () => {
     await prepared.release();
     expect(admissions.all).toHaveLength(0);
   });
+
+  it('control: the deferred census detects a consumer retaining admitted rows', async () => {
+    const localStore = new LocalMediaStore({
+      rootDirectory: join(directory, 'deferred-media'),
+      quotaBytes: 1024 * 1024,
+    });
+    const admissions = new RetainedHistoryAdmissions(localStore);
+    const prepared = admissions.prepareDeferredArray([imageRow(RED_PNG)], {});
+    if (prepared.rows === undefined) throw new Error('rows missing');
+    const retained: IContent[] = [];
+    for await (const row of prepared.rows) retained.push(row);
+    const weak = retained.map((row) => new WeakRef(row));
+    prepared.rows = undefined;
+    prepared.discardInput();
+    await expect(expectNoLive(weak)).rejects.toThrow('still reachable');
+    expect(retained).toHaveLength(1);
+    await prepared.release();
+  });
 });
