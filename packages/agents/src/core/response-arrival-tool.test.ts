@@ -14,7 +14,9 @@ import {
   sourcePending,
 } from './__tests__/support/streamprocessor-source-fixture.js';
 
-async function* events(): AsyncGenerator<Anthropic.MessageStreamEvent> {
+async function* events(
+  onArgument: () => void,
+): AsyncGenerator<Anthropic.MessageStreamEvent> {
   yield {
     type: 'content_block_start',
     index: 0,
@@ -25,11 +27,13 @@ async function* events(): AsyncGenerator<Anthropic.MessageStreamEvent> {
       input: {},
     },
   };
+  onArgument();
   yield {
     type: 'content_block_delta',
     index: 0,
     delta: { type: 'input_json_delta', partial_json: '{"x":' },
   };
+  onArgument();
   yield {
     type: 'content_block_delta',
     index: 0,
@@ -100,17 +104,25 @@ describe('production tool argument recording', () => {
         false,
         0,
       );
-      setup.provider.generateChatCompletion = () =>
-        processAnthropicStream(events(), {
-          isOAuth: false,
-          tools: undefined,
-          unprefixToolName: (name) => name,
-          findToolSchema: () => undefined,
-          logger: { debug: () => undefined },
-          cacheLogger: { debug: () => undefined },
-          rateLimitLogger: { debug: () => undefined },
-          includeThinkingInResponse: true,
-        });
+      let pulledArguments = 0;
+      setup.provider.generateChatCompletion = async function* (options) {
+        if (!('contents' in options))
+          throw new Error('Expected provider request options');
+        await options.onTransportAttempt?.();
+        yield* processAnthropicStream(
+          events(() => pulledArguments++),
+          {
+            isOAuth: false,
+            tools: undefined,
+            unprefixToolName: (name) => name,
+            findToolSchema: () => undefined,
+            logger: { debug: () => undefined },
+            cacheLogger: { debug: () => undefined },
+            rateLimitLogger: { debug: () => undefined },
+            includeThinkingInResponse: true,
+          },
+        );
+      };
       const recording = createSessionRecorder({
         sessionId: 'tool-arrival',
         projectHash: 'tool-arrival',
@@ -132,6 +144,7 @@ describe('production tool argument recording', () => {
         const pending = await responseBlock(path);
         expect(pending.status).toBe(0);
         expect(pending.text).toContain('"parameters":{"x":');
+        expect(pulledArguments).toBe(1);
         await finishToolStream(stream, complete);
         const terminal = await responseBlock(path);
         expect(terminal.status).toBe(complete ? 1 : 2);
