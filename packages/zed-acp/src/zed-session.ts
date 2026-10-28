@@ -55,6 +55,48 @@ import {
   buildSessionInfoUpdate,
 } from './zed-session-info.js';
 
+export interface SessionPorts {
+  readonly id: string;
+  readonly streamTurn: Agent['stream'];
+  readonly readModel: Agent['getModel'];
+  readonly selectModel: Agent['setModel'];
+  readonly listModels: Agent['listAvailableModels'];
+  readonly readContextLimit: Agent['getProviderContextLimit'];
+  readonly readApprovalMode: Agent['getApprovalMode'];
+  readonly writeApprovalMode: Agent['setApprovalMode'];
+  readonly readHistory: Agent['getHistory'];
+  readonly compressHistory: Agent['compress'];
+  readonly retireAgent: Agent['dispose'];
+  readonly lookupTool: Agent['tools']['get'];
+  readonly listTools: Agent['tools']['list'];
+  readonly replyConfirmation: Agent['tools']['respondToConfirmation'];
+  readonly readTitle: Agent['session']['getRecordingTitle'];
+  readonly writeTitle: Agent['session']['recordRecordingTitle'];
+  readonly readMemoryFiles: Agent['memory']['getFilePaths'];
+  readonly listProfiles: Agent['profiles']['list'];
+  readonly listTasks: Agent['tasks']['list'];
+  readonly readProjectRoot: () => string;
+  readonly readMaxTurns: () => number;
+  readonly readDebugMode: () => boolean;
+  readonly readFiltering: ConstructorParameters<typeof ZedPathResolver>[0];
+  readonly readTargetDir: ConstructorParameters<typeof ZedPathResolver>[1];
+  readonly readRecursiveSearch: ConstructorParameters<
+    typeof ZedPathResolver
+  >[2];
+  readonly readTextFile: ConstructorParameters<typeof ZedPathResolver>[3];
+  readonly shouldIgnoreFile: ConstructorParameters<typeof ZedPathResolver>[4];
+  readonly readIgnorePatterns: ConstructorParameters<typeof ZedPathResolver>[5];
+  readonly readSetting: Agent['getEphemeralSetting'];
+  readonly writeSetting: Agent['setEphemeralSetting'];
+  readonly subscribeModelChanges: SubscribeModelChanges;
+  readonly connection: Pick<
+    acp.AgentSideConnection,
+    'sessionUpdate' | 'requestPermission'
+  >;
+  readonly configOptionsEnabled: boolean;
+  readonly terminals: TerminalManager | null;
+}
+
 export class Session {
   private pendingPrompt: AbortController | null = null;
   private closing: Promise<void> | undefined;
@@ -74,48 +116,25 @@ export class Session {
   private readonly stopConfigUpdates: () => void;
   private readonly sessionInfo = new SessionTitleTracker();
   private readonly createdAt = new Date().toISOString();
-  private readonly terminals: TerminalManager | null;
 
   private readonly executeCommand: ReturnType<typeof createZedCommandExecutor>;
-  constructor(
-    private readonly id: string,
-    private readonly streamTurn: Agent['stream'],
-    private readonly readModel: Agent['getModel'],
-    private readonly selectModel: Agent['setModel'],
-    private readonly listModels: Agent['listAvailableModels'],
-    private readonly readContextLimit: Agent['getProviderContextLimit'],
-    private readonly readApprovalMode: Agent['getApprovalMode'],
-    private readonly writeApprovalMode: Agent['setApprovalMode'],
-    private readonly readHistory: Agent['getHistory'],
-    compressHistory: Agent['compress'],
-    private readonly retireAgent: Agent['dispose'],
-    private readonly lookupTool: Agent['tools']['get'],
-    listTools: Agent['tools']['list'],
-    private readonly replyConfirmation: Agent['tools']['respondToConfirmation'],
-    private readonly readTitle: Agent['session']['getRecordingTitle'],
-    private readonly writeTitle: Agent['session']['recordRecordingTitle'],
-    readMemoryFiles: Agent['memory']['getFilePaths'],
-    listProfiles: Agent['profiles']['list'],
-    listTasks: Agent['tasks']['list'],
-    private readonly readProjectRoot: () => string,
-    private readonly readMaxTurns: () => number,
-    private readonly readDebugMode: () => boolean,
-    readFiltering: ConstructorParameters<typeof ZedPathResolver>[0],
-    readTargetDir: ConstructorParameters<typeof ZedPathResolver>[1],
-    readRecursiveSearch: ConstructorParameters<typeof ZedPathResolver>[2],
-    readTextFile: ConstructorParameters<typeof ZedPathResolver>[3],
-    shouldIgnoreFile: ConstructorParameters<typeof ZedPathResolver>[4],
-    readIgnorePatterns: ConstructorParameters<typeof ZedPathResolver>[5],
-    private readonly readSetting: Agent['getEphemeralSetting'],
-    private readonly writeSetting: Agent['setEphemeralSetting'],
-    subscribeModelChanges: SubscribeModelChanges,
-    private readonly connection: Pick<
-      acp.AgentSideConnection,
-      'sessionUpdate' | 'requestPermission'
-    >,
-    configOptionsEnabled = false,
-    terminals: TerminalManager | null = null,
-  ) {
+  constructor(private readonly ports: SessionPorts) {
+    const {
+      readModel,
+      compressHistory,
+      listTools,
+      readMemoryFiles,
+      listProfiles,
+      listTasks,
+      readFiltering,
+      readTargetDir,
+      readRecursiveSearch,
+      readTextFile,
+      shouldIgnoreFile,
+      readIgnorePatterns,
+      subscribeModelChanges,
+      configOptionsEnabled,
+    } = ports;
     this.executeCommand = createZedCommandExecutor(
       compressHistory,
       readModel,
@@ -124,7 +143,6 @@ export class Session {
       listProfiles,
       listTasks,
     );
-    this.terminals = terminals;
     this.pathResolver = new ZedPathResolver(
       readFiltering,
       readTargetDir,
@@ -134,18 +152,18 @@ export class Session {
       readIgnorePatterns,
       (msg) => this.debug(msg),
     );
-    const recordedTitle = this.readTitle();
+    const recordedTitle = this.ports.readTitle();
     if (recordedTitle !== undefined) {
       this.sessionInfo.hydrateFromMetadata(recordedTitle);
     }
-    this.stopTodoUpdates = subscribeSessionTodos(this.id, (todos) =>
+    this.stopTodoUpdates = subscribeSessionTodos(this.ports.id, (todos) =>
       this.sendUpdate(buildZedPlanUpdate(todos)),
     );
     this.stopConfigUpdates = configOptionsEnabled
       ? observeZedConfigOptions(
-          this.readModel,
-          this.listModels,
-          this.readSetting,
+          this.ports.readModel,
+          this.ports.listModels,
+          this.ports.readSetting,
           (update) => this.sendUpdateStrict(update),
           (error) => this.logger.debug(() => `Config update failed: ${error}`),
           subscribeModelChanges,
@@ -155,20 +173,20 @@ export class Session {
   }
   setMode(modeId: acp.SessionModeId): acp.SetSessionModeResponse {
     this.assertOpen();
-    this.writeApprovalMode(resolveZedMode(modeId));
+    this.ports.writeApprovalMode(resolveZedMode(modeId));
     return {};
   }
   getApprovalMode(): ApprovalMode {
-    return this.readApprovalMode();
+    return this.ports.readApprovalMode();
   }
   setConfigOption(configId: string, value: string) {
     return this.admitWork(() =>
       setZedConfigOption(
-        this.readModel,
-        this.listModels,
-        this.selectModel,
-        this.readSetting,
-        this.writeSetting,
+        this.ports.readModel,
+        this.ports.listModels,
+        this.ports.selectModel,
+        this.ports.readSetting,
+        this.ports.writeSetting,
         configId,
         value,
       ),
@@ -176,12 +194,16 @@ export class Session {
   }
   getConfigOptions = () =>
     this.admitWork(() =>
-      buildZedConfigOptions(this.readModel, this.listModels, this.readSetting),
+      buildZedConfigOptions(
+        this.ports.readModel,
+        this.ports.listModels,
+        this.ports.readSetting,
+      ),
     );
   getLifecycleInfo(): LifecycleSession {
     return presentLifecycleSession(
-      this.id,
-      this.readProjectRoot(),
+      this.ports.id,
+      this.ports.readProjectRoot(),
       this.createdAt,
       this.sessionInfo,
     );
@@ -191,7 +213,7 @@ export class Session {
       this.settleActiveConfirmation();
       this.pendingPrompt?.abort();
       this.pendingPrompt = null;
-      await this.terminals?.settleAll();
+      await this.ports.terminals?.settleAll();
     });
   }
   private settleActiveConfirmation(): void {
@@ -206,7 +228,10 @@ export class Session {
     if (state.settled) return;
     state.settled = true;
     try {
-      this.replyConfirmation(confirmationId, ToolConfirmationOutcome.Cancel);
+      this.ports.replyConfirmation(
+        confirmationId,
+        ToolConfirmationOutcome.Cancel,
+      );
     } catch (error) {
       debugLogger.error('Failed to cancel active tool confirmation:', error);
     } finally {
@@ -224,7 +249,7 @@ export class Session {
     this.assertOpen();
     const eligibility = this.sessionInfo.consumeTitleEligibility(params.prompt);
     try {
-      await this.writeTitle(eligibility.title ?? null);
+      await this.ports.writeTitle(eligibility.title ?? null);
     } catch (error) {
       this.logger.debug(() => `Session metadata recording failed: ${error}`);
     }
@@ -273,7 +298,7 @@ export class Session {
     return executePromptTurn(
       {
         pathResolver: this.pathResolver,
-        emojiFilterMode: (this.readSetting('emojifilter') ??
+        emojiFilterMode: (this.ports.readSetting('emojifilter') ??
           'auto') as FilterConfiguration['mode'],
         streamDeps: this.buildStreamDeps(promptGeneration, pendingSend),
       },
@@ -289,9 +314,9 @@ export class Session {
     pendingSend: AbortController,
   ): SessionStreamDeps {
     return {
-      streamTurn: this.streamTurn,
-      lookupTool: this.lookupTool,
-      terminals: this.terminals,
+      streamTurn: this.ports.streamTurn,
+      lookupTool: this.ports.lookupTool,
+      terminals: this.ports.terminals,
       sendUpdate: (update) => this.sendUpdate(update),
       sendUsage: (usage) => this.sendUsageUpdate(usage),
       handleConfirmation: (confirmation) =>
@@ -301,7 +326,7 @@ export class Session {
           pendingSend,
         ),
       isPromptStale: (gen, send) => this.isPromptStale(gen, send),
-      maxTurns: this.readMaxTurns(),
+      maxTurns: this.ports.readMaxTurns(),
       logger: this.logger,
     };
   }
@@ -355,9 +380,9 @@ export class Session {
         outputTokenCount: usage.candidatesTokenCount,
       },
       resolveZedContextWindowSize(
-        this.readModel,
-        this.readSetting,
-        this.readContextLimit,
+        this.ports.readModel,
+        this.ports.readSetting,
+        this.ports.readContextLimit,
       ),
     );
     if (update !== null) await this.sendUpdate(update);
@@ -393,12 +418,12 @@ export class Session {
     try {
       result = await Promise.race([
         requestToolConfirmation(
-          this.id,
+          this.ports.id,
           event.confirmation.toolCallId,
           event.confirmation.name,
           event.confirmation.details,
-          this.connection,
-          this.lookupTool(event.confirmation.name)?.kind,
+          this.ports.connection,
+          this.ports.lookupTool(event.confirmation.name)?.kind,
         ),
         cancelled,
       ] as const);
@@ -418,7 +443,7 @@ export class Session {
     state.settled = true;
     this.activeConfirmations.delete(confirmationId);
     try {
-      this.replyConfirmation(
+      this.ports.replyConfirmation(
         confirmationId,
         result.decision,
         result.payload,
@@ -433,7 +458,12 @@ export class Session {
   }
   private sendUpdateStrict(update: acp.SessionUpdate): Promise<void> {
     return this.joinWork(() =>
-      sendZedSessionUpdate(this.connection, this.id, update, this.logger),
+      sendZedSessionUpdate(
+        this.ports.connection,
+        this.ports.id,
+        update,
+        this.logger,
+      ),
     );
   }
   sendAvailableCommands(): Promise<void> {
@@ -452,13 +482,13 @@ export class Session {
     }
   }
   debug(msg: string) {
-    if (this.readDebugMode()) debugLogger.warn(msg);
+    if (this.ports.readDebugMode()) debugLogger.warn(msg);
   }
   streamHistory(items: readonly IContent[]): Promise<void> {
     return this.admitWork(() => this.replayHistory(items));
   }
   private async replayHistory(items: readonly IContent[]): Promise<void> {
-    await streamZedHistory(this.id, items, (update) =>
+    await streamZedHistory(this.ports.id, items, (update) =>
       this.sendUpdateStrict(update),
     );
     this.sessionInfo.hydrateFromHistory(items);
@@ -466,7 +496,7 @@ export class Session {
   replayLiveHistory(): Promise<void> {
     return this.admitWork(async () => {
       await this.replayHistory(
-        await readAgentHistoryForReplay(this.readHistory, this.id),
+        await readAgentHistoryForReplay(this.ports.readHistory, this.ports.id),
       );
     });
   }
@@ -518,13 +548,13 @@ export class Session {
     const accepted = [...this.acceptedWork];
     const release = disposeZedSession(
       () => this.detachObservers(),
-      this.terminals,
+      this.ports.terminals,
       this.logger,
       () => {
         this.pendingPrompt?.abort();
         this.pendingPrompt = null;
       },
-      this.retireAgent,
+      this.ports.retireAgent,
     );
     void Promise.allSettled([release, ...accepted]).then(([result]) => {
       if (result.status === 'rejected') fail(result.reason);

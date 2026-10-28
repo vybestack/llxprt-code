@@ -582,49 +582,55 @@ export function createSession(
   config: Config = buildMinimalConfig(),
 ): Session {
   const filesystem = fixtureFilesystem();
-  return new Session(
-    'test-session-id',
-    (input, options) => agent.stream(input, options),
-    () => agent.getModel(),
-    (model) => agent.setModel(model),
-    () => agent.listAvailableModels(),
-    () => agent.getProviderContextLimit(),
-    () => agent.getApprovalMode(),
-    (mode) => agent.setApprovalMode(mode),
-    () => agent.getHistory(),
-    (options) => agent.compress(options),
-    () => agent.dispose(),
-    (name) => agent.tools.get(name),
-    () => agent.tools.list(),
-    (id, decision, payload, requiresConfirmation) =>
+  return new Session({
+    id: 'test-session-id',
+    streamTurn: (input, options) => agent.stream(input, options),
+    readModel: () => agent.getModel(),
+    selectModel: (model) => agent.setModel(model),
+    listModels: () => agent.listAvailableModels(),
+    readContextLimit: () => agent.getProviderContextLimit(),
+    readApprovalMode: () => agent.getApprovalMode(),
+    writeApprovalMode: (mode) => agent.setApprovalMode(mode),
+    readHistory: () => agent.getHistory(),
+    compressHistory: (options) => agent.compress(options),
+    retireAgent: () => agent.dispose(),
+    lookupTool: (name) => agent.tools.get(name),
+    listTools: () => agent.tools.list(),
+    replyConfirmation: (id, decision, payload, requiresConfirmation) =>
       agent.tools.respondToConfirmation(
         id,
         decision,
         payload,
         requiresConfirmation,
       ),
-    () => agent.session.getRecordingTitle(),
-    (title) => agent.session.recordRecordingTitle(title),
-    () => agent.memory.getFilePaths(),
-    () => agent.profiles.list(),
-    () => agent.tasks.list(),
-    config.getProjectRoot.bind(config),
-    config.getMaxSessionTurns.bind(config),
-    config.getDebugMode.bind(config),
-    config.getFileFilteringOptions.bind(config),
-    config.getTargetDir.bind(config),
-    config.getEnableRecursiveFileSearch.bind(config),
-    filesystem.files.readTextFile.bind(filesystem.files),
-    filesystem.ignore.shouldIgnoreFile.bind(filesystem.ignore),
-    filesystem.ignore.getCoreIgnorePatterns.bind(filesystem.ignore),
-    agent.getEphemeralSetting.bind(agent),
-    agent.setEphemeralSetting.bind(agent),
-    (listener) =>
+    readTitle: () => agent.session.getRecordingTitle(),
+    writeTitle: (title) => agent.session.recordRecordingTitle(title),
+    readMemoryFiles: () => agent.memory.getFilePaths(),
+    listProfiles: () => agent.profiles.list(),
+    listTasks: () => agent.tasks.list(),
+    readProjectRoot: config.getProjectRoot.bind(config),
+    readMaxTurns: config.getMaxSessionTurns.bind(config),
+    readDebugMode: config.getDebugMode.bind(config),
+    readFiltering: config.getFileFilteringOptions.bind(config),
+    readTargetDir: config.getTargetDir.bind(config),
+    readRecursiveSearch: config.getEnableRecursiveFileSearch.bind(config),
+    readTextFile: filesystem.files.readTextFile.bind(filesystem.files),
+    shouldIgnoreFile: filesystem.ignore.shouldIgnoreFile.bind(
+      filesystem.ignore,
+    ),
+    readIgnorePatterns: filesystem.ignore.getCoreIgnorePatterns.bind(
+      filesystem.ignore,
+    ),
+    readSetting: agent.getEphemeralSetting.bind(agent),
+    writeSetting: agent.setEphemeralSetting.bind(agent),
+    subscribeModelChanges: (listener) =>
       new SessionSettingsOwner(new SettingsService()).subscribeModelChanges(
         listener,
       ),
-    connection as unknown as acp.AgentSideConnection,
-  );
+    connection: connection as unknown as acp.AgentSideConnection,
+    configOptionsEnabled: false,
+    terminals: null,
+  });
 }
 
 export async function runPrompt(session: Session): Promise<acp.PromptResponse> {
