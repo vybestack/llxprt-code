@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { JournalHistoryStore } from '../services/history/journalHistoryStore.js';
+import { draftRow } from './__tests__/support/storeFixtures.js';
 import {
   detachedRows,
   withDetachedFixture,
@@ -17,6 +18,19 @@ describe('commit settlement before automatic maintenance', () => {
         await journal.replaceFrom(detachedRows(rows), rows);
         const release = await session.store.pin();
         try {
+          if (rows === 8192) {
+            const abandoned = draftRow({ text: 'garbage'.repeat(8192) });
+            for (let index = 0; index < 2048; index++)
+              session.store.admissions.admit(abandoned);
+            session.store.admissions.release(2048);
+            await session.store.commit([
+              {
+                kind: 'setState',
+                key: 'maintenance-fixture',
+                value: new Uint8Array([1]),
+              },
+            ]);
+          }
           await history.recalculateTotalTokens();
           await history.waitForCommit();
         } finally {
