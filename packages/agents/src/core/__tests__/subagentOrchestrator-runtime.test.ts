@@ -45,6 +45,7 @@ import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import {
   makeForegroundConfig,
   createRuntimeBundle,
+  launchForTest,
 } from './subagentOrchestrator-test-helpers.js';
 
 describe('SubagentOrchestrator - Runtime Assembly', () => {
@@ -108,7 +109,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    const result = await orchestrator.launch({
+    const result = await launchForTest(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
@@ -164,7 +165,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({
+    await launchForTest(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
@@ -390,7 +391,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({
+    await launchForTest(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
@@ -443,7 +444,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({
+    await launchForTest(orchestrator, {
       name: subagentConfig.name,
       runConfig,
     });
@@ -505,7 +506,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({
+    await launchForTest(orchestrator, {
       name: qwenSubagent.name,
     });
 
@@ -577,7 +578,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
         messageBus: new MessageBus(),
       });
 
-      await orchestrator.launch({ name: vertexSubagent.name });
+      await launchForTest(orchestrator, { name: vertexSubagent.name });
 
       const settingsService =
         runtimeLoader.mock.calls[0][0].profile.providerRuntime.settingsService;
@@ -654,7 +655,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({
+    await launchForTest(orchestrator, {
       name: qwenSubagent.name,
     });
 
@@ -715,7 +716,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({
+    await launchForTest(orchestrator, {
       name: kimiSubagent.name,
     });
 
@@ -776,7 +777,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({
+    await launchForTest(orchestrator, {
       name: keyNameSubagent.name,
     });
 
