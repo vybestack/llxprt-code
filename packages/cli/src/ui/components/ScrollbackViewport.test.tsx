@@ -115,6 +115,7 @@ async function useJournalFixture(): Promise<Fixture> {
 interface ViewOptions {
   readonly viewportLines?: number;
   readonly pollMs?: number;
+  readonly showClearNotice?: boolean;
   readonly onPageUp?: () => void;
   readonly onPageDown?: () => void;
   readonly onScrollUp?: () => void;
@@ -233,6 +234,7 @@ describe('ScrollbackViewport @plan:PLAN-20260917-ISSUE854.P02d @requirement:G1,G
           viewport={reporter}
           viewportLines={options.viewportLines ?? 6}
           pollMs={options.pollMs ?? 10}
+          showClearNotice={options.showClearNotice}
           onPageUp={options.onPageUp}
           onPageDown={options.onPageDown}
           onScrollUp={options.onScrollUp}
@@ -438,7 +440,7 @@ describe('ScrollbackViewport @plan:PLAN-20260917-ISSUE854.P02d @requirement:G1,G
     }
   });
 
-  it('shows the visibility-floor notice only at the floor', async () => {
+  it('does not describe the start of a fresh journal as cleared', async () => {
     await fixture.addUser(1);
     await fixture.addUser(2);
     const reporter = makeReporter();
@@ -448,9 +450,27 @@ describe('ScrollbackViewport @plan:PLAN-20260917-ISSUE854.P02d @requirement:G1,G
       expect(view.lastFrame() ?? '').not.toContain('history above was cleared');
       await fillFromDisk(store);
       await waitFor(() => {
+        expect(store.getState().atVisibilityFloor).toBe(true);
+        expect(view.lastFrame()).toContain(rowLabel(2));
+      });
+      expect(view.lastFrame()).not.toContain('history above was cleared');
+    } finally {
+      view.unmount();
+    }
+  });
+
+  it('shows the cleared notice at the floor after an explicit clear', async () => {
+    await fixture.addUser(1);
+    const reporter = makeReporter();
+    const store = makeStore(reporter);
+    const view = await mountViewport(store, reporter, {
+      showClearNotice: true,
+    });
+    try {
+      await fillFromDisk(store);
+      await waitFor(() => {
         expect(view.lastFrame()).toContain('history above was cleared');
       });
-      expect(store.getState().atVisibilityFloor).toBe(true);
     } finally {
       view.unmount();
     }

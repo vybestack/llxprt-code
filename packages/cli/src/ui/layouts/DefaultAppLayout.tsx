@@ -204,32 +204,36 @@ function TranscriptRegion(props: DefaultAppLayoutProps) {
     terminal.store,
     (state) => state.terminalWidth,
   );
-  return (
-    <>
-      {!usesAlternateBuffer(props) &&
-      process.env.LLXPRT_CODE_SUPPRESS_STATIC_HEADER !== 'true' ? (
-        <AppHeader
-          config={props.slashCommandRuntime}
-          settings={props.settings}
-          version={props.version}
-          nightly={props.nightly}
-          terminalWidth={width}
-        />
-      ) : null}
-      <JournalTranscript {...props} />
-    </>
-  );
+  const header =
+    process.env.LLXPRT_CODE_SUPPRESS_STATIC_HEADER !== 'true' ? (
+      <AppHeader
+        config={props.slashCommandRuntime}
+        settings={props.settings}
+        version={props.version}
+        nightly={props.nightly}
+        terminalWidth={width}
+      />
+    ) : null;
+  return <JournalTranscript {...props} header={header} />;
 }
 
-function JournalTranscript(props: DefaultAppLayoutProps) {
+function JournalTranscript(
+  props: DefaultAppLayoutProps & { header: React.ReactNode },
+) {
   if (!props.scrollbackPager)
-    return <Text color={Colors.DimComment}>Opening session journal…</Text>;
+    return (
+      <Box flexDirection="column">
+        {props.header}
+        <Text color={Colors.DimComment}>Opening session journal…</Text>
+      </Box>
+    );
   if (usesAlternateBuffer(props))
     return (
       <MemoizedPagerTranscript
         pager={props.scrollbackPager}
         uiRuntime={props.uiRuntime}
         slashCommandRuntime={props.slashCommandRuntime}
+        header={props.header}
       />
     );
   return (
@@ -237,6 +241,7 @@ function JournalTranscript(props: DefaultAppLayoutProps) {
       store={props.scrollbackPager.store}
       viewport={props.scrollbackPager.viewport}
       config={props.slashCommandRuntime}
+      header={props.header}
     />
   );
 }
@@ -266,10 +271,13 @@ function useContextRangeSnapshot(uiRuntime: UiRuntime): ContextRange | null {
   const cleanupRef = useRef<(() => void) | null>(null);
   const serviceRef = useRef<HistoryServiceHandle | null>(null);
 
+  const turn = useTurnStore();
   useEffect(() => {
-    let intervalCleared = false;
     const checkInterval = setInterval(() => {
-      if (intervalCleared) return;
+      if (turn.store.getState().quittingMessages !== null) {
+        clearInterval(checkInterval);
+        return;
+      }
       const historyService = getInitializedHistoryService(uiRuntime);
       if (historyService === serviceRef.current) return;
       if (cleanupRef.current !== null) {
@@ -292,14 +300,13 @@ function useContextRangeSnapshot(uiRuntime: UiRuntime): ContextRange | null {
     }, 100);
     return () => {
       clearInterval(checkInterval);
-      intervalCleared = true;
       if (cleanupRef.current !== null) {
         cleanupRef.current();
         cleanupRef.current = null;
       }
       serviceRef.current = null;
     };
-  }, [uiRuntime]);
+  }, [uiRuntime, turn.store]);
 
   return range;
 }
@@ -308,13 +315,19 @@ function PagerTranscript({
   pager,
   uiRuntime,
   slashCommandRuntime,
+  header,
 }: {
   pager: ScrollbackPagerLayoutBinding;
   uiRuntime: UiRuntime;
   slashCommandRuntime: SlashCommandRuntime;
+  header: React.ReactNode;
 }) {
   const contextRange = useContextRangeSnapshot(uiRuntime);
   const turn = useTurnStore();
+  const showClearNotice = useStoreSelector(
+    turn.store,
+    (state) => state.historyEpoch > 0,
+  );
   const pendingToolControls = useStoreSelector(
     turn.store,
     (s) => s.pendingHistoryItems,
@@ -327,6 +340,8 @@ function PagerTranscript({
       range={contextRange ?? undefined}
       config={slashCommandRuntime}
       pendingToolControls={pendingToolControls}
+      header={header}
+      showClearNotice={showClearNotice}
     />
   );
 }

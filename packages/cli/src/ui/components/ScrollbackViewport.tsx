@@ -75,6 +75,8 @@ export interface ScrollbackViewportProps {
   viewportLines: number;
   terminalWidth?: number;
   pollMs: number;
+  header?: React.ReactNode;
+  showClearNotice?: boolean;
   /**
    * Context boundary snapshot (#854). When absent (or paired with no
    * `config`), rows render as raw text exactly as before P03.
@@ -416,6 +418,8 @@ function useResizeReport(
 
 /** Per-render wiring handed down from the owning component. */
 interface FrameWiring {
+  readonly header: React.ReactNode;
+  readonly showClearNotice: boolean;
   readonly range: ContextRange | undefined;
   readonly config: CliUiRuntime | undefined;
   readonly pendingToolControls: readonly HistoryItemWithoutId[];
@@ -477,24 +481,60 @@ function ViewportFrame({
     if (row.seq !== null) olderSeq = row.seq;
   }
   return (
-    <Box flexDirection="column">
-      {state.error !== null ? (
-        <Text color={SemanticColors.status.error}>
-          scrollback unavailable: {state.error}
-        </Text>
-      ) : (
-        <TopEdgeRow
-          loadingOlder={state.loadingOlder}
-          atVisibilityFloor={state.atVisibilityFloor}
-          hiddenAbove={frame.hiddenAbove}
-        />
-      )}
+    <ViewportWindow state={state} frame={frame} wiring={wiring}>
       {lines}
-      <BottomEdgeRow
-        hiddenBelow={frame.hiddenBelow}
-        atFileEnd={state.atFileEnd}
-        hasNewOutput={state.hasNewOutput}
-      />
+    </ViewportWindow>
+  );
+}
+
+function ViewportWindow({
+  state,
+  frame,
+  wiring,
+  children,
+}: React.PropsWithChildren<{
+  state: ScrollbackPagerState;
+  frame: WindowFrame;
+  wiring: FrameWiring;
+}>): React.JSX.Element {
+  return (
+    <Box
+      height={
+        wiring.config === undefined
+          ? wiring.availableTerminalHeight + 2
+          : wiring.availableTerminalHeight
+      }
+      flexShrink={0}
+      overflow="hidden"
+      flexDirection="column"
+      justifyContent="flex-end"
+    >
+      <Box
+        flexDirection="column"
+        flexShrink={0}
+        minHeight={wiring.availableTerminalHeight}
+      >
+        {wiring.header}
+        {state.error !== null ? (
+          <Text color={SemanticColors.status.error}>
+            scrollback unavailable: {state.error}
+          </Text>
+        ) : (
+          <TopEdgeRow
+            loadingOlder={state.loadingOlder}
+            atVisibilityFloor={
+              state.atVisibilityFloor && wiring.showClearNotice
+            }
+            hiddenAbove={frame.hiddenAbove}
+          />
+        )}
+        {children}
+        <BottomEdgeRow
+          hiddenBelow={frame.hiddenBelow}
+          atFileEnd={state.atFileEnd}
+          hasNewOutput={state.hasNewOutput}
+        />
+      </Box>
     </Box>
   );
 }
@@ -594,6 +634,8 @@ export function ScrollbackViewport({
   viewportLines,
   terminalWidth,
   pollMs,
+  header,
+  showClearNotice = false,
   range,
   config,
   pendingToolControls = [],
@@ -638,27 +680,25 @@ export function ScrollbackViewport({
   );
 
   useEdgeJumpInput(store, stdin, windowRows, setPageOffset);
-  useHeightAnchorRemap(
-    pageOffset,
-    setPageOffset,
-    rowHeightLines,
-    windowRows,
-    state.rows.length,
-  );
-  useResizeReport(
+  useViewportGeometry({
     store,
     viewport,
     stdout,
     pageOffset,
     viewportLines,
     rowHeightLines,
-  );
+    windowRows,
+    residentRows: state.rows.length,
+    setPageOffset,
+  });
 
   return (
     <ViewportFrame
       state={state}
       frame={frame}
       wiring={{
+        header,
+        showClearNotice,
         range,
         config,
         pendingToolControls,
@@ -668,5 +708,43 @@ export function ScrollbackViewport({
         onToggleBoundary: toggleVisibleBoundaries,
       }}
     />
+  );
+}
+
+function useViewportGeometry({
+  store,
+  viewport,
+  stdout,
+  pageOffset,
+  viewportLines,
+  rowHeightLines,
+  windowRows,
+  residentRows,
+  setPageOffset,
+}: {
+  store: ScrollbackPagerStore;
+  viewport: ScrollbackViewportReporter;
+  stdout: NodeJS.WriteStream;
+  pageOffset: number;
+  viewportLines: number;
+  rowHeightLines: number;
+  windowRows: number;
+  residentRows: number;
+  setPageOffset: (offset: number) => void;
+}): void {
+  useHeightAnchorRemap(
+    pageOffset,
+    setPageOffset,
+    rowHeightLines,
+    windowRows,
+    residentRows,
+  );
+  useResizeReport(
+    store,
+    viewport,
+    stdout,
+    pageOffset,
+    viewportLines,
+    rowHeightLines,
   );
 }

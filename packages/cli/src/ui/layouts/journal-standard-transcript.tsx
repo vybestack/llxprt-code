@@ -20,6 +20,7 @@ interface Emission {
   readonly serial: number;
   readonly rows: ScrollbackRow[];
   readonly width: number;
+  readonly header: boolean;
 }
 
 interface PrintedPosition {
@@ -45,11 +46,12 @@ function useJournalEmission(
     serial: 0,
     rows: [],
     width,
+    header: true,
   });
   const printed = useRef({ offset: -1, keys: new Set<string>() });
   useEffect(() => {
-    if (emission.rows.length > 0)
-      setEmission((previous) => ({ ...previous, rows: [] }));
+    if (emission.rows.length > 0 || emission.header)
+      setEmission((previous) => ({ ...previous, rows: [], header: false }));
   }, [emission]);
   useEffect(() => {
     printed.current = { offset: -1, keys: new Set<string>() };
@@ -71,7 +73,12 @@ function useJournalEmission(
       printed.current.offset = row.offset;
       printed.current.keys.add(row.key);
     }
-    setEmission((previous) => ({ serial: previous.serial + 1, rows, width }));
+    setEmission((previous) => ({
+      serial: previous.serial + 1,
+      rows,
+      width,
+      header: false,
+    }));
   }, [frame, width, responding]);
   const live = responding
     ? frame.rows.slice(-1).filter((row) => unprinted(row, printed.current))
@@ -82,21 +89,36 @@ function useJournalEmission(
 function PrintedBatch({
   emission,
   config,
+  header,
 }: {
   emission: Emission;
   config: SlashCommandRuntime;
+  header: React.ReactNode;
 }) {
   return (
-    <Static key={emission.serial} items={emission.rows}>
-      {(row) => (
-        <HistoryItemDisplay
-          key={row.key}
-          item={row.item}
-          terminalWidth={emission.width}
-          isPending={false}
-          config={config}
-        />
-      )}
+    <Static
+      key={emission.serial}
+      style={{ width: emission.width }}
+      items={[
+        ...(emission.header
+          ? [
+              <Box key="header" flexDirection="column">
+                {header}
+              </Box>,
+            ]
+          : []),
+        ...emission.rows.map((row) => (
+          <HistoryItemDisplay
+            key={row.key}
+            item={row.item}
+            terminalWidth={emission.width}
+            isPending={false}
+            config={config}
+          />
+        )),
+      ]}
+    >
+      {(item) => item}
     </Static>
   );
 }
@@ -106,11 +128,73 @@ export function JournalStandardTranscript({
   store,
   config,
   viewport,
+  header,
 }: {
   store: ScrollbackPagerStore;
   config: SlashCommandRuntime;
   viewport: ScrollbackViewportReporter;
+  header?: React.ReactNode;
 }): React.JSX.Element {
+  const { width, height, pending, responding } = useJournalLiveState();
+  const { emission, live, printed } = useJournalEmission(
+    store,
+    width,
+    responding,
+  );
+  useEffect(() => {
+    viewport.followingTail = true;
+    viewport.viewportLines = Math.max(1, height);
+    viewport.visibleKeys = store
+      .getState()
+      .rows.filter((row) => unprinted(row, printed.current))
+      .map((row) => row.key);
+    store.reportViewport();
+    store.pageOut('older');
+  }, [store, viewport, height, emission, printed]);
+  return (
+    <>
+      <MemoizedPrintedBatch
+        emission={emission}
+        config={config}
+        header={header}
+      />
+      <Box
+        flexDirection="column"
+        width={width}
+        maxHeight={Math.max(1, height)}
+        overflow="hidden"
+        justifyContent="flex-end"
+      >
+        <Box flexDirection="column" flexShrink={0}>
+          {live.map((row) => (
+            <HistoryItemDisplay
+              key={row.key}
+              item={row.item}
+              terminalWidth={width}
+              availableTerminalHeight={height}
+              isPending={true}
+              config={config}
+            />
+          ))}
+          {pending.map((item, index) => (
+            <HistoryItemDisplay
+              key={index}
+              item={{ ...item, id: index }}
+              terminalWidth={width}
+              availableTerminalHeight={
+                item.type === 'tool_group' ? height : undefined
+              }
+              isPending={true}
+              config={config}
+            />
+          ))}
+        </Box>
+      </Box>
+    </>
+  );
+}
+
+function useJournalLiveState() {
   const turn = useTurnStore();
   const terminal = useTerminalStore();
   const width = useStoreSelector(
@@ -129,47 +213,5 @@ export function JournalStandardTranscript({
     turn.store,
     (state) => state.streamingState === StreamingState.Responding,
   );
-  const { emission, live, printed } = useJournalEmission(
-    store,
-    width,
-    responding,
-  );
-  useEffect(() => {
-    viewport.followingTail = true;
-    viewport.viewportLines = Math.max(1, height);
-    viewport.visibleKeys = store
-      .getState()
-      .rows.filter((row) => unprinted(row, printed.current))
-      .map((row) => row.key);
-    store.reportViewport();
-    store.pageOut('older');
-  }, [store, viewport, height, emission, printed]);
-  return (
-    <>
-      <MemoizedPrintedBatch emission={emission} config={config} />
-      <Box flexDirection="column">
-        {live.map((row) => (
-          <HistoryItemDisplay
-            key={row.key}
-            item={row.item}
-            terminalWidth={width}
-            isPending={true}
-            config={config}
-          />
-        ))}
-        {pending.map((item, index) => (
-          <HistoryItemDisplay
-            key={index}
-            item={{ ...item, id: index }}
-            terminalWidth={width}
-            availableTerminalHeight={
-              item.type === 'tool_group' ? height : undefined
-            }
-            isPending={true}
-            config={config}
-          />
-        ))}
-      </Box>
-    </>
-  );
+  return { width, height, pending, responding };
 }
