@@ -4,6 +4,7 @@ import { JournalFormatError } from './errors.js';
 import type { RecordAccess } from './recordAccess.js';
 import type { RecordAppender } from './groupAppender.js';
 import { RECORD_KIND } from './recordKinds.js';
+import { FRAME_HEAD_BYTES } from './frame.js';
 import { readValueBody } from './mapEntries.js';
 import { transcriptEntries, type TranscriptEntry } from './transcript-tree.js';
 import type { RowHeader } from './rowRecord.js';
@@ -81,7 +82,7 @@ export async function chunkValue(
   access: RecordAccess,
   ref: number,
 ): Promise<Uint8Array> {
-  const head = await access.readRecordHead(ref, 'VALUE');
+  const head = await access.readRecordHead(ref, 'VALUE', 64);
   if (head.kind !== RECORD_KIND.VALUE)
     throw new JournalFormatError('Chunk descriptor is not VALUE');
   return readValueBody(access, head);
@@ -149,8 +150,9 @@ export async function* chunkBlockParts(
   access: RecordAccess,
   manifest: ChunkManifest,
   ordinal: number,
+  known?: ChunkBlock,
 ): AsyncGenerator<Uint8Array> {
-  const block = await chunkBlock(access, manifest, ordinal);
+  const block = known ?? (await chunkBlock(access, manifest, ordinal));
   if (block.named === true) {
     const { namedBlockParts } = await import('./chunk-fields.js');
     yield* namedBlockParts(access, manifest, ordinal, block);
@@ -171,7 +173,11 @@ export async function* chunkFieldParts(
     0n,
     false,
   )) {
-    const head = await access.readRecordHead(entry.rowRef, 'PIECE');
+    const head = await access.readRecordHead(
+      entry.rowRef,
+      'PIECE',
+      FRAME_HEAD_BYTES + 32,
+    );
     if (
       head.kind !== RECORD_KIND.PIECE ||
       head.bodyLen > MAX_ARRIVAL_PIECE_BYTES ||
@@ -216,7 +222,7 @@ export async function readChunkBlock(
       : block.length;
   const bytes = new Uint8Array(length);
   let position = 0;
-  for await (const part of chunkBlockParts(access, manifest, ordinal)) {
+  for await (const part of chunkBlockParts(access, manifest, ordinal, block)) {
     bytes.set(part, position);
     position += part.length;
   }

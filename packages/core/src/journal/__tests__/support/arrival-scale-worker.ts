@@ -28,6 +28,17 @@ const options = small ? { rowCount: 3124, payloadBytes: 8 * 1024 * 1024 } : {};
 const path = join(root, `${mode}.llxj`);
 const encoder = new TextEncoder();
 
+async function* recordedParts(store: JournalStore): AsyncGenerator<Uint8Array> {
+  const snapshot = await store.snapshot();
+  try {
+    for await (const entry of snapshot.entries()) {
+      for await (const block of snapshot.blocks(entry)) yield* block.parts();
+    }
+  } finally {
+    await snapshot.close();
+  }
+}
+
 async function record(
   store: JournalStore,
   probe: SessionProbe,
@@ -64,15 +75,9 @@ async function record(
     await probe.checkpoint('terminal-publication');
     if (recorder.census.peakBytes > 256 * 1024)
       throw new Error('Recording charge exceeded');
-    const snapshot = await store.snapshot();
-    try {
-      for await (const entry of snapshot.entries()) {
-        const stored = await snapshot.readRow(entry);
-        hash.update(stored.blocks[0]);
-        bytes += stored.blocks[0].length;
-      }
-    } finally {
-      await snapshot.close();
+    for await (const part of recordedParts(store)) {
+      hash.update(part);
+      bytes += part.length;
     }
     return { bytes, sha256: hash.digest('hex') };
   } finally {

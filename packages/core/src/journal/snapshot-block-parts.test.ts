@@ -8,6 +8,7 @@ import { JournalStore } from './journalStore.js';
 import type { DirectoryBlock } from './row-directory.js';
 import { draftRow, storeDeps } from './__tests__/support/storeFixtures.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
+import { testJournalSeams } from './__tests__/support/journalFixtures.js';
 
 async function digest(blocks: AsyncIterable<DirectoryBlock>): Promise<string> {
   const hash = createHash('sha256');
@@ -33,6 +34,42 @@ async function firstBlock(
 
 describe('snapshot bounded block parts', () => {
   const directory = useTempDir('snapshot-block-parts-');
+
+  it('streams an arrival directory without rereading its block descriptor', async () => {
+    const counter = { reads: 0 };
+    const store = await JournalStore.create(
+      join(directory(), 'read-cost.llxj'),
+      storeDeps({
+        seams: testJournalSeams({ readCounter: counter }, 1, false),
+      }),
+    );
+    const recorder = new JournalArrivalRecorder(store);
+    const payload = new TextEncoder().encode('streamed payload');
+    try {
+      const row = await recorder.beginRow(
+        { ...draftRow(), blocks: [] },
+        { id: 'read-cost', submissionId: 'prompt' },
+      );
+      const block = await recorder.beginBlock(row, 0);
+      await recorder.appendField(block, payload);
+      await recorder.endBlock(block);
+      await recorder.sealRow(row);
+      const snapshot = await store.snapshot();
+      try {
+        const entry = await snapshot.entryAt(0);
+        const before = counter.reads;
+        expect(await digest(snapshot.blocks(entry))).toBe(
+          createHash('sha256').update(payload).digest('hex'),
+        );
+        expect(counter.reads - before).toBeLessThanOrEqual(10);
+      } finally {
+        await snapshot.close();
+      }
+    } finally {
+      await recorder.close();
+      await store.close();
+    }
+  });
 
   it('reads a large ordinary block without retaining its complete backing buffer', async () => {
     const store = await JournalStore.create(
