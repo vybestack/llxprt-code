@@ -507,6 +507,17 @@ export class NativeJournalCursor {
       this.options.counters?.ownership?.release(opener);
     }
   }
+  private async *projectTextItems(
+    slices: AsyncIterable<IContent>,
+  ): AsyncGenerator<{ content: IContent; item: HistoryItem }> {
+    for await (const content of slices) {
+      for (const item of iContentToHistoryItems(
+        [content],
+        this.options.emojiFilterMode,
+      ))
+        yield { content, item };
+    }
+  }
   private async *projectTextSlices(
     from: number,
     first: RowEntry,
@@ -517,20 +528,13 @@ export class NativeJournalCursor {
   ): AsyncGenerator<LocatedEntry> {
     const tail: LocatedEntry[] = [];
     const inContext = await this.reader.inContext(first);
-    const iterator = slices[Symbol.asyncIterator]();
+    const iterator = this.projectTextItems(slices)[Symbol.asyncIterator]();
     let current = await iterator.next();
     let index = 0;
     try {
       while (current.done !== true && index < maximum) {
         const next = await iterator.next();
-        const content = current.value;
-        const projected = iContentToHistoryItems(
-          [content],
-          this.options.emojiFilterMode,
-        );
-        const [original] = projected;
-        if (projected.length !== 1)
-          throw new Error('Text slice must project to one display item');
+        const { content, item: original } = current.value;
         const sliced: HistoryItem =
           index > 0 && original.type === 'gemini'
             ? { ...original, type: 'gemini_content' }
@@ -561,7 +565,7 @@ export class NativeJournalCursor {
       }
       yield* tail;
     } finally {
-      await iterator.return?.();
+      await iterator.return(undefined);
     }
   }
 

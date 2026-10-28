@@ -8,6 +8,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
 import { NativeJournalCursor } from './native-journal-cursor.js';
+import type { HistoryItem } from '../../types.js';
 import { rowIdentityKey } from '../../utils/rowIdentity.js';
 
 function boundedReads(stats: { bytes: number }): NativeJournalReadDependencies {
@@ -34,6 +35,47 @@ function boundedReads(stats: { bytes: number }): NativeJournalReadDependencies {
 
 describe('giant journal text rows', () => {
   const directory = useTempDir('journal-giant-text-');
+  it('projects sliced emoji warnings with distinct identities and pageable positions', async () => {
+    const session = await JournalSession.create(
+      join(directory(), 'emoji.llxj'),
+    );
+    try {
+      await session.append([
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'hello 🌙 '.repeat(5000) }],
+        },
+      ]);
+      const cursor = await NativeJournalCursor.open(
+        session.path,
+        { emojiFilterMode: 'warn' },
+        1,
+      );
+      try {
+        let entries = (await cursor.pageBack(1)).entries;
+        const items: HistoryItem[] = [];
+        while (entries.length > 0) {
+          items.push(
+            ...entries.flatMap((entry) =>
+              entry.kind === 'projected' ? [entry.item] : [],
+            ),
+          );
+          entries = (await cursor.pageBack(1)).entries;
+        }
+        expect(items.some((item) => item.type === 'info')).toBe(true);
+        expect(items.some((item) => item.type === 'gemini')).toBe(true);
+        const keys = items.flatMap((item) =>
+          item.rowIdentity ? [rowIdentityKey(item.rowIdentity)] : [],
+        );
+        expect(new Set(keys).size).toBe(items.length);
+      } finally {
+        await cursor.close();
+      }
+    } finally {
+      await session.close();
+    }
+  });
+
   it('decodes bounded viewport slices with distinct identities instead of materializing the giant row', async () => {
     const text =
       'escaped "quote" \\ slash\n🌙漢字\t'.repeat(70000) + 'TAIL_SENTINEL';
