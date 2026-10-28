@@ -4,7 +4,7 @@ import { MetadataJsonProjection } from '../recording/metadataJsonProjection.js';
 import type { DraftId } from './rowDraft.js';
 import type { RecordAccess } from './recordAccess.js';
 import { ROW_BLOCK_TYPE, ROW_ID_KIND } from './rowRecord.js';
-import { transcriptEntries } from './transcript-tree.js';
+import { firstTranscriptEntry, transcriptEntries } from './transcript-tree.js';
 import {
   chunkValue,
   decodeChunkBlock,
@@ -24,16 +24,12 @@ async function textField(
   name: ArrivalFieldName,
 ): Promise<string> {
   const code = fieldCode(name);
-  const found = await transcriptEntries(
-    access,
-    block.piecesRoot,
-    'blocks',
-    BigInt(code),
-    false,
-  ).next();
-  if (found.value?.transcriptId !== BigInt(code))
+  const found = await firstTranscriptEntry(
+    transcriptEntries(access, block.piecesRoot, 'blocks', BigInt(code), false),
+  );
+  if (found?.transcriptId !== BigInt(code))
     throw new JournalFormatError(`Missing ${name} field`);
-  const field = decodeChunkBlock(await chunkValue(access, found.value.rowRef));
+  const field = decodeChunkBlock(await chunkValue(access, found.rowRef));
   const bytes = new Uint8Array(field.length);
   let at = 0;
   for await (const part of chunkFieldParts(

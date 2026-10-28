@@ -328,6 +328,13 @@ export class TranscriptTreeWriter {
   }
 }
 
+export async function firstTranscriptEntry(
+  entries: AsyncIterable<TranscriptEntry>,
+): Promise<TranscriptEntry | undefined> {
+  for await (const entry of entries) return entry;
+  return undefined;
+}
+
 /** A seek retains only the search path and one leaf, in either direction. */
 export async function* transcriptEntries(
   access: RecordAccess,
@@ -338,36 +345,32 @@ export async function* transcriptEntries(
   readNode: (ref: number) => Promise<TranscriptNode> = (ref) =>
     readTranscriptNode(access, ref, mode),
 ): AsyncGenerator<TranscriptEntry> {
-  if (root === 0) return;
-  const node = await readNode(root);
-  if (node.level === 0) {
-    for (
-      let at = backward ? node.entries.length - 1 : 0;
-      backward ? at >= 0 : at < node.entries.length;
-      at += backward ? -1 : 1
-    ) {
-      const entry = node.entries[at];
-      if (
-        backward ? entry.transcriptId <= fromId : entry.transcriptId >= fromId
-      )
-        yield entry;
+  const pending = root === 0 ? [] : [root];
+  try {
+    while (pending.length > 0) {
+      const ref = pending.pop();
+      if (ref === undefined) throw new Error('Missing transcript path');
+      yield* await readNode(ref).then((node) => {
+        if (node.level === 0) {
+          const selected = node.entries.filter((entry) =>
+            backward
+              ? entry.transcriptId <= fromId
+              : entry.transcriptId >= fromId,
+          );
+          return backward ? selected.reverse() : selected;
+        }
+        let first = node.children.findIndex((child) => child.maxId >= fromId);
+        if (first < 0) first = node.children.length - 1;
+        for (
+          let at = backward ? 0 : node.children.length - 1;
+          backward ? at <= first : at >= first;
+          at += backward ? 1 : -1
+        )
+          pending.push(node.children[at].ref);
+        return [];
+      });
     }
-    return;
-  }
-  let first = node.children.findIndex((child) => child.maxId >= fromId);
-  if (first < 0) first = node.children.length - 1;
-  for (
-    let at = first;
-    backward ? at >= 0 : at < node.children.length;
-    at += backward ? -1 : 1
-  ) {
-    yield* transcriptEntries(
-      access,
-      node.children[at].ref,
-      mode,
-      fromId,
-      backward,
-      readNode,
-    );
+  } finally {
+    pending.length = 0;
   }
 }

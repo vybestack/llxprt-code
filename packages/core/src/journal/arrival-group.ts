@@ -25,6 +25,7 @@ import { buildStreamedAppend } from './streamed-append-build.js';
 import type { AppendInput } from './streamed-append-pass.js';
 import {
   TranscriptTreeWriter,
+  firstTranscriptEntry,
   transcriptEntries,
   type TranscriptEntry,
 } from './transcript-tree.js';
@@ -173,10 +174,9 @@ export class ArrivalGroup {
     await this.target.drain();
     const staged = this.manifests.get(row.transcriptId);
     if (staged !== undefined) return staged;
-    const selected = await this.tree('transcript')
-      .entries(this.head.root, row.transcriptId)
-      .next();
-    const entry = selected.value;
+    const entry = await firstTranscriptEntry(
+      this.tree('transcript').entries(this.head.root, row.transcriptId),
+    );
     if (entry === undefined || entry.transcriptId !== row.transcriptId)
       throw new Error('Missing recording transcript row');
     const header = decodeRowHeader(
@@ -323,15 +323,17 @@ export class ArrivalGroup {
     const block = await chunkBlock(this.access(), header.chunk, handle.ordinal);
     if (block.named !== true || block.ended)
       throw new Error('Named block is not open');
-    const found = await transcriptEntries(
-      this.access(),
-      block.piecesRoot,
-      'blocks',
-      BigInt(fieldCode(name)),
-      false,
-    ).next();
-    return found.value?.transcriptId === BigInt(fieldCode(name))
-      ? decodeChunkBlock(await chunkValue(this.access(), found.value.rowRef))
+    const found = await firstTranscriptEntry(
+      transcriptEntries(
+        this.access(),
+        block.piecesRoot,
+        'blocks',
+        BigInt(fieldCode(name)),
+        false,
+      ),
+    );
+    return found?.transcriptId === BigInt(fieldCode(name))
+      ? decodeChunkBlock(await chunkValue(this.access(), found.rowRef))
       : undefined;
   }
   async appendNamed(

@@ -17,6 +17,7 @@ import { rootRef } from './groupSegments.js';
 import type { RowEntry } from './rowEntry.js';
 import {
   TranscriptTreeWriter,
+  firstTranscriptEntry,
   type TranscriptEntry,
 } from './transcript-tree.js';
 import {
@@ -267,11 +268,9 @@ export class TranscriptGroup {
       const selected =
         previous.occurrencesRoot === 0
           ? undefined
-          : (
-              await occurrences
-                .entries(previous.occurrencesRoot, entry.label)
-                .next()
-            ).value;
+          : await firstTranscriptEntry(
+              occurrences.entries(previous.occurrencesRoot, entry.label),
+            );
       if (
         selected?.label !== entry.label ||
         selected.rowRef !== entry.recordOffset
@@ -331,13 +330,13 @@ export class TranscriptGroup {
       previous.occurrencesRoot,
       entry.label,
     );
-    const first = await tree.entries(occurrencesRoot, 0n).next();
+    const first = await firstTranscriptEntry(tree.entries(occurrencesRoot, 0n));
     meta.set(
       key,
       encodeMembership({
         count: previous.count - 1,
-        label: first.value?.label ?? 0n,
-        rowRef: first.value?.rowRef ?? 0,
+        label: first?.label ?? 0n,
+        rowRef: first?.rowRef ?? 0,
         occurrencesRoot,
       }),
     );

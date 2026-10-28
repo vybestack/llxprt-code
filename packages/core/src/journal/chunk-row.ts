@@ -6,7 +6,11 @@ import type { RecordAppender } from './groupAppender.js';
 import { RECORD_KIND } from './recordKinds.js';
 import { FRAME_HEAD_BYTES } from './frame.js';
 import { readValueBody } from './mapEntries.js';
-import { transcriptEntries, type TranscriptEntry } from './transcript-tree.js';
+import {
+  firstTranscriptEntry,
+  transcriptEntries,
+  type TranscriptEntry,
+} from './transcript-tree.js';
 import type { RowHeader } from './rowRecord.js';
 
 export const MAX_ARRIVAL_PIECE_BYTES = 64 * 1024;
@@ -105,10 +109,12 @@ export async function findChunkEntry(
   mode: 'blocks' | 'pieces' | 'transcript',
   id: bigint,
 ): Promise<TranscriptEntry> {
-  const found = await transcriptEntries(access, root, mode, id, false).next();
-  if (found.value?.transcriptId !== id)
+  const found = await firstTranscriptEntry(
+    transcriptEntries(access, root, mode, id, false),
+  );
+  if (found?.transcriptId !== id)
     throw new JournalFormatError(`Missing ${mode} entry ${id}`);
-  return found.value;
+  return found;
 }
 export async function chunkBlock(
   access: RecordAccess,

@@ -11,7 +11,7 @@ import {
   decodeTranscriptHead,
   TRANSCRIPT_HEAD_KEY,
 } from './transcript-head.js';
-import { transcriptEntries } from './transcript-tree.js';
+import { firstTranscriptEntry, transcriptEntries } from './transcript-tree.js';
 import type { RecordAccess } from './recordAccess.js';
 
 import type { ArrivalBlock } from './arrival-group.js';
@@ -55,15 +55,11 @@ export async function readRecordingField(
   if (block.named !== true || block.ended)
     throw new Error('Named block is not open');
   const code = BigInt(fieldCode(name));
-  const field = await transcriptEntries(
-    ctx.access,
-    block.piecesRoot,
-    'blocks',
-    code,
-    false,
-  ).next();
-  return field.value?.transcriptId === code
-    ? decodeChunkBlock(await chunkValue(ctx.access, field.value.rowRef))
+  const field = await firstTranscriptEntry(
+    transcriptEntries(ctx.access, block.piecesRoot, 'blocks', code, false),
+  );
+  return field?.transcriptId === code
+    ? decodeChunkBlock(await chunkValue(ctx.access, field.rowRef))
     : undefined;
 }
 export function recordingMutations(seams: {

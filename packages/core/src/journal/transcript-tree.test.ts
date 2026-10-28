@@ -7,6 +7,7 @@ import { createFileHandleReader } from './positionalFile.js';
 import { createRecordAccess } from './recordAccess.js';
 import {
   TranscriptTreeWriter,
+  firstTranscriptEntry,
   transcriptEntries,
   type TranscriptEntry,
 } from './transcript-tree.js';
@@ -90,6 +91,32 @@ describe('transcript index primitives', () => {
     } finally {
       await reader.close();
     }
+  });
+
+  it('closes a point-seek iterator after consuming only its first entry', async () => {
+    let closed = false;
+    let pulled = 0;
+    async function* entries(): AsyncGenerator<TranscriptEntry> {
+      try {
+        for (const id of [7n, 8n]) {
+          pulled++;
+          yield entry(id);
+        }
+      } finally {
+        closed = true;
+      }
+    }
+
+    expect((await firstTranscriptEntry(entries()))?.rowRef).toBe(700);
+    expect(pulled).toBe(1);
+    expect(closed).toBe(true);
+  });
+
+  it('returns no first entry when a point seek is empty', async () => {
+    async function* entries(): AsyncGenerator<TranscriptEntry> {
+      yield* [];
+    }
+    expect(await firstTranscriptEntry(entries())).toBeUndefined();
   });
 
   it('persists fixed-size heads and exact membership with u64 identities', () => {
