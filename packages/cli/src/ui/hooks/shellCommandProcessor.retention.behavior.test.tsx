@@ -104,9 +104,7 @@ describe('useShellCommandProcessor — retention cap at shell commit (issue #342
         config={buildConfig()}
         agent={agent}
         addItemToHistory={(item) => {
-          // The store command carries the Omit<HistoryItem,'id'> family; the
-          // assertions use the union form, which narrows through .find().
-          committed.push(item as HistoryItemWithoutId);
+          committed.push(item);
           return committed.length;
         }}
         onReady={(h) => {
