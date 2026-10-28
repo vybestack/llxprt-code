@@ -4,7 +4,7 @@ import {
   pairedEstimate,
   RETAINED_ALLOWANCE_BYTES,
 } from '@vybestack/llxprt-code-test-utils/core/retained-growth.js';
-import { pair } from './semantic-purge-memory-test-helpers.js';
+import { pair } from './__tests__/support/semantic-purge-memory-test-helpers.js';
 
 describe('semantic purge detached candidate retained growth', () => {
   it('rejects an explicitly retained whole-array row and marker trap against the same allowance', () => {

@@ -19,7 +19,7 @@ export function measure(size: number, trap: boolean): z.infer<typeof schema> {
     process.execPath,
     [
       new URL(
-        '../../../../../scripts/tests/semantic-purge-memory-child.ts',
+        '../../../../../../../scripts/tests/semantic-purge-memory-child.ts',
         import.meta.url,
       ).pathname,
       String(size),

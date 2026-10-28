@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { measure } from './semantic-purge-memory-test-helpers.js';
+import { measure } from './__tests__/support/semantic-purge-memory-test-helpers.js';
 
 describe('semantic purge actual owner census', () => {
   for (const size of [512, 8192]) {
