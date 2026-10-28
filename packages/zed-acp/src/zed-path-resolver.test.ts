@@ -66,13 +66,76 @@ describe('ZedPathResolver - recursive glob search', () => {
     };
   }
 
+  for (const reference of ['needle.ts', 'src']) {
+    it(`propagates ignore-reader failures while resolving ${reference}`, async () => {
+      await fs.mkdir(path.join(tmpDir, 'src'));
+      await fs.writeFile(path.join(tmpDir, 'src', 'needle.ts'), 'visible');
+      const config = buildConfig(tmpDir);
+      const failure = Object.assign(new Error('ignore reader unavailable'), {
+        code: 'EACCES',
+      });
+      const resolver = createResolver(
+        {
+          ...config,
+          ignore: {
+            ...config.ignore,
+            shouldIgnoreFile: config.ignore.shouldIgnoreFile.bind(
+              config.ignore,
+            ),
+            getCoreIgnorePatterns: () => {
+              throw failure;
+            },
+          },
+        },
+        () => {},
+      );
+      await expect(
+        resolver.resolvePrompt(
+          [
+            {
+              type: 'resource_link',
+              uri: `file://${reference}`,
+              name: reference,
+            },
+          ],
+          new AbortController().signal,
+        ),
+      ).rejects.toBe(failure);
+    });
+  }
+
+  it('searches without ignore patterns when their file is absent', async () => {
+    await fs.mkdir(path.join(tmpDir, 'src'));
+    await fs.writeFile(path.join(tmpDir, 'src', 'needle.ts'), 'visible');
+    const config = buildConfig(tmpDir);
+    const resolver = createResolver(
+      {
+        ...config,
+        ignore: {
+          ...config.ignore,
+          shouldIgnoreFile: config.ignore.shouldIgnoreFile.bind(config.ignore),
+          getCoreIgnorePatterns: () => {
+            throw Object.assign(new Error('absent ignore file'), {
+              code: 'ENOENT',
+            });
+          },
+        },
+      },
+      () => {},
+    );
+    const parts = await resolver.resolvePrompt(
+      [{ type: 'resource_link', uri: 'file://needle.ts', name: 'needle.ts' }],
+      new AbortController().signal,
+    );
+    expect(parts).toContainEqual({ type: 'text', text: 'visible' });
+  });
+
   it('returns a valid relative path for a deeply nested glob match', async () => {
     // Create a nested file that does not exist at the root.
     const nestedDir = path.join(tmpDir, 'src', 'deep');
     await fs.mkdir(nestedDir, { recursive: true });
     const fileName = 'target-file.ts';
     await fs.writeFile(path.join(nestedDir, fileName), 'export const x = 1;');
-
     const resolver = createResolver(buildConfig(tmpDir), () => {});
 
     const parts = await resolver.resolvePrompt(

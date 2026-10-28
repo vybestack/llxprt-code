@@ -352,10 +352,12 @@ export class ZedPathResolver {
     }
 
     this.debug(`Path ${pathName} not found directly, attempting glob search.`);
+    const ignore = this.resolveGlobIgnore();
     try {
       const relativePath = await this.globSearchFirstMatch(
         pathName,
         abortSignal,
+        ignore,
       );
       if (relativePath !== undefined) {
         this.debug(
@@ -377,13 +379,14 @@ export class ZedPathResolver {
   private async globSearchFirstMatch(
     pathName: string,
     abortSignal: AbortSignal,
+    ignore: string[],
   ): Promise<string | undefined> {
     const targetDir = this.readTargetDir();
     const entries = await glob(`**/*${pathName}*`, {
       cwd: targetDir,
       nodir: true,
       dot: true,
-      ignore: this.resolveGlobIgnore(),
+      ignore,
       signal: abortSignal,
     });
     return entries.find((entry) => !this.shouldSkipDiscoveredPath(entry));
@@ -392,8 +395,9 @@ export class ZedPathResolver {
   private resolveGlobIgnore(): string[] {
     try {
       return this.readIgnorePatterns();
-    } catch {
-      return [];
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') return [];
+      throw error;
     }
   }
 
@@ -533,12 +537,13 @@ export class ZedPathResolver {
     abortSignal: AbortSignal,
     processedQueryParts: ResolverPart[],
   ): Promise<void> {
+    const ignore = this.resolveGlobIgnore();
     try {
       const matches = await glob(spec, {
         cwd: targetDir,
         nodir: true,
         dot: true,
-        ignore: this.resolveGlobIgnore(),
+        ignore,
         signal: abortSignal,
       });
       for (const match of matches) {
