@@ -22,10 +22,7 @@ import { useFakeResponsesReplay } from '../../../agents/src/api/__tests__/helper
 import { createMockSettings } from '../__tests__/render.js';
 import { setupOwnerSessionRecording as setupOwnerSessionRecordingCore } from '../cliSessionBootstrap.js';
 import { dispatchInteractiveOrNonInteractive } from '../__tests__/session-dispatch-fixture.js';
-import {
-  __setRenderForTesting,
-  __resetInteractiveUIStateForTesting,
-} from './interactiveUI.js';
+import { __setRenderForTesting } from './interactiveUI.js';
 import {
   __resetCleanupStateForTesting,
   registerCleanup,
@@ -63,7 +60,7 @@ describe('interactive CLI owner startup', () => {
   useFakeResponsesReplay('plain-text.jsonl');
   afterEach(async () => {
     __setRenderForTesting(null);
-    __resetInteractiveUIStateForTesting();
+
     await runExitCleanup();
     __resetCleanupStateForTesting();
     for (const agent of agents.splice(0)) await agent.dispose();

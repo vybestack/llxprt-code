@@ -1,3 +1,4 @@
+import { createTerminalHost } from '../session/terminalHost.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -19,7 +20,9 @@ import {
 } from '../session/interactiveUI.js';
 import { InMemoryProviderKeyHandle } from './provider-key-handle-fixture.js';
 
-type WithoutKeys<T> = T extends unknown ? Omit<T, 'providerKeys'> : never;
+type WithoutKeys<T> = T extends unknown
+  ? Omit<T, 'providerKeys' | 'terminalHost'>
+  : never;
 
 /**
  * The one place test code starts the interactive UI. Every test that calls
@@ -41,7 +44,11 @@ export function startInteractiveUIForTest(
     settings,
     startupWarnings,
     workspaceRoot,
-    { ...startup, providerKeys: new InMemoryProviderKeyHandle() },
+    {
+      ...startup,
+      terminalHost: createTerminalHost(),
+      providerKeys: new InMemoryProviderKeyHandle(),
+    },
   );
 }
 
@@ -54,6 +61,7 @@ export function commitInteractiveStartupForTest(
 ): ReturnType<typeof commitInteractiveStartup> {
   return commitInteractiveStartup({
     ...args,
+    terminalHost: createTerminalHost(),
     providerKeys: new InMemoryProviderKeyHandle(),
   });
 }

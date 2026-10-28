@@ -63,10 +63,7 @@ import {
 import { initializeOutputListenersAndFlush } from '../session/outputListeners.js';
 import { dispatchInteractiveOrNonInteractive } from '../__tests__/session-dispatch-fixture.js';
 import { startInteractiveUIForTest } from './raw-interactive-startup-fixture.js';
-import {
-  __resetInteractiveUIStateForTesting,
-  __setRenderForTesting,
-} from '../session/interactiveUI.js';
+import { __setRenderForTesting } from '../session/interactiveUI.js';
 
 import {
   ExitCalledError,
@@ -715,7 +712,6 @@ describe('session-dispatch characterization', () => {
       // Reset interactiveUI module-level state (cleanupRegistered,
       // titleResetExitListenerRegistered, latestInstance) so each test starts
       // with a fresh first-call registration.
-      __resetInteractiveUIStateForTesting();
     });
 
     afterEach(() => {

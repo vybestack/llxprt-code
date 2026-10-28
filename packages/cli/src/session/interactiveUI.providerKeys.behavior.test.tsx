@@ -1,3 +1,5 @@
+import { createTerminalHost } from './terminalHost.js';
+let terminalHost = createTerminalHost();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -30,11 +32,8 @@ import { AppWrapper } from '../ui/App.js';
 import type { SlashCommand } from '../ui/commands/types.js';
 import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 import {
-  __resetInteractiveUIStateForTesting,
   __setRenderForTesting,
-  __setTrackedInstanceAndOwnerForTesting,
   commitInteractiveStartup,
-  replacePreviousInstanceAndOwner,
   startInteractiveUI,
   type InteractiveProviderKeys,
 } from './interactiveUI.js';
@@ -95,12 +94,12 @@ describe('interactive UI key handle ownership', () => {
       debugMode: false,
     });
     runtimeSettings = new SessionSettingsOwner(new SettingsService());
-    __resetInteractiveUIStateForTesting();
+    terminalHost = createTerminalHost();
   });
 
   afterEach(async () => {
     __setRenderForTesting(null);
-    __resetInteractiveUIStateForTesting();
+    terminalHost = createTerminalHost();
     await runExitCleanup();
     __resetCleanupStateForTesting();
     await runtimeSettings.dispose();
@@ -112,6 +111,7 @@ describe('interactive UI key handle ownership', () => {
     return startInteractiveUI(config, agent, settings, [], dir, {
       recordingOwner: 'agent',
       runtimeSettings,
+      terminalHost,
       providerKeys,
     });
   }
@@ -119,7 +119,7 @@ describe('interactive UI key handle ownership', () => {
   it('closes the handle once when a stage before commit fails, and never renders', async () => {
     const rendered = installRender();
     const sentinel = new Error('previous-owner-dispose-failed');
-    __setTrackedInstanceAndOwnerForTesting(undefined, {
+    terminalHost.publish(undefined, {
       dispose: () => Promise.reject(sentinel),
     });
     const keys = new InMemoryProviderKeyHandle();
@@ -140,6 +140,7 @@ describe('interactive UI key handle ownership', () => {
         recordingOwner: 'raw',
         runtimeSettings,
         sessionPersistence: undefined,
+        terminalHost,
         providerKeys,
       });
     }
@@ -232,6 +233,7 @@ describe('interactive UI key handle ownership', () => {
         version: 'test',
         startupWarnings: [],
         recordingOwner: 'agent',
+        terminalHost,
         providerKeys,
       });
 
@@ -244,7 +246,7 @@ describe('interactive UI key handle ownership', () => {
     );
     expect(await storeA.listKeys()).toStrictEqual(['only-in-a']);
 
-    await replacePreviousInstanceAndOwner();
+    await terminalHost.cleanup();
     expect(storeA.closeCount).toBe(1);
 
     await commit(storeB);

@@ -1,4 +1,8 @@
 import {
+  createTerminalHost,
+  type TerminalHost,
+} from './session/terminalHost.js';
+import {
   parseBootstrapArgs,
   prepareRuntimeForProfile,
 } from './config/profileBootstrap.js';
@@ -339,6 +343,7 @@ class ForegroundSessionHost {
       AgentForegroundHost['mcpHost']
     >['getAuthProviderFactory'],
     private readonly credentialAuthority: CredentialAuthority,
+    private readonly terminalHost: TerminalHost,
   ) {
     configureUnicodeSupport(settings.merged.ui.unicode ?? 'auto');
     const receipt = providerActivation.token;
@@ -516,6 +521,7 @@ class ForegroundSessionHost {
       warnings,
       this.workspaceRoot,
       {
+        terminalHost: this.terminalHost,
         providerKeys: this.credentialAuthority.createProviderKeyStorage(),
         recordingOwner: 'agent',
         runtimeSettings: this.owner.runtimeSettings,
@@ -761,6 +767,7 @@ async function prepareConfiguredTerminalSession(
 
 export async function main() {
   const capturedEnvPath = captureBootstrapEnvPath();
+  const terminalHost = createTerminalHost();
   configureEarlyDebugLogging();
   await handleVersionAndHelpFlags(process.argv.slice(2));
 
@@ -845,6 +852,7 @@ export async function main() {
       bootstrapSelection,
       (type) => authFactories.getAuthProviderFactory(type),
       authority,
+      terminalHost,
     ).run();
     preflightHandedOff = true;
   } finally {

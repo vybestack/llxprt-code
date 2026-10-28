@@ -1,3 +1,5 @@
+import { createTerminalHost } from './terminalHost.js';
+let terminalHost = createTerminalHost();
 import { buildInteractiveUiPorts } from './interactiveUiPorts.js';
 import { createMockSettings } from '../__tests__/render.js';
 /**
@@ -30,10 +32,7 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { useCommandOwners as installCommandOwners } from '../__tests__/command-owner-fixture.js';
 const makeTransactionAgent = installCommandOwners();
-import {
-  __resetInteractiveUIStateForTesting,
-  type InteractiveStartupPorts,
-} from './interactiveUI.js';
+import { type InteractiveStartupPorts } from './interactiveUI.js';
 import { commitInteractiveStartupForTest } from '../__tests__/raw-interactive-startup-fixture.js';
 import { createInteractivePerfRuntime } from '../ui/hooks/perf/interactivePerfRuntime.js';
 import type { OperationIdentitySnapshot } from '../ui/hooks/agentStream/operationLifecycle.js';
@@ -175,13 +174,13 @@ describe('Finding B — transactional interactive startup', () => {
     setInteractiveStdoutObserver(null);
     setInteractiveRenderObserver(null);
     setPerfPhaseObserver(null);
-    __resetInteractiveUIStateForTesting();
+    terminalHost = createTerminalHost();
   });
 
   afterEach(async () => {
     await runtimeSettings.dispose();
     await testConfig.dispose();
-    __resetInteractiveUIStateForTesting();
+    terminalHost = createTerminalHost();
     setInteractiveStdoutObserver(null);
     setInteractiveRenderObserver(null);
     setPerfPhaseObserver(null);
@@ -512,9 +511,6 @@ describe('Finding B — transactional interactive startup', () => {
     // captureAndClearTrackedInstanceAndOwner. Calling replacePreviousInstanceAndOwner
     // now must be a no-op (nothing to dispose — refs already cleared).
     // We verify this does NOT throw (no double-dispose of the already-disposed owner).
-    const { replacePreviousInstanceAndOwner } = await import(
-      './interactiveUI.js'
-    );
-    await replacePreviousInstanceAndOwner();
+    await terminalHost.cleanup();
   });
 });

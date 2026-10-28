@@ -1,3 +1,4 @@
+import type { TerminalHost } from './terminalHost.js';
 import { bindDebugCommand } from '../ui/commands/debugCommandHost.js';
 import { InteractiveApplication } from './interactiveApplication.js';
 import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFeatures.js';
@@ -65,7 +66,6 @@ import type { CliSessionPersistencePort } from '../cliSessionPersistence.js';
 import { appendInteractiveUiDebug } from './debugLog.js';
 import { mouseEventsExitHandler } from './terminalCleanup.js';
 import {
-  cleanupInstanceAndOwner,
   rollbackInteractiveFailure,
   type InteractiveInstanceCapability,
   type InteractiveOwnerCapability,
@@ -76,35 +76,6 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 import { InteractiveContextHost } from '../runtime/InteractiveContextHost.js';
 import { buildInteractiveUiPorts } from './interactiveUiPorts.js';
 import { type InteractiveCommandPorts } from '../ui/cliCommandPorts.js';
-
-/**
- * Module-level reference to the latest rendered Ink instance.
- *
- * startInteractiveUI may be called more than once in a long-lived process
- * (e.g. tests). registerCleanup appends to a module-level array, so a bare
- * registerCleanup inside startInteractiveUI would accumulate a fresh closure
- * (capturing that call's local `instance`) on every invocation. By tracking
- * the latest instance here and registering the cleanup callback at most once,
- * repeated calls simply update this reference — the single registered
- * callback always tears down whichever instance is current.
- */
-let latestInstance: InteractiveInstanceCapability | undefined;
-
-/**
- * Idempotent flag so the cleanup callback is registered at most once per
- * process, regardless of how many times startInteractiveUI is called.
- */
-let cleanupRegistered = false;
-
-/**
- * Idempotent flag so the synchronous terminal-protocol cleanup is registered
- * at most once per process. registerSyncCleanup appends to a module-level
- * array (it does not dedup), so without this guard repeated startInteractiveUI
- * calls would accumulate duplicate restoreTerminalProtocolsSync entries in
- * syncCleanupFunctions. Mirrors the dedup pattern used by cleanupRegistered
- * and titleResetExitListenerRegistered.
- */
-let syncCleanupRegistered = false;
 
 function handleError(error: Error, errorInfo: ErrorInfo) {
   appendInteractiveUiDebug(
@@ -125,53 +96,15 @@ function handleError(error: Error, errorInfo: ErrorInfo) {
   }
 }
 
-/**
- * Module-level reference to the latest interactive perf runtime owner.
- * Mirrors the latestInstance pattern: startInteractiveUI may be called more
- * than once in a long-lived process, so we track the latest owner and dispose
- * it in the single registered cleanup callback.
- */
-let latestPerfOwner: InteractiveOwnerCapability | null = null;
-
-/**
- * Module-level guard ensuring the title-reset exit listener is registered at
- * most once per process. setWindowTitle is called on every interactive
- * session; without this guard, each call appends a duplicate process.on('exit')
- * listener that accumulates over the process lifetime.
- */
-let titleResetExitListenerRegistered = false;
-
 function resetTitleExitHandler() {
   writeToStdout(`\x1b]0;\x07`);
 }
 
-export function __resetInteractiveUIStateForTesting() {
-  latestInstance = undefined;
-  latestPerfOwner = null;
-  cleanupRegistered = false;
-  titleResetExitListenerRegistered = false;
-  syncCleanupRegistered = false;
-  process.off('exit', resetTitleExitHandler);
-  process.off('exit', mouseEventsExitHandler);
-  process.off('exit', restoreTerminalProtocolsSync);
-}
-
-/**
- * Narrow test-only seam to install a tracked latest instance and perf owner so
- * a behavior test can drive the ACTUAL exported
- * {@link replacePreviousInstanceAndOwner} against real tracked state. Does not
- * reset state without cleanup in production paths — only tests call this to
- * stage ownership before invoking the real replacement routine.
- */
-export function __setTrackedInstanceAndOwnerForTesting(
-  instance: InteractiveInstanceCapability | undefined,
-  owner: InteractiveOwnerCapability | null,
-): void {
-  latestInstance = instance;
-  latestPerfOwner = owner;
-}
-
-export function setWindowTitle(title: string, settings: LoadedSettings) {
+export function setWindowTitle(
+  title: string,
+  settings: LoadedSettings,
+  terminalHost: TerminalHost,
+) {
   if (settings.merged.ui.hideWindowTitle !== true) {
     // Initial state before React loop starts
     const windowTitle = computeTerminalTitle({
@@ -186,8 +119,8 @@ export function setWindowTitle(title: string, settings: LoadedSettings) {
     // Register the title-reset listener only once per process; multiple
     // interactive sessions in the same process would otherwise accumulate
     // duplicate exit listeners.
-    if (!titleResetExitListenerRegistered) {
-      titleResetExitListenerRegistered = true;
+    if (!terminalHost.titleResetExitListenerRegistered) {
+      terminalHost.titleResetExitListenerRegistered = true;
       process.off('exit', resetTitleExitHandler);
       process.on('exit', resetTitleExitHandler);
     }
@@ -408,6 +341,7 @@ export type InteractiveProviderKeys = ProviderKeyStorageLike & {
 };
 
 export interface OwnerInteractiveStartup {
+  readonly terminalHost: TerminalHost;
   readonly providerKeys: InteractiveProviderKeys;
   readonly runtimeSettings: SessionSettingsOperations;
   readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
@@ -421,6 +355,7 @@ export interface OwnerInteractiveStartup {
 }
 
 export interface RawInteractiveStartup {
+  readonly terminalHost: TerminalHost;
   readonly providerKeys: InteractiveProviderKeys;
   readonly recordingOwner: 'raw';
   readonly runtimeSettings: SessionSettingsOperations;
@@ -482,8 +417,9 @@ async function prepareInteractiveStartup(
     const version = await initializeInteractivePresentation(
       workspaceRoot,
       settings,
+      startup.terminalHost,
     );
-    await replacePreviousInstanceAndOwner();
+    await startup.terminalHost.cleanup();
     const perfOwner = await buildAndStartPerfOwner(
       config,
       agent,
@@ -580,6 +516,7 @@ interface StartupTransactionState {
  * perf owner successfully starts runs inside this one transaction.
  */
 export type CommitInteractiveStartupArgs = {
+  readonly terminalHost: TerminalHost;
   readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
   readonly skillOperations?: Pick<
     WorkspaceSkillOperations,
@@ -614,12 +551,12 @@ export type CommitInteractiveStartupArgs = {
 
 /**
  * Runs every fallible stage after a perf owner successfully starts as ONE
- * transaction: inkRenderOptions, buildUiRuntimeFromSource, the command-port
+ * transaction: inkRenderOptions, the command-port
  * build, debug append, terminal/mouse staging, render,
  * sync-cleanup registration, and setupInstanceLifecycle.
  *
  * On ANY failure the single transactional rollback: preserves the primary
- * failure first, atomically clears tracked module refs (so no later global
+ * failure first, atomically clears tracked host resources (so no later
  * cleanup double-disposes), independently disposes the owner, clears/unmounts
  * any produced instance, disables staged mouse state + removes the listener,
  * and restores terminal protocols + removes the listener. Stages before mouse
@@ -751,9 +688,9 @@ export async function commitInteractiveStartup(
     );
 
     // Sync-cleanup registration (guarded against duplicate registration).
-    if (!syncCleanupRegistered) {
+    if (!args.terminalHost.syncCleanupRegistered) {
       ports.registerSync(restoreTerminalProtocolsSync);
-      syncCleanupRegistered = true;
+      args.terminalHost.syncCleanupRegistered = true;
     }
 
     await ports.setupLifecycle(
@@ -764,17 +701,18 @@ export async function commitInteractiveStartup(
         debugMode: args.config.getDebugMode(),
       },
       state.owner,
+      args.terminalHost,
     );
 
     return state.instance;
   } catch (primaryError) {
-    // Single transactional rollback. Atomically clear tracked module refs so
+    // Single transactional rollback. Atomically clear tracked host resources so
     // the registered global cleanup cannot double-dispose the same
     // instance/owner. Then tear down staged instance/owner/mouse/terminal
     // independently. The primary failure is preserved first; every cleanup
     // error aggregates behind it. Stages before mouse activation leave
     // mouseStaged=false so unstaged mouse is NOT falsely disabled.
-    captureAndClearTrackedInstanceAndOwner();
+    args.terminalHost.release();
     const { mouse, restore } = buildTerminalRollbackCapabilities(
       state.mouseStaged,
     );
@@ -792,6 +730,7 @@ async function setupInstanceLifecycle(
   settings: LoadedSettings,
   runtimeScalars: { projectRoot: string; debugMode: boolean },
   owner: InteractiveOwnerCapability,
+  terminalHost: TerminalHost,
 ): Promise<void> {
   checkForUpdates(settings)
     .then((info) => {
@@ -804,73 +743,24 @@ async function setupInstanceLifecycle(
       }
     });
 
-  // Prior instance/owner cleanup has ALREADY been done by
-  // replacePreviousInstanceAndOwner() before buildAndStartPerfOwner(). Here
-  // we only track the new instance and register the cleanup callback.
-
-  latestInstance = instance;
-  latestPerfOwner = owner;
-  if (!cleanupRegistered) {
-    cleanupRegistered = true;
-    // Registered global cleanup uses the SAME capture+clear+dispose helper as
-    // replacePreviousInstanceAndOwner: capture and clear module refs BEFORE
-    // disposal so exactly-once is guaranteed even when disposal throws. If a
-    // replacement already captured+cleared, this callback finds empty slots
-    // and is a no-op; if this callback runs first, the replacement is a no-op.
-    registerCleanup(async () => {
-      const { instance, owner } = captureAndClearTrackedInstanceAndOwner();
-      await cleanupInstanceAndOwner(instance, owner);
-    });
+  terminalHost.publish(instance, owner);
+  if (!terminalHost.cleanupRegistered) {
+    terminalHost.cleanupRegistered = true;
+    registerCleanup(() => terminalHost.cleanup());
   }
-}
-
-/**
- * Atomically captures the currently tracked instance/owner and clears the
- * module-level references. Used by the registered global cleanup,
- * {@link replacePreviousInstanceAndOwner}, and the setup-failure transactional
- * catch so all three paths share one exactly-once disposal point: the
- * capture+clear happens before any disposal attempt, so even when disposal
- * throws the slots are already empty and no second path can re-dispose the
- * same instance/owner.
- */
-function captureAndClearTrackedInstanceAndOwner(): {
-  instance: InteractiveInstanceCapability | undefined;
-  owner: InteractiveOwnerCapability | null;
-} {
-  const instance = latestInstance;
-  const owner = latestPerfOwner;
-  latestInstance = undefined;
-  latestPerfOwner = null;
-  return { instance, owner };
-}
-
-/**
- * Deterministic pre-start replacement: tears down any previous interactive
- * instance and perf owner BEFORE a new owner is constructed and started. This
- * prevents observer-conflict: a new owner's installObservers() must not
- * collide with a previous owner's still-installed observers.
- *
- * Delegates to {@link captureAndClearTrackedInstanceAndOwner} +
- * {@link cleanupInstanceAndOwner} so clear, unmount, and dispose run
- * independently and internal errors surface as one Error or AggregateError.
- * Tracking is cleared BEFORE cleanup so the slots are reclaimable even when
- * cleanup throws.
- */
-export async function replacePreviousInstanceAndOwner(): Promise<void> {
-  const { instance, owner } = captureAndClearTrackedInstanceAndOwner();
-  await cleanupInstanceAndOwner(instance, owner);
 }
 
 async function initializeInteractivePresentation(
   workspaceRoot: string,
   settings: LoadedSettings,
+  terminalHost: TerminalHost,
 ): Promise<string> {
   const version = await getCliVersion();
 
   appendInteractiveUiDebug(
     `startInteractiveUI version=${version} stdoutTTY=${String(process.stdout.isTTY)} columns=${String(process.stdout.columns)} rows=${String(process.stdout.rows)} builtinOnly=${String(process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY)} suppressStatic=${String(process.env.LLXPRT_CODE_SUPPRESS_STATIC_HEADER)}`,
   );
-  setWindowTitle(basename(workspaceRoot), settings);
+  setWindowTitle(basename(workspaceRoot), settings, terminalHost);
 
   return version;
 }

@@ -133,10 +133,6 @@ describe('startInteractiveUI', () => {
   });
   beforeEach(async () => {
     mockAgent = await makeStartupAgent(crypto.randomUUID());
-    const { __resetInteractiveUIStateForTesting } = await import(
-      './session/interactiveUI.js'
-    );
-    __resetInteractiveUIStateForTesting();
   });
 
   afterEach(async () => {
