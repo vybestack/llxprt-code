@@ -1554,5 +1554,10 @@
   "packages/providers/src/__tests__/send-peak.native-chat-text.test.ts": 87,
   "packages/providers/src/__tests__/send-peak.native-chat-tools.test.ts": 58,
   "packages/providers/src/__tests__/send-peak.native-full-tools.test.ts": 104,
-  "packages/providers/src/__tests__/sendPathImportBoundary.test.ts": 1
+  "packages/providers/src/__tests__/sendPathImportBoundary.test.ts": 1,
+  "packages/core/src/services/history/token-accounting-memory.test.ts": 172,
+  "packages/core/src/services/history/token-accounting-memory-legacy.test.ts": 73,
+  "packages/core/src/services/history/token-accounting-memory-retaining-trap.test.ts": 75,
+  "packages/core/src/services/history/token-accounting-memory-legacy-retaining-trap.test.ts": 40,
+  "packages/core/src/services/history/token-accounting-memory-fixture.test.ts": 7
 }
