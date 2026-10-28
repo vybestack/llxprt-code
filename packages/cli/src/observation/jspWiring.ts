@@ -21,7 +21,7 @@ import {
 import { JspHttpPublisher } from './jspPublisher.js';
 import { JspProducer, type JspProducerHooks } from './jspProducer.js';
 import type { JspNativeSession } from './jspDocuments.js';
-import { createObservationTap, type ObservationTap } from './observationTap.js';
+import { createObservationTap } from './observationTap.js';
 
 const BOOTSTRAP_ENV = 'LLXPRT_JSP_BOOTSTRAP_FILE';
 const NO_CONTENT_ENV = 'LLXPRT_JSP_NO_CONTENT';
@@ -58,47 +58,20 @@ export interface BootstrapSelection {
  */
 export type BootstrapWarningSink = (message: string) => void;
 
-/**
- * Physical stderr writer used by the default warning sink. Routed through the
- * core {@link writeToStderr} helper, which holds a bound reference to the
- * original `process.stderr.write` captured before any monkey-patching, so the
- * warning reaches physical stderr immediately even after `cli.tsx`'s
- * `patchStdio()` has redirected `process.stderr.write` to the internal output
- * event bus (that redirection happens before `setupObservation` runs). Swapped
- * via {@link __setBootstrapWarningStderrWriterForTesting} so the best-effort
- * guard below can be exercised without destroying fd 2.
- */
-let bootstrapStderrWriter: (message: string) => void = (message) =>
-  writeToStderr(message);
-
-/**
- * @internal Test seam: replace the physical stderr writer the default warning
- * sink delegates to. Pass `null` to restore the production `writeToStderr`
- * writer. An explicitly injected {@link BootstrapWarningSink} bypasses this
- * seam and the default's guard entirely, so injected sinks stay strict.
- */
-export function __setBootstrapWarningStderrWriterForTesting(
-  writer: ((message: string) => void) | null,
-): void {
-  bootstrapStderrWriter = writer ?? ((message) => writeToStderr(message));
+/** A broken OS stderr must not make optional observation fatal. */
+export function createBootstrapWarningSink(
+  writer: BootstrapWarningSink,
+): BootstrapWarningSink {
+  return (message) => {
+    try {
+      writer(message);
+    } catch {
+      // Physical stderr can be unavailable during process teardown.
+    }
+  };
 }
 
-/**
- * Default warning sink. Best-effort: a destroyed or throwing stderr must not
- * propagate and turn a missing-file warning back into a fatal startup error.
- * Mirrors the guarded-default/strict-injected-sink pattern in
- * `launcher/process-memory-hardening.ts` — an explicitly injected
- * `warningSink` is invoked directly by {@link loadBootstrap} and stays strict
- * by contract.
- */
-function writeBootstrapWarningToStderr(message: string): void {
-  try {
-    bootstrapStderrWriter(message);
-  } catch {
-    // Physical stderr is unusable; the warning is best-effort by contract and
-    // must not abort startup. An injected sink is deliberately not guarded.
-  }
-}
+const writeBootstrapWarningToStderr = createBootstrapWarningSink(writeToStderr);
 
 /**
  * Render an environment-controlled file path as a single escaped token so a
@@ -129,15 +102,12 @@ export interface ObservationSessionContext {
   readonly displayName: string;
 }
 
-let producer: JspProducer | null = null;
-let tap: ObservationTap = createObservationTap(null);
-let unsubscribeTodos: (() => void) | null = null;
-
 export function createTodoObservationSubscription(
+  sessionId: string,
   observer: (agentId: string | undefined, todos: readonly Todo[]) => void,
 ): () => void {
   const listener = (event: TodoUpdateEvent) => {
-    observer(event.agentId, event.todos);
+    if (event.sessionId === sessionId) observer(event.agentId, event.todos);
   };
   todoEvents.onTodoUpdated(listener);
   return () => todoEvents.offTodoUpdated(listener);
@@ -355,49 +325,86 @@ export function createObservationProducer(
   return nextProducer;
 }
 
-export function initializeObservationProducer(
-  context: ObservationSessionContext,
-  selection: BootstrapSelection | null,
-): void {
-  unsubscribeTodos?.();
-  unsubscribeTodos = null;
-  // Clear module state before building the replacement. Loading the bootstrap
-  // or constructing the producer can throw, and on this re-initialization path
-  // that would otherwise leave `tap` dispatching into an already-stopped
-  // producer.
-  producer?.stop();
-  producer = null;
-  tap = createObservationTap(null);
-  producer = createObservationProducer(loadBootstrap(selection), context);
-  if (producer === null) {
-    return;
-  }
-  producer.setAgentScope(undefined);
-  unsubscribeTodos = createTodoObservationSubscription(observeTodosReplaced);
-  tap = createObservationTap({
-    onTurnStarted: () => producer?.observeTurnStarted(),
-    onTurnEnded: (outcome) => producer?.observeTurnEnded(outcome),
-    onActivityChanged: (state) => producer?.observeActivityChanged(state),
-    onWaitOpened: (reason) => producer?.observeWaitOpened(reason),
-    onWaitResolved: () => producer?.observeWaitResolved(),
-    onToolCreated: (label, phase) => producer?.observeToolCreated(label, phase),
-    onToolPhaseChanged: (label, phase) =>
-      producer?.observeToolPhaseChanged(label, phase),
-    onAssistantChunk: (content) => producer?.observeAssistantChunk(content),
-    onAssistantMessageCommitted: (content, committedMs) =>
-      producer?.observeAssistantMessageDisplayed(content, committedMs),
-    onSourceError: (summary, code) =>
-      producer?.observeSourceError(summary, code),
-  });
+export interface ObservationCallbacks {
+  observeTurnStarted(): void;
+  observeTurnFailed(): void;
+  observeTurnCancelled(): void;
+  observeAgentEvent(event: AgentEvent): void;
+  observeAssistantMessageCommitted(content: string, committedMs: number): void;
 }
 
-export async function stopObservationProducer(): Promise<void> {
-  const activeProducer = producer;
-  producer = null;
-  tap = createObservationTap(null);
-  unsubscribeTodos?.();
-  unsubscribeTodos = null;
-  await activeProducer?.shutdown();
+export function createObservationOwner(inputs: {
+  producer: JspProducer | null;
+  subscribeTodos: (
+    observer: (agentId: string | undefined, todos: readonly Todo[]) => void,
+  ) => () => void;
+}): { callbacks: ObservationCallbacks; cleanup(): Promise<void> } {
+  const producer = inputs.producer;
+  let active = true;
+  const tap = createObservationTap(
+    producer === null
+      ? null
+      : {
+          onTurnStarted: () => producer.observeTurnStarted(),
+          onTurnEnded: (outcome) => producer.observeTurnEnded(outcome),
+          onActivityChanged: (state) => producer.observeActivityChanged(state),
+          onWaitOpened: (reason) => producer.observeWaitOpened(reason),
+          onWaitResolved: () => producer.observeWaitResolved(),
+          onToolCreated: (label, phase) =>
+            producer.observeToolCreated(label, phase),
+          onToolPhaseChanged: (label, phase) =>
+            producer.observeToolPhaseChanged(label, phase),
+          onAssistantChunk: (content) =>
+            producer.observeAssistantChunk(content),
+          onAssistantMessageCommitted: (content, committedMs) =>
+            producer.observeAssistantMessageDisplayed(content, committedMs),
+          onSourceError: (summary, code) =>
+            producer.observeSourceError(summary, code),
+        },
+  );
+  const unsubscribe =
+    producer === null
+      ? () => {}
+      : inputs.subscribeTodos((agentId, todos) =>
+          isolate(() => producer.observeTodosReplaced(agentId, todos)),
+        );
+  const observe = (callback: () => void): void => {
+    if (active) isolate(callback);
+  };
+  return {
+    callbacks: {
+      observeTurnStarted: () => observe(() => tap.onTurnStarted()),
+      observeTurnFailed: () => observe(() => tap.onTurnEnded('failed')),
+      observeTurnCancelled: () => observe(() => tap.onTurnEnded('cancelled')),
+      observeAgentEvent: (event) => observe(() => tap.processEvent(event)),
+      observeAssistantMessageCommitted: (content, committedMs) =>
+        observe(() => tap.onFlushCommitted(content, committedMs)),
+    },
+    async cleanup(): Promise<void> {
+      if (!active) return;
+      active = false;
+      unsubscribe();
+      if (producer !== null) await producer.shutdown();
+    },
+  };
+}
+
+export function createSessionObservation(inputs: {
+  context: ObservationSessionContext;
+  selection: BootstrapSelection | null;
+  sessionId: string;
+  warningSink?: BootstrapWarningSink;
+}): ReturnType<typeof createObservationOwner> {
+  const producer = createObservationProducer(
+    loadBootstrap(inputs.selection, inputs.warningSink),
+    inputs.context,
+  );
+  if (producer !== null) producer.setAgentScope(undefined);
+  return createObservationOwner({
+    producer,
+    subscribeTodos: (observer) =>
+      createTodoObservationSubscription(inputs.sessionId, observer),
+  });
 }
 
 /**
@@ -412,40 +419,4 @@ function isolate(observe: () => void): void {
   } catch {
     // Telemetry-only failure; foreground behavior is deliberately unaffected.
   }
-}
-
-export function observeTurnStarted(): void {
-  isolate(() => tap.onTurnStarted());
-}
-
-export function observeTurnFailed(): void {
-  isolate(() => tap.onTurnEnded('failed'));
-}
-
-/**
- * Close the observed turn when the user cancels interactively. The abort does
- * not surface as a terminal `done` event and does not reach the submit path's
- * failure handler, so without this the producer would keep reporting an active
- * turn with a growing elapsed time for the rest of the session.
- */
-export function observeTurnCancelled(): void {
-  isolate(() => tap.onTurnEnded('cancelled'));
-}
-
-export function observeAgentEvent(event: AgentEvent): void {
-  isolate(() => tap.processEvent(event));
-}
-
-export function observeAssistantMessageCommitted(
-  content: string,
-  committedMs: number,
-): void {
-  isolate(() => tap.onFlushCommitted(content, committedMs));
-}
-
-export function observeTodosReplaced(
-  agentId: string | undefined,
-  todos: readonly Todo[],
-): void {
-  isolate(() => producer?.observeTodosReplaced(agentId, todos));
 }

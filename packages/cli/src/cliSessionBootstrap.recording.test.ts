@@ -112,7 +112,7 @@ describe('recording bootstrap checkpoint resolution', () => {
           session.listBrowserTargetsDetailed,
           { listSessions: false, deleteSession: undefined },
           null,
-        ),
+        ).then(({ history }) => history),
       ).rejects.toThrow(/Ambiguous continue target name/);
     } finally {
       await session.dispose();

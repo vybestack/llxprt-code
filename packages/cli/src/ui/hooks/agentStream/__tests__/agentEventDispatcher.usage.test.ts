@@ -13,6 +13,7 @@ import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 
 function usageDeps(metrics: UiTelemetryService): AgentEventDeps {
   return {
+    observeAssistantMessageCommitted: () => {},
     setLastPromptTokenCount: (count) => metrics.setLastPromptTokenCount(count),
     addItem: () => {},
     sanitizeContent: (text) => ({ text, blocked: false }),

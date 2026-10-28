@@ -38,7 +38,7 @@ function setupOwnerSessionRecording(
     argv,
     selection,
     warnings,
-  );
+  ).then(({ history }) => history);
 }
 
 describe('foreground noninteractive recording owner', () => {

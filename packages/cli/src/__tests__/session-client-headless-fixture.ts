@@ -47,7 +47,7 @@ function setupOwnerSessionRecording(
     argv,
     selection,
     warnings,
-  );
+  ).then(({ history }) => history);
 }
 
 const scenario = z.enum(['record', 'profile', 'resume']).parse(process.argv[2]);

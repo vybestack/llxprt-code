@@ -239,7 +239,7 @@ describe('provider changes made in dialogs reach the session recording (issue #3
         session.listBrowserTargetsDetailed,
         { listSessions: false, deleteSession: undefined },
         null,
-      );
+      ).then(({ history }) => history);
     } finally {
       capture.mockRestore();
     }

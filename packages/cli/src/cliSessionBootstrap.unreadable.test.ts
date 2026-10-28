@@ -335,7 +335,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       { listSessions: false, deleteSession: undefined },
       null,
       startupWarnings,
-    );
+    ).then(({ history }) => history);
     const setup: StartupResult = {
       resumedSessionId: resumedHistory === null ? null : session.getSessionId(),
       resumedHistory,
@@ -390,7 +390,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       first.listBrowserTargetsDetailed,
       { listSessions: false, deleteSession: undefined },
       null,
-    );
+    ).then(({ history }) => history);
     let header: Awaited<ReturnType<typeof readSessionHeader>>;
     try {
       await loadProfile(noProviderConfig, first, 'codex', 'gpt-6-luna');
@@ -426,7 +426,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       recording.listBrowserTargetsDetailed,
       { listSessions: false, deleteSession: undefined },
       null,
-    );
+    ).then(({ history }) => history);
     try {
       liveConfig.setProvider('anthropic');
       liveConfig.setModel('claude-opus-5-5');
@@ -642,7 +642,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       session.listBrowserTargetsDetailed,
       { listSessions: false, deleteSession: undefined },
       null,
-    );
+    ).then(({ history }) => history);
     if (history === null) throw new Error('Expected restored startup history');
     expect(identities).toStrictEqual(['fresh-session', 'fresh-session']);
     expect(config.getSessionId()).toBe('identity-after-restore');
@@ -684,10 +684,12 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       { listSessions: false, deleteSession: undefined },
       null,
       warnings,
-    ).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    )
+      .then(({ history }) => history)
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
     if (!(outcome instanceof AggregateError)) throw outcome;
     expect(outcome.errors).toStrictEqual([primary, rollback]);
     expect(resets).toStrictEqual(['fresh-session']);

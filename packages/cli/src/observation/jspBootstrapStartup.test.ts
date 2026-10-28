@@ -25,7 +25,6 @@ import {
   captureBootstrapEnvPath,
   resolveBootstrapSelection,
   augmentArgvWithInternalEnvPath,
-  stopObservationProducer,
 } from './jspWiring.js';
 import { parseArguments } from '../config/cliArgParser.js';
 import type { Settings } from '../config/settings.js';
@@ -495,12 +494,14 @@ describe('startup ordering — capture at first line of main()', () => {
 });
 
 describe('setupObservation seam — cliSessionBootstrap → observation wiring (AC15)', () => {
+  let observation: ReturnType<typeof setupObservation> | null = null;
   let captureServer: http.Server | null = null;
   let losingTimeout: ReturnType<typeof setTimeout> | null = null;
 
   afterEach(async () => {
     try {
-      await stopObservationProducer();
+      if (observation !== null) await observation.cleanup();
+      observation = null;
     } finally {
       if (losingTimeout !== null) {
         clearTimeout(losingTimeout);
@@ -548,9 +549,10 @@ describe('setupObservation seam — cliSessionBootstrap → observation wiring (
 
     const configStub = {
       getProjectRoot: () => '/test-project',
+      getSessionId: () => 'test-session',
     } as unknown as Config;
     const selection = resolveBootstrapSelection(file, undefined, undefined);
-    setupObservation(configStub, selection);
+    observation = setupObservation(configStub, selection);
 
     const timeoutPromise = new Promise<never>((_, reject) => {
       losingTimeout = setTimeout(

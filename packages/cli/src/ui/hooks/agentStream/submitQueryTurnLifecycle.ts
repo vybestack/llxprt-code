@@ -15,10 +15,7 @@
 import type { AgentRequestInput } from '@vybestack/llxprt-code-core';
 import { prepareTurnForQuery } from './turnPreparation.js';
 import { handleSubmissionError } from './streamUtils.js';
-import {
-  observeTurnFailed,
-  observeTurnStarted,
-} from '../../../observation/jspWiring.js';
+import type { ObservationCallbacks } from '../../../observation/jspWiring.js';
 import type {
   OperationLifecycleRegistry,
   OperationStatus,
@@ -34,6 +31,10 @@ export interface TurnInit {
 }
 
 export interface SubmitQueryCallbackDeps extends UseSubmitQueryDeps {
+  observation: Pick<
+    ObservationCallbacks,
+    'observeTurnStarted' | 'observeTurnFailed'
+  >;
   displayUserMessage: (q: string, t: number) => void;
   prepareQueryForAgent: (
     query: AgentRequestInput,
@@ -171,7 +172,7 @@ function handleProviderError(
   error: unknown,
 ): void {
   if (isCurrentTurn(cbd, turn.abortSignal)) {
-    observeTurnFailed();
+    cbd.observation.observeTurnFailed();
     handleSubmissionError(
       error,
       cbd.addItem,
@@ -413,7 +414,7 @@ export async function runSubmitQueryCore(
   try {
     cbd.setIsResponding(true);
     cbd.setInitError(null);
-    observeTurnStarted();
+    cbd.observation.observeTurnStarted();
     cbd.pendingResponse.beginCommittedSegments();
   } catch (error) {
     await finaliseTurnStartFailure(cbd, turn, error);

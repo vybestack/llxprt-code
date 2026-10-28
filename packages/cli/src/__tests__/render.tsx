@@ -1,3 +1,5 @@
+import { ObservationContext } from '../observation/ObservationContext.js';
+import { createObservationOwner } from '../observation/jspWiring.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -34,7 +36,15 @@ export const render = (
   let renderResult: ReturnType<typeof inkRender> =
     undefined as unknown as ReturnType<typeof inkRender>;
   act(() => {
-    renderResult = inkRender(tree);
+    const observation = createObservationOwner({
+      producer: null,
+      subscribeTodos: () => () => {},
+    });
+    renderResult = inkRender(
+      <ObservationContext.Provider value={observation.callbacks}>
+        {tree}
+      </ObservationContext.Provider>,
+    );
   });
 
   const originalUnmount = renderResult.unmount;
@@ -64,7 +74,15 @@ export const render = (
     },
     rerender: (newTree: React.ReactElement) => {
       act(() => {
-        originalRerender(newTree);
+        const observation = createObservationOwner({
+          producer: null,
+          subscribeTodos: () => () => {},
+        });
+        originalRerender(
+          <ObservationContext.Provider value={observation.callbacks}>
+            {newTree}
+          </ObservationContext.Provider>,
+        );
       });
     },
   };

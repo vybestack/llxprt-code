@@ -1,3 +1,4 @@
+import { createObservationOwner } from '../observation/jspWiring.js';
 import { createTerminalHost } from './terminalHost.js';
 let terminalHost = createTerminalHost();
 /**
@@ -111,6 +112,10 @@ describe('interactive UI key handle ownership', () => {
     return startInteractiveUI(config, agent, settings, [], dir, {
       recordingOwner: 'agent',
       runtimeSettings,
+      observation: createObservationOwner({
+        producer: null,
+        subscribeTodos: () => () => {},
+      }).callbacks,
       terminalHost,
       providerKeys,
     });
@@ -140,6 +145,10 @@ describe('interactive UI key handle ownership', () => {
         recordingOwner: 'raw',
         runtimeSettings,
         sessionPersistence: undefined,
+        observation: createObservationOwner({
+          producer: null,
+          subscribeTodos: () => () => {},
+        }).callbacks,
         terminalHost,
         providerKeys,
       });
@@ -233,6 +242,10 @@ describe('interactive UI key handle ownership', () => {
         version: 'test',
         startupWarnings: [],
         recordingOwner: 'agent',
+        observation: createObservationOwner({
+          producer: null,
+          subscribeTodos: () => () => {},
+        }).callbacks,
         terminalHost,
         providerKeys,
       });

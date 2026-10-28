@@ -49,7 +49,7 @@ function setupOwnerSessionRecording(
     argv,
     selection,
     warnings,
-  );
+  ).then(({ history }) => history);
 }
 
 describe('interactive CLI owner startup', () => {

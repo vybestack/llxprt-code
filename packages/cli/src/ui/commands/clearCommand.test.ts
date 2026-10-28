@@ -387,7 +387,7 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
       () => agent.session.listBrowserTargetsDetailed(),
       { listSessions: false, deleteSession: undefined },
       null,
-    );
+    ).then(({ history }) => history);
     expect(resumed?.flatMap((item) => item.blocks)).toStrictEqual([
       { type: 'text', text: 'old question' },
       { type: 'text', text: 'old answer' },

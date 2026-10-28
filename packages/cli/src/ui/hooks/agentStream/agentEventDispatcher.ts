@@ -37,10 +37,11 @@ import {
   buildRefusalNoticeMessage,
   buildFinishReasonMessage,
 } from './streamUtils.js';
-import { observeAssistantMessageCommitted } from '../../../observation/jspWiring.js';
+import type { ObservationCallbacks } from '../../../observation/jspWiring.js';
 import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
 
 export interface AgentEventDeps {
+  observeAssistantMessageCommitted: ObservationCallbacks['observeAssistantMessageCommitted'];
   setLastPromptTokenCount: (count: number) => void;
   addItem: (item: HistoryItemWithoutId, timestamp: number) => void;
   sanitizeContent: (text: string) => {
@@ -138,7 +139,7 @@ function flushPendingAiContent(
   if (pending?.type === 'gemini' || pending?.type === 'gemini_content') {
     const sanitized = deps.sanitizeContent(pending.text);
     if (!sanitized.blocked) {
-      observeAssistantMessageCommitted(sanitized.text, Date.now());
+      deps.observeAssistantMessageCommitted(sanitized.text, Date.now());
     }
     deps.flushPendingHistoryItem(userMessageTimestamp);
     deps.setPendingHistoryItem(null);

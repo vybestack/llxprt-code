@@ -34,7 +34,8 @@ import { dispatchAgentEvent } from './agentEventDispatcher.js';
 import type { AgentEventRouter } from './useAgentEventStream.js';
 import type { QueuedSubmission, SubmissionOutcome } from './types.js';
 import type { UiSubagentManager } from '../../cliUiRuntime.js';
-import { observeAgentEvent } from '../../../observation/jspWiring.js';
+import { useObservationCallbacks } from '../../../observation/ObservationContext.js';
+import type { ObservationCallbacks } from '../../../observation/jspWiring.js';
 
 import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
 import type { OperationLifecycleRegistry } from './operationLifecycle.js';
@@ -252,16 +253,23 @@ function useSubmissionEventHandlers(
 }
 
 export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
+  const observation = useObservationCallbacks();
   const { startNewPrompt, getPromptCount } = useSessionStats();
   const activeTurnRef = useRef(false);
   const handlers = useSubmissionEventHandlers(deps);
 
-  const processAgentEvent = useProcessAgentEvent(deps, handlers, activeTurnRef);
+  const processAgentEvent = useProcessAgentEvent(
+    deps,
+    handlers,
+    activeTurnRef,
+    observation,
+  );
 
   const scheduleNextQueuedSubmission = useScheduleNext(deps, activeTurnRef);
 
   const executeSubmission = useSubmitQueryCallback({
     ...deps,
+    observation,
     displayUserMessage: handlers.displayUserMessage,
     prepareQueryForAgent: handlers.prepareQueryForAgent,
     handleLoopDetectedEvent: handlers.handleLoopDetectedEvent,
@@ -306,12 +314,13 @@ function useProcessAgentEvent(
     | 'handleCitationEvent'
   >,
   activeTurnRef: React.MutableRefObject<boolean>,
+  observation: ObservationCallbacks,
 ) {
   const agentBufferRef = useRef('');
   // Latest-ref pattern: store deps+handlers in a ref so the useCallback
   // never needs to change identity (avoids recreating every render).
-  const latestDeps = useRef(deps);
-  latestDeps.current = deps;
+  const latestDeps = useRef({ ...deps, observation });
+  latestDeps.current = { ...deps, observation };
   const latestHandlers = useRef(handlers);
   latestHandlers.current = handlers;
   return useCallback<AgentEventRouter>(
@@ -339,10 +348,12 @@ function useProcessAgentEvent(
         latestDeps.current.setIsResponding(false);
         agentBufferRef.current = '';
       }
-      observeAgentEvent(event);
+      latestDeps.current.observation.observeAgentEvent(event);
       const result = dispatchAgentEvent(
         event,
         {
+          observeAssistantMessageCommitted:
+            latestDeps.current.observation.observeAssistantMessageCommitted,
           setLastPromptTokenCount: latestDeps.current.setLastPromptTokenCount,
           addItem: latestDeps.current.addItem,
           sanitizeContent: latestDeps.current.sanitizeContent,

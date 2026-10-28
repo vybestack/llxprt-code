@@ -147,6 +147,7 @@ function createRendered(): Rendered {
   const sanitizeContent = (text: string) => ({ text, blocked: false });
 
   const deps: AgentEventDeps = {
+    observeAssistantMessageCommitted: () => {},
     setLastPromptTokenCount: () => {},
     addItem,
     sanitizeContent,

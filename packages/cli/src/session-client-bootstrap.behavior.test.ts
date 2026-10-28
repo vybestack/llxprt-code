@@ -212,7 +212,7 @@ describe('CLI session client bootstrap ownership', () => {
         agent.session.listBrowserTargetsDetailed.bind(agent.session),
         argv,
         null,
-      );
+      ).then(({ history }) => history);
       await agent.addHistory({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'pre-agent content' }],

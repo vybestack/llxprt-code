@@ -127,11 +127,14 @@ async function settleRefresh(refresh: () => void): Promise<void> {
 /**
  * Subscribe to the REAL observation seam and collect every published event.
  */
-function observeTodoChannel(): ObservedEvent[] {
+function observeTodoChannel(sessionId: string): ObservedEvent[] {
   const events: ObservedEvent[] = [];
-  const unsubscribe = createTodoObservationSubscription((agentId, todos) => {
-    events.push({ agentId, todos });
-  });
+  const unsubscribe = createTodoObservationSubscription(
+    sessionId,
+    (agentId, todos) => {
+      events.push({ agentId, todos });
+    },
+  );
   cleanups.push(unsubscribe);
   return events;
 }
@@ -250,7 +253,7 @@ async function seedObserveRun(
   args: string,
 ): Promise<ObservedEvent[]> {
   const mounted = await seedDiskAndMount(sessionId, seed);
-  const events = observeTodoChannel();
+  const events = observeTodoChannel(sessionId);
   const errors = await runSubcommand(mounted.result.current, name, args);
   expect(errors).toStrictEqual([]);
   return events;
@@ -328,7 +331,7 @@ describe('TodoProvider observation (issue #3052)', () => {
         todo('c2', 'Ship fix'),
       ]);
       expect(mounted.result.current.todos).toHaveLength(2);
-      const events = observeTodoChannel();
+      const events = observeTodoChannel(sessionId);
 
       const errors = await runSubcommand(mounted.result.current, 'clear', '');
       expect(errors).toStrictEqual([]);
@@ -526,7 +529,7 @@ describe('TodoProvider observation (issue #3052)', () => {
       const mounted = await seedDiskAndMount(sessionId, [
         todo('pre', 'Before load'),
       ]);
-      const events = observeTodoChannel();
+      const events = observeTodoChannel(sessionId);
       const errors = await runSubcommand(mounted.result.current, 'load', '1');
       expect(errors).toStrictEqual([]);
 
@@ -542,22 +545,24 @@ describe('TodoProvider observation (issue #3052)', () => {
   describe('published payload carries provider agent scoping (JSP seam)', () => {
     it('publishes the explicit agentId prop on the event', async () => {
       const agentId = 'agent-7';
+      const sessionId = 'obs-scope-explicit';
       const mounted = await seedDiskAndMount(
         'obs-scope-explicit',
         [todo('e1', 'Scoped')],
         agentId,
       );
-      const events = observeTodoChannel();
+      const events = observeTodoChannel(sessionId);
       await runSubcommand(mounted.result.current, 'clear', '');
       expect(events).toHaveLength(1);
       expect(events[0].agentId).toBe(agentId);
     });
 
     it('publishes undefined agentId under the default (no agentId prop)', async () => {
+      const sessionId = 'obs-scope-default';
       const mounted = await seedDiskAndMount('obs-scope-default', [
         todo('d1', 'Default'),
       ]);
-      const events = observeTodoChannel();
+      const events = observeTodoChannel(sessionId);
       await runSubcommand(mounted.result.current, 'clear', '');
       expect(events).toHaveLength(1);
       expect(events[0].agentId).toBeUndefined();
@@ -568,7 +573,7 @@ describe('TodoProvider observation (issue #3052)', () => {
     it('applies /todo add exactly once to provider state and emits one publication', async () => {
       const sessionId = 'obs-once';
       const mounted = await seedDiskAndMount(sessionId, [todo('o1', 'Seed')]);
-      const events = observeTodoChannel();
+      const events = observeTodoChannel(sessionId);
       const rendersBefore = mounted.result.all.length;
 
       await runSubcommand(mounted.result.current, 'add', '2 Added');
@@ -648,7 +653,7 @@ describe('TodoProvider observation (issue #3052)', () => {
         todo('ac1', 'Done one', 'completed'),
         todo('ac2', 'Done two', 'completed'),
       ]);
-      const events = observeTodoChannel();
+      const events = observeTodoChannel(sessionId);
 
       expect(shouldClearTodos(mounted.result.current.todos)).toBe(true);
       act(() => {
@@ -734,7 +739,7 @@ describe('TodoProvider observation (issue #3052)', () => {
       expect(origin.result.current.todos).toStrictEqual(seed);
       expect(peer.result.current.todos).toStrictEqual(seed);
 
-      const events = observeTodoChannel();
+      const events = observeTodoChannel(sessionId);
       const published: Todo[] = [todo('p1', 'From origin', 'in_progress')];
       act(() => {
         origin.result.current.updateTodos(published);

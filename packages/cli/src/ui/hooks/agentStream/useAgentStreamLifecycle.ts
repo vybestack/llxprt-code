@@ -14,7 +14,7 @@ import {
   StreamingState,
   type HistoryItemWithoutId,
 } from '../../types.js';
-import { observeTurnCancelled } from '../../../observation/jspWiring.js';
+import { useObservationCallbacks } from '../../../observation/ObservationContext.js';
 import { useShellCommandProcessor } from '../shellCommandProcessor.js';
 import {
   type TrackedCancelledToolCall,
@@ -228,6 +228,7 @@ export function useCancellation(
   cancelRunningAsyncTasks: () => void = () => {},
   cancelActiveSlashCommand: () => boolean = () => false,
 ) {
+  const { observeTurnCancelled } = useObservationCallbacks();
   const cancelOngoingRequest = useCallback(() => {
     // Slash commands run outside the streaming lifecycle: they set neither
     // isResponding nor toolCalls, so streamingState is Idle while one is in
@@ -266,6 +267,7 @@ export function useCancellation(
     setShellInputFocused(false);
   }, [
     streamingState,
+    observeTurnCancelled,
     cancelActiveSlashCommand,
     turnCancelledRef,
     setTurnCancelled,

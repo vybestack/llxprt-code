@@ -1,3 +1,4 @@
+import { createObservationOwner } from '../observation/jspWiring.js';
 import { createTerminalHost } from '../session/terminalHost.js';
 /**
  * @license
@@ -21,7 +22,7 @@ import {
 import { InMemoryProviderKeyHandle } from './provider-key-handle-fixture.js';
 
 type WithoutKeys<T> = T extends unknown
-  ? Omit<T, 'providerKeys' | 'terminalHost'>
+  ? Omit<T, 'providerKeys' | 'terminalHost' | 'observation'>
   : never;
 
 /**
@@ -46,6 +47,10 @@ export function startInteractiveUIForTest(
     workspaceRoot,
     {
       ...startup,
+      observation: createObservationOwner({
+        producer: null,
+        subscribeTodos: () => () => {},
+      }).callbacks,
       terminalHost: createTerminalHost(),
       providerKeys: new InMemoryProviderKeyHandle(),
     },
@@ -61,6 +66,10 @@ export function commitInteractiveStartupForTest(
 ): ReturnType<typeof commitInteractiveStartup> {
   return commitInteractiveStartup({
     ...args,
+    observation: createObservationOwner({
+      producer: null,
+      subscribeTodos: () => () => {},
+    }).callbacks,
     terminalHost: createTerminalHost(),
     providerKeys: new InMemoryProviderKeyHandle(),
   });

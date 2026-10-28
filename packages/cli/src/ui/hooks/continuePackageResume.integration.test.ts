@@ -660,7 +660,7 @@ describe('continue package perform_resume integration', () => {
         first.session.listBrowserTargetsDetailed.bind(first.session),
         { listSessions: false, deleteSession: undefined },
         null,
-      );
+      ).then(({ history }) => history);
       const sessionId = first.session.getSessionId();
       await first.client.addHistory({
         speaker: 'human',
@@ -693,7 +693,7 @@ describe('continue package perform_resume integration', () => {
         resumed.session.listBrowserTargetsDetailed.bind(resumed.session),
         { listSessions: false, deleteSession: undefined },
         null,
-      );
+      ).then(({ history }) => history);
       expect(historyText(resumedHistory ?? [])).toContain(
         'legacy early resume',
       );

@@ -144,6 +144,7 @@ import {
   captureBootstrapEnvPath,
   resolveBootstrapSelection,
   type BootstrapSelection,
+  type ObservationCallbacks,
 } from './observation/jspWiring.js';
 import {
   dispatchInteractiveOrNonInteractive,
@@ -372,7 +373,7 @@ class ForegroundSessionHost {
       agent.ide.setIdeClientConnected.bind(agent.ide),
     );
     const warnings: string[] = [];
-    const history = await setupOwnerSessionRecording(
+    const { history, observation } = await setupOwnerSessionRecording(
       this.config,
       agent.session,
       agent.session.listBrowserTargetsDetailed.bind(agent.session),
@@ -390,7 +391,11 @@ class ForegroundSessionHost {
       warnings,
       () => getUserStartupWarnings(this.settings.merged),
       async (startupWarnings) => {
-        await this.launchInteractive(startupWarnings, history);
+        await this.launchInteractive(
+          startupWarnings,
+          history,
+          observation.callbacks,
+        );
       },
       () => this.config.getOutputFormat(),
       (initialInput) =>
@@ -512,6 +517,7 @@ class ForegroundSessionHost {
   private async launchInteractive(
     warnings: string[],
     history: IContent[] | null,
+    observation: ObservationCallbacks,
   ): Promise<void> {
     const agent = await this.#foreground;
     await startInteractiveUI(
@@ -521,6 +527,7 @@ class ForegroundSessionHost {
       warnings,
       this.workspaceRoot,
       {
+        observation,
         terminalHost: this.terminalHost,
         providerKeys: this.credentialAuthority.createProviderKeyStorage(),
         recordingOwner: 'agent',

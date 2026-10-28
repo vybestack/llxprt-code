@@ -39,8 +39,7 @@ import {
 } from './config/extensions/extensionEnablement.js';
 import {
   type BootstrapSelection,
-  initializeObservationProducer,
-  stopObservationProducer,
+  createSessionObservation,
 } from './observation/jspWiring.js';
 import { registerCleanup, runExitCleanup } from './utils/cleanup.js';
 
@@ -175,24 +174,25 @@ export async function bootstrapRuntimeAndConfig(
  * recording-suite weight.
  */
 export function setupObservation(
-  config: Pick<Config, 'getProjectRoot'>,
+  config: Pick<Config, 'getProjectRoot' | 'getSessionId'>,
   selection: BootstrapSelection | null,
-): void {
+): ReturnType<typeof createSessionObservation> {
   const projectRoot = config.getProjectRoot();
   // loadBootstrap disables observation (one stderr warning, startup continues)
   // when the bootstrap file cannot be read, but still fails fast
   // (FatalConfigError, exit 52) on a file that reads but is malformed,
   // insecure, or version-mismatched. Recording cleanup is registered above,
   // so the process exits cleanly on either path.
-  initializeObservationProducer(
-    {
+  return createSessionObservation({
+    context: {
       repository: basename(projectRoot),
       path: projectRoot,
       agentKind: 'llxprt',
       displayName: basename(projectRoot),
     },
     selection,
-  );
+    sessionId: config.getSessionId(),
+  });
 }
 
 async function resumeOwnerRecording(
@@ -261,14 +261,21 @@ async function resumeOwnerRecording(
 export async function setupOwnerSessionRecording(
   config: Pick<
     Config,
-    'getProjectRoot' | 'projectChatsDir' | 'getContinueSessionRef' | 'dispose'
+    | 'getProjectRoot'
+    | 'getSessionId'
+    | 'projectChatsDir'
+    | 'getContinueSessionRef'
+    | 'dispose'
   >,
   session: Pick<Agent['session'], 'getRecording' | 'setRecording' | 'resume'>,
   listTargets: Agent['session']['listBrowserTargetsDetailed'],
   argv: Pick<ParsedCliArgs, 'listSessions' | 'deleteSession'>,
   bootstrapSelection: BootstrapSelection | null,
   startupWarnings: string[] = [],
-): Promise<IContent[] | null> {
+): Promise<{
+  history: IContent[] | null;
+  observation: ReturnType<typeof setupObservation>;
+}> {
   const projectHash = getProjectHash(config.getProjectRoot());
   const chatsDir = config.projectChatsDir;
   await handleSessionListAndDelete(argv, chatsDir, projectHash, config);
@@ -289,9 +296,9 @@ export async function setupOwnerSessionRecording(
       history = null;
     }
 
-    registerCleanup(() => stopObservationProducer());
-    setupObservation(config, bootstrapSelection);
-    return history;
+    const observation = setupObservation(config, bootstrapSelection);
+    registerCleanup(() => observation.cleanup());
+    return { history, observation };
   } catch (error: unknown) {
     if (session.getRecording().enabled) {
       try {

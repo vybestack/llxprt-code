@@ -41,6 +41,10 @@ async function runOwnedTurn(owner: Agent, decoy: Agent): Promise<string> {
       {
         ...base,
         ...{ agent: decoy, recordingOwner: 'agent' as const },
+        observation: {
+          observeTurnStarted: () => {},
+          observeTurnFailed: () => {},
+        },
         flushRecording: () => owner.session.flushRecording(),
         operationLifecycle: undefined,
         displayUserMessage: () => {},

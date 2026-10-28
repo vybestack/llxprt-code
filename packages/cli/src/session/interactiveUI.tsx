@@ -1,3 +1,5 @@
+import { ObservationContext } from '../observation/ObservationContext.js';
+import type { ObservationCallbacks } from '../observation/jspWiring.js';
 import type { TerminalHost } from './terminalHost.js';
 import { bindDebugCommand } from '../ui/commands/debugCommandHost.js';
 import { InteractiveApplication } from './interactiveApplication.js';
@@ -342,6 +344,7 @@ export type InteractiveProviderKeys = ProviderKeyStorageLike & {
 
 export interface OwnerInteractiveStartup {
   readonly terminalHost: TerminalHost;
+  readonly observation: ObservationCallbacks;
   readonly providerKeys: InteractiveProviderKeys;
   readonly runtimeSettings: SessionSettingsOperations;
   readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
@@ -356,6 +359,7 @@ export interface OwnerInteractiveStartup {
 
 export interface RawInteractiveStartup {
   readonly terminalHost: TerminalHost;
+  readonly observation: ObservationCallbacks;
   readonly providerKeys: InteractiveProviderKeys;
   readonly recordingOwner: 'raw';
   readonly runtimeSettings: SessionSettingsOperations;
@@ -517,6 +521,7 @@ interface StartupTransactionState {
  */
 export type CommitInteractiveStartupArgs = {
   readonly terminalHost: TerminalHost;
+  readonly observation: ObservationCallbacks;
   readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
   readonly skillOperations?: Pick<
     WorkspaceSkillOperations,
@@ -669,21 +674,23 @@ export async function commitInteractiveStartup(
     ports.setupTerminal(renderOptions, args.settings);
 
     state.instance = ports.render(
-      buildRenderElement(
-        commandPorts,
-        args.agent,
-        args.runtimeSettings,
-        args.settings,
-        args.startupWarnings,
-        args.version,
-        args.recordingIntegration,
-        args.resumedHistory,
-        args.initialRecordingService,
-        args.initialLockHandle,
-        args.suppressStartupWelcome,
-        args.perfOwner,
-        args.recordingOwner,
-      ),
+      <ObservationContext.Provider value={args.observation}>
+        {buildRenderElement(
+          commandPorts,
+          args.agent,
+          args.runtimeSettings,
+          args.settings,
+          args.startupWarnings,
+          args.version,
+          args.recordingIntegration,
+          args.resumedHistory,
+          args.initialRecordingService,
+          args.initialLockHandle,
+          args.suppressStartupWelcome,
+          args.perfOwner,
+          args.recordingOwner,
+        )}
+      </ObservationContext.Provider>,
       renderOptions,
     );
 

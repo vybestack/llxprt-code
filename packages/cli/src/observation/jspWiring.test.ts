@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -11,12 +12,9 @@ import {
   loadBootstrap,
   createObservationProducer,
   createTodoObservationSubscription,
-  initializeObservationProducer,
-  observeTurnStarted,
-  observeTurnFailed,
+  createSessionObservation,
   shouldSuppressContent,
-  stopObservationProducer,
-  __setBootstrapWarningStderrWriterForTesting,
+  createBootstrapWarningSink,
   type ObservationSessionContext,
   type BootstrapSelection,
 } from './jspWiring.js';
@@ -177,7 +175,6 @@ describe('loadBootstrap (validation, source-labeled diagnostics, missing-file de
   afterEach(async () => {
     process.env = { ...origEnv };
     await cleanupTempDirs();
-    __setBootstrapWarningStderrWriterForTesting(null);
   });
 
   it('returns null for a null selection (observation disabled)', () => {
@@ -260,10 +257,7 @@ describe('loadBootstrap (validation, source-labeled diagnostics, missing-file de
       emitted.push(payload);
     };
     coreEvents.on(CoreEvent.Output, onOutput);
-    const physicalWarnings: string[] = [];
-    __setBootstrapWarningStderrWriterForTesting((message) => {
-      physicalWarnings.push(message);
-    });
+
     const missingPath =
       join(
         tmpdir(),
@@ -277,15 +271,26 @@ describe('loadBootstrap (validation, source-labeled diagnostics, missing-file de
     } finally {
       restorePatched?.();
       coreEvents.off(CoreEvent.Output, onOutput);
-      __setBootstrapWarningStderrWriterForTesting(null);
     }
     // The warning bypassed the patched stream: nothing was forwarded to the
     // bus on either fd, so stdout stayed clean and the warning was neither
     // redirected nor buffered.
     expect(emitted).toHaveLength(0);
-    expect(physicalWarnings).toHaveLength(1);
-    expect(physicalWarnings[0]).toContain(JSON.stringify(missingPath));
-    expect(physicalWarnings[0]).toContain('observation is disabled');
+    const child = spawnSync(process.execPath, [
+      '-e',
+      `
+      import { patchStdio } from '@vybestack/llxprt-code-core';
+      import { loadBootstrap } from ${JSON.stringify(import.meta.resolve('./jspWiring.ts'))};
+      const restore = patchStdio();
+      loadBootstrap({ path: ${JSON.stringify(missingPath)}, source: 'LLXPRT_JSP_BOOTSTRAP_FILE' });
+      restore();
+    `,
+    ]);
+    expect(child.status).toBe(0);
+    expect(new TextDecoder().decode(child.stderr)).toContain(
+      JSON.stringify(missingPath),
+    );
+    expect(new TextDecoder().decode(child.stdout)).toBe('');
 
     // Control: the patch WAS active during the call, so the empty result is a
     // genuine bypass rather than a no-op patch. A direct write through the
@@ -455,15 +460,10 @@ describe('bootstrap warning sink hardening (default best-effort, injected strict
     // warning back into a fatal startup error. fd-2 destruction is not
     // reliably throwable in-process, so swap the physical writer the default
     // sink delegates to (then guards) via the test seam.
-    __setBootstrapWarningStderrWriterForTesting(() => {
+    const sink = createBootstrapWarningSink(() => {
       throw new Error('stderr destroyed');
     });
-    try {
-      // No injected warningSink — the production default sink is exercised.
-      expect(loadBootstrap(selection)).toBeNull();
-    } finally {
-      __setBootstrapWarningStderrWriterForTesting(null);
-    }
+    expect(loadBootstrap(selection, sink)).toBeNull();
   });
 
   it('B2: an explicitly injected throwing sink propagates and is not swallowed', () => {
@@ -515,7 +515,8 @@ describe('bootstrap diagnostic path sanitization (no log injection)', () => {
   });
 });
 
-describe('initializeObservationProducer (startup survives a stale pointer)', () => {
+describe('session observation (startup survives a stale pointer)', () => {
+  let observation: ReturnType<typeof createSessionObservation> | null = null;
   const origEnv = { ...process.env };
 
   beforeEach(() => {
@@ -524,10 +525,10 @@ describe('initializeObservationProducer (startup survives a stale pointer)', () 
 
   afterEach(async () => {
     process.env = { ...origEnv };
-    __setBootstrapWarningStderrWriterForTesting(null);
     // Reset module-level producer/tap state so no observation subscription
     // leaks into sibling describe blocks.
-    await stopObservationProducer();
+    if (observation !== null) await observation.cleanup();
+    observation = null;
   });
 
   it('A8: a missing bootstrap file disables observation without aborting startup', () => {
@@ -548,35 +549,39 @@ describe('initializeObservationProducer (startup survives a stale pointer)', () 
     // pre-patch-bound writeToStderr, which a process.stderr.write spy cannot
     // intercept. This also keeps the runner output clean.
     const warnings: string[] = [];
-    __setBootstrapWarningStderrWriterForTesting((message) => {
+    const warningSink = (message: string): void => {
       warnings.push(message);
-    });
-    try {
-      // This is the reported bug: a stale inherited pointer must not abort the
-      // CLI before the TUI loads. initializeObservationProducer must return
-      // normally, leaving observation inert.
-      expect(() =>
-        initializeObservationProducer(sessionContext, selection),
-      ).not.toThrow();
+    };
+    // This is the reported bug: a stale inherited pointer must not abort the
+    // CLI before the TUI loads. initializeObservationProducer must return
+    // normally, leaving observation inert.
+    expect(() => {
+      observation = createSessionObservation({
+        context: sessionContext,
+        selection,
+        sessionId: 'test',
+        warningSink,
+      });
+    }).not.toThrow();
 
-      // The warning fired once through the full startup path, naming the path.
-      expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toContain(JSON.stringify(missingPath));
+    // The warning fired once through the full startup path, naming the path.
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(JSON.stringify(missingPath));
 
-      // With no producer created, observation calls are inert and must not
-      // throw or reach any transport.
-      expect(() => observeTurnStarted()).not.toThrow();
-      expect(() => observeTurnFailed()).not.toThrow();
-    } finally {
-      __setBootstrapWarningStderrWriterForTesting(null);
-    }
+    // With no producer created, observation calls are inert and must not
+    // throw or reach any transport.
+    expect(() => observation?.callbacks.observeTurnStarted()).not.toThrow();
+    expect(() => observation?.callbacks.observeTurnFailed()).not.toThrow();
   });
 });
 
 describe('createTodoObservationSubscription', () => {
   it('observes canonical todo replacements before UI providers mount', () => {
     const observer = vi.fn();
-    const unsubscribe = createTodoObservationSubscription(observer);
+    const unsubscribe = createTodoObservationSubscription(
+      'session-1',
+      observer,
+    );
     const todos = [
       {
         id: 'todo-1',
@@ -759,7 +764,8 @@ describe('createObservationProducer', () => {
   });
 });
 
-describe('initializeObservationProducer (AC15)', () => {
+describe('session observation (AC15)', () => {
+  let observation: ReturnType<typeof createSessionObservation> | null = null;
   const origEnv = { ...process.env };
   let captureServer: http.Server | null = null;
   let losingTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -771,7 +777,8 @@ describe('initializeObservationProducer (AC15)', () => {
 
   afterEach(async () => {
     try {
-      await stopObservationProducer();
+      if (observation !== null) await observation.cleanup();
+      observation = null;
     } finally {
       if (losingTimeout !== null) {
         clearTimeout(losingTimeout);
@@ -825,7 +832,11 @@ describe('initializeObservationProducer (AC15)', () => {
     );
 
     const selection = resolveBootstrapSelection(file, undefined, undefined);
-    initializeObservationProducer(sessionContext, selection);
+    observation = createSessionObservation({
+      context: sessionContext,
+      selection,
+      sessionId: 'test',
+    });
     // No env var was ever set, and the loader must not introduce one.
 
     return {
