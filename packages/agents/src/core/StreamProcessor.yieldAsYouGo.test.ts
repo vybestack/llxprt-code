@@ -76,7 +76,7 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
     const history = createMockHistoryService();
 
     Object.assign(processor, {
-      runtimeContext: ctx,
+      ports: ctx,
       compressionHandler: compression,
       conversationManager: conversation,
       historyService: history,

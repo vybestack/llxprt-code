@@ -39,9 +39,9 @@ import { getShellConfiguration } from '../utils/shell-utils.js';
  * avoids shell-quoting issues across bash/zsh/PowerShell/cmd.exe.
  *
  * Usage: node producer.mjs <size> <stream> <mode> <exit-code>
- *   size:      number of bytes to write
+ *   size:      number of bytes to write (the marker number in "marker" mode)
  *   stream:    "stdout" | "stderr" | "both"
- *   mode:      "ascii" | "multibyte" | "tiny"
+ *   mode:      "ascii" | "multibyte" | "tiny" | "marker"
  *   exit-code: optional process exit code (defaults to zero)
  */
 let producerDir = '';
@@ -53,7 +53,9 @@ const stream = process.argv[3] || 'stdout';
 const mode = process.argv[4] || 'ascii';
 process.exitCode = parseInt(process.argv[5] || '0', 10);
 
-if (mode === 'tiny') {
+if (mode === 'marker') {
+  process.stdout.write('END_MARKER_' + size + '\\n');
+} else if (mode === 'tiny') {
   // Write single bytes in a loop (many tiny chunks).
   const target = stream === 'stderr' ? process.stderr : process.stdout;
   for (let i = 0; i < size; i++) {
@@ -105,7 +107,7 @@ if (mode === 'tiny') {
 function producerCommand(
   size: number,
   stream: 'stdout' | 'stderr' | 'both' = 'stdout',
-  mode: 'ascii' | 'multibyte' | 'tiny' = 'ascii',
+  mode: 'ascii' | 'multibyte' | 'tiny' | 'marker' = 'ascii',
   exitCode = 0,
 ): string {
   const invocation = `"${process.execPath}" "${producerScript}" ${size} ${stream} ${mode} ${exitCode}`;
@@ -208,7 +210,7 @@ describe('Shell bounded acquisition', () => {
       // Produce output beyond the budget, then write a tail marker.
       const cmd = chainOnSuccess(
         producerCommand(524288, 'stdout', 'ascii'),
-        'echo END_MARKER_42',
+        producerCommand(42, 'stdout', 'marker'),
       );
       const result = await executeAndCollect(cmd, {
         outputRetentionMaxBytes: 4096,

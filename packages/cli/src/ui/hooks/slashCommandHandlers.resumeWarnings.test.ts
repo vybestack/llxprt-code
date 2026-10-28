@@ -1,3 +1,8 @@
+import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import { CliSessionPersistence } from '../../cliSessionPersistence.js';
+import type { CommandHandlerFixture as SlashCommandHandlerDeps } from './slash-command-handler-deps-test-helpers.js';
+import { installFixtureRawResume } from '../../__tests__/command-raw-resume-fixture.js';
+import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -19,12 +24,9 @@ import {
   type LockHandle,
 } from '@vybestack/llxprt-code-core';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { continueCommand } from '../commands/continueCommand.js';
+import { createContinueCommand } from '../commands/continueCommand.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
-import {
-  processSlashCommand,
-  type SlashCommandHandlerDeps,
-} from './slashCommandHandlers.js';
+import { processSlashCommand } from './slashCommandHandlers.js';
 import { convertMessageToHistoryItem } from './slashCommandProcessorSupport.js';
 
 const SESSION_ID = 'healthy-resume-session';
@@ -78,6 +80,7 @@ async function writeCorruptSession(
 }
 
 describe('processSlashCommand /continue <id> with an unreadable recording present (issue #3732)', () => {
+  const createOwner = useCommandOwners();
   let root: string;
   let committed: SessionRecordingService | null;
   let committedLock: LockHandle | null;
@@ -94,9 +97,10 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
     await rm(root, { recursive: true, force: true });
   });
 
-  function createDeps(
+  async function createDeps(
     turnStore: ReturnType<typeof createTurnStore>,
-  ): SlashCommandHandlerDeps {
+  ): Promise<SlashCommandHandlerDeps> {
+    const owner = await createOwner('resume-warning-owner');
     const { commands } = turnStore;
     const addItem = (
       item: Parameters<SlashCommandHandlerDeps['addItem']>[0],
@@ -105,35 +109,36 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
       commands.addItem(item, timestamp);
     };
     const projectRoot = join(root, 'project');
-    return {
+    const continueCommand = createContinueCommand({
+      isInteractive: () => true,
+      listContinueTargets: async () => [],
+      exportSession: async () => undefined,
+      validateSessionPackage: async () => {
+        throw new Error('Package validation is not used by this test');
+      },
+    });
+    const runtime = {
+      getEphemeralSetting: () => 'auto',
+      projectTempDir: root,
+      getSessionRecordingQueueByteLimit: () => Number.MAX_SAFE_INTEGER,
+      logSlashCommand: () => {},
+      getProjectRoot: () => projectRoot,
+      getSessionId: () => 'current-session',
+      getProvider: () => 'test-provider',
+      getModel: () => 'test-model',
+      directories: () => [root],
+      adoptSessionId: () => {},
+    } as never;
+    const deps: SlashCommandHandlerDeps = {
       commands: [continueCommand],
-      config: {
-        getEphemeralSetting: () => 'auto',
-        projectTempDir: root,
-        getSessionRecordingQueueByteLimit: () => Number.MAX_SAFE_INTEGER,
-        logSlashCommand: () => {},
-        getProjectRoot: () => projectRoot,
-        getSessionId: () => 'current-session',
-        getProvider: () => 'test-provider',
-        getModel: () => 'test-model',
-        directories: () => [root],
-        adoptSessionId: () => {},
-      } as never,
+      config: runtime,
       commandContext: createMockCommandContext({
         ui: { addItem: commands.addItem, clear: commands.clearItems },
         services: {
-          agent: {
-            agentClient: { getHistoryService: () => undefined },
-          },
+          agent: owner,
+          config: runtime,
         },
       }),
-      sessionPersistence: {
-        mediaStore: new LocalMediaStore({
-          rootDirectory: join(root, 'media'),
-          quotaBytes: 1024,
-        }),
-        forRecording: () => undefined,
-      } as never,
       actions: {} as never,
       addItem,
       addMessage: (message) => {
@@ -147,20 +152,39 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
       setPendingItem: vi.fn(),
       setSessionShellAllowlist: vi.fn(),
       setConfirmationRequest: vi.fn(),
-      recordingSwapCallbacks: {
-        getCurrentRecording: () => null,
-        getCurrentIntegration: () => null,
-        getCurrentLockHandle: () => null,
-        setRecording: (recording, _integration, lock) => {
-          committed = recording;
-          committedLock = lock;
-        },
-      },
       confirmationLogger: new DebugLogger('test-confirmation'),
       slashCommandLogger: new DebugLogger('test-slash'),
       beginSlashCommandAction: () => new AbortController(),
       endSlashCommandAction: () => {},
+      resumeOwnedSession: null,
+      isMcpDiscoveryPending: () => false,
+      resumeRawSession: null,
+      replayResumedHistory: () => {},
+      recordCommandError: async () => {},
+      loadCommandHistory: async () => {},
     };
+    const persistence = new CliSessionPersistence(
+      { projectRoot, chatsDir: join(root, 'chats') },
+      {
+        mediaStore: new LocalMediaStore({
+          rootDirectory: join(root, 'media'),
+          quotaBytes: 1024,
+        }),
+      },
+    );
+
+    const callbacks: RecordingSwapCallbacks = {
+      getCurrentRecording: () => null,
+      getCurrentIntegration: () => null,
+      getCurrentLockHandle: () => null,
+      setRecording: (recording, _integration, lock) => {
+        committed = recording;
+        committedLock = lock;
+      },
+    };
+
+    installFixtureRawResume(deps, runtime, persistence, callbacks);
+    return deps;
   }
 
   it('leaves the skipped-recording warning visible next to the restored conversation', async () => {
@@ -171,7 +195,10 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
     const corruptPath = await writeCorruptSession(chatsDir, projectHash);
     const turnStore = createTurnStore();
 
-    await processSlashCommand(createDeps(turnStore), `/continue ${SESSION_ID}`);
+    await processSlashCommand(
+      await createDeps(turnStore),
+      `/continue ${SESSION_ID}`,
+    );
 
     const visible = turnStore.store
       .getState()

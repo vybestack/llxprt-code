@@ -1,3 +1,5 @@
+import type { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+let metricSource: UiTelemetryService;
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -11,35 +13,35 @@
  * file-level max-lines).
  */
 
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
   afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
   type Mock,
 } from 'bun:test';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { AgentClient } from './client.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { ChatSession } from './chatSession.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { AgentEventType, PerformCompressionResult } from './turn.js';
-import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import {
-  buildRuntimeContext,
   buildMockContentGenerator,
-  makeUserMessage,
+  buildRuntimeContext,
   makeAiText,
+  makeUserMessage,
 } from './__tests__/chatSession-density-helpers.js';
-import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import {
   fromAsync,
   setupAgentClient,
   type MockResponseShape,
 } from './__tests__/client-test-helpers.js';
+import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
+import { AgentClient } from './client.js';
+import { AgentEventType, PerformCompressionResult } from './turn.js';
 
 // Mock prompts module before imports
 const realConfigModule = {
@@ -219,12 +221,6 @@ void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
     ),
   };
 });
-void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
-  uiTelemetryService: {
-    setLastPromptTokenCount: vi.fn(),
-    getLastPromptTokenCount: vi.fn(),
-  },
-}));
 
 // All scenarios share the same token geometry: a 1000-token limit with a
 // 900-token preflight baseline, leaving 100 tokens of capacity. A 400-char
@@ -258,11 +254,7 @@ function buildOverflowScenario(
   const initialBaseline =
     scenario.initialProjectedBaseline ?? PREFLIGHT_BASELINE;
   const observedCount = scenario.lastPromptTokenCount ?? initialBaseline;
-  (
-    uiTelemetryService.getLastPromptTokenCount as Mock<
-      typeof uiTelemetryService.getLastPromptTokenCount
-    >
-  ).mockReturnValue(observedCount);
+  metricSource.setLastPromptTokenCount(observedCount);
 
   let currentBaseline = initialBaseline;
 
@@ -323,6 +315,7 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
       mockEmbedContentFn,
     });
     client = ctx.client;
+    metricSource = ctx.metrics;
 
     mockTodoStoreConstructor.mockImplementation(() => ({
       readTodos: todoStoreReadMock,
@@ -438,7 +431,14 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
       });
 
       const realChat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         buildMockContentGenerator(),
         { maxOutputTokens: 100 },
         [],
@@ -597,11 +597,7 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
       (tokenLimit as Mock<typeof tokenLimit>).mockReturnValue(
         MOCKED_TOKEN_LIMIT,
       );
-      (
-        uiTelemetryService.getLastPromptTokenCount as Mock<
-          typeof uiTelemetryService.getLastPromptTokenCount
-        >
-      ).mockReturnValue(0);
+      metricSource.setLastPromptTokenCount(0);
 
       const currentBaseline = PREFLIGHT_BASELINE;
 

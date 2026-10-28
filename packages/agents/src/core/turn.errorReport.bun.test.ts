@@ -411,4 +411,51 @@ describe('Turn error report payload (issue 3113)', () => {
       },
     ]);
   });
+
+  it('E5: reports both the stream error and the endpoint probe error when the probe throws', async () => {
+    const streamError = new Error('E5 stream error');
+    const probeError = new Error('E5 probe error');
+    const chat: FixtureChat = {
+      ...createChatPolicyFixture(),
+      getHistory: () => [],
+      getStreamTimeoutPolicy: createTurnStreamPolicy({}),
+      getResolvedBaseUrl: () => {
+        throw probeError;
+      },
+      sendMessageStream: () => Promise.reject(streamError),
+    };
+    const turn = new Turn(
+      chat as unknown as ChatSession,
+      'prompt-test',
+      DEFAULT_AGENT_ID,
+      'fixture',
+    );
+
+    const thrown = await collectEvents(turn, [{ text: 'E5 failing request' }])
+      .then(() => undefined)
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AggregateError);
+    const aggregate = thrown as AggregateError;
+    expect(aggregate.message).toBe('E5 stream error');
+    expect(aggregate.errors).toStrictEqual([streamError, probeError]);
+    expect(await listReportFiles()).toStrictEqual([]);
+  });
+
+  it('E6: keeps the stream error as the reported error when the probe succeeds', async () => {
+    const turn = createTurn(
+      [],
+      'E6 stream error',
+      'https://ollama.example/v1/',
+    );
+
+    const events = await collectEvents(turn, [{ text: 'E6 failing request' }]);
+
+    expect(events).toStrictEqual([
+      {
+        type: AgentEventType.Error,
+        value: { error: { message: 'E6 stream error' } },
+      },
+    ]);
+  });
 });

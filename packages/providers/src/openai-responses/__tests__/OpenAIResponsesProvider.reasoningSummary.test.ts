@@ -41,7 +41,6 @@ describe('OpenAIResponsesProvider reasoning.summary @issue:922', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-responses-reasoning-summary-runtime',
-      settingsService: settings,
     });
 
     let capturedBody: string | undefined;
@@ -112,7 +111,6 @@ describe('OpenAIResponsesProvider reasoning.summary @issue:922', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-responses-reasoning-summary-runtime-2',
-      settingsService: settings,
     });
 
     let capturedBody: string | undefined;
@@ -181,7 +179,6 @@ describe('OpenAIResponsesProvider reasoning.summary @issue:922', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-responses-reasoning-summary-runtime-3',
-      settingsService: settings,
     });
 
     let capturedBody: string | undefined;
@@ -250,7 +247,6 @@ describe('OpenAIResponsesProvider reasoning.summary @issue:922', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-responses-reasoning-summary-runtime-4',
-      settingsService: settings,
     });
 
     let capturedBody: string | undefined;
@@ -321,7 +317,6 @@ describe('OpenAIResponsesProvider reasoning.summary @issue:922', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-responses-reasoning-summary-runtime-5',
-      settingsService: settings,
     });
 
     let capturedBody: string | undefined;

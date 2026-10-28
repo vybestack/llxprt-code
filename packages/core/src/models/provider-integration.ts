@@ -13,7 +13,7 @@
 
 import type { RuntimeModel as IModel } from '../runtime/contracts/RuntimeModel.js';
 import type { LlxprtModel } from './schema.js';
-import { getModelRegistry } from './registry.js';
+import type { ModelRegistry } from './registry.js';
 
 /**
  * Maps llxprt provider names to models.dev provider IDs
@@ -82,11 +82,11 @@ export function getModelsDevProviderIds(providerName: string): string[] {
  * Check if a specific model ID exists in the registry for a provider
  */
 export function hasModelInRegistry(
+  registry: ModelRegistry,
   providerName: string,
   modelId: string,
 ): boolean {
   try {
-    const registry = getModelRegistry();
     if (!registry.isInitialized()) {
       return false;
     }
@@ -112,11 +112,11 @@ export function hasModelInRegistry(
  * Returns undefined if model not found or registry unavailable
  */
 export function getExtendedModelInfo(
+  registry: ModelRegistry,
   providerName: string,
   modelId: string,
 ): LlxprtModel | undefined {
   try {
-    const registry = getModelRegistry();
     if (!registry.isInitialized()) {
       return undefined;
     }
@@ -142,6 +142,7 @@ export function getExtendedModelInfo(
  * Useful for selecting default models
  */
 export function getRecommendedModel(
+  registry: ModelRegistry,
   providerName: string,
   options?: {
     requireToolCalling?: boolean;
@@ -150,7 +151,6 @@ export function getRecommendedModel(
   },
 ): LlxprtModel | undefined {
   try {
-    const registry = getModelRegistry();
     if (!registry.isInitialized()) {
       return undefined;
     }

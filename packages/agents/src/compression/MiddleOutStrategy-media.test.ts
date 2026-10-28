@@ -1,3 +1,4 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -26,6 +27,10 @@ import {
   humanMsgWithMedia,
   testProviderRuntime,
 } from './__tests__/MiddleOutStrategy-test-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /**
  * Type guard for text blocks — used to extract text content from blocks.
@@ -112,14 +117,27 @@ describe('MiddleOutStrategy media sanitization', () => {
           history,
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
-              testProviderRuntime,
+              {
+                fetch: requestFetch,
+                runtimeId: testProviderRuntime.runtimeId,
+                metadata: testProviderRuntime.metadata,
+                globalSettings: new SettingsService().getAllGlobalSettings(),
+                providerSettings: new SettingsService().getProviderSettings(
+                  captureProvider.name,
+                ),
+              },
               captureProvider.name,
             ),
             provider: captureProvider,
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy();
+        const strategy = new MiddleOutStrategy(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
         const result = await strategy.compress(ctx);
 
         const allBlocks = capturedRequests.flatMap((m) => m.blocks);
@@ -208,14 +226,27 @@ describe('MiddleOutStrategy media sanitization', () => {
           history,
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
-              testProviderRuntime,
+              {
+                fetch: requestFetch,
+                runtimeId: testProviderRuntime.runtimeId,
+                metadata: testProviderRuntime.metadata,
+                globalSettings: new SettingsService().getAllGlobalSettings(),
+                providerSettings: new SettingsService().getProviderSettings(
+                  captureProvider.name,
+                ),
+              },
               captureProvider.name,
             ),
             provider: captureProvider,
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy();
+        const strategy = new MiddleOutStrategy(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
         const result = await strategy.compress(ctx);
 
         const topCount = result.metadata.topPreserved!;
@@ -297,14 +328,27 @@ describe('MiddleOutStrategy media sanitization', () => {
           history,
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
-              testProviderRuntime,
+              {
+                fetch: requestFetch,
+                runtimeId: testProviderRuntime.runtimeId,
+                metadata: testProviderRuntime.metadata,
+                globalSettings: new SettingsService().getAllGlobalSettings(),
+                providerSettings: new SettingsService().getProviderSettings(
+                  captureProvider.name,
+                ),
+              },
               captureProvider.name,
             ),
             provider: captureProvider,
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy();
+        const strategy = new MiddleOutStrategy(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
         const result = await strategy.compress(ctx);
 
         const allBlocks = capturedRequests.flatMap((m) => m.blocks);
@@ -381,14 +425,27 @@ describe('MiddleOutStrategy media sanitization', () => {
           history,
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
-              testProviderRuntime,
+              {
+                fetch: requestFetch,
+                runtimeId: testProviderRuntime.runtimeId,
+                metadata: testProviderRuntime.metadata,
+                globalSettings: new SettingsService().getAllGlobalSettings(),
+                providerSettings: new SettingsService().getProviderSettings(
+                  captureProvider.name,
+                ),
+              },
               captureProvider.name,
             ),
             provider: captureProvider,
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy();
+        const strategy = new MiddleOutStrategy(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
         const result = await strategy.compress(ctx);
 
         const allBlocks = capturedRequests.flatMap((m) => m.blocks);
@@ -447,14 +504,27 @@ describe('MiddleOutStrategy media sanitization', () => {
           history,
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
-              testProviderRuntime,
+              {
+                fetch: requestFetch,
+                runtimeId: testProviderRuntime.runtimeId,
+                metadata: testProviderRuntime.metadata,
+                globalSettings: new SettingsService().getAllGlobalSettings(),
+                providerSettings: new SettingsService().getProviderSettings(
+                  captureProvider.name,
+                ),
+              },
               captureProvider.name,
             ),
             provider: captureProvider,
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy();
+        const strategy = new MiddleOutStrategy(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
         const result = await strategy.compress(ctx);
 
         const allBlocks = capturedRequests.flatMap((m) => m.blocks);
@@ -505,14 +575,27 @@ describe('MiddleOutStrategy media sanitization', () => {
           history,
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
-              testProviderRuntime,
+              {
+                fetch: requestFetch,
+                runtimeId: testProviderRuntime.runtimeId,
+                metadata: testProviderRuntime.metadata,
+                globalSettings: new SettingsService().getAllGlobalSettings(),
+                providerSettings: new SettingsService().getProviderSettings(
+                  defaultProvider.name,
+                ),
+              },
               defaultProvider.name,
             ),
             provider: defaultProvider,
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy();
+        const strategy = new MiddleOutStrategy(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
         const result = await strategy.compress(ctx);
 
         const topCount = result.metadata.topPreserved!;

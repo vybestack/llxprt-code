@@ -311,7 +311,6 @@ describe('parseReasoningFromSseStream — configurable field name (#2488)', () =
   });
 
   it('stops the detached parser when the request signal aborts', async () => {
-    const originalFetch = globalThis.fetch;
     const encoder = new TextEncoder();
     const response = new Response(
       new ReadableStream<Uint8Array>({
@@ -325,9 +324,12 @@ describe('parseReasoningFromSseStream — configurable field name (#2488)', () =
       }),
       { headers: { 'content-type': 'text/event-stream' } },
     );
-    globalThis.fetch = async (): Promise<Response> => response;
     const captureBuffer = createCaptureBuffer();
-    const captureFetch = createReasoningCaptureFetch(captureBuffer, logger);
+    const captureFetch = createReasoningCaptureFetch(
+      captureBuffer,
+      logger,
+      async (): Promise<Response> => response,
+    );
     const controller = new AbortController();
 
     let interceptedResponse: Response | undefined;
@@ -348,7 +350,6 @@ describe('parseReasoningFromSseStream — configurable field name (#2488)', () =
       expect(outcome).toBe('stopped');
     } finally {
       await interceptedResponse?.body?.cancel();
-      globalThis.fetch = originalFetch;
     }
   });
 });

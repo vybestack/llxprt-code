@@ -11,11 +11,9 @@ import { DiffRenderer } from './DiffRenderer.js';
 import { RenderInline } from '../../utils/InlineMarkdownRenderer.js';
 import {
   type ToolCallConfirmationDetails,
-  type IdeClient,
   ToolConfirmationOutcome,
   hasRedirection,
 } from '@vybestack/llxprt-code-core';
-import type { CliUiRuntime } from '../../cliUiRuntime.js';
 import type { RadioSelectItem } from '../shared/RadioButtonSelect.js';
 import { RadioButtonSelect } from '../shared/RadioButtonSelect.js';
 import { MaxSizedBox, MINIMUM_MAX_HEIGHT } from '../shared/MaxSizedBox.js';
@@ -39,7 +37,7 @@ import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 function buildEditOptions(
   isTrustedFolder: boolean,
   allowPermanentApproval: boolean,
-  config: CliUiRuntime,
+  ideMode: boolean,
   isDiffingEnabled: boolean | null,
 ): Array<RadioSelectItem<ToolConfirmationOutcome>> {
   const options: Array<RadioSelectItem<ToolConfirmationOutcome>> = [];
@@ -65,7 +63,7 @@ function buildEditOptions(
     }
   }
 
-  if (!config.getIdeMode() || isDiffingEnabled === false) {
+  if (!ideMode || isDiffingEnabled === false) {
     options.push({
       label: 'Modify with external editor',
       value: ToolConfirmationOutcome.ModifyWithEditor,
@@ -179,7 +177,7 @@ function buildQuestionAndOptions(
   confirmationDetails: ToolCallConfirmationDetails,
   isTrustedFolder: boolean,
   allowPermanentApproval: boolean,
-  config: CliUiRuntime,
+  ideMode: boolean,
   isDiffingEnabled: boolean | null,
 ): {
   question: string;
@@ -192,7 +190,7 @@ function buildQuestionAndOptions(
         options: buildEditOptions(
           isTrustedFolder,
           allowPermanentApproval,
-          config,
+          ideMode,
           isDiffingEnabled,
         ),
       };
@@ -481,24 +479,21 @@ function buildBodyContent(
 /**
  * Hook to manage IDE client state.
  */
-function useIdeClientState(config: CliUiRuntime): {
-  ideClient: IdeClient | null;
-  isDiffingEnabled: boolean | null;
-} {
-  const [ideClient, setIdeClient] = useState<IdeClient | null>(null);
+function useIdeDiffingState(
+  ideMode: boolean,
+  readIdeDiffingEnabled: () => boolean | null,
+  subscribeIdeDiffing: (listener: () => void) => () => void,
+): boolean | null {
   const [isDiffingEnabled, setIsDiffingEnabled] = useState<boolean | null>(
-    config.getIdeMode() ? null : false,
+    ideMode ? null : false,
   );
-
   useEffect(() => {
-    if (!config.getIdeMode()) return;
-    const client = config.getIdeClient();
-    if (client === undefined) return;
-    setIdeClient(client);
-    setIsDiffingEnabled(client.isDiffingEnabled());
-  }, [config]);
-
-  return { ideClient, isDiffingEnabled };
+    const update = (): void =>
+      setIsDiffingEnabled(ideMode ? readIdeDiffingEnabled() : false);
+    update();
+    return subscribeIdeDiffing(update);
+  }, [ideMode, readIdeDiffingEnabled, subscribeIdeDiffing]);
+  return isDiffingEnabled;
 }
 
 /**
@@ -506,7 +501,8 @@ function useIdeClientState(config: CliUiRuntime): {
  */
 function useConfirmationContent(
   confirmationDetails: ToolCallConfirmationDetails,
-  config: CliUiRuntime,
+  ideMode: boolean,
+  isTrustedFolder: boolean,
   isDiffingEnabled: boolean | null,
   availableTerminalHeight: number | undefined,
   terminalWidth: number,
@@ -515,7 +511,6 @@ function useConfirmationContent(
   bodyContent: React.ReactNode | null;
   options: Array<RadioSelectItem<ToolConfirmationOutcome>>;
 } {
-  const isTrustedFolder = config.isTrustedFolder();
   const isAlternateBuffer = useAlternateBuffer();
   const settings = useSettings();
   const allowPermanentApproval =
@@ -526,7 +521,7 @@ function useConfirmationContent(
       confirmationDetails,
       isTrustedFolder,
       allowPermanentApproval,
-      config,
+      ideMode,
       isDiffingEnabled,
     );
 
@@ -546,7 +541,7 @@ function useConfirmationContent(
   }, [
     confirmationDetails,
     isTrustedFolder,
-    config,
+    ideMode,
     isDiffingEnabled,
     availableTerminalHeight,
     terminalWidth,
@@ -575,7 +570,15 @@ function useCancelKeypress(
 
 export interface ToolConfirmationMessageProps {
   confirmationDetails: ToolCallConfirmationDetails;
-  config: CliUiRuntime;
+  isTrustedFolder: boolean;
+  readIdeMode: () => boolean;
+  readIdeDiffingEnabled: () => boolean | null;
+  subscribeIdeDiffing: (listener: () => void) => () => void;
+  resolveIdeDiff: (
+    filePath: string,
+    outcome: 'accepted' | 'rejected',
+  ) => Promise<void>;
+
   isFocused?: boolean;
   availableTerminalHeight?: number;
   terminalWidth: number;
@@ -588,22 +591,19 @@ export interface ToolConfirmationMessageProps {
 async function performConfirm(
   outcome: ToolConfirmationOutcome,
   confirmationDetails: ToolCallConfirmationDetails,
-  config: CliUiRuntime,
-  ideClient: IdeClient | null,
+  ideMode: boolean,
+  resolveIdeDiff: ToolConfirmationMessageProps['resolveIdeDiff'],
   isDiffingEnabled: boolean | null,
   onConfirm: (outcome: ToolConfirmationOutcome) => Promise<void>,
 ): Promise<void> {
   if (
     confirmationDetails.type === 'edit' &&
-    config.getIdeMode() &&
+    ideMode &&
     isDiffingEnabled === true
   ) {
     const cliOutcome =
       outcome === ToolConfirmationOutcome.Cancel ? 'rejected' : 'accepted';
-    await ideClient?.resolveDiffFromCli(
-      confirmationDetails.filePath,
-      cliOutcome,
-    );
+    await resolveIdeDiff(confirmationDetails.filePath, cliOutcome);
   }
   await onConfirm(outcome);
 }
@@ -612,26 +612,35 @@ export const ToolConfirmationMessage: React.FC<
   ToolConfirmationMessageProps
 > = ({
   confirmationDetails,
-  config,
+  isTrustedFolder,
+  readIdeMode,
+  readIdeDiffingEnabled,
+  subscribeIdeDiffing,
+  resolveIdeDiff,
   isFocused = true,
   availableTerminalHeight,
   terminalWidth,
 }) => {
   const { onConfirm } = confirmationDetails;
-  const { ideClient, isDiffingEnabled } = useIdeClientState(config);
+  const ideMode = readIdeMode();
+  const isDiffingEnabled = useIdeDiffingState(
+    ideMode,
+    readIdeDiffingEnabled,
+    subscribeIdeDiffing,
+  );
 
   const handleConfirm = useCallback(
     async (outcome: ToolConfirmationOutcome) => {
       await performConfirm(
         outcome,
         confirmationDetails,
-        config,
-        ideClient,
+        ideMode,
+        resolveIdeDiff,
         isDiffingEnabled,
         onConfirm,
       );
     },
-    [confirmationDetails, config, ideClient, isDiffingEnabled, onConfirm],
+    [confirmationDetails, ideMode, resolveIdeDiff, isDiffingEnabled, onConfirm],
   );
 
   useCancelKeypress(isFocused, handleConfirm);
@@ -645,7 +654,8 @@ export const ToolConfirmationMessage: React.FC<
 
   const { question, bodyContent, options } = useConfirmationContent(
     confirmationDetails,
-    config,
+    ideMode,
+    isTrustedFolder,
     isDiffingEnabled,
     availableTerminalHeight,
     terminalWidth,
@@ -655,22 +665,7 @@ export const ToolConfirmationMessage: React.FC<
     confirmationDetails.type === 'edit' &&
     confirmationDetails.isModifying === true
   ) {
-    return (
-      <Box
-        width={terminalWidth}
-        borderStyle={getBorderStyle('round')}
-        borderColor={theme.border.default}
-        justifyContent="space-around"
-        paddingTop={1}
-        paddingBottom={1}
-        overflow="hidden"
-      >
-        <Text color={theme.text.primary}>Modify in progress: </Text>
-        <Text color={theme.status.success}>
-          Save and close external editor to continue
-        </Text>
-      </Box>
-    );
+    return <ModifyingConfirmation terminalWidth={terminalWidth} />;
   }
 
   return (
@@ -691,3 +686,26 @@ export const ToolConfirmationMessage: React.FC<
     </Box>
   );
 };
+
+function ModifyingConfirmation({
+  terminalWidth,
+}: {
+  terminalWidth: number;
+}): React.ReactNode {
+  return (
+    <Box
+      width={terminalWidth}
+      borderStyle={getBorderStyle('round')}
+      borderColor={theme.border.default}
+      justifyContent="space-around"
+      paddingTop={1}
+      paddingBottom={1}
+      overflow="hidden"
+    >
+      <Text color={theme.text.primary}>Modify in progress: </Text>
+      <Text color={theme.status.success}>
+        Save and close external editor to continue
+      </Text>
+    </Box>
+  );
+}

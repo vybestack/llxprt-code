@@ -1,4 +1,6 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -29,19 +31,21 @@ const fixturePaths = installTestWorkspacePaths({
  *       profile so failover/round-robin routing downstream is not lost.
  */
 
-import { describe, expect, it, vi } from 'bun:test';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
-import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import type { SubAgentScope } from '../subagent.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { SubagentOrchestrator } from '../subagentOrchestrator.js';
+import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
+import { describe, expect, it, vi } from 'bun:test';
+import type { SubAgentScopeFactory } from '../subagent.js';
 import {
-  makeForegroundConfig,
-  createRuntimeBundle,
   createOrchestratorForTurns,
+  createRuntimeBundle,
+  fakeChildScope,
   extractRunConfig,
+  makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
+
+const parentSignal = new AbortController().signal;
 
 describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
   const loadBalancerSubagent: SubagentConfig = {
@@ -124,10 +128,11 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
   ) {
     const loadSubagent = vi.fn().mockResolvedValue(subagent);
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
-    const scopeFactory = vi.fn<typeof SubAgentScope.create>();
+    const scopeFactory = vi.fn<SubAgentScopeFactory>();
     const foregroundConfig1 = makeForegroundConfig();
     const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings1.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings1.settingsOwner.createChildStore(),
@@ -154,17 +159,15 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
 
     const runtimeBundle = createRuntimeBundle('load-balancer');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'lb-helper-1',
-    } as unknown as SubAgentScope;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig2 = makeForegroundConfig();
     const foregroundSettings2 = createSessionSettingsFixture(foregroundConfig2);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings2.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings2.settingsOwner.createChildStore(),
@@ -184,9 +187,12 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     });
 
     // Before the fix this rejected with RuntimeStateError: provider.missing.
-    const result = await orchestrator.launch({
-      name: loadBalancerSubagent.name,
-    });
+    const result = await orchestrator.launch(
+      {
+        name: loadBalancerSubagent.name,
+      },
+      parentSignal,
+    );
 
     expect(runtimeLoader).toHaveBeenCalledTimes(1);
     const loaderArgs = runtimeLoader.mock.calls[0][0];
@@ -205,17 +211,15 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
 
     const runtimeBundle = createRuntimeBundle('load-balancer');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
+    const scope = fakeChildScope({
       getAgentId: () => 'lb-helper-2',
-    } as unknown as SubAgentScope;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    });
+    const scopeFactory = vi.fn<SubAgentScopeFactory>().mockResolvedValue(scope);
 
     const foregroundConfig3 = makeForegroundConfig();
     const foregroundSettings3 = createSessionSettingsFixture(foregroundConfig3);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings3.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings3.settingsOwner.createChildStore(),
@@ -234,9 +238,12 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       messageBus: new MessageBus(),
     });
 
-    const result = await orchestrator.launch({
-      name: loadBalancerSubagent.name,
-    });
+    const result = await orchestrator.launch(
+      {
+        name: loadBalancerSubagent.name,
+      },
+      parentSignal,
+    );
 
     // The load-balancer profile is preserved so its failover routing survives.
     expect(result.profile).toBe(loadBalancerProfile);
@@ -266,11 +273,12 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const loadSubagent = vi.fn().mockResolvedValue(emptySubagent);
     const loadProfile = vi.fn().mockResolvedValue(emptyProfile);
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
-    const scopeFactory = vi.fn<typeof SubAgentScope.create>();
+    const scopeFactory = vi.fn<SubAgentScopeFactory>();
 
     const foregroundConfig4 = makeForegroundConfig();
     const foregroundSettings4 = createSessionSettingsFixture(foregroundConfig4);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings4.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings4.settingsOwner.createChildStore(),
@@ -290,7 +298,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     });
 
     await expect(
-      orchestrator.launch({ name: emptySubagent.name }),
+      orchestrator.launch({ name: emptySubagent.name }, parentSignal),
     ).rejects.toThrow(/must reference at least one profile/);
     expect(runtimeLoader).not.toHaveBeenCalled();
   });
@@ -299,7 +307,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const { orchestrator, nestedSubagent, runtimeLoader } =
       await observeStillRejectsALoadBalancerProfileThatReferencesANestedLoadBalancer();
     await expect(
-      orchestrator.launch({ name: nestedSubagent.name }),
+      orchestrator.launch({ name: nestedSubagent.name }, parentSignal),
     ).rejects.toThrow(/cannot use nested load balancer profile 'inner-lb'/);
     expect(runtimeLoader).not.toHaveBeenCalled();
   });
@@ -352,7 +360,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const { orchestrator, invalidSubagent, runtimeLoader } =
       await observeRejectsALoadBalancerMemberWithAnEmptyProvider();
     await expect(
-      orchestrator.launch({ name: invalidSubagent.name }),
+      orchestrator.launch({ name: invalidSubagent.name }, parentSignal),
     ).rejects.toThrow(/must define a non-empty provider/);
     expect(runtimeLoader).not.toHaveBeenCalled();
   });
@@ -395,7 +403,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const { orchestrator, invalidSubagent, runtimeLoader } =
       await observeRejectsALoadBalancerMemberWithAnEmptyModel();
     await expect(
-      orchestrator.launch({ name: invalidSubagent.name }),
+      orchestrator.launch({ name: invalidSubagent.name }, parentSignal),
     ).rejects.toThrow(/must define a non-empty model/);
     expect(runtimeLoader).not.toHaveBeenCalled();
   });
@@ -486,7 +494,10 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
         }),
       });
 
-      await orchestrator.launch({ name: 'lb-default-turns-helper' });
+      await orchestrator.launch(
+        { name: 'lb-default-turns-helper' },
+        parentSignal,
+      );
 
       const runConfigArg = extractRunConfig(factory);
 
@@ -546,7 +557,10 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
         }),
       });
 
-      await orchestrator.launch({ name: 'lb-profile-turns-helper' });
+      await orchestrator.launch(
+        { name: 'lb-profile-turns-helper' },
+        parentSignal,
+      );
 
       const runConfigArg = extractRunConfig(factory);
       // 400 from the LB profile wins — not 7 from the member, not 55 from the

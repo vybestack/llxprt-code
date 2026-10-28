@@ -25,6 +25,10 @@ import {
   preparePromptEnvelopeAfterEnforcement,
   type PreparedPromptEnvelopeSend,
 } from './promptEnvelopeSendSeam.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function buildPrepared(
   callerSignal: AbortSignal,
@@ -35,6 +39,7 @@ function buildPrepared(
     options: {
       contents: [],
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'prepared-test',
         providerName: 'openai',
         ephemeralsSnapshot: {},

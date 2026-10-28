@@ -20,7 +20,11 @@ import * as fs from 'node:fs';
 import { getIdeProcessInfo } from './process-utils.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { detectIde, IDE_DEFINITIONS } from './detect-ide.js';
+import {
+  detectIde,
+  IDE_DEFINITIONS,
+  terminalAnnouncesSupportedIde,
+} from './detect-ide.js';
 import * as os from 'node:os';
 
 const realProcessUtilsModule = { ...(await import('./process-utils.js')) };
@@ -218,13 +222,18 @@ describe('IdeClient connection lifecycle isolation', () => {
   let createdFakes: FakeClientController[];
 
   beforeEach(async () => {
-    (IdeClient as unknown as { instance: IdeClient | undefined }).instance =
-      undefined;
+    IdeClient.resetInstance();
     process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'] = '/test/workspace';
     delete process.env['LLXPRT_CODE_IDE_SERVER_PORT'];
     delete process.env['LLXPRT_CODE_IDE_AUTH_TOKEN'];
 
     vi.spyOn(process, 'cwd').mockReturnValue('/test/workspace/sub-dir');
+    // These cases connect from inside an IDE terminal.
+    (
+      terminalAnnouncesSupportedIde as Mock<
+        typeof terminalAnnouncesSupportedIde
+      >
+    ).mockReturnValue(true);
     (detectIde as Mock<typeof detectIde>).mockReturnValue(
       IDE_DEFINITIONS.vscode,
     );

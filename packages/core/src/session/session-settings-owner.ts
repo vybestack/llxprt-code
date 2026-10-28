@@ -1,8 +1,13 @@
 import { resolvePerfSettings } from '../config/configConstructor.js';
 import {
   RootTelemetry,
+  UiTelemetryService,
   logCliConfiguration,
   StartSessionEvent,
+  logUserPrompt,
+  logSlashCommand,
+  type UserPromptEvent,
+  type SlashCommandEvent,
 } from '@vybestack/llxprt-code-telemetry';
 import type { TelemetrySettings } from '../config/config.js';
 import type { Config } from '../config/config.js';
@@ -27,8 +32,10 @@ import { z } from 'zod';
 import { captureProviderInvocation } from '../runtime/providerRequestContext.js';
 import type { RuntimeInvocationContext } from '../runtime/RuntimeInvocationContext.js';
 import type { AdmittedModelParameters } from '../runtime/admittedModelParameters.js';
+import type { NetworkFetch } from '../utils/fetch.js';
 
-import { coreEvents } from '../utils/events.js';
+import { EventEmitter } from 'node:events';
+import { CoreEvent, type ModelProfileInfoPayload } from '../utils/events.js';
 import { assertSessionScopedKey } from '@vybestack/llxprt-code-settings';
 import { EphemeralDefaultOwnership } from '../config/ephemeralDefaultOwnership.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -104,22 +111,26 @@ export class SessionSettingsOwner {
     this.ownsTelemetry = borrowedRoot === undefined;
     this.telemetryRoot =
       borrowedRoot ??
-      RootTelemetry.prepare({
-        sessionId: config.getSessionId(),
-        enabled: config.getTelemetryEnabled(),
-        outfile: config.getTelemetryOutfile(),
-        maxBytes: config.getTelemetryOutfileMaxBytes(),
-        maxFiles: config.getTelemetryOutfileMaxFiles(),
-        readPrivacySettings: () => {
-          const settings = this.readTelemetrySettings();
-          return {
-            logPrompts: settings.logPrompts === true,
-            logConversations: this.readConversationLoggingEnabled(),
-            logApiBodies: settings.logApiBodies === true,
-            maxChars: settings.logApiBodyMaxChars ?? 4000,
-          };
+      RootTelemetry.prepare(
+        {
+          sessionId: config.getSessionId(),
+          enabled: config.getTelemetryEnabled(),
+          outfile: config.getTelemetryOutfile(),
+          maxBytes: config.getTelemetryOutfileMaxBytes(),
+          maxFiles: config.getTelemetryOutfileMaxFiles(),
+          readPrivacySettings: () => {
+            const settings = this.readTelemetrySettings();
+            return {
+              logPrompts: settings.logPrompts === true,
+              logConversations: this.readConversationLoggingEnabled(),
+              logApiBodies: settings.logApiBodies === true,
+              maxChars: settings.logApiBodyMaxChars ?? 4000,
+            };
+          },
         },
-      });
+        undefined,
+        new UiTelemetryService(),
+      );
     return this.telemetryRoot;
   }
 
@@ -156,6 +167,29 @@ export class SessionSettingsOwner {
         );
       });
     return this.telemetryStarted;
+  }
+
+  logUserPrompt(
+    config: Parameters<typeof logUserPrompt>[0],
+    event: UserPromptEvent,
+  ): void {
+    logUserPrompt(config, event, this.telemetry);
+  }
+  logSlashCommand(
+    config: Parameters<typeof logSlashCommand>[0],
+    event: SlashCommandEvent,
+  ): void {
+    logSlashCommand(config, event, this.telemetry);
+  }
+  isTelemetryEnabled(): boolean {
+    return this.telemetry.isEnabled();
+  }
+  flushTelemetry(): Promise<void> {
+    return this.telemetry.flush();
+  }
+  readDefaultProfileName(): string | null {
+    const name = this.settings.get('defaultProfile');
+    return typeof name === 'string' ? name : null;
   }
 
   readTelemetrySettings(): TelemetrySettings {
@@ -371,13 +405,19 @@ export class SessionSettingsOwner {
   prepareProviderInvocation(
     runtimeId: string,
     providerName: string,
-    modelParameters?: AdmittedModelParameters,
-    signal?: AbortSignal,
-    sessionId?: string,
+    modelParameters: AdmittedModelParameters | undefined,
+    signal: AbortSignal | undefined,
+    sessionId: string | undefined,
+    requestFetch: NetworkFetch,
   ): RuntimeInvocationContext {
     this.assertOpen();
     return captureProviderInvocation(
-      { settingsService: this.settings, runtimeId },
+      {
+        runtimeId,
+        globalSettings: this.settings.getAllGlobalSettings(),
+        providerSettings: this.settings.getProviderSettings(providerName),
+        fetch: requestFetch,
+      },
       providerName,
       modelParameters,
       signal,
@@ -638,6 +678,40 @@ export class SessionSettingsOwner {
     );
   }
 
+  private readonly modelNotifications = new EventEmitter();
+
+  subscribeModelChanges(
+    listener: (profile?: ModelProfileInfoPayload) => void,
+  ): () => void {
+    this.assertOpen();
+    const model = (): void => listener();
+    const profile = (payload: ModelProfileInfoPayload): void =>
+      listener(payload);
+    this.modelNotifications.on(CoreEvent.ModelChanged, model);
+    this.modelNotifications.on(CoreEvent.ModelProfileChanged, profile);
+    return () => {
+      const failures: unknown[] = [];
+      for (const [event, callback] of [
+        [CoreEvent.ModelChanged, model],
+        [CoreEvent.ModelProfileChanged, profile],
+      ] as const) {
+        try {
+          this.modelNotifications.off(event, callback);
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1)
+        throw new AggregateError(failures, 'Model notification cleanup failed');
+    };
+  }
+
+  publishModelProfile(profile: ModelProfileInfoPayload): void {
+    this.assertOpen();
+    this.modelNotifications.emit(CoreEvent.ModelProfileChanged, profile);
+  }
+
   private publicationPending = false;
 
   /**
@@ -660,7 +734,7 @@ export class SessionSettingsOwner {
         this.publicationPending = false;
         const current = this.readSelectedModel();
         if (current !== undefined && current !== previous)
-          coreEvents.emitModelChanged(current);
+          this.modelNotifications.emit(CoreEvent.ModelChanged, current);
       },
       rollback: () => {
         this.publicationPending = false;
@@ -766,6 +840,7 @@ export class SessionSettingsOwner {
     this.closed = true;
     this.settings.off('provider-change', this.selectionChanged);
     this.selectedModels.clear();
+    this.modelNotifications.removeAllListeners();
     this.telemetryListeners.clear();
   }
 

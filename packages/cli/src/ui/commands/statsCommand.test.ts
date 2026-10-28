@@ -1,26 +1,29 @@
-import { detectFromProviderConfig } from '../../runtime/providerInspection.js';
+import {
+  detectFromProviderConfig,
+  discoverProviderBuckets,
+} from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
-import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import {
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  setSystemTime,
-  type Mock,
   afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  setSystemTime,
+  vi,
+  type Mock,
 } from 'bun:test';
-import { statsCommand } from './statsCommand.js';
-import { type CommandContext } from './types.js';
+import { registerStatsCommand } from '../../__tests__/stats-command-test-owner.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
-import { discoverProviderBuckets } from './oauthBucketDiscovery.js';
 import { formatDuration } from '../utils/formatters.js';
 
 const oauthManagerMock = vi.fn();
@@ -61,7 +64,7 @@ describe('statsCommand', () => {
     restoreGlobals();
   });
 
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   const startTime = new Date('2025-07-14T10:00:00.000Z');
   const endTime = new Date('2025-07-14T10:00:30.000Z');
 
@@ -77,10 +80,15 @@ describe('statsCommand', () => {
           logger: Parameters<typeof discoverProviderBuckets>[1],
         ) => discoverProviderBuckets(oauthManagerMock(), logger),
         getAllAnthropicUsageInfo: () =>
-          oauthManagerMock().getAllAnthropicUsageInfo(),
-        getAllCodexUsageInfo: () => oauthManagerMock().getAllCodexUsageInfo(),
+          oauthManagerMock().getAllAnthropicUsageInfo(globalThis.fetch),
+        getAllCodexUsageInfo: () =>
+          oauthManagerMock().getAllCodexUsageInfo(globalThis.fetch),
       },
       runtimeApi: {
+        fetch: (
+          input: RequestInfo | URL,
+          init?: RequestInit,
+        ): Promise<Response> => globalThis.fetch(input, init),
         getEphemeralSetting: getEphemeralSettingMock,
         getActiveProviderName: getActiveProviderNameMock,
         detectProviderQuota: (name: string) => {
@@ -104,7 +112,7 @@ describe('statsCommand', () => {
   });
 
   it('should display general session stats when run with no subcommand', async () => {
-    await statsCommand.action!(mockContext, '');
+    await registerStatsCommand(mockContext).action!(mockContext, '');
 
     const expectedDuration = formatDuration(
       endTime.getTime() - startTime.getTime(),
@@ -117,7 +125,7 @@ describe('statsCommand', () => {
   });
 
   it('should display model stats when using the "model" subcommand', () => {
-    const modelSubCommand = statsCommand.subCommands?.find(
+    const modelSubCommand = registerStatsCommand(mockContext).subCommands?.find(
       (sc) => sc.name === 'model',
     );
     if (modelSubCommand?.action === undefined)
@@ -134,7 +142,7 @@ describe('statsCommand', () => {
   });
 
   it('should display tool stats when using the "tools" subcommand', () => {
-    const toolsSubCommand = statsCommand.subCommands?.find(
+    const toolsSubCommand = registerStatsCommand(mockContext).subCommands?.find(
       (sc) => sc.name === 'tools',
     );
     if (toolsSubCommand?.action === undefined)
@@ -151,7 +159,7 @@ describe('statsCommand', () => {
   });
 
   it('should display cache stats when using the "cache" subcommand', () => {
-    const cacheSubCommand = statsCommand.subCommands?.find(
+    const cacheSubCommand = registerStatsCommand(mockContext).subCommands?.find(
       (sc) => sc.name === 'cache',
     );
     if (cacheSubCommand?.action === undefined)
@@ -189,7 +197,7 @@ describe('statsCommand', () => {
 
     oauthManagerMock.mockReturnValue(oauthManager);
 
-    const quotaSubCommand = statsCommand.subCommands?.find(
+    const quotaSubCommand = registerStatsCommand(mockContext).subCommands?.find(
       (sc) => sc.name === 'quota',
     );
     if (quotaSubCommand?.action === undefined)
@@ -253,7 +261,7 @@ describe('statsCommand', () => {
 
     oauthManagerMock.mockReturnValue(oauthManager);
 
-    const quotaSubCommand = statsCommand.subCommands?.find(
+    const quotaSubCommand = registerStatsCommand(mockContext).subCommands?.find(
       (sc) => sc.name === 'quota',
     );
     if (quotaSubCommand?.action === undefined)
@@ -314,7 +322,7 @@ describe('statsCommand', () => {
     } as Response);
     setGlobal('fetch', fetchMock);
 
-    const quotaSubCommand = statsCommand.subCommands?.find(
+    const quotaSubCommand = registerStatsCommand(mockContext).subCommands?.find(
       (sc) => sc.name === 'quota',
     );
     if (quotaSubCommand?.action === undefined)
@@ -342,7 +350,7 @@ describe('statsCommand', () => {
     oauthManagerMock.mockReturnValue(null);
     getEphemeralSettingMock.mockReturnValue(undefined);
 
-    const quotaSubCommand = statsCommand.subCommands?.find(
+    const quotaSubCommand = registerStatsCommand(mockContext).subCommands?.find(
       (sc) => sc.name === 'quota',
     );
     if (quotaSubCommand?.action === undefined)
@@ -415,7 +423,7 @@ describe('statsCommand', () => {
     } as Response);
     setGlobal('fetch', fetchMock);
 
-    const quotaSubCommand = statsCommand.subCommands?.find(
+    const quotaSubCommand = registerStatsCommand(mockContext).subCommands?.find(
       (sc) => sc.name === 'quota',
     );
     if (quotaSubCommand?.action === undefined)
@@ -458,7 +466,7 @@ describe('statsCommand', () => {
     } as Response);
     setGlobal('fetch', fetchMock);
 
-    const quotaSubCommand = statsCommand.subCommands?.find(
+    const quotaSubCommand = registerStatsCommand(mockContext).subCommands?.find(
       (sc) => sc.name === 'quota',
     );
     if (quotaSubCommand?.action === undefined)
@@ -494,7 +502,7 @@ describe('statsCommand', () => {
     const fetchMock = vi.fn().mockImplementation(chutesFetchResponse);
     setGlobal('fetch', fetchMock);
 
-    const quotaSubCommand = statsCommand.subCommands?.find(
+    const quotaSubCommand = registerStatsCommand(mockContext).subCommands?.find(
       (sc) => sc.name === 'quota',
     );
     if (quotaSubCommand?.action === undefined)
@@ -534,7 +542,7 @@ describe('statsCommand', () => {
     } as Response);
     setGlobal('fetch', fetchMock);
 
-    const quotaSubCommand = statsCommand.subCommands?.find(
+    const quotaSubCommand = registerStatsCommand(mockContext).subCommands?.find(
       (sc) => sc.name === 'quota',
     );
     if (quotaSubCommand?.action === undefined)
@@ -606,9 +614,9 @@ describe('statsCommand', () => {
       } as Response);
       setGlobal('fetch', fetchMock);
 
-      const quotaSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'quota',
-      );
+      const quotaSubCommand = registerStatsCommand(
+        mockContext,
+      ).subCommands?.find((cmd) => cmd.name === 'quota');
       if (quotaSubCommand?.action === undefined)
         throw new Error('Missing quota action');
 
@@ -654,9 +662,9 @@ describe('statsCommand', () => {
       } as Response);
       setGlobal('fetch', fetchMock);
 
-      const quotaSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'quota',
-      );
+      const quotaSubCommand = registerStatsCommand(
+        mockContext,
+      ).subCommands?.find((cmd) => cmd.name === 'quota');
       if (quotaSubCommand?.action === undefined)
         throw new Error('Missing quota action');
 
@@ -702,9 +710,9 @@ describe('statsCommand', () => {
       } as Response);
       setGlobal('fetch', fetchMock);
 
-      const quotaSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'quota',
-      );
+      const quotaSubCommand = registerStatsCommand(
+        mockContext,
+      ).subCommands?.find((cmd) => cmd.name === 'quota');
       if (quotaSubCommand?.action === undefined)
         throw new Error('Missing quota action');
 
@@ -750,9 +758,9 @@ describe('statsCommand', () => {
       } as Response);
       setGlobal('fetch', fetchMock);
 
-      const quotaSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'quota',
-      );
+      const quotaSubCommand = registerStatsCommand(
+        mockContext,
+      ).subCommands?.find((cmd) => cmd.name === 'quota');
       if (quotaSubCommand?.action === undefined)
         throw new Error('Missing quota action');
 
@@ -797,9 +805,9 @@ describe('statsCommand', () => {
       } as Response);
       setGlobal('fetch', fetchMock);
 
-      const quotaSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'quota',
-      );
+      const quotaSubCommand = registerStatsCommand(
+        mockContext,
+      ).subCommands?.find((cmd) => cmd.name === 'quota');
       if (quotaSubCommand?.action === undefined)
         throw new Error('Missing quota action');
 
@@ -845,9 +853,9 @@ describe('statsCommand', () => {
       } as Response);
       setGlobal('fetch', fetchMock);
 
-      const quotaSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'quota',
-      );
+      const quotaSubCommand = registerStatsCommand(
+        mockContext,
+      ).subCommands?.find((cmd) => cmd.name === 'quota');
       if (quotaSubCommand?.action === undefined)
         throw new Error('Missing quota action');
 
@@ -906,9 +914,9 @@ describe('statsCommand', () => {
       } as Response);
       setGlobal('fetch', fetchMock);
 
-      const quotaSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'quota',
-      );
+      const quotaSubCommand = registerStatsCommand(
+        mockContext,
+      ).subCommands?.find((cmd) => cmd.name === 'quota');
       if (quotaSubCommand?.action === undefined)
         throw new Error('Missing quota action');
 
@@ -953,9 +961,9 @@ describe('statsCommand', () => {
       } as Response);
       setGlobal('fetch', fetchMock);
 
-      const quotaSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'quota',
-      );
+      const quotaSubCommand = registerStatsCommand(
+        mockContext,
+      ).subCommands?.find((cmd) => cmd.name === 'quota');
       if (quotaSubCommand?.action === undefined)
         throw new Error('Missing quota action');
 

@@ -13,6 +13,10 @@ import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
 } from './testSupport.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
@@ -191,8 +195,6 @@ describe('Gemini provider stateless contract tests', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-stream',
-      settingsService: settings,
-      config,
     });
 
     const chunks = await collectResults(
@@ -245,8 +247,6 @@ describe('Gemini provider stateless contract tests', () => {
     });
     const runtimePrimary = createProviderRuntimeContext({
       runtimeId: 'runtime-config',
-      settingsService: settingsPrimary,
-      config: configPrimary,
     });
 
     await collectResults(
@@ -296,8 +296,6 @@ describe('Gemini provider stateless contract tests', () => {
     });
     const runtimeOverride = createProviderRuntimeContext({
       runtimeId: 'runtime-config',
-      settingsService: settingsOverride,
-      config: configOverride,
     });
 
     await collectResults(
@@ -357,8 +355,6 @@ describe('Gemini provider stateless contract tests', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-tools',
-      settingsService: settings,
-      config,
     });
 
     await collectResults(
@@ -419,14 +415,13 @@ describe('Gemini provider stateless contract tests', () => {
     });
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-invocation',
-      settingsService: settings,
-      config,
     });
     const authMock = mockDetermineBestAuth([
       { authMode: 'gemini-api-key', token: 'runtime-key' },
     ]);
     authMock.useMode(0);
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 

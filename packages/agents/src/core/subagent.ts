@@ -1,3 +1,12 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  runInteractiveIteration,
+  buildSubagentInitialMessages,
+} from './subagent-interactive-iteration.js';
+import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -7,95 +16,91 @@
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 
-import {
-  processInteractiveStreamEvent,
-  InteractiveOutputCounter,
-  readInteractiveOutputTokens,
-} from './subagent-interactive-output.js';
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import { AggregateDisposeError } from '../api/disposeErrors.js';
+import type { ChildAgentScope } from './subagentOrchestrator.js';
+import { consumeInteractiveTurnOutput } from './subagent-interactive-output.js';
 
 /**
  * @plan PLAN-20251028-STATELESS6.P08
  * @requirement REQ-STAT6-001.1, REQ-STAT6-003.1
  * @pseudocode agent-runtime-context.md lines 92-101
  */
-import { assembleSchedulerOwner } from '../session/assembleSchedulerOwner.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
-import { AgentEventType, type ToolCallRequestInfo, Turn } from './turn.js';
-import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
-import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
-import type {
-  IContent,
-  ContentBlock,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
+import type {
+  ContentBlock,
+  IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { assembleSchedulerOwner } from '../session/assembleSchedulerOwner.js';
+import {
+  executeToolCall,
+  type ToolExecutionConfig,
+} from './nonInteractiveToolExecutor.js';
+import { Turn, type ToolCallRequestInfo } from './turn.js';
 
-import { type ChatSession } from './chatSession.js';
-import { isToolNameRestricted } from './hookToolRestrictions.js';
-import { SCOPE_LOCAL_EMIT_TOOL_NAME } from './toolGovernance.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { type EmojiFilter } from '@vybestack/llxprt-code-core/filters/EmojiFilter.js';
+import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import type {
   AgentRuntimeContext,
-  ToolRegistryView,
   ReadonlySettingsSnapshot,
+  ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
-import type { SubagentExecutionOptions } from './subagentScheduler.js';
+import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
+import { LocalTodoStore } from '@vybestack/llxprt-code-tools';
+import { type ChatSession } from './chatSession.js';
 import { type CompletedToolCall } from './coreToolScheduler.js';
-import { type EmojiFilter } from '@vybestack/llxprt-code-core/filters/EmojiFilter.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { isToolNameRestricted } from './hookToolRestrictions.js';
+import { providerNameOrDefault } from './subagentAdmissionForwarding.js';
 import {
-  filterToolsAgainstRuntime,
-  createToolExecutionConfig,
-  createEmojiFilter,
-  buildRuntimeFunctionDeclarations,
-  getScopeLocalFuncDefs,
-  createChatObject,
-} from './subagentRuntimeSetup.js';
-import {
-  buildToolUnavailableMessage,
-  finalizeOutput,
-  handleEmitValueCall,
-  buildPartsFromCompletedCalls,
-  buildTodoCompletionPrompt,
-  recordFatalToolError,
-  classifyToolCompletions,
-  type InteractiveToolMarker,
-  recordSuccessfulToolExecution,
-} from './subagentToolProcessing.js';
-import {
-  checkTerminationConditions,
-  checkGoalCompletion,
-  processInteractiveTextResponse,
+  checkInteractiveGoal,
   handleExecutionError,
   initInteractiveScheduler,
-  checkOutputBudget,
-  recordTurnOutputTokens,
   type ExecutionLoopContext,
 } from './subagentExecution.js';
-import type { executeNonInteractiveRun } from './subagentNonInteractive.js';
+import { executeNonInteractiveRun } from './subagentNonInteractive.js';
 import {
-  forwardNonInteractiveAdmission,
-  providerNameOrDefault,
-} from './subagentAdmissionForwarding.js';
+  buildRuntimeFunctionDeclarations,
+  createChatObject,
+  createEmojiFilter,
+  createToolExecutionConfig,
+  filterToolsAgainstRuntime,
+  getScopeLocalFuncDefs,
+} from './subagentRuntimeSetup.js';
+import type { SubagentExecutionOptions } from './subagentScheduler.js';
+import {
+  buildPartsFromCompletedCalls,
+  buildTodoCompletionPrompt,
+  buildToolUnavailableMessage,
+  classifyToolCompletions,
+  finalizeOutput,
+  handleEmitValueCall,
+  processFunctionCalls,
+  recordFatalToolError,
+  recordSuccessfulToolExecution,
+  resolveToolName,
+  type InteractiveToolMarker,
+  type NonInteractiveToolExecutionResult,
+} from './subagentToolProcessing.js';
+import { SCOPE_LOCAL_EMIT_TOOL_NAME } from './toolGovernance.js';
 
 // --- Internal imports from subagentTypes.ts (used within this file) ---
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import {
   SubagentTerminateMode,
-  defaultEnvironmentContextLoader,
-  type OutputObject,
-  type PromptConfig,
-  type ToolConfig,
-  type OutputConfig,
-  type SubAgentRuntimeOverrides,
   type EnvironmentContextLoader,
   type ModelConfig,
+  type OutputConfig,
+  type OutputObject,
+  type PromptConfig,
   type RunConfig,
+  type ToolConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 
 /**
  * Represents the scope and execution environment for a subagent.
@@ -116,7 +121,53 @@ export interface SubAgentDependencies {
   ) => Pick<Turn, 'run' | 'pendingToolCalls'>;
 }
 
-export class SubAgentScope {
+export interface SubAgentLaunchInput {
+  readonly name: string;
+  readonly prompt: PromptConfig;
+  readonly model: ModelConfig;
+  readonly run: RunConfig;
+  readonly toolConfig: ToolConfig | undefined;
+  readonly outputConfig: OutputConfig | undefined;
+  readonly parentSignal: AbortSignal;
+}
+
+export interface SubAgentRuntimeInput {
+  readonly admittedRuntime: AgentRuntimeContext;
+  readonly contentGenerator: ContentGenerator;
+  readonly telemetry: RootTelemetry;
+  readonly toolRegistry: ToolSelection;
+  readonly toolsView: ToolRegistryView;
+  readonly settingsSnapshot: ReadonlySettingsSnapshot;
+  readonly foregroundConfig: Config;
+}
+
+export interface SubAgentOperationPorts {
+  readonly instructions: InstructionReadOperations;
+  readonly workspacePaths: WorkspacePathOperations;
+  readonly readMcpInstructions: () => string | undefined;
+  readonly messageBus: MessageBus;
+  readonly loadEnvironmentContext: EnvironmentContextLoader;
+  readonly readApprovalMode: () => ApprovalMode;
+  readonly admitModelParameters: () => AdmittedModelParameters;
+  readonly providerFiles: ProviderFileLifecycle | undefined;
+  readonly hooks: HookExecutionOwner;
+  readonly tryBucketFailover: ProviderRetryOperations['tryBucketFailover'];
+  readonly readCurrentBucket: ProviderRetryOperations['readCurrentBucket'];
+  readonly dependencies: SubAgentDependencies;
+}
+
+/** Values admitted once, before the scope's lifecycle begins. */
+export interface SubAgentScopeAdmission {
+  /** The admitted runtime, frozen with the tool view the scope may reach. */
+  readonly runtimeContext: AgentRuntimeContext;
+  /** Tool config narrowed to the tools that runtime exposes. */
+  readonly toolConfig: ToolConfig | undefined;
+  readonly toolExecutorContext: ToolExecutionConfig;
+}
+
+export type SubAgentScopeFactory = typeof SubAgentScope.create;
+
+export class SubAgentScope implements ChildAgentScope {
   output: OutputObject = {
     terminate_reason: SubagentTerminateMode.ERROR,
     emitted_vars: {},
@@ -125,7 +176,6 @@ export class SubAgentScope {
   private readonly logger = new DebugLogger('llxprt:subagent');
   private readonly textToolParser = new GemmaToolCallParser();
   private activeAbortController: AbortController | null = null;
-  private readonly parentAbortSignal?: AbortSignal;
   private parentAbortCleanup?: () => void;
 
   /** Emoji filter instance for subagent output */
@@ -137,36 +187,34 @@ export class SubAgentScope {
   onOutputReset?: () => void;
 
   private timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  private activeRun: Promise<void> | undefined;
+  private disposal: Promise<void> | undefined;
+  private closed = false;
+
+  readonly name: string;
+  private readonly launch: SubAgentLaunchInput;
+  private readonly runtime: SubAgentRuntimeInput;
+  private readonly operations: SubAgentOperationPorts;
+  private readonly admission: SubAgentScopeAdmission;
 
   /** @plan PLAN-20251028-STATELESS6.P08, PLAN-20260303-MESSAGEBUS.P01 */
   private constructor(
-    readonly name: string,
-    readonly runtimeContext: AgentRuntimeContext,
-    private readonly modelConfig: ModelConfig,
-    private readonly runConfig: RunConfig,
-    private readonly promptConfig: PromptConfig,
-    private readonly contentGenerator: ContentGenerator,
-    private readonly toolExecutorContext: ToolExecutionConfig,
-    private readonly environmentContextLoader: EnvironmentContextLoader,
-    private readonly config: Config,
-    private readonly workspacePaths: WorkspacePathOperations,
-    private readonly readMcpInstructions: () => string | undefined,
-    private readonly instructions: InstructionReadOperations,
-    private readonly messageBus?: MessageBus,
-    private readonly toolConfig?: ToolConfig,
-    private readonly outputConfig?: OutputConfig,
-    settingsSnapshot?: ReadonlySettingsSnapshot,
-    parentAbortSignal?: AbortSignal,
-    private readonly dependencies: SubAgentDependencies = {},
-    private readonly admitModelParameters?: () => AdmittedModelParameters,
-    private readonly hookOwner?: HookExecutionOwner,
+    launch: SubAgentLaunchInput,
+    runtime: SubAgentRuntimeInput,
+    operations: SubAgentOperationPorts,
+    admission: SubAgentScopeAdmission,
   ) {
+    this.name = launch.name;
+    this.launch = launch;
+    this.runtime = runtime;
+    this.operations = operations;
+    this.admission = admission;
+
     const randomPart = Math.random().toString(36).slice(2, 8);
     this.subagentId = `${this.name}-${randomPart}`;
-    this.parentAbortSignal = parentAbortSignal;
 
     // Initialize emoji filter based on subagent and foreground settings
-    this.emojiFilter = createEmojiFilter(settingsSnapshot);
+    this.emojiFilter = createEmojiFilter(runtime.settingsSnapshot);
   }
 
   /**
@@ -185,132 +233,56 @@ export class SubAgentScope {
    * @requirement REQ-D01-001.1
    */
   static async create(
-    name: string,
-    foregroundConfig: Config,
-    promptConfig: PromptConfig,
-    modelConfig: ModelConfig,
-    runConfig: RunConfig,
-    toolConfig: ToolConfig | undefined,
-    outputConfig: OutputConfig | undefined,
-    overrides: SubAgentRuntimeOverrides,
-    parentSignal?: AbortSignal,
-    dependencies: SubAgentDependencies = {},
-  ): Promise<SubAgentScope> {
-    const runtimeBundle = overrides.runtimeBundle;
-    if (!runtimeBundle) {
-      throw new Error(
-        'SubAgentScope.create requires a runtime bundle after initialization.',
-      );
-    }
+    launch: SubAgentLaunchInput,
+    runtime: SubAgentRuntimeInput,
+    operations: SubAgentOperationPorts,
+  ): Promise<ChildAgentScope> {
+    const { admittedRuntime, toolsView } = runtime;
+    const toolConfig =
+      launch.toolConfig === undefined
+        ? undefined
+        : await filterToolsAgainstRuntime({
+            toolConfig: launch.toolConfig,
+            toolsView,
+          });
 
-    // Persisted subagent config may omit tools/toolsView despite the
-    // declared-required type; validate at the boundary.
-    const toolsView = SubAgentScope.requireToolsView(runtimeBundle);
-
-    const toolRegistry = overrides.toolRegistry ?? runtimeBundle.toolRegistry;
-    if (!toolRegistry) {
-      throw new Error(
-        'SubAgentScope.create requires a ToolRegistry in the runtime bundle or overrides.',
-      );
-    }
-
-    if (toolConfig) {
-      const filteredToolConfig = await filterToolsAgainstRuntime({
+    return new SubAgentScope(launch, runtime, operations, {
+      runtimeContext: Object.freeze({ ...admittedRuntime, tools: toolsView }),
+      toolConfig,
+      toolExecutorContext: createToolExecutionConfig(
+        runtime.telemetry,
+        () => admittedRuntime.readToolExecutionPolicy(),
+        () => admittedRuntime.state.sessionId,
+        runtime.toolRegistry,
+        runtime.settingsSnapshot,
         toolConfig,
-        toolsView,
-      });
-      // Preserve explicit empty/fail-closed semantics: an explicit toolConfig
-      // that filters to zero tools must remain { tools: [] } so the runtime
-      // produces no normal declarations. Only undefined toolConfig means
-      // runtime/profile defaults.
-      toolConfig = filteredToolConfig;
-    }
-
-    const settingsSnapshot =
-      overrides.settingsSnapshot ?? runtimeBundle.settingsSnapshot;
-
-    const readApprovalMode = overrides.readApprovalMode;
-    const toolExecutorContext = createToolExecutionConfig(
-      runtimeBundle,
-      toolRegistry,
-      settingsSnapshot,
-      toolConfig,
-      readApprovalMode,
-    );
-
-    const runtimeContext: AgentRuntimeContext = Object.freeze({
-      ...runtimeBundle.runtimeContext,
-      tools: toolsView,
+        operations.readApprovalMode,
+      ),
     });
-
-    return new SubAgentScope(
-      name,
-      runtimeContext,
-      modelConfig,
-      runConfig,
-      promptConfig,
-      runtimeBundle.contentGenerator,
-      toolExecutorContext,
-      overrides.environmentContextLoader ?? defaultEnvironmentContextLoader,
-      foregroundConfig,
-      overrides.workspacePaths,
-      overrides.readMcpInstructions,
-      overrides.instructions,
-      overrides.messageBus,
-      toolConfig,
-      outputConfig,
-      settingsSnapshot,
-      parentSignal,
-      dependencies,
-      overrides.admitModelParameters,
-      overrides.hookOwner,
-    );
-  }
-
-  private static requireToolsView(
-    runtimeBundle: NonNullable<SubAgentRuntimeOverrides['runtimeBundle']>,
-  ): ToolRegistryView {
-    const contextTools = runtimeBundle.runtimeContext.tools as
-      | ToolRegistryView
-      | undefined;
-    const bundleToolsView = runtimeBundle.toolsView as
-      | ToolRegistryView
-      | undefined;
-    const toolsCandidate: ToolRegistryView | undefined =
-      contextTools ?? bundleToolsView;
-    if (toolsCandidate == null) {
-      throw new Error(
-        'SubAgentScope.create requires a ToolRegistryView from the runtime bundle.',
-      );
-    }
-    return toolsCandidate;
   }
 
   private bindParentSignal(abortController: AbortController): void {
-    if (!this.parentAbortSignal) {
-      return;
-    }
     if (this.parentAbortCleanup) {
       this.parentAbortCleanup();
     }
     const relayAbort = () => abortController.abort();
-    if (this.parentAbortSignal.aborted) {
+    if (this.launch.parentSignal.aborted) {
       relayAbort();
       return;
     }
-    this.parentAbortSignal.addEventListener('abort', relayAbort, {
+    this.launch.parentSignal.addEventListener('abort', relayAbort, {
       once: true,
     });
     this.parentAbortCleanup = () => {
-      this.parentAbortSignal?.removeEventListener('abort', relayAbort);
+      this.launch.parentSignal.removeEventListener('abort', relayAbort);
     };
   }
 
   private armTimeout(abortController: AbortController): void {
-    if (!Number.isFinite(this.runConfig.max_time_minutes)) {
+    if (!Number.isFinite(this.launch.run.max_time_minutes)) {
       return;
     }
-    const timeoutMs = this.runConfig.max_time_minutes * 60 * 1000;
+    const timeoutMs = this.launch.run.max_time_minutes * 60 * 1000;
     if (timeoutMs <= 0) {
       if (!abortController.signal.aborted) {
         this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
@@ -336,20 +308,29 @@ export class SubAgentScope {
   }
 
   private async prepareRun(context: ContextState) {
-    const chat = await createChatObject({
-      promptConfig: this.promptConfig,
-      modelConfig: this.modelConfig,
-      outputConfig: this.outputConfig,
-      toolConfig: this.toolConfig,
-      runtimeContext: this.runtimeContext,
-      contentGenerator: this.contentGenerator,
-      environmentContextLoader: this.environmentContextLoader,
-      foregroundConfig: this.config,
-      workspaceDirectories: () => this.workspacePaths.directories(),
-      readMcpInstructions: this.readMcpInstructions,
-      instructions: this.instructions,
-      context,
-    });
+    const chat = await createChatObject(
+      {
+        promptConfig: this.launch.prompt,
+        modelConfig: this.launch.model,
+        outputConfig: this.launch.outputConfig,
+        toolConfig: this.admission.toolConfig,
+        runtimeContext: this.admission.runtimeContext,
+        contentGenerator: this.runtime.contentGenerator,
+        environmentContextLoader: this.operations.loadEnvironmentContext,
+        foregroundConfig: this.runtime.foregroundConfig,
+        workspaceDirectories: () =>
+          this.operations.workspacePaths.directories(),
+        readMcpInstructions: this.operations.readMcpInstructions,
+        instructions: this.operations.instructions,
+        context,
+      },
+      this.operations.providerFiles,
+      this.operations.tryBucketFailover,
+      this.operations.readCurrentBucket,
+    );
+    // dispose() during the awaited preparation found no active controller to
+    // abort, so the closed admission is the only record that the owner left.
+    if (this.closed) throw new Error('Subagent scope is disposed');
     if (!chat) {
       this.output.terminate_reason = SubagentTerminateMode.ERROR;
       return null;
@@ -358,27 +339,16 @@ export class SubAgentScope {
     this.activeAbortController = abortController;
     this.bindParentSignal(abortController);
     const functionDeclarations = buildRuntimeFunctionDeclarations(
-      this.runtimeContext.tools,
-      this.toolConfig,
+      this.admission.runtimeContext.tools,
+      this.admission.toolConfig,
     );
-    if (this.outputConfig?.outputs) {
-      functionDeclarations.push(...getScopeLocalFuncDefs(this.outputConfig));
+    if (this.launch.outputConfig?.outputs) {
+      functionDeclarations.push(
+        ...getScopeLocalFuncDefs(this.launch.outputConfig),
+      );
     }
     this.armTimeout(abortController);
     return { chat, abortController, functionDeclarations };
-  }
-
-  private buildInitialMessages(context: ContextState): IContent[] {
-    const behaviourPrompts =
-      (context.get('task_behaviour_prompts') as string[] | undefined) ?? [];
-    const initialInstruction =
-      behaviourPrompts.length > 0
-        ? behaviourPrompts.join('\n')
-        : 'Follow the task directives provided in the system prompt.';
-
-    return [
-      iContentFromBlocks([{ type: 'text', text: initialInstruction }], 'human'),
-    ];
   }
 
   /**
@@ -386,28 +356,20 @@ export class SubAgentScope {
    * shared CoreToolScheduler. Tests may supply a custom schedulerFactory to
    * observe scheduling behaviour without touching the real scheduler.
    */
-  private async runInteractiveGoalCheckLoop(
-    execCtx: ExecutionLoopContext,
-    startTime: number,
-    turnCounter: number,
-    currentTurn: number,
-  ): Promise<IContent[] | null> {
-    const recheck = checkTerminationConditions(turnCounter, startTime, execCtx);
-    if (recheck.shouldStop) return null;
-
-    const todoReminder = await buildTodoCompletionPrompt(
-      this.runtimeContext,
-      this.subagentId,
-      this.logger,
-    );
-    return checkGoalCompletion(execCtx, todoReminder, currentTurn);
-  }
-
-  async runInteractive(
+  runInteractive(
     context: ContextState,
     options?: SubagentExecutionOptions,
   ): Promise<void> {
-    const modelParameters = this.admitModelParameters?.();
+    if (this.closed)
+      return Promise.reject(new Error('Subagent scope is disposed'));
+    return this.trackRun(() => this.runInteractiveOwned(context, options));
+  }
+
+  private async runInteractiveOwned(
+    context: ContextState,
+    options?: SubagentExecutionOptions,
+  ): Promise<void> {
+    const modelParameters = this.operations.admitModelParameters();
     const setup = await this.prepareRun(context);
     if (!setup) return;
     const { chat, abortController } = setup;
@@ -417,7 +379,7 @@ export class SubAgentScope {
     const execCtx = this.buildExecCtx();
     const startTime = Date.now();
     let turnCounter = 0;
-    let currentMessages = this.buildInitialMessages(context);
+    let currentMessages = buildSubagentInitialMessages(context);
 
     try {
       const { scheduler, schedulerDispose: releaseScheduler } =
@@ -426,15 +388,38 @@ export class SubAgentScope {
 
       let keepRunning = true;
       while (keepRunning) {
-        const iteration = await this.runInteractiveLoopIteration(
-          chat,
-          currentMessages,
-          abortController,
+        const iteration = await runInteractiveIteration(
           turnCounter,
           startTime,
           execCtx,
-          scheduler,
-          modelParameters,
+          abortController.signal,
+          {
+            runTurn: () =>
+              this.runInteractiveTurn(
+                chat,
+                currentMessages,
+                abortController,
+                turnCounter,
+                execCtx,
+                modelParameters,
+              ),
+            processTools: (calls) =>
+              this.handleInteractiveToolCalls(
+                calls,
+                scheduler,
+                chat,
+                abortController,
+                execCtx,
+              ),
+            checkGoal: (nextTurn, currentTurn) =>
+              checkInteractiveGoal(
+                execCtx,
+                startTime,
+                nextTurn,
+                currentTurn,
+                () => this.readTodoCompletionPrompt(),
+              ),
+          },
         );
         if (iteration.action === 'abort') {
           return;
@@ -464,108 +449,26 @@ export class SubAgentScope {
    * Extracting the loop body keeps the caller loop to a single control
    * branch (no break/continue) and avoids the always-truthy while(true).
    */
-  private async runInteractiveLoopIteration(
-    chat: ChatSession,
-    currentMessages: IContent[],
-    abortController: AbortController,
-    turnCounter: number,
-    startTime: number,
-    execCtx: ExecutionLoopContext,
-    scheduler: {
-      schedule: (
-        req: ToolCallRequestInfo | ToolCallRequestInfo[],
-        signal: AbortSignal,
-        hookOwner?: HookExecutionOwner,
-      ) => Promise<void> | void;
-      awaitCompletedCalls: (
-        signal?: AbortSignal,
-      ) => Promise<CompletedToolCall[]>;
-    },
-    modelParameters?: AdmittedModelParameters,
-  ): Promise<
-    | { action: 'stop' }
-    | { action: 'abort' }
-    | { action: 'continue'; messages: IContent[]; turnCounter: number }
-  > {
-    const check = checkTerminationConditions(turnCounter, startTime, execCtx);
-    if (check.shouldStop) return { action: 'stop' };
-
-    const nextTurnCounter = turnCounter + 1;
-    const {
-      responseParts,
-      textResponse,
-      currentTurn,
-      reportedOutputTokens,
-      outputCharacterCount,
-    } = await this.runInteractiveTurn(
-      chat,
-      currentMessages,
-      abortController,
-      turnCounter,
-      execCtx,
-      modelParameters,
-    );
-    if (abortController.signal.aborted === true) return { action: 'abort' };
-
-    recordTurnOutputTokens(execCtx, reportedOutputTokens, outputCharacterCount);
-    // Budget only. The turn and time limits are checked at the top of the loop,
-    // so that tool calls the model emitted on its last allowed turn still run.
-    if (checkOutputBudget(execCtx).shouldStop) return { action: 'stop' };
-
-    processInteractiveTextResponse(textResponse, execCtx);
-
-    const toolMessages = await this.handleInteractiveToolCalls(
-      responseParts,
-      scheduler,
-      chat,
-      abortController,
-      execCtx,
-    );
-    if (toolMessages) {
-      return {
-        action: 'continue',
-        messages: toolMessages,
-        turnCounter: nextTurnCounter,
-      };
-    }
-
-    const nextMessages = await this.runInteractiveGoalCheckLoop(
-      execCtx,
-      startTime,
-      nextTurnCounter,
-      currentTurn,
-    );
-    if (!nextMessages) return { action: 'stop' };
-    return {
-      action: 'continue',
-      messages: nextMessages,
-      turnCounter: nextTurnCounter,
-    };
-  }
-
   private async initScheduler(options: SubagentExecutionOptions | undefined) {
-    const messageBus = this.messageBus;
-    const registry = this.toolExecutorContext.getToolRegistry();
-    if (registry === undefined) throw new Error('Missing child tool selection');
+    const messageBus = this.operations.messageBus;
+    const registry = this.admission.toolExecutorContext.getToolRegistry();
     return initInteractiveScheduler(options, {
-      createSchedulerOwner: (callbacks) => {
-        if (!messageBus)
-          throw new Error('Child scheduler requires its message bus');
-        return assembleSchedulerOwner(this.subagentId, {
-          telemetry: this.toolExecutorContext.telemetry,
-          config: this.config,
+      createSchedulerOwner: (callbacks) =>
+        assembleSchedulerOwner(this.subagentId, {
+          telemetry: this.admission.toolExecutorContext.telemetry,
+          config: this.runtime.foregroundConfig,
           messageBus,
           toolRegistry: registry,
-          readApprovalMode: this.toolExecutorContext.readApprovalMode,
-          getToolGovernance: () => this.toolExecutorContext.readGovernance(),
+          readApprovalMode: this.admission.toolExecutorContext.readApprovalMode,
+          getToolGovernance: () =>
+            this.admission.toolExecutorContext.readGovernance(),
           readExecutionPolicy: () =>
-            this.toolExecutorContext.readExecutionPolicy(),
+            this.admission.toolExecutorContext.readExecutionPolicy(),
           toolContextInteractiveMode: true,
           ...callbacks,
-        });
-      },
+        }),
       onMessage: this.onMessage,
-      messageBus: this.messageBus,
+      messageBus: this.operations.messageBus,
       subagentId: this.subagentId,
       logger: this.logger,
     });
@@ -580,19 +483,19 @@ export class SubAgentScope {
     modelParameters?: AdmittedModelParameters,
   ) {
     const currentTurn = turnIndex;
-    const promptId = `${this.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`;
+    const promptId = `${this.admission.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`;
     // Persisted subagent runtime state may carry a nullish provider
     // despite the declared-required type; validate at the boundary.
     const providerName = providerNameOrDefault(
-      this.runtimeContext.state.provider,
+      this.admission.runtimeContext.state.provider,
     );
-    const turn = this.dependencies.createTurn
-      ? this.dependencies.createTurn(
+    const turn = this.operations.dependencies.createTurn
+      ? this.operations.dependencies.createTurn(
           chat,
           promptId,
           this.subagentId,
           providerName,
-          this.hookOwner,
+          this.operations.hooks,
         )
       : new Turn(
           chat,
@@ -600,42 +503,19 @@ export class SubAgentScope {
           this.subagentId,
           providerName,
           undefined,
-          this.hookOwner,
+          this.operations.hooks,
         );
     const blocks = currentMessages[0]?.blocks ?? [];
 
-    let textResponse = '';
-    let reportedOutputTokens: number | undefined;
-    let outputCounter = new InteractiveOutputCounter();
-    try {
-      const stream = turn.run(blocks, abortController.signal, modelParameters);
-      for await (const event of stream) {
-        if (abortController.signal.aborted === true) break;
-        if (event.type === AgentEventType.Retry) {
-          textResponse = '';
-          reportedOutputTokens = undefined;
-          outputCounter = new InteractiveOutputCounter();
-          execCtx.onOutputReset?.();
-        }
-        outputCounter.add(event);
-        reportedOutputTokens =
-          readInteractiveOutputTokens(event) ?? reportedOutputTokens;
-        const eventText = processInteractiveStreamEvent(event, execCtx);
-        textResponse += eventText;
-      }
-    } catch (error) {
-      if (abortController.signal.aborted === true) {
-        throw createAbortError();
-      }
-      throw error;
-    }
-
+    const output = await consumeInteractiveTurnOutput(
+      turn.run(blocks, abortController.signal, modelParameters),
+      abortController.signal,
+      execCtx,
+    );
     return {
       responseParts: [...turn.pendingToolCalls],
-      textResponse,
       currentTurn,
-      reportedOutputTokens,
-      outputCharacterCount: outputCounter.total,
+      ...output,
     };
   }
 
@@ -714,11 +594,11 @@ export class SubAgentScope {
       await scheduler.schedule(
         schedulerRequests,
         abortController.signal,
-        this.hookOwner,
+        this.operations.hooks,
       );
       completedCalls = await completionPromise;
       try {
-        chat.recordCompletedToolCalls(this.modelConfig.model, completedCalls);
+        chat.recordCompletedToolCalls(this.launch.model.model, completedCalls);
       } catch (error) {
         this.logger.debug(
           () =>
@@ -812,55 +692,146 @@ export class SubAgentScope {
    * @plan PLAN-20251028-STATELESS6.P08
    * @requirement REQ-STAT6-001.1
    */
-  async runNonInteractive(context: ContextState): Promise<void> {
-    await forwardNonInteractiveAdmission({
-      admit: this.admitModelParameters,
-      prepare: async () => {
-        const setup = await this.prepareRun(context);
-        return setup
-          ? {
-              ...setup,
-              functionDeclarations:
-                setup.functionDeclarations as unknown as Parameters<
-                  typeof executeNonInteractiveRun
-                >[1],
-            }
-          : null;
-      },
-      buildExecCtx: () => this.buildExecCtx(),
-      initialMessages: () => this.buildInitialMessages(context),
-      context: (modelParameters) => ({
+  runNonInteractive(context: ContextState): Promise<void> {
+    if (this.closed)
+      return Promise.reject(new Error('Subagent scope is disposed'));
+    return this.trackRun(() => this.runNonInteractiveOwned(context));
+  }
+
+  private async runNonInteractiveOwned(context: ContextState): Promise<void> {
+    const modelParameters = Object.freeze({
+      ...this.operations.admitModelParameters(),
+    });
+    const setup = await this.prepareRun(context);
+    if (!setup) return;
+    const { chat, abortController, functionDeclarations } = setup;
+    await executeNonInteractiveRun(
+      functionDeclarations,
+      abortController,
+      buildSubagentInitialMessages(context),
+      Date.now(),
+      this.buildExecCtx(),
+      {
         output: this.output,
         subagentId: this.subagentId,
         name: this.name,
-        runtimeContext: this.runtimeContext,
+        sessionId: this.admission.runtimeContext.state.sessionId,
         logger: this.logger,
-        config: this.config,
-        runConfig: this.runConfig,
-        outputConfig: this.outputConfig,
-        toolExecutorContext: this.toolExecutorContext,
-        messageBus: this.messageBus,
-        hookOwner: this.hookOwner,
+        runConfig: this.launch.run,
+        ...(this.launch.outputConfig === undefined
+          ? {}
+          : { outputConfig: this.launch.outputConfig }),
         modelParameters,
-      }),
-      cleanup: () => {
+        streamTimeoutPolicy: chat.getStreamTimeoutPolicy(),
+        imagePayloadBudgetBytes:
+          this.runtime.foregroundConfig.getImagePayloadBudgetBytes(),
+        streamModel: (message, tools, signal, promptId, parameters) =>
+          chat.sendMessageStream(
+            {
+              message,
+              modelParameters: parameters,
+              hookOwner: this.operations.hooks,
+              config: { abortSignal: signal, tools },
+            },
+            promptId,
+          ),
+        executeToolCalls: (calls, controller, promptId, allowedToolNames) =>
+          processFunctionCalls(
+            calls,
+            controller,
+            promptId,
+            {
+              output: this.output,
+              ...(this.launch.outputConfig === undefined
+                ? {}
+                : { outputConfig: this.launch.outputConfig }),
+              subagentId: this.subagentId,
+              logger: this.logger,
+              imagePayloadBudgetBytes:
+                this.runtime.foregroundConfig.getImagePayloadBudgetBytes(),
+              executeToolCall: (request, signal) =>
+                this.executeNonInteractiveToolCall(request, signal),
+            },
+            allowedToolNames,
+          ),
+        readTodoCompletionPrompt: () => this.readTodoCompletionPrompt(),
+      },
+      () => {
         this.clearTimeoutHandle();
         this.parentAbortCleanup?.();
         this.parentAbortCleanup = undefined;
         this.activeAbortController = null;
       },
-    });
+    );
+  }
+
+  private async executeNonInteractiveToolCall(
+    request: ToolCallRequestInfo,
+    signal: AbortSignal,
+  ): Promise<NonInteractiveToolExecutionResult> {
+    const registry = this.admission.toolExecutorContext.getToolRegistry();
+    const completed = await executeToolCall(
+      (callbacks) =>
+        assembleSchedulerOwner(this.subagentId, {
+          telemetry: this.admission.toolExecutorContext.telemetry,
+          config: this.runtime.foregroundConfig,
+          messageBus: this.operations.messageBus,
+          toolRegistry: registry,
+          readApprovalMode: this.admission.toolExecutorContext.readApprovalMode,
+          getToolGovernance: () =>
+            this.admission.toolExecutorContext.readGovernance(),
+          readExecutionPolicy: () =>
+            this.admission.toolExecutorContext.readExecutionPolicy(),
+          toolContextInteractiveMode: false,
+          ...callbacks,
+        }),
+      request,
+      signal,
+      this.operations.hooks,
+    );
+    return { status: completed.status, response: completed.response };
+  }
+
+  private async readTodoCompletionPrompt(): Promise<string | null> {
+    const sessionId = this.admission.runtimeContext.state.sessionId;
+    if (!sessionId) return null;
+    try {
+      const dataDirResolver = () => Storage.getGlobalDataDir();
+      let todos = await new LocalTodoStore(
+        sessionId,
+        { dataDirResolver },
+        this.subagentId,
+      ).readTodos();
+      if (todos.length === 0) {
+        todos = await new LocalTodoStore(sessionId, {
+          dataDirResolver,
+        }).readTodos();
+      }
+      return buildTodoCompletionPrompt(todos);
+    } catch (error) {
+      this.logger.warn(
+        () =>
+          `Subagent ${this.subagentId} could not inspect todos: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
   }
 
   private buildExecCtx(): ExecutionLoopContext {
     return {
       output: this.output,
       subagentId: this.subagentId,
-      runConfig: this.runConfig,
-      outputConfig: this.outputConfig,
+      runConfig: this.launch.run,
+      outputConfig: this.launch.outputConfig,
       emojiFilter: this.emojiFilter,
       textToolParser: this.textToolParser,
-      toolsView: this.runtimeContext.tools,
+      resolveToolName: (rawName) =>
+        resolveToolName(
+          rawName,
+          (name) =>
+            this.admission.runtimeContext.tools.getToolMetadata(name) !==
+            undefined,
+        ),
       logger: this.logger,
       onMessage: this.onMessage,
       onOutputReset: this.onOutputReset,
@@ -895,7 +866,22 @@ export class SubAgentScope {
    *
    * Safe to call multiple times.
    */
-  dispose(): void {
+  private trackRun(operation: () => Promise<void>): Promise<void> {
+    if (this.activeRun !== undefined)
+      return Promise.reject(new Error('Subagent scope is already running'));
+    const run = operation();
+    this.activeRun = run;
+    void run
+      .finally(() => {
+        if (this.activeRun === run) this.activeRun = undefined;
+      })
+      .catch(() => undefined);
+    return run;
+  }
+
+  dispose(): Promise<void> {
+    if (this.disposal !== undefined) return this.disposal;
+    this.closed = true;
     // 1. Cancel any active operations
     if (
       this.activeAbortController &&
@@ -908,13 +894,15 @@ export class SubAgentScope {
       this.activeAbortController.abort();
     }
     this.activeAbortController = null;
-
-    // 2. Clean up parent abort signal event listeners
-    if (this.parentAbortCleanup) {
-      this.parentAbortCleanup();
-      this.parentAbortCleanup = undefined;
-    }
-
-    this.logger.debug(() => `Subagent ${this.subagentId} disposed`);
+    const activeRun = this.activeRun;
+    this.disposal = (async () => {
+      await activeRun?.catch(() => undefined);
+      if (this.parentAbortCleanup) {
+        this.parentAbortCleanup();
+        this.parentAbortCleanup = undefined;
+      }
+      this.logger.debug(() => `Subagent ${this.subagentId} disposed`);
+    })();
+    return this.disposal;
   }
 }

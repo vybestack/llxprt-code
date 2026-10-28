@@ -24,6 +24,21 @@ import { join } from 'node:path';
 import ts from 'typescript';
 
 export const BANNED_AMBIENT_SYMBOLS = [
+  'getCliRuntimeServices',
+  'getCliRuntimeContext',
+  'getCliRuntimeConfig',
+  'getCliProviderManager',
+  'getCliOAuthManager',
+  'maybeGetCliOAuthManager',
+  'isCliRuntimeStatelessReady',
+  'ensureStatelessProviderReady',
+  'getActiveProviderStatus',
+  'resolveActiveRuntimeIdentity',
+  'defaultCliRuntimeId',
+  'singletonManager',
+  'singletonOAuthManager',
+  'registerProviderManagerSingleton',
+
   'ownershipByConfig',
   'peekActiveProviderRuntimeContext',
   'setActiveProviderRuntimeContext',
@@ -107,7 +122,7 @@ function collectFileViolations(
   violations: AmbientSymbolViolation[],
 ): void {
   const migratedRetryConsumer =
-    /(?:^|\/)(?:errors|RetryOrchestrator)\.ts$/.test(file);
+    /(?:^|[/\\])(?:errors|RetryOrchestrator)\.ts$/.test(file);
   for (let index = 0; index < lines.length; index += 1) {
     if (
       BANNED_PATTERN.test(lines[index]) ||

@@ -39,7 +39,8 @@ export type ToolExecutionConfig = Pick<
     readApprovalMode?: () => ApprovalMode;
     readExecutionPolicy(): ToolExecutionPolicy;
     readGovernance(): ToolGovernance;
-    getToolRegistry(): ToolSelection | undefined;
+    /** Always present: subagent scope construction requires its registry. */
+    getToolRegistry(): ToolSelection;
   };
 
 async function createScheduler(

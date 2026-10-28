@@ -15,16 +15,24 @@
 
 import { beforeAll, describe, expect, it } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
+import { PUBLIC_SUBPATHS_BY_PACKAGE } from '../cli-boundary/config.ts';
 import { asRecord } from './typed-test-helpers.ts';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(SCRIPT_DIR, '..', '..');
 const SCRIPT = join(REPO_ROOT, 'scripts', 'check-cli-import-boundary.ts');
-const RUNTIME = process.env.BUN_EXECUTABLE ?? 'bun';
+const RUNTIME = process.env.BUN_EXECUTABLE ?? process.execPath;
 
 /** @type {boolean | undefined} */
 let cachedBunAvailable: boolean | undefined;
@@ -943,7 +951,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       const { code, stdout } = withCliFixture(({ root, write }) => {
         write(
           'packages/cli/src/ui/commands/providerCommand.ts',
-          "import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';\n",
+          "import { populateProviderManager } from '@vybestack/llxprt-code-providers/composition.js';\n",
         );
         write(...thinIndex());
         return runScript(root, 0);
@@ -952,22 +960,22 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       expect(code).toBe(0);
     });
 
-    it('allows imports from the providers runtime.js public barrel without an allowlist entry', () => {
+    it('rejects imports from the retired providers runtime.js barrel', () => {
       const { code, stdout } = withCliFixture(({ root, write }) => {
         write(
           'packages/cli/src/ui/commands/clearCommand.ts',
           "import { getCliRuntimeServices } from '@vybestack/llxprt-code-providers/runtime.js';\n",
         );
         write(...thinIndex());
-        return runScript(root, 0);
+        return runScript(root, 1);
       });
-      expect(stdout).toContain('CLI import boundary check PASSED.');
-      expect(code).toBe(0);
+      expect(stdout).toContain('@vybestack/llxprt-code-providers/runtime.js');
+      expect(code).toBe(1);
     });
 
     it('still flags deep providers/runtime/* paths that are NOT the public barrel', () => {
-      // runtime.js is public, but runtime/runtimeSettings.js is a deep internal
-      // path that must still be flagged.
+      // Retired runtime entrypoints and deep runtime implementation paths must
+      // both remain outside the public package boundary.
       const { code, stdout } = withCliFixture(({ root, write }) => {
         write(
           'packages/cli/src/rogue.ts',
@@ -1007,3 +1015,34 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
     });
   },
 );
+
+describe('PUBLIC_SUBPATHS_BY_PACKAGE', () => {
+  it('lists only subpaths that are declared package exports backed by an existing bun target', () => {
+    const stale: string[] = [];
+    for (const [packageName, subpaths] of Object.entries(
+      PUBLIC_SUBPATHS_BY_PACKAGE,
+    )) {
+      const packageDir = join(
+        REPO_ROOT,
+        'packages',
+        packageName.replace('@vybestack/llxprt-code-', ''),
+      );
+      const manifest = JSON.parse(
+        readFileSync(join(packageDir, 'package.json'), 'utf-8'),
+      ) as { exports: Record<string, { bun?: string }> };
+      for (const subpath of subpaths) {
+        const target = manifest.exports[`./${subpath}`]?.bun;
+        if (target === undefined) {
+          stale.push(
+            `${packageName}/${subpath}: no exports entry with a bun target`,
+          );
+        } else if (!existsSync(join(packageDir, target))) {
+          stale.push(
+            `${packageName}/${subpath}: bun target ${target} does not exist`,
+          );
+        }
+      }
+    }
+    expect(stale).toStrictEqual([]);
+  });
+});

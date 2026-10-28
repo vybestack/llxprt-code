@@ -9,7 +9,10 @@ import type {
   AgentChatRecordingExecution,
 } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { getResponseTextFromBlocks } from '@vybestack/llxprt-code-core';
-import type { AgentInput } from './agent.js';
+import type { AgentInput, GenerateOptions } from './agent.js';
+import type { SessionControl } from './control/sessionControl.js';
+import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import { createRecordingExecution } from './recordingExecution.js';
 import { toPartListUnion } from './agentBootstrap.js';
 
 export async function generateDetachedText(
@@ -24,4 +27,19 @@ export async function generateDetachedText(
     recording,
   );
   return getResponseTextFromBlocks(response.content.blocks) ?? '';
+}
+
+export function generateSessionText(
+  input: AgentInput,
+  options: GenerateOptions | undefined,
+  generate: AgentClientContract['generateDirectMessage'],
+  session: SessionControl,
+  hooks: Pick<SessionHookOwner, 'execution'>,
+): Promise<string> {
+  return generateDetachedText(
+    input,
+    options?.promptId ?? `generate-${Date.now()}`,
+    generate,
+    createRecordingExecution(session, () => session.getSessionId(), hooks),
+  );
 }

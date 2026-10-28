@@ -1,3 +1,35 @@
+import { createCapturedSessionOwner } from './helpers/session-client-capture.js';
+import { currentOwnerClient } from './helpers/owner-current-client.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { fileURLToPath } from 'node:url';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { preparePreferredProviderCompletion } from '../preferred-provider-acquisition.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+} from './helpers/provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
+import { randomUUID } from 'node:crypto';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import { cleanupAfterFailure } from '../../core/subagent-cleanup.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -7,9 +39,6 @@ import { describe, expect, it } from 'bun:test';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { AgentClient } from '../../core/client.js';
 import { SessionClientOwner } from '../../session/session-client-owner.js';
-import { createSessionClientEngineFixture } from './helpers/session-client-engine-fixture.js';
-
-type Fixture = Awaited<ReturnType<typeof createSessionClientEngineFixture>>;
 
 interface Gate {
   readonly opened: Promise<void>;
@@ -27,15 +56,26 @@ function createGate(): Gate {
 }
 
 function createOwnerWithClient(
-  built: Fixture,
+  builtConfig: Parameters<typeof SessionClientOwner.create>[0]['config'],
+  builtSettings: SettingsService,
+  builtManager: Parameters<typeof SessionClientOwner.create>[1]['manager'],
+  builtMedia: SessionMediaOwner,
+  builtMcp: McpRuntimeOwner,
+  builtSettingsOwner: SessionSettingsOwner,
+  builtContent: NonNullable<
+    Parameters<typeof SessionClientOwner.create>[1]['contentGeneratorFactory']
+  >,
+  builtTokenizer: NonNullable<
+    Parameters<typeof SessionClientOwner.create>[1]['tokenizerFactory']
+  >,
   createClient: (
     ...args: ConstructorParameters<typeof AgentClient>
   ) => AgentClient,
 ): Promise<SessionClientOwner> {
-  return SessionClientOwner.create(
-    built.config,
-    assembleTaskSchemaPolicy(built.settingsService),
-    built.handle.providerManager,
+  return createCapturedSessionOwner(
+    builtConfig,
+    assembleTaskSchemaPolicy(builtSettings),
+    builtManager,
     (config, state, instructions, store) => {
       if (store === undefined) throw new Error('Missing factory store');
       return createClient(
@@ -43,41 +83,184 @@ function createOwnerWithClient(
         state,
         instructions ?? (() => undefined),
         store,
-        built.mcp.workspacePaths,
+        builtMcp.workspacePaths,
       );
     },
-    built.media.store,
-    built.mcp.readInstructions,
-    built.mcp.workspacePaths,
-    built.handle.settingsOwner,
-    built.handle.contentGeneratorFactory,
-    built.handle.tokenizerFactory,
+    builtMedia.store,
+    builtMcp.readInstructions,
+    builtMcp.workspacePaths,
+    builtSettingsOwner,
+    builtContent,
+    builtTokenizer,
   );
 }
 
 describe('Factory-created session client acquisition', () => {
+  const credentials = useOwnedCredentials();
   it('rejects with the binding error only after the abandoned client is disposed', async () => {
-    const built = await createSessionClientEngineFixture();
+    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
+    );
+    const builtDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'explicit-engine-owner-')),
+    );
+    const builtConfig = new Config(
+      toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        workingDir: builtDirectory,
+      }),
+    );
+    const builtSettings = new SettingsService();
+    const builtPolicy = new RuntimePolicyOwner(builtConfig);
+    const builtMessageBus = builtPolicy.session.messageBus;
+    const builtMcp = await createTestMcpRuntime(
+      {
+        oauth: {
+          openBrowser: async () => {
+            throw new Error('Unexpected browser request');
+          },
+          tokenStorage: new MCPOAuthTokenStorage({
+            getCredentials: async () => null,
+            setCredentials: async () => {
+              throw new Error('Unexpected token write');
+            },
+            deleteCredentials: async () => {},
+            listServers: async () => [],
+            getAllCredentials: async () => new Map(),
+            clearAll: async () => {},
+          }),
+        },
+        config: builtConfig,
+        policy: { owner: builtPolicy, ownership: 'runtime' },
+      },
+      {},
+    );
+
+    const builtRuntimeId = 'engine-' + randomUUID();
+    const builtRelease = new AcquisitionRelease();
+    const builtSettingsOwner = new SessionSettingsOwner(builtSettings);
+    builtRelease.acquire('settings', () => builtSettingsOwner.dispose());
+    builtSettingsOwner.initializeProviderSelection(
+      builtConfig.getProvider(),
+      builtConfig.getModel(),
+    );
+    builtSettingsOwner.bindTelemetry(builtConfig);
+    const builtFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    for (const scope of [builtRuntimeId, builtConfig.getSessionId()])
+      builtRelease.acquire('files', () =>
+        releaseAdoptedFileScope(builtFiles, scope),
+      );
+    const builtManager = acquirePreferredProviderManager(
+      builtConfig,
+      builtSettings,
+      builtSettingsOwner,
+      builtFiles,
+      builtRuntimeId,
+      credentials().authority,
+      builtRelease,
+    );
+    const builtTokenizer = configureProviderTokenizer(builtManager);
+    const builtContent = createRuntimeContentGeneratorFactory();
+    const builtOAuth = acquirePreferredOAuth(
+      undefined,
+      builtMessageBus,
+      builtConfig,
+      builtSettings,
+      builtManager,
+      builtRuntimeId,
+      builtMcp.profileDefinitions,
+      credentials().authority,
+      builtRelease,
+      undefined,
+    );
+    const builtMedia = new SessionMediaOwner(
+      builtConfig.projectTempDir,
+      1024 * 1024,
+    );
+    const builtOwner = await createCapturedSessionOwner(
+      builtConfig,
+      assembleTaskSchemaPolicy(builtSettings),
+      builtManager,
+      buildAgentClientFactory(),
+      builtMedia.store,
+      builtMcp.readInstructions,
+      builtMcp.workspacePaths,
+      builtSettingsOwner,
+      builtContent,
+      builtTokenizer,
+    );
+    builtOwner.bindMcpRuntime(builtMcp);
+    builtOwner.bindHooks();
+    const closeEngine = settleEngineRelease.bind(
+      undefined,
+      [
+        () => builtOwner.dispose(),
+        () => builtRelease.close(),
+        () => builtMedia.dispose(),
+        () => builtMcp.dispose(),
+        () => builtConfig.dispose(),
+        () => rm(builtDirectory, { recursive: true, force: true }),
+      ],
+      previousReplay,
+    );
+    try {
+      await preparePreferredProviderCompletion(
+        builtConfig,
+        builtSettings,
+        builtSettingsOwner,
+        builtManager,
+        builtOAuth,
+        builtRuntimeId,
+        builtTokenizer,
+        undefined,
+        process.env.LLXPRT_FAKE_RESPONSES,
+      );
+      await builtMcp.initialize();
+      await builtOwner.initializeTools();
+      await builtOwner.clients.refreshAuth();
+      await (await currentOwnerClient(builtOwner)).startChat();
+    } catch (primary) {
+      await cleanupAfterFailure(primary, closeEngine);
+    }
+
     const releaseDisposal = createGate();
     const disposalStarted = createGate();
     const events: string[] = [];
     const bindingError = new Error('binding boom');
-    class BindingFailureClient extends AgentClient {
-      override bindProviderInvocation(): void {
+    const createBindingFailureClient = (
+      ...args: ConstructorParameters<typeof AgentClient>
+    ): AgentClient => {
+      const client = new AgentClient(...args);
+      const dispose = client.dispose;
+      client.bindProviderInvocation = () => {
         throw bindingError;
-      }
-      override async dispose(): Promise<void> {
+      };
+      client.dispose = async () => {
         events.push('dispose-started');
         disposalStarted.open();
         await releaseDisposal.opened;
-        await super.dispose();
+        await dispose.call(client);
         events.push('dispose-finished');
-      }
-    }
+      };
+      return client;
+    };
     try {
       const construction = createOwnerWithClient(
-        built,
-        (...args) => new BindingFailureClient(...args),
+        builtConfig,
+        builtSettings,
+        builtManager,
+        builtMedia,
+        builtMcp,
+        builtSettingsOwner,
+        builtContent,
+        builtTokenizer,
+        createBindingFailureClient,
       ).then(
         () => events.push('constructed'),
         (error: unknown) => {
@@ -99,34 +282,176 @@ describe('Factory-created session client acquisition', () => {
       ]);
       expect(error).toBe(bindingError);
     } finally {
-      await built.cleanup();
+      await closeEngine();
     }
   }, 30000);
 
   it('rejects with the binding and disposal failures after disposal settles', async () => {
-    const built = await createSessionClientEngineFixture();
+    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
+    );
+    const builtDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'explicit-engine-owner-')),
+    );
+    const builtConfig = new Config(
+      toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        workingDir: builtDirectory,
+      }),
+    );
+    const builtSettings = new SettingsService();
+    const builtPolicy = new RuntimePolicyOwner(builtConfig);
+    const builtMessageBus = builtPolicy.session.messageBus;
+    const builtMcp = await createTestMcpRuntime(
+      {
+        oauth: {
+          openBrowser: async () => {
+            throw new Error('Unexpected browser request');
+          },
+          tokenStorage: new MCPOAuthTokenStorage({
+            getCredentials: async () => null,
+            setCredentials: async () => {
+              throw new Error('Unexpected token write');
+            },
+            deleteCredentials: async () => {},
+            listServers: async () => [],
+            getAllCredentials: async () => new Map(),
+            clearAll: async () => {},
+          }),
+        },
+        config: builtConfig,
+        policy: { owner: builtPolicy, ownership: 'runtime' },
+      },
+      {},
+    );
+
+    const builtRuntimeId = 'engine-' + randomUUID();
+    const builtRelease = new AcquisitionRelease();
+    const builtSettingsOwner = new SessionSettingsOwner(builtSettings);
+    builtRelease.acquire('settings', () => builtSettingsOwner.dispose());
+    builtSettingsOwner.initializeProviderSelection(
+      builtConfig.getProvider(),
+      builtConfig.getModel(),
+    );
+    builtSettingsOwner.bindTelemetry(builtConfig);
+    const builtFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    for (const scope of [builtRuntimeId, builtConfig.getSessionId()])
+      builtRelease.acquire('files', () =>
+        releaseAdoptedFileScope(builtFiles, scope),
+      );
+    const builtManager = acquirePreferredProviderManager(
+      builtConfig,
+      builtSettings,
+      builtSettingsOwner,
+      builtFiles,
+      builtRuntimeId,
+      credentials().authority,
+      builtRelease,
+    );
+    const builtTokenizer = configureProviderTokenizer(builtManager);
+    const builtContent = createRuntimeContentGeneratorFactory();
+    const builtOAuth = acquirePreferredOAuth(
+      undefined,
+      builtMessageBus,
+      builtConfig,
+      builtSettings,
+      builtManager,
+      builtRuntimeId,
+      builtMcp.profileDefinitions,
+      credentials().authority,
+      builtRelease,
+      undefined,
+    );
+    const builtMedia = new SessionMediaOwner(
+      builtConfig.projectTempDir,
+      1024 * 1024,
+    );
+    const builtOwner = await createCapturedSessionOwner(
+      builtConfig,
+      assembleTaskSchemaPolicy(builtSettings),
+      builtManager,
+      buildAgentClientFactory(),
+      builtMedia.store,
+      builtMcp.readInstructions,
+      builtMcp.workspacePaths,
+      builtSettingsOwner,
+      builtContent,
+      builtTokenizer,
+    );
+    builtOwner.bindMcpRuntime(builtMcp);
+    builtOwner.bindHooks();
+    const closeEngine = settleEngineRelease.bind(
+      undefined,
+      [
+        () => builtOwner.dispose(),
+        () => builtRelease.close(),
+        () => builtMedia.dispose(),
+        () => builtMcp.dispose(),
+        () => builtConfig.dispose(),
+        () => rm(builtDirectory, { recursive: true, force: true }),
+      ],
+      previousReplay,
+    );
+    try {
+      await preparePreferredProviderCompletion(
+        builtConfig,
+        builtSettings,
+        builtSettingsOwner,
+        builtManager,
+        builtOAuth,
+        builtRuntimeId,
+        builtTokenizer,
+        undefined,
+        process.env.LLXPRT_FAKE_RESPONSES,
+      );
+      await builtMcp.initialize();
+      await builtOwner.initializeTools();
+      await builtOwner.clients.refreshAuth();
+      await (await currentOwnerClient(builtOwner)).startChat();
+    } catch (primary) {
+      await cleanupAfterFailure(primary, closeEngine);
+    }
+
     const releaseDisposal = createGate();
     const disposalStarted = createGate();
     const events: string[] = [];
     const bindingError = new Error('binding boom');
     const disposalError = new Error('dispose boom');
-    class BindingFailureClient extends AgentClient {
-      override bindProviderInvocation(): void {
+    const createBindingFailureClient = (
+      ...args: ConstructorParameters<typeof AgentClient>
+    ): AgentClient => {
+      const client = new AgentClient(...args);
+      const dispose = client.dispose;
+      client.bindProviderInvocation = () => {
         throw bindingError;
-      }
-      override async dispose(): Promise<void> {
+      };
+      client.dispose = async () => {
         events.push('dispose-started');
         disposalStarted.open();
         await releaseDisposal.opened;
-        await super.dispose();
+        await dispose.call(client);
         events.push('dispose-finished');
         throw disposalError;
-      }
-    }
+      };
+      return client;
+    };
     try {
       const construction = createOwnerWithClient(
-        built,
-        (...args) => new BindingFailureClient(...args),
+        builtConfig,
+        builtSettings,
+        builtManager,
+        builtMedia,
+        builtMcp,
+        builtSettingsOwner,
+        builtContent,
+        builtTokenizer,
+        createBindingFailureClient,
       ).then(
         () => events.push('constructed'),
         (error: unknown) => {
@@ -152,7 +477,19 @@ describe('Factory-created session client acquisition', () => {
         );
       expect(error.errors).toStrictEqual([bindingError, disposalError]);
     } finally {
-      await built.cleanup();
+      await closeEngine();
     }
   }, 30000);
 });
+
+async function settleEngineRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previousReplay: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
+  }
+}

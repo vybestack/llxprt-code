@@ -37,7 +37,9 @@ import {
   countType,
   isTextEvent,
   ASYNC_PROPERTY_TIMEOUT_MS,
+  buildPropertyAgent,
 } from './helpers/agentHarness.js';
+import { buildReplayProviderAgent } from './helpers/replay-provider-agent.js';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 
 const MODEL_PARAM_KEY_ARBITRARY = fc
@@ -99,7 +101,8 @@ describe('mutation P23.b — getProviderStatus auth-shape divergence (REQ-002)',
         fc.asyncProperty(
           fc.string({ minLength: 1, maxLength: 50 }),
           async (input) => {
-            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            const { agent, cleanup } =
+              await buildPropertyAgent('plain-text.jsonl');
             try {
               const result = await agent.generate(input);
               expect(typeof result).toBe('string');
@@ -120,7 +123,8 @@ describe('mutation P23.b — getProviderStatus auth-shape divergence (REQ-002)',
         fc.asyncProperty(
           fc.string({ minLength: 1, maxLength: 30 }),
           async (input) => {
-            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            const { agent, cleanup } =
+              await buildPropertyAgent('plain-text.jsonl');
             try {
               await drain(agent.stream(input));
               const stats = agent.getStats();
@@ -235,9 +239,18 @@ describe('mutation P23.b — generate side-channel (REQ-002)', () => {
 
 describe('mutation P23.b — restoreChatVisibility switch continuity (REQ-005)', () => {
   it('after a provider+model switch, a second turn produces real text + one done (carriedHistory path) (REQ-005)', async () => {
-    const { agent, cleanup } = await buildAgent(
-      'provider-switch-two-turn.jsonl',
-    );
+    const { agent, cleanup } = await buildReplayProviderAgent({
+      initial: {
+        alias: 'fake',
+        script: { fixtureRelPath: 'provider-switch-two-turn.jsonl' },
+      },
+      targets: [
+        {
+          alias: 'newprov',
+          script: { fixtureRelPath: 'provider-switch-second-turn.jsonl' },
+        },
+      ],
+    });
     try {
       const e1: AgentEvent[] = await drain(agent.stream('turn one'));
       expect(countType(e1, 'done')).toBe(1);
@@ -261,7 +274,7 @@ describe('mutation P23.b — property cases @plan:PLAN-20260621-COREAPIREMED.P23
     async () => {
       await fc.assert(
         fc.asyncProperty(nonBlankStringArbitrary, async (model) => {
-          const { agent, cleanup } = await buildAgent(
+          const { agent, cleanup } = await buildPropertyAgent(
             'provider-switch-two-turn.jsonl',
           );
           try {
@@ -288,7 +301,8 @@ describe('mutation P23.b — property cases @plan:PLAN-20260621-COREAPIREMED.P23
           MODEL_PARAM_KEY_ARBITRARY,
           fc.jsonValue(),
           async (key, value) => {
-            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            const { agent, cleanup } =
+              await buildPropertyAgent('plain-text.jsonl');
             try {
               agent.setModelParam(key, value);
               const afterSet = agent.getModelParams()[key];
@@ -313,9 +327,12 @@ describe('mutation P23.b — property cases @plan:PLAN-20260621-COREAPIREMED.P23
         fc.asyncProperty(
           fc.string({ minLength: 1, maxLength: 60 }),
           async (keyFile) => {
-            const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-              auth: { apiKeyFile: keyFile },
-            });
+            const { agent, cleanup } = await buildPropertyAgent(
+              'plain-text.jsonl',
+              {
+                auth: { apiKeyFile: keyFile },
+              },
+            );
             try {
               const status = agent.getProviderStatus();
               expect(status.authStatus).toBe('authenticated');
@@ -336,7 +353,8 @@ describe('mutation P23.b — property cases @plan:PLAN-20260621-COREAPIREMED.P23
     async () => {
       await fc.assert(
         fc.asyncProperty(nonBlankStringArbitrary, async (promptId) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+          const { agent, cleanup } =
+            await buildPropertyAgent('plain-text.jsonl');
           try {
             await drain(agent.stream('turn'));
             const result = await agent.compress({ promptId });

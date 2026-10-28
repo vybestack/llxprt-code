@@ -1,14 +1,41 @@
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { ProviderManager } from '../ProviderManager.js';
+import { ProviderFileLifecycle } from '../providerFilePolicy.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import {
+  createOwnedTokenStoreClose,
+  createSessionAuthPolicyReader,
+  createOwnerAuthCacheInvalidator,
+  populateProviderManager,
+} from './index.js';
+import {
+  acquireOwnedOAuth,
+  acquireOwnedProviderManager,
+} from '../__tests__/helpers/acquire-provider-owners.js';
+
+import { releaseAdoptedFileScope } from '../__tests__/helpers/adopted-file-scope.js';
+import { useOwnedCredentials } from '../__tests__/helpers/owned-credential-fixture.js';
+import {
+  cleanupAfterFailure,
+  runCleanupSteps,
+} from '../__tests__/helpers/cleanup.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { createProviderPopulationTarget } from './providerManagerInstance.js';
 
 import { NodeFileSystem } from './IFileSystem.js';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { BrowserLaunchOptions } from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
 import type { LocalOAuthCallbackOptions } from '../auth/local-oauth-callback.js';
@@ -16,24 +43,7 @@ import { MemoryTokenStore } from '../auth/__tests__/behavioral/test-utils.js';
 import { AnthropicOAuthProvider } from '../auth/anthropic-oauth-provider.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import { registerStandardOAuthProviders } from './oauth-provider-registration.js';
-import { createProviderManager } from './providerManagerInstance.js';
-import {
-  createIsolatedRuntimeContext,
-  type RuntimeActivationBindings,
-} from '../runtime/runtimeContextFactory.js';
-
-const activationBindings: RuntimeActivationBindings = {
-  resetInfrastructure: () => {},
-  setRuntimeContext: () => {},
-  registerInfrastructure: () => {},
-  linkProviderManager: (config, manager) => {
-    configureProviderRuntimeFactories(config, manager);
-  },
-};
-import {
-  interactiveAuthCoordinator,
-  type InteractiveAuthChallenge,
-} from '../auth/interactive-auth-coordinator.js';
+import { type InteractiveAuthChallenge } from '../auth/interactive-auth-coordinator.js';
 
 const launches: Array<BrowserLaunchOptions | undefined> = [];
 import * as browser from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
@@ -45,83 +55,179 @@ void vi.mock('../auth/local-oauth-callback.js', () => ({
   }),
 }));
 
-function context(runtimeId: string) {
-  const settingsService = new SettingsService();
-  const config = new Config({
-    sessionId: runtimeId,
-    targetDir: process.cwd(),
-    cwd: process.cwd(),
-    debugMode: false,
-    model: 'gpt-5',
-  });
-  return { runtimeId, settingsService, config };
-}
-
 type Construction =
   | 'direct'
   | 'composition'
   | 'composition-context'
-  | 'isolated'
-  | 'adopted'
-  | 'adopted-live';
-function buildManager(
-  owner: ReturnType<typeof context>,
-  construction: Construction,
-  adoptingOwner: ReturnType<typeof context>,
-  cleanups: Array<() => void | Promise<void>>,
-): OAuthManager {
-  if (construction === 'composition-context')
-    return createProviderManager(owner, {
-      fileSystem: new NodeFileSystem(),
-      activateConfiguredProvider: false,
-    }).oauthManager;
-  if (construction === 'composition')
-    return createProviderManager(owner, {
-      fileSystem: new NodeFileSystem(),
-      config: owner.config,
-      activateConfiguredProvider: false,
-    }).oauthManager;
-  if (construction === 'isolated') {
-    const handle = createIsolatedRuntimeContext(
-      {
-        ...owner,
-        activationBindings,
-      },
-      owner.settingsService,
-    );
-    cleanups.push(() => handle.cleanup());
-    return handle.oauthManager;
-  }
-  const manager = new OAuthManager(new MemoryTokenStore(), undefined, {
-    readSessionAuthPolicy: () => ({
-      profileName: owner.settingsService.getCurrentProfileName(),
-      baseUrl: undefined,
-      bucketPrompt: owner.settingsService.get('auth-bucket-prompt'),
-      bucketDelay: owner.settingsService.get('auth-bucket-delay'),
-      interactiveTimeoutMs: owner.settingsService.get(
-        'auth.interactiveTimeoutMs',
-      ),
-      noBrowser: owner.settingsService.get('auth.noBrowser') === true,
-      authOnly: owner.settingsService.get('authOnly') === true,
-    }),
-  });
-  if (construction === 'adopted-live') registerStandardOAuthProviders(manager);
-  if (construction === 'adopted' || construction === 'adopted-live') {
-    const handle = createIsolatedRuntimeContext(
-      {
-        ...adoptingOwner,
-        activationBindings,
-        oauthManager: manager,
-      },
-      adoptingOwner.settingsService,
-    );
-    cleanups.push(() => handle.cleanup());
-  } else registerStandardOAuthProviders(manager);
-  return manager;
-}
-
+  | 'isolated';
 const originalFetch = globalThis.fetch;
+const stubbedOwnerFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 describe('OAuth owner reads before registration', () => {
+  const credentials = useOwnedCredentials();
+  const retiring: Array<() => void | Promise<void>> = [];
+  let configA: Config;
+  let configB: Config;
+  let settingsA: SettingsService;
+  let settingsB: SettingsService;
+  afterEach(async () => {
+    await runCleanupSteps(retiring.splice(0).reverse());
+  });
+  async function openContexts(idA: string, idB: string): Promise<void> {
+    const raw = await mkdtemp(join(tmpdir(), 'browser-policy-'));
+    retiring.push(() => rm(raw, { recursive: true, force: true }));
+    const directory = await realpath(raw);
+    const first = new Config({
+      sessionId: idA,
+      targetDir: directory,
+      cwd: directory,
+      debugMode: false,
+      model: 'gpt-5',
+    });
+    configA = first;
+    retiring.push(() => first.dispose());
+    const second = new Config({
+      sessionId: idB,
+      targetDir: directory,
+      cwd: directory,
+      debugMode: false,
+      model: 'gpt-5',
+    });
+    configB = second;
+    retiring.push(() => second.dispose());
+    settingsA = new SettingsService();
+    settingsB = new SettingsService();
+  }
+  async function buildManager(
+    config: Config,
+    settings: SettingsService,
+    construction: Construction,
+  ): Promise<OAuthManager> {
+    const release = new AcquisitionRelease();
+    let complete = false;
+    retiring.push(() => (complete ? release.close() : release.rollback()));
+    try {
+      if (
+        construction === 'composition' ||
+        construction === 'composition-context'
+      ) {
+        const oauth = composeOAuth(config, settings, construction, release);
+        complete = true;
+        return oauth;
+      }
+      if (construction === 'isolated') {
+        const oauth = isolateOAuth(config, settings, release);
+        complete = true;
+        return oauth;
+      }
+      const manager = new OAuthManager(new MemoryTokenStore(), undefined, {
+        readSessionAuthPolicy: () => ({
+          profileName: settings.getCurrentProfileName(),
+          baseUrl: undefined,
+          bucketPrompt: settings.get('auth-bucket-prompt'),
+          bucketDelay: settings.get('auth-bucket-delay'),
+          interactiveTimeoutMs: settings.get('auth.interactiveTimeoutMs'),
+          noBrowser: settings.get('auth.noBrowser') === true,
+          authOnly: settings.get('authOnly') === true,
+        }),
+      });
+      release.acquire('oauth', () => manager.dispose());
+      registerStandardOAuthProviders(manager, globalThis.fetch);
+      complete = true;
+      return manager;
+    } catch (primary) {
+      return cleanupAfterFailure(primary, () => release.rollback());
+    }
+  }
+  function composeOAuth(
+    config: Config,
+    settings: SettingsService,
+    construction: Construction,
+    release: AcquisitionRelease,
+  ): OAuthManager {
+    const attachedConfig =
+      construction === 'composition-context' ? undefined : config;
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      attachedConfig,
+      { runtimeId: config.getSessionId() },
+    );
+    release.acquire('manager', () => manager.dispose());
+    manager.bindNetworkFetch(stubbedOwnerFetch);
+    const keys = credentials().authority.createProviderKeyStorage();
+    release.acquire('manager', () => keys.close());
+    manager.bindProviderKeyStorage(keys);
+    const tokens = credentials().authority.createTokenStore();
+    release.acquire('tokens', createOwnedTokenStoreClose(tokens));
+    const oauth = new OAuthManager(tokens, undefined, {
+      config: attachedConfig,
+      readAuthIdentity: () => manager.getAuthIdentity(),
+      readSessionAuthPolicy: createSessionAuthPolicyReader(settings),
+      invalidateAuthCaches: createOwnerAuthCacheInvalidator((name) =>
+        manager.getProviderByName(name),
+      ),
+    });
+    release.acquire('oauth', () => oauth.dispose());
+    populateProviderManager({
+      target: createProviderPopulationTarget(manager, oauth, tokens),
+      readSetting: (key) => settings.get(key),
+      fileSystem: new NodeFileSystem(),
+      configuration:
+        attachedConfig === undefined
+          ? { kind: 'pre-config' }
+          : { kind: 'configured', config: attachedConfig },
+      contributions: { kind: 'none' },
+      messages: { kind: 'none' },
+      allowBrowser: false,
+      activateConfiguredProvider: false,
+      fakeResponses: { kind: 'disabled' },
+    });
+    return oauth;
+  }
+  function isolateOAuth(
+    config: Config,
+    settings: SettingsService,
+    release: AcquisitionRelease,
+  ): OAuthManager {
+    const owner = new SessionSettingsOwner(settings);
+    release.acquire('settings', () => owner.dispose());
+    owner.bindTelemetry(config);
+    const policy = new RuntimePolicyOwner(config);
+    release.acquire('policy', () => policy.dispose());
+    const files = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    release.acquire('files', () =>
+      releaseAdoptedFileScope(files, config.getSessionId()),
+    );
+    const manager = acquireOwnedProviderManager(
+      config,
+      settings,
+      owner,
+      files,
+      config.getSessionId(),
+      credentials().authority,
+      release,
+    );
+    manager.bindNetworkFetch(stubbedOwnerFetch);
+    return acquireOwnedOAuth(
+      undefined,
+      policy.session.messageBus,
+      config,
+      settings,
+      manager,
+      config.getSessionId(),
+      undefined,
+      credentials().authority,
+      release,
+      undefined,
+    );
+  }
   beforeEach(() => {
     vi.spyOn(browser, 'shouldLaunchBrowser').mockImplementation(
       (options) => options?.forceManual !== true,
@@ -135,29 +241,23 @@ describe('OAuth owner reads before registration', () => {
   afterEach(async () => {
     globalThis.fetch = originalFetch;
     launches.length = 0;
-    await interactiveAuthCoordinator.dispose();
-    interactiveAuthCoordinator.unbindHost();
     vi.restoreAllMocks();
   });
 
   it.each([
     ['composition-context', 'codex'],
-    ['adopted-live', 'codex'],
     ['direct', 'codex'],
     ['composition', 'codex'],
     ['isolated', 'codex'],
-    ['adopted', 'codex'],
     ['composition-context', 'claudecode'],
-    ['adopted-live', 'claudecode'],
     ['direct', 'claudecode'],
     ['composition', 'claudecode'],
     ['isolated', 'claudecode'],
-    ['adopted', 'claudecode'],
   ] as const)(
     '%s %s preserves owner browser policy and bucket routing without an identity scope',
     async (construction, providerName) => {
-      globalThis.fetch = vi.fn(
-        async () =>
+      const requestFetch = vi.fn(
+        async (_input: string | URL | Request, _init?: RequestInit) =>
           new Response(
             JSON.stringify({
               id_token: `header.${Buffer.from(JSON.stringify({ account_id: 'owner-account' })).toString('base64url')}.signature`,
@@ -170,11 +270,13 @@ describe('OAuth owner reads before registration', () => {
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           ),
       );
-      const a = context(`browser-a-${construction}`);
-      const b = context(`browser-b-${construction}`);
-      const cleanups: Array<() => void | Promise<void>> = [];
-      const managerA = buildManager(a, construction, b, cleanups);
-      const managerB = buildManager(b, construction, b, cleanups);
+      globalThis.fetch = requestFetch;
+      await openContexts(
+        `browser-a-${construction}`,
+        `browser-b-${construction}`,
+      );
+      const managerA = await buildManager(configA, settingsA, construction);
+      const managerB = await buildManager(configB, settingsB, construction);
       const bucketA = `owner-a-${construction}`;
       const bucketB = `owner-b-${construction}`;
       managerA.setBrowserProfileAssociation(providerName, bucketA, {
@@ -203,21 +305,23 @@ describe('OAuth owner reads before registration', () => {
           launches.map((launch) => launch?.profileDirectory).sort(),
         ).toStrictEqual(['Owner A', 'Owner B']);
         launches.length = 0;
-        a.settingsService.set('auth.noBrowser', true);
-        globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
-          if (String(input).includes('deviceauth'))
-            throw new Error('device-route');
-          return new Response(
-            JSON.stringify({
-              id_token: `header.${Buffer.from(JSON.stringify({ account_id: 'owner-account' })).toString('base64url')}.signature`,
-              access_token: 'browser-token',
-              expires_in: 3600,
-              token_type: 'Bearer',
-              scope: 'user:inference',
-            }),
-            { status: 200 },
-          );
-        });
+        settingsA.set('auth.noBrowser', true);
+        requestFetch.mockImplementation(
+          async (input: string | URL | Request) => {
+            if (String(input).includes('deviceauth'))
+              throw new Error('device-route');
+            return new Response(
+              JSON.stringify({
+                id_token: `header.${Buffer.from(JSON.stringify({ account_id: 'owner-account' })).toString('base64url')}.signature`,
+                access_token: 'browser-token',
+                expires_in: 3600,
+                token_type: 'Bearer',
+                scope: 'user:inference',
+              }),
+              { status: 200 },
+            );
+          },
+        );
         if (providerA instanceof AnthropicOAuthProvider) {
           providerA.setAddItem(() => {
             setImmediate(() => providerA.submitAuthCode('manual-code'));
@@ -241,9 +345,7 @@ describe('OAuth owner reads before registration', () => {
       } finally {
         managerA.clearBrowserProfileAssociation(providerName, bucketA);
         managerB.clearBrowserProfileAssociation(providerName, bucketB);
-        for (const cleanup of cleanups) await cleanup();
-        await a.config.dispose();
-        await b.config.dispose();
+        await runCleanupSteps(retiring.splice(0).reverse());
       }
     },
   );
@@ -253,28 +355,35 @@ describe('OAuth owner reads before registration', () => {
     'composition',
     'composition-context',
     'isolated',
-    'adopted',
-    'adopted-live',
   ] as const)(
     '%s uses each manager timeout and carries only its available requester identity',
     async (construction) => {
-      const a = context('timeout-a');
-      const b = context('timeout-b');
-      a.settingsService.set('auth.interactiveTimeoutMs', 20);
-      b.settingsService.set('auth.interactiveTimeoutMs', 10000);
+      await openContexts('timeout-a', 'timeout-b');
+      settingsA.set('auth.interactiveTimeoutMs', 20);
+      settingsB.set('auth.interactiveTimeoutMs', 10000);
       const challenges: InteractiveAuthChallenge[] = [];
-      const cleanups: Array<() => void | Promise<void>> = [];
-      const managers = [a, b].map((owner) =>
-        buildManager(owner, construction, b, cleanups),
-      );
+      const managers = [
+        await buildManager(configA, settingsA, construction),
+        await buildManager(configB, settingsB, construction),
+      ];
       for (const manager of managers) {
         if (!manager.isOAuthEnabled('codex'))
           await manager.toggleOAuthEnabled('codex');
       }
-      interactiveAuthCoordinator.bindHost(async (challenge) => {
-        challenges.push(challenge);
-        await new Promise<void>(() => {});
-      });
+      const started = managers.map(
+        (manager) =>
+          new Promise<void>((resolve) => {
+            manager.bindInteractiveAuthHost(async (challenge, signal) => {
+              challenges.push(challenge);
+              resolve();
+              await new Promise<void>((_resolve, reject) => {
+                signal.addEventListener('abort', () => reject(signal.reason), {
+                  once: true,
+                });
+              });
+            });
+          }),
+      );
       try {
         const first = managers[0]
           .getToken('codex', 'short')
@@ -282,6 +391,7 @@ describe('OAuth owner reads before registration', () => {
         const second = managers[1]
           .getToken('codex', 'long')
           .catch((error: unknown) => error);
+        await Promise.all(started);
         expect(
           await Promise.race([
             first,
@@ -309,15 +419,13 @@ describe('OAuth owner reads before registration', () => {
               (left.runtimeId ?? '').localeCompare(right.runtimeId ?? ''),
             ),
         ).toStrictEqual([requesterFor('timeout-a'), requesterFor('timeout-b')]);
-        expect(interactiveAuthCoordinator.cancelActiveSessions()).toBe(1);
+        expect(managers[1].cancelInteractiveAuth()).toBe(1);
         expect(await second).toMatchObject({
           name: 'InteractiveAuthCancelledError',
         });
       } finally {
-        await interactiveAuthCoordinator.dispose();
-        for (const cleanup of cleanups) await cleanup();
-        await a.config.dispose();
-        await b.config.dispose();
+        await Promise.all(managers.map((manager) => manager.dispose()));
+        await runCleanupSteps(retiring.splice(0).reverse());
       }
     },
   );

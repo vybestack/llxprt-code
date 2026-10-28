@@ -3,6 +3,9 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createAgent } from '@vybestack/llxprt-code-agents';
+
+import { createOwnedTask } from './__tests__/owned-task.js';
 
 /**
  * Behavioral tests for the #3221 approval-boundary semantics of Task:
@@ -83,7 +86,9 @@ const SAVED_ENV: Readonly<Record<string, string | undefined>> = {
 const SAVED_CWD = process.cwd();
 
 async function buildAgent(): Promise<Agent> {
-  const { createTaskAgent, setTargetDir } = await import('../config/config.js');
+  const { createTaskAgentConfig, setTargetDir } = await import(
+    '../config/config.js'
+  );
   const { loadSettings } = await import('../config/settings.js');
   // Executor parity: resolve the workspace (chdir) before building the task
   // agent, exactly as the executor does per request.
@@ -93,7 +98,9 @@ async function buildAgent(): Promise<Agent> {
   });
   process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
   const settings = loadSettings(WORKSPACE);
-  return createTaskAgent(settings, [], 'approval-semantics-task');
+  return createAgent(
+    createTaskAgentConfig(settings, [], 'approval-semantics-task'),
+  );
 }
 
 /**
@@ -158,7 +165,7 @@ describe('Task approval-boundary semantics (#3221)', () => {
   it('rejects a message mixing a pending confirmation with new content before consuming the confirmation', async () => {
     const agent = await buildAgent();
     try {
-      const task = await Task.create('t-mixed', 'c-mixed', agent);
+      const task = createOwnedTask('t-mixed', 'c-mixed', agent);
       const { callId } = await driveToApprovalBoundary(task);
 
       const mixedMessage = {
@@ -210,7 +217,7 @@ describe('Task approval-boundary semantics (#3221)', () => {
   it('cancelTurn at the approval boundary releases the turn-scoped confirmation state', async () => {
     const agent = await buildAgent();
     try {
-      const task = await Task.create('t-cancel', 'c-cancel', agent);
+      const task = createOwnedTask('t-cancel', 'c-cancel', agent);
       const { callId } = await driveToApprovalBoundary(task);
       expect(task.hasPendingConfirmation(callId)).toBe(true);
 

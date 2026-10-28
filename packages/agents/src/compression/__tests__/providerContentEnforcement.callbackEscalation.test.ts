@@ -17,26 +17,27 @@
  * projections, never on mock interactions.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { CompressionCallback } from '@vybestack/llxprt-code-providers';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  buildMockContentGenerator,
+  buildRuntimeContext,
+} from '../../core/__tests__/chatSession-density-helpers.js';
+import { ChatSession } from '../../core/chatSession.js';
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
+import { buildCompressionContext } from '../compressionContextBuilder.js';
+import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
 import {
   ProviderContentEnforcer,
   type ProviderContentEnforcementDeps,
 } from '../providerContentEnforcement.js';
 import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
-import { buildCompressionContext } from '../compressionContextBuilder.js';
-import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
-import {
-  buildRuntimeContext,
-  buildMockContentGenerator,
-} from '../../core/__tests__/chatSession-density-helpers.js';
-import { ChatSession } from '../../core/chatSession.js';
-import type { CompressionCallback } from '@vybestack/llxprt-code-providers';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 
 const MODEL = 'test-model';
 const HISTORY_MESSAGES = 14;
@@ -134,6 +135,7 @@ function buildFallbackCompression(
     const context = await buildCompressionContext(
       promptId,
       runtimeContext,
+      undefined,
       historyService,
       () =>
         Promise.resolve({
@@ -246,7 +248,14 @@ describe('ProviderContentEnforcer compression-callback escalation (issue #3499)'
     seedHistory(historyService);
     const pending = makePending();
     const chat = new ChatSession(
-      runtimeContext,
+      chatSessionPorts(runtimeContext),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       buildMockContentGenerator(),
       {},
       [],

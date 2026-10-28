@@ -1,16 +1,19 @@
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'bun:test';
-import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { ChatSession } from '../chatSession.js';
-import { SubagentOrchestrator } from '../subagentOrchestrator.js';
-import { AggregateDisposeError } from '../../api/disposeErrors.js';
+import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { describe, expect, it, vi } from 'bun:test';
 import { withDisposalJoinFixture } from '../../api/__tests__/helpers/async-child-disposal-join-fixture.js';
+import { AggregateDisposeError } from '../../api/disposeErrors.js';
+import { ChatSession } from '../chatSession.js';
+
+const parentSignal = new AbortController().signal;
 
 describe('subagent cleanup error retention', () => {
   it.each([false, true])(
@@ -21,6 +24,7 @@ describe('subagent cleanup error retention', () => {
           config,
           settingsOwner,
           agent,
+          parentTools,
           workspaceTrust,
           workspacePaths,
           instructionReads,
@@ -38,11 +42,12 @@ describe('subagent cleanup error retention', () => {
                 yield* [];
               })(),
             );
-          const orchestrator = new SubagentOrchestrator({
+          const orchestrator = createTestChildOrchestrator({
+            credentialAuthority: new CredentialAuthority(),
             workspaceTrust,
             createChildSettings: () => settingsOwner.createChildStore(),
             readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),
-            toolRegistry: agent.agentClient.tools,
+            toolRegistry: await parentTools(),
             workspacePaths,
             instructions: instructionReads,
             foregroundConfig: config,
@@ -51,10 +56,13 @@ describe('subagent cleanup error retention', () => {
             messageBus: new MessageBus(),
             readMcpInstructions,
           });
-          const run = await orchestrator.launch({
-            name: 'disposal-child',
-            runConfig: { max_turns: 1, max_time_minutes: 1 },
-          });
+          const run = await orchestrator.launch(
+            {
+              name: 'disposal-child',
+              runConfig: { max_turns: 1, max_time_minutes: 1 },
+            },
+            parentSignal,
+          );
           const context = new ContextState();
           context.set('task_goal', 'Complete.');
           try {

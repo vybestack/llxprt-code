@@ -3,14 +3,17 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createCommandRegistryFixture } from '../../__tests__/command-registry-fixture.js';
 
-import { act, useCallback, useState } from 'react';
+import { act, useCallback, useMemo, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { CommandKind, type SlashCommand } from '../commands/types.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { FixtureCommandRuntime } from '../../__tests__/slash-command-runtime-fixture.js';
 import { CoreEvent, coreEvents } from '@vybestack/llxprt-code-core';
 import { useCommandReload } from './slashCommandProcessorSupport.js';
+import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
+const builtinOwners = createUnconfiguredBuiltinOwners();
 
 const loaderState = {
   builtinCommands: [] as SlashCommand[],
@@ -20,6 +23,8 @@ const loaderState = {
 
 void vi.mock('../../services/BuiltinCommandLoader.js', () => ({
   BuiltinCommandLoader: class {
+    constructor(..._args: unknown[]) {}
+
     loadCommands(): Promise<readonly SlashCommand[]> {
       return Promise.resolve(loaderState.builtinCommands);
     }
@@ -28,7 +33,7 @@ void vi.mock('../../services/BuiltinCommandLoader.js', () => ({
 
 void vi.mock('../../services/FileCommandLoader.js', () => ({
   FileCommandLoader: class {
-    constructor(private readonly config: CliUiRuntime) {}
+    constructor(private readonly config: FixtureCommandRuntime) {}
 
     loadCommands(): Promise<readonly SlashCommand[]> {
       return Promise.resolve(
@@ -53,19 +58,26 @@ void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   ...actual,
 }));
 
-function useCommandRegistry(config: CliUiRuntime): readonly SlashCommand[] {
+function useCommandRegistry(
+  config: FixtureCommandRuntime,
+): readonly SlashCommand[] {
   const [reloadTrigger, setReloadTrigger] = useState(0);
   const [commands, setCommands] = useState<readonly SlashCommand[]>([]);
   const reloadCommands = useCallback(() => {
     setReloadTrigger((value) => value + 1);
   }, []);
+  const registry = useMemo(
+    () => createCommandRegistryFixture(config),
+    [config],
+  );
   useCommandReload(
-    config,
+    builtinOwners,
+    registry.loadRegisteredCommands,
+    registry.subscribeCommandChanges,
     reloadTrigger,
     true,
     reloadCommands,
     setCommands,
-    null,
   );
   return commands;
 }
@@ -81,9 +93,9 @@ describe('useCommandReload', () => {
     let trusted = false;
     const config = {
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => trusted,
-    } as CliUiRuntime;
+    } as FixtureCommandRuntime;
     loaderState.fileCommands = [
       {
         name: 'trusted-file-command',
@@ -117,9 +129,9 @@ describe('useCommandReload', () => {
     let trusted = true;
     const config = {
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => trusted,
-    } as CliUiRuntime;
+    } as FixtureCommandRuntime;
     const { result } = renderHook(() => useCommandRegistry(config));
     await waitFor(() => expect(result.current).toHaveLength(1));
 
@@ -135,9 +147,9 @@ describe('useCommandReload', () => {
   it('stops listening for folder trust changes after unmount', async () => {
     const config = {
       getFolderTrust: () => false,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => true,
-    } as CliUiRuntime;
+    } as FixtureCommandRuntime;
     const listenersBeforeMount = coreEvents.listenerCount(
       CoreEvent.FolderTrustChanged,
     );

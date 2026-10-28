@@ -28,12 +28,19 @@ import type { UseShellPathCompletionReturn } from '../src/ui/hooks/useShellPathC
  * means the process-global mutation is scoped to a single `await` and survives
  * neither a successful import nor a module-initialisation throw. That removes
  * any dependence on test ordering, runner process reuse, or `afterAll` running.
+ *
+ * The key-handler graph reaches the core barrel, whose native addons (for
+ * example `@ast-grep/napi`) select their prebuilt binary from
+ * `process.platform` when first evaluated. The barrel is therefore loaded
+ * under the real platform before the pin, so the pin only affects the key
+ * binding resolution it exists to exercise.
  */
 export async function loadKeyHandlerForPlatform(
   platform: NodeJS.Platform,
 ): Promise<
   typeof import('../src/ui/components/inputPromptKeyHandlers.js').handleInputKey
 > {
+  await import('@vybestack/llxprt-code-core');
   const originalPlatform = process.platform;
   Object.defineProperty(process, 'platform', {
     value: platform,

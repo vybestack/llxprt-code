@@ -1,3 +1,5 @@
+import { CliSessionPersistence } from '../../cliSessionPersistence.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -17,9 +19,12 @@ import {
   getProjectHash,
   type LockHandle,
 } from '@vybestack/llxprt-code-core';
-import { renderHook } from '../../__tests__/render.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
-import { useSessionBrowserHandler } from './DialogManager.js';
+import {
+  bindRawBrowserResume,
+  bindRawBrowserSession,
+} from './browserResumeHost.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const SESSION_ID = 'browser-resume-session';
 const CORRUPT_REASON =
@@ -90,50 +95,46 @@ describe('session browser resume with an unreadable recording present (issue #37
     const turnStore = createTurnStore();
     const { commands } = turnStore;
     const config = {
-      getEphemeralSetting: () => 'auto',
-      getProjectTempDir: () => root,
+      projectTempDir: root,
       getProjectRoot: () => projectRoot,
       getSessionId: () => 'current-session',
       getProvider: () => 'test-provider',
       getModel: () => 'test-model',
       directories: () => [root],
       adoptSessionId: () => {},
-    } as never;
-    const { result, unmount } = renderHook(() =>
-      useSessionBrowserHandler(
-        config,
+      sessionPersistence: new CliSessionPersistence(
+        { projectRoot, chatsDir },
         {
-          ui: {
-            clear: commands.clearItems,
-            addItem: commands.addItem,
-            pendingItem: null,
-            loadHistory: commands.loadHistory,
-          },
-          services: {
-            agent: {
-              agentClient: { getHistoryService: () => undefined },
-            } as never,
-          },
-          recordingSwapCallbacks: {
-            getCurrentRecording: () => null,
-            getCurrentIntegration: () => null,
-            getCurrentLockHandle: () => null,
-            setRecording: (
-              next: SessionRecordingService,
-              _integration: unknown,
-              lock: LockHandle,
-            ) => {
-              committed = next;
-              committedLock = lock;
-            },
+          mediaStore: new LocalMediaStore({
+            rootDirectory: join(root, 'media'),
+            quotaBytes: 4096,
+          }),
+        },
+      ),
+    } as never;
+    const logger = new DebugLogger('test-browser-resume');
+    const resume = bindRawBrowserResume(
+      bindRawBrowserSession(
+        config,
+        undefined,
+        {
+          getCurrentRecording: () => null,
+          getCurrentIntegration: () => null,
+          getCurrentLockHandle: () => null,
+          setRecording: (next, _integration, lock) => {
+            committed = next;
+            committedLock = lock;
           },
         },
-        commands.addItem,
-        () => {},
+        logger,
       ),
+      () => 'auto',
+      commands.clearItems,
+      commands.addItem,
+      () => {},
+      logger,
     );
-
-    await result.current(target);
+    await resume(target);
 
     const visible = turnStore.store
       .getState()
@@ -142,6 +143,5 @@ describe('session browser resume with an unreadable recording present (issue #37
       'restored conversation',
       `Warning: Skipped unreadable session recording ${corruptPath}: ${CORRUPT_REASON}`,
     ]);
-    unmount();
   });
 });

@@ -9,22 +9,24 @@
  * @requirement REQ-004
  */
 
-import type {
-  SlashCommand,
-  CommandContext,
-  MessageActionReturn,
-} from './types.js';
+import type { SlashCommand, MessageActionReturn } from './types.js';
 import { CommandKind } from './types.js';
-import { ConfigurationManager } from '@vybestack/llxprt-code-telemetry';
+import type { ConfigurationManager } from '@vybestack/llxprt-code-telemetry';
 
 /**
  * Handle /debug enable command
  */
+export interface DebugCommandOperations {
+  readonly readConfig: ConfigurationManager['getEffectiveConfig'];
+  readonly writeConfig: ConfigurationManager['setEphemeralConfig'];
+  readonly readOutput: ConfigurationManager['getOutputTarget'];
+  readonly hasChanges: () => boolean;
+  readonly persist: () => void;
+}
 function handleDebugEnable(
-  _context: CommandContext,
+  operations: DebugCommandOperations,
   args: string,
 ): MessageActionReturn {
-  const configManager = ConfigurationManager.getInstance();
   const namespace = args.trim() || 'llxprt:*';
 
   // Validate namespace pattern
@@ -37,7 +39,7 @@ function handleDebugEnable(
   }
 
   try {
-    const currentConfig = configManager.getEffectiveConfig();
+    const currentConfig = operations.readConfig();
     const namespaces = Array.isArray(currentConfig.namespaces)
       ? [...currentConfig.namespaces]
       : [];
@@ -52,7 +54,7 @@ function handleDebugEnable(
       };
     }
 
-    configManager.setEphemeralConfig({
+    operations.writeConfig({
       enabled: true,
       namespaces,
     });
@@ -75,14 +77,13 @@ function handleDebugEnable(
  * Handle /debug disable command
  */
 function handleDebugDisable(
-  _context: CommandContext,
+  operations: DebugCommandOperations,
   args: string,
 ): MessageActionReturn {
-  const configManager = ConfigurationManager.getInstance();
   const namespace = args.trim();
 
   try {
-    const currentConfig = configManager.getEffectiveConfig();
+    const currentConfig = operations.readConfig();
 
     if (!currentConfig.enabled) {
       return {
@@ -94,7 +95,7 @@ function handleDebugDisable(
 
     if (!namespace) {
       // Disable all debug logging
-      configManager.setEphemeralConfig({
+      operations.writeConfig({
         enabled: false,
       });
       return {
@@ -128,7 +129,7 @@ function handleDebugDisable(
       };
     }
 
-    configManager.setEphemeralConfig({
+    operations.writeConfig({
       namespaces,
       enabled: namespaces.length > 0,
     });
@@ -151,16 +152,15 @@ function handleDebugDisable(
  * Handle /debug level command
  */
 function handleDebugLevel(
-  _context: CommandContext,
+  operations: DebugCommandOperations,
   args: string,
 ): MessageActionReturn {
-  const configManager = ConfigurationManager.getInstance();
   const level = args.trim().toLowerCase();
 
   const validLevels = ['verbose', 'debug', 'info', 'error'];
 
   if (!level) {
-    const currentLevel = configManager.getEffectiveConfig().level;
+    const currentLevel = operations.readConfig().level;
     return {
       type: 'message',
       messageType: 'info',
@@ -177,7 +177,7 @@ function handleDebugLevel(
   }
 
   try {
-    const currentLevel = configManager.getEffectiveConfig().level;
+    const currentLevel = operations.readConfig().level;
     if (currentLevel === level) {
       return {
         type: 'message',
@@ -186,7 +186,7 @@ function handleDebugLevel(
       };
     }
 
-    configManager.setEphemeralConfig({
+    operations.writeConfig({
       level,
     });
 
@@ -208,16 +208,15 @@ function handleDebugLevel(
  * Handle /debug output command
  */
 function handleDebugOutput(
-  _context: CommandContext,
+  operations: DebugCommandOperations,
   args: string,
 ): MessageActionReturn {
-  const configManager = ConfigurationManager.getInstance();
   const target = args.trim().toLowerCase();
 
   const validTargets = ['file', 'console', 'stderr', 'both'];
 
   if (!target) {
-    const currentTarget = configManager.getOutputTarget();
+    const currentTarget = operations.readOutput();
     return {
       type: 'message',
       messageType: 'info',
@@ -244,7 +243,7 @@ function handleDebugOutput(
       outputConfig = target;
     }
 
-    configManager.setEphemeralConfig({
+    operations.writeConfig({
       output: outputConfig,
     });
 
@@ -266,16 +265,12 @@ function handleDebugOutput(
  * Handle /debug persist command
  */
 function handleDebugPersist(
-  _context: CommandContext,
+  operations: DebugCommandOperations,
   _args: string,
 ): MessageActionReturn {
-  const configManager = ConfigurationManager.getInstance();
-
   try {
-    const config = configManager.getEffectiveConfig();
-    const hasEphemeralChanges = (
-      configManager as typeof configManager & { hasEphemeralConfig(): boolean }
-    ).hasEphemeralConfig();
+    const config = operations.readConfig();
+    const hasEphemeralChanges = operations.hasChanges();
 
     if (!hasEphemeralChanges) {
       return {
@@ -286,7 +281,7 @@ function handleDebugPersist(
       };
     }
 
-    configManager.persistEphemeralConfig();
+    operations.persist();
 
     return {
       type: 'message',
@@ -306,14 +301,12 @@ function handleDebugPersist(
  * Handle /debug status command
  */
 function handleDebugStatus(
-  _context: CommandContext,
+  operations: DebugCommandOperations,
   _args: string,
 ): MessageActionReturn {
-  const configManager = ConfigurationManager.getInstance();
-
   try {
-    const config = configManager.getEffectiveConfig();
-    const outputTarget = configManager.getOutputTarget();
+    const config = operations.readConfig();
+    const outputTarget = operations.readOutput();
 
     const namespaces = Array.isArray(config.namespaces)
       ? config.namespaces
@@ -416,61 +409,58 @@ function isValidNamespace(namespace: string): boolean {
 }
 
 /**
- * Register debug commands in the CLI command system
- */
-export function registerDebugCommands(): SlashCommand[] {
-  return [debugCommand];
-}
-
-/**
  * Debug command with all subcommands
  */
-export const debugCommand: SlashCommand = {
-  name: 'debug',
-  description: 'debug logging controls',
-  kind: CommandKind.BUILT_IN,
-  subCommands: [
-    {
-      name: 'enable',
-      description: 'enable debug logging',
-      kind: CommandKind.BUILT_IN,
-      action: (context: CommandContext, args: string): MessageActionReturn =>
-        handleDebugEnable(context, args),
-    },
-    {
-      name: 'disable',
-      description: 'disable debug logging',
-      kind: CommandKind.BUILT_IN,
-      action: (context: CommandContext, args: string): MessageActionReturn =>
-        handleDebugDisable(context, args),
-    },
-    {
-      name: 'level',
-      description: 'set debug logging level',
-      kind: CommandKind.BUILT_IN,
-      action: (context: CommandContext, args: string): MessageActionReturn =>
-        handleDebugLevel(context, args),
-    },
-    {
-      name: 'output',
-      description: 'set debug output destination',
-      kind: CommandKind.BUILT_IN,
-      action: (context: CommandContext, args: string): MessageActionReturn =>
-        handleDebugOutput(context, args),
-    },
-    {
-      name: 'persist',
-      description: 'toggle debug persistence',
-      kind: CommandKind.BUILT_IN,
-      action: (context: CommandContext, args: string): MessageActionReturn =>
-        handleDebugPersist(context, args),
-    },
-    {
-      name: 'status',
-      description: 'show debug logging status',
-      kind: CommandKind.BUILT_IN,
-      action: (context: CommandContext, args: string): MessageActionReturn =>
-        handleDebugStatus(context, args),
-    },
-  ],
-};
+export function createDebugCommand(
+  operations: DebugCommandOperations,
+): SlashCommand {
+  return {
+    name: 'debug',
+    description: 'debug logging controls',
+    kind: CommandKind.BUILT_IN,
+    subCommands: [
+      {
+        name: 'enable',
+        description: 'enable debug logging',
+        kind: CommandKind.BUILT_IN,
+        action: (_invocation: unknown, args: string): MessageActionReturn =>
+          handleDebugEnable(operations, args),
+      },
+      {
+        name: 'disable',
+        description: 'disable debug logging',
+        kind: CommandKind.BUILT_IN,
+        action: (_invocation: unknown, args: string): MessageActionReturn =>
+          handleDebugDisable(operations, args),
+      },
+      {
+        name: 'level',
+        description: 'set debug logging level',
+        kind: CommandKind.BUILT_IN,
+        action: (_invocation: unknown, args: string): MessageActionReturn =>
+          handleDebugLevel(operations, args),
+      },
+      {
+        name: 'output',
+        description: 'set debug output destination',
+        kind: CommandKind.BUILT_IN,
+        action: (_invocation: unknown, args: string): MessageActionReturn =>
+          handleDebugOutput(operations, args),
+      },
+      {
+        name: 'persist',
+        description: 'toggle debug persistence',
+        kind: CommandKind.BUILT_IN,
+        action: (_invocation: unknown, args: string): MessageActionReturn =>
+          handleDebugPersist(operations, args),
+      },
+      {
+        name: 'status',
+        description: 'show debug logging status',
+        kind: CommandKind.BUILT_IN,
+        action: (_invocation: unknown, args: string): MessageActionReturn =>
+          handleDebugStatus(operations, args),
+      },
+    ],
+  };
+}

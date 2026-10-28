@@ -27,7 +27,7 @@ describe('AnthropicDeviceFlow redirect selection', () => {
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
     });
-    const flow = new AnthropicDeviceFlow();
+    const flow = new AnthropicDeviceFlow(globalThis.fetch);
 
     await flow.initiateDeviceFlow();
     flow.buildAuthorizationUrl('http://localhost:8765/callback');
@@ -48,7 +48,7 @@ describe('AnthropicDeviceFlow redirect selection', () => {
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
     });
-    const flow = new AnthropicDeviceFlow();
+    const flow = new AnthropicDeviceFlow(globalThis.fetch);
 
     await flow.initiateDeviceFlow();
     flow.buildAuthorizationUrl('http://localhost:8765/callback');

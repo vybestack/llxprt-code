@@ -288,7 +288,10 @@ async function* fetchStreamWithRetries(
 
     const yieldedForAttempt: { value: boolean } = { value: false };
     try {
-      const response = await fetchResponse(params);
+      const response = await fetchResponse(
+        params,
+        params.normalizedOptions.invocation.fetch,
+      );
       yield* parseSuccessfulResponse(response, params, deps, yieldedForAttempt);
       return;
     } catch (error) {
@@ -312,12 +315,18 @@ async function* fetchStreamWithRetries(
   }
 }
 
-async function fetchResponse(params: {
-  responsesURL: string;
-  headers: Record<string, string>;
-  body: BoundedJsonBody;
-  abortSignal?: AbortSignal;
-}): Promise<Response> {
+async function fetchResponse(
+  params: {
+    responsesURL: string;
+    headers: Record<string, string>;
+    body: BoundedJsonBody;
+    abortSignal?: AbortSignal;
+  },
+  requestFetch: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>,
+): Promise<Response> {
   const requestBody = params.body.createStreamHandle();
   const requestInit: RequestInit & { duplex: 'half' } = {
     method: 'POST',
@@ -327,7 +336,7 @@ async function fetchResponse(params: {
     duplex: 'half',
   };
   try {
-    return await fetch(params.responsesURL, requestInit);
+    return await requestFetch(params.responsesURL, requestInit);
   } catch (error) {
     try {
       await requestBody.dispose(error);

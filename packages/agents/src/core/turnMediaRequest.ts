@@ -4,17 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
-import { logApiRequest } from './turnLogging.js';
+import { logApiRequest, type TurnTelemetryPorts } from './turnLogging.js';
 
 interface TurnMediaRequestOptions {
-  readonly runtimeContext: AgentRuntimeContext;
+  readonly telemetry: TurnTelemetryPorts;
   readonly historyService: HistoryService;
   readonly compressionHandler: CompressionHandler;
   readonly userContents: IContent[];
@@ -48,10 +47,9 @@ export async function enforceTurnMediaRequestContents(
     options.hookOwner ?? options.recordingExecution?.hookOwner,
   );
   logApiRequest(
-    options.runtimeContext,
-    options.runtimeContext.state,
+    options.telemetry,
     contents,
-    options.runtimeContext.state.model,
+    options.telemetry.model,
     options.promptId,
   );
   return contents;

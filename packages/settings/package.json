@@ -40,6 +40,21 @@
       "types": "./dist/src/storage/Storage.d.ts",
       "bun": "./src/storage/Storage.ts",
       "import": "./dist/src/storage/Storage.js"
+    },
+    "./settings/ephemeral-settings.js": {
+      "types": "./dist/src/settings/ephemeral-settings.d.ts",
+      "bun": "./src/settings/ephemeral-settings.ts",
+      "import": "./dist/src/settings/ephemeral-settings.js"
+    },
+    "./settings/cli-ephemeral-settings.js": {
+      "types": "./dist/src/settings/cli-ephemeral-settings.d.ts",
+      "bun": "./src/settings/cli-ephemeral-settings.ts",
+      "import": "./dist/src/settings/cli-ephemeral-settings.js"
+    },
+    "./settings/model-param-parser.js": {
+      "types": "./dist/src/settings/model-param-parser.d.ts",
+      "bun": "./src/settings/model-param-parser.ts",
+      "import": "./dist/src/settings/model-param-parser.js"
     }
   },
   "scripts": {

@@ -7,6 +7,7 @@ import {
   PolicyEngine,
   type PolicyEngineConfig,
   type PolicyFunctionCall,
+  type BucketAuthConfirmationRequest,
   type PolicyLogger,
   type ToolConfirmationRequest,
 } from '@vybestack/llxprt-code-policy';
@@ -475,6 +476,92 @@ describe('MessageBus', () => {
           },
         }),
       );
+    });
+  });
+
+  describe('requestBucketAuthConfirmation with an abort signal', () => {
+    const responseType = MessageBusType.BUCKET_AUTH_CONFIRMATION_RESPONSE;
+
+    it('resolves false for an aborted signal without publishing a request', async () => {
+      const published: unknown[] = [];
+      messageBus.subscribe(
+        MessageBusType.BUCKET_AUTH_CONFIRMATION_REQUEST,
+        (message) => published.push(message),
+      );
+      const controller = new AbortController();
+      controller.abort();
+
+      const confirmed = await messageBus.requestBucketAuthConfirmation(
+        'provider',
+        'bucket',
+        1,
+        1,
+        controller.signal,
+      );
+
+      expect(confirmed).toBe(false);
+      expect(published).toHaveLength(0);
+      expect(messageBus.listenerCount(responseType)).toBe(0);
+    });
+
+    it('cancels only the aborted request and leaves another owner waiting', async () => {
+      const requests: BucketAuthConfirmationRequest[] = [];
+      messageBus.subscribe<BucketAuthConfirmationRequest>(
+        MessageBusType.BUCKET_AUTH_CONFIRMATION_REQUEST,
+        (message) => requests.push(message),
+      );
+      const controller = new AbortController();
+      const aborted = messageBus.requestBucketAuthConfirmation(
+        'first',
+        'bucket',
+        1,
+        1,
+        controller.signal,
+      );
+      const other = messageBus.requestBucketAuthConfirmation(
+        'second',
+        'bucket',
+        1,
+        1,
+      );
+      expect(messageBus.listenerCount(responseType)).toBe(2);
+
+      controller.abort();
+
+      expect(await aborted).toBe(false);
+      expect(messageBus.listenerCount(responseType)).toBe(1);
+      const waiting = requests.find((request) => request.provider === 'second');
+      messageBus.respondToBucketAuthConfirmation(
+        waiting?.correlationId ?? '',
+        true,
+      );
+      expect(await other).toBe(true);
+      expect(messageBus.listenerCount(responseType)).toBe(0);
+    });
+
+    it('removes its abort listener once a user answers', async () => {
+      const requests: BucketAuthConfirmationRequest[] = [];
+      messageBus.subscribe<BucketAuthConfirmationRequest>(
+        MessageBusType.BUCKET_AUTH_CONFIRMATION_REQUEST,
+        (message) => requests.push(message),
+      );
+      const controller = new AbortController();
+      const answered = messageBus.requestBucketAuthConfirmation(
+        'provider',
+        'bucket',
+        1,
+        1,
+        controller.signal,
+      );
+      messageBus.respondToBucketAuthConfirmation(
+        requests[0]?.correlationId ?? '',
+        true,
+      );
+      expect(await answered).toBe(true);
+
+      controller.abort();
+
+      expect(messageBus.listenerCount(responseType)).toBe(0);
     });
   });
 

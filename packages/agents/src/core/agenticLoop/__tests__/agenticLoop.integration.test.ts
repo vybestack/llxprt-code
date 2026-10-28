@@ -1,3 +1,5 @@
+import { bindTurnModel } from '../../../session/bind-turn-model.js';
+import { TurnToolExecutionOwner } from '../../../session/turn-tool-execution-owner.js';
 import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
  * @license
@@ -83,24 +85,26 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
       ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        configSettingsOwner.telemetry,
-      ),
-      agentClient: client,
       config,
-      messageBus,
-      approvalHandler,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        approvalHandler,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+      ),
     });
 
     const events = await collectEvents(
@@ -174,24 +178,26 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        configSettingsOwner.telemetry,
-      ),
-      agentClient: client,
       config,
-      messageBus,
-      approvalHandler,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        approvalHandler,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+      ),
     });
 
     const events = await collectEvents(
@@ -245,24 +251,26 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        configSettingsOwner.telemetry,
-      ),
-      agentClient: client,
       config,
-      messageBus,
-      approvalHandler,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        approvalHandler,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+      ),
     });
 
     const events = await collectEvents(
@@ -316,24 +324,26 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        configSettingsOwner.telemetry,
-      ),
-      agentClient: client,
       config,
-      messageBus,
-      approvalHandler,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        approvalHandler,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+      ),
     });
 
     const events = await collectEvents(
@@ -401,30 +411,32 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
       ]);
 
       const loop = new AgenticLoop({
-        createSchedulerOwner: bindSchedulerOwner(
-          config,
-          messageBus,
-          config.isInteractive(),
-          toolRegistry,
-          (options) => new CoreToolScheduler(options),
-          () => configSettingsOwner.readToolExecutionPolicy(),
-          () =>
-            configSettingsOwner.readToolGovernance(
-              config.getExcludeTools() ?? [],
-            ),
-          undefined,
-          configSettingsOwner.telemetry,
-        ),
-        agentClient: client,
         config,
-        messageBus,
-        approvalHandler,
         interactiveMode: true,
         displayCallbacks: {
           getPreferredEditor: () => 'vscode',
           onEditorOpen: () => {},
           onEditorClose: () => {},
         },
+        ...bindTurnModel(client),
+        tools: new TurnToolExecutionOwner(
+          messageBus,
+          approvalHandler,
+          bindSchedulerOwner(
+            config,
+            messageBus,
+            config.isInteractive(),
+            toolRegistry,
+            (options) => new CoreToolScheduler(options),
+            () => configSettingsOwner.readToolExecutionPolicy(),
+            () =>
+              configSettingsOwner.readToolGovernance(
+                config.getExcludeTools() ?? [],
+              ),
+            undefined,
+            configSettingsOwner.telemetry,
+          ),
+        ),
       });
 
       const events = await collectEvents(
@@ -468,24 +480,26 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        configSettingsOwner.telemetry,
-      ),
-      agentClient: client,
       config,
-      messageBus,
-      approvalHandler,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        approvalHandler,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+      ),
     });
 
     const events = await collectEvents(

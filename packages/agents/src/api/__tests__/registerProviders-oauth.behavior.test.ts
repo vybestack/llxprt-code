@@ -1,4 +1,18 @@
-import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
+import { OwnedCredentialFixture } from './helpers/owned-credential-fixture.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+} from './helpers/provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
+import {
+  cleanupAfterFailure,
+  runCleanupSteps,
+} from '../../core/subagent-cleanup.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -26,10 +40,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {
-  createIsolatedRuntimeContext,
-  type IsolatedRuntimeContextHandle,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { registerProvidersOntoManager } from '../createAgent.js';
 
@@ -49,20 +60,6 @@ function formatCleanupError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-async function cleanupHandle(
-  handle: IsolatedRuntimeContextHandle | undefined,
-  cleanupErrors: unknown[],
-): Promise<void> {
-  if (!handle) {
-    return;
-  }
-  try {
-    await handle.cleanup();
-  } catch (error) {
-    cleanupErrors.push(error);
-  }
-}
-
 function restoreConfigHome(previousConfigHome: string | undefined): void {
   if (previousConfigHome === undefined) {
     delete process.env.LLXPRT_CONFIG_HOME;
@@ -74,19 +71,28 @@ function restoreConfigHome(previousConfigHome: string | undefined): void {
 describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
   let tmpConfigHome: string;
   let previousConfigHome: string | undefined;
-  const handles: IsolatedRuntimeContextHandle[] = [];
+  const retiring: Array<() => void | Promise<void>> = [];
+  let credentials: OwnedCredentialFixture;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmpConfigHome = fs.mkdtempSync(path.join(os.tmpdir(), 'issue2410-oauth-'));
     previousConfigHome = process.env.LLXPRT_CONFIG_HOME;
     process.env.LLXPRT_CONFIG_HOME = tmpConfigHome;
+    credentials = await OwnedCredentialFixture.create();
   });
 
   afterEach(async () => {
     const cleanupErrors: unknown[] = [];
     try {
-      while (handles.length > 0) {
-        await cleanupHandle(handles.pop(), cleanupErrors);
+      try {
+        await runCleanupSteps(retiring.splice(0).reverse());
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
+      try {
+        await credentials.dispose();
+      } catch (error) {
+        cleanupErrors.push(error);
       }
     } finally {
       restoreConfigHome(previousConfigHome);
@@ -111,48 +117,76 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
 
   async function registerAndGet(providerName: string): Promise<ProviderLike> {
     const runtimeId = `issue2410-oauth-${Math.random().toString(36).slice(2)}`;
-    const handle = (() => {
-      const capturedConfig1 = new Config({
-        sessionId: runtimeId,
-        targetDir: tmpConfigHome,
-        cwd: tmpConfigHome,
-        model: 'claude-opus-4-8',
-        debugMode: false,
-      });
-      const settingsRoot = createSessionSettingsFixture(capturedConfig1);
-      return createIsolatedRuntimeContext(
-        {
-          settingsOwner: settingsRoot.settingsOwner,
-          runtimeId,
-          // The caller supplies the Config (issue #3222): providers no longer
-          // constructs one for isolated runtimes.
-          config: capturedConfig1,
-          metadata: { source: 'issue2410-test' },
-        },
-        settingsRoot.settingsService,
+    const config = new Config({
+      sessionId: runtimeId,
+      targetDir: tmpConfigHome,
+      cwd: tmpConfigHome,
+      model: 'claude-opus-4-8',
+      debugMode: false,
+    });
+    retiring.push(() => config.dispose());
+    const release = new AcquisitionRelease();
+    let complete = false;
+    retiring.push(() => (complete ? release.close() : release.rollback()));
+    try {
+      const settings = new SettingsService();
+      for (const [key, value] of Object.entries(config.getInitialSettings()))
+        settings.set(key, value);
+      const owner = new SessionSettingsOwner(settings);
+      release.acquire('settings', () => owner.dispose());
+      owner.initializeProviderSelection(
+        config.getProvider(),
+        config.getModel(),
       );
-    })();
-    handles.push(handle);
-    await handle.activate();
-
-    // The exact production seam under test.
-    registerProvidersOntoManager(
-      handle.providerManager,
-      {
-        settingsService: handle.settingsService,
-        runtimeId: handle.runtimeId,
-        metadata: handle.metadata,
-      },
-      handle.config,
-    );
-
-    const provider = handle.providerManager.getProviderByName(providerName) as
-      | ProviderLike
-      | undefined;
-    if (!provider) {
-      throw new Error(`${providerName} was not registered onto the manager`);
+      owner.bindTelemetry(config);
+      const policy = new RuntimePolicyOwner(config);
+      release.acquire('policy', () => policy.dispose());
+      const files = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
+      });
+      release.acquire('files', () => releaseAdoptedFileScope(files, runtimeId));
+      const manager = acquirePreferredProviderManager(
+        config,
+        settings,
+        owner,
+        files,
+        runtimeId,
+        credentials.authority,
+        release,
+      );
+      const oauth = acquirePreferredOAuth(
+        undefined,
+        policy.session.messageBus,
+        config,
+        settings,
+        manager,
+        runtimeId,
+        undefined,
+        credentials.authority,
+        release,
+        undefined,
+      );
+      await owner.startTelemetry(config);
+      registerProvidersOntoManager(
+        manager,
+        settings,
+        config,
+        oauth,
+        undefined,
+        process.env.LLXPRT_FAKE_RESPONSES,
+      );
+      const provider = manager.getProviderByName(providerName);
+      complete = true;
+      if (!provider) {
+        throw new Error(`${providerName} was not registered onto the manager`);
+      }
+      return provider;
+    } catch (primary) {
+      return cleanupAfterFailure(primary, () =>
+        runCleanupSteps(retiring.splice(0).reverse()),
+      );
     }
-    return provider;
   }
 
   it('registers the Claude Code alias with its subscription model catalog @issue:3531', async () => {

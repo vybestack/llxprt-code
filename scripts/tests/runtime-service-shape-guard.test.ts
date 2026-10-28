@@ -4,7 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { scanRuntimeServiceShapes } from './runtime-service-shape-guard.js';
+import ts from 'typescript';
+import { compilerSourcePath } from '../compiler-source-path.js';
+import {
+  scanRuntimeServiceProgram,
+  scanRuntimeServiceShapes,
+  type RuntimeServiceShapeFinding,
+} from './runtime-service-shape-guard.js';
 import {
   roots,
   options,
@@ -14,6 +20,124 @@ import {
 } from './runtime-service-shape-test-helpers.js';
 
 describe('runtime service shape guard', () => {
+  it.each([
+    'export class Services { scheduler = new Scheduler(); context = new Context(); }',
+    'export class Services { constructor(public scheduler: Scheduler, public context: Context) {} }',
+    'export type Services = Map<string, Scheduler | Context>;',
+    'export type Services = Array<Scheduler | Context>;',
+  ])(
+    'reports publicly exposed or repeated service bags at declaration: %s',
+    (source) => {
+      expect(scan(imports + source)).toContainEqual(
+        expect.objectContaining({
+          rule: 'runtime-service-bundle',
+          line: 2,
+          column: 1,
+        }),
+      );
+    },
+  );
+
+  it.each([
+    'export class Owner { private scheduler = new Scheduler(); private context = new Context(); run(): void { this.scheduler.schedule(); } }',
+    'export class Owner { constructor(private scheduler: Scheduler, private context: Context) {} run(): void { this.scheduler.schedule(); } }',
+    'export type OneService = Array<Scheduler>;',
+    'export type OneService = Map<string, Scheduler>;',
+    'export type Alternative = Scheduler | Context;',
+    'export type SingleResult = Promise<Scheduler | Context>;',
+  ])(
+    'permits private collaborators and single-service or alternative values: %s',
+    (source) => {
+      expect(scan(imports + source)).toEqual([]);
+    },
+  );
+
+  it.each([
+    {
+      caseSensitive: false,
+      assemblyFile: 'C:/Fixture/Assembly.ts',
+      exempt: true,
+    },
+    {
+      caseSensitive: true,
+      assemblyFile: 'C:/fixture/assembly.ts',
+      exempt: true,
+    },
+    {
+      caseSensitive: true,
+      assemblyFile: 'C:/Fixture/Assembly.ts',
+      exempt: false,
+    },
+  ])(
+    'uses compiler source identity for assembly paths: %j',
+    ({ caseSensitive, assemblyFile, exempt }) => {
+      const file = 'C:/fixture/assembly.ts';
+      const source = `export class Clock { tick(): void {} }
+export class Session { id = 1; }
+export class Config { clock(): Clock { return new Clock(); } }
+export type Outside = { clock: Clock; session: Session };
+export function assemble(bag: { clock: Clock; session: Session }): void {
+  type Local = { clock: Clock; session: Session };
+  function nested(bag: { clock: Clock; session: Session }): void {}
+  new Config().clock();
+}
+export function other(bag: { clock: Clock; session: Session }): void {}`;
+      const compilerOptions: ts.CompilerOptions = {
+        strict: true,
+        noEmit: true,
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ESNext,
+        types: [],
+        skipLibCheck: true,
+      };
+      const base = ts.createCompilerHost(compilerOptions, true);
+      const getCanonicalFileName = (name: string): string =>
+        caseSensitive ? name : name.toLowerCase();
+      const key = (name: string): string =>
+        getCanonicalFileName(compilerSourcePath(name));
+      const host: ts.CompilerHost = {
+        ...base,
+        getCanonicalFileName,
+        useCaseSensitiveFileNames: () => caseSensitive,
+        fileExists: (name) => key(name) === key(file) || base.fileExists(name),
+        readFile: (name) =>
+          key(name) === key(file) ? source : base.readFile(name),
+        getSourceFile: (name, version) =>
+          key(name) === key(file)
+            ? ts.createSourceFile(name, source, version, true)
+            : base.getSourceFile(name, version),
+      };
+      const program = ts.createProgram([key(file)], compilerOptions, host);
+      const findings = scanRuntimeServiceProgram(
+        program,
+        {
+          services: ['Clock', 'Session'].map((exportName) => ({
+            file,
+            exportName,
+          })),
+          configs: [{ file, exportName: 'Config' }],
+          assembly: [{ file: assemblyFile, functionName: 'assemble' }],
+        },
+        [file],
+      );
+      const assemblyFindings: ReadonlyArray<
+        Pick<RuntimeServiceShapeFinding, 'rule' | 'line'>
+      > = exempt
+        ? []
+        : [
+            { rule: 'runtime-service-bag-parameter', line: 5 },
+            { rule: 'runtime-service-bundle', line: 6 },
+          ];
+      expect(findings.map(({ rule, line }) => ({ rule, line }))).toEqual([
+        { rule: 'runtime-service-bundle', line: 4 },
+        ...assemblyFindings,
+        { rule: 'runtime-service-bag-parameter', line: 7 },
+        { rule: 'config-service-locator', line: 8 },
+        { rule: 'runtime-service-bag-parameter', line: 10 },
+      ]);
+    },
+  );
+
   it('finishes an installed SDK stream graph and retains its exposed item services', () => {
     expect(
       scanInstalled(`import { Stream } from 'openai/core/streaming';
@@ -197,13 +321,17 @@ describe('runtime service shape guard', () => {
     );
   });
 
-  it('checks private constructor injection while ignoring private storage for consumers', () => {
+  it('reports private constructor injection as a holder and a bag parameter', () => {
     expect(
       scan(
         imports +
           `class Owner { constructor(private bag: { clock: Scheduler; context: Context }) {} }\nfunction use(owner: Owner): void {}`,
       ),
     ).toEqual([
+      expect.objectContaining({
+        rule: 'runtime-service-bundle',
+        line: 2,
+      }),
       expect.objectContaining({
         rule: 'runtime-service-bag-parameter',
         line: 2,
@@ -228,6 +356,7 @@ describe('runtime service shape guard', () => {
           configs: [{ file: 'settings.ts', exportName: 'Settings' }],
           runtimeObjects: [{ file: 'hooks.ts', exportName: 'HookSystem' }],
         },
+        ['consumer.ts'],
       ),
     ).toEqual([
       expect.objectContaining({

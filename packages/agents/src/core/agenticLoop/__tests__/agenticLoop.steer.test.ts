@@ -1,3 +1,5 @@
+import { bindTurnModel } from '../../../session/bind-turn-model.js';
+import { TurnToolExecutionOwner } from '../../../session/turn-tool-execution-owner.js';
 import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
  * @license
@@ -74,23 +76,26 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
       ]);
 
       const loop = new AgenticLoop({
-        createSchedulerOwner: bindSchedulerOwner(
-          config,
-          messageBus,
-          config.isInteractive(),
-          toolRegistry,
-          (options) => new CoreToolScheduler(options),
-          () => configSettingsOwner.readToolExecutionPolicy(),
-          () =>
-            configSettingsOwner.readToolGovernance(
-              config.getExcludeTools() ?? [],
-            ),
-          undefined,
-          configSettingsOwner.telemetry,
-        ),
-        agentClient: client,
         config,
-        messageBus,
+        ...bindTurnModel(client),
+        tools: new TurnToolExecutionOwner(
+          messageBus,
+          undefined,
+          bindSchedulerOwner(
+            config,
+            messageBus,
+            config.isInteractive(),
+            toolRegistry,
+            (options) => new CoreToolScheduler(options),
+            () => configSettingsOwner.readToolExecutionPolicy(),
+            () =>
+              configSettingsOwner.readToolGovernance(
+                config.getExcludeTools() ?? [],
+              ),
+            undefined,
+            configSettingsOwner.telemetry,
+          ),
+        ),
       });
 
       // Start the loop — the first turn will stream a tool call and then
@@ -176,23 +181,26 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
         [contentEvent('final-response'), finishedEvent()],
       ]);
       const loop = new AgenticLoop({
-        createSchedulerOwner: bindSchedulerOwner(
-          config,
-          messageBus,
-          config.isInteractive(),
-          toolRegistry,
-          (options) => new CoreToolScheduler(options),
-          () => configSettingsOwner.readToolExecutionPolicy(),
-          () =>
-            configSettingsOwner.readToolGovernance(
-              config.getExcludeTools() ?? [],
-            ),
-          undefined,
-          configSettingsOwner.telemetry,
-        ),
-        agentClient: client,
         config,
-        messageBus,
+        ...bindTurnModel(client),
+        tools: new TurnToolExecutionOwner(
+          messageBus,
+          undefined,
+          bindSchedulerOwner(
+            config,
+            messageBus,
+            config.isInteractive(),
+            toolRegistry,
+            (options) => new CoreToolScheduler(options),
+            () => configSettingsOwner.readToolExecutionPolicy(),
+            () =>
+              configSettingsOwner.readToolGovernance(
+                config.getExcludeTools() ?? [],
+              ),
+            undefined,
+            configSettingsOwner.telemetry,
+          ),
+        ),
       });
 
       const eventsPromise = collectEvents(
@@ -237,23 +245,26 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
     ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        configSettingsOwner.telemetry,
-      ),
-      agentClient: client,
       config,
-      messageBus,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+      ),
     });
 
     const eventsPromise = collectEvents(
@@ -298,23 +309,26 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
     ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        configSettingsOwner.telemetry,
-      ),
-      agentClient: client,
       config,
-      messageBus,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+      ),
     });
 
     const eventsPromise = collectEvents(
@@ -349,23 +363,26 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
     ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        configSettingsOwner.telemetry,
-      ),
-      agentClient: client,
       config,
-      messageBus,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+      ),
     });
 
     // Should not throw — just silently drops the steer
@@ -398,23 +415,26 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
     ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        configSettingsOwner.telemetry,
-      ),
-      agentClient: client,
       config,
-      messageBus,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+      ),
     });
 
     const events = await collectEvents(

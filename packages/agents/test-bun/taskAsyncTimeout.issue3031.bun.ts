@@ -3,13 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
 
-import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
-const fixturePaths = installTestWorkspacePaths({
-  targetDir: process.cwd(),
-  isTrusted: () => true,
-});
 import { TaskLaunchOwner } from '../src/session/task-launch-owner.js';
 
 /**
@@ -47,12 +41,13 @@ describe('Issue #3031 — async task timeout observability', () => {
     });
     const tool = new TaskTool(fixture.config, {
       ...fixture.policies,
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
+
       messageBus: new MessageBus(),
-      orchestratorFactory: () =>
-        ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+      launchChild: (request, signal) =>
+        (({ launch: launchMock }) as unknown as SubagentOrchestrator).launch(
+          request,
+          signal,
+        ),
       taskLaunchOwner: new TaskLaunchOwner(manager),
       isInteractiveEnvironment: () => false,
     });
@@ -88,12 +83,13 @@ describe('Issue #3031 — async task timeout observability', () => {
     });
     const tool = new TaskTool(fixture.config, {
       ...fixture.policies,
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
+
       messageBus: new MessageBus(),
-      orchestratorFactory: () =>
-        ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+      launchChild: (request, signal) =>
+        (({ launch: launchMock }) as unknown as SubagentOrchestrator).launch(
+          request,
+          signal,
+        ),
       taskLaunchOwner: new TaskLaunchOwner(manager),
       isInteractiveEnvironment: () => false,
     });
@@ -141,12 +137,13 @@ describe('Issue #3031 — async task timeout observability', () => {
     });
     const tool = new TaskTool(fixture.config, {
       ...fixture.policies,
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
+
       messageBus: new MessageBus(),
-      orchestratorFactory: () =>
-        ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+      launchChild: (request, signal) =>
+        (({ launch: launchMock }) as unknown as SubagentOrchestrator).launch(
+          request,
+          signal,
+        ),
       taskLaunchOwner: new TaskLaunchOwner(manager),
       isInteractiveEnvironment: () => false,
     });

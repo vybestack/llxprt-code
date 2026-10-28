@@ -6,93 +6,142 @@
 
 /**
  * Behavioral contract for issue #3954: `Agent.setModel` publishes the model
- * change through the core event bus so subscribers (the footer) refresh. The
- * events under test are produced by the real agent and observed through a real
- * `coreEvents` subscription; nothing here emits them manually.
+ * change so subscribers (the footer) refresh. The events under test are
+ * produced by the real agent and observed through the session settings owner
+ * the way the CLI footer subscribes; nothing here emits them manually.
+ *
+ * The transition's failing and blocking steps are injected through the
+ * tokenizer factory the session client prepares before it acquires anything,
+ * which is the seam this branch leaves open to a host.
  */
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { FakeProvider } from '@vybestack/llxprt-code-providers';
 import { AgentBusyError } from '@vybestack/llxprt-code-agents';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
+import type { Agent } from '../agent.js';
+import { drain, type BuiltAgent } from './helpers/agentHarness.js';
 import {
-  buildProfileAgent,
-  drain,
-  type Agent,
-  type BuiltAgent,
-} from './helpers/agentHarness.js';
+  buildReplayProviderAgent,
+  fixtureKeys,
+} from './helpers/replay-provider-agent.js';
 
 const PROFILE_NAME = 'gpt-sol-high';
 
-function recordModelChanges(): {
+interface Gate {
+  readonly entered: Promise<void>;
+  open(): void;
+  readonly released: Promise<void>;
+  release(): void;
+}
+
+function gate(): Gate {
+  let open = (): void => undefined;
+  let release = (): void => undefined;
+  const entered = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { entered, open, released, release };
+}
+
+interface TokenizerControl {
+  readonly factory: RuntimeTokenizerFactory;
+  /** Rejects the next preparation with the returned error. */
+  failNext(): Error;
+  /** Blocks the next preparation until the returned gate is released. */
+  holdNext(): Gate;
+}
+
+/**
+ * A tokenizer factory whose preparation the test can fail or hold. Client
+ * replacement prepares the tokenizer before it acquires anything, so a failure
+ * or a hold lands inside the model transition: nothing has been swapped yet and
+ * the transition observes a rejection, or waits.
+ */
+function tokenizerControl(): TokenizerControl {
+  const failures: Error[] = [];
+  const holds: Gate[] = [];
+  return {
+    factory: {
+      getTokenizer: () => ({ fallbackPolicy: 'deny', countTokens: () => 1 }),
+      estimatePrompt: async (request) => ({
+        count: await request.legacyEstimate(),
+        method: 'calibrated',
+        family: 'model-publication',
+        estimatorVersion: 'model-publication-v1',
+        assetRevision: 'none',
+        projectionRevision: request.projectionRevision,
+      }),
+      prepareTokenizer: async () => {
+        const held = holds.shift();
+        if (held !== undefined) {
+          held.open();
+          await held.released;
+        }
+        const failure = failures.shift();
+        if (failure !== undefined) throw failure;
+      },
+    },
+    failNext: () => {
+      const failure = new Error('credential refresh failed');
+      failures.push(failure);
+      return failure;
+    },
+    holdNext: () => {
+      const held = gate();
+      holds.push(held);
+      return held;
+    },
+  };
+}
+
+function recordModelChanges(subject: Agent): {
   readonly models: readonly string[];
   readonly stop: () => void;
 } {
   const models: string[] = [];
-  const listener = (model: string): void => {
-    models.push(model);
-  };
-  coreEvents.on(CoreEvent.ModelChanged, listener);
-  return {
-    models,
-    stop: () => {
-      coreEvents.off(CoreEvent.ModelChanged, listener);
-    },
-  };
+  const stop = subject.settings.subscribeModelChanges((profile) => {
+    if (profile === undefined) models.push(subject.getModel());
+  });
+  return { models, stop };
 }
 
-function recordProfileChanges(): {
+function recordProfileChanges(subject: Agent): {
   readonly payloads: ReadonlyArray<{ model: string; providerName?: string }>;
   readonly stop: () => void;
 } {
   const payloads: Array<{ model: string; providerName?: string }> = [];
-  const listener = (payload: {
-    model: string;
-    providerName?: string;
-  }): void => {
-    payloads.push(payload);
-  };
-  coreEvents.on(CoreEvent.ModelProfileChanged, listener);
-  return {
-    payloads,
-    stop: () => {
-      coreEvents.off(CoreEvent.ModelProfileChanged, listener);
-    },
-  };
-}
-
-function clientOwner(agent: Agent): SessionClientOwner {
-  const deps = 'deps' in agent ? agent.deps : undefined;
-  const owner =
-    typeof deps === 'object' && deps !== null && 'sessionClient' in deps
-      ? deps.sessionClient
-      : undefined;
-  if (!(owner instanceof SessionClientOwner))
-    throw new Error('Expected an owned session client');
-  return owner;
-}
-
-function gate(): { promise: Promise<void>; release: () => void } {
-  let release = (): void => {
-    throw new Error('Gate has not been initialized');
-  };
-  const promise = new Promise<void>((resolve) => {
-    release = resolve;
+  const stop = subject.settings.subscribeModelChanges((profile) => {
+    if (profile !== undefined) payloads.push(profile);
   });
-  return { promise, release };
+  return { payloads, stop };
+}
+
+async function buildPublicationAgent(
+  tokenizer: TokenizerControl,
+): Promise<BuiltAgent> {
+  return buildReplayProviderAgent({
+    initial: {
+      alias: 'fake',
+      script: { fixtureRelPath: 'plain-text.jsonl' },
+    },
+    storedKeys: fixtureKeys('openai-prod', 'anthropic-prod'),
+    configOverrides: { tokenizerFactory: tokenizer.factory },
+  });
 }
 
 describe('Agent.setModel model publication (#3954)', () => {
   let built: BuiltAgent;
   let agent: Agent;
+  let tokenizer: TokenizerControl;
   let changes: ReturnType<typeof recordModelChanges>;
 
   beforeEach(async () => {
-    built = await buildProfileAgent('plain-text.jsonl');
+    tokenizer = tokenizerControl();
+    built = await buildPublicationAgent(tokenizer);
     agent = built.agent;
     await agent.profiles.applySnapshot(
       {
@@ -104,7 +153,7 @@ describe('Agent.setModel model publication (#3954)', () => {
       },
       { profileName: PROFILE_NAME },
     );
-    changes = recordModelChanges();
+    changes = recordModelChanges(agent);
   });
 
   afterEach(async () => {
@@ -143,14 +192,14 @@ describe('Agent.setModel model publication (#3954)', () => {
       FakeProvider.prototype,
       'generateChatCompletion',
     ).mockImplementation(async function* () {
-      entered.release();
-      await blocked.promise;
+      entered.open();
+      await blocked.released;
       yield { speaker: 'ai', blocks: [{ type: 'text', text: 'complete' }] };
     });
     const previousModel = agent.getModel();
     const run = drain(agent.stream('hold the run open'));
     try {
-      await entered.promise;
+      await entered.entered;
 
       await expect(agent.setModel('fake-model-busy')).rejects.toBeInstanceOf(
         AgentBusyError,
@@ -166,46 +215,31 @@ describe('Agent.setModel model publication (#3954)', () => {
   });
 
   it('publishes nothing when a later step of the model change fails and still publishes the next successful change', async () => {
-    const failure = new Error('credential refresh failed');
-    const refresh = spyOn(
-      clientOwner(agent),
-      'refreshAuth',
-    ).mockRejectedValueOnce(failure);
+    const failure = tokenizer.failNext();
 
     await expect(agent.setModel('fake-model-failed')).rejects.toBe(failure);
     expect(changes.models).toStrictEqual([]);
 
-    refresh.mockRestore();
     await agent.setModel('fake-model-recovered');
 
     expect(changes.models).toStrictEqual(['fake-model-recovered']);
   });
 
   it('publishes when the same target is retried successfully after an earlier attempt failed after the selection was written', async () => {
-    const failure = new Error('credential refresh failed');
-    const refresh = spyOn(
-      clientOwner(agent),
-      'refreshAuth',
-    ).mockRejectedValueOnce(failure);
+    const failure = tokenizer.failNext();
 
     await expect(agent.setModel('fake-model-retry')).rejects.toBe(failure);
     expect(changes.models).toStrictEqual([]);
 
     await agent.setModel('fake-model-retry');
 
-    refresh.mockRestore();
     expect(changes.models).toStrictEqual(['fake-model-retry']);
     expect(changes.models[0]).toBe(agent.getModel());
   });
 
   it('stays silent for a no-op setModel of the current model after a failed attempt of another model', async () => {
-    const failure = new Error('credential refresh failed');
-    const refresh = spyOn(
-      clientOwner(agent),
-      'refreshAuth',
-    ).mockRejectedValueOnce(failure);
+    const failure = tokenizer.failNext();
     await expect(agent.setModel('fake-model-failed')).rejects.toBe(failure);
-    refresh.mockRestore();
 
     await agent.setModel('fake-model');
 
@@ -214,17 +248,10 @@ describe('Agent.setModel model publication (#3954)', () => {
   });
 
   it('rejects a concurrent setModel with AgentBusyError without mutating the model or emitting, and accepts a later setModel', async () => {
-    const entered = gate();
-    const blocked = gate();
-    const refresh = spyOn(clientOwner(agent), 'refreshAuth').mockImplementation(
-      async () => {
-        entered.release();
-        await blocked.promise;
-      },
-    );
+    const held = tokenizer.holdNext();
     const first = agent.setModel('fake-model-first');
     try {
-      await entered.promise;
+      await held.entered;
 
       await expect(agent.setModel('fake-model-second')).rejects.toBeInstanceOf(
         AgentBusyError,
@@ -233,9 +260,8 @@ describe('Agent.setModel model publication (#3954)', () => {
       expect(agent.getModel()).toBe('fake-model-first');
       expect(changes.models).toStrictEqual([]);
     } finally {
-      blocked.release();
+      held.release();
       await first;
-      refresh.mockRestore();
     }
 
     expect(changes.models).toStrictEqual(['fake-model-first']);
@@ -248,29 +274,8 @@ describe('Agent.setModel model publication (#3954)', () => {
   });
 
   describe('shared exclusive mutation boundary for model and provider changes', () => {
-    function holdNextRefreshAuth(): {
-      readonly entered: Promise<void>;
-      readonly release: () => void;
-      readonly restore: () => void;
-    } {
-      const entered = gate();
-      const blocked = gate();
-      const refresh = spyOn(
-        clientOwner(agent),
-        'refreshAuth',
-      ).mockImplementationOnce(async () => {
-        entered.release();
-        await blocked.promise;
-      });
-      return {
-        entered: entered.promise,
-        release: blocked.release,
-        restore: () => refresh.mockRestore(),
-      };
-    }
-
     it('rejects a setModel issued while a provider switch is in flight with AgentBusyError, without mutating the model or emitting for the rejected call', async () => {
-      const hold = holdNextRefreshAuth();
+      const hold = tokenizer.holdNext();
       const switching = agent.setProvider('openai');
       try {
         await hold.entered;
@@ -286,7 +291,6 @@ describe('Agent.setModel model publication (#3954)', () => {
       } finally {
         hold.release();
         await switching;
-        hold.restore();
       }
 
       expect(changes.models).not.toContain('fake-model-rejected');
@@ -295,7 +299,7 @@ describe('Agent.setModel model publication (#3954)', () => {
     });
 
     it('rejects a setProvider issued while a model change is in flight with AgentBusyError and keeps the active provider', async () => {
-      const hold = holdNextRefreshAuth();
+      const hold = tokenizer.holdNext();
       const changing = agent.setModel('fake-model-first');
       try {
         await hold.entered;
@@ -308,7 +312,6 @@ describe('Agent.setModel model publication (#3954)', () => {
       } finally {
         hold.release();
         await changing;
-        hold.restore();
       }
 
       expect(agent.getProvider()).toBe('fake');
@@ -347,7 +350,7 @@ describe('Agent.setModel model publication (#3954)', () => {
     let profileChanges: ReturnType<typeof recordProfileChanges>;
 
     beforeEach(() => {
-      profileChanges = recordProfileChanges();
+      profileChanges = recordProfileChanges(agent);
     });
 
     afterEach(() => {
@@ -403,10 +406,9 @@ describe('Agent.setModel model publication (#3954)', () => {
     });
 
     it('keeps a completed provider switch successful when a ModelProfileChanged listener throws', async () => {
-      const throwing = (): void => {
-        throw new Error('profile listener exploded');
-      };
-      coreEvents.on(CoreEvent.ModelProfileChanged, throwing);
+      const stop = agent.settings.subscribeModelChanges((profile) => {
+        if (profile !== undefined) throw new Error('profile listener exploded');
+      });
       try {
         await expect(
           agent.setProvider('openai', 'gpt-4o'),
@@ -416,29 +418,14 @@ describe('Agent.setModel model publication (#3954)', () => {
         expect(agent.getModel()).toBe('gpt-4o');
         expect(changes.models).toStrictEqual(['gpt-4o']);
       } finally {
-        coreEvents.off(CoreEvent.ModelProfileChanged, throwing);
+        stop();
       }
     });
 
     it('publishes nothing when applying the requested model fails after the provider switched', async () => {
-      const failure = new Error('credential refresh failed');
-      const owner = clientOwner(agent);
-      const refreshAuth = owner.refreshAuth.bind(owner);
-      let calls = 0;
-      const refresh = spyOn(owner, 'refreshAuth').mockImplementation(
-        async (method?: string) => {
-          calls += 1;
-          if (calls === 2) throw failure;
-          return refreshAuth(method);
-        },
-      );
-      try {
-        await expect(agent.setProvider('openai', 'gpt-4o')).rejects.toBe(
-          failure,
-        );
-      } finally {
-        refresh.mockRestore();
-      }
+      const failure = tokenizer.failNext();
+
+      await expect(agent.setProvider('openai', 'gpt-4o')).rejects.toBe(failure);
 
       expect(changes.models).toStrictEqual([]);
       expect(profileChanges.payloads).toStrictEqual([]);
@@ -473,11 +460,9 @@ describe('Agent.setModel model publication (#3954)', () => {
   });
 
   it('keeps a completed model change successful when a ModelChanged listener throws', async () => {
-    const listenerFailure = new Error('listener exploded');
-    const throwing = (): void => {
-      throw listenerFailure;
-    };
-    coreEvents.on(CoreEvent.ModelChanged, throwing);
+    const stop = agent.settings.subscribeModelChanges((profile) => {
+      if (profile === undefined) throw new Error('listener exploded');
+    });
     try {
       await expect(
         agent.setModel('fake-model-notified'),
@@ -489,7 +474,7 @@ describe('Agent.setModel model publication (#3954)', () => {
       ).resolves.toBeUndefined();
       expect(agent.getModel()).toBe('fake-model-after-listener');
     } finally {
-      coreEvents.off(CoreEvent.ModelChanged, throwing);
+      stop();
     }
   });
 

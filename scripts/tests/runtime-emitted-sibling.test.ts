@@ -75,11 +75,15 @@ it('ignores emitted siblings but audits independent JavaScript', () => {
     ['tsconfig.json'],
   ).files;
   const selected = files.map((file) => file.slice(workspace.length + 1));
-  expect(selected).toContain('packages/demo/src/only.js');
-  expect(selected).toContain('packages/demo/src/manual.js');
-  expect(selected).not.toContain('packages/demo/src/generated.js');
-  expect(selected).not.toContain('packages/demo/src/declared.js');
-  expect(selected).toContain('packages/demo/src/generated.ts');
+  expect(selected).toContain(join('packages', 'demo', 'src', 'only.js'));
+  expect(selected).toContain(join('packages', 'demo', 'src', 'manual.js'));
+  expect(selected).not.toContain(
+    join('packages', 'demo', 'src', 'generated.js'),
+  );
+  expect(selected).not.toContain(
+    join('packages', 'demo', 'src', 'declared.js'),
+  );
+  expect(selected).toContain(join('packages', 'demo', 'src', 'generated.ts'));
   expect(
     discoverProductionSources(workspace, ['packages/demo/src']),
   ).not.toContain(join(workspace, 'packages/demo/src/generated.js'));

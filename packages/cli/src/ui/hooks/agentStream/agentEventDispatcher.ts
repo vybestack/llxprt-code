@@ -23,7 +23,6 @@ import type {
   CanonicalFinishReason,
 } from '@vybestack/llxprt-code-core';
 import { isCanonicalFinishReason } from '@vybestack/llxprt-code-core';
-import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import type {
   AgentEvent,
   AgentStopInfo,
@@ -38,10 +37,12 @@ import {
   buildRefusalNoticeMessage,
   buildFinishReasonMessage,
 } from './streamUtils.js';
-import { observeAssistantMessageCommitted } from '../../../observation/jspWiring.js';
+import type { ObservationCallbacks } from '../../../observation/jspWiring.js';
 import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
 
 export interface AgentEventDeps {
+  observeAssistantMessageCommitted: ObservationCallbacks['observeAssistantMessageCommitted'];
+  setLastPromptTokenCount: (count: number) => void;
   addItem: (item: HistoryItemWithoutId, timestamp: number) => void;
   sanitizeContent: (text: string) => {
     text: string;
@@ -138,7 +139,7 @@ function flushPendingAiContent(
   if (pending?.type === 'gemini' || pending?.type === 'gemini_content') {
     const sanitized = deps.sanitizeContent(pending.text);
     if (!sanitized.blocked) {
-      observeAssistantMessageCommitted(sanitized.text, Date.now());
+      deps.observeAssistantMessageCommitted(sanitized.text, Date.now());
     }
     deps.flushPendingHistoryItem(userMessageTimestamp);
     deps.setPendingHistoryItem(null);
@@ -487,7 +488,7 @@ function dispatchUsageEvent(
   agentMessageBuffer: string,
 ): DispatchResult {
   if (event.usage.promptTokenCount !== undefined) {
-    uiTelemetryService.setLastPromptTokenCount(event.usage.promptTokenCount);
+    deps.setLastPromptTokenCount(event.usage.promptTokenCount);
   }
   return { agentMessageBuffer };
 }

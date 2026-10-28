@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createAgent } from '@vybestack/llxprt-code-agents';
 
 import express from 'express';
 
@@ -24,7 +25,7 @@ import { logger } from '../utils/logger.js';
 import type { AgentSettings } from '../types.js';
 import { GCSTaskStore, NoOpTaskStore } from '../persistence/gcs.js';
 import { CoderAgentExecutor } from '../agent/executor.js';
-import { requestStorage } from './requestStorage.js';
+import { createRequestCancellationUser } from './request-cancellation.js';
 import {
   GitService,
   debugLogger,
@@ -32,7 +33,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import {
-  createTaskAgent,
+  createTaskAgentConfig,
   loadEnvironment,
   setTargetDir,
 } from '../config/config.js';
@@ -161,11 +162,10 @@ export async function createApp(dependencies: CreateAppDependencies = {}) {
     );
 
     let expressApp = express();
-    expressApp.use((req, res, next) => {
-      requestStorage.run({ req }, next);
-    });
-
-    const appBuilder = new A2AExpressApp(requestHandler);
+    const appBuilder = new A2AExpressApp(
+      requestHandler,
+      createRequestCancellationUser,
+    );
     expressApp = appBuilder.setupRoutes(expressApp, '');
     expressApp.use(express.json());
 
@@ -197,7 +197,9 @@ async function createStartupContext(): Promise<AppContext & TaskStores> {
   // model) has been read (#3221). Disposal must run even if the read fails:
   // dispose() tears down MCP connections and bus listeners the host would
   // otherwise leak for its lifetime.
-  const agent = await createTaskAgent(settings, extensions, 'a2a-server');
+  const agent = await createAgent(
+    createTaskAgentConfig(settings, extensions, 'a2a-server'),
+  );
   let model: string;
   try {
     model = agent.getModel();

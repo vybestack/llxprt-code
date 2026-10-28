@@ -10,11 +10,10 @@
  * @requirement REQ-ASYNC-006, REQ-ASYNC-007
  */
 
-import type { SlashCommand, CommandContext } from './types.js';
+import type { SlashCommand } from './types.js';
 import { CommandKind } from './types.js';
-import { MessageType } from '../types.js';
+import { MessageType, type HistoryItemWithoutId } from '../types.js';
 import type {
-  Agent,
   AgentTaskInfo,
   AgentSubagentTaskInfo,
   AgentShellJobInfo,
@@ -89,75 +88,68 @@ function formatTask(task: AgentTaskInfo): string {
   return formatShellJob(task);
 }
 
-function getRunningTaskIds(context: CommandContext): string[] {
-  const agent = context.services.agent;
-  if (agent) {
-    return agent.tasks.listRunning().map((t) => t.id);
-  }
-
-  return [];
+export interface TaskCommandOperations {
+  readonly list: () => readonly AgentTaskInfo[];
+  readonly listRunning: () => readonly AgentTaskInfo[];
+  readonly get: (id: string) => AgentTaskInfo | undefined;
+  readonly cancel: (id: string) => Promise<boolean>;
 }
 
-function reportTaskNotFound(context: CommandContext, taskId: string): void {
-  context.ui.addItem(
-    { type: MessageType.ERROR, text: `Task not found: ${taskId}` },
-    Date.now(),
-  );
-}
+type AddTaskItem = (item: HistoryItemWithoutId, timestamp?: number) => void;
 
-function reportAmbiguous(context: CommandContext, candidates: string[]): void {
-  const candidateList = candidates.map((c) => `  ${c}`).join('\n');
-  context.ui.addItem(
-    {
-      type: MessageType.ERROR,
-      text: `Ambiguous task ID. Did you mean:\n${candidateList}`,
-    },
-    Date.now(),
-  );
-}
-
-function reportCancelResult(
-  context: CommandContext,
-  taskId: string,
-  cancelled: boolean,
+function listTasks(
+  operations: TaskCommandOperations | null,
+  addItem: AddTaskItem,
 ): void {
-  context.ui.addItem(
-    cancelled
-      ? { type: MessageType.INFO, text: `Cancelled task: ${taskId}` }
-      : {
-          type: MessageType.ERROR,
-          text: `Failed to cancel task ${taskId}. It may have already completed.`,
-        },
-    Date.now(),
-  );
+  if (operations === null) {
+    addItem(
+      { type: MessageType.ERROR, text: 'Agent tasks not available' },
+      Date.now(),
+    );
+    return;
+  }
+  const tasks = operations.list();
+  if (tasks.length === 0) {
+    addItem({ type: MessageType.INFO, text: 'No async tasks.' }, Date.now());
+    return;
+  }
+  const lines = ['Async Tasks:', ''];
+  for (const task of tasks) lines.push(formatTask(task), '');
+  addItem({ type: MessageType.INFO, text: lines.join('\n') }, Date.now());
 }
 
-async function endTaskViaAgent(
-  context: CommandContext,
-  agent: Agent,
+async function cancelTask(
+  operations: TaskCommandOperations,
+  addItem: AddTaskItem,
   taskId: string,
 ): Promise<void> {
-  let task = agent.tasks.get(taskId);
-  if (!task) {
-    const prefixMatches = agent.tasks
+  let task = operations.get(taskId);
+  if (task === undefined) {
+    const matches = operations
       .list()
-      .filter((t) => t.id.startsWith(taskId));
-    if (prefixMatches.length === 1) {
-      task = prefixMatches[0];
-    } else if (prefixMatches.length > 1) {
-      reportAmbiguous(
-        context,
-        prefixMatches.map((t) => t.id),
+      .filter((entry) => entry.id.startsWith(taskId));
+    if (matches.length === 1) task = matches[0];
+    else if (matches.length > 1) {
+      const candidates = matches.map((entry) => `  ${entry.id}`).join('\n');
+      addItem(
+        {
+          type: MessageType.ERROR,
+          text: `Ambiguous task ID. Did you mean:\n${candidates}`,
+        },
+        Date.now(),
       );
       return;
     }
   }
-  if (!task) {
-    reportTaskNotFound(context, taskId);
+  if (task === undefined) {
+    addItem(
+      { type: MessageType.ERROR, text: `Task not found: ${taskId}` },
+      Date.now(),
+    );
     return;
   }
   if (task.status !== 'running') {
-    context.ui.addItem(
+    addItem(
       {
         type: MessageType.ERROR,
         text: `Task ${task.id} is already ${task.status}.`,
@@ -166,87 +158,67 @@ async function endTaskViaAgent(
     );
     return;
   }
-  reportCancelResult(context, task.id, await agent.tasks.cancel(task.id));
+  const cancelled = await operations.cancel(task.id);
+  addItem(
+    cancelled
+      ? { type: MessageType.INFO, text: `Cancelled task: ${task.id}` }
+      : {
+          type: MessageType.ERROR,
+          text: `Failed to cancel task ${task.id}. It may have already completed.`,
+        },
+    Date.now(),
+  );
 }
 
-export const taskCommand: SlashCommand = {
-  name: 'task',
-  description: 'Manage async background tasks',
-  kind: CommandKind.BUILT_IN,
-  subCommands: [
-    {
-      name: 'list',
-      description: 'List all async background tasks',
-      kind: CommandKind.BUILT_IN,
-      action: (context: CommandContext) => {
-        const agent = context.services.agent;
-        const tasks: readonly AgentTaskInfo[] | undefined = agent
-          ? agent.tasks.list()
-          : undefined;
-
-        if (!tasks) {
-          context.ui.addItem(
-            { type: MessageType.ERROR, text: 'Agent tasks not available' },
-            Date.now(),
-          );
-          return;
-        }
-        if (tasks.length === 0) {
-          context.ui.addItem(
-            { type: MessageType.INFO, text: 'No async tasks.' },
-            Date.now(),
-          );
-          return;
-        }
-
-        const lines: string[] = ['Async Tasks:', ''];
-        for (const task of tasks) {
-          lines.push(formatTask(task));
-          lines.push('');
-        }
-        context.ui.addItem(
-          { type: MessageType.INFO, text: lines.join('\n') },
+function createEndTaskCommand(
+  operations: TaskCommandOperations | null,
+  addItem: AddTaskItem,
+): SlashCommand {
+  return {
+    name: 'end',
+    description: 'Cancel a running async task',
+    kind: CommandKind.BUILT_IN,
+    completion: async (_invocation, partialArg): Promise<string[]> =>
+      (operations?.listRunning() ?? [])
+        .map((entry) => entry.id)
+        .filter((id) => id.toLowerCase().startsWith(partialArg.toLowerCase())),
+    action: async (_invocation, args): Promise<void> => {
+      const taskId = args.trim();
+      if (!taskId) {
+        addItem(
+          { type: MessageType.ERROR, text: 'Usage: /task end <task_id>' },
           Date.now(),
         );
-      },
-    },
-    {
-      name: 'end',
-      description: 'Cancel a running async task',
-      kind: CommandKind.BUILT_IN,
-      completion: async (
-        context: CommandContext,
-        partialArg: string,
-      ): Promise<string[]> => {
-        const taskIds = getRunningTaskIds(context);
-        if (!partialArg) {
-          return taskIds;
-        }
-        return taskIds.filter((id) =>
-          id.toLowerCase().startsWith(partialArg.toLowerCase()),
-        );
-      },
-      action: async (context: CommandContext, args: string) => {
-        const taskId = args.trim();
-        if (!taskId) {
-          context.ui.addItem(
-            { type: MessageType.ERROR, text: 'Usage: /task end <task_id>' },
-            Date.now(),
-          );
-          return;
-        }
-        const agent = context.services.agent;
-        if (agent) {
-          await endTaskViaAgent(context, agent, taskId);
-          return;
-        }
-        context.ui.addItem(
+        return;
+      }
+      if (operations === null) {
+        addItem(
           { type: MessageType.ERROR, text: 'Agent tasks not available' },
           Date.now(),
         );
-      },
+        return;
+      }
+      await cancelTask(operations, addItem, taskId);
     },
-  ],
-};
+  };
+}
 
-export const tasksCommands: SlashCommand[] = [taskCommand];
+export function createTaskCommand(
+  operations: TaskCommandOperations | null,
+  addItem: AddTaskItem,
+): SlashCommand {
+  return {
+    name: 'task',
+    description: 'Manage async background tasks',
+    kind: CommandKind.BUILT_IN,
+    subCommands: [
+      {
+        name: 'list',
+        description: 'List all async background tasks',
+        kind: CommandKind.BUILT_IN,
+        action: (): void => listTasks(operations, addItem),
+      },
+      createEndTaskCommand(operations, addItem),
+    ],
+  };
+}

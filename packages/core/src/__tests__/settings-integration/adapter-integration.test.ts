@@ -4,47 +4,46 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Issue #2616 PR A: vertical-slice integration for the surviving settings
- * construction seam. The explicit composition contract is: a caller that
- * owns no service constructs one via createRuntimeSettingsService and hands
- * it to createProviderRuntimeContext. The context exposes exactly the
- * service the caller constructed — no ambient resolution participates.
- */
-
 import { describe, it, expect } from 'bun:test';
 import { createRuntimeSettingsService } from '../../runtime/settingsRuntimeAdapter.js';
 import { createProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
+import { captureProviderInvocation } from '../../runtime/providerRequestContext.js';
+import type { NetworkFetch } from '../../utils/fetch.js';
 
-describe('settings runtime composition — vertical slice', () => {
-  it('the constructed service is the one visible through the runtime context', () => {
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
+
+describe('settings runtime composition', () => {
+  it('captures separately constructed settings without publishing the service in a context', () => {
     const service = createRuntimeSettingsService();
     service.set('probe-key', 'probe-value');
-
     const context = createProviderRuntimeContext({
-      settingsService: service,
       runtimeId: 'composition-slice',
     });
+    const invocation = captureProviderInvocation(
+      {
+        fetch: requestFetch,
+        runtimeId: context.runtimeId,
+        globalSettings: service.getAllGlobalSettings(),
+        providerSettings: service.getProviderSettings('test-provider'),
+      },
+      'test-provider',
+    );
+    service.set('probe-key', 'later-value');
 
-    expect(context.settingsService).toBe(service);
-    expect(context.settingsService.get('probe-key')).toBe('probe-value');
+    expect(invocation.ephemerals['probe-key']).toBe('probe-value');
+    expect('settingsService' in context).toBe(false);
   });
 
-  it('two composition rounds produce independent context/service pairs', () => {
+  it('two composition rounds retain independent settings and context identity', () => {
     const firstService = createRuntimeSettingsService();
     const secondService = createRuntimeSettingsService();
+    const first = createProviderRuntimeContext({ runtimeId: 'round-1' });
+    const second = createProviderRuntimeContext({ runtimeId: 'round-2' });
+    firstService.set('probe-key', 'first');
 
-    const first = createProviderRuntimeContext({
-      settingsService: firstService,
-      runtimeId: 'round-1',
-    });
-    const second = createProviderRuntimeContext({
-      settingsService: secondService,
-      runtimeId: 'round-2',
-    });
-
-    first.settingsService.set('probe-key', 'first');
-    expect(second.settingsService.get('probe-key')).toBeUndefined();
-    expect(first.settingsService).not.toBe(second.settingsService);
+    expect(secondService.get('probe-key')).toBeUndefined();
+    expect(firstService).not.toBe(secondService);
+    expect(first.runtimeId).not.toBe(second.runtimeId);
   });
 });

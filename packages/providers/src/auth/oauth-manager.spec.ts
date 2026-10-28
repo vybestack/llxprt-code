@@ -710,58 +710,129 @@ describe('OAuthManager', () => {
           ).resolves.toStrictEqual(['personal', 'work']);
         });
 
-        it('prefers an explicit bucket over a single configured profile bucket during auth fallback', async () => {
-          const savedTokens = new Map<string, OAuthToken>();
-          const targetBucketToken: OAuthToken = {
-            access_token: 'target-bucket-token',
-            refresh_token: 'target-refresh-token',
-            expiry: Math.floor(Date.now() / 1000) + 3600,
-            token_type: 'Bearer',
-          };
+        describe('explicit bucket versus a single configured profile bucket', () => {
+          function oneBucketManager(
+            savedTokens: Map<string, OAuthToken>,
+            provider: OAuthProvider,
+          ): OAuthManager {
+            const store: TokenStore = {
+              ...createTokenMapAccess(savedTokens),
+              removeToken: async () => undefined,
+              listProviders: async () => [],
+              listBuckets: async () => [],
+              getBucketStats: async () => null,
+              acquireRefreshLock: async () => false,
+              releaseRefreshLock: async () => undefined,
+              acquireAuthLock: async () => true,
+              releaseAuthLock: async () => undefined,
+            };
+            const bucketedManager = new OAuthManager(
+              store,
+              createLoadedSettings({
+                oauthEnabledProviders: { anthropic: true },
+              }),
+              {
+                profileReads: {
+                  loadProfile: async () => ({
+                    version: 1,
+                    provider: 'anthropic',
+                    model: 'claude-test',
+                    modelParams: {},
+                    ephemeralSettings: {},
+                    auth: { type: 'oauth', buckets: ['profile-only-bucket'] },
+                  }),
+                },
+                readSessionAuthPolicy: () => ({
+                  profileName: 'single-bucket-profile',
+                  bucketPrompt: undefined,
+                  bucketDelay: undefined,
+                  interactiveTimeoutMs: undefined,
+                  noBrowser: false,
+                  authOnly: false,
+                }),
+              },
+            );
+            bucketedManager.registerProvider(provider);
+            return bucketedManager;
+          }
 
-          const tokenMapAccess = createTokenMapAccess(savedTokens);
-          const tokenStore: TokenStore = {
-            saveToken: vi.fn(tokenMapAccess.saveToken),
-            getToken: vi.fn(tokenMapAccess.getToken),
-            removeToken: vi.fn(async () => undefined),
-            listProviders: vi.fn(async () => []),
-            listBuckets: vi.fn(async () => []),
-            getBucketStats: vi.fn(async () => null),
-            acquireRefreshLock: vi.fn(async () => false),
-            releaseRefreshLock: vi.fn(async () => undefined),
-            acquireAuthLock: vi.fn(async () => true),
-            releaseAuthLock: vi.fn(async () => undefined),
-          };
+          it('prefers an explicit bucket over a single configured profile bucket during auth fallback', async () => {
+            const savedTokens = new Map<string, OAuthToken>();
+            const abortedAtEntry: boolean[] = [];
+            const provider: OAuthProvider = {
+              name: 'anthropic',
+              initiateAuth: async (signal?: AbortSignal) => {
+                abortedAtEntry.push(signal?.aborted ?? true);
+                return {
+                  access_token: 'target-bucket-token',
+                  refresh_token: 'target-refresh-token',
+                  expiry: Math.floor(Date.now() / 1000) + 3600,
+                  token_type: 'Bearer',
+                };
+              },
+              getToken: async () => null,
+              refreshToken: async () => null,
+            };
+            const bucketed = oneBucketManager(savedTokens, provider);
 
-          const manager = new OAuthManager(tokenStore);
-          const provider: OAuthProvider = {
-            name: 'anthropic',
-            initiateAuth: vi.fn(async () => targetBucketToken),
-            getToken: vi.fn(async () => null),
-            refreshToken: vi.fn(async () => null),
-          };
-          manager.registerProvider(provider);
-          vi.spyOn(manager, 'isOAuthEnabled').mockReturnValue(true);
-          vi.spyOn(
-            manager as unknown as {
-              getProfileBuckets: (provider: string) => Promise<string[]>;
-            },
-            'getProfileBuckets',
-          ).mockResolvedValue(['profile-only-bucket']);
+            const result = await bucketed.getToken(
+              'anthropic',
+              'target-bucket',
+            );
 
-          const authenticateSpy = vi.spyOn(manager, 'authenticate');
+            expect(result).toBe('target-bucket-token');
+            expect([...savedTokens.keys()]).toStrictEqual([
+              'anthropic:target-bucket',
+            ]);
+            expect(abortedAtEntry).toStrictEqual([false]);
+            await bucketed.dispose();
+          });
 
-          const result = await manager.getToken('anthropic', 'target-bucket');
+          it('cancels the provider signal when the manager is disposed during that fallback authentication', async () => {
+            const savedTokens = new Map<string, OAuthToken>();
+            const observed: AbortSignal[] = [];
+            let announce = (): void => {};
+            const entered = new Promise<void>((resolve) => {
+              announce = resolve;
+            });
+            const provider: OAuthProvider = {
+              name: 'anthropic',
+              initiateAuth: async (signal?: AbortSignal) => {
+                if (signal === undefined) throw new Error('No owner signal');
+                observed.push(signal);
+                announce();
+                return new Promise<OAuthToken>((_resolve, reject) => {
+                  signal.addEventListener(
+                    'abort',
+                    () => reject(signal.reason),
+                    {
+                      once: true,
+                    },
+                  );
+                });
+              },
+              getToken: async () => null,
+              refreshToken: async () => null,
+            };
+            const bucketed = oneBucketManager(savedTokens, provider);
+            const callerOutcomes: unknown[] = [];
+            const reading = bucketed
+              .getToken('anthropic', 'target-bucket')
+              .then(
+                (token) => callerOutcomes.push(token),
+                (error: unknown) => callerOutcomes.push(error),
+              );
+            await entered;
+            expect(observed[0]?.aborted).toBe(false);
 
-          expect(authenticateSpy).toHaveBeenCalledWith(
-            'anthropic',
-            'target-bucket',
-          );
-          expect(tokenStore.getToken).toHaveBeenCalledWith(
-            'anthropic',
-            'target-bucket',
-          );
-          expect(result).toBe('target-bucket-token');
+            await bucketed.dispose();
+            await reading;
+
+            expect(observed[0]?.aborted).toBe(true);
+            expect(callerOutcomes).toHaveLength(1);
+            expect(callerOutcomes[0]).toBeInstanceOf(Error);
+            expect(savedTokens.size).toBe(0);
+          });
         });
       });
 

@@ -187,6 +187,7 @@ export type AgentHookBlockedEvent = Readonly<{
 export type AgentErrorEvent = Readonly<{
   type: 'error';
   error: StructuredError;
+  cause?: unknown;
 }>;
 
 export type AgentDoneEvent = Readonly<{

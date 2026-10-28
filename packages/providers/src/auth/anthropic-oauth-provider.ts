@@ -1,3 +1,4 @@
+import type { OAuthFetch } from '@vybestack/llxprt-code-auth/types.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -22,7 +23,7 @@ import {
   GracefulErrorHandler,
   RetryHandler,
 } from '@vybestack/llxprt-code-auth/oauth-errors.js';
-import { oauthUIBridge } from '@vybestack/llxprt-code-auth/oauth-ui-bridge.js';
+import type { OAuthProviderUIPort } from '@vybestack/llxprt-code-auth/oauth-ui-bridge.js';
 import {
   openBrowserSecurely,
   shouldLaunchBrowser,
@@ -89,6 +90,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   private addItem?: OAuthUICallback;
   private currentAuthBucket?: string;
   private dialogAttemptId?: string;
+  private ui?: OAuthProviderUIPort;
 
   /**
    * @plan PLAN-20250823-AUTHFIXES.P06
@@ -98,6 +100,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * Constructor completes synchronously - no async calls
    */
   constructor(
+    requestFetch: OAuthFetch,
     tokenStore: TokenStore,
     addItem?: OAuthUICallback,
     private readonly isBrowserDisabled: () => boolean = () => false,
@@ -107,16 +110,29 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     ) => BrowserProfileAssociation | undefined = () => undefined,
   ) {
     assertTokenStore(tokenStore);
-    this.deviceFlow = new AnthropicDeviceFlow();
+    this.deviceFlow = new AnthropicDeviceFlow(requestFetch);
     this.retryHandler = new RetryHandler();
     this.errorHandler = new GracefulErrorHandler(this.retryHandler);
     this.logger = new DebugLogger('llxprt:auth:claudecode');
     this.tokenStore = tokenStore;
     this.addItem = addItem;
     this.initGuard = new InitializationGuard('wrap', this.name);
-    this.dialog = new AuthCodeDialog();
+    this.dialog = new AuthCodeDialog(() => this.requireUI().clearCodeRequest());
 
     // DO NOT call initializeToken() - lazy initialization pattern
+  }
+
+  bindUIPort(port: OAuthProviderUIPort): void {
+    this.ui = port;
+  }
+
+  private requireUI(): OAuthProviderUIPort {
+    if (this.ui === undefined) {
+      throw new Error(
+        `OAuth provider ${this.name} has no UI port; register it with an OAuthManager before authenticating.`,
+      );
+    }
+    return this.ui;
   }
 
   /**
@@ -160,44 +176,63 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     return this.initGuard.ensureInitialized(() => this.initializeToken());
   }
 
-  async initiateAuth(): Promise<OAuthToken> {
-    return this.errorHandler.wrapMethod(
-      async () => {
-        // Cancel any previous auth attempt's pending dialog
-        const attemptId = crypto.randomUUID();
-        if (this.currentAuthAttemptId) {
-          this.cancelAuth();
-        }
-        this.currentAuthAttemptId = attemptId;
+  async initiateAuth(signal?: AbortSignal): Promise<OAuthToken> {
+    signal?.throwIfAborted();
+    try {
+      return await this.errorHandler.wrapMethod(
+        async () => this.runAuthAttempt(signal),
+        this.name,
+        'initiateAuth',
+      )();
+    } catch (error) {
+      // The wrapper classifies every failure as an OAuth error; the caller
+      // that aborted must see its own reason.
+      if (signal?.aborted === true) throw signal.reason;
+      throw error;
+    }
+  }
 
-        try {
-          await this.ensureInitialized();
-          const { localCallback } =
-            await this.setupDeviceFlowAndDisplay(attemptId);
+  private async runAuthAttempt(
+    signal: AbortSignal | undefined,
+  ): Promise<OAuthToken> {
+    if (signal?.aborted === true) throw new AuthAttemptCancelledError();
+    // Cancel any previous auth attempt's pending dialog
+    const attemptId = crypto.randomUUID();
+    if (this.currentAuthAttemptId) {
+      this.cancelAuth();
+    }
+    this.currentAuthAttemptId = attemptId;
+    const onAbort = (): void => {
+      if (this.currentAuthAttemptId === attemptId) {
+        this.dialog.rejectWithError(new AuthAttemptCancelledError());
+      }
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
 
-          if (localCallback) {
-            return await this.raceCallbackVsManualEntry(
-              attemptId,
-              localCallback,
-            );
-          }
+    try {
+      await this.ensureInitialized();
+      const { localCallback } = await this.setupDeviceFlowAndDisplay(
+        attemptId,
+        signal,
+      );
 
-          const authCode = await this.pendingAuthPromise!;
-          if (this.currentAuthAttemptId !== attemptId) {
-            throw new AuthAttemptCancelledError();
-          }
-          return await this.completeAuth(authCode);
-        } finally {
-          if (this.currentAuthAttemptId === attemptId) {
-            this.dialog.cancelAuth(this.name);
-            this.pendingAuthPromise = undefined;
-            this.currentAuthAttemptId = undefined;
-          }
-        }
-      },
-      this.name,
-      'initiateAuth',
-    )();
+      if (localCallback) {
+        return await this.raceCallbackVsManualEntry(attemptId, localCallback);
+      }
+
+      const authCode = await this.pendingAuthPromise!;
+      if (this.currentAuthAttemptId !== attemptId) {
+        throw new AuthAttemptCancelledError();
+      }
+      return await this.completeAuth(authCode);
+    } finally {
+      signal?.removeEventListener('abort', onAbort);
+      if (this.currentAuthAttemptId === attemptId) {
+        this.dialog.cancelAuth(this.name);
+        this.pendingAuthPromise = undefined;
+        this.currentAuthAttemptId = undefined;
+      }
+    }
   }
 
   /**
@@ -205,7 +240,10 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * display the auth URL to the user, copy to clipboard, and open browser.
    * Returns the URLs and callback handle needed by the calling flow.
    */
-  private async setupDeviceFlowAndDisplay(attemptId: string): Promise<{
+  private async setupDeviceFlowAndDisplay(
+    attemptId: string,
+    signal: AbortSignal | undefined,
+  ): Promise<{
     localCallback: LocalOAuthCallbackServer | null;
   }> {
     const deviceCodeResponse = await this.deviceFlow.initiateDeviceFlow();
@@ -238,7 +276,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       ? this.deviceFlow.buildAuthorizationUrl(localCallback.redirectUri)
       : null;
 
-    if (this.currentAuthAttemptId !== attemptId) {
+    if (this.currentAuthAttemptId !== attemptId || signal?.aborted === true) {
       await localCallback?.shutdown();
       throw new AuthAttemptCancelledError();
     }
@@ -252,7 +290,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     if (this.addItem) {
       this.addItem(historyItem);
     } else {
-      oauthUIBridge.emit(historyItem);
+      this.requireUI().emit(historyItem);
     }
     debugLogger.log('Visit the following URL to authorize:');
     debugLogger.log(deviceCodeUrl);
@@ -317,7 +355,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       if (this.addItem) {
         this.addItem(warning);
       } else {
-        oauthUIBridge.emit(warning);
+        this.requireUI().emit(warning);
       }
     }
   }
@@ -327,14 +365,13 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * Assigns this.pendingAuthPromise and this.dialog, and marks global auth state.
    */
   private armPendingAuthDialog(): void {
+    const ui = this.requireUI();
     if (this.dialogAttemptId) {
-      oauthUIBridge.beginDialog(this.dialogAttemptId, this.name);
+      ui.beginDialog(this.dialogAttemptId, this.name);
     }
-    (global as unknown as { __oauth_provider: string }).__oauth_provider =
-      'claudecode';
 
     this.pendingAuthPromise = new Promise<string>((resolve, reject) => {
-      const innerDialog = new AuthCodeDialog();
+      const innerDialog = new AuthCodeDialog(() => ui.clearCodeRequest());
       const innerPromise = innerDialog.waitForAuthCode();
       this.dialog = innerDialog;
 
@@ -363,8 +400,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     });
 
     void this.pendingAuthPromise.catch(() => undefined);
-    (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code =
-      true;
+    ui.requestCode(this.name);
   }
 
   /**
@@ -456,10 +492,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           redirectUri,
         );
 
-        // Clear the dialog flag on successful auth
-        (
-          global as unknown as { __oauth_needs_code: boolean }
-        ).__oauth_needs_code = false;
+        this.requireUI().clearCodeRequest();
 
         this.logger.debug(() => 'Successfully authenticated with Claude Code!');
 

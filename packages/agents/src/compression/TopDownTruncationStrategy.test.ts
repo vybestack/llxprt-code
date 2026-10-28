@@ -169,7 +169,7 @@ function buildContext(
     logger: noopLogger,
     resolveProvider: () => ({
       provider: throwingProvider,
-      runtime: { settingsService: {} } as never,
+      runtime: {},
     }),
     promptResolver,
     promptBaseDir: '/tmp/test-prompts',

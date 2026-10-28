@@ -1,15 +1,29 @@
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { ProviderReadFixture } from '../../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
+import {
+  createBarrier,
+  createDeferred,
+  delay,
+} from './runtime-isolation-gates.js';
 import {
   assembleProfileApplication,
   assembleProviderSwitch,
+  switchActiveProvider,
 } from '@vybestack/llxprt-code-agents';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import {
-  providerSwitchInputs,
-  baseUrlInputs,
-  overrideInputs,
-  modelParamInputs,
-} from '../../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
+  ProviderFileLifecycle,
+  ProviderManager,
+} from '@vybestack/llxprt-code-providers';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { useOwnedCredentials as installOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
+import {
+  acquirePreferredOAuth,
+  acquirePreferredProviderManager,
+} from '../../../../agents/src/api/__tests__/helpers/provider-acquisition.js';
+import { buildRuntimeProfileSnapshot } from '../../../../agents/src/api/profileSnapshot.js';
+const credentials = installOwnedCredentials();
 /**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P14
  * @requirement REQ-SP2-003
@@ -23,64 +37,37 @@ const definitionFixture = installDefinitionRuntimeFixture();
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { afterEach, describe, expect, it } from 'bun:test';
-import { SettingsService, type Profile } from '@vybestack/llxprt-code-settings';
+import { Config, MessageBus } from '@vybestack/llxprt-code-core';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
+import { SettingsService, type Profile } from '@vybestack/llxprt-code-settings';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { setActiveModelParam } from '../../../../agents/src/api/model-parameters.js';
 import {
-  activateIsolatedRuntimeContext,
-  buildRuntimeProfileSnapshot,
-  createIsolatedRuntimeContext,
   setActiveModel,
-  setActiveModelParam,
-  switchActiveProvider,
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
-  listProviders,
-  getEphemeralSettings,
-} from '@vybestack/llxprt-code-providers/runtime.js';
-import {
-  Config,
-  createProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
-import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js';
+} from '../../../../agents/src/api/providerMutations.js';
 import { createProviderSessionOwner } from '../../integration-tests/__tests__/session-client-owner-fixture.js';
 import {
   cleanupTempDirectory,
   createTempDirectory,
 } from '../../integration-tests/test-utils.js';
-import { MissingProviderRuntimeError } from '../../../../providers/src/runtime/messages.js';
 
-interface RuntimeFixture {
+interface RuntimeData {
   id: string;
   profileName: string;
   primaryProvider: string;
   secondaryProvider: string;
   primaryModel: string;
   secondaryModel: string;
-  tempDir: string;
-  handle: IsolatedRuntimeContextHandle;
-  sessionClient: ReturnType<typeof createProviderSessionOwner>['sessionClient'];
 }
-
-const runtimeFixtures: RuntimeFixture[] = [];
-
+const releases: Array<() => Promise<void>> = [];
 describe('CLI runtime isolation', () => {
   afterEach(async () => {
-    while (runtimeFixtures.length > 0) {
-      const fixture = runtimeFixtures.pop();
-      if (!fixture) {
-        continue;
-      }
-      try {
-        await fixture.handle.cleanup();
-        await fixture.handle.config.dispose();
-      } finally {
-        await cleanupTempDirectory(fixture.tempDir);
-      }
-    }
+    for (const close of releases.splice(0).reverse()) await close();
   });
   it('isolates concurrent runtime activations across sessions @plan:PLAN-20251018-STATELESSPROVIDER2.P14 @requirement:REQ-SP2-003 @pseudocode cli-runtime-isolation.md lines 1-3', async () => {
-    const runtimeA = await bootstrapRuntimeFixture({
+    await openFirst({
       id: 'runtime-a',
       profileName: 'profile-a',
       primaryProvider: 'primary',
@@ -88,7 +75,7 @@ describe('CLI runtime isolation', () => {
       primaryModel: 'alpha-primary',
       secondaryModel: 'alpha-secondary',
     });
-    const runtimeB = await bootstrapRuntimeFixture({
+    await openSecond({
       id: 'runtime-b',
       profileName: 'profile-b',
       primaryProvider: 'primary',
@@ -100,23 +87,22 @@ describe('CLI runtime isolation', () => {
     const barrier = createBarrier(2);
 
     await Promise.all([
-      runWithRuntime(runtimeA, barrier, async () => {
+      runWithFirst(barrier, async () => {
         await setActiveModel(
           'alpha-primary-updated',
-          assembleModelSelection(runtimeA.handle.settingsOwner),
-          runtimeA.handle.settingsService,
-          runtimeA.handle.providerManager.getActiveProvider(),
+          assembleModelSelection(firstOwner),
+          firstSettings,
+          firstManager.getActiveProvider(),
         );
       }),
-      runWithRuntime(
-        runtimeB,
+      runWithSecond(
         barrier,
         async () => {
           await setActiveModel(
             'beta-primary-updated',
-            assembleModelSelection(runtimeB.handle.settingsOwner),
-            runtimeB.handle.settingsService,
-            runtimeB.handle.providerManager.getActiveProvider(),
+            assembleModelSelection(secondOwner),
+            secondSettings,
+            secondManager.getActiveProvider(),
           );
         },
         { delayBeforeActivationMs: 5 },
@@ -124,30 +110,22 @@ describe('CLI runtime isolation', () => {
     ]);
 
     expect(
-      runtimeA.handle.settingsService.getProviderSettings(
-        runtimeA.primaryProvider,
-      ).model,
+      firstSettings.getProviderSettings(firstData.primaryProvider).model,
     ).toBe('alpha-primary-updated');
     expect(
-      runtimeA.handle.settingsService.getProviderSettings(
-        runtimeA.primaryProvider,
-      ).model,
+      firstSettings.getProviderSettings(firstData.primaryProvider).model,
     ).toBe('alpha-primary-updated');
 
     expect(
-      runtimeB.handle.settingsService.getProviderSettings(
-        runtimeB.primaryProvider,
-      ).model,
+      secondSettings.getProviderSettings(secondData.primaryProvider).model,
     ).toBe('beta-primary-updated');
     expect(
-      runtimeB.handle.settingsService.getProviderSettings(
-        runtimeB.primaryProvider,
-      ).model,
+      secondSettings.getProviderSettings(secondData.primaryProvider).model,
     ).toBe('beta-primary-updated');
   });
 
   it('scopes command mutations to active runtime contexts @plan:PLAN-20251018-STATELESSPROVIDER2.P14 @requirement:REQ-SP2-003 @pseudocode cli-runtime-isolation.md lines 4-10', async () => {
-    const runtimeA = await bootstrapRuntimeFixture({
+    await openFirst({
       id: 'runtime-a',
       profileName: 'profile-a',
       primaryProvider: 'primary',
@@ -155,7 +133,7 @@ describe('CLI runtime isolation', () => {
       primaryModel: 'alpha-primary',
       secondaryModel: 'alpha-secondary-default',
     });
-    const runtimeB = await bootstrapRuntimeFixture({
+    await openSecond({
       id: 'runtime-b',
       profileName: 'profile-b',
       primaryProvider: 'primary',
@@ -167,30 +145,33 @@ describe('CLI runtime isolation', () => {
     const barrier = createBarrier(2);
 
     await Promise.all([
-      runWithRuntime(runtimeA, barrier, async () => {
+      runWithFirst(barrier, async () => {
         await switchActiveProvider(
-          runtimeA.secondaryProvider,
+          firstData.secondaryProvider,
           {},
-          ...(await providerSwitchInputs(
-            runtimeA.handle,
-            runtimeA.handle.providerManager,
-            () => runtimeA.sessionClient.refreshAuth(),
-          )),
+          firstConfig,
+          firstSettings,
+          firstManager,
+          firstOAuth,
+          undefined,
+          () => firstClient.clients.refreshAuth(),
+          firstOwner,
         );
         await setActiveModel(
           'alpha-secondary-tuned',
-          assembleModelSelection(runtimeA.handle.settingsOwner),
-          runtimeA.handle.settingsService,
-          runtimeA.handle.providerManager.getActiveProvider(),
+          assembleModelSelection(firstOwner),
+          firstSettings,
+          firstManager.getActiveProvider(),
         );
         setActiveModelParam(
           'temperature',
           0.2,
-          ...modelParamInputs(runtimeA.handle, runtimeA.handle.providerManager),
+          firstSettings,
+          firstManager.getActiveProviderName(),
         );
         const profile: Profile = {
           version: 1,
-          provider: runtimeA.secondaryProvider,
+          provider: firstData.secondaryProvider,
           model: 'alpha-profile-model',
           modelParams: { temperature: 0.6 },
           ephemeralSettings: {
@@ -199,74 +180,78 @@ describe('CLI runtime isolation', () => {
           },
         };
         await assembleProfileApplication(
-          runtimeA.handle.config,
-          runtimeA.handle.settingsService,
-          runtimeA.handle.providerManager,
-          runtimeA.handle.oauthManager,
+          firstSettings,
+          firstManager,
+          firstOAuth,
           assembleProviderSwitch(
-            runtimeA.handle.config,
-            runtimeA.handle.settingsService,
-            runtimeA.handle.providerManager,
-            runtimeA.handle.oauthManager,
-            () => runtimeA.handle.readRuntimeKind(),
-            () => runtimeA.sessionClient.refreshAuth(),
+            firstConfig,
+            firstSettings,
+            firstManager,
+            firstOAuth,
+            () => 'cli-interactive',
+            () => firstClient.clients.refreshAuth(),
 
-            runtimeA.handle.settingsOwner,
+            firstOwner,
           ),
-          runtimeA.handle.settingsOwner,
+          firstOwner,
           definitionFixture().profileDefinitions,
-        ).applySnapshot(profile, { profileName: runtimeA.profileName });
+        ).applySnapshot(profile, { profileName: firstData.profileName });
         await updateActiveProviderBaseUrl(
           'https://alpha.isolated.example.com',
-          ...(await baseUrlInputs(
-            runtimeA.handle,
-            runtimeA.handle.providerManager,
-          )),
+          {
+            setEphemeralSetting: (key, value) =>
+              firstOwner.writeUserParameter(key, value),
+          },
+          firstSettings,
+          firstManager.getActiveProviderName() ?? '',
         );
         await updateActiveProviderApiKey(
           'alpha-updated-key',
-          ...(await overrideInputs(runtimeA.handle)),
-          runtimeA.handle.providerManager.getActiveProvider(),
+          {
+            setEphemeralSetting: (key, value) =>
+              firstOwner.writeUserParameter(key, value),
+          },
+          firstSettings,
+          firstManager.getActiveProvider(),
         );
-        runtimeA.handle.settingsOwner.writeUserParameter(
+        firstOwner.writeUserParameter(
           'auth-keyfile',
-          `${runtimeA.tempDir}/alpha-keyfile`,
+          `${firstTempDir}/alpha-keyfile`,
         );
         // Set custom-headers AFTER profile load to ensure it persists
-        runtimeA.handle.settingsOwner.writeUserParameter('custom-headers', {
-          'x-runtime': runtimeA.id,
+        firstOwner.writeUserParameter('custom-headers', {
+          'x-runtime': firstData.id,
         });
       }),
-      runWithRuntime(
-        runtimeB,
+      runWithSecond(
         barrier,
         async () => {
           await switchActiveProvider(
-            runtimeB.secondaryProvider,
+            secondData.secondaryProvider,
             {},
-            ...(await providerSwitchInputs(
-              runtimeB.handle,
-              runtimeB.handle.providerManager,
-              () => runtimeB.sessionClient.refreshAuth(),
-            )),
+            secondConfig,
+            secondSettings,
+            secondManager,
+            secondOAuth,
+            undefined,
+            () => secondClient.clients.refreshAuth(),
+            secondOwner,
           );
           await setActiveModel(
             'beta-secondary-tuned',
-            assembleModelSelection(runtimeB.handle.settingsOwner),
-            runtimeB.handle.settingsService,
-            runtimeB.handle.providerManager.getActiveProvider(),
+            assembleModelSelection(secondOwner),
+            secondSettings,
+            secondManager.getActiveProvider(),
           );
           setActiveModelParam(
             'temperature',
             0.9,
-            ...modelParamInputs(
-              runtimeB.handle,
-              runtimeB.handle.providerManager,
-            ),
+            secondSettings,
+            secondManager.getActiveProviderName(),
           );
           const profile: Profile = {
             version: 1,
-            provider: runtimeB.secondaryProvider,
+            provider: secondData.secondaryProvider,
             model: 'beta-profile-model',
             modelParams: { temperature: 0.4 },
             ephemeralSettings: {
@@ -275,98 +260,91 @@ describe('CLI runtime isolation', () => {
             },
           };
           await assembleProfileApplication(
-            runtimeB.handle.config,
-            runtimeB.handle.settingsService,
-            runtimeB.handle.providerManager,
-            runtimeB.handle.oauthManager,
+            secondSettings,
+            secondManager,
+            secondOAuth,
             assembleProviderSwitch(
-              runtimeB.handle.config,
-              runtimeB.handle.settingsService,
-              runtimeB.handle.providerManager,
-              runtimeB.handle.oauthManager,
-              () => runtimeB.handle.readRuntimeKind(),
-              () => runtimeB.sessionClient.refreshAuth(),
+              secondConfig,
+              secondSettings,
+              secondManager,
+              secondOAuth,
+              () => 'cli-interactive',
+              () => secondClient.clients.refreshAuth(),
 
-              runtimeB.handle.settingsOwner,
+              secondOwner,
             ),
-            runtimeB.handle.settingsOwner,
+            secondOwner,
             definitionFixture().profileDefinitions,
-          ).applySnapshot(profile, { profileName: runtimeB.profileName });
+          ).applySnapshot(profile, { profileName: secondData.profileName });
           await updateActiveProviderBaseUrl(
             'https://beta.isolated.example.com',
-            ...(await baseUrlInputs(
-              runtimeB.handle,
-              runtimeB.handle.providerManager,
-            )),
+            {
+              setEphemeralSetting: (key, value) =>
+                secondOwner.writeUserParameter(key, value),
+            },
+            secondSettings,
+            secondManager.getActiveProviderName() ?? '',
           );
           await updateActiveProviderApiKey(
             'beta-updated-key',
-            ...(await overrideInputs(runtimeB.handle)),
-            runtimeB.handle.providerManager.getActiveProvider(),
+            {
+              setEphemeralSetting: (key, value) =>
+                secondOwner.writeUserParameter(key, value),
+            },
+            secondSettings,
+            secondManager.getActiveProvider(),
           );
-          runtimeB.handle.settingsOwner.writeUserParameter(
+          secondOwner.writeUserParameter(
             'auth-keyfile',
-            `${runtimeB.tempDir}/beta-keyfile`,
+            `${secondTempDir}/beta-keyfile`,
           );
           // Set custom-headers AFTER profile load to ensure it persists
-          runtimeB.handle.settingsOwner.writeUserParameter('custom-headers', {
-            'x-runtime': runtimeB.id,
+          secondOwner.writeUserParameter('custom-headers', {
+            'x-runtime': secondData.id,
           });
         },
         { delayBeforeActivationMs: 5 },
       ),
     ]);
 
-    const aSecondarySettings =
-      runtimeA.handle.settingsService.getProviderSettings(
-        runtimeA.secondaryProvider,
-      );
-    expect(runtimeA.handle.settingsOwner.readSelectedProvider()).toBe(
-      runtimeA.secondaryProvider,
+    const aSecondarySettings = firstSettings.getProviderSettings(
+      firstData.secondaryProvider,
     );
-    expect(runtimeA.handle.settingsOwner.readSelectedModel()).toBe(
-      'alpha-profile-model',
-    );
-    expect(runtimeA.handle.settingsOwner.readNamedParameter('base-url')).toBe(
+    expect(firstOwner.readSelectedProvider()).toBe(firstData.secondaryProvider);
+    expect(firstOwner.readSelectedModel()).toBe('alpha-profile-model');
+    expect(firstOwner.readNamedParameter('base-url')).toBe(
       'https://alpha.isolated.example.com',
     );
-    expect(runtimeA.handle.settingsOwner.readNamedParameter('auth-key')).toBe(
-      'alpha-updated-key',
+    expect(firstOwner.readNamedParameter('auth-key')).toBe('alpha-updated-key');
+    expect(firstOwner.readNamedParameter('auth-keyfile')).toBe(
+      `${firstTempDir}/alpha-keyfile`,
     );
-    expect(
-      runtimeA.handle.settingsOwner.readNamedParameter('auth-keyfile'),
-    ).toBe(`${runtimeA.tempDir}/alpha-keyfile`);
-    expect(
-      runtimeA.handle.settingsOwner.readNamedParameter('custom-headers'),
-    ).toStrictEqual({ 'x-runtime': runtimeA.id });
+    expect(firstOwner.readNamedParameter('custom-headers')).toStrictEqual({
+      'x-runtime': firstData.id,
+    });
     expect(aSecondarySettings.temperature).toBe(0.6);
     expect(aSecondarySettings['auth-key']).toBe('alpha-updated-key');
     expect(aSecondarySettings['base-url']).toBe(
       'https://alpha.isolated.example.com',
     );
 
-    const bSecondarySettings =
-      runtimeB.handle.settingsService.getProviderSettings(
-        runtimeB.secondaryProvider,
-      );
-    expect(runtimeB.handle.settingsOwner.readSelectedProvider()).toBe(
-      runtimeB.secondaryProvider,
+    const bSecondarySettings = secondSettings.getProviderSettings(
+      secondData.secondaryProvider,
     );
-    expect(runtimeB.handle.settingsOwner.readSelectedModel()).toBe(
-      'beta-profile-model',
+    expect(secondOwner.readSelectedProvider()).toBe(
+      secondData.secondaryProvider,
     );
-    expect(runtimeB.handle.settingsOwner.readNamedParameter('base-url')).toBe(
+    expect(secondOwner.readSelectedModel()).toBe('beta-profile-model');
+    expect(secondOwner.readNamedParameter('base-url')).toBe(
       'https://beta.isolated.example.com',
     );
-    expect(runtimeB.handle.settingsOwner.readNamedParameter('auth-key')).toBe(
-      'beta-updated-key',
+    expect(secondOwner.readNamedParameter('auth-key')).toBe('beta-updated-key');
+    expect(secondOwner.readNamedParameter('auth-keyfile')).toBe(
+      `${secondTempDir}/beta-keyfile`,
     );
-    expect(
-      runtimeB.handle.settingsOwner.readNamedParameter('auth-keyfile'),
-    ).toBe(`${runtimeB.tempDir}/beta-keyfile`);
-    expect(
-      runtimeB.handle.settingsOwner.readNamedParameter('custom-headers'),
-    ).toStrictEqual({ 'x-runtime': runtimeB.id });
+    expect(secondOwner.readNamedParameter('custom-headers')).toStrictEqual({
+      'x-runtime': secondData.id,
+    });
     expect(bSecondarySettings.temperature).toBe(0.4);
     expect(bSecondarySettings['auth-key']).toBe('beta-updated-key');
     expect(bSecondarySettings['base-url']).toBe(
@@ -375,7 +353,7 @@ describe('CLI runtime isolation', () => {
   });
 
   it('does not resurrect cleared auth and base-url state in runtime snapshots @plan:PLAN-20251018-STATELESSPROVIDER2.P14 @requirement:REQ-SP2-003', async () => {
-    const runtime = await bootstrapRuntimeFixture({
+    await openFirst({
       id: 'runtime-clear-state',
       profileName: 'profile-clear-state',
       primaryProvider: 'primary',
@@ -384,64 +362,74 @@ describe('CLI runtime isolation', () => {
       secondaryModel: 'secondary-model',
     });
 
-    await activateIsolatedRuntimeContext(runtime.handle, {
-      runtimeId: runtime.handle.runtimeId,
+    await activateFirst({
+      runtimeId: firstData.id,
       metadata: {
-        profileName: runtime.profileName,
-        source: `runtime-isolation-test:${runtime.id}`,
+        profileName: firstData.profileName,
+        source: `runtime-isolation-test:${firstData.id}`,
       },
     });
 
     await updateActiveProviderApiKey(
       'runtime-clear-secret',
-      ...(await overrideInputs(runtime.handle)),
-      runtime.handle.providerManager.getActiveProvider(),
+      {
+        setEphemeralSetting: (key, value) =>
+          firstOwner.writeUserParameter(key, value),
+      },
+      firstSettings,
+      firstManager.getActiveProvider(),
     );
     await updateActiveProviderBaseUrl(
       'https://runtime-clear.example.com/v1',
-      ...(await baseUrlInputs(runtime.handle, runtime.handle.providerManager)),
+      {
+        setEphemeralSetting: (key, value) =>
+          firstOwner.writeUserParameter(key, value),
+      },
+      firstSettings,
+      firstManager.getActiveProviderName() ?? '',
     );
 
-    expect(runtime.handle.settingsOwner.readNamedParameter('auth-key')).toBe(
+    expect(firstOwner.readNamedParameter('auth-key')).toBe(
       'runtime-clear-secret',
     );
-    expect(runtime.handle.settingsOwner.readNamedParameter('base-url')).toBe(
+    expect(firstOwner.readNamedParameter('base-url')).toBe(
       'https://runtime-clear.example.com/v1',
     );
 
     await updateActiveProviderApiKey(
       null,
-      ...(await overrideInputs(runtime.handle)),
-      runtime.handle.providerManager.getActiveProvider(),
+      {
+        setEphemeralSetting: (key, value) =>
+          firstOwner.writeUserParameter(key, value),
+      },
+      firstSettings,
+      firstManager.getActiveProvider(),
     );
     await updateActiveProviderBaseUrl(
       'NONE',
-      ...(await baseUrlInputs(runtime.handle, runtime.handle.providerManager)),
+      {
+        setEphemeralSetting: (key, value) =>
+          firstOwner.writeUserParameter(key, value),
+      },
+      firstSettings,
+      firstManager.getActiveProviderName() ?? '',
     );
 
-    expect(
-      runtime.handle.settingsOwner.readNamedParameter('auth-key'),
-    ).toBeUndefined();
-    expect(
-      runtime.handle.settingsOwner.readNamedParameter('auth-keyfile'),
-    ).toBeUndefined();
-    expect(
-      runtime.handle.settingsOwner.readNamedParameter('auth-key-name'),
-    ).toBeUndefined();
-    expect(
-      runtime.handle.settingsOwner.readNamedParameter('base-url'),
-    ).toBeUndefined();
+    expect(firstOwner.readNamedParameter('auth-key')).toBeUndefined();
+    expect(firstOwner.readNamedParameter('auth-keyfile')).toBeUndefined();
+    expect(firstOwner.readNamedParameter('auth-key-name')).toBeUndefined();
+    expect(firstOwner.readNamedParameter('base-url')).toBeUndefined();
 
-    const selectedModel = runtime.handle.settingsOwner.readSelectedModel();
+    const selectedModel = firstOwner.readSelectedModel();
     if (selectedModel === undefined)
       throw new Error('Runtime fixture has no selected model');
     const runtimeSnapshot = buildRuntimeProfileSnapshot({
-      providerName: runtime.handle.settingsOwner.readSelectedProvider() ?? '',
+      providerName: firstOwner.readSelectedProvider() ?? '',
       modelName: selectedModel,
-      providerSettings: runtime.handle.settingsService.getProviderSettings(
-        runtime.handle.settingsOwner.readSelectedProvider() ?? '',
+      providerSettings: firstSettings.getProviderSettings(
+        firstOwner.readSelectedProvider() ?? '',
       ),
-      ephemeralSettings: runtime.handle.settingsOwner.captureNamedParameters(),
+      ephemeralSettings: firstOwner.captureNamedParameters(),
     });
     expect(runtimeSnapshot.ephemeralSettings['auth-key']).toBeUndefined();
     expect(runtimeSnapshot.ephemeralSettings['auth-keyfile']).toBeUndefined();
@@ -450,7 +438,7 @@ describe('CLI runtime isolation', () => {
   });
 
   it('keeps other runtimes stable when disposing one in flight @plan:PLAN-20251018-STATELESSPROVIDER2.P14 @requirement:REQ-SP2-003 @pseudocode cli-runtime-isolation.md lines 2-3', async () => {
-    const runtimeA = await bootstrapRuntimeFixture({
+    await openFirst({
       id: 'runtime-a',
       profileName: 'profile-a',
       primaryProvider: 'primary',
@@ -458,7 +446,7 @@ describe('CLI runtime isolation', () => {
       primaryModel: 'alpha-primary',
       secondaryModel: 'alpha-secondary',
     });
-    const runtimeB = await bootstrapRuntimeFixture({
+    await openSecond({
       id: 'runtime-b',
       profileName: 'profile-b',
       primaryProvider: 'primary',
@@ -471,44 +459,39 @@ describe('CLI runtime isolation', () => {
     const cleanupSignal = createDeferred<void>();
 
     const taskA = (async () => {
-      await runWithRuntime(
-        runtimeA,
+      await runWithFirst(
         barrier,
         async () => {
           await cleanupSignal.promise;
           await setActiveModel(
             'alpha-primary-post-dispose',
-            assembleModelSelection(runtimeA.handle.settingsOwner),
-            runtimeA.handle.settingsService,
-            runtimeA.handle.providerManager.getActiveProvider(),
+            assembleModelSelection(firstOwner),
+            firstSettings,
+            firstManager.getActiveProvider(),
           );
         },
         { delayBeforeActivationMs: 0 },
       );
-      return runtimeA.handle.settingsService.getProviderSettings(
-        runtimeA.primaryProvider,
-      ).model;
+      return firstSettings.getProviderSettings(firstData.primaryProvider).model;
     })();
 
     const taskB = (async () => {
-      await runWithRuntime(
-        runtimeB,
+      await runWithSecond(
         barrier,
         async () => {
           await setActiveModel(
             'beta-primary-post-dispose',
-            assembleModelSelection(runtimeB.handle.settingsOwner),
-            runtimeB.handle.settingsService,
-            runtimeB.handle.providerManager.getActiveProvider(),
+            assembleModelSelection(secondOwner),
+            secondSettings,
+            secondManager.getActiveProvider(),
           );
-          await runtimeB.handle.cleanup();
+          await secondRelease.close();
           cleanupSignal.resolve();
         },
         { delayBeforeActivationMs: 5 },
       );
-      return runtimeB.handle.settingsService.getProviderSettings(
-        runtimeB.primaryProvider,
-      ).model;
+      return secondSettings.getProviderSettings(secondData.primaryProvider)
+        .model;
     })();
 
     await expect(taskB).resolves.toBe('beta-primary-post-dispose');
@@ -516,17 +499,19 @@ describe('CLI runtime isolation', () => {
   });
 
   it('enforces runtime guard for ownerless provider queries @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-005 @pseudocode provider-runtime-handling.md lines 10-16', () => {
-    expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-      'Provider listing requires an explicit owner',
+    expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
+      'Provider reads require an explicit session owner',
     );
   });
 
   it('enforces explicit SettingsService for ownerless settings queries @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-004', () => {
-    expect(() => getEphemeralSettings()).toThrow(MissingProviderRuntimeError);
+    expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
+      'Provider reads require an explicit session owner',
+    );
   });
 
   it('prepares a stateless invocation from the explicit runtime context', async () => {
-    const runtimeA = await bootstrapRuntimeFixture({
+    await openFirst({
       id: 'runtime-stateless-ready',
       profileName: 'profile-ready',
       primaryProvider: 'primary',
@@ -535,126 +520,24 @@ describe('CLI runtime isolation', () => {
       secondaryModel: 'ready-model-2',
     });
 
-    await activateIsolatedRuntimeContext(runtimeA.handle, {
-      runtimeId: runtimeA.id,
+    await activateFirst({
+      runtimeId: firstData.id,
       metadata: {
         source: 'test-ensure-ready',
         statelessHardening: 'strict',
       },
     });
 
-    const context = createProviderRuntimeContext({
-      settingsService: runtimeA.handle.settingsService,
-      config: runtimeA.handle.config,
-      providerFileLifecycle: runtimeA.handle.providerFileLifecycle,
-      runtimeId: runtimeA.id,
-      runtimeKind: 'cli-interactive',
-      metadata: { statelessHardening: 'strict' },
-    });
-    const prepare =
-      runtimeA.handle.providerManager.prepareStatelessProviderInvocation;
-    if (!prepare) throw new Error('Stateless preparation is unavailable');
-    expect(() =>
-      prepare.call(runtimeA.handle.providerManager, context),
-    ).not.toThrow();
+    const prepare = firstManager.prepareStatelessProviderInvocation;
+    expect(() => prepare.call(firstManager)).not.toThrow();
   });
 
   it('rejects ownerless provider queries without consulting process preference', () => {
-    expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-      'Provider listing requires an explicit owner',
+    expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
+      'Provider reads require an explicit session owner',
     );
   });
 });
-
-async function bootstrapRuntimeFixture(options: {
-  id: string;
-  profileName: string;
-  primaryProvider: string;
-  secondaryProvider: string;
-  primaryModel: string;
-  secondaryModel: string;
-}): Promise<RuntimeFixture> {
-  const tempDir = await createTempDirectory();
-  const handle = (() => {
-    const capturedConfig3 = new Config({
-      sessionId: options.id,
-      targetDir: tempDir,
-      cwd: tempDir,
-      model: options.primaryModel,
-      debugMode: false,
-      initialSettings: {},
-    });
-    const settingsService = new SettingsService();
-    const settingsOwner = new SessionSettingsOwner(settingsService);
-    return createIsolatedRuntimeContext(
-      {
-        settingsOwner,
-        runtimeId: options.id,
-        config: capturedConfig3,
-        metadata: {
-          profileName: options.profileName,
-        },
-        prepare: async ({ providerManager, settingsService }) => {
-          providerManager.registerProvider(
-            createStubProvider(options.primaryProvider, options.primaryModel),
-          );
-          providerManager.registerProvider(
-            createStubProvider(
-              options.secondaryProvider,
-              options.secondaryModel,
-            ),
-          );
-          void providerManager.setActiveProvider(options.primaryProvider);
-          settingsService.set('activeProvider', options.primaryProvider);
-          settingsService.setCurrentProfileName(options.profileName);
-          settingsService.setProviderSetting(
-            options.primaryProvider,
-            'model',
-            options.primaryModel,
-          );
-          settingsService.setProviderSetting(
-            options.primaryProvider,
-            'base-url',
-            `https://${options.id}.primary.example.com`,
-          );
-          settingsService.setProviderSetting(
-            options.primaryProvider,
-            'auth-key',
-            `${options.id}-initial-key`,
-          );
-
-          settingsOwner.writeUserParameter(
-            'base-url',
-            `https://${options.id}.primary.example.com`,
-          );
-          settingsOwner.writeUserParameter(
-            'auth-key',
-            `${options.id}-initial-key`,
-          );
-          settingsOwner.writeUserParameter(
-            'auth-keyfile',
-            `${tempDir}/${options.id}-initial.key`,
-          );
-        },
-      },
-      settingsService,
-    );
-  })();
-
-  const fixture: RuntimeFixture = {
-    ...options,
-    tempDir,
-    handle,
-    sessionClient: createProviderSessionOwner(
-      handle.config,
-      handle.providerManager,
-      handle.settingsService,
-      handle.settingsOwner,
-    ).sessionClient,
-  };
-  runtimeFixtures.push(fixture);
-  return fixture;
-}
 
 function createStubProvider(
   name: string,
@@ -688,39 +571,104 @@ function createStubProvider(
   };
 }
 
-function createBarrier(expected: number): () => Promise<void> {
-  let count = 0;
-  const waiters: Array<() => void> = [];
-  return () =>
-    new Promise<void>((resolve) => {
-      count += 1;
-      waiters.push(resolve);
-      if (count === expected) {
-        for (const release of waiters) {
-          release();
-        }
-      }
-    });
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
+let firstData: RuntimeData;
+let firstTempDir: string;
+let firstConfig: Config;
+let firstSettings: SettingsService;
+let firstOwner: SessionSettingsOwner;
+let firstManager: ProviderManager;
+let firstOAuth: OAuthManager;
+let firstClient: Awaited<
+  ReturnType<typeof createProviderSessionOwner>
+>['sessionClient'];
+let firstRelease: AcquisitionRelease;
+async function openFirst(data: RuntimeData): Promise<void> {
+  firstData = data;
+  firstTempDir = await createTempDirectory();
+  firstConfig = new Config({
+    sessionId: data.id,
+    targetDir: firstTempDir,
+    cwd: firstTempDir,
+    model: data.primaryModel,
+    debugMode: false,
+    initialSettings: {},
   });
-}
-
-function createDeferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
+  firstSettings = new SettingsService();
+  firstOwner = new SessionSettingsOwner(firstSettings);
+  firstOwner.bindTelemetry(firstConfig);
+  firstRelease = new AcquisitionRelease();
+  releases.push(async () => {
+    await firstRelease.close();
+    await firstConfig.dispose();
+    await cleanupTempDirectory(firstTempDir);
   });
-  return { promise, resolve, reject };
+  firstRelease.acquire('settings', () => firstOwner.dispose());
+  const files = new ProviderFileLifecycle({
+    maxFiles: 100,
+    maxBytes: 512 * 1024 * 1024,
+  });
+  firstManager = acquirePreferredProviderManager(
+    firstConfig,
+    firstSettings,
+    firstOwner,
+    files,
+    data.id,
+    credentials().authority,
+    firstRelease,
+  );
+  firstManager.registerProvider(
+    createStubProvider(data.primaryProvider, data.primaryModel),
+  );
+  firstManager.registerProvider(
+    createStubProvider(data.secondaryProvider, data.secondaryModel),
+  );
+  const bus = new MessageBus();
+  firstRelease.acquire('bus', () => bus.cancelPendingConfirmations());
+  firstOAuth = acquirePreferredOAuth(
+    undefined,
+    bus,
+    firstConfig,
+    firstSettings,
+    firstManager,
+    data.id,
+    undefined,
+    credentials().authority,
+    firstRelease,
+    undefined,
+  );
+  await activateFirst();
+  firstClient = (
+    await createProviderSessionOwner(
+      firstConfig,
+      firstManager,
+      firstSettings,
+      firstOAuth,
+      firstOwner,
+    )
+  ).sessionClient;
 }
-
-async function runWithRuntime<T>(
-  fixture: RuntimeFixture,
+async function activateFirst(
+  input: { runtimeId?: string; metadata?: Record<string, unknown> } = {},
+): Promise<void> {
+  firstManager.setRuntimeContext(
+    {
+      runtimeId: input.runtimeId ?? firstData.id,
+      runtimeKind: 'cli-interactive',
+      metadata: { profileName: firstData.profileName, ...input.metadata },
+    },
+    firstOwner,
+    firstSettings,
+    firstConfig,
+  );
+  prepareSelection(
+    firstData,
+    firstTempDir,
+    firstSettings,
+    firstOwner,
+    firstManager,
+  );
+}
+async function runWithFirst<T>(
   barrier: () => Promise<void>,
   action: () => Promise<T>,
   options: { delayBeforeActivationMs?: number } = {},
@@ -728,17 +676,163 @@ async function runWithRuntime<T>(
   if (
     options.delayBeforeActivationMs !== undefined &&
     options.delayBeforeActivationMs !== 0
-  ) {
+  )
     await delay(options.delayBeforeActivationMs);
-  }
-  const metadata = {
-    profileName: fixture.profileName,
-    source: `runtime-isolation-test:${fixture.id}`,
-  };
-  await activateIsolatedRuntimeContext(fixture.handle, {
-    runtimeId: fixture.handle.runtimeId,
-    metadata,
+  await activateFirst({
+    metadata: {
+      profileName: firstData.profileName,
+      source: `runtime-isolation-test:${firstData.id}`,
+    },
   });
   await barrier();
   return action();
+}
+
+let secondData: RuntimeData;
+let secondTempDir: string;
+let secondConfig: Config;
+let secondSettings: SettingsService;
+let secondOwner: SessionSettingsOwner;
+let secondManager: ProviderManager;
+let secondOAuth: OAuthManager;
+let secondClient: Awaited<
+  ReturnType<typeof createProviderSessionOwner>
+>['sessionClient'];
+let secondRelease: AcquisitionRelease;
+async function openSecond(data: RuntimeData): Promise<void> {
+  secondData = data;
+  secondTempDir = await createTempDirectory();
+  secondConfig = new Config({
+    sessionId: data.id,
+    targetDir: secondTempDir,
+    cwd: secondTempDir,
+    model: data.primaryModel,
+    debugMode: false,
+    initialSettings: {},
+  });
+  secondSettings = new SettingsService();
+  secondOwner = new SessionSettingsOwner(secondSettings);
+  secondOwner.bindTelemetry(secondConfig);
+  secondRelease = new AcquisitionRelease();
+  releases.push(async () => {
+    await secondRelease.close();
+    await secondConfig.dispose();
+    await cleanupTempDirectory(secondTempDir);
+  });
+  secondRelease.acquire('settings', () => secondOwner.dispose());
+  const files = new ProviderFileLifecycle({
+    maxFiles: 100,
+    maxBytes: 512 * 1024 * 1024,
+  });
+  secondManager = acquirePreferredProviderManager(
+    secondConfig,
+    secondSettings,
+    secondOwner,
+    files,
+    data.id,
+    credentials().authority,
+    secondRelease,
+  );
+  secondManager.registerProvider(
+    createStubProvider(data.primaryProvider, data.primaryModel),
+  );
+  secondManager.registerProvider(
+    createStubProvider(data.secondaryProvider, data.secondaryModel),
+  );
+  const bus = new MessageBus();
+  secondRelease.acquire('bus', () => bus.cancelPendingConfirmations());
+  secondOAuth = acquirePreferredOAuth(
+    undefined,
+    bus,
+    secondConfig,
+    secondSettings,
+    secondManager,
+    data.id,
+    undefined,
+    credentials().authority,
+    secondRelease,
+    undefined,
+  );
+  await activateSecond();
+  secondClient = (
+    await createProviderSessionOwner(
+      secondConfig,
+      secondManager,
+      secondSettings,
+      secondOAuth,
+      secondOwner,
+    )
+  ).sessionClient;
+}
+async function activateSecond(
+  input: { runtimeId?: string; metadata?: Record<string, unknown> } = {},
+): Promise<void> {
+  secondManager.setRuntimeContext(
+    {
+      runtimeId: input.runtimeId ?? secondData.id,
+      runtimeKind: 'cli-interactive',
+      metadata: { profileName: secondData.profileName, ...input.metadata },
+    },
+    secondOwner,
+    secondSettings,
+    secondConfig,
+  );
+  prepareSelection(
+    secondData,
+    secondTempDir,
+    secondSettings,
+    secondOwner,
+    secondManager,
+  );
+}
+async function runWithSecond<T>(
+  barrier: () => Promise<void>,
+  action: () => Promise<T>,
+  options: { delayBeforeActivationMs?: number } = {},
+): Promise<T> {
+  if (
+    options.delayBeforeActivationMs !== undefined &&
+    options.delayBeforeActivationMs !== 0
+  )
+    await delay(options.delayBeforeActivationMs);
+  await activateSecond({
+    metadata: {
+      profileName: secondData.profileName,
+      source: `runtime-isolation-test:${secondData.id}`,
+    },
+  });
+  await barrier();
+  return action();
+}
+
+function prepareSelection(
+  data: RuntimeData,
+  directory: string,
+  settings: SettingsService,
+  owner: SessionSettingsOwner,
+  manager: ProviderManager,
+): void {
+  manager.setActiveProvider(data.primaryProvider);
+  settings.set('activeProvider', data.primaryProvider);
+  settings.setCurrentProfileName(data.profileName);
+  settings.setProviderSetting(data.primaryProvider, 'model', data.primaryModel);
+  settings.setProviderSetting(
+    data.primaryProvider,
+    'base-url',
+    `https://${data.id}.primary.example.com`,
+  );
+  settings.setProviderSetting(
+    data.primaryProvider,
+    'auth-key',
+    `${data.id}-initial-key`,
+  );
+  owner.writeUserParameter(
+    'base-url',
+    `https://${data.id}.primary.example.com`,
+  );
+  owner.writeUserParameter('auth-key', `${data.id}-initial-key`);
+  owner.writeUserParameter(
+    'auth-keyfile',
+    `${directory}/${data.id}-initial.key`,
+  );
 }

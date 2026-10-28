@@ -4,21 +4,111 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { act } from 'react';
+import { act, useMemo } from 'react';
+import {
+  bindHistoryTokenSubscription,
+  bindRecordingHistorySubscription,
+} from './historyTokenSubscriptions.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '../../../../__tests__/render.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
+import { bindBootstrapRecordingHistory } from './useBootstrapRuntime.js';
 
 const realLlxprtCodeTelemetryModule = {
   ...(await import('@vybestack/llxprt-code-telemetry')),
 };
 
 const useRuntimeApiMock = vi.fn();
-const setTokenTrackingMetricsMock = vi.fn();
+let metricSource = new realLlxprtCodeTelemetryModule.UiTelemetryService();
 
-void vi.mock('../../../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: useRuntimeApiMock,
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = useRuntimeApiMock;
+    return {
+      useGetActiveProviderDetails: () =>
+        useSelectedTestRuntime().getActiveProviderDetails,
+      useGetProviderDumpMetadata: () =>
+        useSelectedTestRuntime().getProviderDumpMetadata,
+      useGetActiveProviderAliasConfig: () =>
+        useSelectedTestRuntime().getActiveProviderAliasConfig,
+      useDetectProviderQuota: () =>
+        useSelectedTestRuntime().detectProviderQuota,
+      useGetLoadBalancerStats: () =>
+        useSelectedTestRuntime().getLoadBalancerStats,
+      useGetLoadBalancerTokenAccounting: () =>
+        useSelectedTestRuntime().getLoadBalancerTokenAccounting,
+      useListSavedProfiles: () => useSelectedTestRuntime().listSavedProfiles,
+      useGetProfileByName: () => useSelectedTestRuntime().getProfileByName,
+      useSaveProfileDefinition: () =>
+        useSelectedTestRuntime().saveProfileDefinition,
+      useSaveLoadBalancerProfile: () =>
+        useSelectedTestRuntime().saveLoadBalancerProfile,
+      useListProviders: () => useSelectedTestRuntime().listProviders,
+      useGetActiveProviderName: () =>
+        useSelectedTestRuntime().getActiveProviderName,
+      useListAvailableModels: () =>
+        useSelectedTestRuntime().listAvailableModels,
+      useGetActiveModelName: () => useSelectedTestRuntime().getActiveModelName,
+      useProviderStatus: () => useSelectedTestRuntime().providerStatus,
+      useGetUnallowedParametersForActiveModel: () =>
+        useSelectedTestRuntime().getUnallowedParametersForActiveModel,
+      useGetActiveProviderMetrics: () =>
+        useSelectedTestRuntime().getActiveProviderMetrics,
+      useGetSessionTokenUsage: () =>
+        useSelectedTestRuntime().getSessionTokenUsage,
+      useGetEphemeralSettings: () =>
+        useSelectedTestRuntime().getEphemeralSettings,
+      useSetEphemeralSetting: () =>
+        useSelectedTestRuntime().setEphemeralSetting,
+      useGetActiveToolFormatState: () =>
+        useSelectedTestRuntime().getActiveToolFormatState,
+      useSetActiveToolFormatOverride: () =>
+        useSelectedTestRuntime().setActiveToolFormatOverride,
+      useGetEphemeralSetting: () =>
+        useSelectedTestRuntime().getEphemeralSetting,
+      useGetSessionSetting: () => useSelectedTestRuntime().getSessionSetting,
+      useSetSessionSetting: () => useSelectedTestRuntime().setSessionSetting,
+      useClearSessionSetting: () =>
+        useSelectedTestRuntime().clearSessionSetting,
+      useSetActiveModel: () => useSelectedTestRuntime().setActiveModel,
+      useGetActiveModelParams: () =>
+        useSelectedTestRuntime().getActiveModelParams,
+      useSetActiveModelParam: () =>
+        useSelectedTestRuntime().setActiveModelParam,
+      useClearActiveModelParam: () =>
+        useSelectedTestRuntime().clearActiveModelParam,
+      useUpdateActiveProviderApiKey: () =>
+        useSelectedTestRuntime().updateActiveProviderApiKey,
+      useGetWorkspaceDirectories: () =>
+        useSelectedTestRuntime().getWorkspaceDirectories,
+      useGetDefaultProfileName: () =>
+        useSelectedTestRuntime().getDefaultProfileName,
+      useGetOpenAIProviderInfo: () =>
+        useSelectedTestRuntime().getOpenAIProviderInfo,
+      useGetActiveProfileName: () =>
+        useSelectedTestRuntime().getActiveProfileName,
+      useSetDefaultProfileName: () =>
+        useSelectedTestRuntime().setDefaultProfileName,
+      useGetRuntimeDiagnosticsSnapshot: () =>
+        useSelectedTestRuntime().getRuntimeDiagnosticsSnapshot,
+      useSaveProfileSnapshot: () =>
+        useSelectedTestRuntime().saveProfileSnapshot,
+      useDeleteProfileByName: () =>
+        useSelectedTestRuntime().deleteProfileByName,
+      useFetch: () => useSelectedTestRuntime().fetch,
+      useSetProvider: () => useSelectedTestRuntime().setProvider,
+      useLoadProfileByName: () => useSelectedTestRuntime().loadProfileByName,
+      useUpdateActiveProviderBaseUrl: () =>
+        useSelectedTestRuntime().updateActiveProviderBaseUrl,
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../../../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 void vi.mock('@vybestack/llxprt-code-telemetry', () => {
   const actual = realLlxprtCodeTelemetryModule;
@@ -32,9 +122,6 @@ void vi.mock('@vybestack/llxprt-code-telemetry', () => {
   return {
     ...actual,
     DebugLogger: DebugLoggerStub,
-    uiTelemetryService: {
-      setTokenTrackingMetrics: setTokenTrackingMetricsMock,
-    },
   };
 });
 
@@ -105,6 +192,7 @@ const makeRuntimeApi = (
 
 describe('useTokenMetricsTracking', () => {
   beforeEach(() => {
+    metricSource = new realLlxprtCodeTelemetryModule.UiTelemetryService();
     vi.useFakeTimers();
     vi.clearAllMocks();
   });
@@ -139,9 +227,10 @@ describe('useTokenMetricsTracking', () => {
 
     const { result } = renderHook(() =>
       useTokenMetricsTracking({
-        uiRuntime: config as never,
+        setTokenTrackingMetrics:
+          metricSource.setTokenTrackingMetrics.bind(metricSource),
+        ...useBindings(config, recordingIntegrationRef as never),
         updateHistoryTokenCount,
-        recordingIntegrationRef: recordingIntegrationRef as never,
       }),
     );
 
@@ -153,8 +242,8 @@ describe('useTokenMetricsTracking', () => {
       tokensPerSecond: 0,
     });
 
-    expect(setTokenTrackingMetricsMock).toHaveBeenCalledWith({
-      tokensPerMinute: 42,
+    expect(metricSource.getMetrics().tokenTracking).toStrictEqual({
+      tokensPerMinute: 0,
       throttleWaitTimeMs: 75,
       timeToFirstToken: null,
       tokensPerSecond: 0,
@@ -179,9 +268,10 @@ describe('useTokenMetricsTracking', () => {
 
     renderHook(() =>
       useTokenMetricsTracking({
-        uiRuntime: config as never,
+        setTokenTrackingMetrics:
+          metricSource.setTokenTrackingMetrics.bind(metricSource),
+        ...useBindings(config, recordingIntegrationRef as never),
         updateHistoryTokenCount,
-        recordingIntegrationRef: recordingIntegrationRef as never,
       }),
     );
 
@@ -231,9 +321,10 @@ describe('useTokenMetricsTracking', () => {
 
     const { unmount } = renderHook(() =>
       useTokenMetricsTracking({
-        uiRuntime: config as never,
+        setTokenTrackingMetrics:
+          metricSource.setTokenTrackingMetrics.bind(metricSource),
+        ...useBindings(config, recordingIntegrationRef as never),
         updateHistoryTokenCount,
-        recordingIntegrationRef: recordingIntegrationRef as never,
       }),
     );
 
@@ -283,21 +374,27 @@ describe('useTokenMetricsTracking', () => {
     const updateHistoryTokenCount = vi.fn();
     const recordingIntegrationRef = { current: null };
 
+    const updates: number[] = [];
+    const unsubscribe = metricSource.subscribe((update) => {
+      updates.push(update.metrics.tokenTracking.sessionTokenUsage.total);
+    });
     renderHook(() =>
       useTokenMetricsTracking({
-        uiRuntime: config as never,
+        setTokenTrackingMetrics:
+          metricSource.setTokenTrackingMetrics.bind(metricSource),
+        ...useBindings(config, recordingIntegrationRef as never),
         updateHistoryTokenCount,
-        recordingIntegrationRef: recordingIntegrationRef as never,
       }),
     );
 
-    expect(setTokenTrackingMetricsMock).toHaveBeenCalledTimes(1);
+    expect(updates).toStrictEqual([5]);
 
     act(() => {
       vi.advanceTimersByTime(5000);
     });
 
-    expect(setTokenTrackingMetricsMock).toHaveBeenCalledTimes(1);
+    expect(updates).toStrictEqual([5]);
+    unsubscribe();
   });
 
   it('notifies recording integration when history service appears and changes', () => {
@@ -327,9 +424,10 @@ describe('useTokenMetricsTracking', () => {
 
     renderHook(() =>
       useTokenMetricsTracking({
-        uiRuntime: config as never,
+        setTokenTrackingMetrics:
+          metricSource.setTokenTrackingMetrics.bind(metricSource),
+        ...useBindings(config, recordingIntegrationRef as never),
         updateHistoryTokenCount,
-        recordingIntegrationRef: recordingIntegrationRef as never,
       }),
     );
 
@@ -366,12 +464,12 @@ describe('useTokenMetricsTracking', () => {
     const { rerender, unmount } = renderHook(
       ({ uiRuntime }) =>
         useTokenMetricsTracking({
-          uiRuntime: uiRuntime as never,
-          recordingOwner: 'agent',
+          setTokenTrackingMetrics:
+            metricSource.setTokenTrackingMetrics.bind(metricSource),
+          ...useBindings(uiRuntime, recordingIntegrationRef as never, 'agent'),
           updateHistoryTokenCount: (value) => {
             published.push(value);
           },
-          recordingIntegrationRef: recordingIntegrationRef as never,
         }),
       { initialProps: { uiRuntime: firstRuntime } },
     );
@@ -395,3 +493,38 @@ describe('useTokenMetricsTracking', () => {
     );
   });
 });
+
+function useBindings(
+  config: ConfigStub,
+  recordingIntegrationRef?: Parameters<typeof bindBootstrapRecordingHistory>[2],
+  recordingOwner?: 'agent' | 'raw',
+) {
+  const runtime: RuntimeApiStub = useRuntimeApiMock();
+  const logger = useMemo(() => new DebugLogger('tokens-test'), []);
+  const readHistory = useMemo(
+    () => () => {
+      const client = config.agentClientSource.getAgentClient();
+      return client?.hasChatInitialized() === true
+        ? (client.getHistoryService() ?? null)
+        : null;
+    },
+    [config],
+  );
+  return {
+    subscribeHistoryTokens: useMemo(
+      () => bindHistoryTokenSubscription(readHistory, logger),
+      [readHistory, logger],
+    ),
+    subscribeRecordingHistory: useMemo(
+      () =>
+        bindBootstrapRecordingHistory(
+          bindRecordingHistorySubscription(readHistory, logger),
+          recordingOwner,
+          recordingIntegrationRef,
+        ),
+      [readHistory, logger, recordingOwner, recordingIntegrationRef],
+    ),
+    readProviderMetrics: runtime.getActiveProviderMetrics,
+    readSessionTokenUsage: runtime.getSessionTokenUsage,
+  };
+}

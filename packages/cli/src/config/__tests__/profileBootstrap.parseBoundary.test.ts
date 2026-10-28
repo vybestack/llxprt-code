@@ -22,7 +22,7 @@ import {
   parseProfileJson,
   ProfileManager,
 } from '@vybestack/llxprt-code-settings';
-import { profileCommand } from '../../ui/commands/profileCommand.js';
+import { createProfileCommandForTest } from '../../ui/commands/__tests__/profile-command-test-owner.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
 const runtimeMocks = {
@@ -156,12 +156,25 @@ describe('profile load-balancer save — interactive path still requires >= 2 me
     runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
   });
 
-  const saveProfile = () =>
-    profileCommand.subCommands!.find((cmd) => cmd.name === 'save')!;
+  const saveProfile = (
+    context = createMockCommandContext({
+      runtimeApi: runtimeMocks,
+      oauthControl: { listBuckets: async () => [] },
+      services: { agent: null, settings: { setValue: () => undefined } },
+    }),
+  ) =>
+    createProfileCommandForTest(context).subCommands!.find(
+      (cmd) => cmd.name === 'save',
+    )!;
 
   it('too few arguments produce the usage error, not the member-count error', async () => {
-    const result = await saveProfile().action!(
-      createMockCommandContext({ runtimeApi: runtimeMocks }),
+    const context = createMockCommandContext({
+      runtimeApi: runtimeMocks,
+      oauthControl: { listBuckets: async () => [] },
+      services: { agent: null, settings: { setValue: () => undefined } },
+    });
+    const result = await saveProfile(context).action!(
+      context,
       'loadbalancer lb roundrobin profile1',
     );
 
@@ -175,8 +188,13 @@ describe('profile load-balancer save — interactive path still requires >= 2 me
     // Enough tokens to clear the arity guard, so this reaches the member-count
     // rule. Proves BOTH that the flag and its value are stripped rather than
     // counted as profile names, and that a lone member is then rejected.
-    const result = await saveProfile().action!(
-      createMockCommandContext({ runtimeApi: runtimeMocks }),
+    const context = createMockCommandContext({
+      runtimeApi: runtimeMocks,
+      oauthControl: { listBuckets: async () => [] },
+      services: { agent: null, settings: { setValue: () => undefined } },
+    });
+    const result = await saveProfile(context).action!(
+      context,
       'loadbalancer lb roundrobin --context-limit 150000 profile1',
     );
 
@@ -188,7 +206,11 @@ describe('profile load-balancer save — interactive path still requires >= 2 me
 
   it('--context-limit and its value are stripped, not counted as members', async () => {
     const result = await saveProfile().action!(
-      createMockCommandContext({ runtimeApi: runtimeMocks }),
+      createMockCommandContext({
+        runtimeApi: runtimeMocks,
+        oauthControl: { listBuckets: async () => [] },
+        services: { agent: null, settings: { setValue: () => undefined } },
+      }),
       'loadbalancer lb roundrobin --context-limit 150000 profile1 profile2',
     );
 
@@ -201,7 +223,11 @@ describe('profile load-balancer save — interactive path still requires >= 2 me
 
   it('two members save successfully', async () => {
     const result = await saveProfile().action!(
-      createMockCommandContext({ runtimeApi: runtimeMocks }),
+      createMockCommandContext({
+        runtimeApi: runtimeMocks,
+        oauthControl: { listBuckets: async () => [] },
+        services: { agent: null, settings: { setValue: () => undefined } },
+      }),
       'loadbalancer lb roundrobin profile1 profile2',
     );
 

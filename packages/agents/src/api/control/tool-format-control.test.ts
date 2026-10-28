@@ -1,0 +1,76 @@
+/**
+ * @issue #1943 - /toolformat is persisted into profile ephemerals
+ */
+
+import { describe, it, expect, beforeEach } from 'bun:test';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { installOwnedConfigSettings } from '../../../../providers/src/__tests__/helpers/session-settings-owner-fixture.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import {
+  assembleToolFormatControl,
+  type ToolFormatOverrideLiteral,
+} from './tool-format-control.js';
+async function setActiveToolFormatOverride(
+  format: ToolFormatOverrideLiteral | null,
+  owner: SessionSettingsOwner,
+  provider: typeof activeProvider,
+) {
+  return assembleToolFormatControl(
+    owner.readToolFormat.bind(owner),
+    owner.writeToolFormat.bind(owner),
+    () => provider,
+    () => {},
+    () => {},
+  ).setOverride(format);
+}
+
+const activeProvider = {
+  name: 'openai',
+  toolFormat: 'openai',
+  getToolFormat: () => 'openai',
+  getModels: async () => [],
+  async *generateChatCompletion() {},
+};
+
+describe('setActiveToolFormatOverride ephemeral persistence (issue #1943)', () => {
+  const rootsOwnedSettings = installOwnedConfigSettings();
+  let settings: SettingsService;
+  let owner: SessionSettingsOwner;
+
+  beforeEach(() => {
+    settings = new SettingsService();
+    settings.set('activeProvider', 'openai');
+    owner = rootsOwnedSettings('tool-format-profile', settings);
+  });
+
+  it('writes "openai" to the captured user parameters when setting toolFormat to "openai"', async () => {
+    await setActiveToolFormatOverride('openai', owner, activeProvider);
+    expect(settings.getProviderSettings('openai').toolFormat).toBe('openai');
+    expect(owner.captureUserParameters().toolFormat).toBe('openai');
+  });
+
+  it('writes "auto" to the captured user parameters when clearing override', async () => {
+    await setActiveToolFormatOverride(null, owner, activeProvider);
+    expect(settings.getProviderSettings('openai').toolFormat).toBe('auto');
+    expect(owner.captureUserParameters().toolFormat).toBe('auto');
+  });
+
+  it('writes "auto" to the captured user parameters when explicitly setting to "auto"', async () => {
+    await setActiveToolFormatOverride('auto', owner, activeProvider);
+    expect(settings.getProviderSettings('openai').toolFormat).toBe('auto');
+    expect(owner.captureUserParameters().toolFormat).toBe('auto');
+  });
+
+  it('writes "kimi" to the captured user parameters when setting toolFormat to "kimi"', async () => {
+    await setActiveToolFormatOverride('kimi', owner, activeProvider);
+    expect(settings.getProviderSettings('openai').toolFormat).toBe('kimi');
+    expect(owner.captureUserParameters().toolFormat).toBe('kimi');
+  });
+
+  it('updates provider settings and profile capture together', async () => {
+    owner.recordModelDefaults(['toolFormat']);
+    await setActiveToolFormatOverride('openai', owner, activeProvider);
+    expect(settings.getProviderSettings('openai').toolFormat).toBe('openai');
+    expect(owner.captureUserParameters().toolFormat).toBe('openai');
+  });
+});

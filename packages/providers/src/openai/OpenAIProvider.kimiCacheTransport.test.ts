@@ -120,9 +120,7 @@ describe('OpenAIProvider', () => {
         settings,
         contents,
         runtime: {
-          settingsService: settings,
           runtimeId,
-          providerFileLifecycle: lifecycle,
         },
         configOverrides: { getTargetDir: () => '/workspace/test' },
         systemInstruction: 'stable system prompt',
@@ -250,9 +248,7 @@ describe('OpenAIProvider', () => {
           settings,
           contents: mediaHistory(false),
           runtime: {
-            settingsService: settings,
             runtimeId: 'same-label',
-            providerFileLifecycle: lifecycle,
           },
           resolved: {
             model: 'kimi-k3',
@@ -550,20 +546,7 @@ describe('OpenAIProvider', () => {
         settings,
         contents,
         runtime: {
-          settingsService: settings,
           runtimeId,
-          providerFileLifecycle: lifecycle,
-          providerFileBindings: {
-            bind: async (_contentId, reference) => {
-              boundFileIds.push(reference.fileId);
-            },
-            unbind: async (_contentId, reference) => {
-              const retained = boundFileIds.filter(
-                (fileId) => fileId !== reference.fileId,
-              );
-              boundFileIds.splice(0, boundFileIds.length, ...retained);
-            },
-          },
         },
         configOverrides: { getTargetDir: () => '/workspace/projection' },
         systemInstruction: 'stable system prompt',
@@ -747,10 +730,7 @@ describe('OpenAIProvider', () => {
           contents: [{ speaker: 'human', blocks: [reference] }],
           metadata: { abortSignal: controller.signal },
           runtime: {
-            settingsService: new SettingsService(),
             runtimeId: 'runtime-cancelled-chat',
-            mediaResolver: resolver,
-            requestMediaBudgetBytes: reference.normalizedBase64Length,
           },
           ephemerals: { streaming: 'disabled' },
           resolved: {

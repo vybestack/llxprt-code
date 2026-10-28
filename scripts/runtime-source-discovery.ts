@@ -4,7 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import {
+  dirname,
+  isAbsolute,
+  relative as nativeRelative,
+  resolve,
+  sep,
+} from 'node:path';
+import { portableRelativePath as relative } from './compiler-source-path.js';
 import ts from 'typescript';
 import { isBuiltin } from 'node:module';
 
@@ -40,8 +47,8 @@ export interface SourceSelection {
   readonly inventory: readonly SourceInventory[];
 }
 export function workspaceSourcePath(workspace: string, file: string): string {
-  const path = resolve(workspace, file);
-  const local = relative(workspace, path);
+  const path = resolve(workspace, file.replaceAll('\\', '/'));
+  const local = nativeRelative(workspace, path);
   if (local === '..' || local.startsWith(`..${sep}`) || isAbsolute(local))
     throw new Error(`Path outside audit workspace: ${file}`);
   return path;
@@ -188,7 +195,7 @@ export function sourceOwner(
     .sort((a, b) => dirname(b).length - dirname(a).length || a.localeCompare(b))
     .find((config) => {
       const root = dirname(workspaceSourcePath(workspace, config));
-      return file.startsWith(`${root}${sep}`);
+      return resolve(file).startsWith(`${root}${sep}`);
     });
 }
 function record(value: unknown): value is Record<string, unknown> {
@@ -220,7 +227,7 @@ function emittedSources(
         file,
         !ts.sys.useCaseSensitiveFileNames,
       ))
-        outputs.set(output, file);
+        outputs.set(resolve(output), resolve(file));
     }
   }
   return outputs;
@@ -380,8 +387,9 @@ function verifySourceIdentities(
       ts.sys,
     ).resolvedModule;
     if (
-      resolved?.resolvedFileName !==
-      workspaceSourcePath(workspace, identity.source)
+      !resolved ||
+      resolve(resolved.resolvedFileName) !==
+        workspaceSourcePath(workspace, identity.source)
     )
       throw new Error(
         `Compiler source identity mismatch: ${identity.compilerConfig}: ${identity.specifier} -> ${resolved?.resolvedFileName ?? 'unresolved'}, expected ${identity.source}`,
@@ -467,7 +475,8 @@ class SourceClosure {
       return undefined;
     }
     const resolvedTarget =
-      this.outputs.get(resolved.resolvedFileName) ?? resolved.resolvedFileName;
+      this.outputs.get(resolve(resolved.resolvedFileName)) ??
+      resolve(resolved.resolvedFileName);
     const target =
       (!this.entries.has(resolvedTarget) &&
         emittedSiblingSource(resolvedTarget)) ||

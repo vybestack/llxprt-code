@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
 
 import { installWorkspaceRuntimeFixture } from '../../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
@@ -29,11 +30,11 @@ void vi.mock('../schema/index.js', () => ({
 import { renderHook, waitFor } from '../../../__tests__/render.js';
 import { useSlashCompletion } from '../../hooks/useSlashCompletion.js';
 import { useTextBuffer } from '../../components/shared/text-buffer.js';
-import type { CommandContext, SlashCommand } from '../types.js';
+import type { SlashCommand } from '../types.js';
 import { CommandKind } from '../types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 
-const mockCommandContext = {} as CommandContext;
+const mockCommandContext = {} as CommandOwnerFixture;
 
 const mockConfig = {
   getMcpServers: () => undefined,
@@ -96,6 +97,7 @@ describe('useSlashCompletion schema gating', () => {
       ({ text }) => {
         const textBuffer = useTextBufferForTest(text);
         return useSlashCompletion(
+          true,
           textBuffer,
           [],
           '/',

@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 /**
  * @plan PLAN-20260129-TODOPERSIST.P05
@@ -10,8 +11,9 @@
  */
 
 import { describe, it, expect, vi } from 'bun:test';
-import { todoCommand, parsePosition } from './todoCommand.js';
-import type { CommandContext } from './types.js';
+import { registerTodoCommand } from '../../__tests__/todo-command-test-owner.js';
+import { parsePosition } from './todoOperations.js';
+
 import type { Todo } from '@vybestack/llxprt-code-core';
 import * as fc from 'fast-check';
 
@@ -19,7 +21,7 @@ import * as fc from 'fast-check';
  * Mock context factory
  * @plan PLAN-20260129-TODOPERSIST.P08
  */
-function createMockContext(initialTodos: Todo[] = []): CommandContext {
+function createMockContext(initialTodos: Todo[] = []): CommandOwnerFixture {
   const addItemMock = vi.fn();
   const updateTodosMock = vi.fn((newTodos: Todo[]) => {
     mockTodoContext.todos = newTodos;
@@ -34,9 +36,9 @@ function createMockContext(initialTodos: Todo[] = []): CommandContext {
   return {
     services: {
       config: null,
-      settings: {} as unknown as CommandContext['services']['settings'],
+      settings: {} as unknown as CommandOwnerFixture['services']['settings'],
       git: undefined,
-      logger: {} as unknown as CommandContext['services']['logger'],
+      logger: {} as unknown as CommandOwnerFixture['services']['logger'],
     },
     ui: {
       addItem: addItemMock,
@@ -56,11 +58,11 @@ function createMockContext(initialTodos: Todo[] = []): CommandContext {
       addConfirmUpdateExtensionRequest: vi.fn(),
     },
     session: {
-      stats: {} as unknown as CommandContext['session']['stats'],
+      stats: {} as unknown as CommandOwnerFixture['session']['stats'],
       sessionShellAllowlist: new Set(),
     },
     todoContext: mockTodoContext,
-  } as unknown as CommandContext;
+  } as unknown as CommandOwnerFixture;
 }
 
 function commandProducedEffect(
@@ -83,7 +85,7 @@ describe('todoCommand', () => {
     it('displays sorted task history with current session first', async () => {
       const ctx = createMockContext([]);
 
-      const listSubcommand = todoCommand.subCommands?.find(
+      const listSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'list',
       );
 
@@ -108,7 +110,7 @@ describe('todoCommand', () => {
     it('handles empty task directory gracefully', async () => {
       const ctx = createMockContext([]);
 
-      const listSubcommand = todoCommand.subCommands?.find(
+      const listSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'list',
       );
 
@@ -137,7 +139,7 @@ describe('todoCommand', () => {
     it('loads task session at position 1', async () => {
       const ctx = createMockContext([]);
 
-      const loadSubcommand = todoCommand.subCommands?.find(
+      const loadSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'load',
       );
       expect(loadSubcommand).toBeDefined();
@@ -168,7 +170,7 @@ describe('todoCommand', () => {
     it('shows error when loading out-of-range session', async () => {
       const ctx = createMockContext([]);
 
-      const loadSubcommand = todoCommand.subCommands?.find(
+      const loadSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'load',
       );
 
@@ -193,7 +195,7 @@ describe('todoCommand', () => {
     it('shows usage help when no number is provided', async () => {
       const ctx = createMockContext([]);
 
-      const loadSubcommand = todoCommand.subCommands?.find(
+      const loadSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'load',
       );
 
@@ -218,7 +220,7 @@ describe('todoCommand', () => {
     it('shows error when number format is invalid', async () => {
       const ctx = createMockContext([]);
 
-      const loadSubcommand = todoCommand.subCommands?.find(
+      const loadSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'load',
       );
 
@@ -383,10 +385,10 @@ describe('todoCommand', () => {
             const ctx = createMockContext(initialTodos as Todo[]);
             const initialLength = initialTodos.length;
 
-            const addSubcommand = todoCommand.subCommands?.find(
+            const addSubcommand = registerTodoCommand(ctx).subCommands?.find(
               (cmd) => cmd.name === 'add',
             );
-            const removeSubcommand = todoCommand.subCommands?.find(
+            const removeSubcommand = registerTodoCommand(ctx).subCommands?.find(
               (cmd) => cmd.name === 'remove',
             );
 

@@ -37,7 +37,7 @@ describe('agent processor retry boundaries', () => {
         }) => contents,
         clearProviderCompressionCallback: () => undefined,
       },
-      runtimeContext: {
+      ports: {
         ...createSessionPolicyFixture(),
         state: { model: 'test-model' },
         providerRuntime: {},

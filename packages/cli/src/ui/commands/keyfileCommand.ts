@@ -13,6 +13,25 @@ import { CommandKind } from './types.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { homedir } from 'os';
+import type { ApiKeyUpdateResult } from '@vybestack/llxprt-code-core';
+
+/**
+ * The operations /keyfile needs from its owning session. The host binds each
+ * one at registration; the command never reads a runtime from an invocation.
+ */
+export interface KeyfileCommandOperations {
+  readonly activeProviderName: () => string | null;
+  readonly updateActiveProviderApiKey: (
+    key: string | null,
+  ) => Promise<ApiKeyUpdateResult>;
+  readonly setEphemeralSetting: (key: string, value: unknown) => void;
+  readonly rememberProviderKeyfile: (
+    providerName: string,
+    keyfilePath: string,
+  ) => void;
+  readonly forgetProviderKeyfile: (providerName: string) => void;
+  readonly schedulePaymentModeCheck: () => void;
+}
 
 /**
  * Searches for a keyfile for the given provider.
@@ -44,98 +63,98 @@ async function findKeyfileForProvider(
   return null;
 }
 
-export const keyfileCommand: SlashCommand = {
-  name: 'keyfile',
-  description: 'manage API key file for the current provider',
-  kind: CommandKind.BUILT_IN,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<MessageActionReturn> => {
-    const filePath = args.trim();
-    const runtime = context.runtimeApi;
-    const status = runtime.providerStatus();
-    const providerName = status.providerName;
+async function describeKeyfile(
+  providerName: string,
+): Promise<MessageActionReturn> {
+  const foundKeyfile = await findKeyfileForProvider(providerName);
+  if (foundKeyfile) {
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `Current keyfile for provider '${providerName}': ${foundKeyfile}\nTo remove: /keyfile none\nTo change: /keyfile <new_path>`,
+    };
+  }
+  return {
+    type: 'message',
+    messageType: 'info',
+    content: `No keyfile found for provider '${providerName}'\nTo set: /keyfile <path>`,
+  };
+}
 
-    if (!providerName) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content:
-          'No active provider available. Set a provider with /provider first.',
-      };
-    }
+export function createKeyfileCommand(
+  operations: KeyfileCommandOperations,
+): SlashCommand {
+  return {
+    name: 'keyfile',
+    description: 'manage API key file for the current provider',
+    kind: CommandKind.BUILT_IN,
+    action: async (
+      _context: CommandContext,
+      args: string,
+    ): Promise<MessageActionReturn> => {
+      const filePath = args.trim();
+      const providerName = operations.activeProviderName();
 
-    try {
-      if (!filePath || filePath === '') {
-        const foundKeyfile = await findKeyfileForProvider(providerName);
-
-        if (foundKeyfile) {
-          return {
-            type: 'message',
-            messageType: 'info',
-            content: `Current keyfile for provider '${providerName}': ${foundKeyfile}\nTo remove: /keyfile none\nTo change: /keyfile <new_path>`,
-          };
-        }
-
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `No keyfile found for provider '${providerName}'\nTo set: /keyfile <path>`,
-        };
-      }
-
-      if (filePath === 'none') {
-        await runtime.updateActiveProviderApiKey(null);
-        runtime.setEphemeralSetting('auth-keyfile', undefined);
-        context.services.settings.removeProviderKeyfile(providerName);
-
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `Cleared keyfile and API key for provider '${providerName}'`,
-        };
-      }
-
-      const resolvedPath = filePath.replace(/^~/, homedir());
-      await fs.access(resolvedPath);
-      const apiKey = (await fs.readFile(resolvedPath, 'utf-8')).trim();
-      if (!apiKey) {
+      if (!providerName) {
         return {
           type: 'message',
           messageType: 'error',
-          content: 'The specified file is empty',
+          content:
+            'No active provider available. Set a provider with /provider first.',
         };
       }
 
-      const result = await runtime.updateActiveProviderApiKey(apiKey);
-      runtime.setEphemeralSetting('auth-keyfile', resolvedPath);
-      runtime.setEphemeralSetting('auth-key', undefined);
-      context.services.settings.setProviderKeyfile(providerName, resolvedPath);
+      try {
+        if (!filePath || filePath === '') {
+          return await describeKeyfile(providerName);
+        }
 
-      const extendedContext = context as CommandContext & {
-        checkPaymentModeChange?: () => void;
-      };
-      if (typeof extendedContext.checkPaymentModeChange === 'function') {
-        setTimeout(extendedContext.checkPaymentModeChange, 100);
+        if (filePath === 'none') {
+          await operations.updateActiveProviderApiKey(null);
+          operations.setEphemeralSetting('auth-keyfile', undefined);
+          operations.forgetProviderKeyfile(providerName);
+
+          return {
+            type: 'message',
+            messageType: 'info',
+            content: `Cleared keyfile and API key for provider '${providerName}'`,
+          };
+        }
+
+        const resolvedPath = filePath.replace(/^~/, homedir());
+        await fs.access(resolvedPath);
+        const apiKey = (await fs.readFile(resolvedPath, 'utf-8')).trim();
+        if (!apiKey) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: 'The specified file is empty',
+          };
+        }
+
+        const result = await operations.updateActiveProviderApiKey(apiKey);
+        operations.setEphemeralSetting('auth-keyfile', resolvedPath);
+        operations.setEphemeralSetting('auth-key', undefined);
+        operations.rememberProviderKeyfile(providerName, resolvedPath);
+        setTimeout(operations.schedulePaymentModeCheck, 100);
+
+        const paymentWarning =
+          result.isPaidMode === true
+            ? '\nWARNING: You are now in PAID MODE - API usage will be charged to your account'
+            : '';
+
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `API key loaded from ${resolvedPath} for provider '${providerName}'${paymentWarning}`,
+        };
+      } catch (error) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Failed to manage keyfile: ${error instanceof Error ? error.message : String(error)}`,
+        };
       }
-
-      const paymentWarning =
-        result.isPaidMode === true
-          ? '\nWARNING: You are now in PAID MODE - API usage will be charged to your account'
-          : '';
-
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `API key loaded from ${resolvedPath} for provider '${providerName}'${paymentWarning}`,
-      };
-    } catch (error) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Failed to manage keyfile: ${error instanceof Error ? error.message : String(error)}`,
-      };
-    }
-  },
-};
+    },
+  };
+}

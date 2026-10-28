@@ -8,30 +8,19 @@ import { useCallback } from 'react';
 import { getErrorMessage } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { type HistoryItem, MessageType } from '../../../types.js';
+import type { RefreshMemoryResult } from '../../../cliUiRuntime.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
-import type {
-  AppStateRuntime,
-  ExtensionRuntime,
-  FileWorkspaceState,
-  MemoryState,
-  SessionIdentity,
-} from '../../../cliUiRuntime.js';
-
-type MemoryRefreshRuntime = MemoryState &
-  AppStateRuntime &
-  FileWorkspaceState &
-  ExtensionRuntime &
-  SessionIdentity;
-
 interface UseMemoryRefreshActionParams {
-  config: MemoryRefreshRuntime;
+  refreshMemory: () => Promise<RefreshMemoryResult>;
+  readDebugMode: () => boolean;
   settings: LoadedSettings;
   addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => number;
   setLlxprtMdFileCount: (fileCount: number) => void;
 }
 
 export function useMemoryRefreshAction({
-  config,
+  refreshMemory,
+  readDebugMode,
   addItem,
   setLlxprtMdFileCount,
 }: UseMemoryRefreshActionParams): () => Promise<void> {
@@ -45,7 +34,7 @@ export function useMemoryRefreshAction({
     );
 
     try {
-      const { memoryContent, fileCount } = await config.refreshMemory();
+      const { memoryContent, fileCount } = await refreshMemory();
 
       setLlxprtMdFileCount(fileCount);
 
@@ -57,7 +46,7 @@ export function useMemoryRefreshAction({
         Date.now(),
       );
 
-      if (config.getDebugMode()) {
+      if (readDebugMode()) {
         debugLogger.log(
           `[DEBUG] Refreshed memory content in config (${memoryContent.length} chars from ${fileCount} file(s))`,
         );
@@ -74,5 +63,5 @@ export function useMemoryRefreshAction({
       debugLogger.error('Error refreshing memory:', error);
     }
     // settings.merged reference changes when any setting changes, so this dep is correct.
-  }, [config, addItem, setLlxprtMdFileCount]);
+  }, [refreshMemory, readDebugMode, addItem, setLlxprtMdFileCount]);
 }

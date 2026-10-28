@@ -4,13 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type {
+  BrowserCatalogReader,
+  BrowserTargetDeleter,
+} from '../hooks/browserCatalogHost.js';
+
 /**
  * Pure dialog renderer helpers shared by DialogManager. Each helper maps one
  * dialog kind to its component; all data arrives through parameters so these
  * stay hook-free and trivially testable.
  */
 
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { PermissionsTrustRuntime } from '../commands/permissionsCommandHost.js';
+import type { DynamicToolSettingsSource } from '../../utils/dynamicSettings.js';
 import { Box, Text } from 'ink';
 import { theme } from '../semantic-colors.js';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
@@ -19,12 +25,11 @@ import type {
   HydratedModel,
 } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
-import type { Agent, ToolInfo } from '@vybestack/llxprt-code-agents';
+import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import type { ModelInfo, WelcomeState } from '../hooks/useWelcomeOnboarding.js';
 import type { ProfileListItem } from '../stores/settings/settingsStore.js';
 import { getProjectHash } from '@vybestack/llxprt-code-core';
 import { join } from 'node:path';
-import type { ResumeContext } from '../../services/performResume.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
@@ -33,7 +38,7 @@ import { ThemeDialog } from './ThemeDialog.js';
 import { WorkspaceMigrationDialog } from './WorkspaceMigrationDialog.js';
 import { AuthDialog } from './AuthDialog.js';
 import { OAuthCodeDialog } from './OAuthCodeDialog.js';
-import { getPendingOAuthProvider } from '../oauthGlobalState.js';
+import { useOAuthControl } from '../contexts/OAuthControlContext.js';
 import { EditorSettingsDialog } from './EditorSettingsDialog.js';
 import { ProviderDialog } from './ProviderDialog.js';
 import { LoadProfileDialog } from './LoadProfileDialog.js';
@@ -82,11 +87,34 @@ export interface DialogData {
   toolsDialogDisabledTools: string[];
 }
 
+/** Session reads the session-browser dialog makes for its chats directory. */
+export interface SessionBrowserReads {
+  getProjectTempDir(): string;
+  getProjectRoot(): string;
+  getSessionId(): string;
+}
+
+/**
+ * Runtime the store-backed dialogs read: folder trust, the tool registry for
+ * dynamic settings, the session browser's directories, and the working
+ * directory the folder-trust dialog displays.
+ */
+export type StoreDialogRuntime = PermissionsTrustRuntime &
+  DynamicToolSettingsSource &
+  SessionBrowserReads & {
+    getWorkingDir(): string;
+  };
+
 export interface StoreDialogRenderContext {
+  readIdeWorkspaceTrust: () => boolean | undefined;
+  subscribeIdeWorkspaceTrust: (
+    listener: (trusted: boolean | undefined) => void,
+  ) => () => void;
+
   uiState: DialogData;
   uiActions: AppCommands;
   settings: LoadedSettings;
-  config: CliUiRuntime;
+  config: StoreDialogRuntime;
   addItem: UseHistoryManagerReturn['addItem'];
 }
 
@@ -194,16 +222,36 @@ export function renderAuthDialog(
   );
 }
 
+function OAuthCodeDialogHost({
+  uiActions,
+  handleOAuthCodeSubmit,
+}: {
+  uiActions: AppCommands;
+  handleOAuthCodeSubmit: (code: string) => void;
+}) {
+  const oauthControl = useOAuthControl();
+  const provider = firstNonEmptyString(
+    oauthControl.getCodeRequest().provider,
+    'unknown',
+  );
+  return (
+    <OAuthCodeDialog
+      provider={provider}
+      dialogState={oauthControl}
+      onClose={uiActions.handleOAuthCodeDialogClose}
+      onSubmit={handleOAuthCodeSubmit}
+    />
+  );
+}
+
 export function renderOAuthCodeDialog(
   uiActions: AppCommands,
   handleOAuthCodeSubmit: (code: string) => void,
 ) {
-  const provider = firstNonEmptyString(getPendingOAuthProvider(), 'unknown');
   return (
-    <OAuthCodeDialog
-      provider={provider}
-      onClose={uiActions.handleOAuthCodeDialogClose}
-      onSubmit={handleOAuthCodeSubmit}
+    <OAuthCodeDialogHost
+      uiActions={uiActions}
+      handleOAuthCodeSubmit={handleOAuthCodeSubmit}
     />
   );
 }
@@ -387,12 +435,9 @@ export function renderModelsDialog(
  * @plan PLAN-20260214-SESSIONBROWSER.P23
  */
 export function renderSessionBrowserDialog(
-  config: CliUiRuntime,
+  config: SessionBrowserReads,
   commandContext: {
     ui: { pendingItem: unknown };
-    recordingOwner?: 'agent';
-    services: { agent: Agent | null };
-    recordingSwapCallbacks?: ResumeContext['recordingCallbacks'];
   },
   handleSessionBrowserSelect: (
     target: ContinueTarget,
@@ -401,6 +446,8 @@ export function renderSessionBrowserDialog(
     | { ok: false; error: string }
   >,
   close: () => void,
+  readCatalog: BrowserCatalogReader,
+  deleteTarget: BrowserTargetDeleter,
 ) {
   const chatsDir = join(config.getProjectTempDir(), 'chats');
   const projectHash = getProjectHash(config.getProjectRoot());
@@ -413,18 +460,8 @@ export function renderSessionBrowserDialog(
         projectHash={projectHash}
         currentSessionId={currentSessionId}
         hasActiveConversation={hasActiveConversation}
-        activeRecording={
-          commandContext.recordingOwner === 'agent'
-            ? null
-            : (commandContext.recordingSwapCallbacks?.getCurrentRecording() ??
-              null)
-        }
-        ownerAgent={
-          commandContext.recordingOwner === 'agent'
-            ? (commandContext.services.agent ?? undefined)
-            : undefined
-        }
-        mediaStore={commandContext.services.agent?.agentClient.mediaStore}
+        readCatalog={readCatalog}
+        deleteTarget={deleteTarget}
         onSelect={handleSessionBrowserSelect}
         onClose={close}
       />

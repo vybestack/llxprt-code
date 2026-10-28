@@ -1,8 +1,13 @@
+import type { SessionMetricUpdates } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  type GetActiveProviderMetricsOperation,
+  type GetSessionTokenUsageOperation,
+} from '../../../contexts/RuntimeContext.js';
 
 /**
  * @hook useTokenMetricsTracking
@@ -15,14 +20,8 @@
  * @subscriptionStrategy Mixed (Stable subscription + Poll)
  */
 
-import { useEffect, useRef, useMemo, useState } from 'react';
-import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
-import {
-  DebugLogger,
-  uiTelemetryService,
-} from '@vybestack/llxprt-code-telemetry';
-import { useRuntimeApi } from '../../../contexts/RuntimeContext.js';
-import type { UiRuntime } from '../../../cliUiRuntime.js';
+import { useEffect, useRef, useState } from 'react';
+import type { HistoryTokenSubscription } from './historyTokenSubscriptions.js';
 import {
   shouldUpdateTokenMetrics,
   toTokenMetricsSnapshot,
@@ -38,161 +37,21 @@ export interface TokenMetrics {
 }
 
 interface UseTokenMetricsTrackingOptions {
-  uiRuntime: UiRuntime;
+  subscribeHistoryTokens: HistoryTokenSubscription;
+  subscribeRecordingHistory: () => () => void;
+  readProviderMetrics: GetActiveProviderMetricsOperation;
+  readSessionTokenUsage: GetSessionTokenUsageOperation;
+  setTokenTrackingMetrics: SessionMetricUpdates['setTokenTrackingMetrics'];
   updateHistoryTokenCount: (count: number) => void;
-  recordingIntegrationRef?: React.MutableRefObject<RecordingIntegration | null>;
-  recordingOwner?: 'agent' | 'raw';
 }
 
 export interface UseTokenMetricsTrackingResult {
   tokenMetrics: TokenMetrics;
 }
-type RuntimeHistoryService = Parameters<
-  RecordingIntegration['onHistoryServiceReplaced']
->[0];
-
-function getInitializedHistoryService(
-  uiRuntime: UiRuntime,
-): RuntimeHistoryService | null {
-  const agentClient = uiRuntime.agentClientSource.getAgentClient();
-
-  if (agentClient.hasChatInitialized() !== true) {
-    return null;
-  }
-
-  return agentClient.getHistoryService() ?? null;
-}
-
-function useHistoryTokenListener(
-  uiRuntime: UiRuntime,
-  updateHistoryTokenCount: (count: number) => void,
-  tokenLogger: DebugLogger,
-): void {
-  const historyTokenCleanupRef = useRef<(() => void) | null>(null);
-  const lastHistoryServiceRef = useRef<unknown>(null);
-  const lastPublishedHistoryTokensRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    let intervalCleared = false;
-
-    const checkInterval = setInterval(() => {
-      if (intervalCleared) return;
-
-      const historyService = getInitializedHistoryService(uiRuntime);
-
-      // Handle service identity change (including transition to null).
-      if (historyService === lastHistoryServiceRef.current) {
-        return;
-      }
-
-      // Clean up listener from the old service regardless of whether the
-      // new service is truthy — a reset may have cleared the service.
-      if (historyTokenCleanupRef.current) {
-        historyTokenCleanupRef.current();
-        historyTokenCleanupRef.current = null;
-      }
-      lastHistoryServiceRef.current = historyService;
-
-      if (historyService) {
-        tokenLogger.debug(
-          () => 'Found new history service, setting up listener',
-        );
-
-        const handleTokensUpdated = (event: { totalTokens: number }) => {
-          tokenLogger.debug(
-            () =>
-              `Received tokensUpdated event: totalTokens=${event.totalTokens}`,
-          );
-          if (event.totalTokens !== lastPublishedHistoryTokensRef.current) {
-            lastPublishedHistoryTokensRef.current = event.totalTokens;
-            updateHistoryTokenCount(event.totalTokens);
-          }
-        };
-
-        historyService.on('tokensUpdated', handleTokensUpdated);
-
-        const currentTokens = historyService.getTotalTokens();
-        tokenLogger.debug(() => `Initial token count: ${currentTokens}`);
-        lastPublishedHistoryTokensRef.current = currentTokens;
-        updateHistoryTokenCount(currentTokens);
-
-        historyTokenCleanupRef.current = () => {
-          historyService.off('tokensUpdated', handleTokensUpdated);
-        };
-      } else {
-        tokenLogger.debug(() => 'History service reset to undefined');
-      }
-    }, 100); // Check every 100ms
-
-    return () => {
-      clearInterval(checkInterval);
-      intervalCleared = true;
-      if (historyTokenCleanupRef.current) {
-        historyTokenCleanupRef.current();
-        historyTokenCleanupRef.current = null;
-      }
-      lastHistoryServiceRef.current = null;
-      lastPublishedHistoryTokensRef.current = null;
-    };
-  }, [uiRuntime, updateHistoryTokenCount, tokenLogger]);
-}
-
-/**
- * @plan:PLAN-20260211-SESSIONRECORDING.P26
- * @pseudocode recording-integration.md lines 38-59
- *
- * Subscribe RecordingIntegration to HistoryService events when the
- * HistoryService becomes available. Re-subscribes when the HistoryService
- * instance changes (e.g. after compression creates a new instance, or
- * after provider switch triggers AgentClient.startChat()).
- */
-function useRecordingSubscription(
-  uiRuntime: UiRuntime,
-  recordingIntegrationRef:
-    | React.MutableRefObject<RecordingIntegration | null>
-    | undefined,
-  tokenLogger: DebugLogger,
-  recordingOwner: 'agent' | 'raw' | undefined,
-): void {
-  const recordingSubscribedServiceRef = useRef<unknown>(null);
-
-  useEffect(() => {
-    // The effect bails early when recordingIntegrationRef.current is null at mount
-    // time, but ref identity is stable so the effect never re-runs for late-arriving
-    // recording integrations. The polling interval below handles this: each tick checks
-    // recordingIntegrationRef.current?.onHistoryServiceReplaced, so a recording
-    // integration that arrives after mount is automatically picked up on the next tick.
-    if (recordingOwner === 'agent' || !recordingIntegrationRef?.current) {
-      return undefined;
-    }
-
-    let intervalCleared = false;
-    const checkInterval = setInterval(() => {
-      if (intervalCleared) return;
-
-      const historyService = getInitializedHistoryService(uiRuntime);
-      if (
-        historyService === null ||
-        historyService === recordingSubscribedServiceRef.current
-      ) {
-        return;
-      }
-
-      recordingSubscribedServiceRef.current = historyService;
-      recordingIntegrationRef.current?.onHistoryServiceReplaced(historyService);
-      tokenLogger.debug('RecordingIntegration subscribed to HistoryService');
-    }, 100);
-
-    return () => {
-      clearInterval(checkInterval);
-      intervalCleared = true;
-      recordingSubscribedServiceRef.current = null;
-    };
-  }, [uiRuntime, recordingIntegrationRef, tokenLogger, recordingOwner]);
-}
-
 function useTokenMetricsPoll(
-  runtime: ReturnType<typeof useRuntimeApi>,
+  readProviderMetrics: UseTokenMetricsTrackingOptions['readProviderMetrics'],
+  readSessionTokenUsage: UseTokenMetricsTrackingOptions['readSessionTokenUsage'],
+  setTokenTrackingMetrics: SessionMetricUpdates['setTokenTrackingMetrics'],
 ): TokenMetrics {
   const [tokenMetrics, setTokenMetrics] = useState<TokenMetrics>({
     tokensPerMinute: 0,
@@ -205,8 +64,8 @@ function useTokenMetricsPoll(
 
   useEffect(() => {
     const updateTokenMetrics = () => {
-      const metrics = runtime.getActiveProviderMetrics();
-      const usage = runtime.getSessionTokenUsage();
+      const metrics = readProviderMetrics();
+      const usage = readSessionTokenUsage();
 
       if (
         !shouldUpdateTokenMetrics(
@@ -229,7 +88,7 @@ function useTokenMetricsPoll(
         tokensPerSecond: snapshot.tokensPerSecond,
       });
 
-      uiTelemetryService.setTokenTrackingMetrics({
+      setTokenTrackingMetrics({
         tokensPerMinute: snapshot.tokensPerMinute,
         throttleWaitTimeMs: snapshot.throttleWaitTimeMs,
         timeToFirstToken: snapshot.timeToFirstToken,
@@ -244,31 +103,28 @@ function useTokenMetricsPoll(
     const interval = setInterval(updateTokenMetrics, 1000);
 
     return () => clearInterval(interval);
-  }, [runtime]);
+  }, [readProviderMetrics, readSessionTokenUsage, setTokenTrackingMetrics]);
 
   return tokenMetrics;
 }
 
 export function useTokenMetricsTracking({
-  uiRuntime,
+  setTokenTrackingMetrics,
+  subscribeHistoryTokens,
+  subscribeRecordingHistory,
+  readProviderMetrics,
+  readSessionTokenUsage,
   updateHistoryTokenCount,
-  recordingIntegrationRef,
-  recordingOwner,
 }: UseTokenMetricsTrackingOptions): UseTokenMetricsTrackingResult {
-  const runtime = useRuntimeApi();
-  const tokenLogger = useMemo(
-    () => new DebugLogger('llxprt:ui:tokentracking'),
-    [],
+  useEffect(
+    () => subscribeHistoryTokens(updateHistoryTokenCount),
+    [subscribeHistoryTokens, updateHistoryTokenCount],
   );
-
-  useHistoryTokenListener(uiRuntime, updateHistoryTokenCount, tokenLogger);
-  useRecordingSubscription(
-    uiRuntime,
-    recordingIntegrationRef,
-    tokenLogger,
-    recordingOwner,
+  useEffect(subscribeRecordingHistory, [subscribeRecordingHistory]);
+  const tokenMetrics = useTokenMetricsPoll(
+    readProviderMetrics,
+    readSessionTokenUsage,
+    setTokenTrackingMetrics,
   );
-  const tokenMetrics = useTokenMetricsPoll(runtime);
-
   return { tokenMetrics };
 }

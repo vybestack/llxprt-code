@@ -1,10 +1,8 @@
-import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
 
 import { describe, expect, it, spyOn } from 'bun:test';
 import fs from 'node:fs/promises';
@@ -16,20 +14,13 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { json } from 'node:stream/consumers';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import {
-  MessageBusType,
-  type ToolConfirmationRequest,
-} from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-policy';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import { fromConfig } from '../fromConfig.js';
-import { toConfigParameters } from '../agentConfig.adapter.js';
+import { createAgent } from '@vybestack/llxprt-code-agents';
 
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
 import type { Agent, AgentToolHandle } from '../agent.js';
-import type { AgentEvent } from '../event-types.js';
+import type { AgentEvent, ToolConfirmation } from '../event-types.js';
 
 const evidence = join(tmpdir(), 'llxprt-mcp-approval-scheduler-repro');
 
@@ -126,6 +117,32 @@ async function confirm(details: unknown): Promise<void> {
   await details.onConfirm(ToolConfirmationOutcome.ProceedAlwaysTool);
 }
 
+function discoveryReady(agent: Agent): Promise<void> {
+  if (agent.mcp.discoveryState() === 'ready') return Promise.resolve();
+  return new Promise((resolveReady, reject) => {
+    const timer = setTimeout(() => {
+      unsubscribe();
+      reject(new Error('MCP discovery did not become ready'));
+    }, 30000);
+    const unsubscribe = agent.mcp.subscribeStatus(() => {
+      if (agent.mcp.discoveryState() !== 'ready') return;
+      clearTimeout(timer);
+      unsubscribe();
+      resolveReady();
+    });
+  });
+}
+
+function allowRules(agent: Agent, server: string) {
+  return agent.policy
+    .getRules()
+    .filter(
+      (rule) =>
+        rule.toolName === `${server}__increment` &&
+        rule.decision === PolicyDecision.ALLOW,
+    );
+}
+
 describe('MCP scheduler approval isolation', () => {
   it('requires B consent in the real scheduler after A retains MCP tool approval', async () => {
     await mkdir(evidence, { recursive: true });
@@ -140,8 +157,6 @@ describe('MCP scheduler approval isolation', () => {
     delete process.env.LLXPRT_FAKE_RESPONSES;
     const sharedServer = `isolation_${randomUUID().replaceAll('-', '')}`;
     const baselineServer = `baseline_${randomUUID().replaceAll('-', '')}`;
-    const configs: Config[] = [];
-    const runtimes: McpRuntimeOwner[] = [];
     const agents: Agent[] = [];
     const endpoints: Array<Awaited<ReturnType<typeof transport>>> = [];
     const pids: number[] = [];
@@ -154,8 +169,6 @@ describe('MCP scheduler approval isolation', () => {
       servers: string[],
     ): Promise<{
       agent: Agent;
-      config: Config;
-      mcpRuntime: McpRuntimeOwner;
       endpoint: Awaited<ReturnType<typeof transport>>;
       cwd: string;
     }> {
@@ -163,69 +176,50 @@ describe('MCP scheduler approval isolation', () => {
       endpoints.push(endpoint);
       const cwd = join(directory, name);
       await mkdir(cwd);
-      const config = new Config({
-        ...toConfigParameters({
-          provider: 'openai',
-          model: 'scheduler-fixture',
-          workingDir: cwd,
-          folderTrust: true,
-          coreTools: [],
-          skillsSupport: false,
-          policy: { defaultDecision: PolicyDecision.ASK_USER },
-          telemetry: { enabled: false },
-          recording: { enabled: false },
-          mcpServers: Object.fromEntries(
-            servers.map((server) => [
-              server,
-              {
-                command: process.execPath,
-                args: [
-                  resolve(
-                    resolveRepositoryFixture(
-                      import.meta.url,
-                      'packages/agents/src/api/__tests__/helpers/mcp-approval-scheduler-stdio-fixture.ts',
-                    ),
-                  ),
-                  join(cwd, `${server}.pid`),
-                  join(cwd, `${server}.marker`),
-                ],
-                trust: false,
-              },
-            ]),
-          ),
-        }),
+      const agent = await createAgent({
+        provider: 'openai',
+        model: 'scheduler-fixture',
+        auth: { apiKey: 'local-only', baseUrl: endpoint.url },
+        workingDir: cwd,
+        folderTrust: true,
+        coreTools: [],
+        skillsSupport: false,
         interactive: true,
-      });
-      configs.push(config);
-      const runtime = await McpRuntimeOwner.create(
-        createTestOAuthBinding(),
-        config,
-      );
-      runtimes.push(runtime);
-      const agent = await fromConfig({
-        ...createSessionSettingsFixture(config),
-        config,
-        mcpRuntime: runtime,
-        mcpOwnership: 'caller',
-        messageBus: runtime.messageBus,
-        activation: {
-          provider: 'openai',
-          model: 'scheduler-fixture',
-          cliOverrides: { key: 'local-only', baseUrl: endpoint.url },
-        },
+        harness: { forceConfirmations: false, includeProcessCwd: false },
+        policy: { defaultDecision: PolicyDecision.ASK_USER },
+        telemetry: { enabled: false },
+        recording: { enabled: false },
+        mcpServers: Object.fromEntries(
+          servers.map((server) => [
+            server,
+            {
+              command: process.execPath,
+              args: [
+                resolve(
+                  resolveRepositoryFixture(
+                    import.meta.url,
+                    'packages/agents/src/api/__tests__/helpers/mcp-approval-scheduler-stdio-fixture.ts',
+                  ),
+                ),
+                join(cwd, `${server}.pid`),
+                join(cwd, `${server}.marker`),
+              ],
+              trust: false,
+            },
+          ]),
+        ),
       });
 
       agents.push(agent);
-      expect(Array.from(await runtime.awaitDiscovery())).toStrictEqual([]);
+      await discoveryReady(agent);
+      expect(
+        agent.mcp.listServers().filter((entry) => entry.status !== 'connected'),
+      ).toStrictEqual([]);
       for (const server of servers) {
         pids.push(Number(await readFile(join(cwd, `${server}.pid`), 'utf8')));
-        const decision = runtime.policyOwner.session.decisions.evaluate(
-          `${server}__increment`,
-          {},
-          server,
-        );
-        trace.push({ owner: name, server, decision });
-        expect(decision).toBe(PolicyDecision.ASK_USER);
+        const approvals = allowRules(agent, server);
+        trace.push({ owner: name, server, approvals });
+        expect(approvals).toStrictEqual([]);
         expect(
           await tool(agent, server)
             .build({})
@@ -236,32 +230,24 @@ describe('MCP scheduler approval isolation', () => {
           toolName: 'increment',
         });
       }
-      return { agent, config, mcpRuntime: runtime, endpoint, cwd };
+      return { agent, endpoint, cwd };
     }
     try {
       const a = await owner('A', [sharedServer]);
       const b = await owner('B', [sharedServer, baselineServer]);
-      expect(a.mcpRuntime.policyOwner.session.confirmation).not.toBe(
-        b.mcpRuntime.policyOwner.session.confirmation,
-      );
-      expect(a.agent.getMessageBus()).not.toBe(b.agent.getMessageBus());
-      let requests: ToolConfirmationRequest[] = [];
+      let requests: ToolConfirmation[] = [];
       let decision = ToolConfirmationOutcome.ProceedOnce;
       unsubscribers.push(
-        b.agent
-          .getMessageBus()
-          .subscribe<ToolConfirmationRequest>(
-            MessageBusType.TOOL_CONFIRMATION_REQUEST,
-            (request) => {
-              requests = [...requests, request];
-              trace.push({ busRequest: request, decision });
-              queueMicrotask(() =>
-                b.agent
-                  .getMessageBus()
-                  .respondToConfirmation(request.correlationId, decision),
-              );
-            },
-          ),
+        b.agent.tools.onConfirmationRequest((request) => {
+          requests = [...requests, request];
+          trace.push({ busRequest: request, decision });
+          queueMicrotask(() =>
+            b.agent.tools.respondToConfirmation(
+              request.confirmationId,
+              decision,
+            ),
+          );
+        }),
       );
       async function turn(name: string): Promise<AgentEvent[]> {
         b.endpoint.requestTool(tool(b.agent, name).name);
@@ -286,7 +272,7 @@ describe('MCP scheduler approval isolation', () => {
       }
       const baseline = await turn(baselineServer);
       expect(requests).toHaveLength(1);
-      expect(requests[0].serverName).toBe(baselineServer);
+      expect(requests[0].name).toBe(tool(b.agent, baselineServer).name);
       expect(
         baseline.filter((event) => event.type === 'tool-result'),
       ).toMatchObject([{ result: { isError: false } }]);
@@ -300,13 +286,8 @@ describe('MCP scheduler approval isolation', () => {
           .shouldConfirmExecute(controller.signal),
       );
       trace.push({ aApproved: ToolConfirmationOutcome.ProceedAlwaysTool });
-      expect(
-        b.mcpRuntime.policyOwner.session.decisions.evaluate(
-          `${sharedServer}__increment`,
-          {},
-          sharedServer,
-        ),
-      ).toBe(PolicyDecision.ASK_USER);
+      expect(allowRules(a.agent, sharedServer)).toHaveLength(1);
+      expect(allowRules(b.agent, sharedServer)).toStrictEqual([]);
       decision = ToolConfirmationOutcome.Cancel;
       const events = await turn(sharedServer);
       const marker = await readFile(
@@ -351,13 +332,6 @@ describe('MCP scheduler approval isolation', () => {
             .shouldConfirmExecute(controller.signal),
         ).toBe(false);
         expect(
-          b.mcpRuntime.policyOwner.session.decisions.evaluate(
-            `${sharedServer}__increment`,
-            {},
-            sharedServer,
-          ),
-        ).toBe(PolicyDecision.ASK_USER);
-        expect(
           await readFile(join(savedDirectory, 'auto-saved.toml')).catch(
             (error) => error.code,
           ),
@@ -379,10 +353,6 @@ describe('MCP scheduler approval isolation', () => {
       const cleanup: Array<PromiseSettledResult<void>> = [];
       for (const agent of agents)
         cleanup.push(...(await Promise.allSettled([agent.dispose()])));
-      for (const runtime of runtimes)
-        cleanup.push(...(await Promise.allSettled([runtime.dispose()])));
-      for (const config of configs)
-        cleanup.push(...(await Promise.allSettled([config.dispose()])));
       for (const endpoint of endpoints)
         cleanup.push(...(await Promise.allSettled([endpoint.stop()])));
       const alive = pids.filter((pid) => {

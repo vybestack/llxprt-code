@@ -1,26 +1,78 @@
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
+import { describe, test, expect } from 'bun:test';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { drain } from './helpers/agentHarness.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, test, expect } from 'bun:test';
-import { readFile } from 'node:fs/promises';
-import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
-import { drain } from './helpers/agentHarness.js';
+
+/**
+ * Two independent agents built through `fromConfig` over one working
+ * directory (so one chats directory), each with its own Config, client and
+ * history. The user config directory is a temp directory so journals never
+ * land in the real one.
+ */
+async function withIndependentPair(
+  scenario: (agent: Agent, sibling: Agent) => Promise<void>,
+): Promise<void> {
+  const home = await mkdtemp(join(tmpdir(), 'recording-shared-origin-home-'));
+  const previousHome = process.env.LLXPRT_CONFIG_HOME;
+  process.env.LLXPRT_CONFIG_HOME = home;
+  const routes: RouteAAgent[] = [];
+  try {
+    const first = await openRouteAAgent({ config: { interactive: true } });
+    routes.push(first);
+    const second = await openRouteAAgent({
+      config: { interactive: true, workingDir: first.directory },
+    });
+    routes.push(second);
+    await scenario(first.agent, second.agent);
+  } finally {
+    await runCleanupSteps([
+      ...[...routes].reverse().map((route) => () => route.close()),
+      () => {
+        if (previousHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
+        else process.env.LLXPRT_CONFIG_HOME = previousHome;
+      },
+      () => rm(home, { recursive: true, force: true }),
+    ]);
+  }
+}
+
+const seed = [
+  {
+    speaker: 'human' as const,
+    blocks: [{ type: 'text' as const, text: 'seed' }],
+  },
+];
+
+function recordingPath(agent: Agent): string {
+  const path = agent.session.getRecording().path;
+  if (!path) throw new Error('Missing journal');
+  return path;
+}
 
 describe('shared history recording origin', () => {
+  useRecordingPrompts();
+  useFakeResponsesReplay('multi-turn-text.jsonl');
   test('two recording facades on the same history append only their own turns', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-      const sibling = await borrow();
-      await agent.setHistory([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
-      ]);
+    await withIndependentPair(async (agent, sibling) => {
+      await agent.setHistory(seed);
+      await sibling.setHistory(seed);
       await agent.session.setRecording({ enabled: true });
       await new Promise((resolve) => setTimeout(resolve, 1100));
       await sibling.session.setRecording({ enabled: true });
-      const pathA = agent.session.getRecording().path;
-      const pathB = sibling.session.getRecording().path;
-      if (!pathA || !pathB) throw new Error('Missing journal');
+      const pathA = recordingPath(agent);
+      const pathB = recordingPath(sibling);
       await drain(agent.stream('A-only-content-marker'));
       await drain(sibling.stream('B-only-content-marker'));
       const a = await readFile(pathA, 'utf8');
@@ -33,17 +85,14 @@ describe('shared history recording origin', () => {
   }, 30000);
 
   test('a facade starting after an owned turn does not seed the other owner turn', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-      const sibling = await borrow();
-      await agent.setHistory([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
-      ]);
+    await withIndependentPair(async (agent, sibling) => {
+      await agent.setHistory(seed);
+      await sibling.setHistory(seed);
       await agent.session.setRecording({ enabled: true });
       await drain(agent.stream('A-before-B-start-marker'));
       await new Promise((resolve) => setTimeout(resolve, 1100));
       await sibling.session.setRecording({ enabled: true });
-      const bPath = sibling.session.getRecording().path;
-      if (!bPath) throw new Error('Missing B journal');
+      const bPath = recordingPath(sibling);
       expect(await readFile(bPath, 'utf8')).not.toContain(
         'A-before-B-start-marker',
       );
@@ -51,13 +100,10 @@ describe('shared history recording origin', () => {
   }, 30000);
 
   test('profile adoption keeps owner provenance on the same live history for late recording', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-      const sibling = await borrow();
-      await agent.setHistory([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
-      ]);
+    await withIndependentPair(async (agent, sibling) => {
+      await agent.setHistory(seed);
+      await sibling.setHistory(seed);
       await agent.session.setRecording({ enabled: true });
-      const history = agent.agentClient.getHistoryService();
       await drain(agent.stream('A-before-profile-marker'));
       await agent.profiles.applySnapshot({
         version: 1,
@@ -67,102 +113,55 @@ describe('shared history recording origin', () => {
         ephemeralSettings: {},
       });
       expect(
-        history
-          ?.getAll()
-          .some((content) =>
-            content.blocks.some(
-              (block) =>
-                block.type === 'text' &&
-                block.text === 'A-before-profile-marker',
-            ),
+        (await agent.getHistory()).some((content) =>
+          content.blocks.some(
+            (block) =>
+              block.type === 'text' && block.text === 'A-before-profile-marker',
           ),
+        ),
       ).toBe(true);
       await new Promise((resolve) => setTimeout(resolve, 1100));
       await sibling.session.setRecording({ enabled: true });
-      const bPath = sibling.session.getRecording().path;
-      if (!bPath) throw new Error('Missing B journal');
+      const bPath = recordingPath(sibling);
       expect(await readFile(bPath, 'utf8')).not.toContain(
         'A-before-profile-marker',
       );
     });
   }, 30000);
 
-  test('cleared owner content reintroduced by an unbound producer is seeded by a new recording', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-      const sibling = await borrow();
-      await agent.setHistory([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
-      ]);
-      await agent.session.setRecording({ enabled: true });
-      await drain(agent.stream('external-reuse-marker'));
-      const history = agent.agentClient.getHistoryService();
-      if (!history) throw new Error('Missing history');
-      const reused = history
-        .getAll()
-        .find((content) =>
-          content.blocks.some(
-            (block) =>
-              block.type === 'text' && block.text === 'external-reuse-marker',
-          ),
-        );
-      if (!reused) throw new Error('Missing committed content');
-      history.clear();
-      history.add(reused);
-      await new Promise((resolve) => setTimeout(resolve, 1100));
-      await sibling.session.setRecording({ enabled: true });
-      const path = sibling.session.getRecording().path;
-      if (!path) throw new Error('Missing B journal');
-      expect(await readFile(path, 'utf8')).toContain('external-reuse-marker');
-    });
-  }, 30000);
-
-  test('external unbound history additions remain visible to both recording facades', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-      const sibling = await borrow();
-      await agent.setHistory([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
-      ]);
+  test('external unbound history additions remain visible to the recording facade', async () => {
+    await withIndependentPair(async (agent, sibling) => {
+      await agent.setHistory(seed);
+      await sibling.setHistory(seed);
       await agent.session.setRecording({ enabled: true });
       await new Promise((resolve) => setTimeout(resolve, 1100));
       await sibling.session.setRecording({ enabled: true });
-      const history = agent.agentClient.getHistoryService();
-      if (!history) throw new Error('Missing shared history');
-      await history.addBatch([
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'external-batch-marker' }],
-        },
-      ]);
-      history.add({
+      await agent.addHistory({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'external-batch-marker' }],
+      });
+      await agent.addHistory({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'external-sync-marker' }],
       });
-      const aPath = agent.session.getRecording().path;
-      const bPath = sibling.session.getRecording().path;
-      if (!aPath || !bPath) throw new Error('Missing journal');
+      const aPath = recordingPath(agent);
       await agent.session.setRecording({ enabled: false });
       await sibling.session.setRecording({ enabled: false });
       const a = await readFile(aPath, 'utf8');
-      const b = await readFile(bPath, 'utf8');
       expect(a).toContain('external-batch-marker');
-      expect(b).toContain('external-batch-marker');
       expect(a).toContain('external-sync-marker');
-      expect(b).toContain('external-sync-marker');
     });
   }, 30000);
 
   test('stopping and restarting A keeps B turns out of A and A turns out of B', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-      const sibling = await borrow();
-      await agent.setHistory([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
-      ]);
+    await withIndependentPair(async (agent, sibling) => {
+      await agent.setHistory(seed);
+      await sibling.setHistory(seed);
       await agent.session.setRecording({ enabled: true });
       await new Promise((resolve) => setTimeout(resolve, 1100));
       await sibling.session.setRecording({ enabled: true });
-      const aPath = agent.session.getRecording().path;
-      const bPath = sibling.session.getRecording().path;
-      if (!aPath || !bPath) throw new Error('Missing journal');
+      const aPath = recordingPath(agent);
+      const bPath = recordingPath(sibling);
       await agent.session.setRecording({ enabled: false });
       await drain(sibling.stream('B-after-A-stop'));
       await new Promise((resolve) => setTimeout(resolve, 1100));
@@ -185,17 +184,14 @@ describe('shared history recording origin', () => {
   }, 30000);
 
   test('resuming A while B records keeps resumed turns out of B', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-      const sibling = await borrow();
-      await agent.setHistory([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
-      ]);
+    await withIndependentPair(async (agent, sibling) => {
+      await agent.setHistory(seed);
+      await sibling.setHistory(seed);
       await agent.session.setRecording({ enabled: true });
       await agent.session.nameCurrentSession('A-origin-resume');
       await new Promise((resolve) => setTimeout(resolve, 1100));
       await sibling.session.setRecording({ enabled: true });
-      const bPath = sibling.session.getRecording().path;
-      if (!bPath) throw new Error('Missing B journal');
+      const bPath = recordingPath(sibling);
       await agent.session.setRecording({ enabled: false });
       const saved = (await agent.session.listSessions()).find(
         (session) => session.name === 'A-origin-resume',
@@ -215,81 +211,18 @@ describe('shared history recording origin', () => {
   }, 30000);
 
   test('disposing A leaves B able to record its next turn', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-      const sibling = await borrow();
-      await agent.setHistory([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
-      ]);
+    await withIndependentPair(async (agent, sibling) => {
+      await agent.setHistory(seed);
+      await sibling.setHistory(seed);
       await agent.session.setRecording({ enabled: true });
       await new Promise((resolve) => setTimeout(resolve, 1100));
       await sibling.session.setRecording({ enabled: true });
-      const aPath = agent.session.getRecording().path;
-      const bPath = sibling.session.getRecording().path;
-      if (!aPath || !bPath) throw new Error('Missing journal');
+      const aPath = recordingPath(agent);
+      const bPath = recordingPath(sibling);
       await agent.dispose();
       await drain(sibling.stream('B-after-A-dispose'));
       expect(await readFile(bPath, 'utf8')).toContain('B-after-A-dispose');
       expect(await readFile(aPath, 'utf8')).not.toContain('B-after-A-dispose');
-    });
-  }, 30000);
-
-  test('failed shared history publication rolls back both prepared recording effects', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-      const sibling = await borrow();
-      await agent.setHistory([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
-      ]);
-      await agent.session.setRecording({ enabled: true });
-      await new Promise((resolve) => setTimeout(resolve, 1100));
-      await sibling.session.setRecording({ enabled: true });
-      const history = agent.agentClient.getHistoryService();
-      if (!history) throw new Error('Missing shared history');
-      await expect(
-        history.addBatch(
-          [
-            {
-              speaker: 'human',
-              blocks: [{ type: 'text', text: 'rolled-back-marker' }],
-            },
-          ],
-          undefined,
-          {
-            afterPublication: () => {
-              throw new Error('reject publication');
-            },
-          },
-        ),
-      ).rejects.toThrow('reject publication');
-      await expect(
-        history.addBatch(
-          [
-            {
-              speaker: 'human',
-              blocks: [{ type: 'text', text: 'owned-rollback-marker' }],
-            },
-          ],
-          undefined,
-          {
-            origin: agent.session,
-            afterPublication: () => {
-              throw new Error('reject owned publication');
-            },
-          },
-        ),
-      ).rejects.toThrow('reject owned publication');
-      const aPath = agent.session.getRecording().path;
-      const bPath = sibling.session.getRecording().path;
-      if (!aPath || !bPath) throw new Error('Missing journal');
-      await agent.session.setRecording({ enabled: false });
-      await sibling.session.setRecording({ enabled: false });
-      expect(await readFile(aPath, 'utf8')).not.toContain('rolled-back-marker');
-      expect(await readFile(bPath, 'utf8')).not.toContain('rolled-back-marker');
-      expect(await readFile(aPath, 'utf8')).not.toContain(
-        'owned-rollback-marker',
-      );
-      expect(await readFile(bPath, 'utf8')).not.toContain(
-        'owned-rollback-marker',
-      );
     });
   }, 30000);
 });

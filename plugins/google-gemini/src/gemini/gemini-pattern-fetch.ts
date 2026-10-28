@@ -48,6 +48,10 @@ function restorePatterns(wire: unknown, source: unknown): unknown {
 
 export function createPatternPreservingFetch(
   tools: LanguageModelV4CallOptions['tools'],
+  requestFetch: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>,
 ): NonNullable<GoogleGenerativeAIProviderSettings['fetch']> {
   const schemas = new Map(
     tools?.flatMap((tool) =>
@@ -56,7 +60,7 @@ export function createPatternPreservingFetch(
   );
   return async (input, init): Promise<Response> => {
     if (schemas.size === 0) {
-      return globalThis.fetch(input, init);
+      return requestFetch(input, init);
     }
     if (typeof init?.body !== 'string') {
       throw new Error('Expected an AI SDK JSON request body');
@@ -89,7 +93,7 @@ export function createPatternPreservingFetch(
         }),
       };
     });
-    return globalThis.fetch(input, {
+    return requestFetch(input, {
       ...init,
       body: JSON.stringify({ ...body, tools: projected }),
     });

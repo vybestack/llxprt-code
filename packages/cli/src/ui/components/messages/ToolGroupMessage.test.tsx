@@ -154,7 +154,14 @@ describe('<ToolGroupMessage />', () => {
     it('renders single successful tool call', () => {
       const toolCalls = [createToolCall()];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -181,7 +188,14 @@ describe('<ToolGroupMessage />', () => {
         }),
       ];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -202,7 +216,14 @@ describe('<ToolGroupMessage />', () => {
         }),
       ];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -217,7 +238,14 @@ describe('<ToolGroupMessage />', () => {
         }),
       ];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -244,7 +272,14 @@ describe('<ToolGroupMessage />', () => {
         }),
       ];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -267,6 +302,10 @@ describe('<ToolGroupMessage />', () => {
       ];
       const { lastFrame } = render(
         <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
           {...baseProps}
           toolCalls={toolCalls}
           availableTerminalHeight={10}
@@ -279,6 +318,10 @@ describe('<ToolGroupMessage />', () => {
       const toolCalls = [createToolCall()];
       const { lastFrame } = render(
         <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
           {...baseProps}
           toolCalls={toolCalls}
           isFocused={false}
@@ -297,6 +340,10 @@ describe('<ToolGroupMessage />', () => {
       ];
       const { lastFrame } = render(
         <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
           {...baseProps}
           toolCalls={toolCalls}
           terminalWidth={40}
@@ -307,7 +354,14 @@ describe('<ToolGroupMessage />', () => {
 
     it('renders empty tool calls array', () => {
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={[]} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={[]}
+        />,
       );
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -317,7 +371,14 @@ describe('<ToolGroupMessage />', () => {
     it('uses yellow border when tools are pending', () => {
       const toolCalls = [createToolCall({ status: ToolCallStatus.Pending })];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       // The snapshot will capture the visual appearance including border color
       expect(lastFrame()).toMatchSnapshot();
@@ -331,7 +392,14 @@ describe('<ToolGroupMessage />', () => {
         }),
       ];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -346,7 +414,14 @@ describe('<ToolGroupMessage />', () => {
         }),
       ];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -370,6 +445,10 @@ describe('<ToolGroupMessage />', () => {
       ];
       const { lastFrame } = render(
         <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
           {...baseProps}
           toolCalls={toolCalls}
           availableTerminalHeight={20}
@@ -406,7 +485,14 @@ describe('<ToolGroupMessage />', () => {
         }),
       ];
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
       // Should only show confirmation for the first tool
       expect(lastFrame()).toMatchSnapshot();
@@ -434,7 +520,14 @@ describe('<ToolGroupMessage />', () => {
       ];
 
       renderWithContexts(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
         { todos: [defaultTodo], showTodoPanel: true },
       );
 
@@ -466,7 +559,14 @@ describe('<ToolGroupMessage />', () => {
       ];
 
       renderWithContexts(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
         { todos: [defaultTodo], showTodoPanel: false },
       );
 
@@ -504,7 +604,14 @@ describe('<ToolGroupMessage />', () => {
       ];
 
       renderWithContexts(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
         { todos: [], showTodoPanel: true },
       );
 
@@ -536,7 +643,14 @@ describe('<ToolGroupMessage />', () => {
       });
 
       const { lastFrame } = renderWithContexts(
-        <ToolGroupMessage {...baseProps} toolCalls={[readCall]} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={[readCall]}
+        />,
         { todos: [defaultTodo], showTodoPanel: true },
       );
 
@@ -597,7 +711,14 @@ describe('<ToolGroupMessage />', () => {
       ];
 
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
 
       const frame = lastFrame() ?? '';
@@ -656,7 +777,14 @@ describe('<ToolGroupMessage />', () => {
       ];
 
       const { lastFrame } = render(
-        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        <ToolGroupMessage
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseProps}
+          toolCalls={toolCalls}
+        />,
       );
 
       const frame = lastFrame() ?? '';

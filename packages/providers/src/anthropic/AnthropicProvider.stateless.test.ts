@@ -15,6 +15,10 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function isOptionalObject(value: unknown): boolean {
   return value === undefined || typeof value === 'object';
@@ -235,13 +239,9 @@ describe('Anthropic provider stateless contract tests', () => {
     const configB = createRuntimeConfigStub(settingsB);
     const runtimeA = createProviderRuntimeContext({
       runtimeId: 'runtime-A',
-      settingsService: settingsA,
-      config: configA,
     });
     const runtimeB = createProviderRuntimeContext({
       runtimeId: 'runtime-B',
-      settingsService: settingsB,
-      config: configB,
     });
 
     provider.setAuthToken('token-A');
@@ -304,10 +304,9 @@ describe('Anthropic provider stateless contract tests', () => {
     });
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-invocation',
-      settingsService: settings,
-      config,
     });
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 
@@ -380,8 +379,6 @@ describe('Anthropic provider stateless contract tests', () => {
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-oauth',
-      settingsService: settings,
-      config,
     });
 
     await provider

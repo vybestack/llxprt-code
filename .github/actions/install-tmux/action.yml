@@ -1,0 +1,35 @@
+name: 'Install tmux'
+description: >-
+  Provides a version-pinned `tmux` executable on PATH for the real terminal
+  harness tests on macOS. The tmux UI harness is POSIX-only by repo convention
+  (the LLXPRT_E2E_TMUX opt-in), so Windows runners do not install a
+  multiplexer.
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Install tmux 3.8 (macOS)'
+      if: runner.os == 'macOS'
+      shell: 'bash'
+      env:
+        HOMEBREW_NO_AUTO_UPDATE: '1'
+        HOMEBREW_NO_INSTALL_CLEANUP: '1'
+        TMUX_VERSION: '3.8'
+        TMUX_SHA256: 'e79c699c7e949dccd0a4a125e17b8d1261e311b16979dbc8eb34542f3966d82e'
+      run: |
+        set -euo pipefail
+        brew install libevent ncurses jemalloc pkgconf utf8proc
+        source_dir="$RUNNER_TEMP/tmux-source"
+        install_dir="$RUNNER_TEMP/tmux-install"
+        mkdir -p "$source_dir"
+        curl --fail --location --output "$source_dir/tmux.tar.gz" \
+          "https://github.com/tmux/tmux/releases/download/$TMUX_VERSION/tmux-$TMUX_VERSION.tar.gz"
+        printf '%s  %s\n' "$TMUX_SHA256" "$source_dir/tmux.tar.gz" | shasum -a 256 --check
+        tar -xzf "$source_dir/tmux.tar.gz" -C "$source_dir"
+        cd "$source_dir/tmux-$TMUX_VERSION"
+        export PKG_CONFIG_PATH="$(brew --prefix libevent)/lib/pkgconfig:$(brew --prefix ncurses)/lib/pkgconfig:$(brew --prefix jemalloc)/lib/pkgconfig:$(brew --prefix utf8proc)/lib/pkgconfig"
+        ./configure --prefix="$install_dir" --enable-jemalloc --enable-utf8proc
+        make
+        make install
+        test "$("$install_dir/bin/tmux" -V)" = "tmux $TMUX_VERSION"
+        echo "$install_dir/bin" >> "$GITHUB_PATH"

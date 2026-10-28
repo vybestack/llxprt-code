@@ -4,13 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { describe, expect, it } from 'bun:test';
 import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { SubAgentScope } from './subagent.js';
+import type { ChildAgentScope } from './subagentOrchestrator.js';
 import {
-  createMockConfig,
+  acquireSubagentWorkspace,
   createRuntimeOverrides,
-  createStatelessRuntimeBundle,
+  installSubagentCleanup,
+  scopeInputs,
 } from './__tests__/subagent-test-helpers.js';
 import { installResponsesLifecycleFixture } from './__tests__/responses-lifecycle-fixture.js';
 import { setupTaskStreaming } from '../tools/taskStreaming.js';
@@ -26,6 +28,7 @@ import {
 } from '../../../providers/src/openai-responses/__tests__/openAIResponsesWebSocketTransport.test-helpers.js';
 
 const createFixture = installResponsesLifecycleFixture();
+const retainCleanup = installSubagentCleanup();
 function emit(socket: FakeSocket, id: string, value: string): void {
   const args = JSON.stringify({
     emit_variable_name: 'result',
@@ -57,36 +60,44 @@ async function createScope(
   maxTurns = 1,
 ): Promise<{
   fixture: ReturnType<typeof createFixture>;
-  scope: SubAgentScope;
+  scope: ChildAgentScope;
   rendered: string[];
   resetSnapshots: string[];
 }> {
   const fixture = createFixture(harness);
-  const { config, mcpRuntime } = await createMockConfig();
-  const defaults = createStatelessRuntimeBundle();
+  const { config } = fixture;
+  const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
   const runtimeBundle = {
-    ...defaults,
+    telemetryRoot: fixture.telemetryRoot,
+    toolRegistry: fixture.toolRegistry,
     runtimeContext: fixture.runtime,
     history: fixture.history,
     providerAdapter: fixture.runtime.provider,
     telemetryAdapter: fixture.runtime.telemetry,
     toolsView: fixture.runtime.tools,
     contentGenerator: fixture.contentGenerator,
+    settingsSnapshot: {},
   };
   const { overrides } = createRuntimeOverrides(
     mcpRuntime.workspaceFilesystem.paths,
     { runtimeBundle, environmentLoader: async () => [] },
   );
-  const scope = await SubAgentScope.create(
-    'retry-agent',
-    config,
-    { systemPrompt: 'Complete the task.' },
-    { model: 'gpt-5.6-sol', temp: 0.5, top_p: 1 },
-    { max_time_minutes: 1, max_turns: maxTurns, max_output_tokens_total: 200 },
-    undefined,
-    { outputs: { result: 'The completed task result.' } },
-    overrides,
+  const scope = await createSubagentScope(
+    {
+      name: 'retry-agent',
+      prompt: { systemPrompt: 'Complete the task.' },
+      model: { model: 'gpt-5.6-sol', temp: 0.5, top_p: 1 },
+      run: {
+        max_time_minutes: 1,
+        max_turns: maxTurns,
+        max_output_tokens_total: 200,
+      },
+      toolConfig: undefined,
+      outputConfig: { outputs: { result: 'The completed task result.' } },
+    },
+    ...scopeInputs(config, overrides),
   );
+  retainCleanup(() => scope.dispose());
   const rendered: string[] = [];
   const resetSnapshots: string[] = [];
   scope.onMessage = (message) => rendered.push(message);

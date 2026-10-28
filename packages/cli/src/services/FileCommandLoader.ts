@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { ShellPromptOperations } from './prompt-processors/shellProcessor.js';
 
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -13,13 +14,15 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { ICommandLoader } from './types.js';
 import type {
-  CommandContext,
   SlashCommand,
   SlashCommandActionReturn,
 } from '../ui/commands/types.js';
 import { CommandKind } from '../ui/commands/types.js';
 import { DefaultArgumentProcessor } from './prompt-processors/argumentProcessor.js';
-import type { IPromptProcessor } from './prompt-processors/types.js';
+import type {
+  IPromptProcessor,
+  PromptInvocation,
+} from './prompt-processors/types.js';
 import {
   SHORTHAND_ARGS_PLACEHOLDER,
   SHELL_INJECTION_TRIGGER,
@@ -77,7 +80,10 @@ export class FileCommandLoader implements ICommandLoader {
   private readonly userCommandsDir: string;
   private readonly projectCommandsDir: string;
 
-  constructor(private readonly config: FileCommandRuntime | null) {
+  constructor(
+    private readonly config: FileCommandRuntime | null,
+    private readonly shellOperations: ShellPromptOperations | null,
+  ) {
     this.userCommandsDir =
       config?.userCommandsDir ?? Storage.getUserCommandsDir();
     this.projectCommandsDir =
@@ -302,7 +308,9 @@ export class FileCommandLoader implements ICommandLoader {
     const usesShellInjection = prompt.includes(SHELL_INJECTION_TRIGGER);
 
     if (usesShellInjection || usesArgs) {
-      processors.push(new ShellProcessor(baseCommandName));
+      processors.push(
+        new ShellProcessor(baseCommandName, this.shellOperations),
+      );
     }
     if (!usesArgs) {
       processors.push(new DefaultArgumentProcessor());
@@ -315,11 +323,11 @@ export class FileCommandLoader implements ICommandLoader {
     prompt: string,
     processors: IPromptProcessor[],
   ): (
-    context: CommandContext,
+    context: PromptInvocation,
     _args: string,
   ) => Promise<SlashCommandActionReturn> {
     return async (
-      context: CommandContext,
+      context: PromptInvocation,
       _args: string,
     ): Promise<SlashCommandActionReturn> => {
       if (!this.canUseFileCommands()) {
@@ -343,7 +351,13 @@ export class FileCommandLoader implements ICommandLoader {
       try {
         let processedPrompt = prompt;
         for (const processor of processors) {
-          processedPrompt = await processor.process(processedPrompt, context);
+          processedPrompt = await processor.process(processedPrompt, {
+            signal: context.signal,
+            invocation: context.invocation,
+            session: {
+              sessionShellAllowlist: context.session.sessionShellAllowlist,
+            },
+          });
         }
         return {
           type: 'submit_prompt',

@@ -1,9 +1,10 @@
+import { extractModelParams } from '@vybestack/llxprt-code-providers/model-parameter-data.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { ModelSelectionOperations } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import type { ModelSelectionOperations } from './model-selection.js';
 
 /**
  * Consolidated provider-activation / authentication executor (#2374, part of
@@ -41,19 +42,18 @@ import os from 'node:os';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
-import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
-import { setActiveModel } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
+import { setActiveModel } from './providerMutations.js';
 import {
   setActiveModelParam,
   clearActiveModelParam,
-  getActiveModelParams,
-} from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
-import { applyCliArgumentOverrides } from '@vybestack/llxprt-code-providers/runtime/settingsResolver.js';
+} from './model-parameters.js';
+import { applyCliArgumentOverrides } from './settingsResolver.js';
 import {
   setProviderApiKey,
   setProviderBaseUrl,
-} from '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+} from './providerConfigUtils.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import type { ProviderActivationIntent } from './config-types.js';
 import {
   hasProfileAuthEphemerals,
@@ -356,7 +356,7 @@ async function ensureProviderManagerOnConfig(
   config: Config,
   manager: RuntimeProviderManager,
 ): Promise<void> {
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
 }
 
 /**
@@ -368,7 +368,7 @@ function attachProviderManagerToContentConfig(
   config: Config,
   manager: RuntimeProviderManager,
 ): void {
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
 }
 
 // ─── authMode: 'auto' (CLI path) ────────────────────────────────────────────
@@ -543,7 +543,8 @@ async function executeAutoProvider(
     await applyCliArgumentOverrides(
       toArgvShape(intent),
       toBootstrapArgsShape(intent),
-      { setEphemeralSetting: (key, value) => settingsService.set(key, value) },
+      createActivationCredentialTarget(settingsService),
+      manager.getProviderKeys(),
       settingsService,
       manager.getActiveProvider(),
     );
@@ -604,10 +605,11 @@ async function applyModelAndParams(
       ? intent.model.trim()
       : undefined;
   const activeProvider = manager.getActiveProvider();
+  if (activeProvider === undefined) return;
   const resolvedModel =
     modelOverride ??
     selection.readModel() ??
-    resolveFallbackModel(config, activeProvider?.getDefaultModel?.());
+    resolveFallbackModel(config, activeProvider.getDefaultModel?.());
   if (resolvedModel !== undefined) {
     await setActiveModel(
       resolvedModel,
@@ -622,16 +624,15 @@ async function applyModelAndParams(
   // clear all existing params — wiping profile defaults (#2374 CodeRabbit).
   if (intent.modelParams !== undefined) {
     const desiredParams = intent.modelParams;
-    const existingParams = getActiveModelParams(
-      settingsService,
-      activeProvider?.name,
+    const existingParams = extractModelParams(
+      settingsService.getProviderSettings(activeProvider.name),
     );
     for (const [key, value] of Object.entries(desiredParams)) {
-      setActiveModelParam(key, value, settingsService, activeProvider?.name);
+      setActiveModelParam(key, value, settingsService, activeProvider.name);
     }
     for (const key of Object.keys(existingParams)) {
       if (!(key in desiredParams)) {
-        clearActiveModelParam(key, settingsService, activeProvider?.name);
+        clearActiveModelParam(key, settingsService, activeProvider.name);
       }
     }
   }
@@ -758,6 +759,14 @@ function isPureAlreadyActiveRefresh(
     intent.model === undefined &&
     intent.modelParams === undefined
   );
+}
+
+function createActivationCredentialTarget(settingsService: SettingsService): {
+  setEphemeralSetting(key: string, value: unknown): void;
+} {
+  return {
+    setEphemeralSetting: (key, value) => settingsService.set(key, value),
+  };
 }
 
 function resolveActiveProviderName(

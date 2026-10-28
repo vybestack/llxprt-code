@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ModelRegistry } from '@vybestack/llxprt-code-core/models/registry.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
@@ -12,6 +13,7 @@ import type {
   RuntimeSessionTokenUsage,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderManager.js';
 import type { RuntimeModel } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeModel.js';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 /**
@@ -96,10 +98,20 @@ export class TestRuntimeProviderManager implements RuntimeProviderManager {
     };
   }
 
+  bindModelRegistry(_registry: ModelRegistry): void {}
+
   setConfig(_config: Config): void {}
 
   setRuntimeContext(runtimeContext: ProviderRuntimeContext): void {
     this.runtimeContext = runtimeContext;
+  }
+
+  getProviderKeys(): ProviderKeyStorageLike {
+    throw new Error('Test manager has no key storage');
+  }
+
+  fetchNetwork(): Promise<Response> {
+    return Promise.reject(new Error('Test manager has no network'));
   }
 
   hasActiveProvider(): boolean {

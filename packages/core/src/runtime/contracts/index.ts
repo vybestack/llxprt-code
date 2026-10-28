@@ -54,3 +54,12 @@ export type {
   PromptEnvelopeEstimate,
 } from './PromptEstimation.js';
 export { estimatePromptEnvelope } from './PromptEstimation.js';
+
+export type {
+  ProviderSwitcher,
+  ProviderSwitchOptions,
+  ProviderSwitchResult,
+  ApiKeyUpdateResult,
+  BaseUrlUpdateResult,
+  ModelChangeResult,
+} from './ProviderSelection.js';

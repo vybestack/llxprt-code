@@ -1,3 +1,4 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -29,6 +30,10 @@ import {
   generateHistory,
   testProviderRuntime,
 } from './MiddleOutStrategy-test-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const JOURNAL_PATH = '/tmp/llxprt-chats/session-2026-08-22-abcd1234.jsonl';
 
@@ -59,7 +64,15 @@ async function captureRequestText(
     resolveProvider: (): CompressionProviderResult =>
       ({
         invocation: captureProviderInvocation(
-          testProviderRuntime,
+          {
+            fetch: requestFetch,
+            runtimeId: testProviderRuntime.runtimeId,
+            metadata: testProviderRuntime.metadata,
+            globalSettings: new SettingsService().getAllGlobalSettings(),
+            providerSettings: new SettingsService().getProviderSettings(
+              provider.name,
+            ),
+          },
           provider.name,
         ),
         provider,
@@ -89,7 +102,7 @@ function noticeIn(requestText: string[]): string | undefined {
 describe('session journal notice injection (#2933)', () => {
   it('OneShotStrategy hands the journal path to the summarizing model', async () => {
     const requestText = await captureRequestText(
-      new OneShotStrategy(),
+      new OneShotStrategy(undefined, undefined, undefined, undefined),
       JOURNAL_PATH,
     );
 
@@ -98,7 +111,7 @@ describe('session journal notice injection (#2933)', () => {
 
   it('MiddleOutStrategy hands the journal path to the summarizing model', async () => {
     const requestText = await captureRequestText(
-      new MiddleOutStrategy(),
+      new MiddleOutStrategy(undefined, undefined, undefined, undefined),
       JOURNAL_PATH,
     );
 
@@ -107,11 +120,11 @@ describe('session journal notice injection (#2933)', () => {
 
   it('both strategies emit identical notice text so the wording cannot drift', async () => {
     const oneShotText = await captureRequestText(
-      new OneShotStrategy(),
+      new OneShotStrategy(undefined, undefined, undefined, undefined),
       JOURNAL_PATH,
     );
     const middleOutText = await captureRequestText(
-      new MiddleOutStrategy(),
+      new MiddleOutStrategy(undefined, undefined, undefined, undefined),
       JOURNAL_PATH,
     );
 
@@ -123,7 +136,7 @@ describe('session journal notice injection (#2933)', () => {
 
   it('OneShotStrategy sends no journal notice when no path is present', async () => {
     const requestText = await captureRequestText(
-      new OneShotStrategy(),
+      new OneShotStrategy(undefined, undefined, undefined, undefined),
       undefined,
     );
 
@@ -135,7 +148,7 @@ describe('session journal notice injection (#2933)', () => {
 
   it('MiddleOutStrategy sends no journal notice when no path is present', async () => {
     const requestText = await captureRequestText(
-      new MiddleOutStrategy(),
+      new MiddleOutStrategy(undefined, undefined, undefined, undefined),
       undefined,
     );
 

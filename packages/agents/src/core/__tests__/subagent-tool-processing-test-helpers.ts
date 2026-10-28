@@ -5,15 +5,19 @@
  */
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { OutputObject } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import type {
   IContent,
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -21,13 +25,11 @@ import {
   type ToolResult,
 } from '@vybestack/llxprt-code-tools/tools/tools.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
-import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.js';
-import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
+import { assembleSchedulerOwner } from '../../session/assembleSchedulerOwner.js';
+import { executeToolCall } from '../nonInteractiveToolExecutor.js';
 import { createToolExecutionConfig } from '../subagentRuntimeSetup.js';
-import { createStatelessRuntimeBundle } from './subagent-test-helpers.js';
 import { processFunctionCalls } from '../subagentToolProcessing.js';
+import { createStatelessRuntimeBundle } from './subagent-test-helpers.js';
 
 class DivideTool extends BaseDeclarativeTool<{ divisor: number }, ToolResult> {
   constructor() {
@@ -97,7 +99,10 @@ export async function dispatch(
   );
   registry.registerTool(new DivideTool());
   const toolExecutorContext = createToolExecutionConfig(
-    createStatelessRuntimeBundle(),
+    createStatelessRuntimeBundle().telemetryRoot,
+    () =>
+      createStatelessRuntimeBundle().runtimeContext.readToolExecutionPolicy(),
+    () => createStatelessRuntimeBundle().runtimeContext.state.sessionId,
     registry,
   );
   // The processing context object is the scheduler registry owner for this
@@ -107,9 +112,28 @@ export async function dispatch(
     output,
     subagentId: 'flag-test',
     logger: new DebugLogger('flag-test'),
-    toolExecutorContext,
-    config,
-    messageBus,
+    imagePayloadBudgetBytes: config.getImagePayloadBudgetBytes(),
+    executeToolCall: (
+      request: Parameters<typeof executeToolCall>[1],
+      signal: AbortSignal,
+    ) =>
+      executeToolCall(
+        (callbacks) =>
+          assembleSchedulerOwner('flag-test', {
+            telemetry: toolExecutorContext.telemetry,
+            config,
+            messageBus,
+            toolRegistry: registry,
+            readApprovalMode: () => config.getApprovalMode(),
+            getToolGovernance: () => toolExecutorContext.readGovernance(),
+            readExecutionPolicy: () =>
+              toolExecutorContext.readExecutionPolicy(),
+            toolContextInteractiveMode: false,
+            ...callbacks,
+          }),
+        request,
+        signal,
+      ),
   };
   try {
     return await processFunctionCalls(

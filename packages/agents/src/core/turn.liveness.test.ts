@@ -120,10 +120,12 @@ describe('Turn - provider-liveness two-phase watchdog (issue #2607)', () => {
   });
 
   it('a provider liveness ping before the first-response threshold disarms phase A when inter-chunk idle is disabled (0)', async () => {
-    // first-response guard is small (30ms); a liveness ping arrives at 10ms;
-    // then semantic content arrives at 60ms (AFTER the 30ms first-response
-    // bound would have fired). Because liveness disarmed phase A and idle=0
-    // means phase B is unbounded, NO timeout fires.
+    // first-response guard is small (30ms); the liveness ping is emitted as
+    // soon as the stream is first read, then semantic content arrives only
+    // after the 30ms first-response bound would have fired. Because liveness
+    // disarmed phase A and idle=0 means phase B is unbounded, NO timeout
+    // fires. The ping carries no timer of its own so host load cannot push it
+    // past the 30ms bound.
     vi.useRealTimers();
     const { turn } = buildTurn(30, 0);
 
@@ -147,7 +149,6 @@ describe('Turn - provider-liveness two-phase watchdog (issue #2607)', () => {
       }) => {
         const listener = params.config?.onStreamLiveness;
         const stream = (async function* () {
-          await new Promise((resolve) => setTimeout(resolve, 10));
           listener?.({ sourceEvent: 'response.created', sseObserved: true });
           releaseLiveness();
           await contentGate;
@@ -172,8 +173,8 @@ describe('Turn - provider-liveness two-phase watchdog (issue #2607)', () => {
 
     const guard = failsafe(2000);
     await Promise.race([livenessGate, guard.promise]);
-    // Liveness observed at ~10ms. Wait until AFTER the 30ms first-response
-    // bound would have fired, then release content.
+    // Wait until AFTER the 30ms first-response bound would have fired, then
+    // release content.
     await new Promise((resolve) => setTimeout(resolve, 60));
     releaseContent();
 

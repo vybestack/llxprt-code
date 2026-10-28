@@ -4,277 +4,245 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
-import { createServer, type ServerResponse } from 'node:http';
-import { randomUUID } from 'node:crypto';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import {
-  CallToolRequestSchema,
-  PingRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { describe, expect, it, vi } from 'bun:test';
 import {
   IdeClient,
   IDEConnectionStatus,
 } from '@vybestack/llxprt-code-ide-integration';
 import {
-  fromConfig,
-  toConfigParameters,
-  McpRuntimeOwner,
-} from '@vybestack/llxprt-code-agents';
+  setup,
+  client,
+  cleanup,
+  deferred,
+  installIdeCleanup,
+} from './helpers/ide-lifecycle-companion.js';
+import { createAgent, toConfigParameters } from '@vybestack/llxprt-code-agents';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import {
-  MCPOAuthTokenStorage,
-  KeychainTokenStorage,
-} from '@vybestack/llxprt-code-mcp';
-import { openBrowserSecurely } from '@vybestack/llxprt-code-core';
+import { fromConfig } from '../fromConfig.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { WorkspaceIdeOwner } from '@vybestack/llxprt-code-core/services/workspace-ide-owner.js';
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
+import { assembleIdeControl } from '../control/ideControl.js';
 
-function createSessionSettingsFixture(config: Config): {
-  settingsService: SettingsService;
-  settingsOwner: SessionSettingsOwner;
-} {
+async function domainFixture(initialize = true): Promise<{
+  owner: WorkspaceIdeOwner;
+  domain: ReturnType<typeof assembleIdeControl>;
+  trust: WorkspaceTrustLifecycle;
+  transport: IdeClient;
+}> {
+  const config = new Config({
+    sessionId: 'ide-domain',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    model: 'offline',
+    debugMode: false,
+  });
+  const trust = new WorkspaceTrustLifecycle({ localTrust: true });
+  const transport = await client();
+  const owner = new WorkspaceIdeOwner(
+    config,
+    trust,
+    trust,
+    async () => transport,
+  );
+  const domain = assembleIdeControl(trust, owner, () => ({}));
+  cleanup.push(
+    () => config.dispose(),
+    () => trust.dispose(),
+    () => owner.dispose(),
+  );
+  if (initialize) await owner.initialize();
+  return { owner, domain, trust, transport };
+}
+
+function createSeededSettings(config: Config): SettingsService {
   const settingsService = new SettingsService();
   for (const [name, value] of Object.entries(config.getInitialSettings()))
     settingsService.set(name, value);
-  const settingsOwner = new SessionSettingsOwner(settingsService);
-  settingsOwner.initializeProviderSelection(
-    config.getProvider(),
-    config.getModel(),
-  );
-  cleanup.push(async () => {
-    await settingsOwner.dispose();
-  });
-  return { settingsService, settingsOwner };
+  return settingsService;
 }
 
-function createWorkspace(
-  config: Config,
-  trust: WorkspaceTrustLifecycle,
-): Promise<McpRuntimeOwner> {
-  return McpRuntimeOwner.create(
-    {
-      tokenStorage: new MCPOAuthTokenStorage(
-        new KeychainTokenStorage('llxprt-cli-mcp-oauth'),
-      ),
-      openBrowser: openBrowserSecurely,
-    },
-    config,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    'caller',
-    undefined,
-    'runtime',
-    undefined,
-    'runtime',
-    undefined,
-    undefined,
-    'runtime',
-    trust,
-  );
-}
+const diffOutcomes: Array<'accepted' | 'rejected'> = ['accepted', 'rejected'];
 
-function deferred(): { promise: Promise<void>; resolve(): void } {
-  let resolve = (): void => {};
-  const promise = new Promise<void>((complete) => {
-    resolve = complete;
-  });
-  return { promise, resolve };
-}
-
-interface Session {
-  readonly transport: StreamableHTTPServerTransport;
-  readonly server: Server;
-  readonly trusted: boolean;
-  readonly streamClosed: ReturnType<typeof deferred>;
-}
-
-async function companion(
-  blockPing = false,
-  blockCloseDiff = false,
-): Promise<{
-  port: number;
-  sessions: Session[];
-  pingEntered: ReturnType<typeof deferred>;
-  releasePing: ReturnType<typeof deferred>;
-  diffOpened: ReturnType<typeof deferred>;
-  closeDiffEntered: ReturnType<typeof deferred>;
-  releaseCloseDiff: ReturnType<typeof deferred>;
-  updateTrust(index: number, trusted: boolean | undefined): Promise<void>;
-  close(): Promise<void>;
-}> {
-  const sessions: Session[] = [];
-  const byId = new Map<string, Session>();
-  const pingEntered = deferred();
-  const releasePing = deferred();
-  const diffOpened = deferred();
-  const closeDiffEntered = deferred();
-  const releaseCloseDiff = deferred();
-  const responses = new Set<ServerResponse>();
-  const http = createServer((request, response) => {
-    responses.add(response);
-    response.once('close', () => responses.delete(response));
-    const id = request.headers['mcp-session-id'];
-    let session = typeof id === 'string' ? byId.get(id) : undefined;
-    if (session === undefined && request.method === 'POST') {
-      const server = new Server(
-        { name: 'independent-ide-companion', version: '1.0.0' },
-        { capabilities: { tools: {} } },
-      );
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: randomUUID,
-        onsessioninitialized: (sessionId) => {
-          byId.set(sessionId, owned);
-        },
-      });
-      const owned: Session = {
-        transport,
-        server,
-        trusted: sessions.length % 2 === 0,
-        streamClosed: deferred(),
-      };
-      sessions.push(owned);
-      session = owned;
-      server.setRequestHandler(PingRequestSchema, async (_request, extra) => {
-        pingEntered.resolve();
-        if (blockPing) await releasePing.promise;
-        await transport.send(
-          {
-            jsonrpc: '2.0',
-            method: 'ide/contextUpdate',
-            params: { workspaceState: { isTrusted: owned.trusted } },
-          },
-          { relatedRequestId: extra.requestId },
-        );
-        return {};
-      });
-      server.setRequestHandler(CallToolRequestSchema, async (call) => {
-        if (call.params.name === 'openDiff') diffOpened.resolve();
-        if (call.params.name === 'closeDiff') {
-          closeDiffEntered.resolve();
-          if (blockCloseDiff) await releaseCloseDiff.promise;
-        }
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({ content: 'peer remains usable' }),
-            },
-          ],
-        };
-      });
-      void server
-        .connect(transport)
-        .then(() => transport.handleRequest(request, response))
-        .catch((error: unknown) =>
-          response.destroy(
-            error instanceof Error ? error : new Error(String(error)),
-          ),
-        );
-      return;
-    }
-    if (session === undefined) {
-      response.writeHead(404).end();
-      return;
-    }
-    if (request.method === 'GET')
-      request.socket.once('close', session.streamClosed.resolve);
-    const active = session;
-    void active.transport
-      .handleRequest(request, response)
-      .catch((error: unknown) =>
-        response.destroy(
-          error instanceof Error ? error : new Error(String(error)),
-        ),
-      );
-    if (request.method === 'GET')
-      setImmediate(() => {
-        void active.transport
-          .send({
-            jsonrpc: '2.0',
-            method: 'ide/contextUpdate',
-            params: { workspaceState: { isTrusted: active.trusted } },
-          })
-          .catch((error: unknown) =>
-            response.destroy(
-              error instanceof Error ? error : new Error(String(error)),
-            ),
-          );
-      });
-  });
-  await new Promise<void>((resolve, reject) => {
-    http.once('error', reject);
-    http.listen(0, '127.0.0.1', resolve);
-  });
-  const address = http.address();
-  if (address === null || typeof address === 'string')
-    throw new Error('Companion did not bind a TCP port');
-  return {
-    port: address.port,
-    sessions,
-    pingEntered,
-    releasePing,
-    diffOpened,
-    closeDiffEntered,
-    releaseCloseDiff,
-    updateTrust: (index, trusted): Promise<void> =>
-      sessions[index].transport.send({
-        jsonrpc: '2.0',
-        method: 'ide/contextUpdate',
-        params: { workspaceState: { isTrusted: trusted } },
-      }),
-    close: async (): Promise<void> => {
-      releasePing.resolve();
-      releaseCloseDiff.resolve();
-      await Promise.all(sessions.map((session) => session.server.close()));
-      for (const response of responses) response.destroy();
-      const stopped = new Promise<void>((resolve, reject) =>
-        http.close((error) => (error ? reject(error) : resolve())),
-      );
-      http.closeAllConnections();
-      await stopped;
-    },
-  };
-}
-
-const environment = new Map<string, string | undefined>();
-const cleanup: Array<() => Promise<void>> = [];
-function setEnvironment(name: string, value: string): void {
-  if (!environment.has(name)) environment.set(name, process.env[name]);
-  process.env[name] = value;
-}
-async function setup(
-  blockPing = false,
-  blockCloseDiff = false,
-): Promise<Awaited<ReturnType<typeof companion>>> {
-  const host = await companion(blockPing, blockCloseDiff);
-  cleanup.push(host.close);
-  setEnvironment('TERM_PROGRAM', 'vscode');
-  setEnvironment('LLXPRT_CODE_IDE_SERVER_PORT', String(host.port));
-  setEnvironment('LLXPRT_CODE_IDE_WORKSPACE_PATH', process.cwd());
-  return host;
-}
-async function client(): Promise<IdeClient> {
-  const instance = await IdeClient.create();
-  cleanup.push(() => instance.disconnect());
-  return instance;
-}
 describe('Independent IDE transport lifetime', () => {
-  afterEach(async (): Promise<void> => {
-    for (const dispose of cleanup.reverse()) await dispose();
-    cleanup.length = 0;
-    for (const [name, value] of environment) {
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
+  installIdeCleanup();
+  it('reads owner availability separately from connection status without using the public getter', async (): Promise<void> => {
+    await setup();
+    const { owner, domain } = await domainFixture(false);
+    try {
+      expect(domain.readConnection()).toStrictEqual({
+        available: false,
+        diffingEnabled: false,
+      });
+      expect(domain.readContext()).toBeUndefined();
+      expect(domain.readWorkspaceTrust()).toBeUndefined();
+      await owner.initialize();
+      expect(domain.readConnection()).toMatchObject({
+        available: true,
+        status: IDEConnectionStatus.Disconnected,
+        diffingEnabled: false,
+      });
+      const states: Array<string | undefined> = [];
+      const unsubscribe = domain.subscribeConnection((connection) => {
+        states.push(connection.status);
+        expect(domain.readConnection()).toStrictEqual(connection);
+      });
+      await domain.setIdeClientConnected();
+      const connected = domain.readConnection();
+      expect(connected.status).toBe(IDEConnectionStatus.Connected);
+      expect(connected.diffingEnabled).toBe(true);
+      expect(connected.currentIde?.displayName).toBe(
+        connected.detectedIdeDisplayName,
+      );
+      await domain.setIdeClientDisconnected();
+      expect(states).toStrictEqual(['connecting', 'connected', 'disconnected']);
+      expect(domain.readConnection().details).toContain('disabled');
+      unsubscribe();
+      unsubscribe();
+      await domain.setIdeClientConnected();
+      expect(states).toHaveLength(3);
+    } finally {
+      domain.closeAdmission();
     }
-    environment.clear();
   });
+
+  it('delivers file context through subscriptions installed before owner acquisition', async (): Promise<void> => {
+    const host = await setup();
+    const { owner, domain } = await domainFixture(false);
+    const observed = deferred();
+    const stop = domain.subscribeContext((context) => {
+      if (context?.workspaceState?.openFiles?.length === 1) observed.resolve();
+    });
+    await owner.initialize();
+    await domain.setIdeClientConnected();
+    await host.updateContext(0, {
+      workspaceState: {
+        openFiles: [
+          {
+            path: '/workspace/edit.ts',
+            timestamp: 42,
+            isActive: true,
+            selectedText: 'edit',
+            cursor: { line: 3, character: 5 },
+          },
+        ],
+      },
+    });
+    await observed.promise;
+    expect(domain.readContext()?.workspaceState?.openFiles).toStrictEqual([
+      {
+        path: '/workspace/edit.ts',
+        timestamp: 42,
+        isActive: true,
+        selectedText: 'edit',
+        cursor: { line: 3, character: 5 },
+      },
+    ]);
+    stop();
+  });
+
+  it('cancels and joins a held domain connection before owned transport retirement completes', async (): Promise<void> => {
+    const host = await setup(true);
+    const { owner, domain, transport } = await domainFixture();
+    let finished = false;
+    const connecting = domain.setIdeClientConnected().then(() => {
+      finished = true;
+    });
+    await host.pingEntered.promise;
+    await owner.dispose();
+    expect(finished).toBe(true);
+    await connecting;
+    expect(transport.getConnectionStatus().status).toBe(
+      IDEConnectionStatus.Disconnected,
+    );
+    await host.sessions[0].streamClosed.promise;
+    await expect(domain.setIdeClientConnected()).rejects.toThrow('disposed');
+    expect(() => domain.subscribeContext(() => undefined)).toThrow('disposed');
+  });
+
+  it('keeps raw IDE trust unknown while effective folder trust falls back and releases context subscriptions', async (): Promise<void> => {
+    const host = await setup();
+    const { owner, domain } = await domainFixture();
+    await domain.setIdeClientConnected();
+    const contexts: Array<boolean | undefined> = [];
+    const trusts: Array<boolean | undefined> = [];
+    const observed = deferred();
+    const rejected = deferred();
+    const stopContext = domain.subscribeContext((context) => {
+      contexts.push(context?.workspaceState?.isTrusted);
+      expect(domain.readContext()).toStrictEqual(context);
+      if (contexts.length === 1) rejected.resolve();
+      if (contexts.length === 2) observed.resolve();
+    });
+    const stopTrust = domain.subscribeWorkspaceTrust((trusted) =>
+      trusts.push(trusted),
+    );
+    await host.updateTrust(0, false);
+    await rejected.promise;
+    await host.updateTrust(0, undefined);
+    await observed.promise;
+    await domain.whenTrustTransitionSettled();
+    expect(contexts).toStrictEqual([false, undefined]);
+    expect(trusts).toStrictEqual([false, undefined]);
+    expect(domain.readWorkspaceTrust()).toBeUndefined();
+    expect(domain.isTrustedFolder()).toBe(true);
+    stopContext();
+    stopContext();
+    stopTrust();
+    await owner.dispose();
+    expect(contexts).toHaveLength(2);
+    expect(trusts).toHaveLength(2);
+    expect(() => domain.readConnection()).toThrow('disposed');
+  });
+
+  it.each(diffOutcomes)(
+    'awaits the owner diff command before reporting %s to its caller',
+    async (outcome: 'accepted' | 'rejected'): Promise<void> => {
+      const host = await setup(false, true);
+      const { domain, transport } = await domainFixture();
+      await domain.setIdeClientConnected();
+      const opened = transport.openDiff('/domain-diff.txt', 'replacement');
+      await host.diffOpened.promise;
+      const order: string[] = [];
+      const resolving = domain
+        .resolveDiff('/domain-diff.txt', outcome)
+        .then(() => {
+          order.push('confirmed');
+        });
+      await host.closeDiffEntered.promise;
+      expect(order).toStrictEqual([]);
+      host.releaseCloseDiff.resolve();
+      await resolving;
+      const result = await opened;
+      expect(result.status).toBe(outcome);
+      expect(result.content).toBe(
+        outcome === 'accepted' ? 'peer remains usable' : undefined,
+      );
+      expect(order).toStrictEqual(['confirmed']);
+    },
+  );
+
+  it('cancels held domain diff work and joins connection work when its owner retires', async (): Promise<void> => {
+    const host = await setup(false, true);
+    const { owner, domain, transport } = await domainFixture();
+    await domain.setIdeClientConnected();
+    const opened = transport.openDiff('/held-domain.txt', 'replacement');
+    await host.diffOpened.promise;
+    const resolving = domain.resolveDiff('/held-domain.txt', 'accepted');
+    await host.closeDiffEntered.promise;
+    await owner.dispose();
+    await resolving;
+    expect(await opened).toStrictEqual({
+      status: 'rejected',
+      content: undefined,
+    });
+    await expect(domain.resolveDiff('/late.txt', 'accepted')).rejects.toThrow(
+      'disposed',
+    );
+    await owner.dispose();
+  });
+
   it.each([false, true])(
     'keeps public facade IDE transports independent on shared Config with reverse retirement %s',
     async (reverse: boolean): Promise<void> => {
@@ -294,23 +262,29 @@ describe('Independent IDE transport lifetime', () => {
         }),
       );
       cleanup.push(() => config.dispose());
-      const first = await fromConfig({
+      const authority = new CredentialAuthority();
+      const first = await fromConfig(
         config,
-        ...createSessionSettingsFixture(config),
-      });
+        createSeededSettings(config),
+        {},
+        authority,
+      );
       cleanup.push(() => first.dispose());
-      const second = await fromConfig({
+      const second = await fromConfig(
         config,
-        ...createSessionSettingsFixture(config),
-      });
+        createSeededSettings(config),
+        {},
+        authority,
+      );
       cleanup.push(() => second.dispose());
       await first.ide.setIdeClientConnected();
+      expect(second.ide.readConnection().status).toBe(
+        IDEConnectionStatus.Disconnected,
+      );
       await second.ide.setIdeClientConnected();
-      expect(first.ide.getIdeClient()).not.toBe(second.ide.getIdeClient());
-      expect(
-        first.ide.getIdeClient()?.getIdeContext()?.workspaceState?.isTrusted,
-      ).not.toBe(
-        second.ide.getIdeClient()?.getIdeContext()?.workspaceState?.isTrusted,
+      expect(host.sessions).toHaveLength(2);
+      expect(first.ide.readContext()?.workspaceState?.isTrusted).not.toBe(
+        second.ide.readContext()?.workspaceState?.isTrusted,
       );
       expect(first.ide.isTrustedFolder()).toBe(host.sessions[0].trusted);
       expect(second.ide.isTrustedFolder()).toBe(host.sessions[1].trusted);
@@ -318,13 +292,13 @@ describe('Independent IDE transport lifetime', () => {
       const surviving = reverse ? first : second;
       await retiring.dispose();
       await host.sessions[reverse ? 1 : 0].streamClosed.promise;
-      const peer = surviving.ide.getIdeClient();
-      if (peer === undefined)
-        throw new Error('Surviving Agent lost its IDE client');
-      expect(peer.getConnectionStatus().status).toBe(
+      expect(surviving.ide.readConnection().status).toBe(
         IDEConnectionStatus.Connected,
       );
-      expect(await peer.closeDiff('/public-peer.txt')).toContain('usable');
+      await surviving.ide.resolveDiff('/public-peer.txt', 'accepted');
+      expect(host.sessions[reverse ? 0 : 1].closedDiffs).toContain(
+        '/public-peer.txt',
+      );
       expect(surviving.ide.isTrustedFolder()).toBe(
         host.sessions[reverse ? 0 : 1].trusted,
       );
@@ -363,24 +337,64 @@ describe('Independent IDE transport lifetime', () => {
         () => trust.dispose(),
         () => ide.dispose(),
       );
-      const first = await fromConfig({
-        config,
-        ...createSessionSettingsFixture(config),
+      const agentConfig = {
+        provider: '',
+        model: '',
+        workingDir: process.cwd(),
+        folderTrust: false,
+        mcpEnabled: false,
+        skillsSupport: false,
+        telemetry: { enabled: false },
+        recording: { enabled: false },
         trustPort: trust,
         idePort: ide,
-      });
-      const second = await fromConfig({
-        config,
-        ...createSessionSettingsFixture(config),
-        trustPort: trust,
-        idePort: ide,
-      });
+      };
+      const first = await createAgent(agentConfig);
+      const second = await createAgent(agentConfig);
       cleanup.push(
         () => first.dispose(),
         () => second.dispose(),
       );
+      const firstEvents: Array<boolean | undefined> = [];
+      const secondEvents: Array<boolean | undefined> = [];
+      const firstContexts: Array<boolean | undefined> = [];
+      const secondContexts: Array<boolean | undefined> = [];
+      const firstConnections: Array<string | undefined> = [];
+      const secondConnections: Array<string | undefined> = [];
+      first.ide.subscribeWorkspaceTrust((value) => firstEvents.push(value));
+      second.ide.subscribeWorkspaceTrust((value) => secondEvents.push(value));
+      first.ide.subscribeContext((value) =>
+        firstContexts.push(value?.workspaceState?.isTrusted),
+      );
+      second.ide.subscribeContext((value) =>
+        secondContexts.push(value?.workspaceState?.isTrusted),
+      );
+      first.ide.subscribeConnection((value) =>
+        firstConnections.push(value.status),
+      );
+      second.ide.subscribeConnection((value) =>
+        secondConnections.push(value.status),
+      );
       await (reverse ? second : first).dispose();
       expect(await lease.closeDiff('/borrowed-peer.txt')).toContain('usable');
+      const observed = deferred();
+      const surviving = reverse ? first : second;
+      const stop = surviving.ide.subscribeContext(() => observed.resolve());
+      await host.updateTrust(0, false);
+      await observed.promise;
+      stop();
+      expect(reverse ? firstEvents : secondEvents).toStrictEqual([false]);
+      expect(reverse ? secondEvents : firstEvents).toStrictEqual([]);
+      expect(reverse ? firstContexts : secondContexts).toStrictEqual([false]);
+      expect(reverse ? secondContexts : firstContexts).toStrictEqual([]);
+      await surviving.ide.setIdeClientDisconnected();
+      await surviving.ide.setIdeClientConnected();
+      expect(reverse ? firstConnections : secondConnections).toStrictEqual([
+        'disconnected',
+        'connecting',
+        'connected',
+      ]);
+      expect(reverse ? secondConnections : firstConnections).toStrictEqual([]);
       await (reverse ? first : second).dispose();
       expect(lease.getConnectionStatus().status).toBe(
         IDEConnectionStatus.Connected,
@@ -400,29 +414,28 @@ describe('Independent IDE transport lifetime', () => {
     const host = await setup();
     const lease = await client();
     await lease.connect();
-    const config = new Config(
-      toConfigParameters({
-        provider: '',
-        model: '',
-        workingDir: process.cwd(),
-        mcpEnabled: false,
-        skillsSupport: false,
-        telemetry: { enabled: false },
-        recording: { enabled: false },
-      }),
-    );
-    cleanup.push(() => config.dispose());
     const acquire = vi
       .spyOn(IdeClient, 'create')
       .mockImplementationOnce(async () => lease);
     const failure = new Error('public adoption interrupted');
     try {
       await expect(
-        fromConfig({
-          config,
-          ...createSessionSettingsFixture(config),
-          prepareSessionTools: () => {
-            throw failure;
+        createAgent({
+          provider: '',
+          model: '',
+          workingDir: process.cwd(),
+          mcpEnabled: false,
+          skillsSupport: false,
+          telemetry: { enabled: false },
+          recording: { enabled: false },
+          tokenizerFactory: {
+            prepareTokenizer: () => {
+              throw failure;
+            },
+            getTokenizer: () => undefined,
+            estimatePrompt: () => {
+              throw failure;
+            },
           },
         }),
       ).rejects.toThrow('public adoption interrupted');
@@ -527,18 +540,6 @@ describe('Independent IDE transport lifetime', () => {
 
   it('physically retires the owned transport despite failures releasing every trust listener', async (): Promise<void> => {
     const host = await setup();
-    const config = new Config(
-      toConfigParameters({
-        provider: '',
-        model: '',
-        workingDir: process.cwd(),
-        ide: { mode: true },
-        mcpEnabled: false,
-        skillsSupport: false,
-        telemetry: { enabled: false },
-        recording: { enabled: false },
-      }),
-    );
     const trust = new WorkspaceTrustLifecycle({ localTrust: true });
     const subscribe = trust.subscribeTrustChange.bind(trust);
     const failure = new Error('Listener release failed');
@@ -551,34 +552,30 @@ describe('Independent IDE transport lifetime', () => {
           throw failure;
         };
       });
-    cleanup.push(
-      () => config.dispose(),
-      () => trust.dispose(),
-    );
-    const workspace = await createWorkspace(config, trust);
-    const agent = await fromConfig({
-      mcpRuntime: workspace,
-      mcpOwnership: 'agent',
-      config,
-      ...createSessionSettingsFixture(config),
+    cleanup.push(() => trust.dispose());
+    const agent = await createAgent({
+      provider: '',
+      model: '',
+      workingDir: process.cwd(),
+      ide: { mode: true },
+      mcpEnabled: false,
+      skillsSupport: false,
+      telemetry: { enabled: false },
+      recording: { enabled: false },
       trustPort: trust,
     });
     cleanup.push(async () => {
       await agent.dispose().catch(() => undefined);
     });
     await agent.ide.setIdeClientConnected();
-    const instance = agent.ide.getIdeClient();
-    if (instance === undefined)
-      throw new Error('Owned IDE client was not initialized');
+    expect(agent.ide.readConnection().status).toBe(
+      IDEConnectionStatus.Connected,
+    );
     try {
       await expect(agent.dispose()).rejects.toBeInstanceOf(Error);
-      expect(instance.getConnectionStatus().status).toBe(
-        IDEConnectionStatus.Disconnected,
-      );
       await host.sessions[0].streamClosed.promise;
-      expect(() => workspace.workspaceMemory.operations.snapshot()).toThrow(
-        'disposed',
-      );
+      expect(host.sessions[0].closed).toBe(true);
+      expect(() => agent.memory.getMemory()).toThrow('disposed');
       await trust.setIdeTrustLive(undefined);
       await trust.setTrustedFolderLive(false);
       expect(trust.isTrustedFolder()).toBe(false);

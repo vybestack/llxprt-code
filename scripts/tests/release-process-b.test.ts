@@ -16,6 +16,7 @@ import {
   asNumber,
   asOptionalRecord,
   asRecord,
+  asRecordArray,
   asString,
   asStringArray,
   parseWorkflowYaml,
@@ -417,19 +418,20 @@ describe('.github/workflows/nightly.yml', () => {
     return step;
   }
 
-  function matrixShardNames(
-    job: Record<string, unknown> | undefined,
-  ): string[] {
+  interface MatrixLeg {
+    shard: string;
+    partition: string;
+    os: string;
+  }
+
+  function matrixLegs(job: Record<string, unknown> | undefined): MatrixLeg[] {
     const strategy = asOptionalRecord(job?.strategy);
     const matrix = asOptionalRecord(strategy?.matrix);
-    const shards = matrix?.shard;
-    if (
-      !Array.isArray(shards) ||
-      !shards.every((shard) => typeof shard === 'string')
-    ) {
-      throw new Error('job should define a string strategy.matrix.shard array');
-    }
-    return shards;
+    return asRecordArray(matrix?.include).map((row) => ({
+      shard: asString(row.shard),
+      partition: asString(row.partition),
+      os: asString(row.os),
+    }));
   }
 
   function failureNotificationStep(): Record<string, unknown> {
@@ -477,7 +479,7 @@ describe('.github/workflows/nightly.yml', () => {
     ).toBe(true);
   });
 
-  it('runs the canonical test shards independently on Windows and macOS', () => {
+  it('runs the canonical test shards independently on Windows and macOS', async () => {
     const expectedShards = [
       'cli',
       'agents',
@@ -486,14 +488,35 @@ describe('.github/workflows/nightly.yml', () => {
       'rest',
       'scripts',
     ];
-    expect(matrixShardNames(windowsCiJob)).toEqual(expectedShards);
-    expect(matrixShardNames(macosCiJob)).toEqual(expectedShards);
+    // The PR workflow expands shards through buildMatrix; nightly must run
+    // exactly the same shard/partition pairs so every file runs once.
+    const { buildMatrix } = await import('../affected-test-shards.ts');
+    const expectedPairs = buildMatrix(expectedShards).map(
+      ({ shard, partition }) => ({ shard, partition }),
+    );
+    const cliPartitions = expectedPairs.filter((pair) => pair.shard === 'cli');
+    expect(cliPartitions.length).toBeGreaterThan(1);
+
+    for (const [job, os] of [
+      [windowsCiJob, 'windows-latest'],
+      [macosCiJob, 'macos-latest'],
+    ] as const) {
+      const legs = matrixLegs(job);
+      expect(
+        legs.map(({ shard, partition }) => ({ shard, partition })),
+      ).toEqual(expectedPairs);
+      expect(legs.every((leg) => leg.os === os)).toBe(true);
+    }
 
     for (const job of [windowsCiJob, macosCiJob]) {
       const shardStep = stepNamed(job, 'Run shard tests (issue #3153)');
       expect(shardStep.run).toBe(
         'bun scripts/test.ts --shard "${{ matrix.shard }}"',
       );
+      expect(asOptionalRecord(shardStep.env)?.LLXPRT_CLI_TEST_PARTITION).toBe(
+        '${{ matrix.partition }}',
+      );
+      expect(asNumber(job?.['timeout-minutes'])).toBe(45);
       const steps = Array.isArray(job?.steps) ? job.steps.map(asRecord) : [];
       expect(
         steps.some((step) =>

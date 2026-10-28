@@ -79,6 +79,15 @@ function verifyVSCode(
   return IDE_DEFINITIONS.vscodefork;
 }
 
+/**
+ * Only VS Code and Sublime Text integrations are currently supported, and both
+ * announce themselves through `TERM_PROGRAM`.
+ */
+export function terminalAnnouncesSupportedIde(): boolean {
+  const terminal = process.env['TERM_PROGRAM'];
+  return terminal === 'vscode' || terminal === 'sublime';
+}
+
 export function detectIde(
   ideProcessInfo: {
     pid: number;
@@ -93,11 +102,7 @@ export function detectIde(
     };
   }
 
-  // Only VS Code and Sublime Text integrations are currently supported.
-  if (
-    process.env['TERM_PROGRAM'] !== 'vscode' &&
-    process.env['TERM_PROGRAM'] !== 'sublime'
-  ) {
+  if (!terminalAnnouncesSupportedIde()) {
     return undefined;
   }
 

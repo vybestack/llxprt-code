@@ -367,23 +367,31 @@ describe('.github/workflows/release.yml', () => {
     fs.writeFileSync(
       installer,
       `#!/bin/sh
-printf "%s|%s\n" "$PWD" "$*" >> "$INSTALL_LOG"
-if [ -n "$FAIL_PLUGIN" ]; then case "$PWD" in */"$FAIL_PLUGIN") exit 17 ;; esac; fi
+plugin_dir="$(pwd -P)"
+printf "%s|%s\n" "$plugin_dir" "$*" >> "$INSTALL_LOG"
+if [ -n "$FAIL_PLUGIN" ]; then case "$plugin_dir" in */"$FAIL_PLUGIN") exit 17 ;; esac; fi
 `,
     );
     fs.chmodSync(installer, 0o755);
     const run = (failPlugin: string): string => {
       try {
-        execFileSync('bash', ['-e', '-c', shell], {
-          cwd: fixture,
-          env: {
-            ...process.env,
-            PATH: `${bin}:${process.env.PATH ?? ''}`,
-            INSTALL_LOG: log,
-            FAIL_PLUGIN: failPlugin,
+        execFileSync(
+          'bash',
+          [
+            '-e',
+            '-c',
+            `export PATH="$PWD/bin:$PATH" INSTALL_LOG="$PWD/installs.log"
+${shell}`,
+          ],
+          {
+            cwd: fixture,
+            env: {
+              ...process.env,
+              FAIL_PLUGIN: failPlugin,
+            },
+            stdio: ['ignore', 'pipe', 'pipe'],
           },
-          stdio: 'pipe',
-        });
+        );
         return 'success';
       } catch (error) {
         if (typeof error === 'object' && error !== null && 'status' in error)
@@ -394,10 +402,14 @@ if [ -n "$FAIL_PLUGIN" ]; then case "$PWD" in */"$FAIL_PLUGIN") exit 17 ;; esac;
 
     try {
       expect(run('')).toBe('success');
-      const realFixture = fs.realpathSync(fixture);
+      const realFixture = execFileSync('bash', ['-c', 'pwd -P'], {
+        cwd: fixture,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim();
       expect(fs.readFileSync(log, 'utf8')).toBe(
-        `${path.join(realFixture, 'plugins/google-gemini')}|install --omit=peer
-${path.join(realFixture, 'plugins/google-mcp-auth')}|install --omit=peer
+        `${path.posix.join(realFixture, 'plugins/google-gemini')}|install --omit=peer
+${path.posix.join(realFixture, 'plugins/google-mcp-auth')}|install --omit=peer
 `,
       );
       for (const plugin of ['google-gemini', 'google-mcp-auth']) {

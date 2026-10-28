@@ -28,6 +28,25 @@ async function untilGone(pid: number): Promise<void> {
   );
 }
 
+// A SIGKILLed peer may tear its TCP connection down with a reset (e.g. with
+// unread data pending) instead of a FIN, so these codes mean "the child is gone".
+function isPeerGoneError(error: Error): boolean {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === 'ECONNRESET' || code === 'EPIPE';
+}
+
+// A socket 'error' is always followed by 'close', so peer-gone errors surface
+// here as a close. Other errors are recorded by the fixture's error listener
+// and asserted separately.
+function closed(socket: Socket): Promise<void> {
+  return new Promise<void>((resolve) => socket.once('close', () => resolve()));
+}
+
+// events.once() rejects on 'error', which would turn a reset into a failure.
+function received(socket: Socket): Promise<void> {
+  return new Promise<void>((resolve) => socket.once('data', () => resolve()));
+}
+
 it.skipIf(process.platform === 'win32')(
   'disposal joins a TERM-ignoring same-group child after command exit',
   async () => {
@@ -41,9 +60,15 @@ it.skipIf(process.platform === 'win32')(
     let socket: Socket | undefined;
     let childPid: number | undefined;
     let leaderPid: number | undefined;
+    const unexpectedSocketErrors: Error[] = [];
     try {
       const connected = new Promise<Socket>((resolve) =>
-        server.once('connection', resolve),
+        server.once('connection', (connection: Socket) => {
+          connection.on('error', (error) => {
+            if (!isPeerGoneError(error)) unexpectedSocketErrors.push(error);
+          });
+          resolve(connection);
+        }),
       );
       await new Promise<void>((resolve) =>
         server.listen(0, '127.0.0.1', resolve),
@@ -100,14 +125,15 @@ it.skipIf(process.platform === 'win32')(
       let acknowledged = false;
       if (!socket.destroyed) {
         const response = Promise.race([
-          once(socket, 'data').then(() => {
+          received(socket).then(() => {
             acknowledged = true;
           }),
-          once(socket, 'close').then(() => undefined),
+          closed(socket),
         ]);
         socket.write('beat\n');
         await deadline(response);
       }
+      expect(unexpectedSocketErrors).toStrictEqual([]);
       expect({
         absent: processGone(childPid),
         acknowledged,
@@ -115,9 +141,9 @@ it.skipIf(process.platform === 'win32')(
       }).toStrictEqual({ absent: true, acknowledged: false, advanced: false });
     } finally {
       if (socket !== undefined && !socket.destroyed) {
-        const closed = once(socket, 'close');
+        const socketClosed = closed(socket);
         socket.write('stop\n');
-        await deadline(closed);
+        await deadline(socketClosed);
       }
       if (childPid !== undefined) await untilGone(childPid);
       if (leaderPid !== undefined) await untilGone(leaderPid);
@@ -125,6 +151,7 @@ it.skipIf(process.platform === 'win32')(
       await new Promise<void>((resolve) => server.close(() => resolve()));
       await deadline(manager.dispose());
       rmSync(dir, { recursive: true, force: true });
+      expect(unexpectedSocketErrors).toStrictEqual([]);
     }
   },
   30000,

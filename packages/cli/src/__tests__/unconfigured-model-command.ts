@@ -1,0 +1,638 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import type { RegisteredHistoryReads } from '../ui/hooks/useRegisteredHistoryCommands.js';
+import type { CredentialCommands } from '../ui/hooks/credentialCommandTypes.js';
+import type { SlashCommandProcessorPorts } from '../ui/hooks/useSlashCommandProcessorCore.js';
+
+import { createDocsCommand } from '../ui/commands/docsCommand.js';
+import { createHelpCommand } from '../ui/commands/helpCommand.js';
+import { createQuitCommand } from '../ui/commands/quitCommand.js';
+import {
+  createSessionMetrics,
+  ConfigurationManager,
+} from '@vybestack/llxprt-code-telemetry';
+import { createDebugCommand } from '../ui/commands/debugCommands.js';
+import { bindDebugCommand } from '../ui/commands/debugCommandHost.js';
+import { createSetupGithubCommand } from '../ui/commands/setupGithubCommand.js';
+import { createDiagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
+import { createPermissionsCommand } from '../ui/commands/permissionsCommand.js';
+import { bindPermissionCommit } from '../ui/commands/permissionsCommandHost.js';
+import { createPerfCommand } from '../ui/commands/perfCommand.js';
+import { createSkillsCommand } from '../ui/commands/skillsCommand.js';
+
+import { createStatsCommand } from '../ui/commands/statsCommand.js';
+import { createLoggingCommand } from '../ui/commands/loggingCommand.js';
+import { createAboutCommand } from '../ui/commands/aboutCommand.js';
+import { createClearCommand } from '../ui/commands/clearCommand.js';
+import { createInitCommand } from '../ui/commands/initCommand.js';
+import { createVimCommand } from '../ui/commands/vimCommand.js';
+import { createUiProfileCommand } from '../ui/commands/uiprofileCommand.js';
+import { createSubagentCommand } from '../ui/commands/subagentCommand.js';
+import { bindSubagentCommand } from '../ui/commands/subagentCommandHost.js';
+import { createExtensionsCommand } from '../ui/commands/extensionsCommand.js';
+import { bindExtensionsCommand } from '../ui/commands/extensionsCommandHost.js';
+import { createTodoCommand } from '../ui/commands/todoCommand.js';
+import { createHooksCommand } from '../ui/commands/hooksCommand.js';
+import { createTaskCommand } from '../ui/commands/tasksCommand.js';
+import { createModelCommand } from '../ui/commands/modelCommand.js';
+import { createSetCommand } from '../ui/commands/setCommand.js';
+import { createProviderCommand } from '../ui/commands/providerCommand.js';
+import { createBaseurlCommand } from '../ui/commands/baseurlCommand.js';
+import { createKeyCommand } from '../ui/commands/keyCommand.js';
+import { createKeyfileCommand } from '../ui/commands/keyfileCommand.js';
+import { createLogoutCommand } from '../ui/commands/logoutCommand.js';
+import {
+  createAuthCommand,
+  type AuthCommandOperations,
+} from '../ui/commands/authCommand.js';
+import type { QuotaCommandOperations } from '../ui/commands/quotaCommand.js';
+import { createQuotaCommand } from '../ui/commands/quotaCommand.js';
+import { createMcpAuthCommand } from '../ui/commands/mcpAuth.js';
+import { createMcpCommand } from '../ui/commands/mcpCommand.js';
+import { createToolkeyCommand } from '../ui/commands/toolkeyCommand.js';
+import { createToolkeyfileCommand } from '../ui/commands/toolkeyfileCommand.js';
+import type { BuiltinCommandOwners } from '../services/BuiltinCommandLoader.js';
+import type { SlashCommand } from '../ui/commands/types.js';
+import { createToolFormatCommand } from '../ui/commands/toolformatCommand.js';
+import { createProfileCommand } from '../ui/commands/profileCommand.js';
+import { createProfileSchemas } from '../ui/commands/profileSchemas.js';
+import { createChatOwnerCommand } from '../ui/commands/chatOwnerCommand.js';
+import { createContinueCommand } from '../ui/commands/continueCommand.js';
+import { createCopyCommand } from '../ui/commands/copyCommand.js';
+import { createCompressCommand } from '../ui/commands/compressCommand.js';
+import { createDumpcontextCommand } from '../ui/commands/dumpcontextCommand.js';
+import { createToolsCommand } from '../ui/commands/toolsCommand.js';
+import { createDirectoryCommand } from '../ui/commands/directoryCommand.js';
+import { createMemoryCommand } from '../ui/commands/memoryCommand.js';
+import { createImageCommand } from '../ui/commands/imageCommand.js';
+import { createBugCommand } from '../ui/commands/bugCommand.js';
+import { bindBugCommand } from '../ui/commands/bugCommandHost.js';
+import { createPoliciesCommand } from '../ui/commands/policiesCommand.js';
+import { bindMcpCommand } from '../ui/commands/mcpCommandHost.js';
+import {
+  bindCopyCommandClipboard,
+  bindCopyCommandHistoryRead,
+} from '../ui/commands/copyCommandHost.js';
+
+export function createUnconfiguredModelCommand(): SlashCommand {
+  return createModelCommand(
+    async () => {
+      throw new Error(
+        'Model selection is unavailable in this registry fixture',
+      );
+    },
+    async () => {
+      throw new Error('Recording is unavailable in this registry fixture');
+    },
+  );
+}
+
+export function createUnconfiguredToolFormatCommand(): SlashCommand {
+  return createToolFormatCommand(
+    async () => {
+      throw new Error(
+        'Tool-format reads are unavailable in this registry fixture',
+      );
+    },
+    async () => {
+      throw new Error(
+        'Tool-format writes are unavailable in this registry fixture',
+      );
+    },
+  );
+}
+
+export function createUnconfiguredSetCommand(): SlashCommand {
+  const unavailable = (): never => {
+    throw new Error('Set operations are unavailable in this registry fixture');
+  };
+  return createSetCommand({
+    getEphemeralSettings: unavailable,
+    setEphemeralSetting: unavailable,
+    getActiveModelParams: unavailable,
+    setActiveModelParam: unavailable,
+    clearActiveModelParam: unavailable,
+    isFuzzyFilteringEnabled: () => false,
+  });
+}
+
+export function createUnconfiguredProviderCommand(): SlashCommand {
+  const unavailable = (): never => {
+    throw new Error(
+      'Provider operations are unavailable in this registry fixture',
+    );
+  };
+  return createProviderCommand({
+    getActiveProviderName: unavailable,
+    getActiveModelName: unavailable,
+    switchProvider: unavailable,
+    recordProviderSwitch: unavailable,
+    resolveActiveProviderAliasConfig: unavailable,
+    writeProviderAlias: unavailable,
+    refreshProviderAliases: unavailable,
+  });
+}
+
+export function unavailableAuthControl(): AuthCommandOperations {
+  const unavailable = (): never => {
+    throw new Error('Auth operations are unavailable in this registry fixture');
+  };
+  return {
+    getInteractiveAuthSessions: unavailable,
+    cancelInteractiveAuth: unavailable,
+    getSupportedProviders: unavailable,
+    listBuckets: unavailable,
+    isOAuthEnabled: unavailable,
+    isAuthenticated: unavailable,
+    peekStoredToken: unavailable,
+    getHigherPriorityAuth: unavailable,
+    toggleOAuthEnabled: unavailable,
+    authenticate: unavailable,
+    activateNamedLoginBucket: unavailable,
+    logoutAllBuckets: unavailable,
+    logout: unavailable,
+    clearSessionBucket: unavailable,
+    getAuthStatusWithBuckets: unavailable,
+    setSessionBucket: unavailable,
+    getAuthStatus: unavailable,
+    clearBrowserProfileAssociation: unavailable,
+    setBrowserProfileAssociation: unavailable,
+    inspectAuthLock: unavailable,
+    forceRecoverAuthLock: unavailable,
+    recoverAuthLock: unavailable,
+    clearProviderClientCache: unavailable,
+  };
+}
+
+export function unavailableQuotaOAuthControl(): QuotaCommandOperations['oauthControl'] {
+  const unavailable = (): never => {
+    throw new Error(
+      'Quota operations are unavailable in this registry fixture',
+    );
+  };
+  return {
+    isAvailable: unavailable,
+    getAllCodexRateLimitResetCredits: unavailable,
+    hasCodexToken: unavailable,
+    listBuckets: unavailable,
+    readCodexBucketToken: unavailable,
+  };
+}
+
+export function createUnconfiguredCredentialCommands(): Pick<
+  BuiltinCommandOwners,
+  | 'keyCommand'
+  | 'keyfileCommand'
+  | 'baseurlCommand'
+  | 'logoutCommand'
+  | 'toolkeyCommand'
+  | 'toolkeyfileCommand'
+  | 'authCommand'
+  | 'quotaCommand'
+  | 'mcpCommand'
+> {
+  const unavailable = (): never => {
+    throw new Error(
+      'Credential operations are unavailable in this registry fixture',
+    );
+  };
+  return {
+    keyCommand: createKeyCommand({
+      providerKeys: unavailable,
+      listKeyCompletionNames: unavailable,
+      invalidateKeyCompletion: unavailable,
+      isInteractive: unavailable,
+      activeProviderName: unavailable,
+      updateActiveProviderApiKey: unavailable,
+      setEphemeralSetting: unavailable,
+      schedulePaymentModeCheck: unavailable,
+    }),
+    keyfileCommand: createKeyfileCommand({
+      activeProviderName: unavailable,
+      updateActiveProviderApiKey: unavailable,
+      setEphemeralSetting: unavailable,
+      rememberProviderKeyfile: unavailable,
+      forgetProviderKeyfile: unavailable,
+      schedulePaymentModeCheck: unavailable,
+    }),
+    baseurlCommand: createBaseurlCommand({
+      activeProviderName: unavailable,
+      updateBaseUrl: unavailable,
+    }),
+    logoutCommand: createLogoutCommand({ logout: unavailable }),
+    authCommand: createAuthCommand(unavailableAuthControl(), () => true),
+    quotaCommand: createQuotaCommand({
+      oauthControl: unavailableQuotaOAuthControl(),
+      fetch: unavailable,
+      baseUrlSetting: unavailable,
+      fetchQuotaLines: unavailable,
+    }),
+    mcpCommand: createUnconfiguredMcpCommand(unavailable),
+    toolkeyCommand: createToolkeyCommand({
+      getKey: unavailable,
+      saveKey: unavailable,
+      deleteKey: unavailable,
+    }),
+    toolkeyfileCommand: createToolkeyfileCommand({
+      getKeyfilePath: unavailable,
+      setKeyfilePath: unavailable,
+      clearKeyfilePath: unavailable,
+    }),
+  };
+}
+function createUnconfiguredProfileCommand() {
+  const unavailable = async (): Promise<never> => {
+    throw new Error('Profile command is unavailable');
+  };
+  return createProfileCommand({
+    schemas: createProfileSchemas(
+      {
+        listProfiles: async () => [],
+        getActiveProviderName: () => undefined,
+        listBuckets: async () => [],
+      },
+      () => true,
+    ),
+    saveModelProfile: unavailable,
+    saveLoadBalancerProfile: unavailable,
+    loadProfile: unavailable,
+    publishLoadedProfile: async () => {},
+    recordProviderSwitch: async () => {},
+    deleteProfile: unavailable,
+    listProfiles: async () => [],
+    setDefaultProfileName: async () => {},
+  });
+}
+
+export function createUnconfiguredChatCommand(): SlashCommand {
+  const unavailable = (): never => {
+    throw new Error('Chat operations are unavailable in this registry fixture');
+  };
+  return createChatOwnerCommand(
+    {
+      listCheckpoints: unavailable,
+      createCheckpoint: unavailable,
+      resume: unavailable,
+      deleteCheckpoint: unavailable,
+      renameCheckpoint: unavailable,
+      getHistory: unavailable,
+      clearHistory: unavailable,
+      restoreTurns: unavailable,
+      nameCurrentSession: unavailable,
+      getRecordingPath: unavailable,
+      getModel: unavailable,
+      getEmojiFilterMode: unavailable,
+    },
+    () => true,
+  );
+}
+
+function unconfiguredReadCommands() {
+  return {
+    docsCommand: createDocsCommand(() => 0),
+    helpCommand: createHelpCommand(() => 0),
+    quitCommand: createQuitCommand(() => ({
+      sessionStartTime: new Date(0),
+      metrics: createSessionMetrics(),
+    })),
+    debugCommand: createDebugCommand(
+      bindDebugCommand(ConfigurationManager.getInstance()),
+    ),
+    setupGithubCommand: createSetupGithubCommand({
+      isGitHubRepository: () => false,
+      getGitRepoRoot: () => {
+        throw new Error('Git repository unavailable');
+      },
+      getRepoInfo: () => {
+        throw new Error('Git repository unavailable');
+      },
+      getRelease: async () => {
+        throw new Error('Git repository unavailable');
+      },
+      proxy: undefined,
+    }),
+    diagnosticsCommand: createDiagnosticsCommand({
+      isConfigured: false,
+      readSnapshot: () => {
+        throw new Error('Diagnostics unavailable');
+      },
+      isOAuthAvailable: () => false,
+      readSessionBucket: () => undefined,
+      readFailoverBuckets: () => [],
+      readCurrentBucket: () => undefined,
+      readProviderName: () => undefined,
+      readLoadBalancerStats: () => undefined,
+      readTokenAccounting: () => undefined,
+      readSessionTokens: () => {
+        throw new Error('Diagnostics unavailable');
+      },
+      readStaticInfo: () => {
+        throw new Error('Diagnostics unavailable');
+      },
+      listTools: () => [],
+      appendTokens: async () => {},
+    }),
+  };
+}
+
+export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
+  return {
+    ...unconfiguredReadCommands(),
+    ideCommand: null,
+    permissionsCommand: createPermissionsCommand(
+      () => process.cwd(),
+      bindPermissionCommit(null),
+    ),
+    chatCommand: createUnconfiguredChatCommand(),
+    compressCommand: createCompressCommand(async () => {
+      throw new Error('Chat instance not available for compression.');
+    }),
+    restoreCommand: null,
+    dumpcontextCommand: createDumpcontextCommand({
+      dumpDirectory: '',
+      readMode: () => undefined,
+      writeMode: () => {
+        throw new Error('Context dumping is unavailable.');
+      },
+      dumpNow: async () => ({
+        type: 'message',
+        messageType: 'error',
+        content: 'Context dumping is unavailable.',
+      }),
+    }),
+    copyCommand: createCopyCommand(
+      bindCopyCommandHistoryRead(
+        () => false,
+        async () => [],
+      ),
+      bindCopyCommandClipboard(),
+    ),
+    toolsCommand: createToolsCommand(null, () => {}),
+    ...unconfiguredWorkspaceCommands(),
+    ...unconfiguredResourceCommands(),
+    ...unconfiguredPresentationCommands(),
+    imageCommand: createImageCommand({
+      workspaceRoot: undefined,
+      runImageOperation: undefined,
+      addItem: () => 0,
+    }),
+    bugCommand: createBugCommand(
+      bindBugCommand(
+        null,
+        () => undefined,
+        () => 0,
+        () => '',
+      ),
+    ),
+    policiesCommand: createPoliciesCommand({ getPolicyInfo: () => null }),
+    continueCommand: createContinueCommand({
+      isInteractive: () => false,
+      listContinueTargets: async () => [],
+      exportSession: async () => {
+        throw new Error(
+          'Session export is unavailable in this registry fixture',
+        );
+      },
+      validateSessionPackage: async () => {
+        throw new Error(
+          'Package import is unavailable in this registry fixture',
+        );
+      },
+    }),
+    modelCommand: createUnconfiguredModelCommand(),
+    toolFormatCommand: createUnconfiguredToolFormatCommand(),
+    setCommand: createUnconfiguredSetCommand(),
+    providerCommand: createUnconfiguredProviderCommand(),
+    profileCommand: createUnconfiguredProfileCommand(),
+    ...createUnconfiguredCredentialCommands(),
+  };
+}
+
+function unconfiguredPresentationCommands() {
+  return {
+    statsCommand: createStatsCommand({
+      readStartTime: () => undefined,
+      readQuota: async () => [],
+      isOAuthAvailable: () => false,
+      discoverBuckets: async () => [],
+      addItem: () => 0,
+    }),
+    loggingCommand: createLoggingCommand({
+      isConfigured: false,
+      readTelemetry: () => ({}),
+      writeTelemetry: () => {},
+      readRuntimeTelemetry: () => ({}),
+      updateRuntimeTelemetry: async () => {},
+      getConversationLogPath: () => '',
+      getRedactionConfig: () => ({
+        redactApiKeys: true,
+        redactCredentials: true,
+        redactFilePaths: false,
+        redactUrls: false,
+        redactEmails: false,
+        redactPersonalInfo: false,
+      }),
+      addItem: () => 0,
+    }),
+    aboutCommand: createAboutCommand(
+      async () => ({
+        modelVersion: 'Unknown',
+        provider: 'Unknown',
+        baseURL: '',
+        ideClient: '',
+        keyfile: '',
+      }),
+      () => 0,
+    ),
+    clearCommand: createClearCommand(
+      null,
+      () => {},
+      () => 0,
+      () => {},
+      () => {},
+    ),
+    initCommand: createInitCommand(undefined, () => 0),
+    vimCommand: createVimCommand(async () => false),
+    uiProfileCommand: createUiProfileCommand(() => {}),
+  };
+}
+
+function unconfiguredWorkspaceCommands() {
+  return {
+    subagentCommand: createSubagentCommand(
+      bindSubagentCommand(
+        undefined,
+        undefined,
+        async () => [],
+        () => true,
+        async () => {
+          throw new Error('Agent unavailable');
+        },
+        false,
+        () => 0,
+      ),
+    ),
+    extensionsCommand: createExtensionsCommand(
+      bindExtensionsCommand(
+        null,
+        () => 0,
+        () => {},
+        () => {},
+      ),
+    ),
+    todoCommand: createTodoCommand(null, () => 0),
+    hooksCommand: createHooksCommand(
+      {
+        listHooks: () => [],
+        isConfigured: false,
+        isAvailable: false,
+        enable: () => {
+          throw new Error('Hook owner unavailable');
+        },
+        disable: () => {
+          throw new Error('Hook owner unavailable');
+        },
+        setDisabledHooks: () => {
+          throw new Error('Hook owner unavailable');
+        },
+      },
+      () => 0,
+    ),
+    taskCommand: createTaskCommand(null, () => 0),
+    directoryCommand: createDirectoryCommand({
+      isConfigured: false,
+      addDirectory: () => {
+        throw new Error('Directory runtime is unavailable');
+      },
+      directories: () => [],
+      getFolderTrust: () => false,
+      isRestrictiveSandbox: () => false,
+      refreshMemory: async () => ({ memoryContent: '', fileCount: 0 }),
+      shouldLoadMemoryFromIncludeDirectories: () => false,
+      addItem: () => {},
+      setMemoryFileCount: () => {},
+      addDirectoryContext: async () => {},
+      recordDirectoriesChanged: () => {},
+    }),
+    memoryCommand: createMemoryCommand({
+      isConfigured: false,
+      getUserMemory: () => '',
+      getLlxprtMdFileCount: () => 0,
+      getLlxprtMdFilePaths: () => [],
+      refreshMemory: async () => ({ memoryContent: '', fileCount: 0 }),
+      updateSystemInstruction: async () => {},
+      addItem: () => 0,
+      setMemoryFileCount: () => {},
+      saveCoreMemory: async () => {
+        throw new Error('Core memory storage is unavailable.');
+      },
+    }),
+  };
+}
+
+function unconfiguredResourceCommands() {
+  return {
+    perfCommand: createPerfCommand({ readHistory: () => null }),
+    skillsCommand: createSkillsCommand({
+      isConfigured: false,
+      isAvailable: false,
+      list: () => [],
+      find: () => undefined,
+      isAdminEnabled: () => false,
+      enable: () => {
+        throw new Error('Skill owner unavailable');
+      },
+      disable: () => {
+        throw new Error('Skill owner unavailable');
+      },
+      reload: async () => {
+        throw new Error('Skill owner unavailable');
+      },
+      addItem: () => 0,
+      setPendingItem: () => {},
+    }),
+  };
+}
+
+function unavailableSessionAgent(): never {
+  throw new Error('Session agent is unavailable');
+}
+
+function createUnconfiguredMcpCommand(unavailable: () => never): SlashCommand {
+  return createMcpCommand(
+    createMcpAuthCommand(
+      {
+        isConfigured: () => false,
+        configuredServers: () => [],
+        authenticationRequiredServers: async () => [],
+        authenticate: unavailable,
+      },
+      () => true,
+      unavailable,
+      unavailable,
+    ),
+    bindMcpCommand(
+      false,
+      null,
+      () => 0,
+      () => {},
+      unavailableSessionAgent,
+      unavailableSessionAgent,
+    ),
+  );
+}
+
+export function createUnconfiguredCredentialRegistry(): CredentialCommands {
+  const commands = createUnconfiguredBuiltinOwners();
+  return {
+    modelCommand: commands.modelCommand,
+    toolFormatCommand: commands.toolFormatCommand,
+    providerCommand: commands.providerCommand,
+    baseurlCommand: commands.baseurlCommand,
+    logoutCommand: commands.logoutCommand,
+    keyfileCommand: commands.keyfileCommand,
+    keyCommand: commands.keyCommand,
+    toolkeyCommand: commands.toolkeyCommand,
+    toolkeyfileCommand: commands.toolkeyfileCommand,
+    authCommand: commands.authCommand,
+    quotaCommand: commands.quotaCommand,
+    mcpCommand: commands.mcpCommand,
+    profileCommand: commands.profileCommand,
+  };
+}
+
+export function createUnconfiguredHistoryReaders(): RegisteredHistoryReads {
+  return {
+    compressHistory: null,
+    readRawHistory: () => null,
+    isHistoryInitialized: () => false,
+    readHistory: async () => [],
+    replaceHistory: async () => {
+      throw new Error('Session agent is unavailable');
+    },
+    readDumpHistory: () => null,
+  };
+}
+
+/** Slash-command ports for a registry fixture with no CLI runtime behind it. */
+export function createUnconfiguredSlashCommandPorts(): SlashCommandProcessorPorts {
+  return {
+    debug: bindDebugCommand(ConfigurationManager.getInstance()),
+    extensions: null,
+    hosts: null,
+    trust: null,
+    logging: null,
+    skills: undefined,
+    emojiFilter: null,
+    commandLogging: null,
+    about: null,
+    diagnostics: null,
+    history: null,
+    readScreenReader: () => false,
+    readTargetDir: () => undefined,
+    resumeSession: null,
+  };
+}

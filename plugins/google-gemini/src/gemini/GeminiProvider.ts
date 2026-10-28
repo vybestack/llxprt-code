@@ -19,16 +19,19 @@ import type {
   GenerateContentParameters,
   GenerateContentResponse,
 } from './geminiWireTypes.js';
-import type { GeminiApiClientOptions } from './geminiWireTypes.js';
+import type {
+  GeminiApiClientOptions,
+  GoogleCredentialEnvironment,
+} from './geminiWireTypes.js';
+import { join } from 'node:path';
 import { createGeminiApiClient } from './geminiApiClientFactory.js';
 
 /** The factory shape {@link GeminiProvider} depends on. */
 export type CreateGeminiApiClient = typeof createGeminiApiClient;
 import {
-  getSettingOrEnv,
+  getNonEmptySetting,
   getVertexAIAuthConfig,
   hasVertexAICredentials,
-  setupVertexAIAuth,
   type GeminiAuthMode,
   type VertexAIAuthConfig,
 } from './geminiAuth.js';
@@ -69,6 +72,41 @@ function hasHeaderName(headers: Record<string, string>, name: string): boolean {
   return Object.keys(headers).some((key) => key.toLowerCase() === target);
 }
 
+function nonEmpty(value: string | undefined): string | undefined {
+  return value === undefined || value === '' ? undefined : value;
+}
+
+/**
+ * Captures the environment facts the Google credential source depends on, the
+ * same variables the Google auth library reads for its own discovery.
+ */
+export function buildGoogleCredentialEnvironment(
+  credentialsFile: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): GoogleCredentialEnvironment {
+  const configRoot =
+    platform === 'win32'
+      ? nonEmpty(env['APPDATA'])
+      : nonEmpty(env['HOME']) && join(env['HOME'] as string, '.config');
+  const wellKnownFile = configRoot
+    ? join(configRoot, 'gcloud', 'application_default_credentials.json')
+    : undefined;
+  const entries: Array<
+    [keyof GoogleCredentialEnvironment, string | undefined]
+  > = [
+    ['credentialsFile', credentialsFile],
+    ['wellKnownFile', wellKnownFile],
+    [
+      'metadataHost',
+      nonEmpty(env['GCE_METADATA_IP']) ?? nonEmpty(env['GCE_METADATA_HOST']),
+    ],
+    ['metadataDetection', nonEmpty(env['METADATA_SERVER_DETECTION'])],
+    ['quotaProject', nonEmpty(env['GOOGLE_CLOUD_QUOTA_PROJECT'])],
+  ];
+  return Object.fromEntries(entries.filter(([, value]) => value !== undefined));
+}
+
 export class GeminiProvider extends BaseProvider {
   /**
    * How this provider obtains its API client.
@@ -97,6 +135,17 @@ export class GeminiProvider extends BaseProvider {
 
     super(baseConfig, config);
     this.createClient = createClient;
+  }
+
+  private captureGoogleAuthPolicy(): Readonly<Record<string, unknown>> {
+    return {
+      ...this.providerConfig?.googleAuthDefaults,
+      ...Object.fromEntries(
+        Object.entries(this.captureOwnerPolicy()).filter(
+          ([, value]) => value !== undefined,
+        ),
+      ),
+    };
   }
 
   private getLogger(): DebugLogger {
@@ -146,8 +195,7 @@ export class GeminiProvider extends BaseProvider {
       return { authMode: 'gemini-api-key', token: standardAuth };
     }
 
-    if (hasVertexAICredentials(this.captureOwnerPolicy())) {
-      setupVertexAIAuth();
+    if (hasVertexAICredentials(this.captureGoogleAuthPolicy())) {
       return { authMode: 'vertex-ai', token: 'USE_VERTEX_AI' };
     }
 
@@ -174,6 +222,7 @@ export class GeminiProvider extends BaseProvider {
       'none',
       () => Promise.resolve(''),
       () => this.getBaseURL(),
+      this.requestFetch,
     );
     let authMode: GeminiAuthMode;
     try {
@@ -187,6 +236,7 @@ export class GeminiProvider extends BaseProvider {
       authMode,
       () => this.getAuthToken(),
       () => this.getBaseURL(),
+      this.requestFetch,
     );
   }
 
@@ -261,10 +311,10 @@ export class GeminiProvider extends BaseProvider {
   }
 
   override isPaidMode(): boolean {
-    const settingsService = this.captureOwnerPolicy();
+    const settingsService = this.captureGoogleAuthPolicy();
     return (
       !!process.env.GEMINI_API_KEY ||
-      !!getSettingOrEnv(settingsService, 'GOOGLE_API_KEY') ||
+      !!getNonEmptySetting(settingsService, 'GOOGLE_API_KEY') ||
       hasVertexAICredentials(settingsService)
     );
   }
@@ -275,7 +325,6 @@ export class GeminiProvider extends BaseProvider {
 
   override clearAuth(): void {
     super.clearAuth?.();
-    delete process.env.GEMINI_API_KEY;
   }
 
   override clearAuthCache(): void {
@@ -287,7 +336,7 @@ export class GeminiProvider extends BaseProvider {
     settingsService: Readonly<Record<string, unknown>> | undefined,
   ): boolean {
     return Boolean(
-      getSettingOrEnv(settingsService, 'GOOGLE_APPLICATION_CREDENTIALS'),
+      getNonEmptySetting(settingsService, 'GOOGLE_APPLICATION_CREDENTIALS'),
     );
   }
 
@@ -315,9 +364,9 @@ export class GeminiProvider extends BaseProvider {
     authMode: GeminiAuthMode,
     httpOptions: ReturnType<typeof this.createHttpOptions>,
     baseURL?: string,
-  ): GeminiApiClientOptions {
+  ): Omit<GeminiApiClientOptions, 'fetch'> {
     const isVertex = authMode === 'vertex-ai';
-    const settingsService = this.captureOwnerPolicy();
+    const settingsService = this.captureGoogleAuthPolicy();
     const vertexConfig = getVertexAIAuthConfig(settingsService);
     if (
       isVertex &&
@@ -331,8 +380,24 @@ export class GeminiProvider extends BaseProvider {
     return {
       apiKey: authToken,
       vertexai: isVertex,
+      ...(isVertex
+        ? {
+            credentialEnvironment: buildGoogleCredentialEnvironment(
+              getNonEmptySetting(
+                settingsService,
+                'GOOGLE_APPLICATION_CREDENTIALS',
+              ),
+            ),
+          }
+        : {}),
       ...this.buildVertexAIOptions(isVertex, vertexConfig),
-      httpOptions: baseURL ? { ...httpOptions, baseUrl: baseURL } : httpOptions,
+      httpOptions:
+        baseURL &&
+        (!isVertex ||
+          new URL(baseURL).origin !==
+            'https://generativelanguage.googleapis.com')
+          ? { ...httpOptions, baseUrl: baseURL }
+          : httpOptions,
     };
   }
 
@@ -446,14 +511,15 @@ export class GeminiProvider extends BaseProvider {
       params: GenerateContentParameters,
     ) => Promise<AsyncIterable<GenerateContentResponse>>;
   }> {
-    const client = await this.createClient(
-      this.buildGoogleGenAIOptions(
+    const client = await this.createClient({
+      ...this.buildGoogleGenAIOptions(
         setup.authToken,
         setup.authMode,
         setup.httpOptions,
         setup.baseURL,
       ),
-    );
+      fetch: setup.fetch,
+    });
     return client.models;
   }
 

@@ -1,3 +1,5 @@
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
@@ -79,17 +81,7 @@ void vi.mock('./nonInteractiveToolExecutor.js', () => ({
   ...realNonInteractiveToolExecutorModule,
   executeToolCall: toolExecutorMock,
 }));
-const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual4,
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      getConnectionStatus: vi.fn(),
-      initialize: vi.fn(),
-      shutdown: vi.fn(),
-    }),
-  },
-}));
+
 const actual5 = {
   ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
 };
@@ -100,7 +92,11 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 
 import {
   createCompletedToolCallResponse,
-  createMockConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
+  createSubagentConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   createMockStream,
   defaultModelConfig,
   defaultRunConfig,
@@ -109,6 +105,8 @@ import {
 } from './__tests__/subagent-test-helpers.js';
 
 describe('subagent.ts', () => {
+  const retainSubagentCleanup = installSubagentCleanup();
+
   let mockSendMessageStream: Mock<
     (
       ...args: Array<{
@@ -124,19 +122,33 @@ describe('subagent.ts', () => {
     const promptConfig: PromptConfig = { systemPrompt: 'Test prompt' };
 
     it('should create a SubAgentScope successfully with minimal config', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
       );
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        overrides,
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
       expect(scope).toBeInstanceOf(SubAgentScope);
     });
@@ -153,9 +165,23 @@ describe('subagent.ts', () => {
         }),
       };
 
-      const { config, mcpRuntime } = await createMockConfig({
-        getTool: vi.fn().mockReturnValue(mockTool as never),
-      });
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+        {
+          getTool: vi.fn().mockReturnValue(mockTool as never),
+        },
+      );
       const runtimeBundle = createStatelessRuntimeBundle({
         toolRegistry: mcpRuntime.toolSelection,
         toolsView: {
@@ -177,15 +203,16 @@ describe('subagent.ts', () => {
 
       const toolConfig: ToolConfig = { tools: ['risky_tool'] };
 
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        toolConfig,
-        undefined,
-        overrides,
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       expect(scope).toBeInstanceOf(SubAgentScope);
@@ -199,9 +226,23 @@ describe('subagent.ts', () => {
           shouldConfirmExecute: vi.fn().mockResolvedValue(null),
         }),
       };
-      const { config, mcpRuntime } = await createMockConfig({
-        getTool: vi.fn().mockReturnValue(mockTool as never),
-      });
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+        {
+          getTool: vi.fn().mockReturnValue(mockTool as never),
+        },
+      );
       const runtimeBundle = createStatelessRuntimeBundle({
         toolRegistry: mcpRuntime.toolSelection,
         toolsView: {
@@ -223,15 +264,16 @@ describe('subagent.ts', () => {
 
       const toolConfig: ToolConfig = { tools: ['safe_tool'] };
 
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        toolConfig,
-        undefined,
-        overrides,
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       expect(scope).toBeInstanceOf(SubAgentScope);
@@ -257,9 +299,23 @@ describe('subagent.ts', () => {
         build: vi.fn(),
       };
 
-      const { config, mcpRuntime } = await createMockConfig({
-        getTool: vi.fn().mockReturnValue(mockToolWithParams),
-      });
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+        {
+          getTool: vi.fn().mockReturnValue(mockToolWithParams),
+        },
+      );
       const runtimeBundle = createStatelessRuntimeBundle({
         toolRegistry: mcpRuntime.toolSelection,
         toolsView: {
@@ -287,15 +343,16 @@ describe('subagent.ts', () => {
       const toolConfig: ToolConfig = { tools: ['tool_with_params'] };
 
       // The creation should succeed without throwing
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        toolConfig,
-        undefined,
-        overrides,
+      const scope = await createSubagentScope(
+        {
+          name: 'test-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       expect(scope).toBeInstanceOf(SubAgentScope);
@@ -315,7 +372,7 @@ describe('subagent.ts', () => {
       const callArgs = (
         ChatSession as unknown as Mock<(...args: never[]) => unknown>
       ).mock.calls[callIndex];
-      const generationConfig = callArgs[2] as ChatSessionConfig | undefined;
+      const generationConfig = callArgs[9] as ChatSessionConfig | undefined;
       expect(generationConfig).toBeDefined();
       if (generationConfig === undefined)
         throw new Error('generationConfig is undefined');
@@ -358,7 +415,20 @@ describe('subagent.ts', () => {
     });
 
     it('does not access foreground Config tool registry when runtime bundle provided', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const runtimeToolsView: ToolRegistryView = {
         listToolNames: vi.fn(() => ['stateless.tool']),
         getToolMetadata: vi.fn(() => ({
@@ -387,15 +457,16 @@ describe('subagent.ts', () => {
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-      const scope = await SubAgentScope.create(
-        'stateless-agent',
-        config,
-        { systemPrompt: 'Runtime only' },
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        overrides,
+      const scope = await createSubagentScope(
+        {
+          name: 'stateless-agent',
+          prompt: { systemPrompt: 'Runtime only' },
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -420,15 +491,29 @@ describe('subagent.ts', () => {
 
     const observeBuildsToolDeclarationsFromRuntimeToolViewMetadata =
       async () => {
-        const { config, mcpRuntime } = await createMockConfig({
-          getFunctionDeclarationsFiltered: vi.fn().mockReturnValue([
-            {
-              name: 'stateless.tool',
-              description: 'Foreground registry description',
-              parameters: { type: 'object', properties: {} },
-            },
-          ]),
-        });
+        const configSettings = seedSubagentSettings();
+        const config = createSubagentConfig(
+          configSettings,
+          retainSubagentCleanup,
+        );
+        await acquireSubagentSettings(
+          config,
+          configSettings,
+          retainSubagentCleanup,
+        );
+        const mcpRuntime = await acquireSubagentWorkspace(
+          config,
+          retainSubagentCleanup,
+          {
+            getFunctionDeclarationsFiltered: vi.fn().mockReturnValue([
+              {
+                name: 'stateless.tool',
+                description: 'Foreground registry description',
+                parameters: { type: 'object', properties: {} },
+              },
+            ]),
+          },
+        );
 
         const runtimeToolsView: ToolRegistryView = {
           listToolNames: vi.fn(() => ['stateless.tool']),
@@ -450,17 +535,21 @@ describe('subagent.ts', () => {
 
         mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-        const scope = await SubAgentScope.create(
-          'stateless-agent',
-          config,
-          { systemPrompt: 'Use runtime tools' },
-          defaultModelConfig,
-          defaultRunConfig,
-          undefined,
-          undefined,
-          createRuntimeOverrides(mcpRuntime.workspaceFilesystem.paths, {
-            runtimeBundle,
-          }).overrides,
+        const scope = await createSubagentScope(
+          {
+            name: 'stateless-agent',
+            prompt: { systemPrompt: 'Use runtime tools' },
+            model: defaultModelConfig,
+            run: defaultRunConfig,
+            toolConfig: undefined,
+            outputConfig: undefined,
+          },
+          ...scopeInputs(
+            config,
+            createRuntimeOverrides(mcpRuntime.workspaceFilesystem.paths, {
+              runtimeBundle,
+            }).overrides,
+          ),
         );
 
         await scope.runNonInteractive(new ContextState());
@@ -481,7 +570,20 @@ describe('subagent.ts', () => {
       };
 
     it('prefers injected environment context loader over foreground Config', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
 
       (
         getEnvironmentContext as Mock<typeof getEnvironmentContext>
@@ -503,15 +605,16 @@ describe('subagent.ts', () => {
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-      const scope = await SubAgentScope.create(
-        'stateless-agent',
-        config,
-        { systemPrompt: 'Stateless env' },
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        overrides,
+      const scope = await createSubagentScope(
+        {
+          name: 'stateless-agent',
+          prompt: { systemPrompt: 'Stateless env' },
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -551,12 +654,27 @@ describe('subagent.ts', () => {
             };
           },
         });
-        const { config, toolRegistry, mcpRuntime } = await createMockConfig({
-          getTool: (name) =>
-            [readTool, writeTool].find((tool) => tool.name === name),
-          getEnabledTools: () => [readTool, writeTool],
-          getAllTools: () => [readTool, writeTool],
-        });
+        const configSettings = seedSubagentSettings();
+        const config = createSubagentConfig(
+          configSettings,
+          retainSubagentCleanup,
+        );
+        await acquireSubagentSettings(
+          config,
+          configSettings,
+          retainSubagentCleanup,
+        );
+        const mcpRuntime = await acquireSubagentWorkspace(
+          config,
+          retainSubagentCleanup,
+          {
+            getTool: (name) =>
+              [readTool, writeTool].find((tool) => tool.name === name),
+            getEnabledTools: () => [readTool, writeTool],
+            getAllTools: () => [readTool, writeTool],
+          },
+        );
+        const toolRegistry = mcpRuntime.toolSelection;
         mcpRuntime.policyOwner.session.confirmation.addRule({
           toolName: '*',
           decision: PolicyDecision.ALLOW,
@@ -589,21 +707,22 @@ describe('subagent.ts', () => {
             'stop',
           ]),
         );
-        const scope = await SubAgentScope.create(
-          'whitelisted-child',
-          config,
-          { systemPrompt: 'Only read.' },
-          defaultModelConfig,
-          defaultRunConfig,
-          { tools: ['read_file'] },
-          undefined,
+        const scope = await createSubagentScope(
           {
+            name: 'whitelisted-child',
+            prompt: { systemPrompt: 'Only read.' },
+            model: defaultModelConfig,
+            run: defaultRunConfig,
+            toolConfig: { tools: ['read_file'] },
+            outputConfig: undefined,
+          },
+          ...scopeInputs(config, {
             ...createRuntimeOverrides(mcpRuntime.workspaceFilesystem.paths, {
               runtimeBundle,
               toolRegistry,
             }).overrides,
             messageBus,
-          },
+          }),
         );
         try {
           if (mode === 'interactive') {
@@ -634,22 +753,36 @@ describe('subagent.ts', () => {
     );
 
     it('never passes foreground Config into executeToolCall', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const runtimeBundle = createStatelessRuntimeBundle();
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
         { runtimeBundle },
       );
 
-      const scope = await SubAgentScope.create(
-        'stateless-agent',
-        config,
-        { systemPrompt: 'Tool execution' },
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        overrides,
+      const scope = await createSubagentScope(
+        {
+          name: 'stateless-agent',
+          prompt: { systemPrompt: 'Tool execution' },
+          model: defaultModelConfig,
+          run: defaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       mockSendMessageStream.mockImplementation(

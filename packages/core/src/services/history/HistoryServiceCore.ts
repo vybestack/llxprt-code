@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { validateHistoryBatch } from './history-batch-validation.js';
 import { finalizeMutationEffects } from './historyMutationFailure.js';
 import { retainContentOrigins } from './historyOrigin.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
@@ -110,6 +111,7 @@ export interface HistoryMediaOwner {
 export interface HistoryBatchPublication {
   readonly contents: readonly IContent[];
   readonly origin?: object;
+  readonly recordingCompletion?: 'appended';
   readonly nextHistory: readonly IContent[];
   readonly addedTokens: number;
   readonly totalTokens: number;
@@ -117,6 +119,7 @@ export interface HistoryBatchPublication {
 
 export interface HistoryBatchOptions {
   readonly origin?: object;
+  readonly recordingCompletion?: 'appended';
   readonly afterPublication?: () => void | Promise<void>;
   readonly adoptedOwners?: readonly HistoryOwnedMediaReservation[];
 }
@@ -698,7 +701,7 @@ export abstract class HistoryServiceCore
   ): Promise<void> {
     const batch = [...contents];
     return this.enqueueAsynchronousHistoryMutation(async () => {
-      this.validateBatch(batch);
+      validateHistoryBatch(batch);
       if (batch.length === 0) return;
       await this.waitForTokenUpdates();
       const addedTokens = await this.estimateTokensForContents(
@@ -721,7 +724,7 @@ export abstract class HistoryServiceCore
   ): Promise<void> {
     const replacement = [...contents];
     return this.enqueueAsynchronousHistoryMutation(async () => {
-      this.validateBatch(replacement);
+      validateHistoryBatch(replacement);
       await this.waitForTokenUpdates();
       const replacementTokens = await this.estimateTokensForContents(
         replacement,
@@ -745,7 +748,7 @@ export abstract class HistoryServiceCore
   ): Promise<void> {
     return this.enqueueAsynchronousHistoryMutation(async () => {
       const replacement = [...(await transform([...this.history]))];
-      this.validateBatch(replacement);
+      validateHistoryBatch(replacement);
       await this.waitForTokenUpdates();
       const replacementTokens = await this.estimateTokensForContents(
         replacement,
@@ -850,19 +853,6 @@ export abstract class HistoryServiceCore
     });
   }
 
-  private validateBatch(contents: readonly IContent[]): void {
-    for (const [index, content] of contents.entries()) {
-      const validSpeaker = ['human', 'ai', 'tool'].includes(content.speaker);
-      const validBlocks =
-        Array.isArray(content.blocks) && content.blocks.length > 0;
-      if (!validSpeaker || !validBlocks) {
-        throw new Error(
-          `History batch entry ${index} is invalid: ${validSpeaker ? 'content has no blocks' : 'speaker is invalid'}`,
-        );
-      }
-    }
-  }
-
   private stampHistory(contents: readonly IContent[]): {
     readonly state: ChronologyState;
     readonly entries: readonly ChronologyRollbackEntry[];
@@ -954,6 +944,7 @@ export abstract class HistoryServiceCore
         : {
             contents: input.publishedContents,
             origin: input.options.origin,
+            recordingCompletion: input.options.recordingCompletion,
             nextHistory,
             addedTokens,
             totalTokens: this.baseTokenOffset + input.nextHistoryTokens,

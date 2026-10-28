@@ -12,7 +12,7 @@ import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runti
 import type { ProviderMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import { readOpenAIMediaSupport } from './OpenAIPromptProjectionPreparation.js';
 import { resolveKimiProviderFileRequestPolicy } from '../kimi/kimiProviderFilePolicy.js';
-import { ProviderFileLifecycle } from '../providerFilePolicy.js';
+import type { ProviderFileLifecycle } from '../providerFilePolicy.js';
 import { kimiFileUploadCache } from './kimiFileUploadCache.js';
 
 export async function prepareKimiProviderFiles(
@@ -23,7 +23,7 @@ export async function prepareKimiProviderFiles(
   providerName: string,
   mediaTransportCapabilities: ProviderMediaTransportCapabilities,
   fileBindings: ProviderFileBindingStore | undefined,
-  fileLifecycle: object | undefined,
+  fileLifecycle: ProviderFileLifecycle | undefined,
   workspaceDirectory: string | undefined,
 ): Promise<NormalizedGenerateChatOptions> {
   const requestPolicy = resolveKimiProviderFileRequestPolicy(
@@ -39,7 +39,7 @@ export async function prepareKimiProviderFiles(
   if (requestPolicy === undefined) return options;
 
   const lifecycle = fileLifecycle;
-  if (!(lifecycle instanceof ProviderFileLifecycle)) {
+  if (lifecycle === undefined) {
     throw new Error(
       `Kimi provider files require an owner-bound lifecycle for runtime ${options.invocation.runtimeId}`,
     );

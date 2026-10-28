@@ -51,6 +51,11 @@ export class AgentExecutionCoordinator implements SchedulerBoundaryPort {
     }
   }
 
+  assertIdle(): void {
+    this.assertSettingsAdmission();
+    if (this.isBusy()) throw new AgentBusyError();
+  }
+
   admit(run: ActiveRun): void {
     if (this.disposed) throw new Error('Agent is closed');
     if (this.isBusy()) throw new AgentBusyError();

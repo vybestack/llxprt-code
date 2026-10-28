@@ -81,7 +81,14 @@ describe('linkBunRuntime', () => {
     expect(result.bunExe).toBe(bunExe);
     expect(readFileSync(bunExe, 'utf8')).toBe('avx2 binary');
     expect(readFileSync(bunxExe, 'utf8')).toBe('avx2 binary');
-    expect(statSync(bunExe).mode & 0o111).not.toBe(0);
+    const linked = statSync(bunExe);
+    expect(linked.isFile()).toBe(true);
+    expect(linked.size).toBe(Buffer.byteLength('avx2 binary'));
+    // Windows has no POSIX execute bits; the fixture payload is text, so the
+    // content and size assertions above are its whole contract there.
+    if (process.platform !== 'win32') {
+      expect(linked.mode & 0o111).not.toBe(0);
+    }
   });
 
   it('falls back to the baseline variant on a host without AVX2', () => {

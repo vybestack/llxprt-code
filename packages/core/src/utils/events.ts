@@ -64,6 +64,10 @@ export interface McpClientUpdatePayload {
  * Payload for the 'model-profile-changed' event.
  * Carries enough data for UI footer updates and inline chat notifications.
  */
+export type SubscribeModelChanges = (
+  listener: (profile?: ModelProfileInfoPayload) => void,
+) => () => void;
+
 export interface ModelProfileInfoPayload {
   /** The active model name. */
   model: string;
@@ -299,25 +303,10 @@ export class CoreEventEmitter extends EventEmitter {
   }
 
   /**
-   * Emits a model-changed event when the model is updated.
-   */
-  emitModelChanged(model: string): void {
-    this.emit(CoreEvent.ModelChanged, model);
-  }
-
-  /**
-   * Emits a model-profile-changed event carrying model, provider, profile,
-   * and display label data for event-driven UI/footer updates.
-   */
-  emitModelProfileChanged(payload: ModelProfileInfoPayload): void {
-    this.emit(CoreEvent.ModelProfileChanged, payload);
-  }
-
-  /**
    * Notifies subscribers (e.g. the footer) that a load-balancer profile has
    * selected a (new) sub-profile, so profile-qualified identity can be
    * recomputed. This is a UI-refresh trigger and is intentionally distinct
-   * from {@link emitModelChanged}, which signals an actual model switch.
+   * from a session model change, which signals an actual model switch.
    */
   emitLoadBalancerSelectionChanged(
     payload: LoadBalancerSelectionPayload,

@@ -39,9 +39,16 @@ const defaultRuntime: RuntimeStub = {
 // not capture the value at registration time — it reads through the `let` binding),
 // letting each test plug in a different fake runtime API.
 let currentRuntime: RuntimeStub = defaultRuntime;
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => currentRuntime,
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => currentRuntime;
+    return { useRuntimeApi: useSelectedTestRuntime };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 void vi.mock('../contexts/OAuthControlContext.js', () => ({
   useOAuthControl: () => ({ authenticate: async () => {} }),
 }));
@@ -53,6 +60,41 @@ import {
 } from '../../config/welcomeConfig.js';
 
 const agent = createFakeAgent([]);
+
+function isWelcomeModel(value: unknown): value is { id: string; name: string } {
+  if (typeof value !== 'object' || value === null) return false;
+  if (!('id' in value) || typeof value.id !== 'string') return false;
+  return 'name' in value && typeof value.name === 'string';
+}
+const welcomeBindings = new WeakMap<
+  RuntimeStub,
+  ReturnType<typeof bindWelcomeOperations>
+>();
+function bindWelcomeOperations(runtime: RuntimeStub) {
+  return {
+    listProviders: runtime.listProviders,
+    listAvailableModels: async (provider?: string) =>
+      (await runtime.listAvailableModels(provider)).filter(isWelcomeModel),
+    setActiveModel: runtime.setActiveModel,
+    readProviderStatus: runtime.providerStatus,
+    listSavedProfiles: runtime.listSavedProfiles,
+    saveProfileSnapshot: runtime.saveProfileSnapshot,
+    setDefaultProfileName: runtime.setDefaultProfileName,
+    loadProfileByName: runtime.loadProfileByName,
+    switchProviderAfterAuth: (provider: string) =>
+      agent.setProvider(provider, undefined, { autoOAuth: false }),
+    updateActiveProviderApiKey: async () => ({ message: '', providerName: '' }),
+    authenticate: async () => {},
+  };
+}
+function welcomeOperations(runtime: RuntimeStub) {
+  let operations = welcomeBindings.get(runtime);
+  if (!operations) {
+    operations = bindWelcomeOperations(runtime);
+    welcomeBindings.set(runtime, operations);
+  }
+  return operations;
+}
 
 interface PersistedWelcomeConfig {
   welcomeCompleted: boolean;
@@ -181,7 +223,7 @@ describe('useWelcomeOnboarding', () => {
         useWelcomeOnboarding({
           settings: createMockSettings({}),
           isFolderTrustComplete: true,
-          agent,
+          ...welcomeOperations(currentRuntime),
         }),
       );
       expect(result.current.showWelcome).toBe(true);
@@ -193,7 +235,7 @@ describe('useWelcomeOnboarding', () => {
         useWelcomeOnboarding({
           settings: createMockSettings({}),
           isFolderTrustComplete: true,
-          agent,
+          ...welcomeOperations(currentRuntime),
           suppressStartup: true,
         }),
       );
@@ -206,7 +248,7 @@ describe('useWelcomeOnboarding', () => {
         useWelcomeOnboarding({
           settings: createMockSettings({}),
           isFolderTrustComplete: false,
-          agent,
+          ...welcomeOperations(currentRuntime),
         }),
       );
       expect(result.current.showWelcome).toBe(false);
@@ -220,7 +262,7 @@ describe('useWelcomeOnboarding', () => {
         useWelcomeOnboarding({
           settings: createMockSettings({}),
           isFolderTrustComplete: true,
-          agent,
+          ...welcomeOperations(currentRuntime),
         }),
       );
       expect(result.current.showWelcome).toBe(false);
@@ -232,7 +274,7 @@ describe('useWelcomeOnboarding', () => {
         useWelcomeOnboarding({
           settings: createMockSettings({}),
           isFolderTrustComplete: true,
-          agent,
+          ...welcomeOperations(currentRuntime),
           suppressStartup: true,
         }),
       );
@@ -248,7 +290,7 @@ describe('useWelcomeOnboarding', () => {
         useWelcomeOnboarding({
           settings: createMockSettings({}),
           isFolderTrustComplete: true,
-          agent,
+          ...welcomeOperations(currentRuntime),
           suppressStartup: true,
         }),
       );
@@ -267,7 +309,7 @@ describe('useWelcomeOnboarding', () => {
         useWelcomeOnboarding({
           settings: createMockSettings({}),
           isFolderTrustComplete: true,
-          agent,
+          ...welcomeOperations(currentRuntime),
         }),
       );
       act(() => {
@@ -297,7 +339,7 @@ describe('useWelcomeOnboarding', () => {
         useWelcomeOnboarding({
           settings: createMockSettings({}),
           isFolderTrustComplete: true,
-          agent,
+          ...welcomeOperations(currentRuntime),
         }),
       );
       act(() => {
@@ -336,7 +378,7 @@ describe('useWelcomeOnboarding', () => {
         useWelcomeOnboarding({
           settings: createMockSettings({}),
           isFolderTrustComplete: true,
-          agent,
+          ...welcomeOperations(currentRuntime),
         }),
       );
       await act(async () => {
@@ -355,7 +397,7 @@ describe('useWelcomeOnboarding', () => {
         useWelcomeOnboarding({
           settings: createMockSettings({}),
           isFolderTrustComplete: true,
-          agent,
+          ...welcomeOperations(currentRuntime),
         }),
       );
       let caught: unknown;
@@ -385,7 +427,7 @@ describe('useWelcomeOnboarding', () => {
         useWelcomeOnboarding({
           settings: createMockSettings({}),
           isFolderTrustComplete: true,
-          agent,
+          ...welcomeOperations(currentRuntime),
         }),
       );
       await act(async () => {
@@ -407,7 +449,7 @@ describe('useWelcomeOnboarding', () => {
         useWelcomeOnboarding({
           settings: createMockSettings({}),
           isFolderTrustComplete: true,
-          agent,
+          ...welcomeOperations(currentRuntime),
         }),
       );
       await act(async () => {

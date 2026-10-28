@@ -16,7 +16,7 @@
  */
 
 import {
-  interactiveAuthCoordinator,
+  type InteractiveAuthCoordinator,
   InteractiveAuthCancelledError,
   InteractiveAuthError,
   type InteractiveAuthChallenge,
@@ -65,12 +65,13 @@ export async function classifyInteractiveAuthReason(
 }
 
 export function requiresInteractiveAuthentication(
+  coordinator: Pick<InteractiveAuthCoordinator, 'hasHost'>,
   runtimeKind: RuntimeKind | undefined,
 ): boolean {
   return (
     runtimeKind === 'agent' ||
     runtimeKind === 'subagent' ||
-    interactiveAuthCoordinator.hasHost()
+    coordinator.hasHost()
   );
 }
 
@@ -133,6 +134,7 @@ function assertInteractiveAuthSucceeded(
  * InteractiveAuthUnavailableError when no interactive host is bound.
  */
 export async function requestInteractiveAuthentication(
+  coordinator: Pick<InteractiveAuthCoordinator, 'requestAuth'>,
   providerName: string,
   bucket: string,
   runtimeKind: RuntimeKind | undefined,
@@ -141,6 +143,7 @@ export async function requestInteractiveAuthentication(
   identity:
     | Pick<ProviderRuntimeContext, 'runtimeId' | 'runtimeKind'>
     | undefined,
+  signal?: AbortSignal,
 ): Promise<void> {
   const challenge: InteractiveAuthChallenge = {
     provider: providerName,
@@ -149,8 +152,9 @@ export async function requestInteractiveAuthentication(
     reason,
     correlationId: crypto.randomUUID(),
   };
-  const outcome = await interactiveAuthCoordinator.requestAuth(challenge, {
+  const outcome = await coordinator.requestAuth(challenge, {
     timeoutMs: typeof timeoutMs === 'number' ? timeoutMs : undefined,
+    signal,
   });
   assertInteractiveAuthSucceeded(outcome, providerName, bucket);
 }

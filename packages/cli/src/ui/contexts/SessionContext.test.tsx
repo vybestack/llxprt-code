@@ -8,8 +8,9 @@ import { type MutableRefObject, act } from 'react';
 import { render, renderHook } from '../../__tests__/render.js';
 import type { SessionMetrics } from './SessionContext.js';
 import { SessionStatsProvider, useSessionStats } from './SessionContext.js';
-import { describe, it, expect } from 'bun:test';
-import { uiTelemetryService } from '@vybestack/llxprt-code-core';
+import { describe, it, expect, beforeEach } from 'bun:test';
+import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+let metricSource = new UiTelemetryService();
 
 /**
  * A test harness component that uses the hook and exposes the context value
@@ -41,13 +42,16 @@ function createRenderCounters() {
   return { Harness, getRenderCount: () => renderCount };
 }
 describe('SessionStatsContext', () => {
+  beforeEach(() => {
+    metricSource = new UiTelemetryService();
+  });
   it('should provide the correct initial state', () => {
     const contextRef: MutableRefObject<
       ReturnType<typeof useSessionStats> | undefined
     > = { current: undefined };
 
     render(
-      <SessionStatsProvider>
+      <SessionStatsProvider metrics={metricSource}>
         <TestHarness contextRef={contextRef} />
       </SessionStatsProvider>,
     );
@@ -59,13 +63,13 @@ describe('SessionStatsContext', () => {
     expect(stats?.metrics.models).toStrictEqual({});
   });
 
-  it('should update metrics when the uiTelemetryService emits an update', () => {
+  it('should update metrics when the metrics emits an update', () => {
     const contextRef: MutableRefObject<
       ReturnType<typeof useSessionStats> | undefined
     > = { current: undefined };
 
     render(
-      <SessionStatsProvider>
+      <SessionStatsProvider metrics={metricSource}>
         <TestHarness contextRef={contextRef} />
       </SessionStatsProvider>,
     );
@@ -162,7 +166,7 @@ describe('SessionStatsContext', () => {
     };
 
     act(() => {
-      uiTelemetryService.emit('update', {
+      metricSource.emit('update', {
         metrics: newMetrics,
         lastPromptTokenCount: 100,
       });
@@ -182,7 +186,7 @@ describe('SessionStatsContext', () => {
       createRenderCounters();
 
     render(
-      <SessionStatsProvider>
+      <SessionStatsProvider metrics={metricSource}>
         <CountingTestHarness contextRef={contextRef} />
       </SessionStatsProvider>,
     );
@@ -255,13 +259,13 @@ describe('SessionStatsContext', () => {
     };
 
     act(() => {
-      uiTelemetryService.emit('update', { metrics, lastPromptTokenCount: 10 });
+      metricSource.emit('update', { metrics, lastPromptTokenCount: 10 });
     });
 
     expect(getRenderCount()).toBe(2);
 
     act(() => {
-      uiTelemetryService.emit('update', { metrics, lastPromptTokenCount: 10 });
+      metricSource.emit('update', { metrics, lastPromptTokenCount: 10 });
     });
 
     expect(getRenderCount()).toBe(2);
@@ -284,7 +288,7 @@ describe('SessionStatsContext', () => {
       },
     };
     act(() => {
-      uiTelemetryService.emit('update', {
+      metricSource.emit('update', {
         metrics: newMetrics,
         lastPromptTokenCount: 20,
       });
@@ -313,7 +317,11 @@ describe('SessionStatsContext', () => {
 
   it('should not trigger re-render when history token count is unchanged', () => {
     const { result } = renderHook(() => useSessionStats(), {
-      wrapper: SessionStatsProvider,
+      wrapper: ({ children }) => (
+        <SessionStatsProvider metrics={metricSource}>
+          {children}
+        </SessionStatsProvider>
+      ),
     });
 
     const initialRenderCount = result.all.length;
@@ -341,7 +349,7 @@ describe('SessionStatsContext', () => {
       createRenderCounters();
 
     render(
-      <SessionStatsProvider>
+      <SessionStatsProvider metrics={metricSource}>
         <CountingTestHarness contextRef={contextRef} />
       </SessionStatsProvider>,
     );
@@ -401,7 +409,7 @@ describe('SessionStatsContext', () => {
     };
 
     act(() => {
-      uiTelemetryService.emit('update', {
+      metricSource.emit('update', {
         metrics: metricsWithTiming,
         lastPromptTokenCount: 0,
       });
@@ -413,7 +421,7 @@ describe('SessionStatsContext', () => {
 
     // Emit identical metrics — should NOT re-render
     act(() => {
-      uiTelemetryService.emit('update', {
+      metricSource.emit('update', {
         metrics: metricsWithTiming,
         lastPromptTokenCount: 0,
       });
@@ -431,7 +439,7 @@ describe('SessionStatsContext', () => {
       createRenderCounters();
 
     render(
-      <SessionStatsProvider>
+      <SessionStatsProvider metrics={metricSource}>
         <CountingTestHarness contextRef={contextRef} />
       </SessionStatsProvider>,
     );
@@ -491,7 +499,7 @@ describe('SessionStatsContext', () => {
     };
 
     act(() => {
-      uiTelemetryService.emit('update', {
+      metricSource.emit('update', {
         metrics: metricsWithCache,
         lastPromptTokenCount: 0,
       });

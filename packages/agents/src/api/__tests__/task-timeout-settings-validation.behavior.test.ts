@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { fromConfig } from '../fromConfig.js';
 import { describe, expect, it } from 'bun:test';
 import { createServer } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -13,16 +13,12 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import {
   ApprovalMode,
-  fromConfig,
   toConfigParameters,
   type Agent,
 } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
-import {
-  AsyncTaskManager,
-  type AsyncTaskInfo,
-} from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   ProfileManager,
   SettingsService,
@@ -64,7 +60,6 @@ function completion(): string {
 interface Fixture {
   agent: Agent;
   config: Config;
-  manager: AsyncTaskManager;
   requests: unknown[];
 }
 
@@ -87,7 +82,6 @@ async function withTimeoutFixture(
       response.destroy();
     });
   });
-  const manager = new AsyncTaskManager(1);
   let config: Config | undefined;
   let agent: Agent | undefined;
   try {
@@ -115,7 +109,6 @@ async function withTimeoutFixture(
       profiles,
     );
     await subagents.saveSubagent(childName, childName, 'Complete the task.');
-    const factories = createAgentRuntimeFactoryBindings();
     config = new Config({
       ...toConfigParameters({
         provider: 'openai',
@@ -132,21 +125,22 @@ async function withTimeoutFixture(
       subagentDirectory: join(directory, 'subagents'),
       sessionId: 'task-timeout-validation-session',
     });
-    agent = await fromConfig({
-      settingsService: new SettingsService(),
-      runtimeFactoryBindings: factories,
+    agent = await fromConfig(
       config,
-      asyncTaskManager: manager,
-      activation: {
-        provider: 'openai',
-        model: 'timeout-validation-parent-model',
-        cliOverrides: { key: 'local-test-key', baseUrl },
+      new SettingsService(),
+      {
+        activation: {
+          provider: 'openai',
+          model: 'timeout-validation-parent-model',
+          cliOverrides: { key: 'local-test-key', baseUrl },
+        },
       },
-    });
+      new CredentialAuthority(),
+    );
     agent.setEphemeralSetting('task-max-async', 1);
     agent.setEphemeralSetting(defaultKey, 60);
     agent.setEphemeralSetting(maximumKey, 100);
-    await scenario({ agent, config, manager, requests });
+    await scenario({ agent, config, requests });
   } catch (error) {
     errors.push(error);
   } finally {
@@ -173,13 +167,37 @@ async function withTimeoutFixture(
     throw new AggregateError(errors, 'Task timeout validation fixture failed');
 }
 
+const delay = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+async function readSubagentOutcome(
+  agent: Agent,
+  id: string,
+): Promise<{
+  readonly status?: string;
+  readonly output?: { readonly final_message?: string };
+}> {
+  const query = agent.tools.get('check_async_tasks');
+  if (!query) throw new Error('Missing Agent task query');
+  const peeked = await query.buildAndExecute(
+    { task_id: id },
+    new AbortController().signal,
+  );
+  const details = z
+    .object({
+      output: z.object({ final_message: z.string().optional() }).optional(),
+    })
+    .parse(JSON.parse(z.string().parse(peeked.llmContent)));
+  return { status: agent.tasks.get(id)?.status, output: details.output };
+}
+
 async function verifySetting(
   fixture: Fixture,
   key: string,
   invalid: number,
   background: boolean,
 ): Promise<void> {
-  const { agent, manager, requests } = fixture;
+  const { agent, requests } = fixture;
   const task = agent.tools.get('task');
   if (!task) throw new Error('Public direct task handle unavailable');
   const params = {
@@ -216,49 +234,37 @@ async function verifySetting(
   expect(rejectionMessage).toContain('greater than zero');
   expect(requests).toHaveLength(0);
   expect(agent.tasks.list()).toStrictEqual([]);
-  expect(manager.getAllTasks()).toStrictEqual([]);
-  expect(manager.canLaunchAsync().allowed).toBe(true);
 
   agent.setEphemeralSetting(key, key === maximumKey ? 100 : 60);
-  const subscriptions: Array<() => void> = [];
-  const terminal = new Promise<AsyncTaskInfo>((resolve) => {
-    subscriptions.push(
-      manager.onTaskCompleted(resolve),
-      manager.onTaskFailed(resolve),
-      manager.onTaskCancelled(resolve),
-    );
-  });
-  try {
-    const recovered = await task.buildAndExecute(
-      params,
-      new AbortController().signal,
-    );
-    expect(recovered.error).toBeUndefined();
-    if (background) {
-      const outcome = await terminal;
-      expect(outcome.status).toBe('completed');
-      expect(outcome.output?.final_message).toBe(childMessage);
-      expect(recovered.llmContent).toContain(outcome.id);
-      expect(agent.tasks.list()).toHaveLength(1);
-      expect(agent.tasks.get(outcome.id)?.status).toBe('completed');
-    } else {
-      const output = z
-        .object({ final_message: z.string() })
-        .parse(JSON.parse(z.string().parse(recovered.llmContent)));
-      expect(output.final_message).toBe(childMessage);
-      expect(agent.tasks.list()).toStrictEqual([]);
-    }
-    expect(requests).toHaveLength(1);
-    expect(z.object({ model: z.string() }).parse(requests[0]).model).toBe(
-      'timeout-validation-child-model',
-    );
-    await agent.dispose();
-    expect(agent.tasks.listRunning()).toStrictEqual([]);
-    expect(manager.getRunningTasks()).toStrictEqual([]);
-    expect(manager.canLaunchAsync().allowed).toBe(true);
-  } finally {
-    for (const unsubscribe of subscriptions) unsubscribe();
+  const recovered = await task.buildAndExecute(
+    params,
+    new AbortController().signal,
+  );
+  expect(recovered.error).toBeUndefined();
+  if (background) {
+    const launched = agent.tasks.list();
+    expect(launched).toHaveLength(1);
+    const id = launched[0].id;
+    while (agent.tasks.get(id)?.status === 'running') await delay(10);
+    const outcome = await readSubagentOutcome(agent, id);
+    expect(outcome.status).toBe('completed');
+    expect(outcome.output?.final_message).toBe(childMessage);
+    expect(recovered.llmContent).toContain(id);
+    expect(agent.tasks.list()).toHaveLength(1);
+    expect(agent.tasks.get(id)?.status).toBe('completed');
+  } else {
+    const output = z
+      .object({ final_message: z.string() })
+      .parse(JSON.parse(z.string().parse(recovered.llmContent)));
+    expect(output.final_message).toBe(childMessage);
+    expect(agent.tasks.list()).toStrictEqual([]);
   }
+  expect(requests).toHaveLength(1);
+  expect(z.object({ model: z.string() }).parse(requests[0]).model).toBe(
+    'timeout-validation-child-model',
+  );
+  await agent.dispose();
+  expect(agent.tasks.listRunning()).toStrictEqual([]);
 }
 
 for (const background of [false, true]) {

@@ -1,3 +1,5 @@
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
@@ -20,7 +22,6 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
   SubagentTerminateMode,
@@ -79,17 +80,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
 void vi.mock('./nonInteractiveToolExecutor.js', () =>
   automock(realNonInteractiveToolExecutorModule),
 );
-const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual4,
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      getConnectionStatus: vi.fn(),
-      initialize: vi.fn(),
-      shutdown: vi.fn(),
-    }),
-  },
-}));
+
 const actual5 = {
   ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
 };
@@ -99,7 +90,11 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 import {
-  createMockConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
+  createSubagentConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   createStatelessRuntimeBundle,
   createRuntimeOverrides,
   defaultModelConfig,
@@ -116,6 +111,8 @@ import { waitForCondition } from '../test-utils/eventLoop.js';
 const CONDITION_WAIT_TURNS = 200_000;
 
 describe('subagent.ts', () => {
+  const retainSubagentCleanup = installSubagentCleanup();
+
   let mockSendMessageStream: Mock<(...args: never[]) => Promise<unknown>>;
 
   beforeEach(() => {
@@ -173,7 +170,20 @@ describe('subagent.ts', () => {
     const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 
     it('should time out while waiting for interactive tool completion', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       // Install fake timers after config creation so config/auth setup runs on
       // real timers; fake timers freeze Date.now/performance.now/hrtime and
       // stop Bun's per-test timeout from firing.
@@ -200,15 +210,16 @@ describe('subagent.ts', () => {
         { runtimeBundle },
       );
 
-      const scope = await SubAgentScope.create(
-        'interactive-timeout-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        runConfig,
-        { tools: ['external_tool'] },
-        undefined,
-        overrides,
+      const scope = await createSubagentScope(
+        {
+          name: 'interactive-timeout-agent',
+          prompt: promptConfig,
+          model: defaultModelConfig,
+          run: runConfig,
+          toolConfig: { tools: ['external_tool'] },
+          outputConfig: undefined,
+        },
+        ...scopeInputs(config, overrides),
       );
 
       const interactiveResponseStream = (async function* () {
@@ -258,7 +269,7 @@ describe('subagent.ts', () => {
         // rejection so nothing leaks into the next test. Do not await.
         runPromise.catch(() => {});
         runRejection.catch(() => {});
-        scope.dispose();
+        void scope.dispose();
       }
     });
   });
@@ -274,7 +285,20 @@ describe('subagent.ts', () => {
 
     const observeTimeOutWhenSchedulerScheduleNeverResolvesAfterEmittingAToolCall =
       async () => {
-        const { config, mcpRuntime } = await createMockConfig();
+        const configSettings = seedSubagentSettings();
+        const config = createSubagentConfig(
+          configSettings,
+          retainSubagentCleanup,
+        );
+        await acquireSubagentSettings(
+          config,
+          configSettings,
+          retainSubagentCleanup,
+        );
+        const mcpRuntime = await acquireSubagentWorkspace(
+          config,
+          retainSubagentCleanup,
+        );
         const runConfig: RunConfig = {
           max_time_minutes: 0.001, // 0.06 seconds
           max_turns: 100,
@@ -340,15 +364,16 @@ describe('subagent.ts', () => {
           { runtimeBundle },
         );
 
-        const scope = await SubAgentScope.create(
-          'hanging-scheduler-agent',
-          config,
-          { systemPrompt: 'Execute task.' },
-          defaultModelConfig,
-          runConfig,
-          { tools: ['hanging_tool'] },
-          undefined,
-          overrides,
+        const scope = await createSubagentScope(
+          {
+            name: 'hanging-scheduler-agent',
+            prompt: { systemPrompt: 'Execute task.' },
+            model: defaultModelConfig,
+            run: runConfig,
+            toolConfig: { tools: ['hanging_tool'] },
+            outputConfig: undefined,
+          },
+          ...scopeInputs(config, overrides),
         );
 
         // Stream yields a tool call then ends
@@ -395,7 +420,7 @@ describe('subagent.ts', () => {
           // rejection so nothing leaks into the next test. Do not await.
           runPromise.catch(() => {});
           runRejection.catch(() => {});
-          scope.dispose();
+          void scope.dispose();
         }
       };
   });

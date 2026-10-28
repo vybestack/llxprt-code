@@ -32,7 +32,7 @@ import {
   writeDanglingCurrentFixture,
   type FakeIdeEnvironment,
 } from './helpers/fakeIde.js';
-import { IdeControl, type IdeControlDeps } from '../control/ideControl.js';
+import { IdeControl } from '../control/ideControl.js';
 import type { EditorCallbacks } from '../config-types.js';
 
 describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
@@ -170,7 +170,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
   /**
    * Focused behavioral unit coverage for IdeControl projection + lifecycle. Drives
    * the REAL IdeControl over the shipped fake-IDE seam (LLXPRT_FAKE_IDE, activated
-   * by the fake environment helper) and a controlled IdeControlDeps, asserting the
+   * by the fake environment helper) and explicit mode and editor operations, asserting the
    * exact mapping rules: current() resolution + null fallbacks, detected() trusted
    * projection, status() composition incl. modeEnabled default, trust() mutation,
    * and editor open/close firing the shared editor callbacks.
@@ -183,9 +183,12 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
       for (const close of retiring) await close();
     });
     function createControl(
-      deps: Partial<
-        Pick<IdeControlDeps, 'ideModeEnabled' | 'getEditorCallbacks'>
-      > = {},
+      readMode: () => boolean = () => false,
+      readEditors: () => EditorCallbacks = () => ({
+        getPreferredEditor: () => undefined,
+        onEditorOpen: () => {},
+        onEditorClose: () => {},
+      }),
     ): IdeControl {
       const config = new Config({
         sessionId: 'ide-control',
@@ -201,17 +204,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
         await trust.dispose();
         await config.dispose();
       });
-      return new IdeControl({
-        trust,
-        ide,
-        ideModeEnabled: () => false,
-        getEditorCallbacks: () => ({
-          getPreferredEditor: () => undefined,
-          onEditorOpen: () => {},
-          onEditorClose: () => {},
-        }),
-        ...deps,
-      });
+      return new IdeControl(trust, ide, readMode, readEditors);
     }
     it('current() resolves the named current entry and projects its trusted flag @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-014', () => {
       // Use a non-vscode current so the fake-seam result is distinguishable from
@@ -253,14 +246,14 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
       fakeIdeWithCurrent('zed', [
         { name: 'zed', version: '0.1', trusted: true },
       ]);
-      const enabled = createControl({
-        ideModeEnabled: () => true,
-        getEditorCallbacks: () => ({
+      const enabled = createControl(
+        () => true,
+        () => ({
           getPreferredEditor: () => undefined,
           onEditorClose: () => {},
           onEditorOpen: () => {},
         }),
-      });
+      );
       const status = enabled.status();
       expect(status.modeEnabled).toBe(true);
       expect(status.current?.name).toBe('zed');
@@ -288,14 +281,14 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
       fakeIdeWithCurrent('vscode', [
         { name: 'vscode', version: '1.0', trusted: false },
       ]);
-      const control = createControl({
-        ideModeEnabled: () => false,
-        getEditorCallbacks: () => ({
+      const control = createControl(
+        () => false,
+        () => ({
           getPreferredEditor: () => undefined,
           onEditorClose: () => {},
           onEditorOpen: () => {},
         }),
-      });
+      );
       expect(control.status().modeEnabled).toBe(false);
     });
 
@@ -324,10 +317,10 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
           opens += 1;
         },
       };
-      const control = createControl({
-        ideModeEnabled: () => true,
-        getEditorCallbacks: () => callbacks,
-      });
+      const control = createControl(
+        () => true,
+        () => callbacks,
+      );
       await control.openEditor();
       expect(opens).toBe(1);
     });
@@ -341,10 +334,10 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
         },
         onEditorOpen: () => {},
       };
-      const control = createControl({
-        ideModeEnabled: () => true,
-        getEditorCallbacks: () => callbacks,
-      });
+      const control = createControl(
+        () => true,
+        () => callbacks,
+      );
       await control.closeEditor();
       expect(closes).toBe(1);
     });

@@ -7,19 +7,24 @@
 import type { SlashCommand } from './types.js';
 import { CommandKind } from './types.js';
 import { MessageType } from '../types.js';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 
-export const helpCommand: SlashCommand = {
-  name: 'help',
-  altNames: ['?'],
-  description: 'for help on LLxprt Code',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: async (context) => {
-    const helpItem = {
-      type: MessageType.HELP,
-      timestamp: new Date(),
-    };
+export function createHelpCommand(
+  addItem: UseHistoryManagerReturn['addItem'],
+): SlashCommand {
+  return {
+    name: 'help',
+    altNames: ['?'],
+    description: 'for help on LLxprt Code',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    action: async () => {
+      const helpItem = {
+        type: MessageType.HELP,
+        timestamp: new Date(),
+      };
 
-    context.ui.addItem(helpItem);
-  },
-};
+      addItem(helpItem);
+    },
+  };
+}

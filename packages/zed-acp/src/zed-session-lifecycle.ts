@@ -14,6 +14,7 @@ import {
   type Config,
 } from '@vybestack/llxprt-code-core';
 import { buildSessionModes } from './zed-helpers.js';
+import { rethrowZedSessionFailure } from './zed-session-errors.js';
 import { listRecordedSessions } from './zed-session-listing.js';
 import type { LifecycleSession } from './zed-session-pagination.js';
 import type {
@@ -72,10 +73,9 @@ export class SessionLifecycle {
 
   close(params: CloseSessionRequest): Promise<CloseSessionResponse> {
     return this.runSerialized(params.sessionId, async () => {
-      const wasLive = await this.disposeLive(params.sessionId);
-      if (wasLive) {
+      if (this.sessions.has(params.sessionId))
         this.knownClosedSessions.add(params.sessionId);
-      }
+      await this.disposeLive(params.sessionId);
       return {};
     });
   }
@@ -135,18 +135,42 @@ export class SessionLifecycle {
       };
     } catch (error) {
       this.sessions.delete(params.sessionId);
-      await session.dispose().catch(() => undefined);
-      throw error;
+      const results = await Promise.allSettled([
+        Promise.resolve().then(() => session.dispose()),
+      ]);
+      rethrowZedSessionFailure(
+        error,
+        results.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : [],
+        ),
+      );
     }
   }
 
   private async performDelete(
     params: DeleteSessionRequest,
   ): Promise<DeleteSessionResponse> {
-    const hadLiveSession = await this.disposeLive(params.sessionId);
-    if (hadLiveSession) {
+    if (this.sessions.has(params.sessionId))
       this.knownClosedSessions.add(params.sessionId);
+    const [release] = await Promise.allSettled([
+      this.disposeLive(params.sessionId),
+    ]);
+    let response: DeleteSessionResponse;
+    try {
+      response = await this.deleteRecording(params);
+    } catch (primary) {
+      rethrowZedSessionFailure(
+        primary,
+        release.status === 'rejected' ? [release.reason] : [],
+      );
     }
+    if (release.status === 'rejected') throw release.reason;
+    return response;
+  }
+
+  private async deleteRecording(
+    params: DeleteSessionRequest,
+  ): Promise<DeleteSessionResponse> {
     const projectRoot = this.config.getProjectRoot();
     let result: Awaited<ReturnType<typeof deleteSessionById>>;
     try {
@@ -184,8 +208,6 @@ export class SessionLifecycle {
     }
     try {
       await live.dispose();
-    } catch {
-      // Persisted deletion must still proceed after best-effort live cleanup.
     } finally {
       this.sessions.delete(sessionId);
     }

@@ -8,11 +8,11 @@ import type { RequestMediaResolutionService } from '../storage/request-media-res
 import type { ProviderFileBindingStore } from './providerRuntimeContext.js';
 import { bindProviderMediaAndFiles } from './bindProviderMediaAndFiles.js';
 
-export abstract class ProviderMediaFileAdapter {
+export abstract class ProviderMediaFileAdapter<TLifecycle> {
   protected requestMediaResolver?: RequestMediaResolutionService;
   protected requestMediaBudgetBytes?: number;
   protected requestProviderFileBindings?: ProviderFileBindingStore;
-  protected requestProviderFileLifecycle?: object;
+  protected requestProviderFileLifecycle?: TLifecycle;
   protected requestWorkspaceDirectory?: string;
 
   protected bindDelegateProvider<T extends object>(provider: T): T {

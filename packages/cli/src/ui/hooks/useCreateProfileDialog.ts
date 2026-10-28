@@ -3,9 +3,10 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { useListProviders } from '../contexts/RuntimeContext.js';
 
 import { useCallback, useState } from 'react';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 
 interface UseCreateProfileDialogParams {
@@ -15,20 +16,20 @@ interface UseCreateProfileDialogParams {
 export const useCreateProfileDialog = ({
   dialogs,
 }: UseCreateProfileDialogParams) => {
-  const runtime = useRuntimeApi();
+  const runtimeListProviders = useListProviders();
   const [providers, setProviders] = useState<string[]>([]);
 
   const openDialog = useCallback(() => {
     // Populate provider list from runtime
     try {
-      const providerList = runtime.listProviders();
+      const providerList = runtimeListProviders();
       setProviders(providerList);
     } catch {
       // Silently fail - wizard will fall back to static list
       setProviders([]);
     }
     dialogs.createProfile.open({});
-  }, [dialogs, runtime]);
+  }, [dialogs, runtimeListProviders]);
 
   return {
     openDialog,

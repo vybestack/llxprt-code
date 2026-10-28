@@ -3,13 +3,13 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import { initCommand } from './initCommand.js';
+import { createInitCommand } from './initCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { type CommandContext } from './types.js';
 
 const mockMemoryExists = vi.fn();
 // Mock the 'fs' module
@@ -29,7 +29,7 @@ void vi.mock('fs', () => {
 });
 
 describe('initCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   const targetDir = '/test/dir';
   const llxprtMdPath = path.join(targetDir, 'LLXPRT.md');
 
@@ -54,7 +54,10 @@ describe('initCommand', () => {
     mockMemoryExists.mockReturnValue(true);
 
     // Act: Run the command's action
-    const result = await initCommand.action!(mockContext, '');
+    const result = await createInitCommand(
+      mockContext.services.config?.getTargetDir(),
+      mockContext.ui.addItem,
+    ).action!(mockContext, '');
 
     // Assert: Check for the correct informational message
     expect(result).toStrictEqual({
@@ -72,7 +75,10 @@ describe('initCommand', () => {
     mockMemoryExists.mockReturnValue(false);
 
     // Act: Run the command's action
-    const result = await initCommand.action!(mockContext, '');
+    const result = await createInitCommand(
+      mockContext.services.config?.getTargetDir(),
+      mockContext.ui.addItem,
+    ).action!(mockContext, '');
 
     // Assert: Check that writeFileSync was called correctly
     expect(fs.writeFileSync).toHaveBeenCalledWith(llxprtMdPath, '', 'utf8');
@@ -101,7 +107,10 @@ describe('initCommand', () => {
     noConfigContext.services.config = null;
 
     // Act: Run the command's action
-    const result = await initCommand.action!(noConfigContext, '');
+    const result = await createInitCommand(
+      noConfigContext.services.config?.getTargetDir(),
+      noConfigContext.ui.addItem,
+    ).action!(noConfigContext, '');
 
     // Assert: Check for the correct error message
     expect(result).toStrictEqual({

@@ -13,6 +13,7 @@ import {
   type ImageGenerationBackend,
   type ImageResult,
 } from '@vybestack/llxprt-code-core/services/image/ImageGenerationService.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { normalizeBaseUrl } from './codexBaseUrl.js';
 
 const logger = new DebugLogger('llxprt:openai:codex:image');
@@ -108,7 +109,7 @@ export interface CodexImageCredential {
 export interface CodexImageBackendDeps {
   readonly getCredential: () => Promise<CodexImageCredential>;
   readonly getBaseUrl?: () => string | undefined;
-  readonly fetchImpl?: typeof fetch;
+  readonly fetchImpl: NetworkFetch;
 }
 
 interface CodexImageGenerateResponse {
@@ -143,12 +144,12 @@ export class CodexImageBackend implements ImageGenerationBackend {
 
   private readonly getCredential: () => Promise<CodexImageCredential>;
   private readonly getBaseUrl: () => string | undefined;
-  private readonly fetchImpl: typeof fetch;
+  private readonly fetchImpl: NetworkFetch;
 
   constructor(deps: CodexImageBackendDeps) {
     this.getCredential = deps.getCredential;
     this.getBaseUrl = deps.getBaseUrl ?? (() => undefined);
-    this.fetchImpl = deps.fetchImpl ?? fetch;
+    this.fetchImpl = deps.fetchImpl;
   }
 
   private buildHeaders(

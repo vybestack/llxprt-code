@@ -1,3 +1,4 @@
+import { bindTurnModel } from '../../../../../../agents/src/session/bind-turn-model.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
@@ -72,6 +73,7 @@ import type {
 } from '@vybestack/llxprt-code-tools';
 import type { AgentEventRouter } from '../useAgentEventStream.js';
 import { useAgentEventStream } from '../useAgentEventStream.js';
+import { createLoopToolAcquisition } from '../../../../__tests__/loop-tool-acquisition-fixture.js';
 import {
   createLoopConfig,
   toolCallRequestEvent,
@@ -81,6 +83,7 @@ import {
   agentRequestInputToBlocks,
   type ScriptedClientState,
 } from './loopTestHelpers.js';
+import { agentStreamOperations } from './helpers/agentStreamOperations.js';
 
 function createScriptedAgentClient(scripts: ServerAgentStreamEvent[][]): {
   client: AgentClientContract;
@@ -242,20 +245,20 @@ function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
       },
     ): AsyncIterable<AgentEvent> {
       const loop = createAgenticLoop({
-        telemetry: opts.settingsOwner.telemetry,
-        taskLaunchOwner,
         readShellJobSettings: () =>
           resolveShellJobSettings(opts.settingsService),
-        readExecutionPolicy: () => opts.settingsOwner.readToolExecutionPolicy(),
-        getToolGovernance: () =>
-          opts.settingsOwner.readToolGovernance(
-            opts.config.getExcludeTools() ?? [],
-          ),
-        agentClient: opts.agentClient,
         config: opts.config,
-        messageBus: opts.messageBus,
         interactiveMode: opts.interactiveMode ?? true,
         displayCallbacks: displayCallbacksHolder.current,
+        ...bindTurnModel(opts.agentClient),
+        taskLaunchOwner,
+        acquireTools: createLoopToolAcquisition(
+          opts.config,
+          opts.settingsOwner,
+          opts.messageBus,
+          opts.agentClient.tools,
+          opts.interactiveMode ?? true,
+        ),
       });
       yield* mapLoopStream(
         loop.run(
@@ -355,6 +358,12 @@ function createClientBase(): AgentClientContract {
   let selection: import('@vybestack/llxprt-code-tools').ToolSelection =
     createToolRegistryForTest([]);
   return {
+    bindModelNotifications: () => {},
+    bindIdeContext: () => {},
+    bindWorkspaceDefinitions: () => {},
+    bindProviderFiles: () => {},
+    bindTokenization: () => {},
+    bindProviderSelection: () => {},
     get tools() {
       return selection;
     },
@@ -415,9 +424,10 @@ function setupHookWithAgent(agent: Agent): HookHarness {
     { current: null };
   const addItem = vi.fn();
   const onToolCallsUpdate = vi.fn();
+  const operations = agentStreamOperations(agent);
   const { result, unmount } = renderHook(() =>
     useAgentEventStream({
-      agent,
+      ...operations,
       addItem,
       processAgentEventRef,
       flushPendingHistoryItem: vi.fn(),

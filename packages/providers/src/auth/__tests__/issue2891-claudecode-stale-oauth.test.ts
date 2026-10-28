@@ -164,7 +164,7 @@ function buildObjectGraph(
   const oauthManager = new OAuthManager(tokenStore, settings);
 
   // Register the REAL AnthropicOAuthProvider (and Codex).
-  registerStandardOAuthProviders(oauthManager, tokenStore);
+  registerStandardOAuthProviders(oauthManager, globalThis.fetch, tokenStore);
 
   // Build the REAL AnthropicProvider with the SAME OAuthManager instance,
   // the way createAnthropicAliasProvider does.

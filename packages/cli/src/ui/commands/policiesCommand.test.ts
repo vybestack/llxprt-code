@@ -3,17 +3,20 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
+
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { PolicyControl } from '../../../../agents/src/api/control/policyControl.js';
 import { createMockAgent } from '../../__tests__/mockAgent.js';
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { policiesCommand } from './policiesCommand.js';
+import { createPoliciesCommand } from './policiesCommand.js';
+import { bindPoliciesCommand } from './policiesCommandHost.js';
 import {
-  type CommandContext,
   type MessageActionReturn,
   type OpenDialogActionReturn,
+  type SlashCommand,
 } from './types.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core';
 import { assertDefined } from '../../__tests__/assertions.js';
@@ -39,11 +42,12 @@ function makePolicy(): PolicyControl {
   });
   const owner = new RuntimePolicyOwner(config);
   ownedPolicies.push(owner);
-  return new PolicyControl({ inspection: owner.session.inspection });
+  return new PolicyControl(owner.session.inspection);
 }
 
 describe('policiesCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
+  let policiesCommand: SlashCommand;
   afterEach(async () => {
     for (const owner of ownedPolicies.splice(0)) await owner.dispose();
   });
@@ -53,7 +57,22 @@ describe('policiesCommand', () => {
       services: {
         config: null,
       },
-    } as unknown as CommandContext;
+    } as unknown as CommandOwnerFixture;
+    policiesCommand = createPoliciesCommand(
+      bindPoliciesCommand(
+        () => mockContext.services.agent?.policy.getRules() ?? null,
+        () => {
+          const policy = mockContext.services.agent?.policy;
+          if (policy === undefined) throw new Error('Policy owner unavailable');
+          return policy.getDefaultDecision();
+        },
+        () => {
+          const policy = mockContext.services.agent?.policy;
+          if (policy === undefined) throw new Error('Policy owner unavailable');
+          return policy.isNonInteractive();
+        },
+      ),
+    );
   });
 
   describe('structure', () => {
@@ -84,9 +103,9 @@ describe('policiesCommand', () => {
       });
     });
 
-    it('should render the list table when the session policy is available', () => {
+    it('should render the list table when the session policy is available', async () => {
       mockContext.services.agent = {
-        ...createMockAgent(
+        ...(await createMockAgent(
           new Config({
             sessionId: 'commands',
             cwd: process.cwd(),
@@ -94,7 +113,7 @@ describe('policiesCommand', () => {
             debugMode: false,
             model: 'test',
           }),
-        ),
+        )),
         policy: makePolicy(),
       };
 
@@ -125,9 +144,9 @@ describe('policiesCommand', () => {
       });
     });
 
-    it('should render a tier-grouped table from the agent policy engine', () => {
+    it('should render a tier-grouped table from the agent policy engine', async () => {
       mockContext.services.agent = {
-        ...createMockAgent(
+        ...(await createMockAgent(
           new Config({
             sessionId: 'commands',
             cwd: process.cwd(),
@@ -135,7 +154,7 @@ describe('policiesCommand', () => {
             debugMode: false,
             model: 'test',
           }),
-        ),
+        )),
         policy: makePolicy(),
       };
 
@@ -167,9 +186,9 @@ describe('policiesCommand', () => {
       });
     });
 
-    it('should return a dialog action when the session policy is available', () => {
+    it('should return a dialog action when the session policy is available', async () => {
       mockContext.services.agent = {
-        ...createMockAgent(
+        ...(await createMockAgent(
           new Config({
             sessionId: 'commands',
             cwd: process.cwd(),
@@ -177,7 +196,7 @@ describe('policiesCommand', () => {
             debugMode: false,
             model: 'test',
           }),
-        ),
+        )),
         policy: makePolicy(),
       };
 
@@ -193,9 +212,9 @@ describe('policiesCommand', () => {
       });
     });
 
-    it('should return a dialog action when agent is available', () => {
+    it('should return a dialog action when agent is available', async () => {
       mockContext.services.agent = {
-        ...createMockAgent(
+        ...(await createMockAgent(
           new Config({
             sessionId: 'commands',
             cwd: process.cwd(),
@@ -203,7 +222,7 @@ describe('policiesCommand', () => {
             debugMode: false,
             model: 'test',
           }),
-        ),
+        )),
         policy: makePolicy(),
       };
 

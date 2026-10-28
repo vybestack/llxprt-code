@@ -10,12 +10,13 @@ import { basename, dirname, relative, resolve } from 'node:path';
 import { compilerEmittedSiblings } from './compiler-emitted-siblings.js';
 
 export function resolveEmittedSiblingImport(
-  specifier: string,
+  input: string,
   importer: string,
   repoRoot: string,
   emitted: ReadonlySet<string>,
   packageAliases = false,
 ): string | undefined {
+  const specifier = input.replaceAll('\\', '/');
   const packageRoots = [
     ['@vybestack/llxprt-code-core/', 'packages/core/src/'],
     ['@vybestack/llxprt-code-mcp/', 'packages/mcp/src/'],
@@ -62,7 +63,7 @@ function emittedSiblingPlugin(
   );
   const siblingNames = [...new Set([...emitted].map((path) => basename(path)))];
   const filter = new RegExp(
-    `(?:^|/)(?:${siblingNames
+    `(?:^|[/\\\\])(?:${siblingNames
       .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
       .join('|')})$`,
   );

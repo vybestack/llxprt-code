@@ -8,10 +8,14 @@ import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+
 import { captureResponsesRequest } from './responses-request.js';
 import { isResponsesPdfEnabled } from './openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function buildOptions(
   setting?: boolean,
@@ -20,13 +24,12 @@ function buildOptions(
 ): NormalizedGenerateChatOptions {
   const settings = new SettingsService();
   if (setting !== undefined) settings.set('media.pdf.enabled', setting);
-  const config = createRuntimeConfigStub(settings);
+
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
-    config,
     runtimeId: 'pdf-owner',
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
 

@@ -6,6 +6,11 @@
  */
 
 export { SettingsService } from './settings/SettingsService.js';
+export { captureSettingsSnapshot } from './settings/settings-snapshot-input.js';
+export type {
+  SettingsStateSnapshot,
+  SessionOverrideReads,
+} from './settings/SettingsService.js';
 export type { SettingsServiceInit } from './settings/SettingsService.js';
 // SessionSettingsOverlay is intentionally NOT exported: it is an internal
 // implementation detail owned by SettingsService.
@@ -41,6 +46,7 @@ export {
 export {
   assertCanonicalSettingKey,
   LEGACY_SETTING_KEY_MIGRATIONS,
+  legacySettingCanonicalKey,
   migrateLegacySettingKeys,
 } from './settings/legacyKeyMigration.js';
 export { isStrictNumericString } from './settings/numericString.js';
@@ -53,6 +59,7 @@ export type {
 
 export {
   ProfileManager,
+  ProfileNotFoundError,
   applyProfileSettings,
 } from './profiles/ProfileManager.js';
 // Cohesive public profile-lock and write API. Internal lock handle/path/read/

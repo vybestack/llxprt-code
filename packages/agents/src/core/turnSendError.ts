@@ -6,27 +6,19 @@
 
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { enrichSchemaDepthError } from './schemaDepthErrorEnrichment.js';
-import { logApiError } from './turnLogging.js';
+import { logApiError, type TurnTelemetryPorts } from './turnLogging.js';
 
 export function throwTurnSendError(
   error: unknown,
-  runtimeContext: AgentRuntimeContext,
+  telemetry: TurnTelemetryPorts,
   promptId: string,
   durationMs: number,
   tools: ToolDeclaration[] | undefined,
   logger: DebugLogger,
 ): never {
-  logApiError(
-    runtimeContext,
-    runtimeContext.state,
-    runtimeContext.state.model,
-    promptId,
-    durationMs,
-    error,
-  );
+  logApiError(telemetry, telemetry.model, promptId, durationMs, error);
   enrichSchemaDepthError(error, tools, logger);
   throw error;
 }

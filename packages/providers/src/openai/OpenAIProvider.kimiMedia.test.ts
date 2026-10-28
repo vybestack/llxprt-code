@@ -19,6 +19,10 @@ import { declaredMediaTransportCapabilities } from '../providerMediaTransportCap
 import { resolveRequestMedia } from '../utils/request-media-resolution.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function createProvider(): OpenAIProvider {
   const provider = new OpenAIProvider(
@@ -140,6 +144,7 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
       contents: createContents(),
       settings,
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'kimi-media',
         providerName: 'kimi',
         ephemeralsSnapshot: { ...settings.getAllGlobalSettings() },
@@ -153,13 +158,7 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
           },
         },
       }),
-      runtime: {
-        settingsService: settings,
-        providerFileLifecycle: new ProviderFileLifecycle({
-          maxFiles: 10,
-          maxBytes: 1024,
-        }),
-      },
+      runtime: {},
       configOverrides: { getTargetDir: () => '/workspace/kimi-media' },
     });
 

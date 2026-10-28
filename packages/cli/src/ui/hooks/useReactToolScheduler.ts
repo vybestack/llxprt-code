@@ -21,19 +21,16 @@ import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 
 import type { HistoryItemWithoutId } from '../types.js';
 import { ToolCallStatus } from '../types.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   type InteractiveSchedulerHandle,
   type PendingScheduleRequests,
   type SchedulerRefs,
+  type OpenClientChannel,
+  type SubscribeChildTools,
   normalizeRequest,
   useScheduler,
   useChildToolDisplay,
 } from '../../runtime/interactiveToolScheduler.js';
-
-type ReactToolSchedulerRuntime = {
-  readonly agent: Agent;
-};
 
 export type ScheduleFn = (
   request: ToolCallRequestInfo | ToolCallRequestInfo[],
@@ -470,7 +467,8 @@ export function useReactToolScheduler(
     tools: CompletedToolCall[],
     options: { isPrimary: boolean },
   ) => Promise<void> | void,
-  runtime: ReactToolSchedulerRuntime,
+  openClientChannel: OpenClientChannel,
+  subscribeChildTools: SubscribeChildTools,
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
@@ -503,13 +501,17 @@ export function useReactToolScheduler(
   });
 
   const scheduler = useScheduler(
-    runtime.agent,
+    openClientChannel,
     mainSchedulerId,
     refs,
     pendingScheduleRequests,
   );
 
-  useChildToolDisplay(runtime.agent, refs, setExternalSchedulerRegistered);
+  useChildToolDisplay(
+    subscribeChildTools,
+    refs,
+    setExternalSchedulerRegistered,
+  );
 
   const schedule = useScheduleFn(scheduler, pendingScheduleRequests);
   const markToolsAsDisplayCleared = useMarkToolsAsDisplayCleared(

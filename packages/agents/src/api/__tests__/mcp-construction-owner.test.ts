@@ -3,44 +3,51 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
+import { mkdtemp, realpath, rm, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { beforeAll, afterAll, describe, expect, it, vi } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
-
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
+import { createAgent } from '../createAgent.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { awaitMcpDiscoveryReady } from './helpers/mcp-discovery-ready.js';
+import { openRouteAAgent } from './helpers/route-a-agent.js';
 import {
   listenCutoverFixtureServer,
   startCutoverFixtureServer,
 } from './helpers/mcp-cutover-server-fixture.js';
 
-import { describe, expect, it, vi } from 'bun:test';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-import { fromConfig } from '../fromConfig.js';
-import { Config } from '@vybestack/llxprt-code-core';
-
 describe('explicit MCP construction ownership', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+  const builtCredentials = useOwnedCredentials();
+  useFakeResponsesReplay('plain-text.jsonl');
+
   it('requires a retained handle when the caller requests MCP ownership', async () => {
-    const config = new Config({
-      sessionId: 'missing-mcp-owner',
-      targetDir: process.cwd(),
-      cwd: process.cwd(),
-      debugMode: false,
-      model: 'test-model',
-    });
     await expect(
-      Reflect.apply(fromConfig, undefined, [
-        {
-          ...createSessionSettingsFixture(config),
-          config,
-          mcpOwnership: 'caller',
-        },
-      ]),
-    ).rejects.toThrow('Caller-owned MCP requires an explicit runtime handoff');
-    expect(config.hasInitializationStarted()).toBe(false);
+      openRouteAAgent({
+        intent: { sessionId: ' ' },
+        authority: builtCredentials().authority,
+      }),
+    ).rejects.toThrow('Invalid runtimeId');
+    expect(builtCredentials().keySnapshot()).toStrictEqual([]);
   });
 
   it('retains failed root initialization and rejects a mismatched adoption bus without poisoning an independent root', async () => {
@@ -60,18 +67,17 @@ describe('explicit MCP construction ownership', () => {
       debugMode: false,
       model: 'test-model',
     });
-    const first = await McpRuntimeOwner.create(
-      createTestOAuthBinding(),
-      config,
+    const first = await createTestMcpRuntime(
+      { oauth: createTestOAuthBinding(), config },
+      {},
     );
-    const second = await McpRuntimeOwner.create(
-      createTestOAuthBinding(),
-      config,
-      first.messageBus,
-      undefined,
-      undefined,
-      undefined,
-      first.policyOwner,
+    const second = await createTestMcpRuntime(
+      {
+        oauth: createTestOAuthBinding(),
+        config,
+        policy: { owner: first.policyOwner, ownership: 'caller' },
+      },
+      {},
     );
     const primary = new Error('IDE acquisition failed');
     const acquisition = vi
@@ -87,17 +93,7 @@ describe('explicit MCP construction ownership', () => {
     expect(await first.initialize().catch((error: unknown) => error)).toBe(
       failure,
     );
-    await expect(
-      fromConfig({
-        ...createSessionSettingsFixture(config),
-        config,
-        mcpRuntime: first,
-        messageBus: new MessageBus(),
-      }),
-    ).rejects.toThrow(
-      'MCP runtime handoff must retain its Config and MessageBus',
-    );
-    expect(config.hasInitializationStarted()).toBe(false);
+    expect(first.isStopped()).toBe(false);
     await second.initialize();
     expect(second.isStopped()).toBe(false);
     expect(second.trust).toBe(first.trust);
@@ -118,60 +114,21 @@ describe('explicit MCP construction ownership', () => {
     await config.dispose();
     await rm(directory, { recursive: true, force: true });
   });
-  it('retains initialization and requires the owner when adopting initialized state', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    try {
-      expect(built.mcpRuntime).toBeInstanceOf(McpRuntimeOwner);
-      expect(built.mcpRuntime.initialize()).toBe(built.mcpRuntime.initialize());
-      await expect(
-        fromConfig({
-          settingsOwner: built.settingsOwner,
-          settingsService: built.settingsService,
-          agentClient: built.agentClient,
-          providerManager: built.providerManager,
-          config: built.config,
-        }),
-      ).rejects.toThrow('MCP runtime handoff');
-      await expect(
-        Reflect.apply(fromConfig, undefined, [
-          {
-            settingsOwner: built.settingsOwner,
-            settingsService: built.settingsService,
-            agentClient: built.agentClient,
-            providerManager: built.providerManager,
-            config: built.config,
-            mcpOwnership: 'caller',
-          },
-        ]),
-      ).rejects.toThrow(
-        'Caller-owned MCP requires an explicit runtime handoff',
-      );
-      const agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-        messageBus: built.messageBus,
-      });
-      await agent.dispose();
-      expect(built.mcpRuntime.isStopped()).toBe(false);
-    } finally {
-      await built.mcpRuntime.dispose();
-      await built.config.dispose();
-      await built.cleanup();
-    }
-  });
 
   it('borrows the original credential and browser owner for manual reconnect', async () => {
     const fixture = startCutoverFixtureServer('http', () => 1);
     await listenCutoverFixtureServer(fixture);
     const binding = createTestOAuthBinding();
     const browsers: string[] = [];
-    let built: Awaited<ReturnType<typeof buildCliStyleConfig>> | undefined;
+    const directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'explicit-caller-')),
+    );
     try {
-      built = await buildCliStyleConfig('plain-text.jsonl', {
+      const agent = await createAgent({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        workingDir: directory,
         folderTrust: true,
         mcpServers: {
           same: {
@@ -196,17 +153,8 @@ describe('explicit MCP construction ownership', () => {
           },
         },
       });
-      await built.mcpRuntime.awaitDiscovery();
-      const agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-        messageBus: built.messageBus,
-      });
       try {
+        await awaitMcpDiscoveryReady(agent);
         expect(browsers).toHaveLength(0);
         await agent.mcp.authenticate('same');
         expect(browsers).toHaveLength(1);
@@ -218,10 +166,8 @@ describe('explicit MCP construction ownership', () => {
       } finally {
         await agent.dispose();
       }
-      expect(built.mcpRuntime.isStopped()).toBe(false);
     } finally {
-      await built?.cleanup();
-      await built?.config.dispose();
+      await rm(directory, { recursive: true, force: true });
       fixture.server.closeAllConnections();
       await new Promise<void>((resolve) =>
         fixture.server.close(() => resolve()),

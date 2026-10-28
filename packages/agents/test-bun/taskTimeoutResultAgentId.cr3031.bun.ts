@@ -4,13 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
-import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
-const fixturePaths = installTestWorkspacePaths({
-  targetDir: process.cwd(),
-  isTrusted: () => true,
-});
-
 /**
  * CodeRabbit round (PR #3050 / issue #3031) — the post-run timeout result must
  * carry the real subagent id (Finding 3).
@@ -99,11 +92,9 @@ describe('CodeRabbit #3031 — post-run timeout result carries the real agentId'
     });
     const tool = new TaskTool(fixture.config, {
       ...fixture.policies,
-      workspacePaths: fixturePaths(),
-      readMcpInstructions: () => undefined,
-      instructions: emptyInstructionReads,
+
       messageBus: new MessageBus(),
-      orchestratorFactory: () => orchestrator,
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
     });
 
     const invocation = tool.build({

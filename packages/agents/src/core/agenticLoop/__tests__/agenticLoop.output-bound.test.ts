@@ -1,3 +1,5 @@
+import { bindTurnModel } from '../../../session/bind-turn-model.js';
+import { TurnToolExecutionOwner } from '../../../session/turn-tool-execution-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
@@ -90,28 +92,31 @@ describe('AgenticLoop live-output acquisition bound', () => {
 
       const events = await collectEvents(
         new AgenticLoop({
-          createSchedulerOwner: bindSchedulerOwner(
-            config,
-            messageBus,
-            config.isInteractive(),
-            toolRegistry,
-            (options) => new CoreToolScheduler(options),
-            () => configSettingsOwner.readToolExecutionPolicy(),
-            () =>
-              configSettingsOwner.readToolGovernance(
-                config.getExcludeTools() ?? [],
-              ),
-            undefined,
-            RootTelemetry.prepare({
-              enabled: false,
-              sessionId: 'isolated-caller-fixture',
-              maxBytes: 1024,
-              maxFiles: 1,
-            }),
-          ),
-          agentClient: client,
           config,
-          messageBus,
+          ...bindTurnModel(client),
+          tools: new TurnToolExecutionOwner(
+            messageBus,
+            undefined,
+            bindSchedulerOwner(
+              config,
+              messageBus,
+              config.isInteractive(),
+              toolRegistry,
+              (options) => new CoreToolScheduler(options),
+              () => configSettingsOwner.readToolExecutionPolicy(),
+              () =>
+                configSettingsOwner.readToolGovernance(
+                  config.getExcludeTools() ?? [],
+                ),
+              undefined,
+              RootTelemetry.prepare({
+                enabled: false,
+                sessionId: 'isolated-caller-fixture',
+                maxBytes: 1024,
+                maxFiles: 1,
+              }),
+            ),
+          ),
         }),
         'go',
         new AbortController().signal,

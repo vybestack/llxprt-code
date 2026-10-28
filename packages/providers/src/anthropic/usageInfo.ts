@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -64,6 +65,7 @@ const USAGE_ENDPOINT = 'https://api.anthropic.com/api/oauth/usage';
  * @returns Usage info if available, null on error
  */
 export async function fetchAnthropicUsage(
+  requestFetch: NetworkFetch,
   accessToken: string,
 ): Promise<AnthropicUsageInfo | null> {
   if (!accessToken || typeof accessToken !== 'string') {
@@ -78,7 +80,7 @@ export async function fetchAnthropicUsage(
   }
 
   try {
-    const response = await fetch(USAGE_ENDPOINT, {
+    const response = await requestFetch(USAGE_ENDPOINT, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken}`,

@@ -9,6 +9,10 @@ import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/cor
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 // Mock fetch globally
 const fetchMock = vi.fn<typeof fetch>();
@@ -710,6 +714,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
       settings: settingsService,
       config: undefined,
       invocation: createRuntimeInvocationContext({
+        fetch: requestFetch,
         runtimeId: 'empty-retry',
         providerName: 'openai',
         ephemeralsSnapshot: settingsService.getAllGlobalSettings(),

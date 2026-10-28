@@ -1,5 +1,9 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import {
+  installBorrowedConfigSettings,
+  installOwnedConfigSettings,
+} from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
+const fixtureOwnersOwnedSettings = installOwnedConfigSettings();
 import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 /**
  * @plan PLAN-20251023-STATELESS-HARDENING.P07
@@ -61,13 +65,10 @@ const createConfigStub = (label: string): Config =>
     telemetry: { enabled: false, logConversations: false },
   });
 
-const createRuntimeWithoutConfig = (
-  settings: SettingsService,
-): ProviderRuntimeContext =>
+const createRuntimeWithoutConfig = (): ProviderRuntimeContext =>
   ({
     runtimeId: 'stateless-runtime',
-    settingsService: settings,
-    config: undefined,
+
     metadata: { source: 'LoggingProviderWrapper.stateless.test' },
   }) as ProviderRuntimeContext;
 
@@ -81,7 +82,7 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
     );
 
     const settings = new SettingsService();
-    const runtime = createRuntimeWithoutConfig(settings);
+    const runtime = createRuntimeWithoutConfig();
 
     const iterator = wrapper.generateChatCompletion({
       contents: [],
@@ -105,14 +106,13 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
     );
 
     const config = createConfigStub('test');
-    const selectedOwner = fixtureOwners.adopt(
+    const selectedOwner = fixtureOwnersBorrowedSettings(
       config,
       new SettingsService(),
-    ).settingsOwner;
+    );
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'missing-settings-runtime',
-      settingsService: undefined as unknown as SettingsService,
-      config,
+
       metadata: { source: 'test' },
     };
 
@@ -139,14 +139,13 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
 
     const settings = new SettingsService();
     const config = createConfigStub('complete-runtime');
-    const selectedOwner = fixtureOwners.adopt(
+    const selectedOwner = fixtureOwnersBorrowedSettings(
       config,
       new SettingsService(),
-    ).settingsOwner;
+    );
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'complete-runtime',
-      settingsService: settings,
-      config,
+
       metadata: { source: 'test' },
     };
 
@@ -176,23 +175,22 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
 
     const settings = new SettingsService();
     const config = createConfigStub('metadata-test');
-    const selectedOwner = fixtureOwners.adopt(
+    const selectedOwner = fixtureOwnersBorrowedSettings(
       config,
       new SettingsService(),
-    ).settingsOwner;
+    );
 
     // Set up runtime context resolver
-    wrapper.setRuntimeContextResolver(() => ({
+    wrapper.setInvocationDataReader(() => ({
       runtimeId: 'injected-runtime',
-      settingsService: settings,
-      config,
+      globalSettings: settings.getAllGlobalSettings(),
+      providerSettings: settings.getProviderSettings(provider.name),
       metadata: { injected: true, source: 'resolver' },
     }));
 
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'provided-runtime',
-      settingsService: settings,
-      config,
+
       metadata: { provided: true, source: 'caller' },
     };
 
@@ -215,17 +213,16 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
   it('fails fast when config lost its prototype instead of repairing it @requirement:REQ-SP4-004', async () => {
     const provider = new StubProvider();
     const settings = new SettingsService();
-    const selectedOwner = fixtureOwners.config(
+    const selectedOwner = fixtureOwnersOwnedSettings(
       'negative-diagnostics',
       settings,
-    ).settingsOwner;
+    );
     const invalidConfig = Object.freeze({
       getConversationLogPath: () => '/tmp/prototype-lost',
     }) as unknown as Config;
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'prototype-lost-runtime',
-      settingsService: settings,
-      config: invalidConfig,
+
       metadata: { source: 'prototype-lost-test' },
     };
 

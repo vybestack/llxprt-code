@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call-write-1","name":"write_file","parameters":{"file_path":"{{CWD}}/message-bus-confirmation-output.txt","content":"must not be written"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"write was declined"}]}]}

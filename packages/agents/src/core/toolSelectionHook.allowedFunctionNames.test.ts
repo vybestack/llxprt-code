@@ -66,7 +66,11 @@ function createTools(): ToolDeclaration[] {
   ];
 }
 
-/** Real `_applyToolSelectionHook` on a prototype-only processor stub. */
+/**
+ * Real `_applyToolSelectionHook` on a prototype-only processor stub. Every
+ * processor reads its model from its own runtime port, so the stub injects the
+ * one member the hook path touches.
+ */
 function makeVariant(
   name: string,
   ProcessorClass:
@@ -78,13 +82,13 @@ function makeVariant(
     name,
     applyToolSelectionHook: async (toolChoice, toolsFromConfig) => {
       const processor = Object.create(ProcessorClass.prototype) as unknown as {
-        runtimeContext: { state: { model: string } };
+        ports: { state: { model: string } };
         _applyToolSelectionHook: (
           tools: ToolDeclaration[],
           owner: HookExecutionOwner,
         ) => Promise<{ tools: ToolDeclaration[] }>;
       };
-      processor.runtimeContext = { state: { model: STUB_MODEL } };
+      processor.ports = { state: { model: STUB_MODEL } };
       const firedRequest: { request?: V2ToolSelectionRequest } = {};
       const result = await processor._applyToolSelectionHook(
         toolsFromConfig,

@@ -26,6 +26,10 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 // ---------------------------------------------------------------------------
 // Test helpers — construct real IContent objects
@@ -155,6 +159,8 @@ export function buildRuntimeContext(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
     state: runtimeState,
     history: historyService,
@@ -179,7 +185,6 @@ export function buildRuntimeContext(
     telemetry: mockTelemetryAdapter,
     tools: mockToolsView,
     providerRuntime: createProviderRuntimeContext({
-      settingsService,
       runtimeId: runtimeState.runtimeId,
     }),
   });

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
@@ -17,7 +18,6 @@ import {
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { ShellTool, isRipgrepAvailable } from '@vybestack/llxprt-code-core';
-import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 import { ExtensionStorage } from './extension.js';
@@ -25,6 +25,7 @@ import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
+import { loadCliConfigWithPreflight } from '../__tests__/load-cli-config-fixture.js';
 
 const realTrustedFoldersModule = { ...(await import('./trustedFolders.js')) };
 const realLlxprtCodeCoreModule = {
@@ -102,113 +103,6 @@ const runtimeSettingsState = {
   oauthManager: null as unknown,
 };
 
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
-  const getProviderManager = () =>
-    runtimeSettingsState.providerManager ??
-    ({
-      listProviders: vi.fn(() => []),
-      getActiveProviderName: vi.fn(() => null),
-      setActiveProvider: vi.fn(),
-      getActiveProvider: vi.fn(() => undefined),
-      getAvailableModels: vi.fn(async () => []),
-      getProviderByName: vi.fn(() => undefined),
-    } as unknown as ServerConfig.RuntimeProviderManager);
-
-  return {
-    ephemeralSettingHelp: {},
-    parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
-      success: true,
-      value: rawValue,
-    })),
-    applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
-    applyProfileSnapshot: vi.fn(
-      async (profile: {
-        provider?: string;
-        model?: string;
-        baseUrl?: string;
-      }) => ({
-        providerName: profile.provider ?? '',
-        modelName: profile.model ?? '',
-        baseUrl: profile.baseUrl,
-        warnings: [],
-      }),
-    ),
-    switchActiveProvider: vi.fn(async () => ({
-      changed: true,
-      previousProvider: null,
-      nextProvider: 'mock-provider',
-      infoMessages: [],
-    })),
-    applyCliArgumentOverrides: vi.fn(async () => {}),
-    providerManager: vi.fn(() => runtimeSettingsState.providerManager),
-    oauthManager: vi.fn(() => {
-      if (runtimeSettingsState.oauthManager == null) {
-        throw new Error('OAuthManager missing from runtime registration');
-      }
-      return runtimeSettingsState.oauthManager;
-    }),
-    providerStatus: vi.fn(() => ({
-      name:
-        runtimeSettingsState.providerManager?.getActiveProviderName() ??
-        runtimeSettingsState.context?.config?.getProvider() ??
-        null,
-    })),
-    listProviders: vi.fn(() => getProviderManager().listProviders()),
-    getActiveProviderName: vi.fn(() =>
-      getProviderManager().getActiveProviderName(),
-    ),
-    setActiveModel: vi.fn(async () => ({
-      changed: false,
-      previousModel: null,
-      nextModel: null,
-      infoMessages: [],
-    })),
-    listAvailableModels: vi.fn(async () =>
-      getProviderManager().getAvailableModels(),
-    ),
-    getActiveModelName: vi.fn(() => null),
-    getActiveProfileName: vi.fn(() => null),
-    getActiveModelParams: vi.fn(() => ({})),
-    getEphemeralSettings: vi.fn(() => ({})),
-    getEphemeralSetting: vi.fn(() => undefined),
-    setEphemeralSetting: vi.fn(),
-    setActiveModelParam: vi.fn(),
-    clearActiveModelParam: vi.fn(),
-    saveProfileSnapshot: vi.fn(async () => undefined),
-    saveLoadBalancerProfile: vi.fn(async () => undefined),
-    loadProfileByName: vi.fn(async () => undefined),
-    deleteProfileByName: vi.fn(async () => undefined),
-    listSavedProfiles: vi.fn(() => []),
-    getProfileByName: vi.fn(() => undefined),
-    setDefaultProfileName: vi.fn(),
-    updateActiveProviderBaseUrl: vi.fn(async () => undefined),
-    updateActiveProviderApiKey: vi.fn(async () => undefined),
-    getRuntimeDiagnosticsSnapshot: vi.fn(() => ({})),
-    getActiveToolFormatState: vi.fn(() => ({})),
-    setActiveToolFormatOverride: vi.fn(),
-    getActiveProviderMetrics: vi.fn(() => undefined),
-    getSessionTokenUsage: vi.fn(() => undefined),
-    assembleCliProviderRuntime: vi.fn(
-      (input: {
-        settingsService: unknown;
-        config: unknown;
-        runtimeId: string;
-        metadata?: Record<string, unknown>;
-      }) => ({
-        runtime: {
-          settingsService: input.settingsService,
-          config: input.config,
-          runtimeId: input.runtimeId,
-          metadata: input.metadata,
-        },
-        runtimeMessageBus: { kind: 'session-bus' },
-        providerManager: getProviderManager(),
-        oauthManager: { id: 'oauth-manager' },
-      }),
-    ),
-  };
-});
-
 void vi.mock('@vybestack/llxprt-code-core', () => {
   const actualServer = realLlxprtCodeCoreModule;
   return {
@@ -276,16 +170,19 @@ describe('loadCliConfig chatCompression', () => {
         contextPercentageThreshold: 0.5,
       },
     };
-    const config = await loadCliConfig(
+    const config = await loadCliConfigWithPreflight({
       settings,
-      [],
-      new ExtensionEnablementManager(
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getChatCompression()).toStrictEqual({
       contextPercentageThreshold: 0.5,
     });
@@ -295,16 +192,19 @@ describe('loadCliConfig chatCompression', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    const config = await loadCliConfig(
+    const config = await loadCliConfigWithPreflight({
       settings,
-      [],
-      new ExtensionEnablementManager(
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getChatCompression()).toBeUndefined();
   });
 });
@@ -336,16 +236,19 @@ describe('loadCliConfig useRipgrep', () => {
     (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
       true,
     );
-    const config = await loadCliConfig(
+    const config = await loadCliConfigWithPreflight({
       settings,
-      [],
-      new ExtensionEnablementManager(
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getUseRipgrep()).toBe(true);
   });
 
@@ -356,16 +259,19 @@ describe('loadCliConfig useRipgrep', () => {
     (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
       false,
     );
-    const config = await loadCliConfig(
+    const config = await loadCliConfigWithPreflight({
       settings,
-      [],
-      new ExtensionEnablementManager(
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getUseRipgrep()).toBe(false);
   });
 
@@ -376,16 +282,19 @@ describe('loadCliConfig useRipgrep', () => {
     (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
       true,
     );
-    const config = await loadCliConfig(
+    const config = await loadCliConfigWithPreflight({
       settings,
-      [],
-      new ExtensionEnablementManager(
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getUseRipgrep()).toBe(false);
   });
 
@@ -396,16 +305,19 @@ describe('loadCliConfig useRipgrep', () => {
     (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
       false,
     );
-    const config = await loadCliConfig(
+    const config = await loadCliConfigWithPreflight({
       settings,
-      [],
-      new ExtensionEnablementManager(
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getUseRipgrep()).toBe(true);
   });
 });
@@ -432,16 +344,19 @@ describe('screenReader configuration', () => {
     const settings: Settings = {
       accessibility: { screenReader: true },
     };
-    const config = await loadCliConfig(
+    const config = await loadCliConfigWithPreflight({
       settings,
-      [],
-      new ExtensionEnablementManager(
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getScreenReader()).toBe(true);
   });
 
@@ -451,16 +366,19 @@ describe('screenReader configuration', () => {
     const settings: Settings = {
       accessibility: { screenReader: false },
     };
-    const config = await loadCliConfig(
+    const config = await loadCliConfigWithPreflight({
       settings,
-      [],
-      new ExtensionEnablementManager(
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getScreenReader()).toBe(false);
   });
 
@@ -470,16 +388,19 @@ describe('screenReader configuration', () => {
     const settings: Settings = {
       accessibility: { screenReader: false },
     };
-    const config = await loadCliConfig(
+    const config = await loadCliConfigWithPreflight({
       settings,
-      [],
-      new ExtensionEnablementManager(
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getScreenReader()).toBe(true);
   });
 
@@ -487,16 +408,19 @@ describe('screenReader configuration', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    const config = await loadCliConfig(
+    const config = await loadCliConfigWithPreflight({
       settings,
-      [],
-      new ExtensionEnablementManager(
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getScreenReader()).toBe(false);
   });
 });
@@ -527,16 +451,19 @@ describe('loadCliConfig tool exclusions', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getExcludeTools()).not.toContain('run_shell_command');
     expect(config.getExcludeTools()).not.toContain('replace');
     expect(config.getExcludeTools()).not.toContain('write_file');
@@ -546,16 +473,19 @@ describe('loadCliConfig tool exclusions', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', '--yolo'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getExcludeTools()).not.toContain('run_shell_command');
     expect(config.getExcludeTools()).not.toContain('replace');
     expect(config.getExcludeTools()).not.toContain('write_file');
@@ -565,16 +495,19 @@ describe('loadCliConfig tool exclusions', () => {
     process.stdin.isTTY = false;
     process.argv = ['node', 'script.js', '-p', 'test'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getExcludeTools()).toContain('run_shell_command');
     expect(config.getExcludeTools()).toContain('replace');
     expect(config.getExcludeTools()).toContain('write_file');
@@ -584,16 +517,19 @@ describe('loadCliConfig tool exclusions', () => {
     process.stdin.isTTY = false;
     process.argv = ['node', 'script.js', '-p', 'test', '--yolo'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getExcludeTools()).not.toContain('run_shell_command');
     expect(config.getExcludeTools()).not.toContain('replace');
     expect(config.getExcludeTools()).not.toContain('write_file');
@@ -610,16 +546,19 @@ describe('loadCliConfig tool exclusions', () => {
       'ShellTool',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getExcludeTools()).not.toContain(ShellTool.Name);
   });
 
@@ -634,16 +573,19 @@ describe('loadCliConfig tool exclusions', () => {
       'run_shell_command',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getExcludeTools()).not.toContain(ShellTool.Name);
   });
 
@@ -658,16 +600,19 @@ describe('loadCliConfig tool exclusions', () => {
       'ShellTool(wc)',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
+    const config = await loadCliConfigWithPreflight({
+      settings: {},
+      extensions: [],
+      extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
+        {
+          enabledOverride: argv.extensions,
+        },
       ),
-      'test-session',
+      sessionId: 'test-session',
       argv,
-    );
+      authority: new CredentialAuthority(),
+    });
     expect(config.getExcludeTools()).not.toContain(ShellTool.Name);
   });
 });

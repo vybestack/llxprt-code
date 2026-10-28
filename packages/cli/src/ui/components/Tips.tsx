@@ -7,10 +7,13 @@
 import type React from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
-import type { MemoryState } from '../cliUiRuntime.js';
+/** Memory read the tips need: whether context files exist yet. */
+export interface TipsMemory {
+  getLlxprtMdFileCount(): number;
+}
 
 interface TipsProps {
-  memory: MemoryState;
+  memory: TipsMemory;
 }
 
 export const Tips: React.FC<TipsProps> = ({ memory }) => {

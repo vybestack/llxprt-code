@@ -13,10 +13,13 @@
  * without instantiating the full coordinator.
  */
 
-import type { ProfileManager } from '@vybestack/llxprt-code-settings';
+import type { Profile } from '@vybestack/llxprt-code-settings/profiles/types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { createProfileManager } from './profile-utils.js';
+import {
+  createOAuthProfileReads,
+  type OAuthProfileReads,
+} from './oauth-profile-reads.js';
 
 const logger = new DebugLogger('llxprt:oauth:token');
 
@@ -40,14 +43,12 @@ export async function loadProfileBuckets(
   providerName: string,
   currentProfileName: string,
   requestedProfileName: string | null,
-  profiles?: Pick<ProfileManager, 'loadProfile'>,
+  profiles?: OAuthProfileReads,
 ): Promise<string[]> {
-  let profile: Awaited<
-    ReturnType<Awaited<ReturnType<typeof createProfileManager>>['loadProfile']>
-  >;
+  let profile: Profile;
   try {
-    const profileManager = profiles ?? (await createProfileManager());
-    profile = await profileManager.loadProfile(currentProfileName);
+    const reads = profiles ?? createOAuthProfileReads(undefined);
+    profile = await reads.loadProfile(currentProfileName);
   } catch (error) {
     logger.debug(`Could not load profile buckets for ${providerName}:`, error);
     if (requestedProfileName) {
@@ -91,7 +92,7 @@ export async function resolveProfileBuckets(
   providerName: string,
   getOwnerProfileName: () => string | null,
   metadata?: OAuthTokenRequestMetadata,
-  profiles?: Pick<ProfileManager, 'loadProfile'>,
+  profiles?: OAuthProfileReads,
 ): Promise<string[]> {
   const requestedProfileName =
     typeof metadata?.profileId === 'string' && metadata.profileId.trim() !== ''
@@ -141,7 +142,7 @@ export interface CurrentProfileOAuthContext {
 export async function resolveCurrentProfileOAuthContext(
   providerName: string,
   currentProfileName: string | null,
-  profiles?: Pick<ProfileManager, 'loadProfile'>,
+  profiles?: OAuthProfileReads,
 ): Promise<CurrentProfileOAuthContext | undefined> {
   const metadata = await resolveCurrentProfileSessionMetadata(
     providerName,
@@ -151,8 +152,8 @@ export async function resolveCurrentProfileOAuthContext(
     return undefined;
   }
 
-  const profileManager = profiles ?? (await createProfileManager());
-  const profile = await profileManager.loadProfile(metadata.profileId);
+  const reads = profiles ?? createOAuthProfileReads(undefined);
+  const profile = await reads.loadProfile(metadata.profileId);
   const profileProvider =
     'provider' in profile && typeof profile.provider === 'string'
       ? profile.provider

@@ -4,7 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { SubagentConfig } from '@vybestack/llxprt-code-core';
+import type {
+  SubagentDefinitionReads,
+  SubagentDefinitionWrites,
+  ProfileDefinitionReads,
+  SubagentConfig,
+} from '@vybestack/llxprt-code-core';
 
 /**
  * Views available in the SubagentManagerDialog
@@ -79,6 +84,12 @@ export interface SubagentManagerState {
  * Props for SubagentManagerDialog
  */
 export interface SubagentManagerDialogProps {
+  listSubagents: SubagentDefinitionReads['listSubagents'];
+  loadSubagent: SubagentDefinitionReads['loadSubagent'];
+  saveSubagent: SubagentDefinitionWrites['saveSubagent'];
+  deleteSubagent: SubagentDefinitionWrites['deleteSubagent'];
+  listProfiles: ProfileDefinitionReads['listProfiles'];
+  generatePrompt: (input: string) => Promise<string>;
   onClose: () => void;
   initialView?: SubagentView;
   initialSubagentName?: string;

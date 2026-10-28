@@ -5,7 +5,7 @@
  */
 
 import { getErrorMessage } from '@vybestack/llxprt-code-core';
-import type { CliUiRuntime } from '../ui/cliUiRuntime.js';
+import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
 import type { DiscoveredMCPPrompt } from '@vybestack/llxprt-code-mcp';
 import type {
   CommandContext,
@@ -20,12 +20,17 @@ import type {
   PromptMessage,
 } from '@modelcontextprotocol/sdk/types.js';
 
+export interface McpPromptReads {
+  getMcpServers(): Record<string, MCPServerConfig> | undefined;
+  listPrompts(serverName: string): DiscoveredMCPPrompt[];
+}
+
 /**
  * Discovers and loads executable slash commands from prompts exposed by
  * Model-Context-Protocol (MCP) servers.
  */
 export class McpPromptLoader implements ICommandLoader {
-  constructor(private readonly config: CliUiRuntime | null) {}
+  constructor(private readonly config: McpPromptReads | null) {}
 
   /**
    * Loads all available prompts from all configured MCP servers and adapts
@@ -112,11 +117,11 @@ export class McpPromptLoader implements ICommandLoader {
     prompt: DiscoveredMCPPrompt,
     serverName: string,
   ): (
-    context: CommandContext,
+    context: Pick<CommandContext, 'signal'>,
     args: string,
   ) => Promise<SlashCommandActionReturn> {
     return async (
-      context: CommandContext,
+      context: Pick<CommandContext, 'signal'>,
       args: string,
     ): Promise<SlashCommandActionReturn> => {
       if (!this.config) {

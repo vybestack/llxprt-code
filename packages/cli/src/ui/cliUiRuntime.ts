@@ -2,8 +2,7 @@ import type {
   UserPromptEvent,
   SlashCommandEvent,
 } from '@vybestack/llxprt-code-telemetry';
-import { buildSettingsRuntime } from '../runtime/createRuntimeOwnerFeatures.js';
-type SessionSettingsOwner = NonNullable<FromConfigOptions['settingsOwner']>;
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -11,18 +10,15 @@ type SessionSettingsOwner = NonNullable<FromConfigOptions['settingsOwner']>;
  */
 import type {
   SessionEndReason,
-  WorkspaceSkillOperations,
+  ModelProfileInfoPayload,
   WorkspaceCheckpointOperations,
   WorkspacePromptSelection,
   WorkspaceResourceSelection,
   WorkspaceIgnoreOperations,
   WorkspaceSearchOperations,
   AccessibilitySettings,
-  AgentClientContract,
-  ContentGeneratorConfig,
   ApprovalMode,
   FileFilteringOptions,
-  IdeClient,
   LlxprtExtension,
   MCPServerConfig,
   RedactionConfig,
@@ -31,14 +27,12 @@ import type {
   ShellReplacementMode,
   TelemetrySettings,
 } from '@vybestack/llxprt-code-core';
-import type { Agent, FromConfigOptions } from '@vybestack/llxprt-code-agents';
-import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   readGitHubCompletionReport,
   type GitHubCompletionReads,
 } from './hooks/githubAtCompletion.js';
 import type { PerfSnapshotCapability } from './commands/perfCommand.js';
-import type { CliSessionPersistencePort } from '../cliSessionPersistence.js';
 
 export interface RefreshMemoryResult {
   memoryContent: string;
@@ -64,23 +58,11 @@ export interface ExtensionEnablementSource {
   isEnabled(extensionName: string, path: string): boolean;
 }
 
-export type UiContentGeneratorConfig = ContentGeneratorConfig;
-
 /**
  * Focused capability read-models. Each exposes only the members a single
  * consumer family needs, so callers depend on the smallest suitable surface
- * rather than the full CliUiRuntime aggregate.
+ * rather than a whole runtime.
  */
-
-/**
- * Provides the live AgentClient used by the streaming path.
- * Each lookup resolves the current Agent owner after profile replacement;
- * hooks receive this boundary separately from workspace capabilities.
- */
-export interface AgentClientSource {
-  getAgentClient(): AgentClientContract;
-  createDetachedAgentClient?(runtimeId?: string): Promise<AgentClientContract>;
-}
 
 /**
  * Session identity read-model: stable identifiers and directories a UI
@@ -104,7 +86,6 @@ export interface SessionIdentity {
 export interface ModelState {
   getModel(): string;
   getProvider(): string | undefined;
-  getContentGeneratorConfig(): UiContentGeneratorConfig | undefined;
 }
 
 /**
@@ -166,18 +147,6 @@ export interface MemoryState {
 }
 
 /**
- * IDE read-model for IDE client and integration prompt consumers.
- */
-export interface IdeState {
-  getIdeClient(): IdeClient | undefined;
-  getIdeMode(): boolean;
-  setIdeMode(value: boolean): void;
-  setIdeClientConnected(): void | Promise<void>;
-  setIdeClientDisconnected(): void | Promise<void>;
-  getLspConfig(): LspConfig | undefined;
-}
-
-/**
  * Hook/skill read-model for hook display and skill support consumers.
  */
 export interface HookSkillState {
@@ -213,7 +182,9 @@ export interface SettingsTelemetryState {
   readCitations(): unknown;
   readProfileName(): string | null;
   readSelectedProvider(): string | undefined;
-  subscribeModelSelection(listener: () => void): () => void;
+  subscribeModelSelection(
+    listener: (profile?: ModelProfileInfoPayload) => void,
+  ): () => void;
   getProxy(): string | undefined;
   getBugCommand(): UiBugCommandSettings | undefined;
   getTelemetrySettings(): TelemetrySettings;
@@ -234,10 +205,9 @@ export interface UiToolRegistryInfo {
 
 /**
  * Tool-registry SOURCE capability. This is a bare-source read-model (part of
- * {@link StreamRuntimeBareSource}) consumed by the focused MCP/auto-prompt
- * boundaries ({@link McpCommandRuntime}, the auto-prompt runtime) and by the
+ * {@link StreamRuntimeBareSource}) consumed by the auto-prompt runtime and the
  * settings dialog's dynamic tool-settings derivation. It is intentionally NOT
- * re-exposed as a projected `tools` slice on {@link StreamRuntime}: the
+ * re-exposed as a projected `tools` slice on the stream capabilities: the
  * streaming/UI path lists tools through the public `agent.tools` surface
  * (#2376), so no UI hook reads the registry off the runtime.
  */
@@ -288,7 +258,7 @@ export interface EphemeralSettingsRuntime {
 /**
  * MCP discovery and configured-server state exposed to CLI consumers.
  */
-type McpUiSelection = Pick<
+export type McpUiSelection = Pick<
   Agent['mcp'],
   | 'listPrompts'
   | 'listResources'
@@ -364,18 +334,17 @@ export interface AppStateRuntime {
 }
 
 /**
- * Nested runtime boundary for the streaming path. Each field is a focused
- * capability interface so downstream hooks depend on the smallest suitable
- * surface rather than a flat god-object.
+ * Nested boundary for the streaming path. Each field is a focused capability
+ * interface so downstream hooks depend on the smallest suitable surface rather
+ * than a flat god-object. This is the streaming composition's own shape, built
+ * at the composition edge; it is never a component prop.
  */
 export interface StreamRuntime {
   session: SessionIdentity;
   model: ModelState;
-  agentClientSource: AgentClientSource;
   shell: ShellState;
   files: FileWorkspaceState;
   memory: MemoryState;
-  ide: IdeState;
   hooks: HookSkillState;
   mcp: McpState;
   settings: SettingsTelemetryState;
@@ -394,21 +363,15 @@ export interface StreamRuntime {
 }
 
 /**
- * Nested runtime boundary for the full UI layer. Composed at the composition
- * edge from focused capability objects sourced from bootstrap runtime state.
- * Below AppContainer, code accesses `runtime.session.getSessionId()` etc.,
- * never a flat aggregate.
+ * The interactive UI composition: the streaming composition plus the approval,
+ * extension and app capability slices. Built once at the CLI composition root,
+ * which projects it onto narrow ports; it never reaches a component.
  */
-export interface UiRuntime extends StreamRuntime {
-  approval: ApprovalState;
-  extensions: ExtensionRuntime;
-  app: AppStateRuntime;
-}
 
 /**
  * Bare structural source satisfying all focused capability interfaces
  * simultaneously. The CLI bootstrap runtime satisfies this at runtime; the
- * nested UiRuntime is built from it once at the composition edge.
+ * nested capabilities are built from it once at the composition edge.
  */
 export interface StreamRuntimeBareSource
   extends SessionIdentity,
@@ -424,7 +387,6 @@ export interface StreamRuntimeBareSource
       | 'initializeSearch'
     >,
     Pick<MemoryState, 'shouldLoadMemoryFromIncludeDirectories'>,
-    IdeState,
     Omit<HookSkillState, 'endHookSession'>,
     Omit<
       McpState,
@@ -462,7 +424,6 @@ export type StreamRuntimeDeclarationSource = Omit<
   | 'updateTelemetrySettings'
   | 'getModel'
   | 'getProvider'
-  | 'getContentGeneratorConfig'
   | 'readCitations'
   | 'readProfileName'
   | 'readSelectedProvider'
@@ -470,11 +431,6 @@ export type StreamRuntimeDeclarationSource = Omit<
   | 'getEphemeralSettings'
   | 'setEphemeralSetting'
   | 'getEphemeralSetting'
-  | 'getIdeClient'
-  | 'getIdeMode'
-  | 'setIdeMode'
-  | 'setIdeClientConnected'
-  | 'setIdeClientDisconnected'
 >;
 export type UiRuntimeDeclarationSource = Omit<
   UiRuntimeBareSource,
@@ -486,7 +442,6 @@ export type UiRuntimeDeclarationSource = Omit<
   | 'updateTelemetrySettings'
   | 'getModel'
   | 'getProvider'
-  | 'getContentGeneratorConfig'
   | 'readCitations'
   | 'readProfileName'
   | 'readSelectedProvider'
@@ -494,15 +449,20 @@ export type UiRuntimeDeclarationSource = Omit<
   | 'getEphemeralSettings'
   | 'setEphemeralSetting'
   | 'getEphemeralSetting'
-  | 'getIdeClient'
-  | 'getIdeMode'
-  | 'setIdeMode'
-  | 'setIdeClientConnected'
-  | 'setIdeClientDisconnected'
 >;
 
-function buildSessionRuntime(
-  source: StreamRuntimeDeclarationSource,
+export function buildSessionRuntime(
+  source: Pick<
+    StreamRuntimeDeclarationSource,
+    | 'getSessionId'
+    | 'adoptSessionId'
+    | 'getTargetDir'
+    | 'getProjectRoot'
+    | 'getWorkingDir'
+    | 'getProjectTempDir'
+    | 'getSessionRecordingQueueByteLimit'
+    | 'getLlxprtDir'
+  >,
 ): SessionIdentity {
   return {
     getSessionId: () => source.getSessionId(),
@@ -517,47 +477,28 @@ function buildSessionRuntime(
   };
 }
 
-function buildModelRuntime(
-  agent: Pick<Agent, 'getModel' | 'getProvider' | 'agentClient'>,
+export function buildModelRuntime(
+  agent: Pick<Agent, 'getModel' | 'getProvider'>,
 ): ModelState {
   return {
     getModel: () => agent.getModel(),
     getProvider: () => agent.getProvider(),
-    getContentGeneratorConfig: () =>
-      agent.agentClient.getContentGeneratorConfig(),
   };
 }
 
-function buildAgentClientSource(
-  agent: Pick<
-    Agent,
-    | 'agentClient'
-    | 'ide'
-    | 'getApprovalMode'
-    | 'setApprovalMode'
-    | 'sessionClient'
-    | 'hooks'
-    | 'workspace'
-    | 'memory'
-    | 'getModel'
-    | 'getProvider'
-    | 'getEphemeralSetting'
-    | 'getEphemeralSettings'
-    | 'setEphemeralSetting'
-    | 'getActiveProfileName'
-    | 'onStats'
-  > & {
-    mcp: McpUiSelection;
-  },
-): AgentClientSource {
-  return {
-    getAgentClient: () => agent.agentClient,
-    createDetachedAgentClient: (id) =>
-      agent.sessionClient.createDetachedAgentClient(id),
-  };
-}
-
-function buildShellRuntime(source: StreamRuntimeDeclarationSource): ShellState {
+export function buildShellRuntime(
+  source: Pick<
+    StreamRuntimeDeclarationSource,
+    | 'getShouldUseNodePtyShell'
+    | 'getEnableInteractiveShell'
+    | 'getPtyTerminalWidth'
+    | 'getPtyTerminalHeight'
+    | 'setPtyTerminalSize'
+    | 'getTerminalBackground'
+    | 'getShellReplacement'
+    | 'getShellExecutionConfig'
+  >,
+): ShellState {
   return {
     getShouldUseNodePtyShell: () => source.getShouldUseNodePtyShell(),
     getEnableInteractiveShell: () => source.getEnableInteractiveShell(),
@@ -571,26 +512,31 @@ function buildShellRuntime(source: StreamRuntimeDeclarationSource): ShellState {
   };
 }
 
-function buildFilesRuntime(
-  source: StreamRuntimeDeclarationSource,
-  workspace: Pick<
-    Agent,
-    | 'workspace'
-    | 'memory'
-    | 'sessionClient'
-    | 'getModel'
-    | 'getProvider'
-    | 'getEphemeralSetting'
-    | 'getEphemeralSettings'
-    | 'setEphemeralSetting'
-    | 'getActiveProfileName'
-    | 'onStats'
-    | 'agentClient'
-    | 'ide'
-    | 'getApprovalMode'
-    | 'setApprovalMode'
-  > & {
-    mcp: McpUiSelection;
+export function buildFilesRuntime(
+  source: Pick<
+    StreamRuntimeDeclarationSource,
+    | 'getFileFilteringOptions'
+    | 'getFileFilteringDisableFuzzySearch'
+    | 'getFileFilteringRespectLlxprtIgnore'
+    | 'getFileFilteringRespectGitIgnore'
+    | 'getEnableRecursiveFileSearch'
+  >,
+  workspace: {
+    workspace: Pick<
+      Agent['workspace'],
+      | 'initializeSearch'
+      | 'search'
+      | 'getGlobExcludes'
+      | 'getReadManyFilesExcludes'
+      | 'shouldIgnoreFile'
+      | 'shouldGitIgnoreFile'
+      | 'shouldLlxprtIgnoreFile'
+      | 'filterFiles'
+      | 'filterFilesWithReport'
+      | 'getDirectories'
+      | 'addDirectory'
+      | 'containsPath'
+    >;
   },
 ): FileWorkspaceState {
   return {
@@ -628,26 +574,22 @@ function buildFilesRuntime(
   };
 }
 
-function buildMemoryRuntime(
-  source: StreamRuntimeDeclarationSource,
-  workspace: Pick<
-    Agent,
-    | 'workspace'
-    | 'memory'
-    | 'sessionClient'
-    | 'getModel'
-    | 'getProvider'
-    | 'getEphemeralSetting'
-    | 'getEphemeralSettings'
-    | 'setEphemeralSetting'
-    | 'getActiveProfileName'
-    | 'onStats'
-    | 'agentClient'
-    | 'ide'
-    | 'getApprovalMode'
-    | 'setApprovalMode'
-  > & {
-    mcp: McpUiSelection;
+export function buildMemoryRuntime(
+  source: Pick<
+    StreamRuntimeDeclarationSource,
+    'shouldLoadMemoryFromIncludeDirectories'
+  >,
+  workspace: {
+    memory: Pick<
+      Agent['memory'],
+      | 'getMemory'
+      | 'setMemory'
+      | 'setCoreMemory'
+      | 'getFileCount'
+      | 'getCoreFileCount'
+      | 'getFilePaths'
+      | 'refresh'
+    >;
   },
 ): MemoryState {
   return {
@@ -666,22 +608,14 @@ function buildMemoryRuntime(
   };
 }
 
-function buildIdeRuntime(
-  source: StreamRuntimeDeclarationSource,
-  ide: Agent['ide'],
-): IdeState {
-  return {
-    getIdeClient: () => ide.getIdeClient(),
-    getIdeMode: () => ide.getIdeMode(),
-    setIdeMode: (enabled) => ide.setIdeMode(enabled),
-    setIdeClientConnected: () => ide.setIdeClientConnected(),
-    setIdeClientDisconnected: () => ide.setIdeClientDisconnected(),
-    getLspConfig: () => source.getLspConfig(),
-  };
-}
-
-function buildHooksRuntime(
-  source: StreamRuntimeDeclarationSource,
+export function buildHooksRuntime(
+  source: Pick<
+    StreamRuntimeDeclarationSource,
+    | 'getEnableHooks'
+    | 'isSkillsSupportEnabled'
+    | 'getEnableHooksUI'
+    | 'isAdminSkillsEnabled'
+  >,
   hooks: Pick<
     Agent['hooks'],
     'triggerSessionEnd' | 'getDisabledHooks' | 'setDisabledHooks'
@@ -698,8 +632,8 @@ function buildHooksRuntime(
   };
 }
 
-function buildMcpRuntime(
-  source: StreamRuntimeDeclarationSource,
+export function buildMcpRuntime(
+  source: Pick<StreamRuntimeDeclarationSource, 'getMcpServerCommand'>,
   mcp: McpUiSelection,
 ): McpState {
   return {
@@ -714,7 +648,7 @@ function buildMcpRuntime(
   };
 }
 
-function buildAppEventRuntime(
+export function buildAppEventRuntime(
   mcp: Pick<Agent['mcp'], 'subscribeStatus'>,
 ): AppEventRuntime {
   return {
@@ -722,267 +656,77 @@ function buildAppEventRuntime(
   };
 }
 
-/**
- * Helper to build a {@link StreamRuntime} from a runtime source at the
- * composition edge. Each field is a concrete focused adapter so the nested
- * runtime does not expose the flat source object below the composition edge.
- */
-function buildStreamWorkspaceRuntime(
-  source: StreamRuntimeDeclarationSource,
-  workspace: Pick<
-    Agent,
-    | 'hooks'
-    | 'workspace'
-    | 'memory'
-    | 'sessionClient'
-    | 'getModel'
-    | 'getProvider'
-    | 'getEphemeralSetting'
-    | 'getEphemeralSettings'
-    | 'setEphemeralSetting'
-    | 'getActiveProfileName'
-    | 'onStats'
-    | 'agentClient'
-    | 'ide'
-    | 'getApprovalMode'
-    | 'setApprovalMode'
-  > & {
-    mcp: McpUiSelection;
-  },
-  telemetrySettings?: SessionSettingsOwner,
-): Omit<StreamRuntime, 'agentClientSource'> {
+export function buildApprovalRuntime(
+  source: Pick<ApprovalState, 'getCoreTools' | 'getExcludeTools'>,
+  workspace: Pick<Agent, 'getApprovalMode' | 'setApprovalMode'>,
+): ApprovalState {
   return {
-    session: buildSessionRuntime(source),
-    model: buildModelRuntime(workspace),
-    shell: buildShellRuntime(source),
-    files: buildFilesRuntime(source, workspace),
-    memory: buildMemoryRuntime(source, workspace),
-    ide: buildIdeRuntime(source, workspace.ide),
-    hooks: buildHooksRuntime(source, workspace.hooks),
-    mcp: buildMcpRuntime(source, workspace.mcp),
-    settings: buildSettingsRuntime(source, workspace, telemetrySettings),
-    events: buildAppEventRuntime(workspace.mcp),
-    bucketFailover: {
-      resetBuckets: source.resetBuckets?.bind(source),
-      resetBucketSession: source.resetBucketSession?.bind(source),
-      ensureBucketsAuthenticated:
-        source.ensureBucketsAuthenticated?.bind(source),
-      readFailoverBuckets: source.readFailoverBuckets?.bind(source),
-      readCurrentBucket: source.readCurrentBucket?.bind(source),
-    },
-    checkpoint: {
-      checkpoints: workspace.workspace.checkpoints,
-      getCheckpointingEnabled: () => source.getCheckpointingEnabled(),
-    },
-    sessionLimits: { getMaxSessionTurns: () => source.getMaxSessionTurns() },
-    interactive: { isInteractive: () => source.isInteractive() },
-    ephemeral: {
-      getEphemeralSetting: (key) => workspace.getEphemeralSetting(key),
-    },
-    projectTempDir: source.projectTempDir,
-    projectChatsDir: source.projectChatsDir,
-    projectCheckpointsDir: source.projectCheckpointsDir,
-    historyFilePath: source.historyFilePath,
-    userCommandsDir: source.userCommandsDir,
-    projectCommandsDir: source.projectCommandsDir,
+    getApprovalMode: () => workspace.getApprovalMode(),
+    setApprovalMode: (mode) => workspace.setApprovalMode(mode),
+    getCoreTools: () => source.getCoreTools(),
+    getExcludeTools: () => source.getExcludeTools(),
   };
 }
-
-function buildUiWorkspaceRuntime(
-  source: UiRuntimeDeclarationSource,
-  workspace: Parameters<typeof buildStreamWorkspaceRuntime>[1] &
-    Pick<Agent, 'getApprovalMode' | 'setApprovalMode'> & {
-      tools: Pick<Agent['tools'], 'get'>;
-    },
-  bucketFailover?: BucketFailoverRuntime,
-  telemetrySettings?: SessionSettingsOwner,
-): Omit<UiRuntime, 'agentClientSource'> {
+export function buildExtensionRuntime(
+  source: ExtensionRuntime,
+): ExtensionRuntime {
   return {
-    ...buildStreamWorkspaceRuntime(source, workspace, telemetrySettings),
-    ...(bucketFailover ? { bucketFailover } : {}),
-    approval: {
-      getApprovalMode: () => workspace.getApprovalMode(),
-      setApprovalMode: (mode) => workspace.setApprovalMode(mode),
-      getCoreTools: () => source.getCoreTools(),
-      getExcludeTools: () => source.getExcludeTools(),
-    },
-    extensions: {
-      getExtensions: () => source.getExtensions(),
-      isExtensionEnabled: (extensionName) =>
-        source.isExtensionEnabled(extensionName),
-      extensionEnablementManager: source.extensionEnablementManager,
-    },
-    app: {
-      getAccessibility: () => source.getAccessibility(),
-      getScreenReader: () => source.getScreenReader(),
-      getDebugMode: () => source.getDebugMode(),
-      isRestrictiveSandbox: () => source.isRestrictiveSandbox(),
-      isTrustedFolder: () => workspace.ide.isTrustedFolder(),
-      setTrustedFolderLive: (trusted) =>
-        workspace.ide.setTrustedFolderLive(trusted),
-      getFolderTrust: () => source.getFolderTrust(),
-      getQuestion: () => source.getQuestion(),
-      getConversationLogPath: () => source.getConversationLogPath(),
-      getEnablePromptCompletion: () => source.getEnablePromptCompletion(),
-      getUtilityModel: () => source.getUtilityModel(),
-      isJitContextEnabled: () => source.isJitContextEnabled(),
-      getEphemeralSettings: () => workspace.getEphemeralSettings(),
-      setEphemeralSetting: (key, value) =>
-        workspace.setEphemeralSetting(key, value),
-      getSubagentManager: () => workspace.workspace.subagentDefinitions,
-      // @plan PLAN-20260731-GHBROKER.P16
-      githubCompletion: {
-        readReport: async (op, params, signal) =>
-          readGitHubCompletionReport(
-            workspace.tools.get('github'),
-            op,
-            params,
-            signal,
-          ),
-      },
-      updateSystemInstructionIfInitialized: () =>
-        source.updateSystemInstructionIfInitialized(),
-    },
+    getExtensions: () => source.getExtensions(),
+    isExtensionEnabled: (extensionName) =>
+      source.isExtensionEnabled(extensionName),
+    extensionEnablementManager: source.extensionEnablementManager,
   };
 }
-
-export function buildUiRuntimeFromSource(
-  source: UiRuntimeDeclarationSource,
-  agent: Pick<
-    Agent,
-    | 'agentClient'
-    | 'ide'
-    | 'getApprovalMode'
-    | 'setApprovalMode'
-    | 'sessionClient'
-    | 'hooks'
-    | 'workspace'
-    | 'memory'
-    | 'getModel'
-    | 'getProvider'
-    | 'getEphemeralSetting'
-    | 'getEphemeralSettings'
-    | 'setEphemeralSetting'
-    | 'getActiveProfileName'
-    | 'onStats'
-  > & {
-    tools: Pick<Agent['tools'], 'get'>;
-    mcp: McpUiSelection;
-  },
-  bucketFailover?: BucketFailoverRuntime,
-  telemetrySettings?: SessionSettingsOwner,
-): UiRuntime {
-  return {
-    ...buildUiWorkspaceRuntime(
-      source,
-      agent,
-      bucketFailover,
-      telemetrySettings,
-    ),
-    agentClientSource: buildAgentClientSource(agent),
-  };
-}
-
-/**
- * @deprecated Use {@link CliUiRuntime} instead. Slash-command code and other
- * broad-runtime consumers are being migrated to the canonical alias; this type
- * is retained temporarily to avoid a flag-day rename across all call sites and
- * will be removed once the migration completes.
- */
-export type SlashCommandRuntime = CliUiRuntime;
-
-/**
- * Builds a flat delegation adapter satisfying {@link CliUiRuntime} from the
- * bootstrap source. This breaks the Config identity link: downstream code
- * receives a plain object literal with delegated methods, not the raw Config
- * instance. The adapter flattens every capability produced by
- * {@link buildUiRuntimeFromSource} into a single object so slash commands and
- * dialogs receive the flat surface they expect.
- */
-export function buildSlashCommandRuntime(
-  source: UiRuntimeDeclarationSource,
-  agent: Parameters<typeof buildUiWorkspaceRuntime>[1] & {
-    tools: Pick<Agent['tools'], 'describeConfiguration' | 'get'>;
-    mcp: McpUiSelection;
-  },
-  perfSnapshotCapability?: PerfSnapshotCapability | null,
-  sessionPersistence?: CliSessionPersistencePort,
-  bucketFailover?: BucketFailoverRuntime,
-  skillOperations?: Pick<
-    WorkspaceSkillOperations,
-    'list' | 'find' | 'reload' | 'isAdminEnabled'
+export function buildAppRuntime(
+  source: Pick<
+    UiRuntimeDeclarationSource,
+    | 'getAccessibility'
+    | 'getScreenReader'
+    | 'getDebugMode'
+    | 'isRestrictiveSandbox'
+    | 'getFolderTrust'
+    | 'getQuestion'
+    | 'getConversationLogPath'
+    | 'getEnablePromptCompletion'
+    | 'getUtilityModel'
+    | 'isJitContextEnabled'
+    | 'updateSystemInstructionIfInitialized'
   >,
-  restartExtension?: (extension: LlxprtExtension) => Promise<void>,
-  telemetrySettings?: SessionSettingsOwner,
-): CliUiRuntime {
-  // Non-slice members must be destructured out and re-attached explicitly.
-  // The spread below only flattens capability SLICE OBJECTS; a member whose
-  // value is a bare function (or any non-object) contributes no own enumerable
-  // properties to Object.assign and would be dropped silently.
-  const {
-    projectTempDir,
-    projectChatsDir,
-    projectCheckpointsDir,
-    historyFilePath,
-    userCommandsDir,
-    projectCommandsDir,
-    ...capabilities
-  } = buildUiWorkspaceRuntime(source, agent, bucketFailover, telemetrySettings);
-  // This flattening assumes every capability object exposes unique property
-  // names. If a future capability overlaps an existing one, Object.assign will
-  // keep the last value silently, so add an explicit test when adding slices.
-  return Object.assign(
-    {},
-    ...Object.values(capabilities),
-    {
-      projectTempDir,
-      projectChatsDir,
-      projectCheckpointsDir,
-      historyFilePath,
-      userCommandsDir,
-      projectCommandsDir,
-      describeToolConfiguration: () => agent.tools.describeConfiguration(),
+  workspace: Pick<Agent, 'getEphemeralSettings' | 'setEphemeralSetting'> & {
+    ide: Pick<Agent['ide'], 'isTrustedFolder' | 'setTrustedFolderLive'>;
+    workspace: Pick<Agent['workspace'], 'subagentDefinitions'>;
+    tools: Pick<Agent['tools'], 'get'>;
+  },
+): AppStateRuntime {
+  return {
+    getAccessibility: () => source.getAccessibility(),
+    getScreenReader: () => source.getScreenReader(),
+    getDebugMode: () => source.getDebugMode(),
+    isRestrictiveSandbox: () => source.isRestrictiveSandbox(),
+    isTrustedFolder: () => workspace.ide.isTrustedFolder(),
+    setTrustedFolderLive: (trusted) =>
+      workspace.ide.setTrustedFolderLive(trusted),
+    getFolderTrust: () => source.getFolderTrust(),
+    getQuestion: () => source.getQuestion(),
+    getConversationLogPath: () => source.getConversationLogPath(),
+    getEnablePromptCompletion: () => source.getEnablePromptCompletion(),
+    getUtilityModel: () => source.getUtilityModel(),
+    isJitContextEnabled: () => source.isJitContextEnabled(),
+    getEphemeralSettings: () => workspace.getEphemeralSettings(),
+    setEphemeralSetting: (key, value) =>
+      workspace.setEphemeralSetting(key, value),
+    getSubagentManager: () => workspace.workspace.subagentDefinitions,
+    // @plan PLAN-20260731-GHBROKER.P16
+    githubCompletion: {
+      readReport: async (op, params, signal) =>
+        readGitHubCompletionReport(
+          workspace.tools.get('github'),
+          op,
+          params,
+          signal,
+        ),
     },
-    restartExtension !== undefined ? { restartExtension } : {},
-    skillOperations !== undefined ? { skillOperations } : {},
-    sessionPersistence !== undefined ? { sessionPersistence } : {},
-    perfSnapshotCapability !== undefined && perfSnapshotCapability !== null
-      ? { getPerfSnapshotCapability: () => perfSnapshotCapability }
-      : {},
-  );
-}
-
-/**
- * MCP-command boundary: the focused capability slice that MCP display and
- * auth commands actually need.
- */
-export interface McpCommandRuntime {
-  getMcpServers(): Record<string, MCPServerConfig> | undefined;
-  getBlockedMcpServers():
-    | Array<{ name: string; extensionName: string }>
-    | undefined;
-  listPrompts: WorkspacePromptSelection['listPrompts'];
-  listResources: WorkspaceResourceSelection['listResources'];
-}
-
-/**
- * Structural composition of all focused capability interfaces. This is NOT a
- * flat god-object — it is a type-level intersection of focused read-models.
- * The bootstrap runtime satisfies it structurally at runtime. Used by broader UI
- * hooks (slash commands, at-completion, tool dialog, etc.) that have not yet
- * been migrated to the nested UiRuntime pattern. The streaming path and
- * AppContainer MUST NOT use this type — they use StreamRuntime/UiRuntime.
- */
-export type CliUiRuntime = UiRuntimeBareSource &
-  CheckpointRuntime &
-  ToolRuntime &
-  McpState &
-  FileWorkspaceState &
-  MemoryState & {
-    readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
-    readonly skillOperations?: Pick<
-      WorkspaceSkillOperations,
-      'list' | 'find' | 'reload' | 'isAdminEnabled'
-    >;
-    readonly sessionPersistence?: CliSessionPersistencePort;
+    updateSystemInstructionIfInitialized: () =>
+      source.updateSystemInstructionIfInitialized(),
   };
+}

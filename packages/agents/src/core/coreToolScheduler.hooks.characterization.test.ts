@@ -16,7 +16,6 @@ import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { escapeShellArg } from '@vybestack/llxprt-code-core/utils/shell-utils.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
@@ -31,6 +30,10 @@ import {
 } from './__tests__/coreToolScheduler-test-helpers.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { physicalHookCommand } from '../api/__tests__/helpers/physicalHookCommand.js';
 
 const ownedFixtures: Array<{
   config: Config;
@@ -38,6 +41,24 @@ const ownedFixtures: Array<{
   settingsOwner: SessionSettingsOwner;
   hooks: SessionHookOwner;
 }> = [];
+
+const hookDirectories: string[] = [];
+
+/**
+ * Hook command that prints `result` as exact JSON. A real Bun script emits the
+ * bytes so the output does not depend on the selected shell's quoting rules.
+ */
+function jsonOutputHookCommand(result: Record<string, unknown>): string {
+  const directory = mkdtempSync(join(tmpdir(), 'scheduler-hook-'));
+  hookDirectories.push(directory);
+  const script = join(directory, 'hook.ts');
+  writeFileSync(
+    script,
+    `process.stdout.write(${JSON.stringify(JSON.stringify(result))});\n`,
+    'utf8',
+  );
+  return physicalHookCommand(script);
+}
 
 function createMockToolRegistry(tool: MockTool): ToolRegistry {
   return {
@@ -86,12 +107,9 @@ function createMockConfig(
             hooks: [
               {
                 type: HookType.Command,
-                command:
-                  'printf %s ' +
-                  escapeShellArg(
-                    JSON.stringify(hookSystem.beforeToolResult ?? {}),
-                    'bash',
-                  ),
+                command: jsonOutputHookCommand(
+                  hookSystem.beforeToolResult ?? {},
+                ),
               },
             ],
           },
@@ -101,12 +119,9 @@ function createMockConfig(
             hooks: [
               {
                 type: HookType.Command,
-                command:
-                  'printf %s ' +
-                  escapeShellArg(
-                    JSON.stringify(hookSystem.afterToolResult ?? {}),
-                    'bash',
-                  ),
+                command: jsonOutputHookCommand(
+                  hookSystem.afterToolResult ?? {},
+                ),
               },
             ],
           },
@@ -208,6 +223,8 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
       await fixture.policyOwner.dispose();
       await fixture.config.dispose();
     }
+    for (const directory of hookDirectories.splice(0))
+      rmSync(directory, { recursive: true, force: true });
   });
 
   let scheduler: CoreToolScheduler | undefined;

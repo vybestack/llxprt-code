@@ -54,6 +54,10 @@ import {
   buildOptions,
   metadataOf,
 } from './codexStateful.test-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 interface FunctionItem {
   readonly type?: string;
@@ -601,11 +605,10 @@ describe('OpenAIResponsesProvider Codex stateful provider-level remediation @iss
     ];
 
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: TEST_RUNTIME_ID,
-      config: createRuntimeConfigStub(settings),
     });
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 

@@ -149,7 +149,7 @@ async function runCliUntilFirstTurn(
 ): Promise<void> {
   // stdout is discarded rather than piped: the run is observed through its
   // artifacts, and an unread pipe would eventually block the child.
-  const child = spawn('bun', args, {
+  const child = spawn(process.execPath, args, {
     env,
     stdio: ['ignore', 'ignore', 'pipe'],
   });

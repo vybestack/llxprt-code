@@ -51,7 +51,7 @@ describe('migrateLegacySettingKeys', () => {
     expect(migrated['stream-idle-timeout-ms']).toBe(60_000);
     expect(migrated['stream-first-response-timeout-ms']).toBe(300_000);
 
-    for (const legacyKey of LEGACY_SETTING_KEY_MIGRATIONS.keys()) {
+    for (const legacyKey of Object.keys(LEGACY_SETTING_KEY_MIGRATIONS)) {
       expect(migrated[legacyKey]).toBeUndefined();
     }
   });

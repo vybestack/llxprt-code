@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 /**
  * `/perf memory` wiring: it must read live session state, and it must degrade
@@ -11,11 +13,15 @@
 
 import { describe, expect, it } from 'bun:test';
 import { createPerfCommand } from './perfCommand.js';
-import type { CommandContext, SlashCommand } from './types.js';
+import type { SlashCommand } from './types.js';
 import type { IContent } from '@vybestack/llxprt-code-core';
 
-function memorySubCommand(): SlashCommand {
-  const command = createPerfCommand({ perfDir: '/tmp/perf-memory-test' });
+function memorySubCommand(context?: CommandOwnerFixture): SlashCommand {
+  const command = createPerfCommand({
+    perfDir: '/tmp/perf-memory-test',
+    readHistory: () =>
+      context?.services.agent?.session.readHistorySnapshot()?.messages ?? null,
+  });
   const sub = command.subCommands?.find((s) => s.name === 'memory');
   if (sub === undefined) {
     throw new Error('/perf memory subcommand is not registered');
@@ -24,26 +30,21 @@ function memorySubCommand(): SlashCommand {
 }
 
 /** A context whose agent client exposes the given history. */
-function contextWithHistory(history: readonly IContent[]): CommandContext {
-  return {
+function contextWithHistory(history: readonly IContent[]): CommandOwnerFixture {
+  return createMockCommandContext({
     services: {
       agent: {
-        agentClient: {
-          getHistoryService: () => ({
-            getAll: () => history,
-            getChronologyTrace: () => [],
-            getRawHistory: () => history,
-          }),
+        session: {
+          readHistorySnapshot: () => ({ messages: history, chronology: [] }),
         },
       },
-      config: {},
     },
-  } as unknown as CommandContext;
+  });
 }
 
 async function run(
   sub: SlashCommand,
-  context: CommandContext,
+  context: CommandOwnerFixture,
 ): Promise<string> {
   const result = await sub.action?.(context, '');
   if (result === undefined || !('content' in result)) {
@@ -78,22 +79,28 @@ describe('/perf memory', () => {
         ],
       },
     ];
-    const output = await run(memorySubCommand(), contextWithHistory(history));
+    const output = await run(
+      memorySubCommand(contextWithHistory(history)),
+      contextWithHistory(history),
+    );
     expect(output).toContain('History Memory');
     expect(output).toContain('read_file');
     expect(output).toContain('across 1 history items');
   });
 
   it('says history is empty rather than printing an empty table', async () => {
-    const output = await run(memorySubCommand(), contextWithHistory([]));
+    const output = await run(
+      memorySubCommand(contextWithHistory([])),
+      contextWithHistory([]),
+    );
     expect(output).toContain('History is empty.');
   });
 
   it('degrades honestly when no agent client exists yet', async () => {
     const context = {
       services: { config: null },
-    } as unknown as CommandContext;
-    const output = await run(memorySubCommand(), context);
+    } as unknown as CommandOwnerFixture;
+    const output = await run(memorySubCommand(context), context);
     expect(output).toContain('History is not available');
   });
 
@@ -101,21 +108,22 @@ describe('/perf memory', () => {
     const context = {
       services: {
         agent: {
-          get agentClient() {
-            return { getHistoryService: () => null };
-          },
+          session: { readHistorySnapshot: () => null },
         },
         config: {},
       },
-    } as unknown as CommandContext;
-    const output = await run(memorySubCommand(), context);
+    } as unknown as CommandOwnerFixture;
+    const output = await run(memorySubCommand(context), context);
     expect(output).toContain('History is not available');
   });
 
   it('does not require perf telemetry to be enabled', async () => {
     // createPerfCommand is constructed with no snapshotCapability, i.e. perf
     // telemetry off. The memory view reads live state, so it still works.
-    const command = createPerfCommand({ perfDir: '/tmp/perf-memory-test' });
+    const command = createPerfCommand({
+      perfDir: '/tmp/perf-memory-test',
+      readHistory: () => [],
+    });
     const sub = command.subCommands?.find((s) => s.name === 'memory');
     expect(sub).toBeDefined();
     const output = await run(requireSubcommand(sub), contextWithHistory([]));

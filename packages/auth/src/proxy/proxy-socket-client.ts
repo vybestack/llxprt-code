@@ -72,6 +72,7 @@ export class ProxySocketClient {
   private readonly socketPath: string;
   private readonly capabilityToken: string | undefined;
   private socket: net.Socket | null = null;
+  private detachSocketListeners: (() => void) | null = null;
   private decoder: FrameDecoder = new FrameDecoder({
     onPartialFrameTimeout: () => this.handlePartialFrameTimeout(),
   });
@@ -340,13 +341,7 @@ export class ProxySocketClient {
       this.handshakeResolver = null;
       resolver.reject(new Error('Connection closing'));
     }
-    if (this.socket !== null) {
-      // Remove listeners to prevent stale close events from affecting new connections
-      this.socket.removeAllListeners();
-      this.socket.end();
-      this.socket = null;
-    }
-    this.decoder.reset();
+    this.retireSocket()?.end();
   }
 
   private async connectAndHandshake(): Promise<void> {
@@ -364,17 +359,36 @@ export class ProxySocketClient {
   }
 
   private async connect(): Promise<void> {
-    this.socket = net.createConnection(this.socketPath);
+    this.destroy('Credential proxy connection lost. Restart the session.');
+    const socket = net.createConnection(this.socketPath);
+    this.socket = socket;
     this.decoder = new FrameDecoder({
       onPartialFrameTimeout: () => this.handlePartialFrameTimeout(),
     });
-    this.socket.on('data', (chunk: Buffer) => this.onData(chunk));
-    this.socket.on('error', (err: Error) => this.onError(err));
-    this.socket.on('end', () => this.onClose());
-    this.socket.on('close', () => this.onClose());
+    const onData = (chunk: Buffer): void => this.onData(chunk);
+    const onError = (error: Error): void => this.onError(error);
+    const onClose = (): void => this.onClose();
+    socket.on('data', onData);
+    socket.on('error', onError);
+    socket.on('end', onClose);
+    socket.on('close', onClose);
+    this.detachSocketListeners = () => {
+      socket.removeListener('data', onData);
+      socket.removeListener('error', onError);
+      socket.removeListener('end', onClose);
+      socket.removeListener('close', onClose);
+    };
     await new Promise<void>((resolve, reject) => {
-      this.socket!.once('connect', resolve);
-      this.socket!.once('error', reject);
+      const connected = (): void => {
+        socket.removeListener('error', failed);
+        resolve();
+      };
+      const failed = (error: Error): void => {
+        socket.removeListener('connect', connected);
+        reject(error);
+      };
+      socket.once('connect', connected);
+      socket.once('error', failed);
     });
     // Socket is referenced while connect/handshake is in flight; resetIdleTimer
     // releases the reference once the connection is genuinely idle.
@@ -531,6 +545,15 @@ export class ProxySocketClient {
     );
   }
 
+  private retireSocket(): net.Socket | null {
+    const socket = this.socket;
+    this.socket = null;
+    this.detachSocketListeners?.();
+    this.detachSocketListeners = null;
+    this.decoder.reset();
+    return socket;
+  }
+
   private destroy(message: string): void {
     this.cancelIdleTimer();
 
@@ -543,11 +566,7 @@ export class ProxySocketClient {
 
     this.handshakeComplete = false;
 
-    if (this.socket !== null) {
-      this.socket.destroy();
-      this.socket = null;
-    }
-    this.decoder.reset();
+    this.retireSocket()?.destroy();
 
     if (this.handshakeResolver) {
       const resolver = this.handshakeResolver;

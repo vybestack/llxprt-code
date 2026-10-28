@@ -13,6 +13,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { resolve } from 'node:path';
 import {
   discoverRuntimePluginPackages,
   resolvePluginSearchRoot,
@@ -20,7 +21,7 @@ import {
 } from './discoverRuntimePlugins.js';
 import type { RuntimePluginDiscoveryDeps } from './discoverRuntimePlugins.js';
 
-const NODE_MODULES = '/g/lib/node_modules';
+const NODE_MODULES = resolve('/g/lib/node_modules');
 const HOST_FILE = `${NODE_MODULES}/@vybestack/llxprt-code-providers/dist/x.js`;
 
 interface Layout {
@@ -30,15 +31,21 @@ interface Layout {
 }
 
 function deps(layout: Layout): RuntimePluginDiscoveryDeps {
+  const files = Object.fromEntries(
+    Object.entries(layout.files).map(([path, value]) => [resolve(path), value]),
+  );
+  const dirs = Object.fromEntries(
+    Object.entries(layout.dirs).map(([path, value]) => [resolve(path), value]),
+  );
   return {
-    fromPath: layout.fromPath ?? HOST_FILE,
-    exists: (path) => path in layout.files || path in layout.dirs,
-    listDir: (path) => layout.dirs[path] ?? [],
+    fromPath: resolve(layout.fromPath ?? HOST_FILE),
+    exists: (path) => resolve(path) in files || resolve(path) in dirs,
+    listDir: (path) => dirs[resolve(path)] ?? [],
     readFile: (path) => {
-      if (!(path in layout.files)) {
+      if (!(resolve(path) in files)) {
         throw new Error(`unexpected read of ${path}`);
       }
-      return layout.files[path];
+      return files[resolve(path)];
     },
   };
 }
@@ -63,7 +70,7 @@ describe('resolvePluginSearchRoot', () => {
   it('falls back to the nearest existing node_modules in a source checkout', () => {
     // No ancestor is literally named node_modules, which is how a repo
     // checkout looks when running from source.
-    const root = '/repo/node_modules';
+    const root = resolve('/repo/node_modules');
     expect(
       resolvePluginSearchRoot(
         deps({
@@ -209,7 +216,7 @@ describe('resolveRepoCheckoutPluginRoot', () => {
           fromPath: CHECKOUT_FROM,
         }),
       ),
-    ).toBe(`${CHECKOUT}/plugins`);
+    ).toBe(resolve(CHECKOUT, 'plugins'));
   });
 
   it('is undefined in an installed layout', () => {
@@ -263,8 +270,8 @@ describe('checkout plugin discovery', () => {
     );
 
     expect(discovered).toStrictEqual([
-      `${CHECKOUT}/plugins/alpha-provider/src/index.ts`,
-      `${CHECKOUT}/plugins/zeta-provider/src/index.ts`,
+      resolve(CHECKOUT, 'plugins/alpha-provider/src/index.ts'),
+      resolve(CHECKOUT, 'plugins/zeta-provider/src/index.ts'),
     ]);
   });
 
@@ -288,7 +295,7 @@ describe('checkout plugin discovery', () => {
           fromPath: CHECKOUT_FROM,
         }),
       ),
-    ).toStrictEqual([`${CHECKOUT}/plugins/kookoo`]);
+    ).toStrictEqual([resolve(CHECKOUT, 'plugins/kookoo')]);
   });
 
   it('never loads a checkout plugin that is also installed', () => {

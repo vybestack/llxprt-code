@@ -5,6 +5,7 @@
  */
 
 import { afterEach, describe, expect, it, mock } from 'bun:test';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 
 const originalFetch = globalThis.fetch;
@@ -37,11 +38,13 @@ describe('OpenAIVercelProvider model listing timeout', () => {
     const controller = new AbortController();
     let requestSignal: AbortSignal | undefined;
     AbortSignal.timeout = mock(() => controller.signal);
-    globalThis.fetch = createPendingFetch((signal) => {
+    const pendingFetch = createPendingFetch((signal) => {
       requestSignal = signal;
     });
 
-    const provider = new OpenAIVercelProvider('test-api-key');
+    const provider = new OpenAIVercelProvider(
+      'test-api-key',
+    ).bindOwnerAuthentication(new SettingsService(), () => pendingFetch);
     const modelsPromise = provider.getModels();
 
     await Bun.sleep(0);

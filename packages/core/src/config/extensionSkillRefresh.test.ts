@@ -1,3 +1,4 @@
+import { installTestWorkspaceSkills } from '../__tests__/workspace-skill-fixture.js';
 import { tmpdir } from 'node:os';
 /**
  * @license
@@ -21,21 +22,18 @@ import { tmpdir } from 'node:os';
  * without touching the filesystem, git, telemetry or a real provider.
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi, afterEach } from 'bun:test';
 import { join } from 'node:path';
 import { Config } from './config.js';
+import { SimpleExtensionLoader } from '../utils/extensionLoader.js';
+import { WorkspaceExtensionOwner } from '../utils/workspace-extension-owner.js';
+
 import type { WorkspaceSkillOwner } from '../skills/workspace-skill-owner.js';
 import type { SkillDefinition } from '../skills/skillLoader.js';
 import type { LlxprtExtension } from './configTypes.js';
 
-import {
-  MCPDiscoveryState,
-  McpClientManager,
-} from '@vybestack/llxprt-code-mcp';
-import {
-  createTestExtensionLoader,
-  initializeTestMcpRuntime,
-} from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
+import {} from '@vybestack/llxprt-code-test-utils/core/config.js';
 import {
   buildFsMockBody,
   buildToolsMockBody,
@@ -45,7 +43,6 @@ import {
   buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildEventsMockBody,
-  buildFetchMockBody,
   type HoistedConfigMocks,
 } from './__tests__/configTestHarness.js';
 
@@ -57,7 +54,6 @@ const hoistedConfigMocks = {
     emitModelChanged: vi.fn(),
     emitConsoleLog: vi.fn(),
   },
-  setGlobalProxy: vi.fn(),
 } as HoistedConfigMocks;
 const startExtension = vi
   .fn<() => Promise<void>>()
@@ -121,8 +117,6 @@ void vi.mock('../utils/events.js', () =>
   buildEventsMockBody(__actual6, hoistedConfigMocks),
 );
 
-void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
-
 interface RegistrarObservation {
   readonly skills: string[];
 }
@@ -154,44 +148,8 @@ function skillExtension(
 interface Harness {
   readonly config: Config;
   readonly skills: Pick<WorkspaceSkillOwner, 'operations' | 'refresh'>;
-  readonly loader: ReturnType<typeof createTestExtensionLoader>;
+  readonly loader: SimpleExtensionLoader;
   readonly observations: RegistrarObservation[];
-}
-
-async function buildHarness(
-  extensions: LlxprtExtension[] = [],
-): Promise<Harness> {
-  const observations: RegistrarObservation[] = [];
-  const loader = createTestExtensionLoader(extensions);
-  const testRoot = join(tmpdir(), 'llxprt-extension-skill-refresh');
-  const config = new Config({
-    sessionId: 'test-session',
-    targetDir: testRoot,
-    debugMode: false,
-    model: 'test-model',
-    cwd: testRoot,
-    skillsSupport: true,
-    enableExtensionReloading: true,
-  });
-  const runtime = await initializeTestMcpRuntime(
-    config,
-    McpClientManager,
-    undefined,
-    loader,
-    undefined,
-    undefined,
-    undefined,
-    {
-      reloadPolicy: async () => ({}),
-      registerTools: (_registry, skillService) => {
-        observations.push({
-          skills: skillService.listSkills().map((skill) => skill.name),
-        });
-      },
-    },
-  );
-  observations.length = 0;
-  return { config, skills: runtime.workspaceSkills, loader, observations };
 }
 
 /** The most recent skill list the activation tool was rebuilt from. */
@@ -212,6 +170,69 @@ function discoveredSkillNames(
 }
 
 describe('extension load and unload refresh the skill surface @issue:3383', () => {
+  const extensionOwners: WorkspaceExtensionOwner[] = [];
+
+  async function buildHarness(
+    extensions: LlxprtExtension[] = [],
+  ): Promise<Harness> {
+    const observations: RegistrarObservation[] = [];
+    const loader = new SimpleExtensionLoader(extensions);
+    const testRoot = join(tmpdir(), 'llxprt-extension-skill-refresh');
+    const config = new Config({
+      sessionId: 'test-session',
+      targetDir: testRoot,
+      debugMode: false,
+      model: 'test-model',
+      cwd: testRoot,
+      skillsSupport: true,
+      enableExtensionReloading: true,
+    });
+    const extensionOwner = new WorkspaceExtensionOwner(
+      config,
+      loader,
+      async () => {},
+    );
+    extensionOwners.push(extensionOwner);
+    const skills = await acquireSkills(
+      config,
+      {
+        reloadPolicy: async () => ({}),
+        registerTools: (_registry, skillService) => {
+          observations.push({
+            skills: skillService.listSkills().map((skill) => skill.name),
+          });
+        },
+      },
+      () => loader.getExtensions(),
+    );
+    await extensionOwner.initialize(
+      () => startExtension(),
+      async () => {},
+      async () => {},
+      () => skills.refresh(),
+    );
+    observations.length = 0;
+    return { config, skills, loader, observations };
+  }
+
+  afterEach(async () => {
+    const results = await Promise.allSettled(
+      extensionOwners
+        .splice(0)
+        .reverse()
+        .map((owner) => owner.dispose()),
+    );
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(
+        failures,
+        'Extension skill fixture cleanup failed',
+      );
+  });
+  const acquireSkills = installTestWorkspaceSkills();
+
   it('discovers the skills an extension brings when it is loaded', async () => {
     const { skills, loader, observations } = await buildHarness();
 

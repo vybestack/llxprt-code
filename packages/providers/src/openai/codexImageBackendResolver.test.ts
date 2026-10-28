@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi } from 'bun:test';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 import { buildCodexImageGenerateEndpoint } from './codexImageBackend.js';
 import { createCodexImageBackendResolver } from './codexImageBackendResolver.js';
@@ -64,6 +65,9 @@ function makeImageResponse() {
   };
 }
 
+const unusedFetch: NetworkFetch = () =>
+  Promise.reject(new Error('No image request expected'));
+
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 const NON_CODEX_BASE_URL = 'https://api.openai.com/v1';
 const VALID_TOKEN: StubToken = {
@@ -82,6 +86,7 @@ describe('createCodexImageBackendResolver', () => {
     const resolve = createCodexImageBackendResolver({
       oauthManager: makeStubOAuthManager(VALID_TOKEN),
       getActiveProvider: () => undefined,
+      fetchImpl: unusedFetch,
     });
     expect(resolve()?.name).toBe('codex');
   });
@@ -90,6 +95,7 @@ describe('createCodexImageBackendResolver', () => {
     const resolve = createCodexImageBackendResolver({
       oauthManager: makeStubOAuthManager(VALID_TOKEN),
       getActiveProvider: () => makeStubProvider(NON_CODEX_BASE_URL),
+      fetchImpl: unusedFetch,
     });
     expect(resolve()?.name).toBe('codex');
   });
@@ -139,6 +145,7 @@ describe('createCodexImageBackendResolver', () => {
     const resolve = createCodexImageBackendResolver({
       oauthManager: undefined,
       getActiveProvider: () => makeStubProvider(CODEX_BASE_URL),
+      fetchImpl: unusedFetch,
     });
     expect(resolve()).toBeNull();
   });
@@ -147,6 +154,7 @@ describe('createCodexImageBackendResolver', () => {
     const resolve = createCodexImageBackendResolver({
       oauthManager: makeStubOAuthManager(VALID_TOKEN),
       getActiveProvider: () => makeStubProvider(CODEX_BASE_URL),
+      fetchImpl: unusedFetch,
     });
     const backend = resolve();
     expect(backend).not.toBeNull();

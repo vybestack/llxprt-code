@@ -121,6 +121,7 @@ function resetSdkTracking() {
 
 describe('Issue #276: OAuth token behavior through public APIs', () => {
   let runtimeContext: ProviderRuntimeContext;
+  let config: ReturnType<typeof createRuntimeConfigStub>;
   let settingsService: SettingsService;
 
   beforeEach(() => {
@@ -154,7 +155,7 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
 
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
-    runtimeContext.config ??= createRuntimeConfigStub(settingsService);
+    config = createRuntimeConfigStub(settingsService);
   });
 
   const buildCallOptions = (
@@ -166,7 +167,7 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       contents,
       settings: settingsService,
       runtime: runtimeContext,
-      config: runtimeContext.config,
+      config,
       ...overrides,
     });
 

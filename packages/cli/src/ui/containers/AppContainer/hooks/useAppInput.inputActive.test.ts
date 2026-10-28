@@ -14,8 +14,8 @@ import { describe, it, expect } from 'bun:test';
 import {
   computeIsInputActive,
   computeIsAwaitingSlashCommandConfirmation,
-} from './useAppInput.js';
-import type { IsInputActiveInputs } from './useAppInput.js';
+} from './inputActivity.js';
+import type { IsInputActiveInputs } from './inputActivity.js';
 import { StreamingState, ToolCallStatus } from '../../../types.js';
 import type { HistoryItemWithoutId } from '../../../types.js';
 

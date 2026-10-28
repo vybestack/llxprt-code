@@ -178,8 +178,12 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
         ),
       );
 
+      // Subagents are shown as soon as they are known, so wait for the file
+      // results before checking how the two groups are ordered.
       await waitFor(() => {
-        expect(result.current.suggestions.length).toBeGreaterThan(0);
+        expect(result.current.suggestions.map((s) => s.value)).toContain(
+          'deep-file.txt',
+        );
       });
 
       // File suggestions should appear before subagent suggestions

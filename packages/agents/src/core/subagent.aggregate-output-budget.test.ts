@@ -1,3 +1,5 @@
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -22,7 +24,7 @@ import {
   type OutputConfig,
   type RunConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { SubAgentScope } from './subagent.js';
+import type { ChildAgentScope } from './subagentOrchestrator.js';
 import {
   checkOutputBudget,
   checkTerminationConditions,
@@ -30,7 +32,11 @@ import {
   recordTurnOutputTokens,
 } from './subagentExecution.js';
 import {
-  createMockConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
+  createSubagentConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   createRuntimeOverrides,
   createStatelessRuntimeBundle,
   defaultModelConfig,
@@ -116,10 +122,13 @@ async function createBudgetScope(
   workspacePaths: WorkspacePathOperations,
   provider: ControlledUsageProvider,
   runConfig: RunConfig,
-): Promise<SubAgentScope> {
+): Promise<ChildAgentScope> {
   const providerAdapter: AgentRuntimeProviderAdapter = {
     getActiveProvider: () => provider,
     setActiveProvider: () => undefined,
+    getProviderKeys: () => {
+      throw new Error('Test provider adapter has no key storage');
+    },
   };
   const runtimeBundle = createStatelessRuntimeBundle({
     providerAdapter,
@@ -130,25 +139,38 @@ async function createBudgetScope(
   });
   const outputConfig: OutputConfig = { outputs: {} };
 
-  return SubAgentScope.create(
-    'aggregate-budget-agent',
-    config,
-    { systemPrompt: 'Exercise aggregate output accounting.' },
-    defaultModelConfig,
-    runConfig,
-    undefined,
-    outputConfig,
-    overrides,
+  return createSubagentScope(
+    {
+      name: 'aggregate-budget-agent',
+      prompt: { systemPrompt: 'Exercise aggregate output accounting.' },
+      model: defaultModelConfig,
+      run: runConfig,
+      toolConfig: undefined,
+      outputConfig,
+    },
+    ...scopeInputs(config, overrides),
   );
 }
 
 describe('subagent aggregate output token budget', () => {
+  const retainSubagentCleanup = installSubagentCleanup();
+
   it('dispatches tool calls emitted on the last allowed turn', async () => {
     // The loop head already enforces the turn limit. Re-checking it between
     // receiving a response and dispatching its tool calls discards work the
     // model just did. self_emitvalue only reaches emitted_vars if the call was
     // actually dispatched, so this fails if the run stops one step too early.
-    const { config, mcpRuntime } = await createMockConfig();
+    const configSettings = seedSubagentSettings();
+    const config = createSubagentConfig(configSettings, retainSubagentCleanup);
+    await acquireSubagentSettings(
+      config,
+      configSettings,
+      retainSubagentCleanup,
+    );
+    const mcpRuntime = await acquireSubagentWorkspace(
+      config,
+      retainSubagentCleanup,
+    );
     const provider = new ControlledUsageProvider([
       { outputTokens: 1, continueWithTool: true },
     ]);
@@ -170,7 +192,17 @@ describe('subagent aggregate output token budget', () => {
   });
 
   it('terminates the real non-interactive loop after provider usage crosses the budget', async () => {
-    const { config, mcpRuntime } = await createMockConfig();
+    const configSettings = seedSubagentSettings();
+    const config = createSubagentConfig(configSettings, retainSubagentCleanup);
+    await acquireSubagentSettings(
+      config,
+      configSettings,
+      retainSubagentCleanup,
+    );
+    const mcpRuntime = await acquireSubagentWorkspace(
+      config,
+      retainSubagentCleanup,
+    );
     const provider = new ControlledUsageProvider([
       { outputTokens: 6, continueWithTool: true },
       { outputTokens: 6, continueWithTool: true },
@@ -202,7 +234,17 @@ describe('subagent aggregate output token budget', () => {
   });
 
   it('does not terminate when cumulative provider usage stays below the budget', async () => {
-    const { config, mcpRuntime } = await createMockConfig();
+    const configSettings = seedSubagentSettings();
+    const config = createSubagentConfig(configSettings, retainSubagentCleanup);
+    await acquireSubagentSettings(
+      config,
+      configSettings,
+      retainSubagentCleanup,
+    );
+    const mcpRuntime = await acquireSubagentWorkspace(
+      config,
+      retainSubagentCleanup,
+    );
     const provider = new ControlledUsageProvider([
       { outputTokens: 3, continueWithTool: true },
       { outputTokens: 3, text: 'finished below budget' },
@@ -226,7 +268,17 @@ describe('subagent aggregate output token budget', () => {
   });
 
   it('treats -1 as unlimited and runs past the otherwise effective budget', async () => {
-    const { config, mcpRuntime } = await createMockConfig();
+    const configSettings = seedSubagentSettings();
+    const config = createSubagentConfig(configSettings, retainSubagentCleanup);
+    await acquireSubagentSettings(
+      config,
+      configSettings,
+      retainSubagentCleanup,
+    );
+    const mcpRuntime = await acquireSubagentWorkspace(
+      config,
+      retainSubagentCleanup,
+    );
     const provider = new ControlledUsageProvider([
       { outputTokens: 6, continueWithTool: true },
       { outputTokens: 6, continueWithTool: true },
@@ -251,7 +303,17 @@ describe('subagent aggregate output token budget', () => {
   });
 
   it('uses a character estimate when provider usage metadata is absent', async () => {
-    const { config, mcpRuntime } = await createMockConfig();
+    const configSettings = seedSubagentSettings();
+    const config = createSubagentConfig(configSettings, retainSubagentCleanup);
+    await acquireSubagentSettings(
+      config,
+      configSettings,
+      retainSubagentCleanup,
+    );
+    const mcpRuntime = await acquireSubagentWorkspace(
+      config,
+      retainSubagentCleanup,
+    );
     const provider = new ControlledUsageProvider([{ text: 'x'.repeat(80) }]);
     const scope = await createBudgetScope(
       config,
@@ -276,7 +338,17 @@ describe('subagent aggregate output token budget', () => {
     // The profile that motivated #3335 ran reasoning at high effort with
     // includeInContext, so reasoning dwarfed visible text. Counting only the
     // visible text would leave the budget unenforceable for exactly that shape.
-    const { config, mcpRuntime } = await createMockConfig();
+    const configSettings = seedSubagentSettings();
+    const config = createSubagentConfig(configSettings, retainSubagentCleanup);
+    await acquireSubagentSettings(
+      config,
+      configSettings,
+      retainSubagentCleanup,
+    );
+    const mcpRuntime = await acquireSubagentWorkspace(
+      config,
+      retainSubagentCleanup,
+    );
     const reasoningHeavy = new ControlledUsageProvider([
       { thought: 'r'.repeat(4000), text: 'ok' },
     ]);
@@ -299,8 +371,20 @@ describe('subagent aggregate output token budget', () => {
 
     // The same visible text with no reasoning stays well under the budget,
     // which is what proves the reasoning is what tripped it.
-    const { config: textOnlyConfig, mcpRuntime: textOnlyRuntime } =
-      await createMockConfig();
+    const textOnlyConfigSettings = seedSubagentSettings();
+    const textOnlyConfig = createSubagentConfig(
+      textOnlyConfigSettings,
+      retainSubagentCleanup,
+    );
+    await acquireSubagentSettings(
+      textOnlyConfig,
+      textOnlyConfigSettings,
+      retainSubagentCleanup,
+    );
+    const textOnlyRuntime = await acquireSubagentWorkspace(
+      textOnlyConfig,
+      retainSubagentCleanup,
+    );
     const textOnly = new ControlledUsageProvider([{ text: 'ok' }]);
     const textOnlyScope = await createBudgetScope(
       textOnlyConfig,
@@ -321,7 +405,17 @@ describe('subagent aggregate output token budget', () => {
   });
 
   it('applies the same aggregate budget to the real interactive loop', async () => {
-    const { config, mcpRuntime } = await createMockConfig();
+    const configSettings = seedSubagentSettings();
+    const config = createSubagentConfig(configSettings, retainSubagentCleanup);
+    await acquireSubagentSettings(
+      config,
+      configSettings,
+      retainSubagentCleanup,
+    );
+    const mcpRuntime = await acquireSubagentWorkspace(
+      config,
+      retainSubagentCleanup,
+    );
     const provider = new ControlledUsageProvider([
       { outputTokens: 6, continueWithTool: true },
       { outputTokens: 6, continueWithTool: true },

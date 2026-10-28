@@ -1,0 +1,105 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import {
+  useDetectProviderQuota,
+  useFetch,
+  useGetActiveProviderName,
+  useGetEphemeralSetting,
+} from '../contexts/RuntimeContext.js';
+
+import { useQuotaReader } from './useQuotaReader.js';
+
+import { useBound } from './agentStream/useStreamOwnerCallbacks.js';
+
+import { useCallback, useMemo } from 'react';
+import { createDocsCommand } from '../commands/docsCommand.js';
+import { createHelpCommand } from '../commands/helpCommand.js';
+import { createQuitCommand } from '../commands/quitCommand.js';
+import { createDebugCommand } from '../commands/debugCommands.js';
+import type { DebugCommandOperations } from '../commands/debugCommands.js';
+import type { LoadedSettings } from '../../config/settings.js';
+import type { BuiltinCommandOwners } from '../../services/BuiltinCommandLoader.js';
+import type { LoggingCommandRuntime } from '../commands/loggingCommandHost.js';
+import { useOAuthControl } from '../contexts/OAuthControlContext.js';
+import { useSessionStats } from '../contexts/SessionContext.js';
+import { createStatsCommand } from '../commands/statsCommand.js';
+import { bindStatsCommand } from '../commands/statsCommandHost.js';
+import { createLoggingCommand } from '../commands/loggingCommand.js';
+import { bindLoggingCommand } from '../commands/loggingCommandHost.js';
+import type { UseHistoryManagerReturn } from './useHistoryManager.js';
+export function useUtilityCommands(
+  debug: DebugCommandOperations,
+  logging: LoggingCommandRuntime | null,
+  settings: LoadedSettings,
+  addItem: UseHistoryManagerReturn['addItem'],
+): Pick<
+  BuiltinCommandOwners,
+  | 'statsCommand'
+  | 'loggingCommand'
+  | 'debugCommand'
+  | 'docsCommand'
+  | 'helpCommand'
+  | 'quitCommand'
+> {
+  const apiDetectProviderQuota = useDetectProviderQuota();
+  const apiFetch = useFetch();
+  const apiGetActiveProviderName = useGetActiveProviderName();
+  const apiGetEphemeralSetting = useGetEphemeralSetting();
+  const oauth = useOAuthControl();
+  const available = useBound(oauth, oauth.isAvailable);
+  const discover = useBound(oauth, oauth.discoverBuckets);
+  const readQuota = useQuotaReader(
+    apiGetEphemeralSetting,
+    apiGetActiveProviderName,
+    apiDetectProviderQuota,
+    apiFetch,
+    available,
+    useBound(oauth, oauth.getAllAnthropicUsageInfo),
+    useBound(oauth, oauth.getAllCodexUsageInfo),
+  );
+  const { stats } = useSessionStats();
+  const startTime = stats.sessionStartTime;
+  const readStartTime = useCallback(() => startTime, [startTime]);
+  const statsCommand = useMemo(
+    () =>
+      createStatsCommand(
+        bindStatsCommand(
+          readQuota,
+          available,
+          discover,
+          readStartTime,
+          addItem,
+        ),
+      ),
+    [readQuota, available, discover, readStartTime, addItem],
+  );
+  const loggingCommand = useMemo(
+    () => createLoggingCommand(bindLoggingCommand(logging, settings, addItem)),
+    [logging, settings, addItem],
+  );
+  const debugCommand = useMemo(() => createDebugCommand(debug), [debug]);
+  const docsCommand = useMemo(() => createDocsCommand(addItem), [addItem]);
+  const helpCommand = useMemo(() => createHelpCommand(addItem), [addItem]);
+  const quitCommand = useMemo(() => createQuitCommand(() => stats), [stats]);
+  return useMemo(
+    () => ({
+      statsCommand,
+      loggingCommand,
+      debugCommand,
+      docsCommand,
+      helpCommand,
+      quitCommand,
+    }),
+    [
+      statsCommand,
+      loggingCommand,
+      debugCommand,
+      docsCommand,
+      helpCommand,
+      quitCommand,
+    ],
+  );
+}

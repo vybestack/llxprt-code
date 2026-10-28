@@ -24,6 +24,10 @@ import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/reques
 import type { IProvider } from '../IProvider.js';
 import { AnthropicProvider } from '../anthropic/AnthropicProvider.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 describe('provider-media-recovery', () => {
   const originalFetch = globalThis.fetch;
@@ -185,13 +189,10 @@ describe('provider-media-recovery', () => {
     settings.setProviderSetting(provider.name, 'prompt-caching', 'off');
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
-      config,
       runtimeId: `${providerCase.kind}-media-entry`,
-      mediaResolver: resolver,
-      requestMediaBudgetBytes: budget,
     });
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 

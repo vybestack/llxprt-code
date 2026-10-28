@@ -276,6 +276,16 @@ export function serviceAnalyzer(
     if (identities.size || provesType(type)) node.children = [];
     return node;
   }
+  function standardContainer(type: ts.Type): boolean {
+    const symbol = type.getSymbol();
+    return (
+      !!symbol &&
+      contentContainers.has(symbol.name) &&
+      !!symbol.declarations?.some((declaration) =>
+        program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
+      )
+    );
+  }
   function objectChildren(
     type: ts.Type,
     location: ts.Node,
@@ -283,14 +293,7 @@ export function serviceAnalyzer(
     const arguments_ = isTypeReference(type)
       ? checker.getTypeArguments(type)
       : [];
-    const symbol = type.getSymbol();
-    const container =
-      checker.isTupleType(type) ||
-      (!!symbol &&
-        contentContainers.has(symbol.name) &&
-        !!symbol.declarations?.some((declaration) =>
-          program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
-        ));
+    const container = checker.isTupleType(type) || standardContainer(type);
     if (container && noFixedIntroduction(type)) return arguments_;
     return [
       ...(container ? arguments_ : []),
@@ -332,6 +335,13 @@ export function serviceAnalyzer(
       } else if (!(type.flags & ts.TypeFlags.Object)) {
         children = [];
       } else {
+        const symbol = type.getSymbol();
+        if (
+          standardContainer(type) &&
+          symbol &&
+          !['Promise', 'PromiseLike'].includes(symbol.name)
+        )
+          node.mode = 'calls';
         children = [
           ...objectChildren(type, location),
           ...type.getConstructSignatures().flatMap(returns),

@@ -163,7 +163,6 @@ describe('OpenAIResponsesProvider PDF request construction @issue:2608', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'pdf-default-runtime',
-      settingsService: settings,
     });
 
     const options = createProviderCallOptions({
@@ -193,7 +192,6 @@ describe('OpenAIResponsesProvider PDF request construction @issue:2608', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'pdf-disabled-runtime',
-      settingsService: settings,
     });
 
     const options = createProviderCallOptions({
@@ -227,7 +225,6 @@ describe('OpenAIResponsesProvider PDF request construction @issue:2608', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'pdf-enabled-runtime',
-      settingsService: settings,
     });
 
     const options = createProviderCallOptions({

@@ -4,23 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import * as process from 'node:process';
-import type {
-  OpenDialogActionReturn,
-  SlashCommand,
-  MessageActionReturn,
-} from './types.js';
+import type { SlashCommand, MessageActionReturn } from './types.js';
 import { CommandKind } from './types.js';
-import {
-  loadTrustedFolders,
-  resolveLocalWorkspaceTrust,
-  TrustLevel,
-} from '../../config/trustedFolders.js';
+import { TrustLevel } from '../../config/trustedFolders.js';
 import { normalizeTrustPathInput } from '../../config/trustPaths.js';
-import {
-  combineTrustUpdateFailure,
-  getTrustCommitErrorMessage,
-} from '../trustDialogHelpers.js';
 
 const VALID_TRUST_LEVELS = [
   TrustLevel.TRUST_FOLDER,
@@ -84,94 +71,40 @@ function parsePermissionsArgs(
   return { trustLevel, targetPath: normalized.normalizedPath };
 }
 
-export const permissionsCommand: SlashCommand = {
-  name: 'permissions',
-  description: 'manage folder trust settings',
-  kind: CommandKind.BUILT_IN,
-  action: (context, args) => {
-    const parsed = parsePermissionsArgs(
-      args,
-      context.services.config?.getWorkingDir() ?? process.cwd(),
-    );
+export function createPermissionsCommand(
+  readWorkingDirectory: () => string,
+  commitTrust: (
+    level: TrustLevel,
+    path: string,
+  ) => Promise<MessageActionReturn>,
+): SlashCommand {
+  return {
+    name: 'permissions',
+    description: 'manage folder trust settings',
+    kind: CommandKind.BUILT_IN,
+    action: (_invocation, args) => {
+      const parsed = parsePermissionsArgs(args, readWorkingDirectory());
 
-    // If error is empty string, open dialog (no args case)
-    if ('error' in parsed) {
-      if (parsed.error === '') {
-        return {
-          type: 'dialog',
-          dialog: 'permissions',
-        };
-      }
-      // Non-empty error means invalid arguments
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: parsed.error,
-      };
-    }
-
-    // We have valid trust level and path, modify trust
-    const { trustLevel, targetPath } = parsed;
-
-    return (async (): Promise<OpenDialogActionReturn | MessageActionReturn> => {
-      let trustedFolders: ReturnType<typeof loadTrustedFolders> | undefined;
-      let savedSnapshot:
-        | ReturnType<ReturnType<typeof loadTrustedFolders>['snapshotValue']>
-        | undefined;
-      const config = context.services.config;
-      const previousLiveTrust = config?.isTrustedFolder() ?? false;
-      let failedPhase: 'persistence' | 'live' = 'persistence';
-      try {
-        trustedFolders = loadTrustedFolders();
-        savedSnapshot = trustedFolders.snapshotValue(targetPath);
-        trustedFolders.setValue(targetPath, trustLevel);
-        if (config) {
-          failedPhase = 'live';
-          const cwd = config.getWorkingDir();
-          await config.setTrustedFolderLive(
-            resolveLocalWorkspaceTrust(
-              { folderTrust: config.getFolderTrust() },
-              trustedFolders,
-              cwd,
-            ) ?? false,
-          );
+      // If error is empty string, open dialog (no args case)
+      if ('error' in parsed) {
+        if (parsed.error === '') {
+          return {
+            type: 'dialog',
+            dialog: 'permissions',
+          };
         }
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `Trust level set to ${trustLevel} for: ${targetPath}`,
-        };
-      } catch (error) {
-        const rollbackFailures: unknown[] = [];
-        if (trustedFolders !== undefined && savedSnapshot !== undefined) {
-          try {
-            trustedFolders.restoreSnapshot(savedSnapshot);
-          } catch (rollbackError) {
-            rollbackFailures.push(rollbackError);
-          }
-        }
-        if (config && failedPhase === 'live') {
-          try {
-            await config.setTrustedFolderLive(previousLiveTrust);
-          } catch (rollbackError) {
-            rollbackFailures.push(rollbackError);
-          }
-        }
-        const failure = combineTrustUpdateFailure(
-          error,
-          rollbackFailures,
-          'Trust update and rollback failed',
-        );
+        // Non-empty error means invalid arguments
         return {
           type: 'message',
           messageType: 'error',
-          content: getTrustCommitErrorMessage(
-            failedPhase,
-            failure.error,
-            failure.rollbackSucceeded,
-          ),
+          content: parsed.error,
         };
       }
-    })();
-  },
-};
+
+      // We have valid trust level and path, modify trust
+      const { trustLevel, targetPath } = parsed;
+
+      return commitTrust(trustLevel, targetPath);
+    },
+  };
+}

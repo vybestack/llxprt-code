@@ -7,6 +7,9 @@
 import { EventEmitter } from 'node:events';
 import inkRender from '../../../node_modules/ink/build/render.js';
 import { setActiveStdin } from './ink-stub.js';
+import { registerRender, releaseRender } from './ink-render-registry.js';
+
+export { cleanup } from './ink-render-registry.js';
 
 class Stdout extends EventEmitter {
   get columns() {
@@ -94,16 +97,6 @@ export interface InkRenderResult {
   lastFrame: () => string | undefined;
 }
 
-const activeInstances = new Map<InkInstance, Stdin>();
-
-function restoreMostRecentStdin(): void {
-  const remaining = Array.from(activeInstances.values());
-  const stdin = remaining.at(-1);
-  setActiveStdin(
-    stdin === undefined ? null : (stdin as unknown as NodeJS.ReadStream),
-  );
-}
-
 export const render = (
   tree: Parameters<typeof inkRender>[0],
 ): InkRenderResult => {
@@ -122,14 +115,14 @@ export const render = (
     patchConsole: false,
   });
 
-  activeInstances.set(instance, stdin);
+  const registeredStdin = stdin as unknown as NodeJS.ReadStream;
+  registerRender(instance, registeredStdin);
 
   const originalUnmount = instance.unmount.bind(instance);
   const originalCleanup = instance.cleanup.bind(instance);
 
   const removeActiveInstance = () => {
-    activeInstances.delete(instance);
-    restoreMostRecentStdin();
+    releaseRender(instance);
   };
 
   return {
@@ -148,23 +141,4 @@ export const render = (
     frames: stdout.frames,
     lastFrame: stdout.lastFrame,
   };
-};
-
-export const cleanup = () => {
-  for (const instance of Array.from(activeInstances.keys())) {
-    activeInstances.delete(instance);
-
-    try {
-      instance.unmount();
-    } catch {
-      // Ignore teardown failures in test cleanup.
-    }
-
-    try {
-      instance.cleanup();
-    } catch {
-      // Ignore teardown failures in test cleanup.
-    }
-  }
-  setActiveStdin(null);
 };

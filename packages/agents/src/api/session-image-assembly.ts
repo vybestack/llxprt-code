@@ -1,3 +1,5 @@
+import type { Config } from '@vybestack/llxprt-code-core';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -24,7 +26,10 @@ export interface SessionImageSelection {
 }
 
 export function assembleSessionImages(
-  client: SessionClientOwner,
+  client: Pick<
+    SessionClientOwner,
+    'hasImageComposition' | 'bindImageOperation'
+  >,
   workspaceRoot: string,
   manager: RuntimeProviderManager,
   oauthManager: OAuthManager | undefined,
@@ -47,6 +52,7 @@ export function assembleSessionImages(
   }
   const resolveBackend = createCodexImageBackendResolver({
     oauthManager,
+    fetchImpl: manager.fetchNetwork,
     getActiveProvider: () => manager.getActiveProvider(),
     getBaseUrl: () => {
       const providerName = manager.getActiveProviderName();
@@ -85,4 +91,11 @@ export function prepareImageConstruction(
         : Object.freeze({ run: selection.run, ownership: 'caller' });
   }
   return { selection: copied, cleanupFailedConstruction: dispose };
+}
+
+export function acquireAdoptedMedia(config: Config): SessionMediaOwner {
+  return new SessionMediaOwner(
+    config.projectTempDir,
+    config.getMediaStoreQuotaByteLimit(),
+  );
 }

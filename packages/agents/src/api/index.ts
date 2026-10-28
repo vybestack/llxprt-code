@@ -33,7 +33,7 @@ export type {
   AgentSchedulerFactoryOptions,
   AgentSchedulerFactory,
   AgentConfig,
-  FromConfigOptions,
+  AgentAdoptionIntent,
   ProviderActivationIntent,
 } from './config-types.js';
 export {
@@ -50,7 +50,15 @@ export * from './event-types.js';
 export * from './agent.js';
 export type { SessionRecordingEvent } from './control/recordSessionEvent.js';
 export * from './event-schema.js';
-export { createAgent } from './createAgent.js';
+export {
+  createAgent,
+  createAgentWithRetainedProviderFiles,
+  createAgentFromSettingsSnapshot,
+} from './createAgent.js';
+export type {
+  AgentRetainedProviderFile,
+  AgentProviderFileOperations,
+} from './provider-file-domain.js';
 export { fromConfig } from './fromConfig.js';
 export { listProviders, listTools } from './discovery.js';
 export { mapLoopStream, mapStreamEvent } from './eventAdapter.js';
@@ -134,4 +142,11 @@ export type {
   AgentProviderSwitchResult,
 } from './agent.js';
 
-export { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
+export type { AgentSettingsControl } from './control/settings-control.js';
+export type {
+  AgentToolFormatControl,
+  ToolFormatState,
+  ToolFormatOverrideLiteral,
+} from './control/tool-format-control.js';
+
+export type { AgentModelParametersControl } from './model-parameters.js';

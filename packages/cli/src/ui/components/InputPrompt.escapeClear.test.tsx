@@ -3,6 +3,7 @@
  * Copyright 2026 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
@@ -22,7 +23,7 @@ import type { TextBuffer } from './shared/text-buffer.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import * as path from 'node:path';
-import type { CommandContext, SlashCommand } from '../commands/types.js';
+import type { SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
 import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import type { UseShellHistoryReturn } from '../hooks/useShellHistory.js';
@@ -131,7 +132,7 @@ describe('InputPrompt', () => {
   let mockInputHistory: UseInputHistoryReturn;
   let mockReverseSearchCompletion: UseReverseSearchCompletionReturn;
   let mockBuffer: TextBuffer;
-  let mockCommandContext: CommandContext;
+  let mockCommandContext: CommandOwnerFixture;
   // The buffer's setText spy, held under its Mock type so tests can inspect
   // call history without casting the TextBuffer-typed field.
   let setTextMock: Mock<(newText: string) => void>;
@@ -258,6 +259,7 @@ describe('InputPrompt', () => {
     );
 
     props = {
+      enableFuzzyFiltering: true,
       buffer: mockBuffer,
       onSubmit: vi.fn(),
       userMessages: [],
@@ -270,6 +272,7 @@ describe('InputPrompt', () => {
       } as unknown as Config),
       slashCommands: mockSlashCommands,
       commandContext: mockCommandContext,
+      generatePromptContent: null,
       shellModeActive: false,
       setShellModeActive: vi.fn(),
       approvalMode: ApprovalMode.DEFAULT,

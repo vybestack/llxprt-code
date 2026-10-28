@@ -18,27 +18,32 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
  * ChatSession still uses Config directly.
  */
 
-import { afterEach, describe, it, expect, vi } from 'bun:test';
-import { ChatSession } from '../chatSession.js';
 import {
   Config,
   type ConfigParameters,
 } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { ChatSession } from '../chatSession.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /**
  * Test helper: Create minimal Config for testing
@@ -94,8 +99,6 @@ function createTestRuntimeContext(
   historyService?: HistoryService,
 ): AgentRuntimeContext {
   const providerRuntime = createProviderRuntimeContext({
-    settingsService: root.settingsService,
-    config: root.config,
     runtimeId: runtimeState.runtimeId,
     metadata: { source: 'chatSession.runtimeState.test' },
   });
@@ -116,6 +119,8 @@ function createTestRuntimeContext(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
   });
 }
@@ -186,7 +191,14 @@ describe('ChatSession - Runtime State Integration', () => {
       // Phase 6: Use AgentRuntimeContext constructor
       expect(() => {
         new ChatSession(
-          view,
+          chatSessionPorts(view),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
           contentGenerator,
           { systemInstruction: 'test' },
           [],
@@ -207,7 +219,14 @@ describe('ChatSession - Runtime State Integration', () => {
       // Phase 7: Constructor relies solely on AgentRuntimeContext
       expect(() => {
         new ChatSession(
-          view,
+          chatSessionPorts(view),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
           contentGenerator,
           { systemInstruction: 'test' },
           [],
@@ -237,7 +256,14 @@ describe('ChatSession - Runtime State Integration', () => {
       const view = createTestRuntimeContext(runtimeState, root, historyService);
 
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
@@ -262,7 +288,14 @@ describe('ChatSession - Runtime State Integration', () => {
       const view = createTestRuntimeContext(runtimeState, root, historyService);
 
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
@@ -287,7 +320,14 @@ describe('ChatSession - Runtime State Integration', () => {
       const view = createTestRuntimeContext(runtimeState, root, historyService);
 
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
@@ -313,7 +353,14 @@ describe('ChatSession - Runtime State Integration', () => {
       const view = createTestRuntimeContext(runtimeState, root, historyService);
 
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
@@ -347,7 +394,14 @@ describe('ChatSession - Runtime State Integration', () => {
       const view = createTestRuntimeContext(runtimeState, root, historyService);
 
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
@@ -368,7 +422,14 @@ describe('ChatSession - Runtime State Integration', () => {
       const view = createTestRuntimeContext(runtimeState, root, historyService);
 
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
@@ -398,7 +459,14 @@ describe('ChatSession - Runtime State Integration', () => {
       const historyService = createMockHistoryService();
       const view = createTestRuntimeContext(runtimeState, root, historyService);
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
@@ -420,7 +488,14 @@ describe('ChatSession - Runtime State Integration', () => {
       const historyService = createMockHistoryService();
       const view = createTestRuntimeContext(runtimeState, root, historyService);
       const chat = new ChatSession(
-        view,
+        chatSessionPorts(view),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
@@ -453,7 +528,14 @@ describe('ChatSession - Runtime State Integration', () => {
       const getProviderSpy = vi.spyOn(root.config, 'getProvider');
 
       new ChatSession(
-        view,
+        chatSessionPorts(view),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
@@ -479,7 +561,14 @@ describe('ChatSession - Runtime State Integration', () => {
       root.settingsOwner.writeUserParameter('temperature', 0.4);
 
       new ChatSession(
-        view,
+        chatSessionPorts(view),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         contentGenerator,
         { systemInstruction: 'test' },
         [],

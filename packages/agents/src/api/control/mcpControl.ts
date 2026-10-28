@@ -251,7 +251,16 @@ export class McpControl implements AgentMcpControl {
     }
   >();
 
-  async cancelAndJoin(): Promise<void> {
+  private closing: Promise<void> | undefined;
+
+  cancelAndJoin(): Promise<void> {
+    if (this.closing !== undefined) return this.closing;
+    let resolve!: () => void;
+    let reject!: (reason: unknown) => void;
+    this.closing = new Promise<void>((fulfilled, failed) => {
+      resolve = fulfilled;
+      reject = failed;
+    });
     this.closed = true;
     const failures: unknown[] = [];
     for (const release of this.statusSubscriptions) {
@@ -263,10 +272,19 @@ export class McpControl implements AgentMcpControl {
     }
     this.statusSubscriptions.clear();
     const pending = [...this.authentication.values()];
-    for (const { controller } of pending) controller.abort();
-    await Promise.allSettled(pending.map(({ work }) => work));
-    if (failures.length > 0)
-      throw new AggregateError(failures, 'MCP subscription cleanup failed');
+    for (const { controller } of pending) {
+      try {
+        controller.abort();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    void Promise.allSettled(pending.map(({ work }) => work)).then(() => {
+      if (failures.length > 0)
+        reject(new AggregateError(failures, 'MCP subscription cleanup failed'));
+      else resolve();
+    });
+    return this.closing;
   }
 
   constructor(private readonly deps?: McpControlDeps) {}

@@ -163,7 +163,12 @@ describe('compiled memory bootstrap contracts', () => {
           '-e',
           `process.argv = [process.execPath, ${JSON.stringify(quietPath)}, '--help']; await import(${JSON.stringify(pathToFileURL(quietPath).href)}); await import(${JSON.stringify(pathToFileURL(quietPath).href)}); console.log('imported');`,
         ]);
-        expect(result).toEqual({ status: 0, stdout: 'imported\n', stderr: '' });
+        expect(result).toEqual({
+          status: 0,
+          signal: null,
+          stdout: 'imported\n',
+          stderr: '',
+        });
       });
 
       it(`${command} runs ${installedName} exactly once`, () => {
@@ -188,7 +193,12 @@ describe('compiled memory bootstrap contracts', () => {
           '-e',
           `process.argv = [process.execPath, ${JSON.stringify(path)}, '--help']; await import(${JSON.stringify(pathToFileURL(path).href)}); console.log('imported');`,
         ]);
-        expect(result).toEqual({ status: 0, stdout: 'imported\n', stderr: '' });
+        expect(result).toEqual({
+          status: 0,
+          signal: null,
+          stdout: 'imported\n',
+          stderr: '',
+        });
       });
 
       it(`${command} runs the source ${source} through a symlink exactly once`, () => {
@@ -252,7 +262,12 @@ describe('compiled memory bootstrap contracts', () => {
         '-e',
         `try { const entry = await import(${JSON.stringify(url)}); await entry.main(); throw new Error('load unexpectedly succeeded'); } catch (error) { if (error.code !== 'ERR_MODULE_NOT_FOUND' && error.code !== 'MODULE_NOT_FOUND') throw error; } console.log(Reflect.has(globalThis, Symbol.for('llxprt.memprofile.installed-entry-loading')));`,
       ]);
-      expect(result).toEqual({ status: 0, stdout: 'false\n', stderr: '' });
+      expect(result).toEqual({
+        status: 0,
+        signal: null,
+        stdout: 'false\n',
+        stderr: '',
+      });
     });
   }
 });

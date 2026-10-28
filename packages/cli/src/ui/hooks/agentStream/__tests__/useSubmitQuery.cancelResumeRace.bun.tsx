@@ -1,8 +1,10 @@
+import { submissionOperations } from './submission-operations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 /**
  * Behavioral tests for issue #3169 — "Fresh prompt can remain queued during
@@ -88,7 +90,7 @@ void vi.mock('../streamUtils.js', () => ({
   processSlashCommandResult: vi.fn(),
 }));
 
-function createMockAgent() {
+async function createMockAgent() {
   return createFakeAgentFromMockClient({
     getCurrentSequenceModel: () => 'test-model',
   });
@@ -142,7 +144,7 @@ interface RenderOptions {
   wrapper?: React.ComponentType<{ children: React.ReactNode }>;
 }
 
-function renderWithRealQueue(
+async function renderWithRealQueue(
   handles: RaceTestHandles,
   options: RenderOptions = {},
 ) {
@@ -151,21 +153,26 @@ function renderWithRealQueue(
     current: false,
   };
 
+  const agent = await createMockAgent();
+  const policyOps = streamPolicyOperations(
+    createStreamRuntimeForTest({}, createMockOverrides()),
+  );
+  const submissionOps = submissionOperations(agent, undefined, undefined);
   return renderHook(
     ({ streamingState }: { streamingState: StreamingState }) => {
       // REAL queue store — not the createQueueOperations stub.
       const queue = useQueuedSubmissions();
 
       const submitDeps: UseSubmitQueryDeps = {
-        runtime: createStreamRuntimeForTest({}, createMockOverrides()),
-        agent: createMockAgent(),
+        ...policyOps,
+        ...submissionOps,
         addItem: handles.addItem,
         removeItems: vi.fn(),
         settings: createLoadedSettings(),
         onDebugMessage: vi.fn(),
         onCancelSubmit: vi.fn(),
         onAuthError: vi.fn(),
-        recordingIntegration: undefined,
+
         sanitizeContent: (text: string) => ({ text, blocked: false }),
         flushPendingHistoryItem: handles.flushPendingHistoryItem,
         pendingResponse: new PendingResponseBuffer(undefined),
@@ -288,7 +295,7 @@ describe('useSubmitQuery — cancel-resume race (issue #3169)', () => {
       .mockReturnValueOnce(turnADeferred.promise)
       .mockReturnValueOnce(turnBDeferred.promise);
     const handles = createTestHandles(runStream);
-    const { result, rerender } = renderWithRealQueue(handles);
+    const { result, rerender } = await renderWithRealQueue(handles);
 
     // 1. Submit A
     let turnAPromise!: Promise<void>;
@@ -380,7 +387,7 @@ describe('useSubmitQuery — cancel-resume race (issue #3169)', () => {
       return promise;
     });
     const handles = createTestHandles(runStream);
-    const { result, rerender } = renderWithRealQueue(handles);
+    const { result, rerender } = await renderWithRealQueue(handles);
 
     // 1. Submit A, rerender Responding
     let turnAPromise!: Promise<void>;
@@ -471,7 +478,7 @@ describe('useSubmitQuery — cancel-resume race (issue #3169)', () => {
       .mockReturnValueOnce(turnADeferred.promise)
       .mockReturnValueOnce(turnBDeferred.promise);
     const handles = createTestHandles(runStream);
-    const { result, rerender } = renderWithRealQueue(handles);
+    const { result, rerender } = await renderWithRealQueue(handles);
 
     // Submit A
     let turnAPromise!: Promise<void>;
@@ -520,7 +527,7 @@ describe('useSubmitQuery — cancel-resume race (issue #3169)', () => {
     const turnADeferred = createDeferred<void>();
     const runStream = vi.fn().mockReturnValueOnce(turnADeferred.promise);
     const handles = createTestHandles(runStream);
-    const { result, rerender } = renderWithRealQueue(handles);
+    const { result, rerender } = await renderWithRealQueue(handles);
 
     // Submit A to occupy the active turn
     let turnAPromise!: Promise<void>;
@@ -564,7 +571,7 @@ describe('useSubmitQuery — cancel-resume race (issue #3169)', () => {
     const turnADeferred = createDeferred<void>();
     const runStream = vi.fn().mockReturnValueOnce(turnADeferred.promise);
     const handles = createTestHandles(runStream);
-    const { result, rerender } = renderWithRealQueue(handles);
+    const { result, rerender } = await renderWithRealQueue(handles);
 
     // Submit A to start the live turn
     let turnAPromise!: Promise<void>;
@@ -607,7 +614,7 @@ describe('useSubmitQuery — cancel-resume race (issue #3169)', () => {
     const turnADeferred = createDeferred<void>();
     const runStream = vi.fn().mockReturnValueOnce(turnADeferred.promise);
     const handles = createTestHandles(runStream);
-    const { result, rerender } = renderWithRealQueue(handles);
+    const { result, rerender } = await renderWithRealQueue(handles);
 
     // Submit A
     let turnAPromise!: Promise<void>;
@@ -666,7 +673,7 @@ describe('useSubmitQuery — cancel-resume race (issue #3169)', () => {
       .mockReturnValueOnce(turnADeferred.promise)
       .mockReturnValueOnce(turnBDeferred.promise);
     const handles = createTestHandles(runStream);
-    const { result, rerender } = renderWithRealQueue(handles);
+    const { result, rerender } = await renderWithRealQueue(handles);
 
     let turnAPromise!: Promise<void>;
     await act(async () => {

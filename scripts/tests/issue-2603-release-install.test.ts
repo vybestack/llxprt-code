@@ -11,11 +11,15 @@ import {
   mkdirSync,
   mkdtempSync,
   chmodSync,
+  cpSync,
   writeFileSync,
   readFileSync,
+  readdirSync,
+  realpathSync,
   rmSync,
+  symlinkSync,
 } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
@@ -24,7 +28,9 @@ import {
   assertReleaseGraph,
   installReleaseArtifacts,
   packReleaseArtifacts,
+  prepareNodeOnlyRuntime,
   readReleaseManifest,
+  verifyInstalledGraph,
 } from './release-bound-artifact-helpers.ts';
 import {
   deriveNpmReleasePackages,
@@ -138,18 +144,42 @@ const captureSmokeOutput = [
   'smoke.on("close", (status) => finish(status ?? 1));',
 ].join('\n');
 
+function prepareSmokeSource(sourceRoot: string, destination: string): void {
+  cpSync(sourceRoot, destination, {
+    recursive: true,
+    filter: (source) => {
+      const parts = relative(sourceRoot, source).split(sep);
+      return (
+        parts[0] !== 'tmp' &&
+        !parts.some((part) => ['.git', 'node_modules', 'dist'].includes(part))
+      );
+    },
+  });
+  const dependencies = join(sourceRoot, 'node_modules');
+  if (existsSync(dependencies)) {
+    symlinkSync(dependencies, join(destination, 'node_modules'), 'junction');
+  }
+}
+
 function runSmokeAsync(): SmokeHandle {
   const captureDir = mkdtempSync(join(tmpdir(), 'llxprt-release-smoke-'));
   const stdoutPath = join(captureDir, 'stdout.log');
   const stderrPath = join(captureDir, 'stderr.log');
   writeFileSync(stdoutPath, '');
   writeFileSync(stderrPath, '');
+  const sourceRoot = join(captureDir, 'source');
+  try {
+    prepareSmokeSource(repoRoot, sourceRoot);
+  } catch (error) {
+    rmSync(captureDir, { recursive: true, force: true });
+    throw error;
+  }
 
   const runningChild = spawn(
     'node',
-    ['-e', captureSmokeOutput, stdoutPath, stderrPath, smokeScript, repoRoot],
+    ['-e', captureSmokeOutput, stdoutPath, stderrPath, smokeScript, sourceRoot],
     {
-      cwd: repoRoot,
+      cwd: sourceRoot,
       env: { ...process.env },
       stdio: 'ignore',
       // Spawn detached on POSIX so we can kill the entire process group
@@ -287,6 +317,27 @@ function runSmokeAsync(): SmokeHandle {
 }
 
 describe('release-like CLI pack/install smoke (issue #2603)', () => {
+  it('keeps checkout scratch out of the release smoke source copy', () => {
+    const root = mkdtempSync(join(tmpdir(), 'llxprt-smoke-source-'));
+    try {
+      const source = join(root, 'source');
+      const destination = join(root, 'copy');
+      mkdirSync(join(source, 'tmp'), { recursive: true });
+      mkdirSync(join(source, 'node_modules'));
+      const manifest = readFileSync(join(repoRoot, 'package.json'));
+      writeFileSync(join(source, 'package.json'), manifest);
+      writeFileSync(join(source, 'tmp', 'prior-run.log'), 'not release input');
+      prepareSmokeSource(source, destination);
+      expect(readFileSync(join(destination, 'package.json'))).toEqual(manifest);
+      expect(existsSync(join(destination, 'tmp'))).toBe(false);
+      expect(realpathSync(join(destination, 'node_modules'))).toBe(
+        realpathSync(join(source, 'node_modules')),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('the standalone smoke script exists and is invocable via npm script', () => {
     expect(existsSync(smokeScript)).toBe(true);
   });
@@ -444,6 +495,115 @@ describe('rewriteOnePkgDeps does not rewrite peerDependencies', () => {
 });
 
 describe('release-bound artifact graph (issue #3771)', () => {
+  it('runs the native Node runtime with Bun absent from the isolated PATH', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'llxprt-node-only-'));
+    pendingDisposals.push(() =>
+      rmSync(directory, { recursive: true, force: true }),
+    );
+    const host = spawnSync('node', ['-p', 'process.execPath'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    expect(host.status).toBe(0);
+    const hostVersion = spawnSync(host.stdout.trim(), ['--version'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    expect(hostVersion.status).toBe(0);
+    prepareNodeOnlyRuntime(directory);
+    const env = {
+      ...process.env,
+      PATH:
+        process.platform === 'win32'
+          ? `${directory};${process.env.SystemRoot}\\System32;${process.env.SystemRoot}`
+          : directory,
+    };
+    const version = spawnSync('node', ['--version'], {
+      env,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    expect(version.stderr).toBe('');
+    expect(version.status).toBe(0);
+    expect(version.stdout).toBe(hostVersion.stdout);
+    const identity = spawnSync('node', ['-p', 'process.execPath'], {
+      env,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    expect(identity.status).toBe(0);
+    expect(realpathSync(identity.stdout.trim())).toBe(
+      realpathSync(
+        process.platform === 'win32'
+          ? join(directory, 'node.exe')
+          : host.stdout.trim(),
+      ),
+    );
+    const native = spawnSync('node', ['-p', 'Boolean(process.versions.bun)'], {
+      env,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    expect(native.status).toBe(0);
+    expect(native.stdout.trim()).toBe('false');
+    const bun = spawnSync('bun', ['--version'], {
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    expect(bun.error).toMatchObject({ code: 'ENOENT' });
+  });
+
+  it.skipIf(process.platform !== 'darwin')(
+    'exposes native sysctl without restoring host PATH or changing Node identity',
+    () => {
+      const directory = mkdtempSync(join(tmpdir(), 'llxprt-sysctl-only-'));
+      pendingDisposals.push(() =>
+        rmSync(directory, { recursive: true, force: true }),
+      );
+      const host = spawnSync('node', ['-p', 'process.execPath'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      expect(host.status).toBe(0);
+      const machine = spawnSync('/usr/sbin/sysctl', ['-n', 'hw.machine'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      expect(machine.status).toBe(0);
+      expect(machine.stdout.trim().length).toBeGreaterThan(0);
+      prepareNodeOnlyRuntime(directory);
+      const env = { ...process.env, PATH: directory };
+      const identity = spawnSync('node', ['-p', 'process.execPath'], {
+        env,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      expect(identity.status).toBe(0);
+      expect(realpathSync(identity.stdout.trim())).toBe(
+        realpathSync(host.stdout.trim()),
+      );
+      const bun = spawnSync('bun', ['--version'], {
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      expect(bun.error).toMatchObject({ code: 'ENOENT' });
+      const probe = spawnSync(
+        'node',
+        [
+          '-e',
+          "process.stdout.write(require('node:child_process').execFileSync('sysctl', ['-n', 'hw.machine'], {stdio: ['ignore', 'pipe', 'pipe']}))",
+        ],
+        { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      expect(probe.status, probe.stderr).toBe(0);
+      expect(probe.stdout).toBe(machine.stdout);
+      expect(realpathSync(join(directory, 'sysctl'))).toBe(
+        realpathSync('/usr/sbin/sysctl'),
+      );
+      expect(readdirSync(directory).sort()).toEqual(['node', 'sysctl']);
+    },
+  );
+
   const workspaceInfo = getWorkspaceInfo();
   const published = new Set(deriveNpmReleasePackages());
   const manifests = [...workspaceInfo.values()].map((pkg) =>
@@ -517,6 +677,68 @@ describe('release-bound artifact graph (issue #3771)', () => {
       rmSync(root, { recursive: true, force: true });
     }
   }, 30_000);
+
+  for (const outside of [false, true]) {
+    it(
+      outside
+        ? 'rejects an installed package escaping a symlinked consumer root'
+        : 'verifies an installed graph through a symlinked consumer root',
+      async () => {
+        const temporary = mkdtempSync(join(tmpdir(), 'llxprt-graph-alias-'));
+        const root = realpathSync(temporary);
+        try {
+          const consumer = join(root, 'consumer');
+          const alias = join(root, 'consumer-alias');
+          const evidence = join(root, 'evidence');
+          const scope = join(consumer, 'node_modules', '@vybestack');
+          mkdirSync(scope, { recursive: true });
+          mkdirSync(evidence);
+          symlinkSync(consumer, alias, 'junction');
+          const installed = join(scope, 'llxprt-code');
+          const directory = outside ? join(root, 'outside') : installed;
+          mkdirSync(directory);
+          if (outside) symlinkSync(directory, installed, 'junction');
+          const manifest = {
+            name: '@vybestack/llxprt-code',
+            version: '0.0.0-graph-alias',
+          };
+          writeFileSync(
+            join(directory, 'package.json'),
+            JSON.stringify(manifest),
+          );
+          const verification = verifyInstalledGraph(
+            [{ directory, tarball: join(root, 'unused.tgz'), manifest }],
+            alias,
+            evidence,
+            process.env,
+          );
+          if (outside) {
+            await expect(verification).rejects.toThrow(
+              `Package escaped consumer: ${join(alias, 'node_modules', manifest.name, 'package.json')}`,
+            );
+            expect(existsSync(join(evidence, 'installed-graph.json'))).toBe(
+              false,
+            );
+          } else {
+            await verification;
+            expect(
+              JSON.parse(
+                readFileSync(join(evidence, 'installed-graph.json'), 'utf8'),
+              ),
+            ).toEqual([
+              {
+                name: manifest.name,
+                version: manifest.version,
+                dependencies: {},
+              },
+            ]);
+          }
+        } finally {
+          rmSync(temporary, { recursive: true, force: true });
+        }
+      },
+    );
+  }
 
   it('never executes consumer lifecycle scripts in local or global release proof installs', async () => {
     const evidence = mkdtempSync(join(tmpdir(), 'llxprt-lifecycle-proof-'));

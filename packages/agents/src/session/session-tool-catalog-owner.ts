@@ -1,3 +1,11 @@
+import type { ToolInfo, AgentToolHandle } from '../api/agent.js';
+import { wrapToolHandle } from '../api/control/toolControl.js';
+import {
+  buildToolInfos,
+  projectRegistryTool,
+  readOptionalStringProp,
+} from '../api/agentBootstrap.js';
+import { summarizeToolOutput } from '@vybestack/llxprt-code-core/utils/summarizer.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
@@ -5,50 +13,84 @@ import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CoreShellToolHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreShellToolHostAdapter.js';
+import type { IShellToolHost } from '@vybestack/llxprt-code-tools';
+import { bindChildToolRegistry } from './childToolAssembly.js';
+import type { ChildToolDisplay } from './childToolDisplay.js';
+import type { TaskLaunchOwner } from './task-launch-owner.js';
+import type { ShellJobOwner } from './shell-job-owner.js';
+import { ShellTool } from '@vybestack/llxprt-code-tools';
+
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import type { GitHubReportOperations } from '@vybestack/llxprt-code-tools';
 
-import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
 import type {
   ProfileDefinitionReads,
   SubagentDefinitionReads,
 } from '@vybestack/llxprt-code-core';
-import type {
-  TaskExecutionPolicy,
-  SubagentRunPolicy,
-} from '@vybestack/llxprt-code-core/session/session-settings-policies.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
-import type { RegistryPolicy } from '@vybestack/llxprt-code-tools';
-import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
-import {
-  ToolRegistry,
-  type AnyDeclarativeTool,
-  type ToolSelection,
-  type ToolPublication,
-} from '@vybestack/llxprt-code-tools';
-import {
-  isToolBlocked,
-  applyTaskSchemaPolicy,
-} from '@vybestack/llxprt-code-tools';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { createToolRegistry } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
-import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
 import { ToolDispatchAdmission } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type {
+  TaskToolRegistration,
+  ToolOutputSummarizer,
+} from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
+import { createToolRegistry } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type {
+  WorkspaceIgnoreOperations,
+  WorkspacePathOperations,
+  WorkspaceScanOperations,
+  WorkspaceTextOperations,
+} from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import type { WorkspaceIdePort } from '@vybestack/llxprt-code-core/services/workspace-ide-owner.js';
+import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core/services/workspace-trust-ports.js';
+import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
+import { CoreToolRegistryHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreToolRegistryHostAdapter.js';
 import {
   DiscoveredMCPTool,
   type McpApprovalPolicy,
 } from '@vybestack/llxprt-code-mcp';
-import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
-import { CoreToolRegistryHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreToolRegistryHostAdapter.js';
-import type { McpRuntimeOwner } from '../api/mcpRuntimeAssembly.js';
+import type {
+  ILspService,
+  RegistryPolicy,
+  ToolExecutionPolicy,
+} from '@vybestack/llxprt-code-tools';
+import {
+  ToolRegistry,
+  applyTaskSchemaPolicy,
+  isToolBlocked,
+  type AnyDeclarativeTool,
+  type ToolPublication,
+  type ToolSelection,
+} from '@vybestack/llxprt-code-tools';
 
 type ConfigurationEntry = {
   readonly displayName: string;
   readonly isRegistered: boolean;
   readonly reason?: string;
 };
+
+export interface WorkspaceToolPorts {
+  readonly isWorkspaceStopped: () => boolean;
+  readonly paths: WorkspacePathOperations;
+  readonly files: WorkspaceTextOperations;
+  readonly ignore: WorkspaceIgnoreOperations;
+  readonly scans: WorkspaceScanOperations;
+  readonly diagnostics: ILspService | undefined;
+  readonly ide: WorkspaceIdePort;
+  readonly trust: WorkspaceTrustControlPort;
+  readonly workspaceSelection: ToolSelection;
+  readonly profiles: ProfileDefinitionReads;
+  readonly subagents: SubagentDefinitionReads;
+}
+
+export interface SessionToolPorts {
+  readonly bus: MessageBus;
+  readonly registration: TaskToolRegistration;
+  readonly summarize: ToolOutputSummarizer;
+  readonly approval: McpApprovalPolicy;
+  readonly telemetry: RootTelemetry;
+}
 
 export class SessionToolCatalogOwner {
   private readonly admission = new ToolDispatchAdmission();
@@ -60,6 +102,50 @@ export class SessionToolCatalogOwner {
   private configuration: readonly ConfigurationEntry[] = [];
   private sessionApproval: McpApprovalPolicy | undefined;
   private sessionBus: CoreMessageBusAdapter | undefined;
+  listToolInfos(): readonly ToolInfo[] {
+    const registry = this.selection;
+    const allTools = registry.getAllTools().map((t) =>
+      projectRegistryTool({
+        name: t.name,
+        displayName: t.displayName,
+        description: t.description,
+        schema: t.schema,
+        serverName: readOptionalStringProp(t, 'serverName'),
+        serverToolName: readOptionalStringProp(t, 'serverToolName'),
+      }),
+    );
+    const enabledNames = new Set(registry.getEnabledTools().map((t) => t.name));
+    return Object.freeze(buildToolInfos(allTools, enabledNames));
+  }
+  getToolHandle(name: string): AgentToolHandle | undefined {
+    const tool = this.acquireChildTools().getTool(name);
+    return tool === undefined ? undefined : wrapToolHandle(tool);
+  }
+  private childTools: ToolSelection | undefined;
+
+  bindChildExecution(
+    display: ChildToolDisplay,
+    tasks: TaskLaunchOwner,
+    shell: ShellJobOwner,
+  ): void {
+    this.admission.assertOpen();
+    if (this.childTools !== undefined)
+      throw new Error('Child execution ownership is already bound');
+    this.childTools = bindChildToolRegistry(
+      this.selection,
+      display,
+      tasks,
+      shell,
+    );
+  }
+
+  acquireChildTools(): ToolSelection {
+    this.admission.assertOpen();
+    if (this.childTools === undefined)
+      throw new Error('Child launch requires its admitted execution owner');
+    return this.childTools;
+  }
+
   readonly selection: ToolSelection = {
     getTool: (name, context) => {
       const tool = this.resolve(name, context);
@@ -79,7 +165,21 @@ export class SessionToolCatalogOwner {
     private readonly config: Config,
     private readonly readTaskSchemaPolicy: () => RegistryPolicy,
     private readonly readExecutionPolicy: () => ToolExecutionPolicy,
+    private readonly requestFetch: (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => Promise<Response>,
   ) {}
+
+  private shellExecution: IShellToolHost['executeShellCommand'] | undefined;
+  bindShellExecution(execute: IShellToolHost['executeShellCommand']): void {
+    this.admission.assertOpen();
+    if (this.initialization !== undefined || this.shellExecution !== undefined)
+      throw new Error(
+        'Shell execution must be composed once before tool initialization',
+      );
+    this.shellExecution = execute;
+  }
 
   private imageOperation: ImageOperationRunner | undefined;
   bindImageOperation(operation: ImageOperationRunner): void {
@@ -119,80 +219,98 @@ export class SessionToolCatalogOwner {
   }
 
   initialize(
-    workspace: McpRuntimeOwner,
-    bus: MessageBus,
-    registration: TaskToolRegistration,
-    summarize: Parameters<typeof createToolRegistry>[9],
-    approval: McpApprovalPolicy,
-    instructions: InstructionReadOperations,
-    createChildSettings: () => SettingsService,
-    readTaskPolicy: () => TaskExecutionPolicy,
-    readRunPolicy: () => SubagentRunPolicy,
-    profiles: ProfileDefinitionReads = workspace.profileDefinitions,
-    subagents: SubagentDefinitionReads = workspace.subagentDefinitions,
-    hookOwner?: SessionHookOwner,
-    telemetry?: RootTelemetry,
+    workspace: WorkspaceToolPorts,
+    session: SessionToolPorts,
   ): Promise<void> {
     this.admission.assertOpen();
-    this.workspaceStopped = () => workspace.isStopped();
-    this.sessionApproval = approval;
-    this.sessionBus = new CoreMessageBusAdapter(bus);
-    this.initialization ??= createToolRegistry(
-      this.config,
-      this.config,
-      bus,
-      this.readTaskSchemaPolicy,
-      this.readExecutionPolicy,
-      workspace.workspacePaths,
-      workspace.workspaceFiles,
-      workspace.workspaceIgnore,
-      workspace.workspaceScans,
-      summarize,
-      workspace.workspaceLsp.diagnostics,
-      {
-        ...registration,
-        create: (config, args) =>
-          registration.create(config, {
-            ...args,
-            toolSelection: this.selection,
-            hookOwner,
-            workspaceTrust: workspace.trust,
-            instructions,
-            createChildSettings,
-            telemetry,
-            readTaskPolicy,
-            readRunPolicy,
-            readGovernance: () => this.readGovernance(),
-          }),
+    this.workspaceStopped = workspace.isWorkspaceStopped;
+    this.sessionApproval = session.approval;
+    this.sessionBus = new CoreMessageBusAdapter(session.bus);
+    this.initialization ??= createToolRegistry({
+      config: this.config,
+      host: this.config,
+      messageBus: session.bus,
+      readTaskSchemaPolicy: this.readTaskSchemaPolicy,
+      readExecution: this.readExecutionPolicy,
+      workspace: {
+        paths: workspace.paths,
+        files: workspace.files,
+        ignore: workspace.ignore,
+        scans: workspace.scans,
+        trust: workspace.trust,
       },
-      workspace.readInstructions,
-      false,
-      profiles,
-      subagents,
-      workspace.ide,
-      workspace.trust,
-      this.githubReports,
-      this.imageOperation,
-      telemetry,
-    ).then(({ registry, allPotentialTools }) => {
-      this.admission.assertOpen();
-      this.configuration = allPotentialTools.map(
-        ({ displayName, isRegistered, reason }) => ({
-          displayName,
-          isRegistered,
-          reason,
-        }),
+      definitions: {
+        profiles: workspace.profiles,
+        subagents: workspace.subagents,
+      },
+      registration: session.registration,
+      lspDiagnostics: workspace.diagnostics,
+      ide: workspace.ide,
+      summarizeOutput: session.summarize,
+      githubReports: this.githubReports,
+      imageOperation: this.imageOperation,
+      telemetry: session.telemetry,
+      discover: false,
+      requestFetch: this.requestFetch,
+    }).then(({ registry, allPotentialTools }) => {
+      this.bindHostShell(registry, workspace.paths, session.summarize);
+      this.publishRegistry(
+        registry,
+        allPotentialTools,
+        workspace.workspaceSelection,
       );
-      this.builtins = registry;
-      this.workspace = workspace.toolSelection;
     });
     return this.initialization;
+  }
+
+  private bindHostShell(
+    registry: ToolRegistry,
+    paths: WorkspacePathOperations,
+    summarize: ToolOutputSummarizer,
+  ): void {
+    if (
+      this.shellExecution === undefined ||
+      registry.getTool(ShellTool.Name) === undefined
+    )
+      return;
+    const bus = this.sessionBus;
+    if (bus === undefined)
+      throw new Error('Shell execution requires its session bus');
+    registry.registerTool(
+      new ShellTool(
+        new CoreShellToolHostAdapter(
+          this.config,
+          paths,
+          this.readExecutionPolicy,
+          summarize,
+          this.shellExecution,
+        ),
+        bus,
+      ),
+    );
+  }
+
+  private publishRegistry(
+    registry: ToolRegistry,
+    records: readonly ConfigurationEntry[],
+    workspace: ToolSelection,
+  ): void {
+    this.admission.assertOpen();
+    this.configuration = records.map(
+      ({ displayName, isRegistered, reason }) => ({
+        displayName,
+        isRegistered,
+        reason,
+      }),
+    );
+    this.builtins = registry;
+    this.workspace = workspace;
   }
 
   initializeInherited(
     selection: ToolSelection,
     bus: MessageBus,
-    trust?: McpRuntimeOwner['trust'],
+    trust?: WorkspaceTrustControlPort,
   ): Promise<void> {
     this.admission.assertOpen();
     this.initialization ??= Promise.resolve().then(() => {
@@ -352,4 +470,18 @@ export class SessionToolCatalogOwner {
       this.closed = true;
     }
   }
+}
+
+export function bindToolOutputSummary(
+  readClient: () => Parameters<typeof summarizeToolOutput>[1],
+  readUtilityModel: () => string | undefined,
+): ToolOutputSummarizer {
+  return (content, signal, budget) =>
+    summarizeToolOutput(
+      content,
+      readClient(),
+      signal,
+      budget,
+      readUtilityModel(),
+    );
 }

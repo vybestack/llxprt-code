@@ -11,16 +11,20 @@
 
 import type {
   SlashCommand,
-  CommandContext,
   SlashCommandActionReturn,
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { interactiveAuthCoordinator } from '@vybestack/llxprt-code-providers/auth.js';
 import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 
-type AuthCommandControl = Pick<
+/**
+ * The OAuth operations /auth uses. The host binds one session's control at
+ * registration; the command never selects an owner from the invocation.
+ */
+export type AuthCommandControl = Pick<
   OAuthControl,
+  | 'getInteractiveAuthSessions'
+  | 'cancelInteractiveAuth'
   | 'getSupportedProviders'
   | 'listBuckets'
   | 'isOAuthEnabled'
@@ -42,6 +46,9 @@ type AuthCommandControl = Pick<
   | 'forceRecoverAuthLock'
   | 'recoverAuthLock'
 >;
+
+export type AuthCommandOperations = AuthCommandControl &
+  Pick<OAuthControl, 'clearProviderClientCache'>;
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   handleLockCommand as handleLockCommandFn,
@@ -68,9 +75,14 @@ function isCancelSubcommand(args: string | undefined): boolean {
  * @plan PLAN-20260827-ISSUE2562.P05
  * @requirement REQ-2562-4
  */
-function cancelInteractiveAuthentication(): MessageActionReturn {
-  const activeSessions = interactiveAuthCoordinator.getActiveSessions();
-  const cancelledCount = interactiveAuthCoordinator.cancelActiveSessions();
+function cancelInteractiveAuthentication(
+  control: Pick<
+    OAuthControl,
+    'getInteractiveAuthSessions' | 'cancelInteractiveAuth'
+  >,
+): MessageActionReturn {
+  const activeSessions = control.getInteractiveAuthSessions();
+  const cancelledCount = control.cancelInteractiveAuth();
   if (cancelledCount === 0) {
     return {
       type: 'message',
@@ -100,10 +112,12 @@ function cancelInteractiveAuthentication(): MessageActionReturn {
 /**
  * @plan:PLAN-20250214-CREDPROXY.P33
  */
-function getOAuthControl(context: CommandContext): OAuthControl {
+function requireOAuthRuntime<
+  T extends Pick<OAuthControl, 'getSupportedProviders'>,
+>(control: T): T {
   try {
-    context.oauthControl.getSupportedProviders();
-    return context.oauthControl;
+    control.getSupportedProviders();
+    return control;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
@@ -112,173 +126,202 @@ function getOAuthControl(context: CommandContext): OAuthControl {
   }
 }
 
-/**
- * Completer for provider names
- */
-const providerCompleter: CompleterFn = withFuzzyFilter(async (ctx) => {
-  try {
-    const oauthManager = getOAuthControl(ctx);
-    const providers = oauthManager.getSupportedProviders();
-    return providers.map((provider) => ({
-      value: provider,
-      description: `Configure ${provider} OAuth`,
-    }));
-  } catch {
-    return [];
-  }
-});
-
-/**
- * Completer for bucket names for a given provider
- */
-const bucketCompleter: CompleterFn = withFuzzyFilter(
-  async (ctx, _partial, tokens) => {
+function createCompleters(
+  control: AuthCommandOperations,
+  readFuzzyFiltering: () => boolean,
+): {
+  readonly providerCompleter: CompleterFn;
+  readonly bucketCompleter: CompleterFn;
+  readonly logoutCompleter: CompleterFn;
+} {
+  /** Completer for provider names */
+  const providerCompleter: CompleterFn = withFuzzyFilter(async () => {
     try {
-      const provider = tokens.tokens[0];
-      if (!provider) return [];
-
-      const oauthManager = getOAuthControl(ctx);
-      const buckets = await oauthManager.listBuckets(provider);
-      return buckets.map((bucket) => ({
-        value: bucket,
-        description: `OAuth bucket: ${bucket}`,
+      const providers = requireOAuthRuntime(control).getSupportedProviders();
+      return providers.map((provider) => ({
+        value: provider,
+        description: `Configure ${provider} OAuth`,
       }));
     } catch {
       return [];
     }
-  },
-);
+  }, readFuzzyFiltering);
 
-/**
- * Completer for logout command (buckets + --all flag)
- */
-const logoutCompleter: CompleterFn = withFuzzyFilter(
-  async (ctx, _partial, tokens) => {
-    try {
-      const provider = tokens.tokens[0];
-      if (!provider) return [];
+  /** Completer for bucket names for a given provider */
+  const bucketCompleter: CompleterFn = withFuzzyFilter(
+    async (_ctx, _partial, tokens) => {
+      try {
+        const provider = tokens.tokens[0];
+        if (!provider) return [];
 
-      const oauthManager = getOAuthControl(ctx);
-      const buckets = await oauthManager.listBuckets(provider);
-      const options = [
-        { value: '--all', description: 'Logout from all buckets' },
-        ...buckets.map((bucket) => ({
+        const buckets =
+          await requireOAuthRuntime(control).listBuckets(provider);
+        return buckets.map((bucket) => ({
           value: bucket,
-          description: `Logout from bucket: ${bucket}`,
-        })),
-      ];
-      return options;
-    } catch {
-      return [];
-    }
-  },
-);
+          description: `OAuth bucket: ${bucket}`,
+        }));
+      } catch {
+        return [];
+      }
+    },
+    readFuzzyFiltering,
+  );
+
+  /** Completer for logout command (buckets + --all flag) */
+  const logoutCompleter: CompleterFn = withFuzzyFilter(
+    async (_ctx, _partial, tokens) => {
+      try {
+        const provider = tokens.tokens[0];
+        if (!provider) return [];
+
+        const buckets =
+          await requireOAuthRuntime(control).listBuckets(provider);
+        return [
+          { value: '--all', description: 'Logout from all buckets' },
+          ...buckets.map((bucket) => ({
+            value: bucket,
+            description: `Logout from bucket: ${bucket}`,
+          })),
+        ];
+      } catch {
+        return [];
+      }
+    },
+    readFuzzyFiltering,
+  );
+
+  return { providerCompleter, bucketCompleter, logoutCompleter };
+}
+
+type SchemaNode = CommandArgumentSchema[number];
+
+function buildBucketSchemaEntries(
+  bucketCompleter: CompleterFn,
+  logoutCompleter: CompleterFn,
+): SchemaNode[] {
+  return [
+    {
+      kind: 'literal',
+      value: 'login',
+      description: 'Login to provider with optional bucket',
+      next: [
+        {
+          kind: 'value',
+          name: 'bucket',
+          description: 'Bucket name (optional)',
+          completer: bucketCompleter,
+        },
+      ],
+    },
+    {
+      kind: 'literal',
+      value: 'logout',
+      description: 'Logout from provider',
+      next: [
+        {
+          kind: 'value',
+          name: 'bucket-or-flag',
+          description: 'Bucket name or --all',
+          completer: logoutCompleter,
+        },
+      ],
+    },
+    {
+      kind: 'literal',
+      value: 'status',
+      description: 'Show authentication status and buckets',
+    },
+    {
+      kind: 'literal',
+      value: 'switch',
+      description: 'Switch to a different bucket',
+      next: [
+        {
+          kind: 'value',
+          name: 'bucket',
+          description: 'Bucket name to switch to',
+          completer: bucketCompleter,
+        },
+      ],
+    },
+  ];
+}
+
+function buildProfileSchemaEntries(bucketCompleter: CompleterFn): SchemaNode[] {
+  return [
+    {
+      kind: 'literal',
+      value: 'create',
+      description: 'Discover browser profiles for bucket association setup',
+      next: [
+        {
+          kind: 'value',
+          name: 'bucket',
+          description: 'Bucket name (defaults to default)',
+        },
+      ],
+    },
+    {
+      kind: 'literal',
+      value: 'profile',
+      description: 'Associate or clear a browser profile for a bucket',
+      next: [
+        {
+          kind: 'value',
+          name: 'bucket',
+          description: 'Bucket name',
+          completer: bucketCompleter,
+          next: [
+            {
+              kind: 'value',
+              name: 'selector',
+              description: 'Profile number, directory name, or --clear',
+            },
+          ],
+        },
+      ],
+    },
+  ];
+}
 
 /**
  * Command schema for auth command autocomplete
  */
-const authCommandSchema: CommandArgumentSchema = [
-  {
-    kind: 'value',
-    name: 'provider',
-    description: 'Select OAuth provider',
-    completer: providerCompleter,
-    next: [
-      {
-        kind: 'literal',
-        value: 'login',
-        description: 'Login to provider with optional bucket',
-        next: [
-          {
-            kind: 'value',
-            name: 'bucket',
-            description: 'Bucket name (optional)',
-            completer: bucketCompleter,
-          },
-        ],
-      },
-      {
-        kind: 'literal',
-        value: 'logout',
-        description: 'Logout from provider',
-        next: [
-          {
-            kind: 'value',
-            name: 'bucket-or-flag',
-            description: 'Bucket name or --all',
-            completer: logoutCompleter,
-          },
-        ],
-      },
-      {
-        kind: 'literal',
-        value: 'status',
-        description: 'Show authentication status and buckets',
-      },
-      {
-        kind: 'literal',
-        value: 'switch',
-        description: 'Switch to a different bucket',
-        next: [
-          {
-            kind: 'value',
-            name: 'bucket',
-            description: 'Bucket name to switch to',
-            completer: bucketCompleter,
-          },
-        ],
-      },
-      {
-        kind: 'literal',
-        value: 'create',
-        description: 'Discover browser profiles for bucket association setup',
-        next: [
-          {
-            kind: 'value',
-            name: 'bucket',
-            description: 'Bucket name (defaults to default)',
-          },
-        ],
-      },
-      {
-        kind: 'literal',
-        value: 'profile',
-        description: 'Associate or clear a browser profile for a bucket',
-        next: [
-          {
-            kind: 'value',
-            name: 'bucket',
-            description: 'Bucket name',
-            completer: bucketCompleter,
-            next: [
-              {
-                kind: 'value',
-                name: 'selector',
-                description: 'Profile number, directory name, or --clear',
-              },
-            ],
-          },
-        ],
-      },
-      {
-        kind: 'literal',
-        value: 'enable',
-        description: 'Enable OAuth for provider',
-      },
-      {
-        kind: 'literal',
-        value: 'disable',
-        description: 'Disable OAuth for provider',
-      },
-      ...buildLockUnlockSchemaEntries(bucketCompleter),
-    ],
-  },
-  {
-    kind: 'literal',
-    value: 'cancel',
-    description: 'Cancel active interactive authentication sessions',
-  },
-];
+function buildAuthCommandSchema(
+  control: AuthCommandOperations,
+  readFuzzyFiltering: () => boolean,
+): CommandArgumentSchema {
+  const { providerCompleter, bucketCompleter, logoutCompleter } =
+    createCompleters(control, readFuzzyFiltering);
+  return [
+    {
+      kind: 'value',
+      name: 'provider',
+      description: 'Select OAuth provider',
+      completer: providerCompleter,
+      next: [
+        ...buildBucketSchemaEntries(bucketCompleter, logoutCompleter),
+        ...buildProfileSchemaEntries(bucketCompleter),
+        {
+          kind: 'literal',
+          value: 'enable',
+          description: 'Enable OAuth for provider',
+        },
+        {
+          kind: 'literal',
+          value: 'disable',
+          description: 'Disable OAuth for provider',
+        },
+        ...buildLockUnlockSchemaEntries(bucketCompleter),
+      ],
+    },
+    {
+      kind: 'literal',
+      value: 'cancel',
+      description: 'Cancel active interactive authentication sessions',
+    },
+  ];
+}
 
 interface BucketStatus {
   bucket: string;
@@ -344,14 +387,11 @@ export class AuthCommandExecutor {
     private clearProviderClientCache: OAuthControl['clearProviderClientCache'],
   ) {}
 
-  async execute(
-    context: CommandContext,
-    args?: string,
-  ): Promise<SlashCommandActionReturn> {
+  async execute(args?: string): Promise<SlashCommandActionReturn> {
     // Parse args while preserving original parts for error messages
     const trimmedArgs = args?.trim() ?? '';
     if (isCancelSubcommand(trimmedArgs)) {
-      return cancelInteractiveAuthentication();
+      return cancelInteractiveAuthentication(this.oauthManager);
     }
     const parts = trimmedArgs.split(/\s+/).filter((p) => p.length > 0);
     const rawProvider = parts[0];
@@ -817,22 +857,26 @@ export class AuthCommandExecutor {
   }
 }
 
-export const authCommand: SlashCommand = {
-  name: 'auth',
-  description: 'Manage OAuth authentication for providers',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  schema: authCommandSchema,
-  action: async (context, args) => {
-    if (isCancelSubcommand(args)) {
-      return cancelInteractiveAuthentication();
-    }
-    const oauthManager = getOAuthControl(context);
-
-    const executor = new AuthCommandExecutor(
-      oauthManager,
-      context.oauthControl.clearProviderClientCache,
-    );
-    return executor.execute(context, args);
-  },
-};
+export function createAuthCommand(
+  control: AuthCommandOperations,
+  readFuzzyFiltering: () => boolean,
+): SlashCommand {
+  return {
+    name: 'auth',
+    description: 'Manage OAuth authentication for providers',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    schema: buildAuthCommandSchema(control, readFuzzyFiltering),
+    action: async (_context, args) => {
+      if (isCancelSubcommand(args)) {
+        return cancelInteractiveAuthentication(control);
+      }
+      const oauthManager = requireOAuthRuntime(control);
+      const executor = new AuthCommandExecutor(
+        oauthManager,
+        control.clearProviderClientCache,
+      );
+      return executor.execute(args);
+    },
+  };
+}

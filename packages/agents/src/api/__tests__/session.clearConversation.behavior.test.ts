@@ -1,9 +1,10 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
+import { openRouteBPreflight } from './helpers/route-b-preflight.js';
+import { openClientOwner } from './helpers/client-owner-session.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { ownerClients } from './helpers/session-client-capture.js';
 import { describe, it, expect, spyOn } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -21,34 +22,43 @@ import {
   SessionRecordingService,
   RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { AgentClient } from '../../core/client.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import { createAgent } from '../createAgent.js';
+import { AgentExecutionCoordinator } from '../agentExecutionCoordinator.js';
+import type { AgentConfig } from '../config-types.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-import {
-  buildAgent,
-  drain,
-  isDoneEvent,
-  internalSettingsOwner,
-} from './helpers/agentHarness.js';
-import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
-import { ShellJobOwner } from '../../session/shell-job-owner.js';
-import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
+import { drain, isDoneEvent } from './helpers/agentHarness.js';
 
-function clientOwner(agent: Agent): SessionClientOwner {
-  if (
-    !('deps' in agent) ||
-    typeof agent.deps !== 'object' ||
-    agent.deps === null
-  ) {
-    throw new Error('Expected an owned session client');
-  }
-  if (
-    !('sessionClient' in agent.deps) ||
-    !(agent.deps.sessionClient instanceof SessionClientOwner)
-  ) {
-    throw new Error('Expected an owned session client');
-  }
-  return agent.deps.sessionClient;
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * A tokenizer factory passed through the public `tokenizerFactory` input; its
+ * `prepareTokenizer` is the readiness step every candidate session client
+ * awaits, so a scenario can make that step fail on the next switch.
+ */
+function readinessTokenizer(): RuntimeTokenizerFactory {
+  return {
+    prepareTokenizer: async () => {},
+    getTokenizer: () => ({
+      fallbackPolicy: 'deny',
+      countTokens: () => 1,
+    }),
+    estimatePrompt: async (request) => ({
+      count: await request.legacyEstimate(),
+      method: 'calibrated',
+      family: 'test-readiness',
+      estimatorVersion: 'test-readiness-v1',
+      assetRevision: 'none',
+      projectionRevision: request.projectionRevision,
+    }),
+  };
 }
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
@@ -83,32 +93,81 @@ function recordedLineTypes(path: string): string[] {
     .map((line) => z.object({ type: z.string() }).parse(JSON.parse(line)).type);
 }
 
+const RECORDED_CONVERSATION = [
+  textItem('human', 'first question'),
+  textItem('ai', 'first answer'),
+  textItem('human', 'second question'),
+  textItem('ai', 'second answer'),
+];
+
+async function seedRecordedConversation(agent: Agent): Promise<string> {
+  await agent.setHistory(RECORDED_CONVERSATION);
+  await agent.session.setRecording({ enabled: true });
+  const path = agent.session.getRecording().path;
+  if (path === undefined) throw new Error('Expected conversation recording');
+  return path;
+}
+
 async function withRecordedConversation<T>(
   fn: (agent: Agent, recordingPath: string) => Promise<T>,
-  fixture = 'plain-text.jsonl',
+  overrides: Partial<AgentConfig> = {},
 ): Promise<T> {
   const workingDir = mkdtempSync(join(tmpdir(), 'llxprt-clear-conversation-'));
-  const { agent, cleanup } = await buildAgent(fixture, {
+  const agent = await createAgent({
+    provider: 'fake',
+    model: 'fake-model',
     workingDir,
+    ...overrides,
   });
   try {
-    await agent.setHistory([
-      textItem('human', 'first question'),
-      textItem('ai', 'first answer'),
-      textItem('human', 'second question'),
-      textItem('ai', 'second answer'),
-    ]);
-    await agent.session.setRecording({ enabled: true });
-    const path = agent.session.getRecording().path;
-    if (path === undefined) throw new Error('Expected conversation recording');
-    return await fn(agent, path);
+    return await fn(agent, await seedRecordedConversation(agent));
   } finally {
-    await cleanup();
+    await agent.dispose();
     rmSync(workingDir, { recursive: true, force: true });
   }
 }
 
+/**
+ * An agent on the foreground preflight route, with the host's own
+ * `SessionSettingsOwner`: the telemetry root the agent logs through is
+ * `settingsOwner.telemetry`.
+ */
+async function withTelemetryAgent<T>(
+  fn: (agent: Agent, telemetry: RootTelemetry) => Promise<T>,
+  overrides: Partial<AgentConfig> = {},
+): Promise<T> {
+  const route = await openRouteBPreflight({ config: overrides });
+  const settingsOwner = new SessionSettingsOwner(route.settings);
+  let agent: Agent | undefined;
+  try {
+    await route.prepare({ settingsOwner });
+    agent = await route.createAgent();
+    return await fn(agent, settingsOwner.telemetry);
+  } finally {
+    await runCleanupSteps([
+      () => agent?.dispose(),
+      () => route.disposePreflight(),
+      () => route.close(),
+      () => settingsOwner.dispose(),
+    ]);
+  }
+}
+
+async function withTelemetryConversation<T>(
+  fn: (
+    agent: Agent,
+    recordingPath: string,
+    telemetry: RootTelemetry,
+  ) => Promise<T>,
+): Promise<T> {
+  return withTelemetryAgent(async (agent, telemetry) =>
+    fn(agent, await seedRecordedConversation(agent), telemetry),
+  );
+}
+
 describe('starting a new conversation session', () => {
+  useRecordingPrompts();
+  useFakeResponsesReplay('plain-text.jsonl');
   it('rejects foreground turns and settings while recording retirement is paused', async () => {
     await withRecordedConversation(async (agent, oldPath) => {
       const entered = deferred();
@@ -125,32 +184,7 @@ describe('starting a new conversation session', () => {
       const switching = agent.session.startNewSession();
       try {
         await entered.promise;
-        if (
-          !('deps' in agent) ||
-          typeof agent.deps !== 'object' ||
-          agent.deps === null
-        )
-          throw new Error('Expected agent dependencies');
-        if (
-          !('taskLaunchOwner' in agent.deps) ||
-          !(agent.deps.taskLaunchOwner instanceof TaskLaunchOwner)
-        )
-          throw new Error('Expected task owner');
-        if (
-          !('shellOwner' in agent.deps) ||
-          !(agent.deps.shellOwner instanceof ShellJobOwner)
-        )
-          throw new Error('Expected shell owner');
-        const { taskLaunchOwner, shellOwner } = agent.deps;
-        expect(() => taskLaunchOwner.start(async () => {})).toThrow(
-          AgentBusyError,
-        );
-        expect(() =>
-          shellOwner.launch({
-            command: 'printf forbidden',
-            cwd: process.cwd(),
-          }),
-        ).toThrow(AgentBusyError);
+
         const channel = agent.tools.openClientChannel();
         try {
           await channel.ready;
@@ -204,163 +238,245 @@ describe('starting a new conversation session', () => {
     'integration',
   ] as const) {
     it(`preserves the old recorded conversation when ${stage} preparation fails`, async () => {
-      await withRecordedConversation(async (agent, oldPath) => {
-        const oldId = recordingSessionId(oldPath);
-        let candidateIds: readonly string[] = [];
-        const createLocked = SessionRecordingService.createLocked;
-        const recordingAcquisition = spyOn(
-          SessionRecordingService,
-          'createLocked',
-        ).mockImplementation(async (options) => {
-          if (stage === 'recording')
-            throw new Error('candidate preparation failed');
-          const recording = await createLocked(options);
-          candidateIds = [...candidateIds, recording.getSessionId()];
-          return recording;
-        });
-        let acquired: readonly AgentClient[] = [];
-        let disposed: readonly AgentClient[] = [];
-        const initialize = AgentClient.prototype.initialize;
-        const dispose = AgentClient.prototype.dispose;
-        const acquisition = spyOn(
-          AgentClient.prototype,
-          'initialize',
-        ).mockImplementation(async function (this: AgentClient, ...args) {
-          acquired = [...acquired, this];
-          if (stage === 'initialize')
-            throw new Error('candidate preparation failed');
-          return initialize.apply(this, args);
-        });
-        const disposal = spyOn(
-          AgentClient.prototype,
-          'dispose',
-        ).mockImplementation(async function (this: AgentClient) {
-          disposed = [...disposed, this];
-          return dispose.call(this);
-        });
-        const tokenizer = clientOwner(agent).tokenizerFactory;
-        if (tokenizer.prepareTokenizer === undefined)
-          throw new Error('Expected tokenizer readiness');
-        const injectFailure = (): { mockRestore: () => void } | undefined => {
-          switch (stage) {
-            case 'tokenizer':
-              return spyOn(tokenizer, 'prepareTokenizer').mockRejectedValueOnce(
-                new Error('candidate preparation failed'),
-              );
-            case 'integration':
-              return spyOn(
-                RecordingIntegration.prototype,
-                'subscribeToHistory',
-              ).mockImplementationOnce(() => {
-                throw new Error('candidate preparation failed');
-              });
-            case 'resetChat':
-              return spyOn(
-                AgentClient.prototype,
-                'resetChat',
-              ).mockRejectedValueOnce(
-                new Error('candidate preparation failed'),
-              );
-            case 'telemetry':
-              return spyOn(
-                RootTelemetry.prototype,
-                'prepareNewSession',
-              ).mockRejectedValueOnce(
-                new Error('candidate preparation failed'),
-              );
-            default:
-              return undefined;
-          }
-        };
-        const failure = injectFailure();
-        try {
-          await expect(agent.session.startNewSession()).rejects.toThrow(
-            'candidate preparation failed',
-          );
-          expect(agent.session.getSessionId()).toBe(oldId);
-          expect(agent.session.getRecording()).toMatchObject({
-            enabled: true,
-            path: oldPath,
+      const tokenizer = readinessTokenizer();
+      await withRecordedConversation(
+        async (agent, oldPath) => {
+          const oldId = recordingSessionId(oldPath);
+          let candidateIds: readonly string[] = [];
+          const createLocked = SessionRecordingService.createLocked;
+          const recordingAcquisition = spyOn(
+            SessionRecordingService,
+            'createLocked',
+          ).mockImplementation(async (options) => {
+            if (stage === 'recording')
+              throw new Error('candidate preparation failed');
+            const recording = await createLocked(options);
+            candidateIds = [...candidateIds, recording.getSessionId()];
+            return recording;
           });
-          expect((await agent.getHistory()).map(itemText)).toStrictEqual([
-            'first question',
-            'first answer',
-            'second question',
-            'second answer',
-          ]);
-          expect(disposed).toStrictEqual(acquired);
-          for (const id of candidateIds) {
-            const lock = await SessionLockManager.acquire(
-              join(oldPath, '..'),
-              id,
+          let acquired: readonly AgentClient[] = [];
+          let disposed: readonly AgentClient[] = [];
+          const initialize = AgentClient.prototype.initialize;
+          const dispose = AgentClient.prototype.dispose;
+          const acquisition = spyOn(
+            AgentClient.prototype,
+            'initialize',
+          ).mockImplementation(async function (this: AgentClient, ...args) {
+            acquired = [...acquired, this];
+            if (stage === 'initialize')
+              throw new Error('candidate preparation failed');
+            return initialize.apply(this, args);
+          });
+          const disposal = spyOn(
+            AgentClient.prototype,
+            'dispose',
+          ).mockImplementation(async function (this: AgentClient) {
+            disposed = [...disposed, this];
+            return dispose.call(this);
+          });
+          const injectFailure = (): { mockRestore: () => void } | undefined => {
+            switch (stage) {
+              case 'tokenizer':
+                return spyOn(
+                  tokenizer,
+                  'prepareTokenizer',
+                ).mockRejectedValueOnce(
+                  new Error('candidate preparation failed'),
+                );
+              case 'integration':
+                return spyOn(
+                  RecordingIntegration.prototype,
+                  'subscribeToHistory',
+                ).mockImplementationOnce(() => {
+                  throw new Error('candidate preparation failed');
+                });
+              case 'resetChat':
+                return spyOn(
+                  AgentClient.prototype,
+                  'resetChat',
+                ).mockRejectedValueOnce(
+                  new Error('candidate preparation failed'),
+                );
+              case 'telemetry':
+                return spyOn(
+                  RootTelemetry.prototype,
+                  'prepareNewSession',
+                ).mockRejectedValueOnce(
+                  new Error('candidate preparation failed'),
+                );
+              default:
+                return undefined;
+            }
+          };
+          const failure = injectFailure();
+          try {
+            await expect(agent.session.startNewSession()).rejects.toThrow(
+              'candidate preparation failed',
             );
-            await lock.release();
+            expect(agent.session.getSessionId()).toBe(oldId);
+            expect(agent.session.getRecording()).toMatchObject({
+              enabled: true,
+              path: oldPath,
+            });
+            expect((await agent.getHistory()).map(itemText)).toStrictEqual([
+              'first question',
+              'first answer',
+              'second question',
+              'second answer',
+            ]);
+            expect(disposed).toStrictEqual(acquired);
+            for (const id of candidateIds) {
+              const lock = await SessionLockManager.acquire(
+                join(oldPath, '..'),
+                id,
+              );
+              await lock.release();
+            }
+          } finally {
+            failure?.mockRestore();
+            recordingAcquisition.mockRestore();
+            acquisition.mockRestore();
+            disposal.mockRestore();
           }
-        } finally {
-          failure?.mockRestore();
-          recordingAcquisition.mockRestore();
-          acquisition.mockRestore();
-          disposal.mockRestore();
-        }
-        await drain(agent.stream('still recorded after failure'));
-        await agent.session.flushRecording();
-        expect(readFileSync(oldPath, 'utf8')).toContain(
-          'still recorded after failure',
-        );
-      });
+          await drain(agent.stream('still recorded after failure'));
+          await agent.session.flushRecording();
+          expect(readFileSync(oldPath, 'utf8')).toContain(
+            'still recorded after failure',
+          );
+        },
+        { tokenizerFactory: tokenizer },
+      );
     });
   }
 
-  for (const stage of ['recording', 'telemetry', 'client'] as const) {
-    it(`closes admission when ${stage} retirement fails`, async () => {
-      await withRecordedConversation(async (agent, oldPath) => {
+  it('closes admission when recording retirement fails', async () => {
+    await withRecordedConversation(async (agent, oldPath) => {
+      const original = SessionRecordingService.prototype.dispose;
+      const failure = spyOn(
+        SessionRecordingService.prototype,
+        'dispose',
+      ).mockImplementationOnce(async function (this: SessionRecordingService) {
+        await original.call(this);
+        throw new Error('retirement failed');
+      });
+      try {
         const oldId = recordingSessionId(oldPath);
-        const injectFailure = (): { mockRestore: () => void } => {
-          if (stage === 'telemetry') {
-            return spyOn(
-              internalSettingsOwner(agent).telemetry,
-              'setEnabled',
-            ).mockRejectedValueOnce(new Error('retirement failed'));
-          }
-          if (stage === 'client') {
-            const previous = clientOwner(agent).getAgentClient();
-            const original = previous.dispose.bind(previous);
-            return spyOn(previous, 'dispose').mockImplementationOnce(
-              async () => {
-                await original();
-                throw new Error('retirement failed');
-              },
-            );
-          }
-          const original = SessionRecordingService.prototype.dispose;
-          return spyOn(
-            SessionRecordingService.prototype,
-            'dispose',
-          ).mockImplementationOnce(async function (
-            this: SessionRecordingService,
-          ) {
-            await original.call(this);
+        await expect(agent.session.startNewSession()).rejects.toThrow(
+          'retirement failed',
+        );
+        expect(agent.session.getSessionId()).toBe(oldId);
+        await expect(drain(agent.stream('must remain closed'))).rejects.toThrow(
+          'closed',
+        );
+        expect(() =>
+          agent.setEphemeralSetting('reasoning.includeInResponse', false),
+        ).toThrow('closed');
+      } finally {
+        failure.mockRestore();
+      }
+    });
+  });
+
+  it('closes admission when telemetry retirement fails', async () => {
+    await withTelemetryConversation(async (agent, oldPath, telemetry) => {
+      const failure = spyOn(telemetry, 'setEnabled').mockRejectedValueOnce(
+        new Error('retirement failed'),
+      );
+      try {
+        const oldId = recordingSessionId(oldPath);
+        await expect(agent.session.startNewSession()).rejects.toThrow(
+          'retirement failed',
+        );
+        expect(agent.session.getSessionId()).toBe(oldId);
+        await expect(drain(agent.stream('must remain closed'))).rejects.toThrow(
+          'closed',
+        );
+        expect(() =>
+          agent.setEphemeralSetting('reasoning.includeInResponse', false),
+        ).toThrow('closed');
+      } finally {
+        failure.mockRestore();
+      }
+    });
+  });
+
+  describe('client retirement', () => {
+    const credentials = useOwnedCredentials();
+
+    it('closes admission when client retirement fails', async () => {
+      const directory = mkdtempSync(join(tmpdir(), 'clear-client-retirement-'));
+      const opened = await openClientOwner(
+        credentials().authority,
+        {
+          provider: 'fake',
+          model: 'fake-model',
+          workingDir: directory,
+          interactive: true,
+          harness: { includeProcessCwd: false },
+        },
+        { provider: 'fake', model: 'fake-model' },
+      );
+      const coordinator = new AgentExecutionCoordinator();
+      const session = opened.owner.createSessionControl(
+        'facade',
+        () => 'clear-client-retirement-runtime',
+        (operation) => coordinator.withIdleBoundary(operation),
+        () => coordinator.closeAdmission(),
+        () => {},
+        () => 'fake',
+        () => 'fake-model',
+      );
+      let closeAttempted = false;
+      try {
+        await opened.client.restoreHistory(RECORDED_CONVERSATION);
+        await session.setRecording({ enabled: true });
+        const oldId = session.getSessionId();
+        const clients = ownerClients(opened.owner);
+        const previous = clients[clients.length - 1];
+        const original = previous.dispose.bind(previous);
+        const failure = spyOn(previous, 'dispose').mockImplementationOnce(
+          async () => {
+            await original();
             throw new Error('retirement failed');
-          });
-        };
-        const failure = injectFailure();
+          },
+        );
         try {
-          await expect(agent.session.startNewSession()).rejects.toThrow(
+          await expect(session.startNewSession()).rejects.toThrow(
             'retirement failed',
           );
-          expect(agent.session.getSessionId()).toBe(oldId);
-          await expect(
-            drain(agent.stream('must remain closed')),
-          ).rejects.toThrow('closed');
+          expect(session.getSessionId()).toBe(oldId);
           expect(() =>
-            agent.setEphemeralSetting('reasoning.includeInResponse', false),
+            coordinator.admit({
+              controller: new AbortController(),
+              finished: Promise.resolve(),
+              finish: () => {},
+              close: async () => {},
+              retirements: [],
+            }),
           ).toThrow('closed');
+          expect(() => coordinator.assertSettingsAdmission()).toThrow('closed');
+          await expect(session.startNewSession()).rejects.toThrow('closed');
+          await expect(session.getHistory()).rejects.toThrow(
+            'Session disposed',
+          );
+          await session.dispose();
+          closeAttempted = true;
+          await expect(opened.close()).rejects.toThrow(
+            'Session client cleanup failed',
+          );
         } finally {
           failure.mockRestore();
         }
-      });
-    });
-  }
+      } finally {
+        await runCleanupSteps([
+          () => session.dispose(),
+          () => (closeAttempted ? undefined : opened.close()),
+          () => coordinator.dispose(),
+          () => rmSync(directory, { recursive: true, force: true }),
+        ]);
+      }
+    }, 30000);
+  });
 
   it('leaves no prior conversation turns for the next model request', async () => {
     const afterReset = await withRecordedConversation(async (agent) => {
@@ -373,92 +489,95 @@ describe('starting a new conversation session', () => {
   it('moves telemetry events, spans and token measurements to the new session', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'clear-telemetry-'));
     const outfile = join(directory, 'telemetry.jsonl');
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-      workingDir: directory,
-      telemetry: { enabled: true, outfile },
-    });
     try {
-      const telemetry = internalSettingsOwner(agent).telemetry;
-      const oldId = agent.session.getSessionId();
-      telemetry.events.record(() => ({ body: 'before clear' }));
-      await agent.session.startNewSession();
-      const nextId = agent.session.getSessionId();
-      telemetry.events.record(() => ({ body: 'after clear' }));
-      telemetry.spans.start('after-clear-span').end();
-      telemetry.measurements.tokenUsage('after-clear-model', 7, 'input');
-      await telemetry.flush();
-      const records = readFileSync(outfile, 'utf8')
-        .trim()
-        .split('\n')
-        .map((line) => JSON.parse(line));
-      const logs = records.flatMap((record: unknown) => {
-        const parsed = z
-          .object({ body: z.string(), attributes: z.record(z.unknown()) })
-          .safeParse(record);
-        return parsed.success ? [parsed.data] : [];
-      });
-      expect(
-        logs.find((record) => record.body === 'before clear')?.attributes[
-          'session.id'
-        ],
-      ).toBe(oldId);
-      expect(
-        logs.find((record) => record.body === 'after clear')?.attributes[
-          'session.id'
-        ],
-      ).toBe(nextId);
-      const span = records
-        .map((record: unknown) =>
-          z
-            .object({
-              name: z.string(),
-              attributes: z.record(z.unknown()),
-              resource: z.object({
-                _rawAttributes: z.array(z.tuple([z.string(), z.unknown()])),
-              }),
-            })
-            .safeParse(record),
-        )
-        .find(
-          (record) => record.success && record.data.name === 'after-clear-span',
-        );
-      if (span?.success !== true) throw new Error('Expected exported span');
-      expect(span.data.attributes['session.id']).toBe(nextId);
-      expect(
-        Object.fromEntries(span.data.resource._rawAttributes)['session.id'],
-      ).toBe(nextId);
-      const points = records
-        .flatMap((record: unknown) => {
-          const parsed = z
-            .object({
-              scopeMetrics: z.array(
-                z.object({
-                  metrics: z.array(
+      await withTelemetryAgent(
+        async (agent, telemetry) => {
+          const oldId = agent.session.getSessionId();
+          telemetry.events.record(() => ({ body: 'before clear' }));
+          await agent.session.startNewSession();
+          const nextId = agent.session.getSessionId();
+          telemetry.events.record(() => ({ body: 'after clear' }));
+          telemetry.spans.start('after-clear-span').end();
+          telemetry.measurements.tokenUsage('after-clear-model', 7, 'input');
+          await telemetry.flush();
+          const records = readFileSync(outfile, 'utf8')
+            .trim()
+            .split('\n')
+            .map((line) => JSON.parse(line));
+          const logs = records.flatMap((record: unknown) => {
+            const parsed = z
+              .object({ body: z.string(), attributes: z.record(z.unknown()) })
+              .safeParse(record);
+            return parsed.success ? [parsed.data] : [];
+          });
+          expect(
+            logs.find((record) => record.body === 'before clear')?.attributes[
+              'session.id'
+            ],
+          ).toBe(oldId);
+          expect(
+            logs.find((record) => record.body === 'after clear')?.attributes[
+              'session.id'
+            ],
+          ).toBe(nextId);
+          const span = records
+            .map((record: unknown) =>
+              z
+                .object({
+                  name: z.string(),
+                  attributes: z.record(z.unknown()),
+                  resource: z.object({
+                    _rawAttributes: z.array(z.tuple([z.string(), z.unknown()])),
+                  }),
+                })
+                .safeParse(record),
+            )
+            .find(
+              (record) =>
+                record.success && record.data.name === 'after-clear-span',
+            );
+          if (span?.success !== true) throw new Error('Expected exported span');
+          expect(span.data.attributes['session.id']).toBe(nextId);
+          expect(
+            Object.fromEntries(span.data.resource._rawAttributes)['session.id'],
+          ).toBe(nextId);
+          const points = records
+            .flatMap((record: unknown) => {
+              const parsed = z
+                .object({
+                  scopeMetrics: z.array(
                     z.object({
-                      dataPoints: z.array(
+                      metrics: z.array(
                         z.object({
-                          attributes: z.record(z.unknown()),
-                          value: z.number(),
+                          dataPoints: z.array(
+                            z.object({
+                              attributes: z.record(z.unknown()),
+                              value: z.number(),
+                            }),
+                          ),
                         }),
                       ),
                     }),
                   ),
-                }),
-              ),
+                })
+                .safeParse(record);
+              return parsed.success
+                ? parsed.data.scopeMetrics.flatMap((scope) =>
+                    scope.metrics.flatMap((metric) => metric.dataPoints),
+                  )
+                : [];
             })
-            .safeParse(record);
-          return parsed.success
-            ? parsed.data.scopeMetrics.flatMap((scope) =>
-                scope.metrics.flatMap((metric) => metric.dataPoints),
-              )
-            : [];
-        })
-        .filter((point) => point.attributes.model === 'after-clear-model');
-      expect(
-        points.map((point) => [point.attributes['session.id'], point.value]),
-      ).toStrictEqual([[nextId, 7]]);
+            .filter((point) => point.attributes.model === 'after-clear-model');
+          expect(
+            points.map((point) => [
+              point.attributes['session.id'],
+              point.value,
+            ]),
+          ).toStrictEqual([[nextId, 7]]);
+        },
+        { telemetry: { enabled: true, outfile } },
+      );
     } finally {
-      await cleanup();
       rmSync(directory, { recursive: true, force: true });
     }
   });
@@ -615,10 +734,20 @@ describe('starting a new conversation session', () => {
     });
   });
 
-  it('does not clear a sibling conversation or change shared Config identity', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, borrow, config }) => {
+  it('does not clear a sibling conversation or change its Config identity', async () => {
+    const routes: RouteAAgent[] = [];
+    try {
+      const first = await openRouteAAgent();
+      routes.push(first);
+      const second = await openRouteAAgent({
+        config: { workingDir: first.directory },
+      });
+      routes.push(second);
+      const agent = first.agent;
+      const sibling = second.agent;
+      const config = first.config;
       await agent.setHistory([textItem('human', 'shared conversation')]);
-      const sibling = await borrow();
+      await sibling.setHistory([textItem('human', 'shared conversation')]);
       const prior = await sibling.getHistory();
       const configId = config.getSessionId();
       await agent.session.setRecording({ enabled: true });
@@ -631,42 +760,45 @@ describe('starting a new conversation session', () => {
       expect((await agent.getHistory()).map(itemText)).toStrictEqual([
         'shared conversation',
       ]);
-    });
+    } finally {
+      await runCleanupSteps(
+        [...routes].reverse().map((route) => () => route.close()),
+      );
+    }
   });
 
   it('keeps the new facade session identity on model requests after a model switch', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'clear-model-identity-'));
     const outfile = join(directory, 'telemetry.jsonl');
+    const route = await openRouteAAgent({
+      config: { telemetry: { enabled: true, outfile } },
+    });
     try {
-      await withRecordingLifetimeFixture(
-        async ({ agent, config }) => {
-          const sharedId = config.getSessionId();
-          await agent.session.startNewSession();
-          const nextId = agent.session.getSessionId();
-          await agent.setModel('fresh-model');
-          await drain(agent.stream('new request'));
-          await internalSettingsOwner(agent).telemetry.flush();
-          const spans = readFileSync(outfile, 'utf8')
-            .trim()
-            .split('\n')
-            .flatMap((line) => {
-              const parsed = z
-                .object({ name: z.string(), attributes: z.record(z.unknown()) })
-                .safeParse(JSON.parse(line));
-              return parsed.success && parsed.data.name === 'llxprt.api.request'
-                ? [parsed.data]
-                : [];
-            });
-          expect(spans.length).toBeGreaterThan(0);
-          expect(
-            spans.map((span) => span.attributes['session.id']),
-          ).toStrictEqual(spans.map(() => nextId));
-          expect(config.getSessionId()).toBe(sharedId);
-        },
-        undefined,
-        { telemetry: { enabled: true, outfile } },
+      const { agent, config } = route;
+      const sharedId = config.getSessionId();
+      await agent.session.startNewSession();
+      const nextId = agent.session.getSessionId();
+      await agent.setModel('fresh-model');
+      await drain(agent.stream('new request'));
+      await agent.dispose();
+      const spans = readFileSync(outfile, 'utf8')
+        .trim()
+        .split('\n')
+        .flatMap((line) => {
+          const parsed = z
+            .object({ name: z.string(), attributes: z.record(z.unknown()) })
+            .safeParse(JSON.parse(line));
+          return parsed.success && parsed.data.name === 'llxprt.api.request'
+            ? [parsed.data]
+            : [];
+        });
+      expect(spans.length).toBeGreaterThan(0);
+      expect(spans.map((span) => span.attributes['session.id'])).toStrictEqual(
+        spans.map(() => nextId),
       );
+      expect(config.getSessionId()).toBe(sharedId);
     } finally {
+      await route.close();
       rmSync(directory, { recursive: true, force: true });
     }
   });

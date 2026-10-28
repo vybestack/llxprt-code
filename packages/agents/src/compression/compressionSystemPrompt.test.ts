@@ -39,6 +39,10 @@ import {
   CompressionLoadBalancingProvider,
   type CompressionLoadBalancerCandidate,
 } from '../core/CompressionLoadBalancingProvider.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const COMPRESSION_SYSTEM_PROMPT = 'COMPRESSION_CORE_PROMPT';
 
@@ -120,16 +124,21 @@ function buildContext(
     config: Config;
   }> = {},
 ): CompressionContext {
+  const invocationSettings = new SettingsService();
   const contextProviderRuntime = {
-    settingsService: new SettingsService(),
-    config: overrides.config,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
   };
 
   const resolveProvider = (): CompressionProviderResult => ({
     invocation: captureProviderInvocation(
-      contextProviderRuntime,
+      {
+        fetch: requestFetch,
+        runtimeId: contextProviderRuntime.runtimeId,
+        metadata: contextProviderRuntime.metadata,
+        globalSettings: invocationSettings.getAllGlobalSettings(),
+        providerSettings: invocationSettings.getProviderSettings(provider.name),
+      },
       provider.name,
     ),
     provider,
@@ -207,7 +216,12 @@ describe('Compression system instruction (issue #3136, Step 3)', () => {
     const history = generateHistory(20);
     const context = buildContext(provider, { history });
 
-    const strategy = new OneShotStrategy();
+    const strategy = new OneShotStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     const result = await strategy.compress(context);
 
     expect(result.kind).toBe('applied');
@@ -227,7 +241,12 @@ describe('Compression system instruction (issue #3136, Step 3)', () => {
       preserveThreshold: 0.2,
     });
 
-    const strategy = new MiddleOutStrategy();
+    const strategy = new MiddleOutStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     const result = await strategy.compress(context);
 
     expect(result.kind).toBe('applied');
@@ -248,6 +267,10 @@ describe('Compression system instruction (issue #3136, Step 3)', () => {
       provider,
       'initial summary',
       context,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       resolved.runtime,
       undefined,
       undefined,
@@ -270,7 +293,12 @@ describe('Compression system instruction (issue #3136, Step 3)', () => {
       compressionVerification: true,
     });
 
-    const strategy = new OneShotStrategy();
+    const strategy = new OneShotStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     await strategy.compress(context);
 
     // First call = initial compression, second = verification pass
@@ -308,7 +336,12 @@ describe('Compression request-scoped provider and interactionMode (issue #3176, 
       subagentName: 'typescript-expert',
     });
 
-    const strategy = new OneShotStrategy();
+    const strategy = new OneShotStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     await strategy.compress(context);
 
     expect(captured.length).toBeGreaterThanOrEqual(1);
@@ -325,7 +358,12 @@ describe('Compression request-scoped provider and interactionMode (issue #3176, 
       config: makeInteractiveConfig(true),
     });
 
-    const strategy = new OneShotStrategy();
+    const strategy = new OneShotStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     await strategy.compress(context);
 
     expect(captured.length).toBeGreaterThanOrEqual(1);
@@ -343,7 +381,12 @@ describe('Compression request-scoped provider and interactionMode (issue #3176, 
       config: makeInteractiveConfig(false),
     });
 
-    const strategy = new OneShotStrategy();
+    const strategy = new OneShotStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     await strategy.compress(context);
 
     expect(captured.length).toBeGreaterThanOrEqual(1);
@@ -361,7 +404,12 @@ describe('Compression request-scoped provider and interactionMode (issue #3176, 
     const history = generateHistory(20);
     const context = buildContext(provider, { history });
 
-    const strategy = new OneShotStrategy();
+    const strategy = new OneShotStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     await strategy.compress(context);
 
     expect(captured.length).toBeGreaterThanOrEqual(1);
@@ -376,7 +424,12 @@ describe('Compression request-scoped provider and interactionMode (issue #3176, 
     (provider as { name: string }).name = 'load-balancer';
     const context = buildContext(provider, { history: generateHistory(20) });
 
-    const strategy = new OneShotStrategy();
+    const strategy = new OneShotStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     await strategy.compress(context);
 
     expect(captured.length).toBeGreaterThanOrEqual(1);
@@ -410,10 +463,7 @@ function createLoadBalancerCandidate(
   return {
     profileName: `${providerName}-profile`,
     provider,
-    runtime: {
-      settingsService:
-        {} as CompressionLoadBalancerCandidate['runtime']['settingsService'],
-    },
+    runtime: {},
     config: undefined,
     resolved: { model },
     invocation: {} as CompressionLoadBalancerCandidate['invocation'],
@@ -432,6 +482,10 @@ describe('Load-balanced compression prompt assembly (issue #3176, D5+D8)', () =>
       ],
       1,
       'subagent',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
     );
 
     for await (const _chunk of provider.generateChatCompletion({
@@ -463,6 +517,10 @@ describe('Load-balanced compression prompt assembly (issue #3176, D5+D8)', () =>
       ],
       0,
       'interactive',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
     );
 
     for await (const _chunk of provider.generateChatCompletion({
@@ -489,13 +547,22 @@ describe('Load-balanced compression prompt assembly (issue #3176, D5+D8)', () =>
       [createLoadBalancerCandidate('provider-a', 'model-a', calls)],
       0,
       'subagent',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
     );
     const context = buildContext(provider, {
       history: generateHistory(20),
       subagentName: 'worker',
     });
 
-    await new OneShotStrategy().compress(context);
+    await new OneShotStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ).compress(context);
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledTimes(1);
     expect(calls[0].systemInstruction).toContain(

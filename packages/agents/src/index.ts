@@ -30,6 +30,8 @@ export { registerActivateSkillTool } from './skill-tool-registrar.js';
  * Creates the core-owned TaskToolRegistration descriptor without requiring core
  * to import the concrete agents-owned TaskTool class.
  */
-export function createTaskToolRegistration(): TaskToolRegistration {
-  return createTaskRegistration();
+export function createTaskToolRegistration(
+  ...args: Parameters<typeof createTaskRegistration>
+): TaskToolRegistration {
+  return createTaskRegistration(...args);
 }

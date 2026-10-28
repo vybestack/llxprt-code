@@ -1,5 +1,11 @@
+import {
+  installOwnedConfig,
+  installBorrowedConfigSettings,
+} from '../__tests__/helpers/session-settings-owner-fixture.js';
+const acquireSettings = installBorrowedConfigSettings();
+const acquireConfig = installOwnedConfig();
 import { readFixtureSessionAuthPolicy } from './__tests__/session-auth-policy-fixture.js';
-import { createProviderConfigFixture } from '../runtime/__tests__/provider-config-fixture.js';
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -94,18 +100,15 @@ describe('OAuthManager explicit runtime MessageBus seam', () => {
    */
 
   it('uses the explicit auth-surface MessageBus seam for bucket confirmation while keeping multi-provider registration intact', async () => {
-    const {
-      config: config,
-      settingsOwner: configSettingsOwner,
-      settingsService,
-    } = createProviderConfigFixture({
+    const config = acquireConfig({
       sessionId: 'messagebus',
       targetDir: process.cwd(),
       cwd: process.cwd(),
       debugMode: false,
       model: 'gpt-5',
-      settingsService: new SettingsService(),
     });
+    const settingsService = new SettingsService();
+    const configSettingsOwner = acquireSettings(config, settingsService);
     configSettingsOwner.writeUserParameter('auth-bucket-prompt', true);
 
     const explicitBus = new MessageBus(new PolicyEngine());

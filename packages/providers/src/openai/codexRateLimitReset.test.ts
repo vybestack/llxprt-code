@@ -33,13 +33,21 @@ describe('codexRateLimitReset', () => {
 
   describe('fetchCodexRateLimitResetCredits', () => {
     it('should return null for empty access token', async () => {
-      const result = await fetchCodexRateLimitResetCredits('', 'account123');
+      const result = await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
+        '',
+        'account123',
+      );
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('should return null for empty account ID', async () => {
-      const result = await fetchCodexRateLimitResetCredits('token123', '');
+      const result = await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
+        'token123',
+        '',
+      );
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -58,6 +66,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       const result = await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
         'token123',
         'account123',
       );
@@ -88,6 +97,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
         'token123',
         'account123',
         'https://chatgpt.com/backend-api/codex',
@@ -115,6 +125,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
         'token123',
         'account123',
         'https://custom.example.com/backend-api',
@@ -147,6 +158,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
         'token123',
         'account123',
         'https://proxy.example.com/v1',
@@ -168,6 +180,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       const result = await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
         'token123',
         'account123',
       );
@@ -178,6 +191,7 @@ describe('codexRateLimitReset', () => {
       fetchMock.mockRejectedValueOnce(new Error('Network error'));
 
       const result = await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
         'token123',
         'account123',
       );
@@ -193,6 +207,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       const result = await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
         'token123',
         'account123',
       );
@@ -210,6 +225,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       const result = await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
         'token123',
         'account123',
       );
@@ -234,6 +250,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       const result = await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
         'token123',
         'account123',
       );
@@ -250,6 +267,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       const result = await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
         'token123',
         'account123',
       );
@@ -273,6 +291,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       const result = await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
         'token123',
         'account123',
       );
@@ -292,7 +311,11 @@ describe('codexRateLimitReset', () => {
         json: async () => mockResponse,
       } as Response);
 
-      await fetchCodexRateLimitResetCredits('token123', 'account123');
+      await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
+        'token123',
+        'account123',
+      );
 
       const secondArg = fetchMock.mock.calls[0]?.[1] as {
         signal?: unknown;
@@ -308,6 +331,7 @@ describe('codexRateLimitReset', () => {
       );
 
       const result = await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
         'token123',
         'account123',
       );
@@ -317,13 +341,21 @@ describe('codexRateLimitReset', () => {
     it('should return null for a whitespace-only access token without fetching', async () => {
       // A whitespace-only token must be rejected by the input guard so no
       // pointless network call is made.
-      const result = await fetchCodexRateLimitResetCredits('   ', 'account123');
+      const result = await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
+        '   ',
+        'account123',
+      );
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('should return null for a whitespace-only account ID without fetching', async () => {
-      const result = await fetchCodexRateLimitResetCredits('token123', '   ');
+      const result = await fetchCodexRateLimitResetCredits(
+        globalThis.fetch,
+        'token123',
+        '   ',
+      );
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -332,6 +364,7 @@ describe('codexRateLimitReset', () => {
   describe('consumeCodexRateLimitResetCredit', () => {
     it('should return null for empty access token', async () => {
       const result = await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         '',
         'account123',
         'credit-1',
@@ -343,6 +376,7 @@ describe('codexRateLimitReset', () => {
 
     it('should return null for empty account ID', async () => {
       const result = await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         '',
         'credit-1',
@@ -354,6 +388,7 @@ describe('codexRateLimitReset', () => {
 
     it('should return null for empty credit ID', async () => {
       const result = await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         'account123',
         '',
@@ -365,6 +400,7 @@ describe('codexRateLimitReset', () => {
 
     it('should return null for empty redeem request ID', async () => {
       const result = await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         'account123',
         'credit-1',
@@ -376,6 +412,7 @@ describe('codexRateLimitReset', () => {
 
     it('should return null for a whitespace-only access token without fetching', async () => {
       const result = await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         '   ',
         'account123',
         'credit-1',
@@ -387,6 +424,7 @@ describe('codexRateLimitReset', () => {
 
     it('should return null for a whitespace-only credit ID without fetching', async () => {
       const result = await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         'account123',
         '   ',
@@ -398,6 +436,7 @@ describe('codexRateLimitReset', () => {
 
     it('should return null for a whitespace-only redeem request ID without fetching', async () => {
       const result = await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         'account123',
         'credit-1',
@@ -419,6 +458,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       const result = await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         'account123',
         'credit-1',
@@ -453,6 +493,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       const result = await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         'account123',
         'credit-1',
@@ -477,6 +518,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       const result = await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         'account123',
         'credit-1',
@@ -495,6 +537,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       const result = await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         'account123',
         'credit-1',
@@ -507,6 +550,7 @@ describe('codexRateLimitReset', () => {
       fetchMock.mockRejectedValueOnce(new Error('Network error'));
 
       const result = await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         'account123',
         'credit-1',
@@ -526,6 +570,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       const result = await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         'account123',
         'credit-1',
@@ -543,6 +588,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       const result = await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         'account123',
         'credit-1',
@@ -563,6 +609,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         'account123',
         'credit-1',
@@ -590,6 +637,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         'account123',
         'credit-1',
@@ -628,6 +676,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         'account123',
         'credit-1',
@@ -648,6 +697,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         'account123',
         'credit-1',
@@ -673,6 +723,7 @@ describe('codexRateLimitReset', () => {
       } as Response);
 
       await consumeCodexRateLimitResetCredit(
+        globalThis.fetch,
         'token123',
         'account123',
         'credit-1',

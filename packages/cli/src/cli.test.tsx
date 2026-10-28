@@ -3,11 +3,13 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { createUiSessionOwner } from './__tests__/uiSessionOwner.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { useCommandOwners as installCommandOwners } from './__tests__/command-owner-fixture.js';
+const makeForegroundAgent = installCommandOwners();
 
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
-import { createProviderSessionCapabilities as preflightCapabilities } from './integration-tests/__tests__/session-client-owner-fixture.js';
+import {
+  AgentProfilePreflight,
+  type Agent,
+} from '@vybestack/llxprt-code-agents';
 import { handoffCliConfig } from './test-utils/bootstrap-config.js';
 
 import {
@@ -29,17 +31,15 @@ import {
   __resetUnhandledRejectionStateForTesting,
   formatNonInteractiveError,
 } from './cli.js';
-import type { LoadedSettings } from './config/settings.js';
+import { createInteractiveConfigFactory } from './__tests__/interactive-config-fixture.js';
+import { createLoadedSettings } from './__tests__/loaded-settings-fixture.js';
+const actualSettings = { ...(await import('./config/settings.js')) };
 import { loadSettings } from './config/settings.js';
 import { loadCliConfig } from './config/config.js';
 import { parseArguments } from './config/cliArgParser.js';
 import { appEvents, AppEvent, type AppEvents } from './utils/events.js';
 import { EventEmitter } from 'node:events';
 import { Config, FatalConfigError } from '@vybestack/llxprt-code-core';
-import {
-  ProviderManager,
-  type IProvider,
-} from '@vybestack/llxprt-code-providers';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import { shouldRelaunchForMemory, isDebugMode } from './utils/bootstrap.js';
 import { relaunchAppInChildProcess } from './utils/relaunch.js';
@@ -57,16 +57,13 @@ class MockProcessExitError extends Error {
 
 // Mock dependencies
 void vi.mock('./config/settings.js', () => ({
-  loadSettings: vi.fn().mockReturnValue({
-    merged: {
-      advanced: {},
+  ...actualSettings,
+  loadSettings: vi.fn().mockReturnValue(
+    createLoadedSettings({
       security: { auth: {} },
       ui: { useAlternateBuffer: true },
-    },
-    setValue: vi.fn(),
-    forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-    errors: [],
-  }),
+    }),
+  ),
   migrateDeprecatedSettings: vi.fn(),
   SettingScope: {
     User: 'user',
@@ -161,33 +158,17 @@ void vi.mock('./utils/cleanup.js', () => ({
   runExitCleanup: vi.fn(),
 }));
 
-// Mock the Agent composition root so interactive-path tests do not construct a
-// real Agent via fromConfig (which would require a fully wired Config). The
-// fake exposes getMessageBus() because dispatch reads the session bus from the
-// Agent (#2378).
+const actualCreateForegroundAgent = createForegroundAgent;
+const foregroundAgents: Agent[] = [];
 void vi.mock('./cliAgentBootstrap.js', () => ({
-  createForegroundAgent: vi.fn(async () => ({
-    workspace: createUiSessionOwner().workspace,
-    ide: createUiSessionOwner().ide,
-    dispose: vi.fn().mockResolvedValue(undefined),
-    getMessageBus: vi.fn(() => ({})),
-    session: {
-      setRecording: vi.fn(async () => {}),
-      getRecording: vi.fn(() => ({ enabled: true })),
+  createForegroundAgent: vi.fn(
+    async (...args: Parameters<typeof createForegroundAgent>) => {
+      const agent = await actualCreateForegroundAgent(...args);
+      foregroundAgents.push(agent);
+      return agent;
     },
-    tools: { get: vi.fn(() => undefined) },
-  })),
+  ),
 }));
-
-// Mock the public activation preflight so main() does not invoke real provider
-// runtime mutators. These tests verify surrounding CLI orchestration.
-const { preflightMock } = {
-  preflightMock: vi.fn().mockResolvedValue({
-    authFailed: false,
-    activeProvider: 'gemini',
-    infoMessages: [],
-  }),
-};
 
 void vi.mock('./ui/utils/mouse.js', () => ({
   enableMouseEvents: vi.fn(),
@@ -216,37 +197,8 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
 
 const interactiveConfigs: Config[] = [];
 
-function makeInteractiveConfig(
-  directory: string,
-  sessionId: string,
-): { config: Config; manager: ProviderManager } {
-  const config = new Config({
-    sessionId,
-    targetDir: directory,
-    cwd: directory,
-    model: 'gemini-2.5-pro',
-    provider: 'gemini',
-    interactive: true,
-    debugMode: false,
-  });
-  const manager = new ProviderManager({
-    config,
-    settingsService: new SettingsService(),
-  });
-  const provider: IProvider = {
-    name: 'gemini',
-    getDefaultModel: () => 'gemini-2.5-pro',
-    getModels: async () => [],
-    async *generateChatCompletion() {
-      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ready' }] };
-    },
-  };
-  manager.registerProvider(provider);
-  manager.setActiveProvider('gemini');
-  configureProviderRuntimeFactories(config, manager);
-  interactiveConfigs.push(config);
-  return { config, manager };
-}
+const makeInteractiveConfig =
+  createInteractiveConfigFactory(interactiveConfigs);
 
 describe('cli.tsx main function', () => {
   /**
@@ -280,14 +232,6 @@ describe('cli.tsx main function', () => {
     loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
     projectTempDir = await mkdtemp(join(tmpdir(), 'cli-main-'));
     dynamicSettingsRegistry.reset();
-    // Re-establish the default resolved value after afterEach's
-    // vi.restoreAllMocks() clears mock implementations.
-    preflightMock.mockResolvedValue({
-      authFailed: false,
-      activeProvider: 'gemini',
-      infoMessages: [],
-    });
-
     // Store and clear sandbox-related env variables to ensure a consistent test environment
     originalEnvLlxprtSandbox = process.env.LLXPRT_SANDBOX;
     originalEnvSandbox = process.env.SANDBOX;
@@ -299,6 +243,7 @@ describe('cli.tsx main function', () => {
   });
 
   afterEach(async () => {
+    for (const agent of foregroundAgents.splice(0)) await agent.dispose();
     for (const config of interactiveConfigs.splice(0)) {
       await config.dispose();
     }
@@ -325,6 +270,74 @@ describe('cli.tsx main function', () => {
       process.removeListener('unhandledRejection', addedListener);
     }
     vi.restoreAllMocks();
+  });
+
+  it('runs a headless request through the actual foreground owner after a sibling retires', async () => {
+    const owner = await makeForegroundAgent('root-headless-owner');
+    const peer = await makeForegroundAgent('root-headless-peer');
+    const { config } = makeInteractiveConfig(
+      projectTempDir,
+      owner.getRuntimeId(),
+    );
+    vi.spyOn(config, 'isInteractive').mockReturnValue(false);
+    vi.spyOn(config, 'getQuestion').mockReturnValue(
+      'Request from the actual CLI composition root',
+    );
+    (
+      createForegroundAgent as Mock<typeof createForegroundAgent>
+    ).mockResolvedValueOnce(owner);
+    loadSettingsMock.mockReturnValue(
+      createLoadedSettings({ ui: { autoConfigureMaxOldSpaceSize: false } }),
+    );
+    (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
+      handoffCliConfig(config),
+    );
+    const originalIsTTY = process.stdin.isTTY;
+    const originalSetRawMode = process.stdin.setRawMode;
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: true,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdin, 'setRawMode', {
+      value: () => process.stdin,
+      configurable: true,
+    });
+    const output = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+    vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new MockProcessExitError(code);
+    });
+    try {
+      expect(owner.getRuntimeId()).toBe(peer.getRuntimeId());
+      await peer.dispose();
+      await expect(main()).rejects.toMatchObject({ code: 0 });
+      expect(await owner.getHistory()).toStrictEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            speaker: 'human',
+            blocks: expect.arrayContaining([
+              expect.objectContaining({
+                type: 'text',
+                text: expect.stringContaining('actual CLI composition root'),
+              }),
+            ]),
+          }),
+          expect.objectContaining({ speaker: 'ai' }),
+        ]),
+      );
+      expect(owner.getModel()).toBe('root-headless-owner-initial');
+    } finally {
+      output.mockRestore();
+      Object.defineProperty(process.stdin, 'isTTY', {
+        value: originalIsTTY,
+        configurable: true,
+      });
+      Object.defineProperty(process.stdin, 'setRawMode', {
+        value: originalSetRawMode,
+        configurable: true,
+      });
+    }
   });
 
   it('should throw InvalidConfigurationError if settings have errors', async () => {
@@ -527,33 +540,25 @@ describe('cli.tsx main function', () => {
   });
 
   it('initializes content generator config before interactive provider usage', async () => {
+    const configuredWorkspace = vi.spyOn(
+      AgentProfilePreflight.prototype,
+      'prepareConfiguredWorkspace',
+    );
     const freshSessionId = randomUUID();
-    const { config: mockConfig, manager } = makeInteractiveConfig(
+    const { config: mockConfig } = makeInteractiveConfig(
       projectTempDir,
       freshSessionId,
     );
 
     const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
-    loadSettingsMock.mockReturnValue({
-      merged: {
+    loadSettingsMock.mockReturnValue(
+      createLoadedSettings({
         ui: { autoConfigureMaxOldSpaceSize: false },
-      },
-      setValue: vi.fn(),
-      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-      errors: [],
-    } as unknown as LoadedSettings);
+      }),
+    );
 
     (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
-      handoffCliConfig(
-        mockConfig,
-        (store, owner) => ({
-          ...preflightCapabilities(mockConfig, manager, store, owner),
-          workspaceMemoryOwnership: 'transferred',
-          preflight: preflightMock,
-          dispose: () => {},
-        }),
-        manager,
-      ),
+      handoffCliConfig(mockConfig),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       model: undefined,
@@ -579,7 +584,7 @@ describe('cli.tsx main function', () => {
       extensions: undefined,
       listExtensions: undefined,
       provider: undefined,
-      key: undefined,
+      key: 'synthetic-cli-main-key',
       keyfile: undefined,
       baseurl: undefined,
       proxy: undefined,
@@ -634,6 +639,11 @@ describe('cli.tsx main function', () => {
     }
 
     expect(renderMock).toHaveBeenCalledTimes(1);
+    const selected = configuredWorkspace.mock.contexts[0];
+    if (!(selected instanceof AgentProfilePreflight))
+      throw new Error('Configured workspace must retain its actual preflight');
+    await selected.updateTelemetrySettings({ logPrompts: true });
+    expect(selected.readTelemetrySettings().logPrompts).toBe(true);
 
     // The interactive path creates exactly one Agent at the composition root,
     // adopting the existing Config.
@@ -642,7 +652,18 @@ describe('cli.tsx main function', () => {
     ).toHaveBeenCalledTimes(1);
     expect(
       createForegroundAgent as Mock<typeof createForegroundAgent>,
-    ).toHaveBeenCalledWith(expect.objectContaining({ config: mockConfig }));
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({ admitForegroundAgent: expect.any(Function) }),
+      expect.any(Object),
+      expect.objectContaining({ provider: mockConfig.getProvider() }),
+      expect.any(Object),
+      expect.any(Object),
+    );
+
+    expect(configuredWorkspace).toHaveBeenCalledWith(
+      mockConfig,
+      expect.any(Function),
+    );
 
     // Avoid the process.exit error from being thrown in later tests.
     processExitSpy.mockRestore();
@@ -662,32 +683,20 @@ describe('cli.tsx main function', () => {
   it('should call setupTerminalAndTheme when isInteractive is true', async () => {
     const freshSessionId = randomUUID();
     const { setupTerminalAndTheme } = await import('./utils/terminalTheme.js');
-    const { config: mockConfig, manager } = makeInteractiveConfig(
+    const { config: mockConfig } = makeInteractiveConfig(
       projectTempDir,
       freshSessionId,
     );
 
     const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
-    loadSettingsMock.mockReturnValue({
-      merged: {
+    loadSettingsMock.mockReturnValue(
+      createLoadedSettings({
         ui: { autoConfigureMaxOldSpaceSize: false },
-      },
-      setValue: vi.fn(),
-      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-      errors: [],
-    } as unknown as LoadedSettings);
+      }),
+    );
 
     (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
-      handoffCliConfig(
-        mockConfig,
-        (store, owner) => ({
-          ...preflightCapabilities(mockConfig, manager, store, owner),
-          workspaceMemoryOwnership: 'transferred',
-          preflight: preflightMock,
-          dispose: () => {},
-        }),
-        manager,
-      ),
+      handoffCliConfig(mockConfig),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       model: undefined,
@@ -713,7 +722,7 @@ describe('cli.tsx main function', () => {
       extensions: undefined,
       listExtensions: undefined,
       provider: undefined,
-      key: undefined,
+      key: 'synthetic-cli-main-key',
       keyfile: undefined,
       baseurl: undefined,
       proxy: undefined,
@@ -809,14 +818,11 @@ describe('cli.tsx deferred initialization', () => {
     // Simulate need for relaunch
     shouldRelaunchMock.mockReturnValue(['--max-old-space-size=4096']);
     relaunchMock.mockResolvedValue(0);
-    loadSettingsMock.mockReturnValue({
-      merged: {
+    loadSettingsMock.mockReturnValue(
+      createLoadedSettings({
         ui: { autoConfigureMaxOldSpaceSize: true, maxHeapSizeMB: 8192 },
-      },
-      setValue: vi.fn(),
-      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-      errors: [],
-    } as unknown as LoadedSettings);
+      }),
+    );
 
     const processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('PROCESS_EXIT');
@@ -919,14 +925,11 @@ describe('cli.tsx deferred initialization', () => {
     isDebugModeMock.mockReturnValue(true);
     shouldRelaunchMock.mockReturnValue([]);
 
-    loadSettingsMock.mockReturnValue({
-      merged: {
+    loadSettingsMock.mockReturnValue(
+      createLoadedSettings({
         ui: { autoConfigureMaxOldSpaceSize: true, maxHeapSizeMB: 8192 },
-      },
-      setValue: vi.fn(),
-      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-      errors: [],
-    } as unknown as LoadedSettings);
+      }),
+    );
 
     try {
       await main();
@@ -950,14 +953,11 @@ describe('cli.tsx deferred initialization', () => {
     isDebugModeMock.mockReturnValue(false);
     shouldRelaunchMock.mockReturnValue([]);
 
-    loadSettingsMock.mockReturnValue({
-      merged: {
+    loadSettingsMock.mockReturnValue(
+      createLoadedSettings({
         ui: { autoConfigureMaxOldSpaceSize: true, maxHeapSizeMB: 4096 },
-      },
-      setValue: vi.fn(),
-      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
-      errors: [],
-    } as unknown as LoadedSettings);
+      }),
+    );
 
     try {
       await main();

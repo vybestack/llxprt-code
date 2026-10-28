@@ -191,9 +191,13 @@ export async function parseReasoningFromSseStream(
 export function createReasoningCaptureFetch(
   captureBuffer: CaptureBuffer,
   logger: DebugLogger,
+  requestFetch: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>,
 ): typeof fetch {
   return async (input: RequestInfo | URL, init?: RequestInit) => {
-    const response = await fetch(input, init);
+    const response = await requestFetch(input, init);
 
     captureBuffer.headers = response.headers;
 

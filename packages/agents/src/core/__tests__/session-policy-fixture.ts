@@ -12,6 +12,10 @@ import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/c
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderAdapterFromManager } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 interface SessionPolicyFixture {
   readonly settings: SettingsService;
@@ -58,7 +62,14 @@ export function createSessionPolicyFixture(
       parameters?: AdmittedModelParameters,
       signal?: AbortSignal,
     ) =>
-      owner.prepareProviderInvocation(runtimeId, provider, parameters, signal),
+      owner.prepareProviderInvocation(
+        runtimeId,
+        provider,
+        parameters,
+        signal,
+        undefined,
+        requestFetch,
+      ),
   };
 }
 
@@ -90,7 +101,6 @@ export function createOwnerPolicyFixture(
     },
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
     providerRuntime: createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: state.runtimeId,
     }),
   });

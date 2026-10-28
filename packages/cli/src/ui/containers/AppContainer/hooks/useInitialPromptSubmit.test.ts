@@ -18,6 +18,7 @@ const createParams = (overrides: Partial<HookParams> = {}): HookParams => ({
   submitPrompt: vi.fn().mockResolvedValue(undefined),
   agentClientPresent: true,
   interactiveRuntimeReady: true,
+  commandsReady: true,
   store: createDialogStore(),
   startupGuardsInitialized: true,
   ...overrides,
@@ -505,5 +506,85 @@ describe('useInitialPromptSubmit', () => {
 
     expect(submitPrompt).toHaveBeenCalledWith('hello');
     expect(submitPrompt).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('initial command registry readiness', () => {
+  it('waits for registration and submits a startup command once across reloads', async () => {
+    const submitted: string[] = [];
+    const { rerender, unmount } = renderHook(
+      ({ commandsReady }: { commandsReady: boolean }) =>
+        useInitialPromptSubmit({
+          ...createParams(),
+          initialPrompt: '  /profile save model delayed',
+          commandsReady,
+          submitPrompt: async (query) => {
+            submitted.push(query.trim());
+          },
+        }),
+      { initialProps: { commandsReady: false } },
+    );
+    try {
+      await act(async () => {});
+      expect(submitted).toStrictEqual([]);
+      rerender({ commandsReady: true });
+      await act(async () => {});
+      expect(submitted).toStrictEqual(['/profile save model delayed']);
+      rerender({ commandsReady: false });
+      rerender({ commandsReady: true });
+      await act(async () => {});
+      expect(submitted).toHaveLength(1);
+    } finally {
+      unmount();
+    }
+  });
+
+  it('keeps ordinary startup input independent of command registration', async () => {
+    const submitted: string[] = [];
+    const { unmount } = renderHook(() =>
+      useInitialPromptSubmit({
+        ...createParams(),
+        initialPrompt: '  ordinary startup request  ',
+        commandsReady: false,
+        submitPrompt: async (query) => {
+          submitted.push(query.trim());
+        },
+      }),
+    );
+    try {
+      await act(async () => {});
+      expect(submitted).toStrictEqual(['ordinary startup request']);
+    } finally {
+      unmount();
+    }
+  });
+
+  it('retains blocking dialogs when the command registry becomes ready', async () => {
+    const submitted: string[] = [];
+    const store = createDialogStore();
+    store.commands.openDialog({ kind: 'folderTrust', payload: {} });
+    const { rerender, unmount } = renderHook(
+      ({ commandsReady }: { commandsReady: boolean }) =>
+        useInitialPromptSubmit({
+          ...createParams({ store }),
+          initialPrompt: '/help',
+          commandsReady,
+          interactiveRuntimeReady: false,
+          submitPrompt: async (query) => {
+            submitted.push(query);
+          },
+        }),
+      { initialProps: { commandsReady: false } },
+    );
+    try {
+      rerender({ commandsReady: true });
+      await act(async () => {});
+      expect(submitted).toStrictEqual([]);
+      act(() => store.commands.closeDialog('folderTrust'));
+      await act(async () => {});
+      expect(submitted).toStrictEqual(['/help']);
+    } finally {
+      unmount();
+    }
   });
 });

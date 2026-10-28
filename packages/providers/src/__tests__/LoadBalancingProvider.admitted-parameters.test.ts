@@ -11,6 +11,10 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/
 import { LoadBalancingProvider } from '../LoadBalancingProvider.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { normalizeRuntimeInputs } from '../runtimeNormalizer.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function setup(): {
   settings: SettingsService;
@@ -19,7 +23,14 @@ function setup(): {
 } {
   const settings = new SettingsService();
   const config = createRuntimeConfigStub(settings);
-  const manager = new ProviderManager({ settingsService: settings, config });
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    settings,
+    config,
+  );
   const provider = new LoadBalancingProvider(
     {
       profileName: 'routing',
@@ -75,13 +86,17 @@ describe('Load-balancer admission normalization', () => {
 
   it('normalizes an LB invocation without replacing it with a member partition', () => {
     const { settings, provider, manager } = setup();
-    const config = createRuntimeConfigStub(settings);
     const captured = provider.admitModelParameters(settings);
     const normalized = normalizeRuntimeInputs(
       {
         contents: [],
         invocation: captureProviderInvocation(
-          { runtimeId: 'test-owner', settingsService: settings, config },
+          {
+            fetch: requestFetch,
+            runtimeId: 'test-owner',
+            globalSettings: settings.getAllGlobalSettings(),
+            providerSettings: settings.getProviderSettings('load-balancer'),
+          },
           'load-balancer',
           captured,
         ),

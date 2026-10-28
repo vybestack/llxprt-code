@@ -11,16 +11,16 @@ import { TaskLaunchOwner } from '../session/task-launch-owner.js';
  * Sibling to task.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
+import { TaskTool, type TaskToolParams } from './task.js';
 
 describe('TaskTool', () => {
   let config: Config;
@@ -39,9 +39,10 @@ describe('TaskTool', () => {
     it('returns error when async=true but no Agent owner is bound', async () => {
       const tool = new TaskTool(config, {
         ...createTaskPolicyFixture({}),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () => ({}) as SubagentOrchestrator,
+        launchChild: (request, signal) =>
+          (({}) as SubagentOrchestrator).launch(request, signal),
         // No TaskLaunchOwner is bound
       });
       const params: TaskToolParams = {
@@ -68,9 +69,10 @@ describe('TaskTool', () => {
       };
       const tool = new TaskTool(config, {
         ...createTaskPolicyFixture({}),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () => ({}) as SubagentOrchestrator,
+        launchChild: (request, signal) =>
+          (({}) as SubagentOrchestrator).launch(request, signal),
         taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
         ),
@@ -113,10 +115,14 @@ describe('TaskTool', () => {
       });
       const tool = new TaskTool(config, {
         ...createTaskPolicyFixture({}),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () =>
-          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        launchChild: (request, signal) =>
+          (
+            ({
+              launch: launchMock,
+            }) as unknown as SubagentOrchestrator
+          ).launch(request, signal),
         taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
         ),
@@ -165,10 +171,14 @@ describe('TaskTool', () => {
       });
       const tool = new TaskTool(config, {
         ...createTaskPolicyFixture({}),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () =>
-          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        launchChild: (request, signal) =>
+          (
+            ({
+              launch: launchMock,
+            }) as unknown as SubagentOrchestrator
+          ).launch(request, signal),
         taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
         ),
@@ -217,10 +227,14 @@ describe('TaskTool', () => {
       });
       const tool = new TaskTool(config, {
         ...createTaskPolicyFixture({}),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () =>
-          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        launchChild: (request, signal) =>
+          (
+            ({
+              launch: launchMock,
+            }) as unknown as SubagentOrchestrator
+          ).launch(request, signal),
         taskLaunchOwner: new TaskLaunchOwner(realAsyncTaskManager),
         isInteractiveEnvironment: () => false,
       });
@@ -285,10 +299,14 @@ describe('TaskTool', () => {
         );
       const tool = new TaskTool(config, {
         ...createTaskPolicyFixture({}),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () =>
-          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        launchChild: (request, signal) =>
+          (
+            ({
+              launch: launchMock,
+            }) as unknown as SubagentOrchestrator
+          ).launch(request, signal),
         taskLaunchOwner: new TaskLaunchOwner(realAsyncTaskManager),
         isInteractiveEnvironment: () => false,
       });
@@ -346,10 +364,14 @@ describe('TaskTool', () => {
       });
       const tool = new TaskTool(config, {
         ...createTaskPolicyFixture({}),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () =>
-          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        launchChild: (request, signal) =>
+          (
+            ({
+              launch: launchMock,
+            }) as unknown as SubagentOrchestrator
+          ).launch(request, signal),
         taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
         ),
@@ -408,10 +430,14 @@ describe('TaskTool', () => {
       });
       const tool = new TaskTool(config, {
         ...createTaskPolicyFixture({}),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () =>
-          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        launchChild: (request, signal) =>
+          (
+            ({
+              launch: launchMock,
+            }) as unknown as SubagentOrchestrator
+          ).launch(request, signal),
         taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
         ),
@@ -461,10 +487,14 @@ describe('TaskTool', () => {
       });
       const tool = new TaskTool(config, {
         ...createTaskPolicyFixture({}),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () =>
-          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        launchChild: (request, signal) =>
+          (
+            ({
+              launch: launchMock,
+            }) as unknown as SubagentOrchestrator
+          ).launch(request, signal),
         taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
         ),
@@ -539,10 +569,14 @@ describe('TaskTool', () => {
           'task-default-timeout-seconds': 60,
           'task-max-timeout-seconds': 120,
         }),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () =>
-          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        launchChild: (request, signal) =>
+          (
+            ({
+              launch: launchMock,
+            }) as unknown as SubagentOrchestrator
+          ).launch(request, signal),
         taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
         ),
@@ -609,10 +643,14 @@ describe('TaskTool', () => {
       });
       const tool = new TaskTool(config, {
         ...createTaskPolicyFixture({}),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () =>
-          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        launchChild: (request, signal) =>
+          (
+            ({
+              launch: launchMock,
+            }) as unknown as SubagentOrchestrator
+          ).launch(request, signal),
         taskLaunchOwner: new TaskLaunchOwner(realAsyncTaskManager),
         isInteractiveEnvironment: () => false,
       });

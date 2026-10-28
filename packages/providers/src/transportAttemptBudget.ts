@@ -20,10 +20,13 @@ export interface TransportAttemptBudget {
 }
 
 interface BudgetLifecycle {
-  readonly leases: number;
+  leases: number;
 }
 
-const budgetLifecycles = new WeakMap<TransportAttemptBudget, BudgetLifecycle>();
+const BUDGET_LIFECYCLE = Symbol('transportAttemptBudgetLifecycle');
+interface OwnedTransportAttemptBudget extends TransportAttemptBudget {
+  readonly [BUDGET_LIFECYCLE]?: BudgetLifecycle;
+}
 
 function normalizeTransportAttemptLimit(limit: number): number {
   return Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 1;
@@ -61,27 +64,27 @@ export interface AttachedTransportAttemptBudget {
 function acquireBudgetLifecycle(
   budget: TransportAttemptBudget,
 ): BudgetLifecycle | undefined {
-  const lifecycle = budgetLifecycles.get(budget);
+  const owned: OwnedTransportAttemptBudget = budget;
+  const lifecycle = owned[BUDGET_LIFECYCLE];
   if (lifecycle === undefined || lifecycle.leases === 0) return undefined;
-  const acquired = { leases: lifecycle.leases + 1 };
-  budgetLifecycles.set(budget, acquired);
-  return acquired;
+  lifecycle.leases += 1;
+  return lifecycle;
 }
 
-function createBudgetLifecycle(budget: TransportAttemptBudget): void {
-  budgetLifecycles.set(budget, { leases: 1 });
+function createBudgetLifecycle(
+  budget: TransportAttemptBudget,
+): BudgetLifecycle {
+  const lifecycle: BudgetLifecycle = { leases: 1 };
+  Object.defineProperty(budget, BUDGET_LIFECYCLE, { value: lifecycle });
+  return lifecycle;
 }
 
-function releaseBudgetLifecycle(budget: TransportAttemptBudget): () => void {
+function releaseBudgetLifecycle(lifecycle: BudgetLifecycle): () => void {
   let released = false;
   return () => {
     if (released) return;
     released = true;
-    const lifecycle = budgetLifecycles.get(budget);
-    if (lifecycle === undefined) return;
-    budgetLifecycles.set(budget, {
-      leases: Math.max(0, lifecycle.leases - 1),
-    });
+    lifecycle.leases -= 1;
   };
 }
 
@@ -97,7 +100,7 @@ export function attachTransportAttemptBudget(
       return {
         options,
         budget: existing,
-        release: releaseBudgetLifecycle(existing),
+        release: releaseBudgetLifecycle(lifecycle),
       };
     }
   }
@@ -105,7 +108,7 @@ export function attachTransportAttemptBudget(
     limit: normalizeTransportAttemptLimit(limit),
     used: 0,
   };
-  createBudgetLifecycle(budget);
+  const lifecycle = createBudgetLifecycle(budget);
   const requestContext = {
     ...existingContext,
     [TRANSPORT_ATTEMPT_BUDGET_KEY]: budget,
@@ -119,7 +122,7 @@ export function attachTransportAttemptBudget(
       },
     },
     budget,
-    release: releaseBudgetLifecycle(budget),
+    release: releaseBudgetLifecycle(lifecycle),
   };
 }
 

@@ -21,7 +21,13 @@ describe('Migration: Default Strategy Unchanged', () => {
   });
 
   it('middle-out strategy resolves correctly', () => {
-    const strategy = getCompressionStrategy('middle-out');
+    const strategy = getCompressionStrategy(
+      'middle-out',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     expect(strategy.name).toBe('middle-out');
   });
 
@@ -32,7 +38,13 @@ describe('Migration: Default Strategy Unchanged', () => {
       'one-shot',
     ];
     for (const name of preExisting) {
-      const strategy = getCompressionStrategy(name);
+      const strategy = getCompressionStrategy(
+        name,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.name).toBe(name);
     }
   });
@@ -41,7 +53,13 @@ describe('Migration: Default Strategy Unchanged', () => {
 describe('Migration: No Breaking Changes to Strategy Interface', () => {
   it('all strategies have trigger property', () => {
     for (const name of COMPRESSION_STRATEGIES) {
-      const strategy = getCompressionStrategy(name);
+      const strategy = getCompressionStrategy(
+        name,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.trigger).toBeDefined();
       expect(strategy.trigger.mode).toBeTruthy();
     }
@@ -54,13 +72,25 @@ describe('Migration: No Breaking Changes to Strategy Interface', () => {
       'one-shot',
     ];
     for (const name of preExisting) {
-      const strategy = getCompressionStrategy(name);
+      const strategy = getCompressionStrategy(
+        name,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.trigger.mode).toBe('threshold');
     }
   });
 
   it('high-density uses continuous trigger', () => {
-    const strategy = getCompressionStrategy('high-density');
+    const strategy = getCompressionStrategy(
+      'high-density',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     expect(strategy.trigger.mode).toBe('continuous');
   });
 
@@ -71,7 +101,13 @@ describe('Migration: No Breaking Changes to Strategy Interface', () => {
       'one-shot',
     ];
     for (const name of preExisting) {
-      const strategy = getCompressionStrategy(name);
+      const strategy = getCompressionStrategy(
+        name,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.optimize).toBeUndefined();
     }
   });

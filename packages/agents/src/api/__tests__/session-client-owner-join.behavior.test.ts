@@ -3,305 +3,283 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
-
+import {
+  createCapturedSessionOwner,
+  ownerClients,
+} from './helpers/session-client-capture.js';
+import { gate as createGate } from './helpers/async-child-disposal-join-fixture.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openRouteBPreflight } from './helpers/route-b-preflight.js';
+import { preparePreferredProviderCompletion } from '../preferred-provider-acquisition.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+} from './helpers/provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
+import { randomUUID } from 'node:crypto';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import { cleanupAfterFailure } from '../../core/subagent-cleanup.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
 import { describe, expect, it } from 'bun:test';
-import { writeFile, access, unlink, mkdir } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { writeFile, access, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
-import { AgentClient } from '../../core/client.js';
-import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
-import {
-  createSessionClientEngineFixture,
-  engineGate,
-} from './helpers/session-client-engine-fixture.js';
-import { fromConfig } from '../fromConfig.js';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
-import { AgentActivationBootstrap } from '../activationPreflightState.js';
 
 describe('Session owner cleanup joining', () => {
-  it('releases retained provider resources when a prepared activation is abandoned', async () => {
-    const built = await createSessionClientEngineFixture();
-    const file = join(built.config.projectTempDir, 'abandoned-provider-file');
-    const lifecycle = built.handle.providerFileLifecycle;
-    const scope = built.config.getSessionId();
-    await mkdir(built.config.projectTempDir, { recursive: true });
-    await writeFile(file, 'uploaded bytes');
-    let deletions = 0;
-    const retained = await lifecycle.retain({
-      cacheKey: file,
-      fileId: 'abandoned-upload',
-      bytes: 14,
-      identity: {
+  useFakeResponsesReplay('multi-turn-text.jsonl');
+  const credentials = useOwnedCredentials();
+  it('keeps the borrowed root fetch open through client cleanup and closes it when the root release closes', async () => {
+    const builtDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'explicit-engine-owner-')),
+    );
+    const builtConfig = new Config(
+      toConfigParameters({
         provider: 'fake',
-        baseURL: 'http://127.0.0.1',
-        credentialHash: 'abandoned-key',
-      },
-      scopeId: scope,
-      policy: {
-        mode: 'enabled',
-        scope: 'session',
-        retentionMs: 60_000,
-        deletion: 'delete',
-        zeroDataRetention: 'incompatible-while-retained',
-      },
-      deleteRemote: async () => {
-        await unlink(file);
-        deletions += 1;
-      },
-    });
-    await retained.lease.release();
-    built.owner.bindProviderFiles(
-      lifecycle,
-      (provider) => built.handle.oauthManager.composeRetryOperations(provider),
-      (id) => SessionClientOwner.cleanupProviderScope(lifecycle, id),
-    );
-    const candidate = await built.owner.prepareProfileClientReplacement();
-    candidate.publish();
-    await candidate.retire();
-    await access(file);
-    expect(lifecycle.snapshot().retainedFiles).toBe(1);
-    const operation = new AgentActivationBootstrap(
-      built.config,
-      built.handle.providerManager,
-      async () => ({ authFailed: false, infoMessages: [] }),
-      undefined,
-      built.owner,
-      built.mcp.workspaceFilesystem,
-      built.mcp.workspaceMemory,
-      false,
-      built.handle.settingsOwner,
-      'borrowed',
-      built.mcp.workspaceDefinitions,
-      false,
-      new WorkspaceTrustLifecycle({
-        localTrust: built.config.initialWorkspaceTrust,
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        workingDir: builtDirectory,
       }),
     );
-    try {
-      await operation.preflight({ provider: 'fake' });
-      const first = operation.dispose();
-      await Promise.all([first, operation.dispose()]);
-      await expect(access(file)).rejects.toMatchObject({ code: 'ENOENT' });
-      expect(lifecycle.snapshot().retainedFiles).toBe(0);
-      expect(deletions).toBe(1);
-    } finally {
-      await SessionClientOwner.cleanupProviderScope(lifecycle, scope);
-      await built.cleanup();
-    }
-  });
-
-  it('joins the preflight client before media cleanup when adoption runtime construction fails', async () => {
-    const built = await createSessionClientEngineFixture();
-    let cleanupStates: readonly boolean[] = [];
-    class ObservedCleanupClient extends AgentClient {
-      override async dispose(): Promise<void> {
-        const open = await built.media.store.getStoredByteLength().then(
-          () => true,
-          () => false,
-        );
-        cleanupStates = [...cleanupStates, open];
-        await super.dispose();
-      }
-    }
-    const owner = await SessionClientOwner.create(
-      built.config,
-      assembleTaskSchemaPolicy(built.settingsService),
-      built.handle.providerManager,
-      (config, state, instructions, store) => {
-        if (store === undefined) throw new Error('Missing factory store');
-        return new ObservedCleanupClient(
-          config,
-          state,
-          instructions ?? (() => undefined),
-          store,
-          built.mcp.workspacePaths,
-        );
-      },
-      built.media.store,
-      built.mcp.readInstructions,
-      built.mcp.workspacePaths,
-      built.handle.settingsOwner,
-      built.handle.contentGeneratorFactory,
-      built.handle.tokenizerFactory,
-    );
-    const intent = { provider: 'fake', model: 'fake-model' };
-    const operation = new AgentActivationBootstrap(
-      built.config,
-      built.handle.providerManager,
-      async () => {
-        await owner.refreshAuth();
-        return { authFailed: false, infoMessages: [] };
-      },
-      built.media,
-      owner,
-      built.mcp.workspaceFilesystem,
-      built.mcp.workspaceMemory,
-      false,
-      built.handle.settingsOwner,
-      undefined,
-      built.mcp.workspaceDefinitions,
-      false,
-      new WorkspaceTrustLifecycle({
-        localTrust: built.config.initialWorkspaceTrust,
-      }),
-    );
-    try {
-      const receipt = await operation.preflight(intent);
-      if (receipt.token === undefined) throw new Error('Missing receipt');
-      await expect(
-        fromConfig({
-          settingsService: built.settingsService,
-          config: built.config,
-          providerManager: built.handle.providerManager,
-          messageBus: built.messageBus,
-          mcpRuntime: built.mcp,
-          activation: intent,
-          activationPreflight: { operation, token: receipt.token },
-          runtimeFactoryBindings: {
-            ...createAgentRuntimeFactoryBindings(built.media.store),
-            taskToolRegistration: () => {
-              throw new Error('Runtime assembly fault');
-            },
+    const builtSettings = new SettingsService();
+    const builtPolicy = new RuntimePolicyOwner(builtConfig);
+    const builtMessageBus = builtPolicy.session.messageBus;
+    const builtMcp = await createTestMcpRuntime(
+      {
+        oauth: {
+          openBrowser: async () => {
+            throw new Error('Unexpected browser request');
           },
-        }),
-      ).rejects.toThrow('Runtime assembly fault');
-      expect(cleanupStates).not.toContain(false);
-      await expect(built.media.store.getStoredByteLength()).rejects.toThrow(
-        /closed/i,
-      );
-    } finally {
-      await operation.dispose();
-      await built.cleanup();
-    }
-  }, 30000);
-  it('joins an accepted replacement and closes every owned client before resolving disposal', async () => {
-    const built = await createSessionClientEngineFixture();
-    const entered = engineGate();
-    const released = engineGate();
-    class GatedClient extends AgentClient {
-      override async initialize(
-        content: ContentGeneratorConfig,
-      ): Promise<void> {
-        entered.release();
-        await released.promise;
-        await super.initialize(content);
-      }
-    }
-    const before = coreEvents.listenerCount(CoreEvent.ModelChanged);
-    const owner = await SessionClientOwner.create(
-      built.config,
-      assembleTaskSchemaPolicy(built.settingsService),
-      built.handle.providerManager,
-      (config, state, instructions, store) => {
-        if (store === undefined) throw new Error('Missing factory store');
-        return new GatedClient(
-          config,
-          state,
-          instructions ?? (() => undefined),
-          store,
-          built.mcp.workspacePaths,
-        );
+          tokenStorage: new MCPOAuthTokenStorage({
+            getCredentials: async () => null,
+            setCredentials: async () => {
+              throw new Error('Unexpected token write');
+            },
+            deleteCredentials: async () => {},
+            listServers: async () => [],
+            getAllCredentials: async () => new Map(),
+            clearAll: async () => {},
+          }),
+        },
+        config: builtConfig,
+        policy: { owner: builtPolicy, ownership: 'runtime' },
       },
-      built.media.store,
-      built.mcp.readInstructions,
-      built.mcp.workspacePaths,
-      built.handle.settingsOwner,
-      built.handle.contentGeneratorFactory,
-      built.handle.tokenizerFactory,
+      {},
     );
-    const pending = owner.refreshAuth();
-    await entered.promise;
-    let closed = false;
-    const closing = owner.dispose().then(() => {
-      closed = true;
+
+    const builtRuntimeId = 'engine-' + randomUUID();
+    const builtRelease = new AcquisitionRelease();
+    const builtSettingsOwner = new SessionSettingsOwner(builtSettings);
+    builtRelease.acquire('settings', () => builtSettingsOwner.dispose());
+    builtSettingsOwner.initializeProviderSelection(
+      builtConfig.getProvider(),
+      builtConfig.getModel(),
+    );
+    builtSettingsOwner.bindTelemetry(builtConfig);
+    const builtFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
     });
+    for (const scope of [builtRuntimeId, builtConfig.getSessionId()])
+      builtRelease.acquire('files', () =>
+        releaseAdoptedFileScope(builtFiles, scope),
+      );
+    const builtManager = acquirePreferredProviderManager(
+      builtConfig,
+      builtSettings,
+      builtSettingsOwner,
+      builtFiles,
+      builtRuntimeId,
+      credentials().authority,
+      builtRelease,
+    );
+    const builtTokenizer = configureProviderTokenizer(builtManager);
+    const builtContent = createRuntimeContentGeneratorFactory();
+    const builtOAuth = acquirePreferredOAuth(
+      undefined,
+      builtMessageBus,
+      builtConfig,
+      builtSettings,
+      builtManager,
+      builtRuntimeId,
+      builtMcp.profileDefinitions,
+      credentials().authority,
+      builtRelease,
+      undefined,
+    );
+    const builtMedia = new SessionMediaOwner(
+      builtConfig.projectTempDir,
+      1024 * 1024,
+    );
+    const builtOwner = await createCapturedSessionOwner(
+      builtConfig,
+      assembleTaskSchemaPolicy(builtSettings),
+      builtManager,
+      buildAgentClientFactory(),
+      builtMedia.store,
+      builtMcp.readInstructions,
+      builtMcp.workspacePaths,
+      builtSettingsOwner,
+      builtContent,
+      builtTokenizer,
+    );
+    builtOwner.bindMcpRuntime(builtMcp);
+    builtOwner.bindHooks();
+    const closeEngine = (): Promise<void> =>
+      runCleanupSteps([
+        () => builtOwner.dispose(),
+        () => builtRelease.close(),
+        () => builtMedia.dispose(),
+        () => builtMcp.dispose(),
+        () => builtConfig.dispose(),
+        () => rm(builtDirectory, { recursive: true, force: true }),
+      ]);
     try {
-      await Promise.resolve();
-      await Promise.resolve();
-      expect(closed).toBe(false);
+      await preparePreferredProviderCompletion(
+        builtConfig,
+        builtSettings,
+        builtSettingsOwner,
+        builtManager,
+        builtOAuth,
+        builtRuntimeId,
+        builtTokenizer,
+        undefined,
+        process.env.LLXPRT_FAKE_RESPONSES,
+      );
+      await builtMcp.initialize();
+      await builtOwner.initializeTools();
+      await builtOwner.clients.refreshAuth();
+      const clients = ownerClients(builtOwner);
+      await clients[clients.length - 1].startChat();
+    } catch (primary) {
+      await cleanupAfterFailure(primary, closeEngine);
+    }
+
+    const entered = createGate();
+    const released = createGate();
+    const server = createServer((request, response) => {
+      response.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      response.end(request.url);
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    if (address === null || typeof address === 'string')
+      throw new Error('Expected HTTP address');
+    const url = `http://127.0.0.1:${address.port}/joined`;
+    const manager = builtManager;
+    let received: string | undefined;
+    const buildClient = buildAgentClientFactory();
+    const owner = await createCapturedSessionOwner(
+      builtConfig,
+      assembleTaskSchemaPolicy(builtSettings),
+      manager,
+      (...operands) => {
+        const client = buildClient(...operands);
+        const cleanup = client.dispose.bind(client);
+        client.dispose = async () => {
+          entered.release();
+          await released.promise;
+          try {
+            received = await (await owner.operations.fetch(url)).text();
+          } finally {
+            await cleanup();
+          }
+        };
+        return client;
+      },
+      builtMedia.store,
+      builtMcp.readInstructions,
+      builtMcp.workspacePaths,
+      builtSettingsOwner,
+      builtContent,
+      builtTokenizer,
+    );
+    const closing = owner.dispose();
+    void closing.catch(() => undefined);
+    let engineClosed = false;
+    try {
+      await entered.promise;
+      expect(new Set([owner.dispose(), closing]).size).toBe(1);
+      released.release();
+      await closing;
+      expect(received).toBe(new URL(url).pathname);
+      expect(await (await owner.operations.fetch(url)).text()).toBe(
+        new URL(url).pathname,
+      );
+      engineClosed = true;
+      await closeEngine();
+      await expect(owner.operations.fetch(url)).rejects.toThrow(
+        'Root fetch is closed',
+      );
     } finally {
       released.release();
-      await pending;
-      await closing;
-      await built.cleanup();
+      await closing.catch(() => undefined);
+      if (!engineClosed) await closeEngine();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
     }
-    expect(coreEvents.listenerCount(CoreEvent.ModelChanged)).toBe(before - 1);
-  }, 30000);
-  it('still closes separately owned media when client cleanup rejects', async () => {
-    const built = await createSessionClientEngineFixture();
-    const entered = engineGate();
-    const released = engineGate();
-    class FailingCleanupClient extends AgentClient {
-      override async dispose(): Promise<void> {
-        await super.dispose();
-        throw new Error('Client cleanup fault');
-      }
-    }
-    const owner = await SessionClientOwner.create(
-      built.config,
-      assembleTaskSchemaPolicy(built.settingsService),
-      built.handle.providerManager,
-      (config, state, instructions, store) => {
-        if (store === undefined) throw new Error('Missing factory store');
-        return new FailingCleanupClient(
-          config,
-          state,
-          instructions ?? (() => undefined),
-          store,
-          built.mcp.workspacePaths,
-        );
-      },
-      built.media.store,
-      built.mcp.readInstructions,
-      built.mcp.workspacePaths,
-      built.handle.settingsOwner,
-      built.handle.contentGeneratorFactory,
-      built.handle.tokenizerFactory,
-    );
-    const operation = new AgentActivationBootstrap(
-      built.config,
-      built.handle.providerManager,
-      async () => {
-        entered.release();
-        await released.promise;
-        return {
-          authFailed: true,
-          infoMessages: [],
-          authError: new Error('Activation failed'),
-        };
-      },
-      built.media,
-      owner,
-      built.mcp.workspaceFilesystem,
-      built.mcp.workspaceMemory,
-      false,
-      built.handle.settingsOwner,
-      undefined,
-      built.mcp.workspaceDefinitions,
-      false,
-      new WorkspaceTrustLifecycle({
-        localTrust: built.config.initialWorkspaceTrust,
-      }),
-    );
-    const preflight = operation.preflight({ provider: 'fake' });
-    await entered.promise;
-    const closing = operation.dispose();
-    released.release();
+  });
+  it('releases retained provider resources when a prepared activation is abandoned', async () => {
+    const route = await openRouteBPreflight({
+      authority: credentials().authority,
+    });
     try {
-      await preflight;
-      await expect(closing).rejects.toThrow(/cleanup/i);
-      await expect(built.media.store.getStoredByteLength()).rejects.toThrow(
-        /closed/i,
-      );
+      await route.prepare();
+      const file = join(route.directory, 'abandoned-provider-file');
+      await writeFile(file, 'uploaded bytes');
+      let deletions = 0;
+      const retained = await route.preflight.retainProviderFile({
+        cacheKey: file,
+        fileId: 'abandoned-upload',
+        bytes: 14,
+        identity: {
+          provider: 'fake',
+          baseURL: 'http://127.0.0.1',
+          credentialHash: 'abandoned-key',
+        },
+        policy: {
+          mode: 'enabled',
+          scope: 'session',
+          retentionMs: 60_000,
+          deletion: 'delete',
+          zeroDataRetention: 'incompatible-while-retained',
+        },
+        deleteRemote: async () => {
+          await unlink(file);
+          deletions += 1;
+        },
+      });
+      await retained.lease.release();
+      await access(file);
+      expect(route.preflight.captureProviderFiles().retainedFiles).toBe(1);
+      await route.preflight.preflight({ provider: 'fake' });
+      await Promise.all([route.disposePreflight(), route.preflight.dispose()]);
+      await expect(access(file)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(route.preflight.captureProviderFiles().retainedFiles).toBe(0);
+      expect(deletions).toBe(1);
     } finally {
-      await built.cleanup();
+      await route.close();
     }
-  }, 30000);
+  });
 });

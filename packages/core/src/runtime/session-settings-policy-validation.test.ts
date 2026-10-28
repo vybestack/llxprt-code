@@ -8,6 +8,10 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '../session/session-settings-owner.js';
 import { createAgentRuntimeContext } from './createAgentRuntimeContext.js';
 import { createAgentRuntimeState } from './AgentRuntimeState.js';
+import type { NetworkFetch } from '../utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function runtime(settings: SettingsService) {
   const owner = new SessionSettingsOwner(settings);
@@ -31,6 +35,9 @@ function runtime(settings: SettingsService) {
       setActiveProvider: () => {
         throw new Error('Policy validation must not select a provider');
       },
+      getProviderKeys: () => {
+        throw new Error('Policy validation must not read provider keys');
+      },
     },
     telemetry: {
       logApiRequest: () => {},
@@ -44,6 +51,8 @@ function runtime(settings: SettingsService) {
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
     providerRuntime: {
       runtimeId: 'policy-validation',

@@ -1,3 +1,5 @@
+import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+const metrics = new UiTelemetryService();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -22,13 +24,29 @@ import { renderWithProviders } from '../../__tests__/render.js';
 // component test does not establish. Preserve the complete module shape and
 // replace only the hook so unrelated exports keep their production contract.
 const actual = { ...(await import('../contexts/RuntimeContext.js')) };
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  ...actual,
-  useRuntimeApi: () => ({
-    providerStatus: () => ({ providerName: 'gemini' }),
-    getEphemeralSetting: () => undefined,
-  }),
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => ({
+      providerStatus: () => ({ providerName: 'gemini' }),
+      getEphemeralSetting: () => undefined,
+    });
+    return {
+      ...actual,
+      useGetWorkspaceDirectories: () => () => [],
+
+      useProviderStatus: () => useSelectedTestRuntime().providerStatus,
+
+      useGetEphemeralSetting: () =>
+        useSelectedTestRuntime().getEphemeralSetting,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 // Mock child components
 void vi.mock('./messages/ToolGroupMessage.js', () => ({
@@ -54,7 +72,14 @@ describe('<HistoryItemDisplay />', () => {
       text: 'Hello',
     };
     const { lastFrame } = renderWithProviders(
-      <HistoryItemDisplay {...baseItem} item={item} />,
+      <HistoryItemDisplay
+        readIdeMode={() => false}
+        readIdeDiffingEnabled={() => false}
+        subscribeIdeDiffing={() => () => {}}
+        resolveIdeDiff={async () => {}}
+        {...baseItem}
+        item={item}
+      />,
     );
     expect(lastFrame()).toContain('Hello');
   });
@@ -66,7 +91,14 @@ describe('<HistoryItemDisplay />', () => {
       text: '/theme',
     };
     const { lastFrame } = renderWithProviders(
-      <HistoryItemDisplay {...baseItem} item={item} />,
+      <HistoryItemDisplay
+        readIdeMode={() => false}
+        readIdeDiffingEnabled={() => false}
+        subscribeIdeDiffing={() => () => {}}
+        resolveIdeDiff={async () => {}}
+        {...baseItem}
+        item={item}
+      />,
     );
     expect(lastFrame()).toContain('/theme');
   });
@@ -78,8 +110,15 @@ describe('<HistoryItemDisplay />', () => {
       duration: '1s',
     };
     const { lastFrame } = renderWithProviders(
-      <SessionStatsProvider>
-        <HistoryItemDisplay {...baseItem} item={item} />
+      <SessionStatsProvider metrics={metrics}>
+        <HistoryItemDisplay
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseItem}
+          item={item}
+        />
       </SessionStatsProvider>,
     );
     expect(lastFrame()).toContain('Stats');
@@ -100,7 +139,14 @@ describe('<HistoryItemDisplay />', () => {
       baseURL: 'test-url',
     };
     const { lastFrame } = renderWithProviders(
-      <HistoryItemDisplay {...baseItem} item={item} />,
+      <HistoryItemDisplay
+        readIdeMode={() => false}
+        readIdeDiffingEnabled={() => false}
+        subscribeIdeDiffing={() => () => {}}
+        resolveIdeDiff={async () => {}}
+        {...baseItem}
+        item={item}
+      />,
     );
     expect(lastFrame()).toContain('About LLxprt Code');
   });
@@ -111,8 +157,15 @@ describe('<HistoryItemDisplay />', () => {
       type: 'model_stats',
     };
     const { lastFrame } = renderWithProviders(
-      <SessionStatsProvider>
-        <HistoryItemDisplay {...baseItem} item={item} />
+      <SessionStatsProvider metrics={metrics}>
+        <HistoryItemDisplay
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseItem}
+          item={item}
+        />
       </SessionStatsProvider>,
     );
     expect(lastFrame()).toContain(
@@ -126,8 +179,15 @@ describe('<HistoryItemDisplay />', () => {
       type: 'tool_stats',
     };
     const { lastFrame } = renderWithProviders(
-      <SessionStatsProvider>
-        <HistoryItemDisplay {...baseItem} item={item} />
+      <SessionStatsProvider metrics={metrics}>
+        <HistoryItemDisplay
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseItem}
+          item={item}
+        />
       </SessionStatsProvider>,
     );
     expect(lastFrame()).toContain(
@@ -142,8 +202,15 @@ describe('<HistoryItemDisplay />', () => {
       duration: '1s',
     };
     const { lastFrame } = renderWithProviders(
-      <SessionStatsProvider>
-        <HistoryItemDisplay {...baseItem} item={item} />
+      <SessionStatsProvider metrics={metrics}>
+        <HistoryItemDisplay
+          readIdeMode={() => false}
+          readIdeDiffingEnabled={() => false}
+          subscribeIdeDiffing={() => () => {}}
+          resolveIdeDiff={async () => {}}
+          {...baseItem}
+          item={item}
+        />
       </SessionStatsProvider>,
     );
     expect(lastFrame()).toContain('Agent powering down. Goodbye!');
@@ -158,6 +225,10 @@ describe('<HistoryItemDisplay />', () => {
 
     const { lastFrame } = renderWithProviders(
       <HistoryItemDisplay
+        readIdeMode={() => false}
+        readIdeDiffingEnabled={() => false}
+        subscribeIdeDiffing={() => () => {}}
+        resolveIdeDiff={async () => {}}
         item={historyItem}
         terminalWidth={80}
         isPending={false}
@@ -196,6 +267,10 @@ describe('<HistoryItemDisplay />', () => {
 
     renderWithProviders(
       <HistoryItemDisplay
+        readIdeMode={() => false}
+        readIdeDiffingEnabled={() => false}
+        subscribeIdeDiffing={() => () => {}}
+        resolveIdeDiff={async () => {}}
         item={historyItem}
         terminalWidth={80}
         isPending={false}
@@ -229,6 +304,10 @@ describe('<HistoryItemDisplay />', () => {
     };
     const { lastFrame } = renderWithProviders(
       <HistoryItemDisplay
+        readIdeMode={() => false}
+        readIdeDiffingEnabled={() => false}
+        subscribeIdeDiffing={() => () => {}}
+        resolveIdeDiff={async () => {}}
         item={item}
         isPending={false}
         terminalWidth={80}
@@ -248,6 +327,10 @@ describe('<HistoryItemDisplay />', () => {
     };
     const { lastFrame } = renderWithProviders(
       <HistoryItemDisplay
+        readIdeMode={() => false}
+        readIdeDiffingEnabled={() => false}
+        subscribeIdeDiffing={() => () => {}}
+        resolveIdeDiff={async () => {}}
         item={item}
         isPending={false}
         terminalWidth={80}
@@ -267,7 +350,14 @@ describe('<HistoryItemDisplay />', () => {
       text: 'Default info message',
     };
     const { lastFrame } = renderWithProviders(
-      <HistoryItemDisplay {...baseItem} item={item} />,
+      <HistoryItemDisplay
+        readIdeMode={() => false}
+        readIdeDiffingEnabled={() => false}
+        subscribeIdeDiffing={() => () => {}}
+        resolveIdeDiff={async () => {}}
+        {...baseItem}
+        item={item}
+      />,
     );
     const output = lastFrame();
     expect(output).toContain('Default info message');
@@ -282,7 +372,14 @@ describe('<HistoryItemDisplay />', () => {
       icon: '✓',
     };
     const { lastFrame } = renderWithProviders(
-      <HistoryItemDisplay {...baseItem} item={item} />,
+      <HistoryItemDisplay
+        readIdeMode={() => false}
+        readIdeDiffingEnabled={() => false}
+        subscribeIdeDiffing={() => () => {}}
+        resolveIdeDiff={async () => {}}
+        {...baseItem}
+        item={item}
+      />,
     );
     const output = lastFrame();
     expect(output).toContain('Custom icon message');
@@ -297,7 +394,14 @@ describe('<HistoryItemDisplay />', () => {
       color: '#00ff00',
     };
     const { lastFrame } = renderWithProviders(
-      <HistoryItemDisplay {...baseItem} item={item} />,
+      <HistoryItemDisplay
+        readIdeMode={() => false}
+        readIdeDiffingEnabled={() => false}
+        subscribeIdeDiffing={() => () => {}}
+        resolveIdeDiff={async () => {}}
+        {...baseItem}
+        item={item}
+      />,
     );
     expect(lastFrame()).toContain('Custom color message');
   });
@@ -310,7 +414,14 @@ describe('<HistoryItemDisplay />', () => {
       icon: '  ',
     };
     const { lastFrame } = renderWithProviders(
-      <HistoryItemDisplay {...baseItem} item={item} />,
+      <HistoryItemDisplay
+        readIdeMode={() => false}
+        readIdeDiffingEnabled={() => false}
+        subscribeIdeDiffing={() => () => {}}
+        resolveIdeDiff={async () => {}}
+        {...baseItem}
+        item={item}
+      />,
     );
     const output = lastFrame();
     expect(output).toContain('No icon message');
@@ -325,6 +436,10 @@ describe('<HistoryItemDisplay />', () => {
     };
     const { lastFrame } = renderWithProviders(
       <HistoryItemDisplay
+        readIdeMode={() => false}
+        readIdeDiffingEnabled={() => false}
+        subscribeIdeDiffing={() => () => {}}
+        resolveIdeDiff={async () => {}}
         item={item}
         isPending={false}
         terminalWidth={80}
@@ -344,6 +459,10 @@ describe('<HistoryItemDisplay />', () => {
     };
     const { lastFrame } = renderWithProviders(
       <HistoryItemDisplay
+        readIdeMode={() => false}
+        readIdeDiffingEnabled={() => false}
+        subscribeIdeDiffing={() => () => {}}
+        resolveIdeDiff={async () => {}}
         item={item}
         isPending={false}
         terminalWidth={80}
@@ -363,7 +482,14 @@ describe('<HistoryItemDisplay />', () => {
       profileName: 'production',
     };
     const { lastFrame } = renderWithProviders(
-      <HistoryItemDisplay {...baseItem} item={item} />,
+      <HistoryItemDisplay
+        readIdeMode={() => false}
+        readIdeDiffingEnabled={() => false}
+        subscribeIdeDiffing={() => () => {}}
+        resolveIdeDiff={async () => {}}
+        {...baseItem}
+        item={item}
+      />,
     );
     const output = lastFrame();
     expect(output).toContain('Responding with: production');

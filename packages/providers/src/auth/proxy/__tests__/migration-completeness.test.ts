@@ -17,9 +17,8 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
-  createTokenStore,
+  HostCredentialOwner,
   createProviderKeyStorage,
-  resetFactorySingletons,
 } from '../credential-store-factory.js';
 import { KeyringTokenStore } from '@vybestack/llxprt-code-auth';
 import { mergeRefreshedToken } from '@vybestack/llxprt-code-core';
@@ -28,19 +27,19 @@ describe('Migration Completeness (P35)', () => {
   beforeEach(() => {
     // Clean up environment and singletons before each test
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    resetFactorySingletons();
   });
 
   afterEach(() => {
     // Clean up environment after each test
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    resetFactorySingletons();
   });
 
   describe('R2.3: Factory Usage at Consumer Sites', () => {
-    it('createTokenStore returns KeyringTokenStore when env unset (non-sandbox)', () => {
+    it('authority returns KeyringTokenStore when env unset (non-sandbox)', () => {
       // R26.1: Non-sandbox mode behavior identical to pre-Phase code
-      const tokenStore = createTokenStore();
+      const tokenStore = new HostCredentialOwner(
+        process.env,
+      ).authority.createTokenStore();
 
       // Should be a KeyringTokenStore instance in non-sandbox mode
       expect(tokenStore).toBeDefined();
@@ -49,7 +48,9 @@ describe('Migration Completeness (P35)', () => {
 
     it('createProviderKeyStorage returns direct storage when env unset (non-sandbox)', () => {
       // R26.1: Non-sandbox mode behavior identical to pre-Phase code
-      const keyStorage = createProviderKeyStorage();
+      const keyStorage = createProviderKeyStorage(
+        new HostCredentialOwner(process.env).authority,
+      );
 
       // Should return the direct ProviderKeyStorage singleton
       expect(keyStorage).toBeDefined();
@@ -58,16 +59,24 @@ describe('Migration Completeness (P35)', () => {
       expect(typeof keyStorage.deleteKey).toBe('function');
     });
 
-    it('factory returns same singleton on repeated calls (non-sandbox)', () => {
-      const tokenStore1 = createTokenStore();
-      const tokenStore2 = createTokenStore();
+    it('factory returns independently owned stores on repeated calls (non-sandbox)', () => {
+      const tokenStore1 = new HostCredentialOwner(
+        process.env,
+      ).authority.createTokenStore();
+      const tokenStore2 = new HostCredentialOwner(
+        process.env,
+      ).authority.createTokenStore();
 
-      expect(tokenStore1).toBe(tokenStore2);
+      expect(tokenStore1).not.toBe(tokenStore2);
 
-      const keyStorage1 = createProviderKeyStorage();
-      const keyStorage2 = createProviderKeyStorage();
+      const keyStorage1 = createProviderKeyStorage(
+        new HostCredentialOwner(process.env).authority,
+      );
+      const keyStorage2 = createProviderKeyStorage(
+        new HostCredentialOwner(process.env).authority,
+      );
 
-      expect(keyStorage1).toBe(keyStorage2);
+      expect(keyStorage1).not.toBe(keyStorage2);
     });
   });
 
@@ -133,7 +142,9 @@ describe('Migration Completeness (P35)', () => {
 
   describe('R26.1: Non-Sandbox Mode Unchanged', () => {
     it('TokenStore has all expected methods in non-sandbox mode', () => {
-      const tokenStore = createTokenStore();
+      const tokenStore = new HostCredentialOwner(
+        process.env,
+      ).authority.createTokenStore();
 
       // Verify the interface is complete (TokenStore interface)
       expect(typeof tokenStore.getToken).toBe('function');
@@ -144,7 +155,9 @@ describe('Migration Completeness (P35)', () => {
     });
 
     it('ProviderKeyStorage has all expected methods in non-sandbox mode', () => {
-      const keyStorage = createProviderKeyStorage();
+      const keyStorage = createProviderKeyStorage(
+        new HostCredentialOwner(process.env).authority,
+      );
 
       // Verify the interface is complete (ProviderKeyStorage class)
       expect(typeof keyStorage.getKey).toBe('function');

@@ -3,11 +3,50 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { ModelProfileInfoPayload } from '@vybestack/llxprt-code-core/utils/events.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 
-const publicationLogger = new DebugLogger('llxprt:model-publication');
+/**
+ * The publication logger. Constructed per call rather than at module scope:
+ * DebugLogger is a singleton per namespace under the hood, and a module-level
+ * instance is mutable module state the runtime-boundary audit rejects in
+ * packages/agents/src.
+ */
+function publicationLogger(): DebugLogger {
+  return new DebugLogger('llxprt:model-publication');
+}
+
+/** The publication owner a model transition needs: open a window on commit. */
+export type ModelPublicationOwner = Pick<
+  SessionSettingsOwner,
+  'beginModelPublication'
+>;
+
+/** The owner reads a provider switch needs to announce the final model. */
+export type ProviderSwitchPublicationOwner = ModelPublicationOwner &
+  Pick<SessionSettingsOwner, 'readSelectedModel' | 'publishModelProfile'>;
+
+/**
+ * Announces a model profile change. `coreEvents` and the owner's notification
+ * emitter are synchronous, so a throwing subscriber would otherwise reject an
+ * already-completed change. Report it through the publication logger instead.
+ */
+export function publishModelProfileChange(
+  owner: Pick<SessionSettingsOwner, 'publishModelProfile'>,
+  profile: ModelProfileInfoPayload,
+): void {
+  try {
+    owner.publishModelProfile(profile);
+  } catch (error) {
+    publicationLogger().warn(
+      () =>
+        `Model change completed but a ModelProfileChanged listener failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+    );
+  }
+}
 
 /**
  * Runs a model transition inside a model publication window. The change is
@@ -19,7 +58,7 @@ const publicationLogger = new DebugLogger('llxprt:model-publication');
  * transition's result.
  */
 export async function withModelPublication<T>(
-  owner: Pick<SessionSettingsOwner, 'beginModelPublication'>,
+  owner: ModelPublicationOwner,
   appliedModel: string,
   transition: () => Promise<T>,
 ): Promise<T> {
@@ -34,7 +73,7 @@ export async function withModelPublication<T>(
   try {
     publication.commit();
   } catch (error) {
-    publicationLogger.warn(
+    publicationLogger().warn(
       () =>
         `Model change completed but a ModelChanged listener failed: ${
           error instanceof Error ? error.message : String(error)
@@ -54,12 +93,12 @@ export interface ModelTransitionSteps {
 
 /**
  * Applies `model` through `steps` inside a publication window opened relative
- * to the facade's applied model (`state.model`). The facade state records the
- * new model only after every step succeeds, so a failed transition leaves the
- * applied model, and therefore the rollback baseline, untouched.
+ * to the model the agent last applied (`state.model`). The applied model is
+ * recorded only after every step succeeds, so a failed transition leaves the
+ * rollback baseline untouched and a retry of the same target still publishes.
  */
 export function applyModelWithPublication(
-  owner: Pick<SessionSettingsOwner, 'beginModelPublication'>,
+  owner: ModelPublicationOwner,
   state: { model: string },
   model: string,
   steps: ModelTransitionSteps,
@@ -76,7 +115,7 @@ export function applyModelWithPublication(
 /**
  * Runs a provider switch so its publication describes the final state. With an
  * explicit `requestedModel` the switch runs deferred inside one publication
- * window opened relative to `appliedModel`, so the target provider default is
+ * window opened relative to `appliedModel`, so the target provider's default is
  * never published ahead of the requested model; after the window commits, a
  * changed provider announces the model actually in force. Without a requested
  * model the switch publishes for itself, unchanged.
@@ -84,10 +123,7 @@ export function applyModelWithPublication(
 export async function publishProviderSwitch<
   R extends { changed: boolean; nextProvider: string },
 >(
-  owner: Pick<
-    SessionSettingsOwner,
-    'beginModelPublication' | 'readSelectedModel'
-  >,
+  owner: ProviderSwitchPublicationOwner,
   appliedModel: string,
   requestedModel: string | undefined,
   readProfileName: () => string | null,
@@ -100,21 +136,12 @@ export async function publishProviderSwitch<
   if (result.changed) {
     const model = owner.readSelectedModel() ?? result.nextProvider;
     const profileName = readProfileName();
-    try {
-      coreEvents.emitModelProfileChanged({
-        model,
-        providerName: result.nextProvider,
-        profileName,
-        displayLabel: profileName ?? model,
-      });
-    } catch (error) {
-      publicationLogger.warn(
-        () =>
-          `Provider switch completed but a ModelProfileChanged listener failed: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-      );
-    }
+    publishModelProfileChange(owner, {
+      model,
+      providerName: result.nextProvider,
+      profileName,
+      displayLabel: profileName ?? model,
+    });
   }
   return result;
 }

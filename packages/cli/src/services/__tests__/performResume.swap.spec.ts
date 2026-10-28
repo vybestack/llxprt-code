@@ -336,7 +336,12 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
       const context = makeResumeContext(chatsDir, {
         currentSessionId: 'current-before-listener-failure',
       });
-      context.historyService = historyService;
+      context.history = {
+        getHistory: async () => historyService.getAll(),
+        replaceHistory: (history) => historyService.replaceAll([...history]),
+        attachRecordingHistory: (integration) =>
+          integration.onHistoryServiceReplaced(historyService),
+      };
 
       const result = await performResume(targetId, context);
 
@@ -370,7 +375,12 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
       const context = makeResumeContext(chatsDir, {
         currentSessionId: 'current-before-independent-rollback',
       });
-      context.historyService = historyService;
+      context.history = {
+        getHistory: async () => historyService.getAll(),
+        replaceHistory: (history) => historyService.replaceAll([...history]),
+        attachRecordingHistory: (integration) =>
+          integration.onHistoryServiceReplaced(historyService),
+      };
       const adoptionOutcomes: Array<() => void> = [
         () => undefined,
         () => {
@@ -430,7 +440,12 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
       const context = makeResumeContext(chatsDir, {
         currentSessionId: 'current-before-rollback',
       });
-      context.historyService = historyService;
+      context.history = {
+        getHistory: async () => historyService.getAll(),
+        replaceHistory: (history) => historyService.replaceAll([...history]),
+        attachRecordingHistory: (integration) =>
+          integration.onHistoryServiceReplaced(historyService),
+      };
       context.recordingCallbacks.setRecording = () => {
         shouldThrow = true;
         throw new Error('commit failed');

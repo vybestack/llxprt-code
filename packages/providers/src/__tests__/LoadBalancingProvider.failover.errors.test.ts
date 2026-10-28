@@ -1,5 +1,5 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -19,6 +19,7 @@ import { LoadBalancerFailoverError, RetriesExhaustedError } from '../errors.js';
 import { MAX_PUBLIC_PROVIDER_MESSAGE_LENGTH } from '../providerErrorObservation.js';
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import type { GenerateChatOptions } from '../GenerateChatOptions.js';
 
 async function* generateNestedFailoverThenSuccess(
@@ -95,12 +96,17 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
-    });
+      undefined,
+      undefined,
+      fixtureOwnersBorrowedSettings(config, settingsService),
+    );
   });
 
   describe('Aggregated Error When All Backends Fail', () => {
@@ -151,6 +157,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       const chunks: IContent[] = [];
 
       for await (const chunk of provider.generateChatCompletion({
+        invocation: makeLoadBalancerInvocation(),
         contents: [],
       })) {
         chunks.push(chunk);
@@ -235,6 +242,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       try {
         for await (const chunk of provider.generateChatCompletion({
+          invocation: makeLoadBalancerInvocation(),
           contents: [],
         })) {
           chunks.push(chunk);
@@ -294,6 +302,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       await expect(
         (async () => {
           for await (const _chunk of provider.generateChatCompletion({
+            invocation: makeLoadBalancerInvocation(),
             contents: [],
           })) {
             await Promise.resolve();
@@ -341,6 +350,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       );
       const observed: unknown[] = [];
       const options: GenerateChatOptions = {
+        invocation: makeLoadBalancerInvocation(),
         contents: [],
         onProviderError: (error) => observed.push(error),
       };
@@ -396,6 +406,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
+        invocation: makeLoadBalancerInvocation(),
         prompt: 'test prompt',
         messages: [{ role: 'user' as const, content: 'test' }],
       };
@@ -446,6 +457,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
+        invocation: makeLoadBalancerInvocation(),
         prompt: 'test prompt',
         messages: [{ role: 'user' as const, content: 'test' }],
       };
@@ -496,6 +508,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
+        invocation: makeLoadBalancerInvocation(),
         prompt: 'test prompt',
         messages: [{ role: 'user' as const, content: 'test' }],
       };
@@ -546,6 +559,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
+        invocation: makeLoadBalancerInvocation(),
         prompt: 'test prompt',
         messages: [{ role: 'user' as const, content: 'test' }],
       };
@@ -598,6 +612,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
+        invocation: makeLoadBalancerInvocation(),
         prompt: 'test prompt',
         messages: [{ role: 'user' as const, content: 'test' }],
       };
@@ -706,10 +721,11 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       try {
         const iterator = provider.generateChatCompletion({
+          invocation: makeLoadBalancerInvocation(),
           contents: [{ role: 'user', parts: [{ text: 'test' }] }],
           settings: settingsService,
           config,
-          runtime: { settingsService, config },
+          runtime: {},
         });
         for await (const _chunk of iterator) {
           // Consume

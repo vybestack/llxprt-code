@@ -194,7 +194,12 @@ describe('Finding 1: provider fallback failure propagation through real Compress
     const providerResult: CompressionProviderResult = { provider };
     handler = new CompressionHandler(
       runtimeContext,
+      undefined,
       historyService,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {},
       vi.fn().mockResolvedValue(providerResult),
       vi.fn().mockResolvedValue(undefined),

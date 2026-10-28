@@ -12,13 +12,11 @@ import {
 
 import dns from 'node:dns';
 import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
-  type Agent,
   type AgentProfileApplication,
   type AgentActivationOperation,
   type ProviderActivationIntent,
-  type ActivationPreflight,
+  type ActivationPreflightToken,
 } from '@vybestack/llxprt-code-agents';
 import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
 import { validateDnsResolutionOrder } from './cliBootstrap.js';
@@ -29,11 +27,12 @@ export type CliProviderManager = RuntimeProviderManager;
 
 /**
  * Compute the merged model params (profile + CLI) that should be applied
- * before the first request for the configured provider.
+ * before the first request for the configured provider. A `--provider`
+ * override replaces the profile's provider/model selection but not its model
+ * params (`prepareProfileForApplication`, config/profileResolution.ts).
  */
 export function collectProviderModelParams(
   config: Config,
-  argv: ParsedCliArgs,
 ): Record<string, unknown> {
   const configWithParams = config as Config & {
     _profileModelParams?: Record<string, unknown>;
@@ -41,7 +40,7 @@ export function collectProviderModelParams(
   };
   const mergedModelParams: Record<string, unknown> = {};
 
-  if (!argv.provider && configWithParams._profileModelParams) {
+  if (configWithParams._profileModelParams) {
     Object.assign(mergedModelParams, configWithParams._profileModelParams);
   }
   if (configWithParams._cliModelParams) {
@@ -134,15 +133,15 @@ function buildActivationCliOverrides(
  */
 export interface ConfiguredProviderActivationResult {
   readonly authFailed: boolean;
-  readonly activationPreflight?: ActivationPreflight;
+  readonly token?: ActivationPreflightToken;
   readonly intent?: ProviderActivationIntent;
 }
 
 export async function activateConfiguredProvider(
   config: Config,
-  providerManager: CliProviderManager,
+  providerManager: Pick<CliProviderManager, 'getActiveProviderName'>,
   argv: ParsedCliArgs,
-  operation: AgentActivationOperation,
+  operation: Pick<AgentActivationOperation, 'preflight'>,
 ): Promise<ConfiguredProviderActivationResult> {
   const configProvider = config.getProvider();
   const cliModelOverride = (config as Config & { _cliModelOverride?: string })
@@ -160,7 +159,7 @@ export async function activateConfiguredProvider(
     cliModelOverride.trim().length > 0
       ? { model: cliModelOverride.trim() }
       : {}),
-    modelParams: collectProviderModelParams(config, argv),
+    modelParams: collectProviderModelParams(config),
     cliOverrides: buildActivationCliOverrides(config, argv),
     authMode: 'auto',
   };
@@ -179,9 +178,7 @@ export async function activateConfiguredProvider(
   }
   return {
     authFailed: result.authFailed,
-    ...(result.token !== undefined
-      ? { activationPreflight: { operation, token: result.token }, intent }
-      : {}),
+    ...(result.token !== undefined ? { token: result.token, intent } : {}),
   };
 }
 
@@ -192,14 +189,14 @@ export async function activateConfiguredProvider(
  */
 export async function reapplyBootstrapProfile(
   argv: ParsedCliArgs,
-  runtimeSettingsService: SettingsService,
-  profileApplication: AgentProfileApplication,
+  readCurrentProfileName: () => string | null,
+  loadProfile: AgentProfileApplication['load'],
 ): Promise<void> {
   const envProfile = process.env.LLXPRT_BOOTSTRAP_PROFILE;
   const bootstrapProfileName =
     argv.profileLoad?.trim() ??
     (typeof envProfile === 'string' ? envProfile.trim() : '');
-  const currentProfileName = runtimeSettingsService.getCurrentProfileName();
+  const currentProfileName = readCurrentProfileName();
   if (
     argv.provider ||
     bootstrapProfileName === '' ||
@@ -208,7 +205,7 @@ export async function reapplyBootstrapProfile(
     return;
   }
   try {
-    await profileApplication.load(bootstrapProfileName);
+    await loadProfile(bootstrapProfileName);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     debugLogger.warn(
@@ -226,15 +223,10 @@ export async function configureProvidersAndServices(
   config: Config,
   settings: LoadedSettings,
   argv: ParsedCliArgs,
-  runtimeSettingsService: SettingsService,
-  profileApplication: AgentProfileApplication,
-  providerManager: RuntimeProviderManager,
-): Promise<CliProviderManager> {
-  await reapplyBootstrapProfile(
-    argv,
-    runtimeSettingsService,
-    profileApplication,
-  );
+  readCurrentProfileName: () => string | null,
+  loadProfile: AgentProfileApplication['load'],
+): Promise<void> {
+  await reapplyBootstrapProfile(argv, readCurrentProfileName, loadProfile);
 
   if (config.getConversationLoggingEnabled()) {
     const gitStatsService = new GitStatsServiceImpl(config);
@@ -244,21 +236,17 @@ export async function configureProvidersAndServices(
   dns.setDefaultResultOrder(
     validateDnsResolutionOrder(settings.merged.dnsResolutionOrder),
   );
-
-  return providerManager;
 }
 
 /** Connect the IDE companion client when IDE mode is enabled. */
 export async function connectIdeClientIfEnabled(
-  config: Pick<Agent['ide'], 'getIdeMode' | 'getIdeClient'>,
+  readIdeMode: () => boolean,
+  connectIdeClient: () => Promise<void>,
 ): Promise<void> {
-  if (!config.getIdeMode()) {
+  if (!readIdeMode()) {
     return;
   }
-  const ideClient = config.getIdeClient();
-  if (ideClient) {
-    await ideClient.connect();
-  }
+  await connectIdeClient();
 }
 
 /**

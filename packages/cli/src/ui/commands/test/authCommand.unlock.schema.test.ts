@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { beforeEach, describe, it, expect } from 'bun:test';
 import { createCompletionHandler } from '../schema/index.js';
-import { authCommand } from '../authCommand.js';
+import { createUnconfiguredBuiltinOwners } from '../../../__tests__/unconfigured-model-command.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import type {
   CommandArgumentSchema,
@@ -36,10 +36,13 @@ function isLiteralNodeWithValue(
  * completion behavior, not just executor mock calls.
  */
 describe('authCommand unlock schema completion (Finding 8)', () => {
-  const mockContext = createMockCommandContext();
+  let mockContext: ReturnType<typeof createMockCommandContext>;
+  beforeEach(() => {
+    mockContext = createMockCommandContext();
+  });
 
   function getProviderSchema(): CommandArgumentSchema {
-    const schema = authCommand.schema;
+    const schema = createUnconfiguredBuiltinOwners().authCommand.schema;
     if (schema === undefined) {
       throw new Error('authCommand has no schema');
     }
@@ -62,7 +65,7 @@ describe('authCommand unlock schema completion (Finding 8)', () => {
   }
 
   async function getCompletions(input: string): Promise<readonly string[]> {
-    const handler = createCompletionHandler(getProviderSchema());
+    const handler = createCompletionHandler(getProviderSchema(), true);
     const parts = input.split(' ');
     // The first token after '/auth' is the provider, followed by the action.
     // We drive the completion handler with the args already consumed.

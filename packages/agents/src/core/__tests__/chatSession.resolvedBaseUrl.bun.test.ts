@@ -5,19 +5,24 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it } from 'bun:test';
-import { ANTHROPIC_DEFAULT_BASE_URL } from '@vybestack/llxprt-code-providers';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderAdapterFromManager } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { ANTHROPIC_DEFAULT_BASE_URL } from '@vybestack/llxprt-code-providers';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { ChatSession } from '../chatSession.js';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { TestRuntimeProviderManager } from '../../test-utils/runtimeProviderManager.js';
+import { ChatSession } from '../chatSession.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const settingsOwners: SessionSettingsOwner[] = [];
 
@@ -46,7 +51,6 @@ function createChatSession(options: {
   const settingsOwner = new SessionSettingsOwner(settingsService);
   settingsOwners.push(settingsOwner);
   const providerRuntime = createProviderRuntimeContext({
-    settingsService,
     runtimeId: 'resolved-base-url-test',
     metadata: { source: 'chatSession.resolvedBaseUrl.bun.test' },
   });
@@ -82,10 +86,24 @@ function createChatSession(options: {
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
   });
 
-  return new ChatSession(runtimeContext, UNUSED_CONTENT_GENERATOR, {}, []);
+  return new ChatSession(
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    UNUSED_CONTENT_GENERATOR,
+    {},
+    [],
+  );
 }
 
 describe('ChatSession.getResolvedBaseUrl', () => {
@@ -189,7 +207,7 @@ describe('ChatSession.getResolvedBaseUrl', () => {
    * @plan:PLAN-20260824-ISSUE2231.P01
    * @requirement:REQ-2231-4
    */
-  it('S6: returns undefined when the LB last-selection probe throws, instead of propagating', () => {
+  it('S6: propagates the error thrown by the LB last-selection probe', () => {
     const manager = new TestRuntimeProviderManager();
     const provider = {
       ...createProvider('router'),
@@ -204,8 +222,6 @@ describe('ChatSession.getResolvedBaseUrl', () => {
       baseUrl: 'https://runtime.example/v1',
     });
 
-    const result = chat.getResolvedBaseUrl();
-
-    expect(result).toBeUndefined();
+    expect(() => chat.getResolvedBaseUrl()).toThrow('probe exploded');
   });
 });

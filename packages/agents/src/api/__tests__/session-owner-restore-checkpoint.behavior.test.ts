@@ -1,14 +1,26 @@
+import { useRecordingPrompts } from './helpers/recording-prompts.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openClientOwner } from './helpers/client-owner-session.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import { describe, expect, it, spyOn } from 'bun:test';
+import { mkdtemp, readFile, readdir, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
+import {
+  LocalMediaStore,
+  replaySession,
+  type IContent,
+} from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-settings';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { describe, expect, it, spyOn } from 'bun:test';
-import { readFile, readdir } from 'node:fs/promises';
-import { basename } from 'node:path';
-import { replaySession } from '@vybestack/llxprt-code-core';
-import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 
 const human = (text: string) => ({
   speaker: 'human' as const,
@@ -19,15 +31,74 @@ const ai = (text: string) => ({
   blocks: [{ type: 'text' as const, text }],
 });
 
+/**
+ * Replays a recording the way the agent's own owners do, with a store over the
+ * project's media archive, which is where recorded media objects live.
+ */
+async function replayRecording(
+  path: string,
+  projectTempDir: string,
+): ReturnType<typeof replaySession> {
+  const archive = new LocalMediaStore({
+    rootDirectory: join(projectTempDir, 'media'),
+    quotaBytes: 1024 * 1024,
+  });
+  try {
+    return await replaySession(path, basename(projectTempDir), {
+      mediaStore: archive,
+    });
+  } finally {
+    await archive.close();
+  }
+}
+
+async function withAgents(
+  authority: CredentialAuthority,
+  count: number,
+  scenario: (routes: readonly RouteAAgent[], chatsDir: string) => Promise<void>,
+): Promise<void> {
+  const routes: RouteAAgent[] = [];
+  try {
+    const first = await openRouteAAgent({
+      authority,
+      config: { interactive: true },
+    });
+    routes.push(first);
+    for (let index = 1; index < count; index++) {
+      routes.push(
+        await openRouteAAgent({
+          authority,
+          config: { interactive: true, workingDir: first.directory },
+        }),
+      );
+    }
+    await scenario(routes, first.config.projectChatsDir);
+  } finally {
+    await runCleanupSteps(
+      [...routes].reverse().map((route) => () => route.close()),
+    );
+  }
+}
+
+async function locks(chatsDir: string): Promise<string[]> {
+  return (await readdir(chatsDir)).filter((file) => file.endsWith('.lock'));
+}
+
+function firstMediaId(history: readonly IContent[]): string {
+  for (const content of history)
+    for (const block of content.blocks)
+      if (block.type === 'media' && 'contentId' in block)
+        return block.contentId;
+  throw new Error('Missing admitted media');
+}
+
 describe('Agent session owner history restore and checkpoint names', () => {
+  useRecordingPrompts();
+  useFakeResponsesReplay('multi-turn-text.jsonl');
+  const credentials = useOwnedCredentials();
   it('uses the agent-captured media store for recording and checkpoint replay after Config media access is disabled', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config }) => {
-      const mediaStore = requireMediaStore(agent.agentClient);
-      const media = await mediaStore.admit({
-        bytes: new Uint8Array([1, 3, 5, 7]),
-        mimeType: 'image/png',
-        semanticMetadata: {},
-      });
+    await withAgents(credentials().authority, 1, async ([route]) => {
+      const { agent, config } = route;
       Object.defineProperty(config, 'getLocalMediaStore', {
         configurable: true,
         value: () => {
@@ -38,9 +109,18 @@ describe('Agent session owner history restore and checkpoint names', () => {
         await agent.setHistory([
           {
             speaker: 'human',
-            blocks: [{ type: 'text', text: 'image' }, media],
+            blocks: [
+              { type: 'text', text: 'image' },
+              {
+                type: 'media',
+                encoding: 'base64',
+                mimeType: 'image/png',
+                data: 'AQMFBw==',
+              },
+            ],
           },
         ]);
+        const mediaId = firstMediaId(await agent.getHistory());
         await agent.session.setRecording({ enabled: true });
         const checkpoint =
           await agent.session.createCheckpoint('media-checkpoint');
@@ -48,13 +128,9 @@ describe('Agent session owner history restore and checkpoint names', () => {
         expect(await agent.session.listCheckpoints()).toHaveLength(1);
         const path = agent.session.getRecording().path;
         if (!path) throw new Error('Missing recording path');
-        const replay = await replaySession(
-          path,
-          basename(config.projectTempDir),
-          { mediaStore },
-        );
+        const replay = await replayRecording(path, config.projectTempDir);
         if (!replay.ok) throw new Error(replay.error);
-        expect(JSON.stringify(replay.history)).toContain(media.contentId);
+        expect(JSON.stringify(replay.history)).toContain(mediaId);
         await agent.session.setRecording({ enabled: false });
       } finally {
         Reflect.deleteProperty(config, 'getLocalMediaStore');
@@ -63,98 +139,116 @@ describe('Agent session owner history restore and checkpoint names', () => {
   }, 30000);
 
   it('restores recorded human turns, persists the rewind and continues recording on the same lock', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config, chatsDir }) => {
-      await agent.setHistory([human('first'), ai('one')]);
-      await agent.session.setRecording({ enabled: true });
-      await agent.setHistory([
-        human('first'),
-        ai('one'),
-        human('second'),
-        ai('two'),
-      ]);
-      const path = agent.session.getRecording().path;
-      if (!path) throw new Error('Recording path missing');
-      const result = await agent.session.restoreTurns(1);
-      expect(result.itemsRemoved).toBe(2);
-      expect(result.remainingHistory).toHaveLength(2);
-      expect(await agent.getHistory()).toHaveLength(2);
-      await agent.setHistory([human('first'), ai('one'), human('third')]);
-      await agent.session.flushRecording();
-      const replay = await replaySession(
-        path,
-        basename(config.projectTempDir),
-        { mediaStore: requireMediaStore(agent.agentClient) },
-      );
-      expect(replay.ok).toBe(true);
-      if (!replay.ok) throw new Error(replay.error);
-      expect(JSON.stringify(replay.history)).not.toContain('second');
-      expect(JSON.stringify(replay.history)).toContain('third');
-      expect(await readFile(path, 'utf8')).toContain('"rewind"');
-      expect(
-        (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
-      ).toHaveLength(1);
-      await agent.session.setRecording({ enabled: false });
-      expect(
-        (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
-      ).toHaveLength(0);
-    });
+    await withAgents(
+      credentials().authority,
+      1,
+      async ([{ agent, config }], chatsDir) => {
+        await agent.setHistory([human('first'), ai('one')]);
+        await agent.session.setRecording({ enabled: true });
+        await agent.setHistory([
+          human('first'),
+          ai('one'),
+          human('second'),
+          ai('two'),
+        ]);
+        const path = agent.session.getRecording().path;
+        if (!path) throw new Error('Recording path missing');
+        const result = await agent.session.restoreTurns(1);
+        expect(result.itemsRemoved).toBe(2);
+        expect(result.remainingHistory).toHaveLength(2);
+        expect(await agent.getHistory()).toHaveLength(2);
+        await agent.setHistory([human('first'), ai('one'), human('third')]);
+        await agent.session.flushRecording();
+        const replay = await replayRecording(path, config.projectTempDir);
+        expect(replay.ok).toBe(true);
+        if (!replay.ok) throw new Error(replay.error);
+        expect(JSON.stringify(replay.history)).not.toContain('second');
+        expect(JSON.stringify(replay.history)).toContain('third');
+        expect(await readFile(path, 'utf8')).toContain('"rewind"');
+        expect(await locks(chatsDir)).toHaveLength(1);
+        await agent.session.setRecording({ enabled: false });
+        expect(await locks(chatsDir)).toHaveLength(0);
+      },
+    );
   }, 30000);
 
   it('serializes restore before a queued checkpoint and rejects mutations after disposal', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config, chatsDir }) => {
-      await agent.setHistory([
-        human('kept-turn'),
-        ai('kept-reply'),
-        human('discarded-turn'),
-      ]);
-      await agent.session.setRecording({ enabled: true });
-      const path = agent.session.getRecording().path;
-      if (!path) throw new Error('Recording path missing');
-      const [restored, checkpoint] = await Promise.all([
-        agent.session.restoreTurns(1),
-        agent.session.createCheckpoint('after-rewind'),
-      ]);
-      expect(restored.itemsRemoved).toBe(1);
-      const replay = await replaySession(
-        path,
-        basename(config.projectTempDir),
-        { mediaStore: requireMediaStore(agent.agentClient) },
-      );
-      if (!replay.ok) throw new Error(replay.error);
-      const raw = await readFile(path, 'utf8');
-      expect(raw.indexOf('"rewind"')).toBeLessThan(
-        raw.indexOf('"checkpoint_created"'),
-      );
-      expect(checkpoint.name).toBe('after-rewind');
-      expect(JSON.stringify(replay.history)).not.toContain('discarded-turn');
-      expect(
-        (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
-      ).toHaveLength(1);
-      await agent.dispose();
-      await expect(agent.session.restoreTurns(1)).rejects.toThrow(
-        'Session disposed',
-      );
-      expect(
-        (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
-      ).toHaveLength(0);
-    });
+    await withAgents(
+      credentials().authority,
+      1,
+      async ([{ agent, config }], chatsDir) => {
+        await agent.setHistory([
+          human('kept-turn'),
+          ai('kept-reply'),
+          human('discarded-turn'),
+        ]);
+        await agent.session.setRecording({ enabled: true });
+        const path = agent.session.getRecording().path;
+        if (!path) throw new Error('Recording path missing');
+        const [restored, checkpoint] = await Promise.all([
+          agent.session.restoreTurns(1),
+          agent.session.createCheckpoint('after-rewind'),
+        ]);
+        expect(restored.itemsRemoved).toBe(1);
+        const replay = await replayRecording(path, config.projectTempDir);
+        if (!replay.ok) throw new Error(replay.error);
+        const raw = await readFile(path, 'utf8');
+        expect(raw.indexOf('"rewind"')).toBeLessThan(
+          raw.indexOf('"checkpoint_created"'),
+        );
+        expect(checkpoint.name).toBe('after-rewind');
+        expect(JSON.stringify(replay.history)).not.toContain('discarded-turn');
+        expect(await locks(chatsDir)).toHaveLength(1);
+        await agent.dispose();
+        await expect(agent.session.restoreTurns(1)).rejects.toThrow(
+          'Session disposed',
+        );
+        expect(await locks(chatsDir)).toHaveLength(0);
+      },
+    );
   }, 30000);
 
   it('rejects invalid turns and restores live and durable history if client restoration fails', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config }) => {
-      await agent.setHistory([
+    // The client's restoration has no Agent form, so the subject is the
+    // session control a SessionClientOwner builds over its real client.
+    const directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'restore-checkpoint-control-')),
+    );
+    const projectTempDir = new Storage(directory).getProjectTempDir();
+    const opened = await openClientOwner(
+      credentials().authority,
+      {
+        provider: 'fake',
+        model: 'fake-model',
+        workingDir: directory,
+        interactive: true,
+        harness: { includeProcessCwd: false },
+      },
+      { provider: 'fake', model: 'fake-model' },
+    );
+    const session = opened.owner.createSessionControl(
+      'facade',
+      () => 'restore-checkpoint-runtime',
+      (operation) => operation(),
+      () => {},
+      () => {},
+      () => 'fake',
+      () => 'fake-model',
+    );
+    try {
+      const client = opened.client;
+      await client.restoreHistory([
         human('base'),
         ai('base-reply'),
         human('cut'),
         ai('cut-reply'),
       ]);
-      await agent.session.setRecording({ enabled: true });
-      const path = agent.session.getRecording().path;
+      await session.setRecording({ enabled: true });
+      const path = session.getRecording().path;
       if (!path) throw new Error('Recording path missing');
-      await expect(agent.session.restoreTurns(-1)).rejects.toThrow(
+      await expect(session.restoreTurns(-1)).rejects.toThrow(
         'non-negative integer',
       );
-      const client = agent.agentClient;
       const original = client.restoreHistory.bind(client);
       const fault = spyOn(client, 'restoreHistory').mockImplementationOnce(
         async (...args) => {
@@ -163,34 +257,34 @@ describe('Agent session owner history restore and checkpoint names', () => {
         },
       );
       try {
-        await expect(agent.session.restoreTurns(1)).rejects.toThrow(
+        await expect(session.restoreTurns(1)).rejects.toThrow(
           'restore interrupted',
         );
       } finally {
         fault.mockRestore();
       }
-      expect(JSON.stringify(await agent.getHistory())).toContain('cut-reply');
-      await agent.session.flushRecording();
-      const replay = await replaySession(
-        path,
-        basename(config.projectTempDir),
-        {
-          mediaStore: requireMediaStore(agent.agentClient),
-        },
-      );
+      expect(JSON.stringify(await session.getHistory())).toContain('cut-reply');
+      await session.flushRecording();
+      const replay = await replayRecording(path, projectTempDir);
       expect(replay.ok).toBe(true);
       if (!replay.ok) throw new Error(replay.error);
       expect(JSON.stringify(replay.history)).toContain('cut-reply');
-      const restored = await agent.session.restoreTurns(1);
+      const restored = await session.restoreTurns(1);
       expect(restored.itemsRemoved).toBe(2);
-      expect(JSON.stringify(await agent.getHistory())).not.toContain(
+      expect(JSON.stringify(await session.getHistory())).not.toContain(
         'cut-reply',
       );
-    });
+    } finally {
+      await runCleanupSteps([
+        () => session.dispose(),
+        () => opened.close(),
+        () => rm(directory, { recursive: true, force: true }),
+      ]);
+    }
   }, 30000);
 
   it('denies collisions without UI confirmation and atomically overwrites on create, rename and session naming', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config }) => {
+    await withAgents(credentials().authority, 1, async ([{ agent }]) => {
       await agent.setHistory([human('checkpoint-seed')]);
       await agent.session.setRecording({ enabled: true });
       const first = await agent.session.createCheckpoint('occupied');
@@ -228,12 +322,11 @@ describe('Agent session owner history restore and checkpoint names', () => {
           (item) => item.name === 'occupied',
         ),
       ).toBe(true);
-      expect(config.getSessionId()).toBeUndefined();
     });
   }, 30000);
 
   it('preserves the colliding name when a confirmed checkpoint write fails', async () => {
-    await withRecordingLifetimeFixture(async ({ agent }) => {
+    await withAgents(credentials().authority, 1, async ([{ agent }]) => {
       await agent.setHistory([human('rollback-seed')]);
       await agent.session.setRecording({ enabled: true });
       const first = await agent.session.createCheckpoint('kept');
@@ -265,10 +358,11 @@ describe('Agent session owner history restore and checkpoint names', () => {
     });
   }, 30000);
 
-  it('keeps a borrowed sibling recording and its lock isolated while restoring and renaming a closed checkpoint', async () => {
-    await withRecordingLifetimeFixture(
-      async ({ agent: owner, borrow, config, chatsDir }) => {
-        const sibling = await borrow();
+  it('keeps a sibling recording and its lock isolated while restoring and renaming a closed checkpoint', async () => {
+    await withAgents(
+      credentials().authority,
+      2,
+      async ([{ agent: owner }, { agent: sibling }], chatsDir) => {
         await owner.setHistory([
           human('owner-first'),
           ai('owner-reply'),
@@ -301,13 +395,10 @@ describe('Agent session owner history restore and checkpoint names', () => {
         );
         expect(sibling.session.getRecording().enabled).toBe(false);
         expect(await readFile(ownerPath ?? '', 'utf8')).toContain('"rewind"');
-        expect(config.getSessionId()).toBeUndefined();
         expect(await readFile(siblingPath ?? '', 'utf8')).toContain(
           'sibling-first',
         );
-        expect(
-          (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
-        ).toHaveLength(1);
+        expect(await locks(chatsDir)).toHaveLength(1);
       },
     );
   }, 30000);

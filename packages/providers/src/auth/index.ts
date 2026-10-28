@@ -57,10 +57,10 @@ export {
 
 // ─── Proxy Credential Store Factory ──────────────────────────────────────────
 export {
-  createTokenStore,
+  CredentialAuthority,
+  HostCredentialOwner,
   createProviderKeyStorage,
   createGitHubBrokerSocketClient,
-  resetFactorySingletons,
 } from './proxy/credential-store-factory.js';
 
 // ─── Clipboard Service ───────────────────────────────────────────────────────
@@ -78,7 +78,6 @@ export {
   InteractiveAuthUnavailableError,
   InteractiveAuthHostUnavailableError,
   InteractiveAuthCancelledError,
-  interactiveAuthCoordinator,
 } from './interactive-auth-coordinator.js';
 export type {
   InteractiveAuthChallenge,
@@ -88,12 +87,7 @@ export type {
 } from './interactive-auth-coordinator.js';
 
 // ─── Sandbox Proxy Lifecycle ─────────────────────────────────────────────────
-export {
-  createAndStartProxy,
-  stopProxy,
-  getProxySocketPath,
-  getProxyCapabilityToken,
-} from './proxy/sandbox-proxy-lifecycle.js';
+export { createAndStartProxy } from './proxy/sandbox-proxy-lifecycle.js';
 export type {
   SandboxProxyConfig,
   SandboxProxyHandle,

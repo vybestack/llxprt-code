@@ -1,11 +1,21 @@
+import { createTestChildOrchestrator } from '../core/__tests__/child-launch-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
 
+import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
+import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import {
+  MessageBusType,
+  type ToolPolicyRejection,
+} from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
+import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import {
   afterEach,
   beforeEach,
@@ -15,26 +25,19 @@ import {
   vi,
   type Mock,
 } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
-import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import {
-  MessageBusType,
-  type ToolPolicyRejection,
-} from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
-import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 
-import { MockTool } from '@vybestack/llxprt-code-test-utils/core/tools.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
-import { ChatSession } from '../core/chatSession.js';
-import { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/tools.js';
 import {
-  createMockConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   createMockStream,
   createStatelessRuntimeBundle,
-  disposeMockConfig,
+  createSubagentConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
 } from '../core/__tests__/subagent-test-helpers.js';
+import { ChatSession } from '../core/chatSession.js';
 import { TaskTool } from './task.js';
 
 const actualTools = { ...(await import('@vybestack/llxprt-code-tools')) };
@@ -101,7 +104,8 @@ function createManagers(): {
 }
 
 describe('TaskTool runtime MessageBus integration', () => {
-  let config: Config | undefined;
+  const retainSubagentCleanup = installSubagentCleanup();
+
   let sendMessageStream: ReturnType<typeof createMockStream>;
 
   beforeEach(() => {
@@ -127,21 +131,27 @@ describe('TaskTool runtime MessageBus integration', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    if (config !== undefined) {
-      await disposeMockConfig(config);
-    }
   });
 
   it('uses the exact session MessageBus for a non-interactive subagent tool scheduler', async () => {
     const probeTool = new MockTool(TOOL_NAME);
-    const {
-      config: runtimeConfig,
-      mcpRuntime,
-      settingsOwner,
-    } = await createMockConfig({
-      getTool: (name) => (name === TOOL_NAME ? probeTool : undefined),
-    });
-    config = runtimeConfig;
+    const runtimeConfigSettings = seedSubagentSettings();
+    const runtimeConfig = createSubagentConfig(
+      runtimeConfigSettings,
+      retainSubagentCleanup,
+    );
+    const settingsOwner = await acquireSubagentSettings(
+      runtimeConfig,
+      runtimeConfigSettings,
+      retainSubagentCleanup,
+    );
+    const mcpRuntime = await acquireSubagentWorkspace(
+      runtimeConfig,
+      retainSubagentCleanup,
+      {
+        getTool: (name) => (name === TOOL_NAME ? probeTool : undefined),
+      },
+    );
 
     const sessionMessageBus = mcpRuntime.messageBus;
     const decoyMessageBus = new MessageBus(sessionMessageBus, false);
@@ -175,33 +185,31 @@ describe('TaskTool runtime MessageBus integration', () => {
       toolRegistry: mcpRuntime.toolSelection,
     });
     const tool = new TaskTool(runtimeConfig, {
-      createChildSettings: () => settingsOwner.createChildStore(),
-      readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),
       readTaskPolicy: () => settingsOwner.readTaskPolicy(),
       readGovernance: () =>
         settingsOwner.readToolGovernance(runtimeConfig.getExcludeTools() ?? []),
-      instructions: emptyInstructionReads,
-      workspacePaths: mcpRuntime.workspaceFilesystem.paths,
-      readMcpInstructions: () => undefined,
+
       messageBus: sessionMessageBus,
       isInteractiveEnvironment: () => false,
-      orchestratorFactory: (coreSchedulerMessageBus) => {
-        expect(coreSchedulerMessageBus).toBe(sessionMessageBus);
-        return new SubagentOrchestrator({
-          workspaceTrust: mcpRuntime.trust,
-          createChildSettings: () => settingsOwner.createChildStore(),
-          readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),
-          instructions: emptyInstructionReads,
-          workspacePaths: mcpRuntime.workspaceFilesystem.paths,
-          readMcpInstructions: () => undefined,
-          subagentManager,
-          profileManager,
-          foregroundConfig: runtimeConfig,
-          toolRegistry: mcpRuntime.toolSelection,
-          runtimeLoader: vi.fn().mockResolvedValue(runtimeBundle),
-          messageBus: coreSchedulerMessageBus,
-        });
-      },
+      launchChild: (request, signal) =>
+        ((coreSchedulerMessageBus) => {
+          expect(coreSchedulerMessageBus).toBe(sessionMessageBus);
+          return createTestChildOrchestrator({
+            credentialAuthority: new CredentialAuthority(),
+            workspaceTrust: mcpRuntime.trust,
+            createChildSettings: () => settingsOwner.createChildStore(),
+            readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),
+            instructions: emptyInstructionReads,
+            workspacePaths: mcpRuntime.workspaceFilesystem.paths,
+            readMcpInstructions: () => undefined,
+            subagentManager,
+            profileManager,
+            foregroundConfig: runtimeConfig,
+            toolRegistry: mcpRuntime.toolSelection,
+            runtimeLoader: vi.fn().mockResolvedValue(runtimeBundle),
+            messageBus: coreSchedulerMessageBus,
+          });
+        })(sessionMessageBus).launch(request, signal),
     });
 
     await tool

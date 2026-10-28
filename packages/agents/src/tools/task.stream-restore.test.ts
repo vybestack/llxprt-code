@@ -4,13 +4,6 @@ import { createSessionPolicyFixture } from '../core/__tests__/session-policy-fix
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
-
-import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
-const fixturePaths = installTestWorkspacePaths({
-  targetDir: process.cwd(),
-  isTrusted: () => true,
-});
 
 /**
  * TaskTool streaming-lifecycle tests (issue #3288).
@@ -22,12 +15,12 @@ const fixturePaths = installTestWorkspacePaths({
  * assert the observable state of the scope afterwards.
  */
 
-import { describe, it, expect, vi } from 'bun:test';
-import { TaskTool } from './task.js';
-import { createTaskToolConfig } from './__tests__/task-test-helpers.js';
-import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { describe, expect, it, vi } from 'bun:test';
+import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
+import { createTaskToolConfig } from './__tests__/task-test-helpers.js';
+import { TaskTool } from './task.js';
 
 interface RestorationScope {
   output: {
@@ -70,16 +63,13 @@ function createRestorationHarness(
   const config = createTaskToolConfig();
   const settingsRoot = createSessionPolicyFixture();
   const tool = new TaskTool(config, {
-    createChildSettings: () => settingsRoot.owner.createChildStore(),
-    readRunPolicy: () => settingsRoot.owner.readSubagentRunPolicy(),
     readTaskPolicy: () => settingsRoot.owner.readTaskPolicy(),
     readGovernance: () =>
       settingsRoot.owner.readToolGovernance(config.getExcludeTools() ?? []),
-    workspacePaths: fixturePaths(),
-    readMcpInstructions: () => undefined,
-    instructions: emptyInstructionReads,
+
     messageBus: new MessageBus(),
-    orchestratorFactory: () => ({ launch }) as unknown as SubagentOrchestrator,
+    launchChild: (request, signal) =>
+      (({ launch }) as unknown as SubagentOrchestrator).launch(request, signal),
     isInteractiveEnvironment: () => true,
   });
   return { scope, tool };

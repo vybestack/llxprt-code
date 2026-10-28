@@ -342,8 +342,6 @@ describe('P26: providerContentEnforcement characterization', () => {
     const tokenizerFactory = createPromptTokenizerFactory();
     const config = createRuntimeConfigStub(settings);
     const providerRuntime = createProviderRuntimeContext({
-      settingsService: settings,
-      config,
       runtimeId: 'stateful-responses-enforcement',
     });
 
@@ -459,8 +457,6 @@ describe('P26: providerContentEnforcement characterization', () => {
     const tokenizerFactory = createAmplifyingPromptTokenizerFactory();
     const config = createRuntimeConfigStub(settings);
     const providerRuntime = createProviderRuntimeContext({
-      settingsService: settings,
-      config,
       runtimeId: 'stateful-responses-overflow',
     });
 

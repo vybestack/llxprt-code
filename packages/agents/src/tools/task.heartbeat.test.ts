@@ -14,19 +14,19 @@ import { createTaskPolicyFixture } from './__tests__/task-policy-fixture.js';
  * on every terminal path, and that heartbeats never pollute content/history.
  */
 
-import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { TaskTool } from './task.js';
-import {
-  createLivenessStatus,
-  startTaskHeartbeat,
-  DEFAULT_HEARTBEAT_INTERVAL_MS,
-} from './taskHeartbeat.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-tools';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
+import { TaskTool } from './task.js';
+import {
+  DEFAULT_HEARTBEAT_INTERVAL_MS,
+  createLivenessStatus,
+  startTaskHeartbeat,
+} from './taskHeartbeat.js';
 
 function createConfig(): Config {
   return {
@@ -99,9 +99,9 @@ function buildTool(scope: PendingScope): TaskTool {
   const orchestrator = { launch } as unknown as SubagentOrchestrator;
   return new TaskTool(createConfig(), {
     ...createTaskPolicyFixture({}),
-    readMcpInstructions: () => undefined,
+
     messageBus: new MessageBus(),
-    orchestratorFactory: () => orchestrator,
+    launchChild: (request, signal) => orchestrator.launch(request, signal),
     isInteractiveEnvironment: () => true,
   });
 }
@@ -576,9 +576,9 @@ describe('TaskTool heartbeat integration', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(createConfig(), {
       ...createTaskPolicyFixture({}),
-      readMcpInstructions: () => undefined,
+
       messageBus: new MessageBus(),
-      orchestratorFactory: () => orchestrator,
+      launchChild: (request, signal) => orchestrator.launch(request, signal),
       isInteractiveEnvironment: () => false,
     });
     const updates: LiveOutputUpdate[] = [];

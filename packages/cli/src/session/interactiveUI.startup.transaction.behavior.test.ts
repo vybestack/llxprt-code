@@ -1,3 +1,7 @@
+import { createTerminalHost } from './terminalHost.js';
+let terminalHost = createTerminalHost();
+import { buildInteractiveUiPorts } from './interactiveUiPorts.js';
+import { createMockSettings } from '../__tests__/render.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -26,12 +30,10 @@ import { Config } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { LoadedSettings } from '../config/settings.js';
-import {
-  commitInteractiveStartup,
-  __resetInteractiveUIStateForTesting,
-  type InteractiveStartupPorts,
-} from './interactiveUI.js';
+import { useCommandOwners as installCommandOwners } from '../__tests__/command-owner-fixture.js';
+const makeTransactionAgent = installCommandOwners();
+import { type InteractiveStartupPorts } from './interactiveUI.js';
+import { commitInteractiveStartupForTest } from '../__tests__/raw-interactive-startup-fixture.js';
 import { createInteractivePerfRuntime } from '../ui/hooks/perf/interactivePerfRuntime.js';
 import type { OperationIdentitySnapshot } from '../ui/hooks/agentStream/operationLifecycle.js';
 import {
@@ -86,10 +88,10 @@ class CountingScheduler implements PerfScheduler {
 }
 
 let testConfig: Config;
-let runtimeSettings: { owner: SessionSettingsOwner; store: SettingsService };
+let runtimeSettings: SessionSettingsOwner;
 
-const testAgent = {} as unknown as Agent;
-const testSettings = {} as unknown as LoadedSettings;
+let testAgent: Agent;
+const testSettings = createMockSettings({});
 
 /**
  * Base noop ports. Every port returns a minimal stub or is a no-op. Each test
@@ -103,10 +105,7 @@ function noopPorts(): InteractiveStartupPorts {
       incrementalRendering: false,
       stdout: { columns: 80, rows: 24 },
     })) as never,
-    buildUiRuntime: (() => ({
-      shell: { getTerminalBackground: () => '' },
-    })) as never,
-    buildSlashRuntime: (() => ({})) as never,
+    buildCommandPorts: buildInteractiveUiPorts,
     debugAppend: () => {},
     setupTerminal: () => {},
     isMouseEnabled: () => false,
@@ -160,7 +159,8 @@ function errorMessages(err: unknown): string[] {
 }
 
 describe('Finding B — transactional interactive startup', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    testAgent = await makeTransactionAgent(crypto.randomUUID());
     dir = fs.mkdtempSync(join(tmpdir(), 'perf-tx-startup-'));
     testConfig = new Config({
       sessionId: 'sess-tx',
@@ -170,17 +170,17 @@ describe('Finding B — transactional interactive startup', () => {
       debugMode: false,
     });
     const store = new SettingsService();
-    runtimeSettings = { store, owner: new SessionSettingsOwner(store) };
+    runtimeSettings = new SessionSettingsOwner(store);
     setInteractiveStdoutObserver(null);
     setInteractiveRenderObserver(null);
     setPerfPhaseObserver(null);
-    __resetInteractiveUIStateForTesting();
+    terminalHost = createTerminalHost();
   });
 
   afterEach(async () => {
-    await runtimeSettings.owner.dispose();
+    await runtimeSettings.dispose();
     await testConfig.dispose();
-    __resetInteractiveUIStateForTesting();
+    terminalHost = createTerminalHost();
     setInteractiveStdoutObserver(null);
     setInteractiveRenderObserver(null);
     setPerfPhaseObserver(null);
@@ -203,7 +203,7 @@ describe('Finding B — transactional interactive startup', () => {
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -223,19 +223,19 @@ describe('Finding B — transactional interactive startup', () => {
     assertOwnerDisposed(owner, scheduler);
   });
 
-  it('ui-runtime failure: owner disposed, no mouse staged', async () => {
+  it('command-port failure: owner disposed, no mouse staged', async () => {
     const scheduler = new CountingScheduler();
     const owner = await makeStartedOwner(scheduler);
     const ports = {
       ...noopPorts(),
-      buildUiRuntime: (() => {
-        throw new Error('ui-runtime-boom');
+      buildCommandPorts: (() => {
+        throw new Error('command-port-boom');
       }) as never,
     };
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -249,38 +249,7 @@ describe('Finding B — transactional interactive startup', () => {
       caught = err;
     }
     expect(
-      errorMessages(caught).some((m) => m.includes('ui-runtime-boom')),
-    ).toBe(true);
-    assertOwnerDisposed(owner, scheduler);
-  });
-
-  it('slash-runtime failure: owner disposed, no mouse staged', async () => {
-    const scheduler = new CountingScheduler();
-    const owner = await makeStartedOwner(scheduler);
-    const ports = {
-      ...noopPorts(),
-      buildSlashRuntime: (() => {
-        throw new Error('slash-runtime-boom');
-      }) as never,
-    };
-
-    let caught: unknown = null;
-    try {
-      await commitInteractiveStartup({
-        config: testConfig,
-        runtimeSettings,
-        agent: testAgent,
-        settings: testSettings,
-        perfOwner: owner,
-        version: 'test',
-        startupWarnings: [],
-        ports,
-      });
-    } catch (err) {
-      caught = err;
-    }
-    expect(
-      errorMessages(caught).some((m) => m.includes('slash-runtime-boom')),
+      errorMessages(caught).some((m) => m.includes('command-port-boom')),
     ).toBe(true);
     assertOwnerDisposed(owner, scheduler);
   });
@@ -297,7 +266,7 @@ describe('Finding B — transactional interactive startup', () => {
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -330,7 +299,7 @@ describe('Finding B — transactional interactive startup', () => {
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -361,7 +330,7 @@ describe('Finding B — transactional interactive startup', () => {
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -391,7 +360,7 @@ describe('Finding B — transactional interactive startup', () => {
     };
 
     await expect(
-      commitInteractiveStartup({
+      commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -409,7 +378,7 @@ describe('Finding B — transactional interactive startup', () => {
         registrationAttempts++;
       },
     };
-    await commitInteractiveStartup({
+    await commitInteractiveStartupForTest({
       config: testConfig,
       runtimeSettings,
       agent: testAgent,
@@ -440,7 +409,7 @@ describe('Finding B — transactional interactive startup', () => {
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -478,7 +447,7 @@ describe('Finding B — transactional interactive startup', () => {
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -522,7 +491,7 @@ describe('Finding B — transactional interactive startup', () => {
 
     let caught: unknown = null;
     try {
-      await commitInteractiveStartup({
+      await commitInteractiveStartupForTest({
         config: testConfig,
         runtimeSettings,
         agent: testAgent,
@@ -542,9 +511,6 @@ describe('Finding B — transactional interactive startup', () => {
     // captureAndClearTrackedInstanceAndOwner. Calling replacePreviousInstanceAndOwner
     // now must be a no-op (nothing to dispose — refs already cleared).
     // We verify this does NOT throw (no double-dispose of the already-disposed owner).
-    const { replacePreviousInstanceAndOwner } = await import(
-      './interactiveUI.js'
-    );
-    await replacePreviousInstanceAndOwner();
+    await terminalHost.cleanup();
   });
 });

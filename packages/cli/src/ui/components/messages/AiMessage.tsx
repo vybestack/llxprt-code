@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useGetEphemeralSetting } from '../../contexts/RuntimeContext.js';
 import type React from 'react';
 import { Text, Box } from 'ink';
 import { MarkdownDisplay } from '../../utils/MarkdownDisplay.js';
@@ -11,7 +12,7 @@ import { Colors } from '../../colors.js';
 import { SCREEN_READER_MODEL_PREFIX } from '../../textConstants.js';
 import { ThinkingBlockDisplay } from './ThinkingBlockDisplay.js';
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
-import { useRuntimeApi } from '../../contexts/RuntimeContext.js';
+
 import { useTerminalStore } from '../../stores/terminal/TerminalContext.js';
 import { useStoreSelector } from '../../stores/useStoreSelector.js';
 import { useResolvedWorkspaceDirectories } from '../../hooks/useResolvedWorkspaceDirectories.js';
@@ -52,7 +53,7 @@ export const AiMessage: React.FC<AiMessageProps> = ({
    * @requirement:REQ-THINK-UI-001
    * @requirement:REQ-THINK-UI-003
    */
-  const { getEphemeralSetting } = useRuntimeApi();
+  const getEphemeralSetting = useGetEphemeralSetting();
   const showThinking = (getEphemeralSetting('reasoning.includeInResponse') ??
     true) as boolean;
   const { store } = useTerminalStore();

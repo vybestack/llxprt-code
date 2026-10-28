@@ -22,23 +22,23 @@ import { isAtCommand, isSlashCommand } from '../../utils/commandUtils.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { processSlashCommandResult } from './streamUtils.js';
 import {
-  buildAtCommandRuntimeFromStream,
   handleAtCommand,
+  type AtCommandRuntime,
 } from '../atCommandProcessor.js';
-import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
+import type { UiSubagentManager } from '../../cliUiRuntime.js';
 import type { FindMcpResource } from '../atCommandProcessorHelpers.js';
 import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 
 export interface PrepareQueryDeps {
   findResource: FindMcpResource;
-  runtime: StreamRuntime;
+  atCommandConfig: AtCommandRuntime;
   // @plan:ISSUE-2376 — resolves read_many_files/glob via the public Agent
   // surface for @file processing, replacing direct
   // getToolRegistry().getTool access.
   readResource: (server: string, uri: string) => Promise<unknown>;
   getToolHandle: (name: string) => AgentToolHandle | undefined;
   /**
-   * Subagent manager for @subagent mention resolution. StreamRuntime does not
+   * Subagent manager for @subagent mention resolution. The runtime does not
    * yet expose getSubagentManager, so this is threaded separately and may be
    * undefined; when absent, @subagent mentions fall through to file resolution
    * (graceful degradation).
@@ -47,7 +47,7 @@ export interface PrepareQueryDeps {
   /**
    * Logs a user-prompt telemetry event. Provided by the caller (which has
    * access to the full telemetry-config boundary) so this module depends only
-   * on the nested StreamRuntime rather than a flat aggregate.
+   * on the nested runtime rather than a flat aggregate.
    */
   logUserPrompt: (event: UserPromptEvent) => void;
   addItem: UseHistoryManagerReturn['addItem'];
@@ -120,7 +120,7 @@ async function processStringQuery(
   deps: PrepareQueryDeps,
 ): Promise<AgentRequestInput | null> {
   const {
-    runtime,
+    atCommandConfig,
     logUserPrompt,
     logger,
     shellModeActive,
@@ -161,7 +161,7 @@ async function processStringQuery(
   if (isAtCommand(trimmedQuery)) {
     const atCommandResult = await handleAtCommand({
       query: trimmedQuery,
-      config: buildAtCommandRuntimeFromStream(runtime),
+      config: atCommandConfig,
       getToolHandle: deps.getToolHandle,
       readResource: deps.readResource,
       findResource: deps.findResource,

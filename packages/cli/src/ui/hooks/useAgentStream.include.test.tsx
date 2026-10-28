@@ -15,7 +15,7 @@ import {
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../__tests__/render.js';
-import { useAgentStream } from './agentStream/index.js';
+import { useTestAgentStream as useAgentStream } from './__tests__/use-stream-owner-inputs.js';
 import { createStreamRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
@@ -80,10 +80,12 @@ void vi.mock('./slashCommandProcessor.js', () => ({
 
 // --- Tests for useAgentStream Hook ---
 describe('useAgentStream', () => {
-  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]>;
+  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]['addItem']>;
   let mockConfig: Config;
   let mockOnDebugMessage: Mock<(message: string) => void>;
-  let mockHandleSlashCommand: Mock<Parameters<typeof useAgentStream>[6]>;
+  let mockHandleSlashCommand: Mock<
+    Parameters<typeof useAgentStream>[2]['handleSlashCommand']
+  >;
   let mockScheduleToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[1]>;
   let mockCancelAllToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[3]>;
   let mockMarkToolsAsDisplayCleared: Mock<
@@ -94,7 +96,9 @@ describe('useAgentStream', () => {
   beforeEach(() => {
     vi.clearAllMocks(); // Clear mocks before each test
 
-    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]>(() => 0);
+    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]['addItem']>(
+      () => 0,
+    );
     // Define the mock for getAgentClient
 
     const contentGeneratorConfig = {
@@ -206,24 +210,32 @@ describe('useAgentStream', () => {
       processedQuery: processedQueryParts,
     });
 
+    const agentForHook1 = await createFakeAgentFromMockClient(
+      new MockedAgentClientClass(mockConfig),
+    );
     const { result } = renderHook(() =>
       useAgentStream(
-        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
-        [],
-        mockAddItem,
+        agentForHook1,
         createStreamRuntimeForTest(mockConfig),
-        mockLoadedSettings,
-        mockOnDebugMessage,
-        mockHandleSlashCommand,
-        false,
-        vi.fn(),
-        vi.fn(),
-        vi.fn(),
-        () => {},
-        vi.fn(),
-        vi.fn(),
-        80,
-        24,
+        {
+          history: [],
+          addItem: mockAddItem,
+          settings: mockLoadedSettings,
+          onDebugMessage: mockOnDebugMessage,
+          handleSlashCommand: mockHandleSlashCommand,
+          shellModeActive: false,
+          getPreferredEditor: vi.fn(),
+          onAuthError: vi.fn(),
+          performMemoryRefresh: vi.fn(),
+          onEditorClose: () => {},
+          onCancelSubmit: vi.fn(),
+          setShellInputFocused: vi.fn(),
+          terminalWidth: 80,
+          terminalHeight: 24,
+        },
+        undefined,
+        undefined,
+        undefined,
       ),
     );
 

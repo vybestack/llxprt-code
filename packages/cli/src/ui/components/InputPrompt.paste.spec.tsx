@@ -110,7 +110,16 @@ import { createMockCommandContext } from '../../__tests__/mockCommandContext.js'
 import type { Config } from '@vybestack/llxprt-code-core';
 import { assertDefined } from '../../__tests__/assertions.js';
 import { testRegex } from '../../__tests__/regex.js';
-import { pasteConfig } from './InputPrompt.paste.fixture.js';
+import { pasteConfig, pasteCompletion } from './InputPrompt.paste.fixture.js';
+
+function PasteInputPrompt(
+  props: Omit<
+    import('./inputPromptTypes.js').InputPromptProps,
+    'enableFuzzyFiltering' | 'generatePromptContent'
+  >,
+) {
+  return <InputPrompt {...pasteCompletion} {...props} />;
+}
 
 // Mock Config
 const mockConfig = pasteConfig as unknown as Config;
@@ -198,7 +207,7 @@ describe('InputPrompt paste functionality', () => {
 
     render(
       <AppDispatchProvider value={mockDispatch}>
-        <InputPrompt
+        <PasteInputPrompt
           buffer={mockBuffer}
           onSubmit={mockOnSubmit}
           userMessages={[]}
@@ -250,7 +259,7 @@ describe('InputPrompt paste functionality', () => {
 
     render(
       <AppDispatchProvider value={mockDispatch}>
-        <InputPrompt
+        <PasteInputPrompt
           buffer={mockBuffer}
           onSubmit={mockOnSubmit}
           userMessages={[]}
@@ -291,7 +300,7 @@ describe('InputPrompt paste functionality', () => {
 
     render(
       <AppDispatchProvider value={mockDispatch}>
-        <InputPrompt
+        <PasteInputPrompt
           buffer={mockBuffer}
           onSubmit={mockOnSubmit}
           userMessages={[]}
@@ -339,7 +348,7 @@ describe('InputPrompt paste functionality', () => {
 
     render(
       <AppDispatchProvider value={mockDispatch}>
-        <InputPrompt
+        <PasteInputPrompt
           buffer={mockBuffer}
           onSubmit={mockOnSubmit}
           userMessages={[]}
@@ -397,7 +406,7 @@ describe('InputPrompt paste functionality', () => {
 
     render(
       <AppDispatchProvider value={mockDispatch}>
-        <InputPrompt
+        <PasteInputPrompt
           buffer={mockBuffer}
           onSubmit={mockOnSubmit}
           userMessages={[]}
@@ -458,7 +467,7 @@ describe('InputPrompt paste functionality', () => {
 
     render(
       <AppDispatchProvider value={mockDispatch}>
-        <InputPrompt
+        <PasteInputPrompt
           buffer={mockBuffer}
           onSubmit={mockOnSubmit}
           onSteer={mockOnSteer}
@@ -512,7 +521,7 @@ describe('InputPrompt paste functionality', () => {
 
     render(
       <AppDispatchProvider value={mockDispatch}>
-        <InputPrompt
+        <PasteInputPrompt
           buffer={mockBuffer}
           onSubmit={mockOnSubmit}
           onSteer={mockOnSteer}
@@ -567,7 +576,7 @@ describe('InputPrompt paste functionality', () => {
 
     render(
       <AppDispatchProvider value={mockDispatch}>
-        <InputPrompt
+        <PasteInputPrompt
           buffer={mockBuffer}
           onSubmit={mockOnSubmit}
           onSteer={mockOnSteer}
@@ -623,7 +632,7 @@ describe('InputPrompt paste functionality', () => {
 
     render(
       <AppDispatchProvider value={mockDispatch}>
-        <InputPrompt
+        <PasteInputPrompt
           buffer={mockBuffer}
           onSubmit={mockOnSubmit}
           onSteer={mockOnSteer}
@@ -681,7 +690,7 @@ describe('InputPrompt paste functionality', () => {
 
     render(
       <AppDispatchProvider value={mockDispatch}>
-        <InputPrompt
+        <PasteInputPrompt
           buffer={mockBuffer}
           onSubmit={mockOnSubmit}
           onSteer={mockOnSteer}
@@ -759,7 +768,7 @@ describe('InputPrompt paste functionality', () => {
 
     render(
       <AppDispatchProvider value={mockDispatch}>
-        <InputPrompt
+        <PasteInputPrompt
           buffer={mockBuffer}
           onSubmit={mockOnSubmit}
           onSteer={mockOnSteer}
@@ -804,7 +813,7 @@ describe('InputPrompt paste functionality', () => {
 
     render(
       <AppDispatchProvider value={mockDispatch}>
-        <InputPrompt
+        <PasteInputPrompt
           buffer={mockBuffer}
           onSubmit={mockOnSubmit}
           onSteer={mockOnSteer}
@@ -863,7 +872,7 @@ describe('InputPrompt paste functionality', () => {
 
     render(
       <AppDispatchProvider value={mockDispatch}>
-        <InputPrompt
+        <PasteInputPrompt
           buffer={mockBuffer}
           onSubmit={mockOnSubmit}
           onSteer={mockOnSteer}

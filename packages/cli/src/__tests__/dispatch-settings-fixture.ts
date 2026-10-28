@@ -9,13 +9,13 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 const retainedDispatchRoots: Array<{
   config: Config;
-  runtimeSettings: { store: SettingsService; owner: SessionSettingsOwner };
+  runtimeSettings: SessionSettingsOwner;
 }> = [];
 afterEach(async () => {
   const retiring = retainedDispatchRoots.splice(0);
   await Promise.all(
     retiring.map(async ({ config, runtimeSettings }) => {
-      await runtimeSettings.owner.dispose();
+      await runtimeSettings.dispose();
       await config.dispose();
     }),
   );
@@ -40,7 +40,7 @@ export function createMinimalConfig(options: {
   const owner = new SessionSettingsOwner(store);
   owner.bindTelemetry(config);
   owner.writeUserParameter('session-recording-queue-max-bytes', 4096);
-  const runtimeSettings = { store, owner };
+  const runtimeSettings = owner;
   retainedDispatchRoots.push({ config, runtimeSettings });
   return { config, runtimeSettings };
 }

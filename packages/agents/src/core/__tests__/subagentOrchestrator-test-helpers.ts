@@ -1,4 +1,6 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -20,22 +22,26 @@ const fixturePaths = installTestWorkspacePaths({
  * max-lines disable is needed.
  */
 
-import { afterEach, vi } from 'bun:test';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { ToolRegistry, type ToolSelection } from '@vybestack/llxprt-code-tools';
-import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
+import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import {
+  SubagentTerminateMode,
+  type RunConfig,
+} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
 import {
   SettingsService,
   type Profile,
   type ProfileManager,
 } from '@vybestack/llxprt-code-settings';
-import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { SubagentOrchestrator } from '../subagentOrchestrator.js';
-import { type SubAgentScope as SubAgentScopeInstance } from '../subagent.js';
+import { ToolRegistry, type ToolSelection } from '@vybestack/llxprt-code-tools';
+import { afterEach, vi } from 'bun:test';
+import type { SubAgentScopeFactory } from '../subagent.js';
+import type { ChildAgentScope } from '../subagentOrchestrator.js';
 
 const foregroundConfigs: Config[] = [];
 afterEach(async () => {
@@ -58,23 +64,29 @@ export function makeForegroundConfig(
   return config;
 }
 
+export function fakeChildScope(
+  overrides: Partial<ChildAgentScope> = {},
+): ChildAgentScope {
+  return {
+    output: { terminate_reason: SubagentTerminateMode.GOAL, emitted_vars: {} },
+    runInteractive: async () => {},
+    runNonInteractive: async () => {},
+    cancel: () => {},
+    getAgentId: () => 'fake-agent',
+    dispose: async () => {},
+    ...overrides,
+  };
+}
+
 /**
  * Creates a stub scope factory and fake scope, returning both so callers can
  * inspect the `runConfig` (5th positional arg — index 4) passed to
  * `SubAgentScope.create`.
  */
 export function createScopeFactory() {
-  const fakeScope = {
-    runtimeContext: {
-      state: { runtimeId: 'runtime#1' },
-      history: { clear: vi.fn() },
-    },
-    getAgentId: () => 'agent-helper-123',
-  } as unknown as SubAgentScopeInstance;
+  const fakeScope = fakeChildScope({ getAgentId: () => 'agent-helper-123' });
 
-  const factory = vi.fn<typeof SubAgentScopeInstance.create>(
-    async () => fakeScope,
-  );
+  const factory = vi.fn<SubAgentScopeFactory>(async () => fakeScope);
   return { factory, fakeScope };
 }
 
@@ -117,7 +129,8 @@ export function createOrchestratorForTurns(options: {
 
   const foregroundConfig1 = options.foregroundConfig ?? makeForegroundConfig();
   const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
-  const orchestrator = new SubagentOrchestrator({
+  const orchestrator = createTestChildOrchestrator({
+    credentialAuthority: new CredentialAuthority(),
     workspaceTrust: foregroundSettings1.workspaceTrust,
     createChildSettings: () =>
       foregroundSettings1.settingsOwner.createChildStore(),
@@ -151,12 +164,7 @@ export function extractRunConfig(
     throw new Error(`Scope factory call ${callIndex} does not exist`);
   }
   const factoryCall = factory.mock.calls[callIndex];
-  if (factoryCall.length <= 4) {
-    throw new Error(
-      `Scope factory call ${callIndex} does not contain a runConfig argument`,
-    );
-  }
-  return factoryCall[4];
+  return factoryCall[0].run;
 }
 
 export function createRuntimeBundle(label = 'bundle') {
@@ -180,7 +188,7 @@ export function createRuntimeBundle(label = 'bundle') {
     provider: {},
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
     providerRuntime: {},
-  } as unknown as SubAgentScopeInstance['runtimeContext'];
+  } as unknown as AgentRuntimeContext;
 
   return {
     runtimeContext,
@@ -192,6 +200,8 @@ export function createRuntimeBundle(label = 'bundle') {
       getToolMetadata: () => undefined,
     },
     contentGenerator: {},
+    toolRegistry: fixtureToolSelection(),
+    settingsSnapshot: {},
   };
 }
 

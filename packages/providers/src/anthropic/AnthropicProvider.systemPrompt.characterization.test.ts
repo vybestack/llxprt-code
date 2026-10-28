@@ -104,7 +104,7 @@ function buildOptions(
     contents,
     settings: settingsService,
     runtime: setup.runtimeContext,
-    config: setup.runtimeContext.config!,
+    config: setup.config,
     ...overrides,
   });
   return systemInstruction !== undefined
@@ -120,7 +120,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
     vi.clearAllMocks();
     setup = setupAnthropicProvider();
     settingsService = setup.settingsService;
-    setup.runtimeContext.config.getEphemeralSettings = () => ({
+    setup.config.getEphemeralSettings = () => ({
       ...settingsService.getAllGlobalSettings(),
       ...settingsService.getProviderSettings('anthropic'),
     });

@@ -47,26 +47,17 @@ Core re-exports the `MCPServerConfig` type for source compatibility.
 
 ### Host services
 
-MCP exposes host registration only through
-`@vybestack/llxprt-code-mcp/host/hostServices.js`. It is not re-exported from
-the package root.
+MCP declares its `McpHostServices` contract in
+`@vybestack/llxprt-code-mcp/host/hostServices.js`. Composition supplies feedback,
+browser and authentication-factory capabilities to each MCP owner explicitly.
+There is no process-global host registration step.
 
-Each application composition root registers both required capabilities before
-starting asynchronous application work:
-
-```typescript
-registerMcpHostServices({
-  emitFeedback: (...args) => coreEvents.emitFeedback(...args),
-  openBrowser: openBrowserSecurely,
-});
-```
-
-The CLI, A2A server, and both public Agent API startup functions (`createAgent`
-and `fromConfig`) perform this registration. MCP's standalone defaults remain
-usable when no application host is present:
-feedback goes to the debug logger, and browser opening rejects so the existing
-manual OAuth URL flow can continue. The fallback rejection does not include the
-URL because OAuth query parameters can contain sensitive values.
+The CLI, A2A server and public Agent API construct their MCP owners with the host
+operations for that instance. MCP's standalone defaults remain usable when an
+owner has no host-supplied capability: feedback goes to the debug logger, and
+browser opening rejects so the manual OAuth URL flow can continue. The fallback
+rejection does not include the URL because OAuth query parameters can contain
+sensitive values.
 
 ### Event compatibility
 

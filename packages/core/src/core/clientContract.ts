@@ -1,3 +1,5 @@
+import type { RuntimeInvocationContext } from '../runtime/RuntimeInvocationContext.js';
+import type { SubscribeModelChanges } from '../utils/events.js';
 import type { ProviderRequestDiagnostics } from '../runtime/providerRequestDiagnostics.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
@@ -57,7 +59,6 @@ import type { StreamEvent } from './chatSessionTypes.js';
 import type { Config } from '../config/config.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { ContentGenerator } from './contentGenerator.js';
-import type { TaskToolRegistration } from '../config/toolRegistryFactory.js';
 import type { ModelOutput } from '../llm-types/modelEnvelope.js';
 import type { AgentMessageInput } from '../llm-types/agentMessageInput.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
@@ -81,6 +82,9 @@ export type AgentRequestInput = AgentMessageInput;
  * accepts AgentRequestInput (neutral AgentMessageInput).
  */
 export interface AgentClientMessageParams {
+  readonly modelParameters?: AdmittedModelParameters;
+  readonly invocation?: RuntimeInvocationContext;
+  readonly historyPrefix?: readonly IContent[];
   readonly hookOwner?: HookExecutionOwner;
   message: AgentRequestInput;
   config?: AgentClientGenerateConfig;
@@ -120,6 +124,13 @@ export interface AgentHistoryAdmission {
 }
 
 export interface AgentChatContract {
+  appendGeneration(
+    input: readonly IContent[],
+    response: ModelOutput,
+    model: string,
+    signal: AbortSignal,
+    historyOrigin?: object,
+  ): Promise<void>;
   takeHistoryAdmissions(): readonly AgentHistoryAdmission[];
   sendMessage(
     params: AgentClientMessageParams,
@@ -158,17 +169,18 @@ export interface AgentChatContract {
  * Structural contract for the agent client.
  * Core-owned; the concrete AgentClient class implements this.
  */
-export interface AgentClientContract {
+export interface AgentClientContract<TLifecycle = never> {
+  bindModelNotifications(subscribe: SubscribeModelChanges): void;
   readonly tools: ToolSelection;
   bindToolSelection(selection: ToolSelection): void;
   assertConfig(config: Config): void;
   assertProviderManager(manager: RuntimeProviderManager): void;
   bindProviderInvocation(prepare: PrepareProviderInvocation): void;
-  bindIdeContext?(
+  bindIdeContext(
     read: () => IdeContext | undefined,
     enabled: () => boolean,
   ): void;
-  bindWorkspaceDefinitions?(
+  bindWorkspaceDefinitions(
     profiles: Pick<ProfileDefinitionReads, 'loadProfile'>,
     subagents: Pick<SubagentDefinitionReads, 'listSubagents'>,
   ): void;
@@ -180,18 +192,18 @@ export interface AgentClientContract {
     read: () => ReadonlySettingsSnapshot,
     readGovernance: () => ToolGovernance,
   ): void;
-  bindProviderFiles?(
-    lifecycle: object,
+  bindProviderFiles(
+    lifecycle: TLifecycle,
     composeRetryOperations: (provider: string) => ProviderRetryOperations,
   ): void;
-  bindTokenization?(
+  bindTokenization(
     getTokenizer: RuntimeTokenizerFactory['getTokenizer'],
     promptEstimator: Pick<
       RuntimeTokenizerFactory,
       'estimatePrompt' | 'claimsModel' | 'getEstimatorFamily'
     >,
   ): void;
-  bindProviderSelection?(
+  bindProviderSelection(
     selection: AgentRuntimeProviderAdapter,
     manager: RuntimeProviderManager,
   ): void;
@@ -247,7 +259,7 @@ export interface AgentClientContract {
     abortSignal: AbortSignal,
     model: string,
   ): Promise<ModelOutput>;
-  generateEmbedding(texts: string[]): Promise<number[][]>;
+  generateEmbedding(texts: string[], signal?: AbortSignal): Promise<number[][]>;
   sendMessageStream(
     initialRequest: AgentRequestInput,
     signal: AbortSignal,
@@ -275,13 +287,3 @@ export type AgentClientFactory = (
   workspacePaths?: WorkspacePathOperations,
   instructions?: InstructionReadOperations,
 ) => AgentClientContract;
-
-/**
- * Aggregation of the agent-runtime factory primitives the composition
- * root wires into Config. Single source of truth — both agents and providers
- * import this from core (no duplicated structural re-declaration).
- */
-export interface AgentRuntimeFactoryBindings {
-  agentClientFactory: AgentClientFactory;
-  taskToolRegistration: () => TaskToolRegistration;
-}

@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { join } from 'node:path';
 import { isDevelopment } from '../utils/installationInfo.js';
 import type {
   SlashCommand,
@@ -12,87 +11,87 @@ import type {
   MessageActionReturn,
 } from '../ui/commands/types.js';
 import { CommandKind } from '../ui/commands/types.js';
-import type {
-  CliUiRuntime,
-  ExtensionEnablementSource,
-} from '../ui/cliUiRuntime.js';
 import type { ICommandLoader } from './types.js';
-import { aboutCommand } from '../ui/commands/aboutCommand.js';
-import { authCommand } from '../ui/commands/authCommand.js';
-import { bugCommand } from '../ui/commands/bugCommand.js';
-import { chatCommand } from '../ui/commands/chatCommand.js';
-import { chatOwnerCommand } from '../ui/commands/chatOwnerCommand.js';
-import { clearCommand } from '../ui/commands/clearCommand.js';
-import { compressCommand } from '../ui/commands/compressCommand.js';
-import { copyCommand } from '../ui/commands/copyCommand.js';
-import { docsCommand } from '../ui/commands/docsCommand.js';
-import { directoryCommand } from '../ui/commands/directoryCommand.js';
+
 import { editorCommand } from '../ui/commands/editorCommand.js';
-import { extensionsCommand } from '../ui/commands/extensionsCommand.js';
-import { helpCommand } from '../ui/commands/helpCommand.js';
-import { ideCommand } from '../ui/commands/ideCommand.js';
-import { imageCommand } from '../ui/commands/imageCommand.js';
-import { initCommand } from '../ui/commands/initCommand.js';
-import { mcpCommand } from '../ui/commands/mcpCommand.js';
-import { memoryCommand } from '../ui/commands/memoryCommand.js';
+
 import { privacyCommand } from '../ui/commands/privacyCommand.js';
-import { loggingCommand } from '../ui/commands/loggingCommand.js';
-import { uiprofileCommand } from '../ui/commands/uiprofileCommand.js';
 import { mouseCommand } from '../ui/commands/mouseCommand.js';
-import { quitCommand } from '../ui/commands/quitCommand.js';
-import { quotaCommand } from '../ui/commands/quotaCommand.js';
-import { restoreCommand } from '../ui/commands/restoreCommand.js';
-import { statsCommand } from '../ui/commands/statsCommand.js';
 import { themeCommand } from '../ui/commands/themeCommand.js';
-import { toolsCommand } from '../ui/commands/toolsCommand.js';
-import { skillsCommand } from '../ui/commands/skillsCommand.js';
+
 import { settingsCommand } from '../ui/commands/settingsCommand.js';
-import { vimCommand } from '../ui/commands/vimCommand.js';
-import { providerCommand } from '../ui/commands/providerCommand.js';
-import { modelCommand } from '../ui/commands/modelCommand.js';
-import { keyCommand } from '../ui/commands/keyCommand.js';
-import { keyfileCommand } from '../ui/commands/keyfileCommand.js';
-import { toolkeyCommand } from '../ui/commands/toolkeyCommand.js';
-import { toolkeyfileCommand } from '../ui/commands/toolkeyfileCommand.js';
-import { baseurlCommand } from '../ui/commands/baseurlCommand.js';
-import { toolformatCommand } from '../ui/commands/toolformatCommand.js';
-import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
-import { setCommand } from '../ui/commands/setCommand.js';
-import { profileCommand } from '../ui/commands/profileCommand.js';
-import { diagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
 import { terminalSetupCommand } from '../ui/commands/terminalSetupCommand.js';
-import { debugCommand } from '../ui/commands/debugCommands.js';
-import { logoutCommand } from '../ui/commands/logoutCommand.js';
-import { subagentCommand } from '../ui/commands/subagentCommand.js';
-import { permissionsCommand } from '../ui/commands/permissionsCommand.js';
-import { policiesCommand } from '../ui/commands/policiesCommand.js';
-import { dumpcontextCommand } from '../ui/commands/dumpcontextCommand.js';
-import { todoCommand } from '../ui/commands/todoCommand.js';
+
 import { setupCommand } from '../ui/commands/setupCommand.js';
-import { tasksCommands } from '../ui/commands/tasksCommand.js';
-import { hooksCommand } from '../ui/commands/hooksCommand.js';
-import { createPerfCommand } from '../ui/commands/perfCommand.js';
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P21
  */
-import { continueCommand } from '../ui/commands/continueCommand.js';
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
  * of the LLxprt Code application.
  */
-export class BuiltinCommandLoader implements ICommandLoader {
-  private extensionEnablementManager?: ExtensionEnablementSource;
+export interface BuiltinCommandOwners {
+  readonly quitCommand: SlashCommand;
+  readonly helpCommand: SlashCommand;
+  readonly docsCommand: SlashCommand;
+  readonly debugCommand: SlashCommand;
+  readonly setupGithubCommand: SlashCommand;
+  readonly diagnosticsCommand: SlashCommand;
+  readonly ideCommand: SlashCommand | null;
+  readonly permissionsCommand: SlashCommand;
+  readonly skillsCommand: SlashCommand;
+  readonly perfCommand: SlashCommand;
+  readonly statsCommand: SlashCommand;
+  readonly loggingCommand: SlashCommand;
+  readonly aboutCommand: SlashCommand;
+  readonly clearCommand: SlashCommand;
+  readonly initCommand: SlashCommand;
+  readonly vimCommand: SlashCommand;
+  readonly uiProfileCommand: SlashCommand | null;
+  readonly extensionsCommand: SlashCommand;
+  readonly subagentCommand: SlashCommand;
+  readonly hooksCommand: SlashCommand;
+  readonly taskCommand: SlashCommand;
+  readonly todoCommand: SlashCommand;
+  readonly modelCommand: SlashCommand;
+  readonly toolFormatCommand: SlashCommand;
+  readonly setCommand: SlashCommand;
+  readonly providerCommand: SlashCommand;
+  readonly toolsCommand: SlashCommand;
+  readonly directoryCommand: SlashCommand;
+  readonly memoryCommand: SlashCommand;
+  readonly imageCommand: SlashCommand;
+  readonly bugCommand: SlashCommand;
+  readonly policiesCommand: SlashCommand;
+  readonly keyCommand: SlashCommand;
+  readonly keyfileCommand: SlashCommand;
+  readonly baseurlCommand: SlashCommand;
+  readonly logoutCommand: SlashCommand;
+  readonly authCommand: SlashCommand;
+  readonly quotaCommand: SlashCommand;
+  readonly mcpCommand: SlashCommand;
+  readonly profileCommand: SlashCommand;
+  readonly chatCommand: SlashCommand;
+  readonly continueCommand: SlashCommand;
+  readonly copyCommand: SlashCommand;
+  readonly compressCommand: SlashCommand;
+  readonly dumpcontextCommand: SlashCommand;
+  readonly restoreCommand: SlashCommand | null;
+  readonly toolkeyCommand: SlashCommand;
+  readonly toolkeyfileCommand: SlashCommand;
+}
 
+export class BuiltinCommandLoader implements ICommandLoader {
   constructor(
-    private config: CliUiRuntime | null,
-    private recordingOwner: 'agent' | 'raw' = 'raw',
-  ) {
-    // Access extensionEnablementManager if available on config
-    if (config && 'extensionEnablementManager' in config) {
-      this.extensionEnablementManager = config.extensionEnablementManager;
-    }
-  }
+    private readonly owners: BuiltinCommandOwners,
+    private readonly readHooksEnabled: () => boolean,
+    private readonly readSkillsEnabled: () => boolean,
+    private readonly readAdminSkillsEnabled: () => boolean,
+    private readonly isExtensionEnabled:
+      | ((name: string, path: string) => boolean)
+      | null,
+  ) {}
 
   /**
    * Discovers and returns all built-in slash commands.
@@ -111,7 +110,8 @@ export class BuiltinCommandLoader implements ICommandLoader {
     const allCommands = this.registerBuiltinCommands();
 
     // Filter out commands from disabled extensions
-    if (this.extensionEnablementManager) {
+    const isExtensionEnabled = this.isExtensionEnabled;
+    if (isExtensionEnabled !== null) {
       return allCommands.filter((cmd) => {
         // Built-in commands (no extensionName) are always included
         if (!cmd.extensionName) {
@@ -121,10 +121,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
         // Extension commands are filtered by enabled state
         // Note: isEnabled requires a path, but for session-based enablement
         // we use an empty string as the path since session state doesn't depend on path
-        return this.extensionEnablementManager!.isEnabled(
-          cmd.extensionName,
-          '',
-        );
+        return isExtensionEnabled(cmd.extensionName, '');
       });
     }
 
@@ -140,69 +137,64 @@ export class BuiltinCommandLoader implements ICommandLoader {
    */
   private registerBuiltinCommands(): SlashCommand[] {
     const allDefinitions: Array<SlashCommand | null> = [
-      aboutCommand,
-      authCommand,
-      bugCommand,
-      this.recordingOwner === 'agent' ? chatOwnerCommand : chatCommand,
-      clearCommand,
-      compressCommand,
-      copyCommand,
-      docsCommand,
-      directoryCommand,
+      this.owners.aboutCommand,
+      this.owners.authCommand,
+      this.owners.bugCommand,
+      this.owners.chatCommand,
+      this.owners.clearCommand,
+      this.owners.compressCommand,
+      this.owners.copyCommand,
+      this.owners.docsCommand,
+      this.owners.directoryCommand,
       editorCommand,
-      extensionsCommand,
-      helpCommand,
-      ideCommand(this.config),
-      imageCommand,
-      initCommand,
-      mcpCommand,
-      memoryCommand,
+      this.owners.extensionsCommand,
+      this.owners.helpCommand,
+      this.owners.ideCommand,
+      this.owners.imageCommand,
+      this.owners.initCommand,
+      this.owners.mcpCommand,
+      this.owners.memoryCommand,
       privacyCommand,
-      loggingCommand,
+      this.owners.loggingCommand,
       mouseCommand,
-      ...(isDevelopment ? [uiprofileCommand] : []),
-      quitCommand,
-      restoreCommand(this.config),
-      quotaCommand,
-      statsCommand,
+      ...(isDevelopment ? [this.owners.uiProfileCommand] : []),
+      this.owners.quitCommand,
+      this.owners.restoreCommand,
+      this.owners.quotaCommand,
+      this.owners.statsCommand,
       themeCommand,
-      toolsCommand,
+      this.owners.toolsCommand,
       ...this.resolveSkillsCommand(),
       settingsCommand,
-      vimCommand,
-      providerCommand,
-      modelCommand,
-      keyCommand,
-      keyfileCommand,
-      toolkeyCommand, // @plan PLAN-20260206-TOOLKEY.P09 @requirement REQ-002
-      toolkeyfileCommand, // @plan PLAN-20260206-TOOLKEY.P09 @requirement REQ-003
-      baseurlCommand,
-      toolformatCommand,
-      setupGithubCommand,
-      setCommand,
-      profileCommand,
-      diagnosticsCommand,
+      this.owners.vimCommand,
+      this.owners.providerCommand,
+      this.owners.modelCommand,
+      this.owners.keyCommand,
+      this.owners.keyfileCommand,
+      this.owners.toolkeyCommand, // @plan PLAN-20260206-TOOLKEY.P09 @requirement REQ-002
+      this.owners.toolkeyfileCommand, // @plan PLAN-20260206-TOOLKEY.P09 @requirement REQ-003
+      this.owners.baseurlCommand,
+      this.owners.toolFormatCommand,
+      this.owners.setupGithubCommand,
+      this.owners.setCommand,
+      this.owners.profileCommand,
+      this.owners.diagnosticsCommand,
       terminalSetupCommand,
-      debugCommand,
-      logoutCommand,
-      subagentCommand,
-      permissionsCommand,
-      policiesCommand,
-      dumpcontextCommand,
-      todoCommand,
+      this.owners.debugCommand,
+      this.owners.logoutCommand,
+      this.owners.subagentCommand,
+      this.owners.permissionsCommand,
+      this.owners.policiesCommand,
+      this.owners.dumpcontextCommand,
+      this.owners.todoCommand,
       setupCommand,
-      ...tasksCommands,
-      ...(this.config?.getEnableHooksUI() === true ? [hooksCommand] : []),
+      this.owners.taskCommand,
+      ...(this.readHooksEnabled() ? [this.owners.hooksCommand] : []),
       /**
        * @plan PLAN-20260214-SESSIONBROWSER.P21
        */
-      continueCommand,
-      createPerfCommand({
-        snapshotCapability: this.config?.getPerfSnapshotCapability?.() ?? null,
-        tokenUsageDir: this.config
-          ? join(this.config.getProjectTempDir(), 'token-usage')
-          : undefined,
-      }),
+      this.owners.continueCommand,
+      this.owners.perfCommand,
     ];
 
     return allDefinitions.filter((cmd): cmd is SlashCommand => cmd !== null);
@@ -214,10 +206,10 @@ export class BuiltinCommandLoader implements ICommandLoader {
    * disabled by admin, or [skillsCommand] when enabled.
    */
   private resolveSkillsCommand(): SlashCommand[] {
-    if (this.config?.isSkillsSupportEnabled() !== true) {
+    if (!this.readSkillsEnabled()) {
       return [];
     }
-    if (this.config.isAdminSkillsEnabled() === false) {
+    if (!this.readAdminSkillsEnabled()) {
       return [
         {
           name: 'skills',
@@ -235,6 +227,6 @@ export class BuiltinCommandLoader implements ICommandLoader {
         },
       ];
     }
-    return [skillsCommand];
+    return [this.owners.skillsCommand];
   }
 }

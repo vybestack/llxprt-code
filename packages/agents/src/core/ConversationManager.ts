@@ -13,7 +13,7 @@
  */
 
 import { isDeepStrictEqual } from 'node:util';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
   IContent,
@@ -100,23 +100,38 @@ function mergeTurnMetadata(
 }
 
 /**
+ * What ConversationManager reads from the agent runtime: the isolated history
+ * it manages, the runtime-state model it stamps onto entries, the active
+ * provider for generating-model attribution, and the reasoning setting that
+ * decides whether thinking blocks stay in history.
+ */
+export interface ConversationRuntime {
+  readonly history: HistoryService;
+  readonly state: { readonly model: string };
+  readonly provider: { getActiveProvider(): RuntimeProvider };
+  readonly ephemerals: {
+    readonly reasoning: { includeInContext(): boolean };
+  };
+}
+
+/**
  * ConversationManager handles conversation history management for ChatSession.
  * It provides methods for recording turns, converting Content to IContent,
  * and managing conversation state.
  */
 export class ConversationManager {
   private historyService: HistoryService;
-  private runtimeContext: AgentRuntimeContext;
+  private runtimeContext: ConversationRuntime;
   private readonly baseURL: string | undefined;
 
-  rebindHistory(runtimeContext: AgentRuntimeContext): void {
+  rebindHistory(runtimeContext: ConversationRuntime): void {
     this.runtimeContext = runtimeContext;
     this.historyService = runtimeContext.history;
   }
 
   constructor(
     historyService: HistoryService,
-    runtimeContext: AgentRuntimeContext,
+    runtimeContext: ConversationRuntime,
     baseURL?: string,
   ) {
     this.historyService = historyService;
@@ -598,13 +613,14 @@ export class ConversationManager {
     // before any provider is active, so read the runtime-state model directly
     // rather than resolving the active provider (issue #2511).
     const generatingModel = this.runtimeContext.state.model;
-    const restored = history.map((content) => {
-      const turnKey = this.historyService.generateTurnKey();
-      return {
-        ...content,
-        metadata: { ...content.metadata, turnId: turnKey },
-      };
-    });
+    const restored = history.map((content) => ({
+      ...content,
+      metadata: {
+        ...content.metadata,
+        turnId:
+          content.metadata?.turnId ?? this.historyService.generateTurnKey(),
+      },
+    }));
     await this.historyService.replaceBatch(restored, generatingModel, {
       origin: historyOrigin,
     });

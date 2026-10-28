@@ -13,6 +13,10 @@ import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 void vi.mock('openai', () => ({
   default: class FakeOpenAI {
@@ -129,13 +133,9 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     const configB = createRuntimeConfigStub(settingsB);
     const runtimeA = createProviderRuntimeContext({
       runtimeId: 'runtime-A',
-      settingsService: settingsA,
-      config: configA,
     });
     const runtimeB = createProviderRuntimeContext({
       runtimeId: 'runtime-B',
-      settingsService: settingsB,
-      config: configB,
     });
 
     await provider
@@ -173,8 +173,6 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     });
     const runtimeA = createProviderRuntimeContext({
       runtimeId: 'runtime-A',
-      settingsService: settingsA,
-      config: configA,
     });
 
     await provider
@@ -200,8 +198,6 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     });
     const runtimeB = createProviderRuntimeContext({
       runtimeId: 'runtime-B',
-      settingsService: settingsB,
-      config: configB,
     });
 
     await provider
@@ -236,8 +232,6 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     });
     const runtimeA = createProviderRuntimeContext({
       runtimeId: 'runtime-config',
-      settingsService: settingsA,
-      config: configA,
     });
 
     await provider
@@ -268,8 +262,6 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     });
     const runtimeB = createProviderRuntimeContext({
       runtimeId: 'runtime-config',
-      settingsService: settingsB,
-      config: configB,
     });
 
     await provider
@@ -302,10 +294,9 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     });
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-invocation',
-      settingsService: settings,
-      config,
     });
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 

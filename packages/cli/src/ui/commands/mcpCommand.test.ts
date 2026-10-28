@@ -6,8 +6,8 @@
 import { unsupportedApprovalPolicy } from '../../../../mcp/src/client/test-support/approval-policy.js';
 
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
-import { mcpCommand } from './mcpCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { registerMcpCommand } from '../../__tests__/credential-command-test-owner.js';
 import { MCPServerStatus, DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import type { MessageActionReturn } from './types.js';
 import type {
@@ -215,7 +215,10 @@ describe('mcpCommand', () => {
         },
         ui: { reloadCommands: vi.fn() },
       });
-      const result = await mcpCommand.action!(contextWithoutConfig, '');
+      const result = await registerMcpCommand(contextWithoutConfig).action!(
+        contextWithoutConfig,
+        '',
+      );
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
@@ -231,7 +234,10 @@ describe('mcpCommand', () => {
         },
         ui: { reloadCommands: vi.fn() },
       });
-      const result = await mcpCommand.action!(contextWithNoAgent, '');
+      const result = await registerMcpCommand(contextWithNoAgent).action!(
+        contextWithNoAgent,
+        '',
+      );
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
@@ -246,7 +252,10 @@ describe('mcpCommand', () => {
     });
 
     it('should display a message with a URL when no MCP servers are configured', async () => {
-      const result = await mcpCommand.action!(mockContext, '');
+      const result = await registerMcpCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
@@ -288,7 +297,10 @@ describe('mcpCommand', () => {
         ui: { reloadCommands: vi.fn() },
       });
 
-      const result = await mcpCommand.action!(testContext, '');
+      const result = await registerMcpCommand(testContext).action!(
+        testContext,
+        '',
+      );
       assertMessageAction(result);
       const message = result.content;
 
@@ -343,7 +355,10 @@ describe('mcpCommand', () => {
         ui: { reloadCommands: vi.fn() },
       });
 
-      const result = await mcpCommand.action!(testContext, '');
+      const result = await registerMcpCommand(testContext).action!(
+        testContext,
+        '',
+      );
       assertMessageAction(result);
       const message = result.content;
 
@@ -374,7 +389,10 @@ describe('mcpCommand', () => {
         ui: { reloadCommands: vi.fn() },
       });
 
-      const result = await mcpCommand.action!(testContext, 'desc');
+      const result = await registerMcpCommand(testContext).action!(
+        testContext,
+        'desc',
+      );
       assertMessageAction(result);
       const message = result.content;
 
@@ -410,7 +428,10 @@ describe('mcpCommand', () => {
         ui: { reloadCommands: vi.fn() },
       });
 
-      const result = await mcpCommand.action!(testContext, 'nodesc');
+      const result = await registerMcpCommand(testContext).action!(
+        testContext,
+        'nodesc',
+      );
       assertMessageAction(result);
       const message = result.content;
 
@@ -437,7 +458,10 @@ describe('mcpCommand', () => {
         ui: { reloadCommands: vi.fn() },
       });
 
-      const result = await mcpCommand.action!(testContext, '');
+      const result = await registerMcpCommand(testContext).action!(
+        testContext,
+        '',
+      );
       assertMessageAction(result);
       const message = result.content;
 
@@ -477,7 +501,10 @@ describe('mcpCommand', () => {
         ui: { reloadCommands: vi.fn() },
       });
 
-      const result = await mcpCommand.action!(testContext, '');
+      const result = await registerMcpCommand(testContext).action!(
+        testContext,
+        '',
+      );
       assertMessageAction(result);
       const message = result.content;
 
@@ -505,7 +532,10 @@ describe('mcpCommand', () => {
         ui: { reloadCommands: vi.fn() },
       });
 
-      const result = await mcpCommand.action!(testContext, '');
+      const result = await registerMcpCommand(testContext).action!(
+        testContext,
+        '',
+      );
       assertMessageAction(result);
       expect(result.content).toContain('server1 (from my-extension)');
     });
@@ -525,7 +555,10 @@ describe('mcpCommand', () => {
         ui: { reloadCommands: vi.fn() },
       });
 
-      const result = await mcpCommand.action!(testContext, '');
+      const result = await registerMcpCommand(testContext).action!(
+        testContext,
+        '',
+      );
       assertMessageAction(result);
       expect(result.content).toContain(
         '[BLOCKED] \u001b[1mblocked-server (from my-extension)\u001b[0m - Blocked',
@@ -549,7 +582,10 @@ describe('mcpCommand', () => {
         ui: { reloadCommands: vi.fn() },
       });
 
-      const result = await mcpCommand.action!(testContext, '');
+      const result = await registerMcpCommand(testContext).action!(
+        testContext,
+        '',
+      );
       assertMessageAction(result);
       expect(result.content).toContain('server1 (from my-extension)');
       expect(result.content).toContain(
@@ -576,7 +612,10 @@ describe('mcpCommand', () => {
       });
 
       // Must NOT throw — it should degrade and return a message.
-      const result = await mcpCommand.action!(testContext, '');
+      const result = await registerMcpCommand(testContext).action!(
+        testContext,
+        '',
+      );
       assertMessageAction(result);
       const message = result.content;
 
@@ -613,7 +652,10 @@ describe('mcpCommand', () => {
         ui: { reloadCommands: vi.fn() },
       });
 
-      const result = await mcpCommand.action!(testContext, '');
+      const result = await registerMcpCommand(testContext).action!(
+        testContext,
+        '',
+      );
       assertMessageAction(result);
 
       // The banner appears because the manager-instance discoveryState is
@@ -638,7 +680,10 @@ describe('mcpCommand', () => {
         ui: { reloadCommands: vi.fn() },
       });
 
-      const result = await mcpCommand.action!(testContext, '');
+      const result = await registerMcpCommand(testContext).action!(
+        testContext,
+        '',
+      );
       assertMessageAction(result);
 
       // No startup banner — discovery is ready.

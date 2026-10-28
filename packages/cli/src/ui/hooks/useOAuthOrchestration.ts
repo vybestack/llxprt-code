@@ -17,26 +17,34 @@
  */
 
 import { useEffect } from 'react';
-import { oauthUIBridge } from '@vybestack/llxprt-code-auth';
+import type { OAuthUIBridge } from '@vybestack/llxprt-code-auth';
 import type { AppAction } from '../reducers/appReducer.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
-import {
-  getOAuthGlobalState,
-  getPendingOAuthProvider,
-} from '../oauthGlobalState.js';
+
+/** The slice of the root's OAuth control this hook reads and acknowledges. */
+export type OAuthOrchestrationControl = Pick<
+  OAuthUIBridge,
+  | 'takeAuthOutcome'
+  | 'getCodeRequest'
+  | 'clearCodeRequest'
+  | 'getDialog'
+  | 'dismissDialog'
+>;
 
 interface UseOAuthOrchestrationOptions {
   appDispatch: React.Dispatch<AppAction>;
   dialogs: DialogOpeners;
   isOAuthCodeDialogOpen: boolean;
   getActiveProviderName?: () => string;
+  /** Undefined only when the root has no OAuth manager, so nothing to poll. */
+  oauth: OAuthOrchestrationControl | undefined;
   setAuthError: (error: string | null) => void;
 }
 
 function oauthProviderMatchesActive(
+  pendingProvider: string | undefined,
   getActiveProviderName: (() => string) | undefined,
 ): boolean {
-  const pendingProvider = getPendingOAuthProvider();
   if (pendingProvider === undefined) {
     return true;
   }
@@ -52,11 +60,11 @@ function oauthProviderMatchesActive(
   return pendingProvider === activeProviderName;
 }
 
-function hasMatchingDialogAttempt(): boolean {
-  const attempt = oauthUIBridge.getDialog();
+function hasMatchingDialogAttempt(oauth: OAuthOrchestrationControl): boolean {
+  const attempt = oauth.getDialog();
   return (
     attempt !== undefined &&
-    (getPendingOAuthProvider() ?? attempt.provider) === attempt.provider
+    (oauth.getCodeRequest().provider ?? attempt.provider) === attempt.provider
   );
 }
 
@@ -65,56 +73,58 @@ export function useOAuthOrchestration({
   dialogs,
   isOAuthCodeDialogOpen,
   getActiveProviderName,
+  oauth,
   setAuthError,
 }: UseOAuthOrchestrationOptions): void {
   useEffect(() => {
+    if (oauth === undefined) return undefined;
     const checkOAuthFlag = setInterval(() => {
-      const oauthState = getOAuthGlobalState();
-      if (oauthState.__oauth_needs_code === true) {
-        if (!oauthProviderMatchesActive(getActiveProviderName)) {
+      const request = oauth.getCodeRequest();
+      if (request.needsCode) {
+        if (
+          !oauthProviderMatchesActive(request.provider, getActiveProviderName)
+        ) {
           return;
         }
-        oauthState.__oauth_needs_code = false;
+        oauth.clearCodeRequest();
         dialogs.oauthCode.open({});
       }
     }, 100);
 
     return () => clearInterval(checkOAuthFlag);
-  }, [dialogs, getActiveProviderName]);
+  }, [dialogs, getActiveProviderName, oauth]);
 
   useEffect(() => {
+    if (oauth === undefined) return undefined;
     const interval = setInterval(() => {
-      const attempt = oauthUIBridge.getDialog();
+      const attempt = oauth.getDialog();
       if (
         isOAuthCodeDialogOpen &&
         attempt?.status === 'succeeded' &&
-        hasMatchingDialogAttempt()
+        hasMatchingDialogAttempt(oauth)
       ) {
         dialogs.oauthCode.close();
-        oauthUIBridge.dismissDialog(attempt.id);
+        oauth.dismissDialog(attempt.id);
       }
     }, 100);
     return () => clearInterval(interval);
-  }, [dialogs, isOAuthCodeDialogOpen]);
+  }, [dialogs, isOAuthCodeDialogOpen, oauth]);
 
   useEffect(() => {
+    if (oauth === undefined) return undefined;
     const interval = setInterval(() => {
-      const oauthState = getOAuthGlobalState();
-      if (oauthState.__oauth_auth_error !== undefined) {
-        if (!hasMatchingDialogAttempt()) {
-          setAuthError(oauthState.__oauth_auth_error);
-          dialogs.oauthCode.close();
-        }
-        oauthState.__oauth_auth_error = undefined;
+      const outcome = oauth.takeAuthOutcome();
+      if (outcome.error !== undefined && !hasMatchingDialogAttempt(oauth)) {
+        setAuthError(outcome.error);
+        dialogs.oauthCode.close();
       }
-      if (oauthState.__oauth_auth_complete === true) {
-        oauthState.__oauth_auth_complete = false;
+      if (outcome.complete) {
         setAuthError(null);
         appDispatch({ type: 'SET_NEEDS_RELOGIN', payload: false });
         dialogs.auth.close();
-        if (!hasMatchingDialogAttempt()) dialogs.oauthCode.close();
+        if (!hasMatchingDialogAttempt(oauth)) dialogs.oauthCode.close();
       }
     }, 100);
     return () => clearInterval(interval);
-  }, [appDispatch, dialogs, setAuthError]);
+  }, [appDispatch, dialogs, oauth, setAuthError]);
 }

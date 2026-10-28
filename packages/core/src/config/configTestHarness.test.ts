@@ -19,7 +19,6 @@ function createHoistedMocks(): HoistedConfigMocks {
       emitModelChanged: vi.fn(),
       emitConsoleLog: vi.fn(),
     },
-    setGlobalProxy: vi.fn(),
   };
 }
 

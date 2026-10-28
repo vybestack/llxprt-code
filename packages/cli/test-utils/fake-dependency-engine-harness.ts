@@ -33,11 +33,8 @@ import {
   decodeFakeEngineState,
   type FakeEngineState,
 } from './fake-dependency-engine.js';
-import { psExecutableSource } from './ps-executable-fixture.js';
-import {
-  removeFixtureDirectory,
-  writePortableExecutable,
-} from './sandbox-fixture-compiler.js';
+import { FAKE_ENGINE_BIN_ENV } from './fake-engine-executables.js';
+import { removeFixtureDirectory } from './sandbox-fixture-compiler.js';
 
 export const FAKE_ENGINE_IMAGE = 'issue3450-fake-image';
 /** Env key the fake `ps` reads (`pid\tstartTimeMs` rows). */
@@ -72,28 +69,32 @@ export function useFakeEngine(
   command: 'docker' | 'podman' = 'docker',
 ): FakeEngineHarness {
   const suiteRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-engine-3450-'));
-  const binDir = path.join(suiteRoot, 'bin');
+  const preparedBinDir = process.env[FAKE_ENGINE_BIN_ENV];
+  const binDir = preparedBinDir ?? path.join(suiteRoot, 'bin');
   const stateRoot = path.join(suiteRoot, 'state');
   const psStarts = path.join(suiteRoot, 'process-starts.tsv');
   let environmentSnapshot: NodeJS.ProcessEnv = {};
 
   beforeAll(() => {
-    fs.mkdirSync(binDir, { recursive: true });
-    if (process.platform === 'win32') {
-      // Windows CreateProcess cannot exec an extensionless symlink, so
-      // engine resolution would fall through to the real docker.exe or a
-      // missing podman. Install real compiled executables from this
-      // module's own source. Both engine names must resolve on PATH, but the
-      // fake engine never reads argv[0], so podman is an identical copy of
-      // the docker executable — that halves the number of `bun build --compile`
-      // runs per suite on the Windows shard (11 suites).
-      const engineSource = fs.readFileSync(FAKE_ENGINE_SCRIPT_PATH, 'utf8');
-      writePortableExecutable('docker', engineSource, binDir);
-      fs.copyFileSync(
-        path.join(binDir, 'docker.exe'),
-        path.join(binDir, 'podman.exe'),
+    if (process.platform === 'win32' && preparedBinDir === undefined) {
+      throw new Error(
+        'Windows sandbox tests require prepared fixtures. Run npm test, or run bun test-utils/fake-engine-executables.ts and set LLXPRT_TEST_ENGINE_BIN to its output directory.',
       );
-      writePortableExecutable('ps', psExecutableSource(), binDir);
+    }
+    if (preparedBinDir !== undefined) {
+      // Executables are runner build artifacts, not disposable suite state.
+      // Windows may still hold an image mapping after the child exits.
+      for (const name of ['docker', 'podman', 'ps']) {
+        fs.accessSync(
+          path.join(
+            binDir,
+            process.platform === 'win32' ? `${name}.exe` : name,
+          ),
+          fs.constants.X_OK,
+        );
+      }
+    }
+    if (process.platform === 'win32') {
       // The fake `ps` is only for Windows (MSYS ps has no -o). Seed the
       // process-start row for the test runner pid so the owner probe from the
       // dependency init/volume code resolves to `observed`. Child pids (e.g. the
@@ -105,9 +106,12 @@ export function useFakeEngine(
       process.env[PS_STARTS_ENV] = psStarts;
       return;
     }
-    fs.chmodSync(FAKE_ENGINE_SCRIPT_PATH, 0o755);
-    for (const name of ['docker', 'podman']) {
-      fs.symlinkSync(FAKE_ENGINE_SCRIPT_PATH, path.join(binDir, name));
+    if (preparedBinDir === undefined) {
+      fs.mkdirSync(binDir, { recursive: true });
+      fs.chmodSync(FAKE_ENGINE_SCRIPT_PATH, 0o755);
+      for (const name of ['docker', 'podman']) {
+        fs.symlinkSync(FAKE_ENGINE_SCRIPT_PATH, path.join(binDir, name));
+      }
     }
     // No fake `ps` on POSIX: the real ps already answers `-o lstart=`, so
     // owner-helper children that inherit PATH can probe themselves (the fake would
@@ -128,7 +132,7 @@ export function useFakeEngine(
 
   afterAll(() => {
     delete process.env[PS_STARTS_ENV];
-    // Retry-aware removal: Windows can briefly lock just-executed exes.
+    // Prepared executable images are build outputs, not suite-owned state.
     removeFixtureDirectory(suiteRoot);
   });
 

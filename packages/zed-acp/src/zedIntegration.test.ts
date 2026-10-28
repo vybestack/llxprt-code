@@ -1,44 +1,64 @@
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import {
+  SettingsService,
+  ProfileManager,
+} from '@vybestack/llxprt-code-settings';
+import { mkdtemp, rm, mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import {
+  beforeAll,
+  afterAll,
+  describe,
+  expect,
+  it,
+  afterEach,
+  beforeEach,
+  vi,
+} from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { useFakeResponsesReplay } from '../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
+import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import {
+  openRouteBPreflight,
+  type RouteBPreflight,
+} from '../../agents/src/api/__tests__/helpers/route-b-preflight.js';
+import { CredentialAuthority } from '../../providers/src/auth/proxy/credential-store-factory.js';
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import {
+  captureZedHostInputs,
+  captureZedSessionParameters,
+} from './zed-session-agent.js';
+import { unusedProfileApplication } from './test-profile-application.js';
+import {
+  ZedAgent as ZedAgentType,
+  parseZedAuthMethodId,
+} from './zedIntegration.js';
+import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
+import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
+import { MCP_SESSION_APPROVAL_SOURCE } from '@vybestack/llxprt-code-core/policy/mcp-approval.js';
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { captureZedHostInputs } from './zed-session-agent.js';
 const createFilesystem = installTestWorkspaceFilesystem();
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { unusedProfileApplication } from './test-profile-application.js';
-
-import type { ZedAgent as ZedAgentType } from './zedIntegration.js';
-
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { mkdtemp, rm, mkdir } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
 const definitionFixture = installZedDefinitionFixture();
-import { ProfileManager } from '@vybestack/llxprt-code-settings';
-import { createZedSessionConfig } from './zed-session-agent.js';
-import {
-  buildCliStyleConfig,
-  type BuiltCliConfig,
-} from '../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
-import { parseZedAuthMethodId } from './zedIntegration.js';
-import { ApprovalMode, Config } from '@vybestack/llxprt-code-core';
-import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import { MCP_SESSION_APPROVAL_SOURCE } from '@vybestack/llxprt-code-core/policy/mcp-approval.js';
 
-const mockFromConfig = vi.fn();
+const mockCreateAgent = vi.fn();
 
 const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
 void vi.mock('@vybestack/llxprt-code-agents', () => ({
   ...actual,
-  fromConfig: (...args: unknown[]) => mockFromConfig(...args),
+  createAgentFromSettingsSnapshot: (
+    ...args: Parameters<typeof actual.createAgentFromSettingsSnapshot>
+  ) => mockCreateAgent(...args),
 }));
 
 describe('zedIntegration auth method validation', () => {
@@ -108,11 +128,13 @@ describe('Zed session composition', () => {
       decision: PolicyDecision.ALLOW,
       source: MCP_SESSION_APPROVAL_SOURCE,
     });
-    const first = createZedSessionConfig(
-      base,
-      'first-session',
-      join(projectRoot, 'first'),
-      captureZedHostInputs(base),
+    const first = new Config(
+      captureZedSessionParameters(
+        base,
+        'first-session',
+        join(projectRoot, 'first'),
+        captureZedHostInputs(base),
+      ),
     );
     const firstRoot = createFilesystem({
       targetDir: first.getTargetDir(),
@@ -125,11 +147,13 @@ describe('Zed session composition', () => {
       baseSettings.exportForStateSnapshot(),
     );
     baseSettings.set('fixture-marker', 'after');
-    const second = createZedSessionConfig(
-      base,
-      'second-session',
-      join(projectRoot, 'second'),
-      captureZedHostInputs(base),
+    const second = new Config(
+      captureZedSessionParameters(
+        base,
+        'second-session',
+        join(projectRoot, 'second'),
+        captureZedHostInputs(base),
+      ),
     );
     const secondRoot = createFilesystem({
       targetDir: second.getTargetDir(),
@@ -188,44 +212,18 @@ describe('ZedAgent.newSession', () => {
     await rm(projectRoot, { recursive: true, force: true });
   });
   afterEach(() => {
-    mockFromConfig.mockImplementation(actual.fromConfig);
+    mockCreateAgent.mockImplementation(actual.createAgentFromSettingsSnapshot);
   });
 
   it('creates independent Agent sessions with session-scoped configs', async () => {
-    const capturedConfigs: Config[] = [];
-    const capturedManagers: ProviderManager[] = [];
-    const capturedOptions: Array<{
-      config: Config;
-      settingsService: SettingsService;
-      sessionId?: string;
-      filesystemOwner: WorkspaceFilesystemOwner;
-    }> = [];
-    mockFromConfig.mockImplementation(
-      async (options: {
-        config: Config;
-        settingsService: SettingsService;
-        sessionId?: string;
-        filesystemOwner: WorkspaceFilesystemOwner;
-      }) => {
-        capturedOptions.push(options);
-        capturedConfigs.push(options.config);
-        const providerManager = new ProviderManager({
-          config: options.config,
-          settingsService: options.settingsService,
-        });
-        capturedManagers.push(providerManager);
-        return {
-          providerManager,
-          getApprovalMode: () => 'default',
-          setApprovalMode: vi.fn(),
-          dispose: vi.fn().mockResolvedValue(undefined),
-          async *stream() {},
-          session: {
-            getRecordingTitle: () => undefined,
-            recordRecordingTitle: async () => undefined,
-          },
-          tools: { respondToConfirmation: vi.fn() },
-        };
+    const capturedAgents: Agent[] = [];
+    mockCreateAgent.mockImplementation(
+      async (
+        ...args: Parameters<typeof actual.createAgentFromSettingsSnapshot>
+      ) => {
+        const agent = await actual.createAgentFromSettingsSnapshot(...args);
+        capturedAgents.push(agent);
+        return agent;
       },
     );
     const baseConfig = new Config({
@@ -233,6 +231,7 @@ describe('ZedAgent.newSession', () => {
       targetDir: projectRoot,
       cwd: projectRoot,
       model: 'test-model',
+      provider: 'openai',
       debugMode: false,
     });
     const settingsService = new SettingsService();
@@ -248,13 +247,11 @@ describe('ZedAgent.newSession', () => {
       baseConfig,
       connection as never,
       unusedProfileApplication,
-      new ProviderManager({
-        config: baseConfig,
-        settingsService,
-      }),
       () => new SettingsService({ sessionSource: settingsService }),
       undefined,
       definitionFixture(),
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
 
     await zedAgent.initialize({
@@ -269,33 +266,34 @@ describe('ZedAgent.newSession', () => {
     const secondSession = await zedAgent.newSession({
       cwd: join(projectRoot, 'second'),
     } as never);
-    expect(capturedOptions).toHaveLength(2);
-    expect(capturedOptions[0].sessionId).toBe(firstSession.sessionId);
-    expect(capturedOptions[1].sessionId).toBe(secondSession.sessionId);
-    expect(capturedOptions[0].sessionId).not.toBe(capturedOptions[1].sessionId);
-    expect('providerManager' in capturedConfigs[0]).toBe(false);
-    expect('providerManager' in capturedConfigs[1]).toBe(false);
-
-    expect(capturedConfigs).toHaveLength(2);
-    expect(capturedConfigs[0]).not.toBe(capturedConfigs[1]);
-    expect(capturedConfigs[0].getTargetDir()).toBe(join(projectRoot, 'first'));
-    expect(capturedConfigs[1].getTargetDir()).toBe(join(projectRoot, 'second'));
-    expect(capturedManagers).toHaveLength(2);
-    expect(capturedManagers[0]).not.toBe(capturedManagers[1]);
-    capturedOptions[0].settingsService.set('activeProvider', 'session-first');
-    expect(capturedManagers[0].getActiveProviderName()).toBe('session-first');
-    expect(capturedManagers[1].getActiveProviderName()).not.toBe(
-      'session-first',
+    expect(capturedAgents).toHaveLength(2);
+    expect(capturedAgents[0].session.getSessionId()).toBe(
+      firstSession.sessionId,
     );
-    expect(capturedOptions[0].config).not.toBe(capturedOptions[1].config);
+    expect(capturedAgents[1].session.getSessionId()).toBe(
+      secondSession.sessionId,
+    );
+    expect(capturedAgents[0].session.getSessionId()).not.toBe(
+      capturedAgents[1].session.getSessionId(),
+    );
+
+    expect(capturedAgents[0].workspace.getWorkingDirectory()).toBe(
+      join(projectRoot, 'first'),
+    );
+    expect(capturedAgents[1].workspace.getWorkingDirectory()).toBe(
+      join(projectRoot, 'second'),
+    );
+    await capturedAgents[0].setProvider('anthropic', 'session-first-model');
+    expect(capturedAgents[0].getProvider()).toBe('anthropic');
+    expect(capturedAgents[1].getProvider()).not.toBe('anthropic');
     expect('providerManager' in baseConfig).toBe(false);
     expect(
-      await capturedOptions[0].filesystemOwner.files.readTextFile(
+      await capturedAgents[0].workspace.readTextFile(
         join(projectRoot, 'first', 'x'),
       ),
     ).toBe('client');
     expect(
-      await capturedOptions[1].filesystemOwner.files.readTextFile(
+      await capturedAgents[1].workspace.readTextFile(
         join(projectRoot, 'second', 'x'),
       ),
     ).toBe('client');
@@ -308,17 +306,45 @@ describe('ZedAgent.newSession', () => {
 });
 
 describe('ZedAgent.authenticate credential cache', () => {
-  let built: BuiltCliConfig;
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  useFakeResponsesReplay('plain-text.jsonl');
+
+  const builtCredentials = useOwnedCredentials();
+
+  /** The selected model, read from the test-owned settings the preflight uses. */
+  function selectedModel(settings: SettingsService): unknown {
+    const provider = settings.get('activeProvider');
+    if (typeof provider !== 'string') return undefined;
+    return settings.getProviderSettings(provider).model;
+  }
+
+  let route: RouteBPreflight;
   let profiles: ProfileManager;
   let root: string;
   let agent: ZedAgentType;
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'llxprt-zed-profile-owner-'));
-    built = await buildCliStyleConfig('plain-text.jsonl', {
-      workingDir: root,
-      settings: { profileDirectory: join(root, 'profiles') },
+    route = await openRouteBPreflight({
+      authority: builtCredentials().authority,
+      config: {
+        workingDir: root,
+        settings: { profileDirectory: join(root, 'profiles') },
+      },
     });
+    await route.prepare();
     profiles = new ProfileManager(join(root, 'profiles'));
     for (const name of ['alpha', 'beta']) {
       await profiles.saveProfile(name, {
@@ -329,40 +355,25 @@ describe('ZedAgent.authenticate credential cache', () => {
         ephemeralSettings: {},
       });
     }
-    const config = built.config;
-    const manager = built.providerManager;
-
-    const application = actual.assembleProfileApplication(
-      config,
-      built.settingsService,
-      manager,
-      null,
-      actual.assembleProviderSwitch(
-        config,
-        built.settingsService,
-        manager,
-        null,
-        () => undefined,
-        () => built.sessionClient.refreshAuth(),
-        built.settingsOwner,
-      ),
-      built.settingsOwner,
-      profiles,
-    );
     const { ZedAgent } = await import('./zedIntegration.js');
     agent = new ZedAgent(
-      config,
+      route.config,
       undefined as never,
-      application,
-      manager,
-      () => built.settingsOwner.createChildStore(),
+      route.preflight,
+      () => {
+        const session = new SettingsService();
+        session.restoreFromStateSnapshot(
+          route.preflight.captureSettingsSnapshot(),
+        );
+        return session;
+      },
       undefined,
-      built.mcpRuntime.profileDefinitions,
+      { listProfiles: () => route.preflight.listProfiles() },
     );
   });
 
   afterEach(async () => {
-    await built.cleanup();
+    await route.close();
     await rm(root, { recursive: true, force: true });
   });
 
@@ -370,8 +381,8 @@ describe('ZedAgent.authenticate credential cache', () => {
     await agent.authenticate({ methodId: 'alpha' });
     await agent.authenticate({ methodId: 'beta' });
 
-    expect(built.settingsService.getCurrentProfileName()).toBe('beta');
-    expect(built.settingsOwner.readSelectedModel()).toBe('beta-model');
+    expect(route.preflight.getCurrentProfileName()).toBe('beta');
+    expect(selectedModel(route.settings)).toBe('beta-model');
   });
 
   it('loads profile when re-authenticating same profile', async () => {
@@ -385,15 +396,15 @@ describe('ZedAgent.authenticate credential cache', () => {
     });
     await agent.authenticate({ methodId: 'alpha' });
 
-    expect(built.settingsService.getCurrentProfileName()).toBe('alpha');
-    expect(built.settingsOwner.readSelectedModel()).toBe('updated-model');
+    expect(route.preflight.getCurrentProfileName()).toBe('alpha');
+    expect(selectedModel(route.settings)).toBe('updated-model');
   });
 
   it('loads profile when no active profile exists', async () => {
-    expect(built.settingsService.getCurrentProfileName()).toBeNull();
+    expect(route.preflight.getCurrentProfileName()).toBeNull();
     await agent.authenticate({ methodId: 'alpha' });
 
-    expect(built.settingsService.getCurrentProfileName()).toBe('alpha');
-    expect(built.settingsOwner.readSelectedModel()).toBe('alpha-model');
+    expect(route.preflight.getCurrentProfileName()).toBe('alpha');
+    expect(selectedModel(route.settings)).toBe('alpha-model');
   });
 });

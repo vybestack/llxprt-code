@@ -1,3 +1,7 @@
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
+import type { SubagentTestInputs } from './__tests__/subagent-test-helpers.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createToolRegistryViewFromRegistry } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
@@ -28,13 +32,11 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
   SubagentTerminateMode,
   type ModelConfig,
   type RunConfig,
-  type SubAgentRuntimeOverrides,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ChatSession, StreamEventType } from './chatSession.js';
 import { mockChunk } from './__tests__/turn-test-helpers.js';
@@ -50,12 +52,18 @@ import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.j
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
-import { initializeTestConfig } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { McpRuntimeOwner } from '../api/mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from '../api/__tests__/helpers/create-mcp-runtime.js';
 import {
-  waitForCondition,
   waitForConditionInRealTime,
+  waitForConditionOnEventLoop,
   delayRealTime,
 } from '../test-utils/eventLoop.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 const realEnvironmentContextModule = {
   ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
 };
@@ -101,17 +109,6 @@ void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
 void vi.mock('./nonInteractiveToolExecutor.js', () =>
   automock(realNonInteractiveToolExecutorModule),
 );
-const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual4,
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      getConnectionStatus: vi.fn(),
-      initialize: vi.fn(),
-      shutdown: vi.fn(),
-    }),
-  },
-}));
 const actual5 = {
   ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
 };
@@ -121,6 +118,23 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 describe('subagent.ts', () => {
+  const workspaceOwners: McpRuntimeOwner[] = [];
+
+  afterEach(async () => {
+    const failures: unknown[] = [];
+    for (const owner of workspaceOwners.splice(0).reverse()) {
+      try {
+        await owner.dispose();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0)
+      throw new AggregateError(
+        failures,
+        'Idle stream workspace cleanup failed',
+      );
+  });
   describe('stream idle timeout behavioral tests', () => {
     const originalEnv = process.env;
     const mockMessageBus = {} as MessageBus;
@@ -179,8 +193,6 @@ describe('subagent.ts', () => {
         readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
         providerRuntime: createProviderRuntimeContext({
           runtimeId: state.runtimeId,
-          settingsService,
-          config,
         }),
         prepareProviderInvocation: (name, parameters, signal) =>
           settingsOwner.prepareProviderInvocation(
@@ -188,10 +200,18 @@ describe('subagent.ts', () => {
             name,
             parameters,
             signal,
+            undefined,
+            requestFetch,
           ),
         tools: createToolRegistryViewFromRegistry(toolRegistry),
       });
       return {
+        telemetryRoot: RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'child-idle',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
         runtimeContext,
         history,
         providerAdapter: provider,
@@ -228,13 +248,18 @@ describe('subagent.ts', () => {
       };
       const configWithTimeout = new Config(configParams);
       settingsService.set('stream-idle-timeout-ms', customTimeoutMs);
-      const mcpRuntime = await initializeTestConfig(configWithTimeout);
+      const mcpRuntime = await createTestMcpRuntime(
+        { oauth: createTestOAuthBinding(), config: configWithTimeout },
+        {},
+      );
+      workspaceOwners.push(mcpRuntime);
+      await mcpRuntime.initialize();
 
       const runtimeBundle = createRuntimeBundle(
         configWithTimeout,
         settingsService,
       );
-      const overrides: SubAgentRuntimeOverrides = {
+      const overrides: SubagentTestInputs = {
         instructions: mcpRuntime.workspaceMemory.operations,
         workspacePaths: mcpRuntime.workspaceFilesystem.paths,
         readMcpInstructions: () => undefined,
@@ -246,15 +271,16 @@ describe('subagent.ts', () => {
         ),
       };
 
-      const scope = await SubAgentScope.create(
-        'timeout-test-agent',
-        configWithTimeout,
-        { systemPrompt: 'Test timeout behavior.' },
-        localDefaultModelConfig,
-        localDefaultRunConfig,
-        undefined,
-        undefined,
-        overrides,
+      const scope = await createSubagentScope(
+        {
+          name: 'timeout-test-agent',
+          prompt: { systemPrompt: 'Test timeout behavior.' },
+          model: localDefaultModelConfig,
+          run: localDefaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(configWithTimeout, overrides),
       );
 
       // Mock a slow stream that yields after the timeout
@@ -327,13 +353,18 @@ describe('subagent.ts', () => {
       };
       const configWithTimeout = new Config(configParams);
       settingsService.set('stream-idle-timeout-ms', 0); // Disabled
-      const mcpRuntime = await initializeTestConfig(configWithTimeout);
+      const mcpRuntime = await createTestMcpRuntime(
+        { oauth: createTestOAuthBinding(), config: configWithTimeout },
+        {},
+      );
+      workspaceOwners.push(mcpRuntime);
+      await mcpRuntime.initialize();
 
       const runtimeBundle = createRuntimeBundle(
         configWithTimeout,
         settingsService,
       );
-      const overrides: SubAgentRuntimeOverrides = {
+      const overrides: SubagentTestInputs = {
         instructions: mcpRuntime.workspaceMemory.operations,
         workspacePaths: mcpRuntime.workspaceFilesystem.paths,
         readMcpInstructions: () => undefined,
@@ -345,15 +376,16 @@ describe('subagent.ts', () => {
         ),
       };
 
-      const scope = await SubAgentScope.create(
-        'no-timeout-agent',
-        configWithTimeout,
-        { systemPrompt: 'Test no timeout behavior.' },
-        localDefaultModelConfig,
-        { ...localDefaultRunConfig, max_time_minutes: 60 }, // Long enough for test
-        undefined,
-        undefined,
-        overrides,
+      const scope = await createSubagentScope(
+        {
+          name: 'no-timeout-agent',
+          prompt: { systemPrompt: 'Test no timeout behavior.' },
+          model: localDefaultModelConfig,
+          run: { ...localDefaultRunConfig, max_time_minutes: 60 }, // Long enough for test
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(configWithTimeout, overrides),
       );
 
       let resolveIterator: () => void;
@@ -413,7 +445,7 @@ describe('subagent.ts', () => {
       // Reach the stall before moving the clock. A real event-loop yield is
       // only reliable while the fake clock is still, so this gate has to come
       // first; without it the advance races the stream start on slower hosts.
-      expect(await waitForCondition(() => stallReached)).toBe(true);
+      expect(await waitForConditionOnEventLoop(() => stallReached)).toBe(true);
 
       // Hold the stall open in real time to show the idle watchdog never
       // fires. The fake clock is not used for this: draining the pipeline to
@@ -462,13 +494,18 @@ describe('subagent.ts', () => {
       };
       const configWithTimeout = new Config(configParams);
       settingsService.set('stream-idle-timeout-ms', configTimeoutMs);
-      const mcpRuntime = await initializeTestConfig(configWithTimeout);
+      const mcpRuntime = await createTestMcpRuntime(
+        { oauth: createTestOAuthBinding(), config: configWithTimeout },
+        {},
+      );
+      workspaceOwners.push(mcpRuntime);
+      await mcpRuntime.initialize();
 
       const runtimeBundle = createRuntimeBundle(
         configWithTimeout,
         settingsService,
       );
-      const overrides: SubAgentRuntimeOverrides = {
+      const overrides: SubagentTestInputs = {
         instructions: mcpRuntime.workspaceMemory.operations,
         workspacePaths: mcpRuntime.workspaceFilesystem.paths,
         readMcpInstructions: () => undefined,
@@ -480,15 +517,16 @@ describe('subagent.ts', () => {
         ),
       };
 
-      const scope = await SubAgentScope.create(
-        'env-precedence-agent',
-        configWithTimeout,
-        { systemPrompt: 'Test env precedence.' },
-        localDefaultModelConfig,
-        localDefaultRunConfig,
-        undefined,
-        undefined,
-        overrides,
+      const scope = await createSubagentScope(
+        {
+          name: 'env-precedence-agent',
+          prompt: { systemPrompt: 'Test env precedence.' },
+          model: localDefaultModelConfig,
+          run: localDefaultRunConfig,
+          toolConfig: undefined,
+          outputConfig: undefined,
+        },
+        ...scopeInputs(configWithTimeout, overrides),
       );
 
       let gapReached = false;
@@ -552,7 +590,7 @@ describe('subagent.ts', () => {
           resultSettled = true;
         });
 
-      expect(await waitForCondition(() => gapReached)).toBe(true);
+      expect(await waitForConditionInRealTime(() => gapReached)).toBe(true);
 
       // The stream stalls after its first chunk, so the env-driven 50ms
       // watchdog fires. Were the 20s config value being used instead, the

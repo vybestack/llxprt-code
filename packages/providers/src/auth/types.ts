@@ -1,10 +1,11 @@
+import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ProfileManager } from '@vybestack/llxprt-code-settings';
+import type { OAuthProfileReads } from './oauth-profile-reads.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -17,6 +18,7 @@ import type {
   OAuthTokenRequestMetadata,
   TokenStore,
   OAuthUICallback,
+  OAuthProviderUIPort,
 } from '@vybestack/llxprt-code-auth';
 
 export type {
@@ -44,7 +46,8 @@ export interface SessionAuthPolicy {
 }
 
 export interface OAuthManagerRuntimeMessageBusDeps {
-  readonly profileReads?: Pick<ProfileManager, 'loadProfile'>;
+  readonly requestInteractiveAuth?: InteractiveAuthPromptOperation;
+  readonly profileReads?: OAuthProfileReads;
   readSessionAuthPolicy?: () => SessionAuthPolicy;
   messageBus?: MessageBus;
   config?: Config;
@@ -116,6 +119,12 @@ export interface OAuthProvider {
    * into the manager's private provider registry.
    */
   setAddItem?(callback: OAuthUICallback): void;
+
+  /**
+   * Optional. The registering manager hands the provider the dialog state it
+   * owns, so a login only ever touches the dialog of the manager it runs in.
+   */
+  bindUIPort?(port: OAuthProviderUIPort): void;
 
   /**
    * Optional method to set the authentication context (e.g. the bucket name)
@@ -193,6 +202,7 @@ export interface BucketFailoverOAuthManagerLike {
     providerName: string,
     buckets: string[],
     requestMetadata?: OAuthTokenRequestMetadata,
+    signal?: AbortSignal,
   ): Promise<void>;
   getTokenStore(): TokenStore;
   /**

@@ -3,46 +3,62 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { describe, it, expect } from 'bun:test';
+import {
+  dispatchAgentEvent,
+  type AgentEventDeps,
+} from '../agentEventDispatcher.js';
+import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
+import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 
-import { describe, it, expect, afterEach } from 'bun:test';
-import { dispatchAgentEvent } from '../agentEventDispatcher.js';
-import type { AgentEventDeps } from '../agentEventDispatcher.js';
-import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+function usageDeps(metrics: UiTelemetryService): AgentEventDeps {
+  return {
+    observeAssistantMessageCommitted: () => {},
+    setLastPromptTokenCount: (count) => metrics.setLastPromptTokenCount(count),
+    addItem: () => {},
+    sanitizeContent: (text) => ({ text, blocked: false }),
+    flushPendingHistoryItem: () => {},
+    pendingResponse: new PendingResponseBuffer(undefined),
+    pendingHistoryItemRef: { current: null },
+    thinkingBlocksRef: { current: [] },
+    turnCancelledRef: { current: false },
+    loopDetectedRef: { current: false },
+    lastModelInfoRef: { current: null },
+    lastModelIdentityRef: { current: null },
+    setPendingHistoryItem: () => {},
+    setLastAgentActivityTime: () => {},
+    setThought: () => {},
+    getContentPrefixIdentity: () => null,
+    handleContentEvent: () => '',
+    handleUserCancelledEvent: () => {},
+    handleErrorEvent: () => {},
+    handleChatCompressionEvent: () => {},
+    handleFinishedNotice: () => {},
+    handleMaxSessionTurnsEvent: () => {},
+    handleContextWindowWillOverflowEvent: () => {},
+    handleCitationEvent: () => {},
+    handleStreamAttemptDiscarded: () => {},
+  };
+}
 
 describe('dispatchAgentEvent usage events', () => {
-  // The telemetry service is a shared singleton: capture and restore its
-  // state so this test neither depends on nor leaks into other tests.
-  let initialCount: number | undefined;
-
-  afterEach(() => {
-    if (initialCount !== undefined) {
-      uiTelemetryService.setLastPromptTokenCount(initialCount);
-    }
-  });
-
-  it('records the public-wire promptTokenCount as the last prompt token count #2627', () => {
-    // The public agent wire keeps Gemini-named usage fields (documented
-    // stability carve-out). The dispatcher must keep reading that shape so
-    // nonzero counts flow provider -> ApiResponseEvent -> public wire -> UI
-    // telemetry after the internal vocabulary rename.
-    initialCount = uiTelemetryService.getLastPromptTokenCount();
-    // Pick a value distinct from whatever earlier tests left behind.
-    const expectedCount = initialCount === 4242 ? 4243 : 4242;
-
+  it('records public-wire promptTokenCount only through the supplied metric writer #2627', () => {
+    const metrics = new UiTelemetryService();
+    const sibling = new UiTelemetryService();
     dispatchAgentEvent(
       {
         type: 'usage',
         usage: {
-          promptTokenCount: expectedCount,
+          promptTokenCount: 4242,
           candidatesTokenCount: 8,
-          totalTokenCount: expectedCount + 8,
+          totalTokenCount: 4250,
         },
       },
-      {} as AgentEventDeps,
+      usageDeps(metrics),
       '',
       Date.now(),
     );
-
-    expect(uiTelemetryService.getLastPromptTokenCount()).toBe(expectedCount);
+    expect(metrics.getLastPromptTokenCount()).toBe(4242);
+    expect(sibling.getLastPromptTokenCount()).toBe(0);
   });
 });

@@ -242,7 +242,7 @@ export class RecordingIntegration {
     }
 
     let persistence: PreparedPersistenceSave | undefined;
-    let recording: PreparedContentBatch | undefined;
+    let recording: PreparedContentBatch<void | Promise<void>> | undefined;
     let batchContents: readonly IContent[] = [];
     try {
       persistence = await this.persistence?.prepareSave(
@@ -253,7 +253,10 @@ export class RecordingIntegration {
           (content) => !this.hasRecordedContent(content),
         );
         if (batchContents.length > 0) {
-          recording = this.recording.prepareContentBatch(batchContents);
+          recording = this.recording.prepareContentBatch(
+            batchContents,
+            publication.recordingCompletion,
+          );
         }
       }
     } catch (error: unknown) {
@@ -294,7 +297,7 @@ export class RecordingIntegration {
       },
       finalize: async () => {
         await persistence?.finalize();
-        recording?.finalize();
+        await recording?.finalize();
       },
     };
   }

@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import {
-  getScopeLocalFuncDefs,
   buildChatSystemPrompt,
   createChatObject,
+  getScopeLocalFuncDefs,
   type CreateChatObjectParams,
 } from './subagentRuntimeSetup.js';
 
@@ -112,9 +112,9 @@ describe('createChatObject', () => {
       context: { get: () => undefined, get_keys: () => [], set: () => {} },
     };
 
-    await expect(createChatObject(params)).rejects.toThrow(
-      'PromptConfig.systemPrompt must be a non-empty string.',
-    );
+    await expect(
+      createChatObject(params, undefined, undefined, undefined),
+    ).rejects.toThrow('PromptConfig.systemPrompt must be a non-empty string.');
   });
 
   it('should throw when systemPrompt is an empty string', async () => {
@@ -143,9 +143,9 @@ describe('createChatObject', () => {
       context: { get: () => undefined, get_keys: () => [], set: () => {} },
     };
 
-    await expect(createChatObject(params)).rejects.toThrow(
-      'PromptConfig.systemPrompt must be a non-empty string.',
-    );
+    await expect(
+      createChatObject(params, undefined, undefined, undefined),
+    ).rejects.toThrow('PromptConfig.systemPrompt must be a non-empty string.');
   });
 
   it('should throw when systemPrompt is whitespace-only', async () => {
@@ -174,9 +174,9 @@ describe('createChatObject', () => {
       context: { get: () => undefined, get_keys: () => [], set: () => {} },
     };
 
-    await expect(createChatObject(params)).rejects.toThrow(
-      'PromptConfig.systemPrompt must be a non-empty string.',
-    );
+    await expect(
+      createChatObject(params, undefined, undefined, undefined),
+    ).rejects.toThrow('PromptConfig.systemPrompt must be a non-empty string.');
   });
 
   it('should throw when systemPrompt is a non-string type', async () => {
@@ -205,8 +205,8 @@ describe('createChatObject', () => {
       context: { get: () => undefined, get_keys: () => [], set: () => {} },
     };
 
-    await expect(createChatObject(params)).rejects.toThrow(
-      'PromptConfig.systemPrompt must be a non-empty string.',
-    );
+    await expect(
+      createChatObject(params, undefined, undefined, undefined),
+    ).rejects.toThrow('PromptConfig.systemPrompt must be a non-empty string.');
   });
 });

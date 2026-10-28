@@ -5,7 +5,9 @@
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
+import { once } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import type { MessageConnection } from 'vscode-jsonrpc/node.js';
 import type { Diagnostic, LspConfig } from '../types.js';
 
 const {
@@ -53,6 +55,7 @@ const createLspProcess = () => {
     kill = vi.fn((_signal?: NodeJS.Signals | number) => {
       this.killed = true;
       this.emit('exit', 0, null);
+      this.emit('close', 0, null);
       return true;
     });
   }
@@ -83,6 +86,7 @@ void vi.mock('vscode-jsonrpc/node.js', () => ({
 }));
 
 import { LspServiceClient } from '../lsp-service-client.js';
+import { createMcpClientTunnel } from '../mcp-tunnel.js';
 
 type CheckFileWithSignal = (
   filePath: string,
@@ -381,5 +385,66 @@ describe('LspServiceClient unit contract', () => {
     };
     expect(bootstrap.config.firstTouchTimeoutMs).toBe(8000);
     expect(bootstrap.config.requestTimeoutMs).toBe(3000);
+  });
+});
+
+/**
+ * The tunnel only needs notification delivery from its connection, so these
+ * cases run it against an in-memory notification peer. The JSON-RPC wire is
+ * exercised by the real-service lifetime tests in packages/core.
+ */
+describe('MCP client tunnel over the service JSON-RPC connection', () => {
+  function connectedTunnel() {
+    const toService: Array<{ method: string; params: unknown }> = [];
+    const handlers = new Map<string, (params: unknown) => void>();
+    const connection = {
+      onNotification: (method: string, handler: (params: unknown) => void) => {
+        handlers.set(method, handler);
+        return { dispose: () => handlers.delete(method) };
+      },
+      sendNotification: async (method: string, params: unknown) => {
+        toService.push({ method, params });
+      },
+    } as unknown as MessageConnection;
+    return {
+      tunnel: createMcpClientTunnel(connection),
+      toService,
+      deliverFromService: (params: unknown) =>
+        handlers.get('mcp/fromService')?.(params),
+    };
+  }
+
+  it('delivers writable bytes to the service, preserving multi-byte text', async () => {
+    const { tunnel, toService } = connectedTunnel();
+
+    await new Promise<void>((resolve, reject) => {
+      tunnel.writable.write('{"id":"シンボル🙂"}\n', (error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
+
+    expect(toService).toStrictEqual([
+      { method: 'mcp/toService', params: { data: '{"id":"シンボル🙂"}\n' } },
+    ]);
+  });
+
+  it('delivers service bytes to the readable side', async () => {
+    const { tunnel, deliverFromService } = connectedTunnel();
+    const chunk = once(tunnel.readable, 'data');
+
+    deliverFromService({ data: 'hello\n' });
+
+    expect(String((await chunk)[0])).toBe('hello\n');
+  });
+
+  it('ends the readable side when closed so the transport observes the close', async () => {
+    const { tunnel } = connectedTunnel();
+    tunnel.readable.resume();
+    const ended = once(tunnel.readable, 'end');
+
+    tunnel.close();
+
+    await ended;
+    expect(tunnel.readable.readableEnded).toBe(true);
   });
 });

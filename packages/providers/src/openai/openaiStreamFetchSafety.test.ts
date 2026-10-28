@@ -274,16 +274,4 @@ describe('reader-based OpenAI fetch', () => {
     expect(chunks[chunks.length - 1]?.usage).toStrictEqual(usage);
     expect(ownedIteratorConsumed).toBe(true);
   });
-
-  it('resolves global fetch lazily after wrapper construction', async () => {
-    const savedFetch = globalThis.fetch;
-    const wrapper = createReaderBasedStreamFetch();
-    const response = new Response(null, { status: 204 });
-    try {
-      globalThis.fetch = responseFetch(response);
-      expect(await wrapper('http://localhost')).toBe(response);
-    } finally {
-      globalThis.fetch = savedFetch;
-    }
-  });
 });

@@ -49,19 +49,6 @@ const KEYFILES_JSON_NAME = 'keyfiles.json';
 const DEFAULT_TOOLS_DIR = (): string =>
   path.join(Storage.getGlobalDataDir(), 'tools');
 
-// ─── Module-level Lazy Singleton ─────────────────────────────────────────────
-
-let _defaultInstance: ToolKeyStorage | null = null;
-
-/**
- * Returns a lazily-created module-level ToolKeyStorage instance.
- * Avoids constructing a new instance on every tool invocation.
- */
-export function getToolKeyStorage(): ToolKeyStorage {
-  _defaultInstance ??= new ToolKeyStorage();
-  return _defaultInstance;
-}
-
 // ─── Storage Interfaces ──────────────────────────────────────────────────────
 
 export type { KeyringAdapter };

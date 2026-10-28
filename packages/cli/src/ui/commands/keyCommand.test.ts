@@ -3,11 +3,11 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import { keyCommand } from './keyCommand.js';
+import { registerKeyCommand } from '../../__tests__/credential-command-test-owner.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import type { CommandContext } from './types.js';
 
 const mockRuntime = {
   updateActiveProviderApiKey: vi.fn(),
@@ -15,7 +15,7 @@ const mockRuntime = {
 };
 
 describe('keyCommand', () => {
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -34,7 +34,7 @@ describe('keyCommand', () => {
   });
 
   it('updates API key when value provided', async () => {
-    const result = await keyCommand.action!(context, 'abc123');
+    const result = await registerKeyCommand(context).action!(context, 'abc123');
 
     expect(mockRuntime.updateActiveProviderApiKey).toHaveBeenCalledWith(
       'abc123',
@@ -49,7 +49,7 @@ describe('keyCommand', () => {
       message: 'API key removed',
     });
 
-    const result = await keyCommand.action!(context, 'none');
+    const result = await registerKeyCommand(context).action!(context, 'none');
 
     expect(mockRuntime.updateActiveProviderApiKey).toHaveBeenCalledWith(null);
     expect(result?.type).toBe('message');
@@ -64,7 +64,7 @@ describe('keyCommand', () => {
       new Error('unsupported'),
     );
 
-    const result = await keyCommand.action!(context, 'abc123');
+    const result = await registerKeyCommand(context).action!(context, 'abc123');
 
     expect(result?.type).toBe('message');
     expect(result).toBeDefined();
@@ -78,9 +78,11 @@ describe('keyCommand', () => {
     const extendedContext = {
       ...context,
       checkPaymentModeChange,
-    } as CommandContext & { checkPaymentModeChange: () => void };
+    } as CommandOwnerFixture & { checkPaymentModeChange: () => void };
 
-    await keyCommand.action!(extendedContext, 'abc123');
+    await registerKeyCommand(context, {
+      schedulePaymentModeCheck: extendedContext.checkPaymentModeChange,
+    }).action!(extendedContext, 'abc123');
 
     expect(checkPaymentModeChange).not.toHaveBeenCalled();
 

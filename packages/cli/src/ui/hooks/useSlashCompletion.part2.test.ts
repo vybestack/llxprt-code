@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 
@@ -12,7 +13,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { useSlashCompletion } from './useSlashCompletion.js';
-import type { CommandContext, SlashCommand } from '../commands/types.js';
+import type { SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
@@ -23,7 +24,7 @@ describe('useSlashCompletion', () => {
     () => testRootDir,
   );
   let mockConfig: Config;
-  const mockCommandContext = {} as CommandContext;
+  const mockCommandContext = {} as CommandOwnerFixture;
   let testDirs: string[];
 
   function useTextBufferForTest(text: string, cursorOffset?: number) {
@@ -97,6 +98,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/'),
             testDirs,
             testRootDir,
@@ -122,6 +124,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/mem'),
             testDirs,
             testRootDir,
@@ -149,6 +152,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/usag'), // partial alt name "usage"
             testDirs,
             testRootDir,
@@ -179,6 +183,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/clear'), // No trailing space
             testDirs,
             testRootDir,
@@ -217,6 +222,7 @@ describe('useSlashCompletion', () => {
 
           const { result } = renderHook(() =>
             useSlashCompletion(
+              true,
               useTextBufferForTest(query),
               testDirs,
               testRootDir,
@@ -253,6 +259,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/review'),
             testDirs,
             testRootDir,
@@ -294,6 +301,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/?'),
             testDirs,
             testRootDir,
@@ -333,6 +341,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/chat'),
             testDirs,
             testRootDir,
@@ -361,6 +370,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/clear '),
             testDirs,
             testRootDir,
@@ -384,6 +394,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/unknown-command'),
             testDirs,
             testRootDir,
@@ -420,6 +431,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/memory '), // Note: trailing space indicates wanting subcommands
             testDirs,
             testRootDir,
@@ -464,6 +476,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/memory'),
             testDirs,
             testRootDir,
@@ -513,6 +526,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/memory '),
             testDirs,
             testRootDir,
@@ -551,6 +565,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/memory a'),
             testDirs,
             testRootDir,
@@ -585,6 +600,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/memory dothisnow'),
             testDirs,
             testRootDir,

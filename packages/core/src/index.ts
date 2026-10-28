@@ -50,6 +50,7 @@ export * from './skills/skillDiscovery.js';
 
 // Export environment sanitization
 export * from './services/environmentSanitization.js';
+export type { NetworkFetch } from './utils/fetch.js';
 
 // Export debugLogger
 export * from './utils/debugLogger.js';
@@ -245,11 +246,7 @@ export type {
   SecureStoreOptions,
   SecureStoreErrorCode,
 } from './storage/secure-store.js';
-export {
-  ProviderKeyStorage,
-  getProviderKeyStorage,
-  resetProviderKeyStorage,
-} from './storage/provider-key-storage.js';
+export { ProviderKeyStorage } from './storage/provider-key-storage.js';
 export * from './storage/local-media-store.js';
 export * from './storage/SessionPersistenceService.js';
 export * from './storage/media-admission-service.js';
@@ -478,7 +475,6 @@ export {
 export * from './tools-adapters/index.js';
 export {
   ToolKeyStorage,
-  getToolKeyStorage,
   type ToolKeyStorageOptions,
 } from './tools/tool-key-storage.js';
 export {
@@ -587,10 +583,7 @@ export { ToolFormatter } from '@vybestack/llxprt-code-tools';
 
 export { createProviderRuntimeContext } from './runtime/providerRuntimeContext.js';
 export { createRuntimeSettingsService } from './runtime/settingsRuntimeAdapter.js';
-export type {
-  ProviderRuntimeContext,
-  ProviderRuntimeContextInit,
-} from './runtime/providerRuntimeContext.js';
+export type { ProviderRuntimeContext } from './runtime/providerRuntimeContext.js';
 
 // @plan PLAN-20251027-STATELESS5.P06
 // Export AgentRuntimeState types and functions for CLI adapter integration
@@ -632,6 +625,12 @@ export { createAgentRuntimeContext } from './runtime/createAgentRuntimeContext.j
 export * from './profiles/index.js';
 
 export type {
+  ProviderSwitcher,
+  ProviderSwitchOptions,
+  ProviderSwitchResult,
+  ApiKeyUpdateResult,
+  BaseUrlUpdateResult,
+  ModelChangeResult,
   RuntimeProvider,
   RuntimeProviderManager,
   RuntimeSessionTokenUsage,
@@ -726,7 +725,10 @@ export type {
   WorkspaceTrustReadPort,
 } from './services/workspace-trust-reader.js';
 export type { WorkspaceTrustTransition } from './services/workspace-trust-transition.js';
-export type { WorkspaceIdePort } from './services/workspace-ide-owner.js';
+export type {
+  WorkspaceIdePort,
+  WorkspaceIdeConnection,
+} from './services/workspace-ide-owner.js';
 
 export { WorkspaceTrustLifecycle } from './services/workspace-trust-lifecycle.js';
 export { initializeParser } from './utils/shell-parser.js';

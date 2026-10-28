@@ -53,6 +53,16 @@
       "types": "./dist/src/core/tools.d.ts",
       "bun": "./src/core/tools.ts",
       "import": "./dist/src/core/tools.js"
+    },
+    "./network/local-forward-proxy.js": {
+      "types": "./dist/src/network/local-forward-proxy.d.ts",
+      "bun": "./src/network/local-forward-proxy.ts",
+      "import": "./dist/src/network/local-forward-proxy.js"
+    },
+    "./windows-filesystem-denial.js": {
+      "types": "./dist/src/windows-filesystem-denial.d.ts",
+      "bun": "./src/windows-filesystem-denial.ts",
+      "import": "./dist/src/windows-filesystem-denial.js"
     }
   },
   "license": "Apache-2.0",

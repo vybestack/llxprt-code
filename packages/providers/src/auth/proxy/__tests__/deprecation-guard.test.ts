@@ -132,7 +132,6 @@ describe('Deprecation Guards (P36)', () => {
   const projectRoot = path.resolve(__dirname, '../../../../../..');
   const packagesRoot = path.resolve(projectRoot, 'packages');
   const cliSrcRoot = path.join(packagesRoot, 'cli', 'src');
-  const providersSrcRoot = path.join(packagesRoot, 'providers', 'src');
   const providersAuthRoot = path.join(packagesRoot, 'providers', 'src', 'auth');
 
   describe('R2.3: No Direct KeyringTokenStore Instantiation at Consumer Sites', () => {
@@ -212,9 +211,9 @@ describe('Deprecation Guards (P36)', () => {
   });
 
   describe('Factory Module is Single Entry Point', () => {
-    it('createTokenStore is exported from credential-store-factory', () => {
+    it('CredentialAuthority is exported from credential-store-factory for owner acquisition', () => {
       const matches = grepFiles(
-        'export function createTokenStore',
+        'export class CredentialAuthority',
         '*.ts',
         providersAuthRoot,
         ['node_modules', 'dist', '__tests__'],
@@ -234,52 +233,6 @@ describe('Deprecation Guards (P36)', () => {
 
       expect(matches.length).toBe(1);
       expect(matches[0]).toContain('credential-store-factory.ts');
-    });
-
-    it('consumer modules should use the credential factory, not construct stores directly', () => {
-      // Runtime context creation uses a per-owner credential store from the
-      // factory; the provider-manager composition root uses the shared store.
-      // Neither consumer constructs a token store directly.
-      // These are: runtimeContextFactory.ts and providerManagerInstance.ts.
-      // authCommand.ts must consume the registered runtime OAuthManager instead
-      // of creating a partial fallback manager.
-
-      const runtimeMatches = grepFiles(
-        'createOwnedTokenStore',
-        '*.ts',
-        path.resolve(providersSrcRoot, 'runtime'),
-        ['node_modules', 'dist', '__tests__'],
-      );
-
-      const providerMatches = grepFiles(
-        'createTokenStore',
-        '*.ts',
-        path.resolve(providersSrcRoot, 'composition'),
-        ['node_modules', 'dist', '__tests__'],
-      );
-
-      const commandMatches = grepFiles(
-        'createTokenStore',
-        '*.ts',
-        path.resolve(cliSrcRoot, 'ui/commands'),
-        ['node_modules', 'dist', '__tests__'],
-      );
-
-      // At least one consumer in each category that creates OAuthManager should
-      // use the factory; the auth command should no longer create OAuthManager.
-      const hasRuntimeFactoryImport = runtimeMatches.some((m) =>
-        m.includes('runtimeContextFactory.ts'),
-      );
-      const hasProviderFactoryImport = providerMatches.some((m) =>
-        m.includes('providerManagerInstance.ts'),
-      );
-      const commandStillReferencesFactory = commandMatches.some((m) =>
-        m.includes('authCommand.ts'),
-      );
-
-      expect(hasRuntimeFactoryImport).toBe(true);
-      expect(hasProviderFactoryImport).toBe(true);
-      expect(commandStillReferencesFactory).toBe(false);
     });
   });
 
@@ -301,33 +254,6 @@ describe('Deprecation Guards (P36)', () => {
 
       expect(authExportStart).toBeGreaterThanOrEqual(0);
       expect(authExportBlock).toContain('KeyringTokenStore');
-    });
-
-    it('getProviderKeyStorage should still be exported from core for factory use', () => {
-      // The function must still be exported from core (via re-export shim) for the factory to use.
-      // The shim is a pure re-export, so the symbol appears exactly once.
-      const matches = grepFiles(
-        'getProviderKeyStorage',
-        'provider-key-storage.ts',
-        path.resolve(packagesRoot, 'core/src'),
-        ['node_modules', 'dist', '__tests__'],
-      );
-
-      expect(matches.length).toBe(1);
-
-      // And that single occurrence must be part of a re-export from the storage
-      // package — proving the symbol is genuinely re-exported, not merely
-      // referenced by a comment or local helper.
-      const reexport = grepFiles(
-        'provider-key-storage.js',
-        'provider-key-storage.ts',
-        path.resolve(packagesRoot, 'core/src'),
-        ['node_modules', 'dist', '__tests__'],
-      );
-
-      expect(
-        reexport.some((m) => m.includes('@vybestack/llxprt-code-storage')),
-      ).toBe(true);
     });
   });
 });

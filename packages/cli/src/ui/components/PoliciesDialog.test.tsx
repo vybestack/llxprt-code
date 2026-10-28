@@ -18,10 +18,8 @@ const realRealInkModule = {
 
 void vi.mock('ink', () => realRealInkModule);
 
-import {
-  PoliciesDialog,
-  type PoliciesDialogRuntime,
-} from './PoliciesDialog.js';
+import { PoliciesDialog } from './PoliciesDialog.js';
+import { bindPolicyRulesReader } from '../hooks/policyRulesReaderHost.js';
 import { MessageType } from '../types.js';
 
 const mockListEditableRules = vi.fn();
@@ -47,7 +45,7 @@ const mockAddItem = vi.fn();
 const ownedPolicies: RuntimePolicyOwner[] = [];
 const ownedConfigs: Config[] = [];
 function createMockConfig(engineRules: PolicyRule[] = []): {
-  config: PoliciesDialogRuntime;
+  config: Pick<Config, 'getApprovalMode'>;
   policy: PolicyControl;
 } {
   const config = new Config({
@@ -64,7 +62,7 @@ function createMockConfig(engineRules: PolicyRule[] = []): {
   ownedConfigs.push(config);
   return {
     config,
-    policy: new PolicyControl({ inspection: owner.session.inspection }),
+    policy: new PolicyControl(owner.session.inspection),
   };
 }
 
@@ -90,8 +88,9 @@ describe('PoliciesDialog', () => {
   async function renderDialog(fixture: ReturnType<typeof createMockConfig>) {
     const result = renderWithProviders(
       <PoliciesDialog
-        config={fixture.config}
-        policy={fixture.policy}
+        readPolicyRules={bindPolicyRulesReader(fixture.policy, () =>
+          fixture.config.getApprovalMode(),
+        )}
         addItem={mockAddItem as never}
         onExit={vi.fn()}
       />,
@@ -180,7 +179,7 @@ describe('PoliciesDialog', () => {
   it('shows an error when policy engine is not available', async () => {
     const { lastFrame } = renderWithProviders(
       <PoliciesDialog
-        config={undefined}
+        readPolicyRules={null}
         addItem={mockAddItem as never}
         onExit={vi.fn()}
       />,
@@ -286,5 +285,33 @@ describe('PoliciesDialog', () => {
         expect.any(Number),
       );
     });
+  });
+  it('reads the bound owner stack rather than a decoy policy control', async () => {
+    const owner = createMockConfig([
+      {
+        toolName: 'owned_tool',
+        decision: PolicyDecision.DENY,
+        priority: 1.05,
+        source: 'Default: defaults.toml',
+      },
+    ]);
+    const readPolicyRules = bindPolicyRulesReader(owner.policy, () =>
+      owner.config.getApprovalMode(),
+    );
+    const { lastFrame, stdin } = renderWithProviders(
+      <PoliciesDialog
+        readPolicyRules={readPolicyRules}
+        addItem={mockAddItem}
+        onExit={() => {}}
+      />,
+    );
+    await waitFor(() => expect(lastFrame()).toContain('Add new rule'));
+    await act(async () => {
+      stdin.write('\u001B[B');
+    });
+    await act(async () => {
+      stdin.write('\r');
+    });
+    await waitFor(() => expect(lastFrame()).toContain('owned_tool'));
   });
 });

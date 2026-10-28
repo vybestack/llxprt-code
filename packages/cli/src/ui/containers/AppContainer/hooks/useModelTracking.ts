@@ -5,7 +5,6 @@
  */
 
 import { useEffect } from 'react';
-import type { CliUiRuntime } from '../../../cliUiRuntime.js';
 import type { SettingsProfileStore } from '../../../stores/settings/settingsStore.js';
 import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 
@@ -21,8 +20,17 @@ import { useStoreSelector } from '../../../stores/useStoreSelector.js';
  * @subscriptionStrategy Stable (subscription-based, not polling)
  */
 
+/**
+ * Model identity reads for the footer. The subscription keeps the mirrored
+ * current model in step with profile/provider switches.
+ */
+export interface ModelTrackingRuntime {
+  getModel(): string;
+  subscribeModelSelection(listener: () => void): () => void;
+}
+
 export interface UseModelTrackingParams {
-  config: CliUiRuntime;
+  config: ModelTrackingRuntime;
   settingsStore: SettingsProfileStore;
 }
 

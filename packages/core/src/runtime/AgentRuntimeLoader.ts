@@ -8,7 +8,6 @@ import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 
 import type { RuntimeTokenizerFactory } from './contracts/RuntimeTokenizerFactory.js';
 import { HistoryService } from '../services/history/HistoryService.js';
-import { createHistoryProviderFileBindingStore } from '../services/history/provider-file-binding.js';
 import type { Config } from '../config/config.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 import { MediaAdmissionService } from '../storage/media-admission-service.js';
@@ -79,6 +78,16 @@ export interface AgentRuntimeLoaderOptions {
   signal?: AbortSignal;
 }
 
+export interface ToolSelectedRuntimeProfileSnapshot
+  extends AgentRuntimeProfileSnapshot {
+  toolRegistry: ToolSelection;
+}
+
+export interface ToolSelectedRuntimeLoaderOptions
+  extends AgentRuntimeLoaderOptions {
+  profile: ToolSelectedRuntimeProfileSnapshot;
+}
+
 export interface AgentRuntimeLoaderResult {
   telemetryRoot: RootTelemetry;
   runtimeContext: AgentRuntimeContext;
@@ -90,6 +99,16 @@ export interface AgentRuntimeLoaderResult {
   toolRegistry?: ToolSelection;
   settingsSnapshot?: ReadonlySettingsSnapshot;
 }
+
+export interface ToolSelectedRuntimeLoaderResult
+  extends AgentRuntimeLoaderResult {
+  toolRegistry: ToolSelection;
+  settingsSnapshot: ReadonlySettingsSnapshot;
+}
+
+export type ToolSelectedRuntimeLoader = (
+  options: ToolSelectedRuntimeLoaderOptions,
+) => Promise<ToolSelectedRuntimeLoaderResult>;
 
 export type ContentGeneratorFactory = (
   config: ContentGeneratorConfig,
@@ -162,6 +181,12 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   throw error;
 }
 
+export function loadAgentRuntime(
+  options: ToolSelectedRuntimeLoaderOptions,
+): Promise<ToolSelectedRuntimeLoaderResult>;
+export function loadAgentRuntime(
+  options: AgentRuntimeLoaderOptions,
+): Promise<AgentRuntimeLoaderResult>;
 export async function loadAgentRuntime(
   options: AgentRuntimeLoaderOptions,
 ): Promise<AgentRuntimeLoaderResult> {
@@ -189,7 +214,6 @@ export async function loadAgentRuntime(
     overrides.mediaAdmission ?? new MediaAdmissionService(mediaStore);
   const mediaResolver =
     overrides.mediaResolver ?? new RequestMediaResolver(mediaStore);
-  const requestMediaBudgetBytes = profile.config.getImagePayloadBudgetBytes();
 
   const runtimeContext = createAgentRuntimeContext({
     state: profile.state,
@@ -202,12 +226,7 @@ export async function loadAgentRuntime(
     history,
     readRuntimeSettings: profile.readRuntimeSettings,
     prepareProviderInvocation: profile.prepareProviderInvocation,
-    providerRuntime: {
-      ...profile.providerRuntime,
-      mediaResolver,
-      requestMediaBudgetBytes,
-      providerFileBindings: createHistoryProviderFileBindingStore(history),
-    },
+    providerRuntime: profile.providerRuntime,
     mediaStore,
     mediaAdmission,
     mediaResolver,

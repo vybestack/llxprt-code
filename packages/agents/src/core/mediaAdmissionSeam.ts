@@ -16,7 +16,7 @@ import type {
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { prepareUserTurnContents } from './turnIdentity.js';
 
-interface MediaAdmissionRuntime {
+export interface MediaAdmissionRuntime {
   readonly mediaAdmission?: Pick<
     MediaAdmissionService,
     'admitContent' | 'admitContents'

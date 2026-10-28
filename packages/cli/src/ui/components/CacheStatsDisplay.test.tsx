@@ -1,3 +1,5 @@
+import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+let metricSource: UiTelemetryService;
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -6,7 +8,7 @@
 
 /**
  * Behavioral tests for CacheStatsDisplay reading from the canonical
- * session snapshot via uiTelemetryService.getSessionSnapshot().
+ * session snapshot via metricSource.getSessionSnapshot().
  * The cache display is driven by real telemetry events flowing
  * through the aggregator, not by a provider manager.
  */
@@ -15,7 +17,6 @@ import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { CacheStatsDisplay } from './CacheStatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
-import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import type { UiEvent } from '@vybestack/llxprt-code-telemetry';
 import { EVENT_API_RESPONSE } from '@vybestack/llxprt-code-telemetry/telemetry/constants.js';
 
@@ -66,7 +67,7 @@ function emitCacheResponse(opts: {
     cache_read_input_tokens: opts.cacheReads,
     cache_creation_input_tokens: opts.cacheWrites,
   } as UiEvent;
-  uiTelemetryService.addEvent(event);
+  metricSource.addEvent(event);
 }
 
 const renderCacheStats = () => {
@@ -74,7 +75,7 @@ const renderCacheStats = () => {
     stats: {
       sessionId: 'test-session',
       sessionStartTime: new Date(),
-      metrics: uiTelemetryService.getMetrics(),
+      metrics: metricSource.getMetrics(),
       lastPromptTokenCount: 0,
       historyTokenCount: 0,
       promptCount: 0,
@@ -88,8 +89,9 @@ const renderCacheStats = () => {
 
 describe('<CacheStatsDisplay /> (canonical snapshot)', () => {
   beforeEach(() => {
+    metricSource = new UiTelemetryService();
     vi.clearAllMocks();
-    uiTelemetryService.reset();
+    metricSource.reset();
     promptIdCounter = 0;
   });
 

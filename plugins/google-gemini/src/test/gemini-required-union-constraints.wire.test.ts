@@ -81,6 +81,7 @@ async function wireSchema(
     ]);
     const client = await createGeminiApiClient({
       apiKey: 'local-test-key',
+      fetch: (input, init) => globalThis.fetch(input, init),
       httpOptions: { baseUrl: `http://127.0.0.1:${address.port}` },
     });
     const parameters = {

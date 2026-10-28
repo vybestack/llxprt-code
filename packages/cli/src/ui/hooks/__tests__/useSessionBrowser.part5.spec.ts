@@ -4,6 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  rawBrowserCatalog,
+  type BrowserFixtureOverrides,
+} from '../../../__tests__/browser-catalog-fixture.js';
+
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P13
  * @requirement REQ-SB-002, REQ-SB-004, REQ-SB-005, REQ-SB-008, REQ-SB-009, REQ-SB-010
@@ -152,12 +157,18 @@ function makeResumeSuccess(): PerformResumeResult {
  */
 function makeHookProps(
   chatsDir: string,
-  overrides: Partial<UseSessionBrowserProps> = {},
+  overrides: BrowserFixtureOverrides = {},
 ): UseSessionBrowserProps {
   return {
     chatsDir,
     projectHash: PROJECT_HASH,
     currentSessionId: overrides.currentSessionId ?? 'current-session-id',
+    ...rawBrowserCatalog(
+      chatsDir,
+      PROJECT_HASH,
+      overrides.currentSessionId ?? 'current-session-id',
+      overrides.activeRecording,
+    ),
     hasActiveConversation: overrides.hasActiveConversation,
     onSelect:
       overrides.onSelect ??

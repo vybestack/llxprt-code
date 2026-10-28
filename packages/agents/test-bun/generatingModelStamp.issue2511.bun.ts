@@ -1,5 +1,5 @@
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -23,8 +23,37 @@ import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-provid
  *    (2 tests, AC1/AC2 and the throw-fallback AC3).
  */
 
-import { afterEach, describe, it, expect } from 'bun:test';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { emptyModelOutput } from '@vybestack/llxprt-code-core/llm-types/modelEnvelope.js';
+import {
+  createAgentRuntimeState,
+  type AgentRuntimeState,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import {
+  createProviderRuntimeContext,
+  type ProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import {
+  createProviderAdapterFromManager,
+  createTelemetryAdapter,
+  createToolRegistryViewFromRegistry,
+} from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { ConversationManager } from '../src/core/ConversationManager.js';
+import { createConfigParams } from '../src/core/chatSession-runtime-helpers.js';
+import { ChatSession } from '../src/core/chatSession.js';
+import { chatSessionPorts } from '../src/core/chatSessionPorts.js';
+import { TestRuntimeProviderManager } from '../src/test-utils/runtimeProviderManager.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const ownedRoots: Array<{
   readonly config: Config;
@@ -36,30 +65,6 @@ afterEach(async () => {
     await config.dispose();
   }
 });
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  createProviderRuntimeContext,
-  type ProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import {
-  createAgentRuntimeState,
-  type AgentRuntimeState,
-} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import {
-  createProviderAdapterFromManager,
-  createTelemetryAdapter,
-  createToolRegistryViewFromRegistry,
-} from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { emptyModelOutput } from '@vybestack/llxprt-code-core/llm-types/modelEnvelope.js';
-import { ConversationManager } from '../src/core/ConversationManager.js';
-import { ChatSession } from '../src/core/chatSession.js';
-import { TestRuntimeProviderManager } from '../src/test-utils/runtimeProviderManager.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import { createConfigParams } from '../src/core/chatSession-runtime-helpers.js';
 
 const STALE_SNAPSHOT_MODEL = 'claude-opus-5';
 const LIVE_PROVIDER_MODEL = 'glm-5.2';
@@ -93,15 +98,13 @@ function buildConversationManager(
   settingsService.set('providers.stub.model', 'stub-model');
 
   const providerRuntime: ProviderRuntimeContext = createProviderRuntimeContext({
-    settingsService,
-    config,
     runtimeId: 'test.runtime.conversationManager.modelStamp',
     metadata: { source: 'generatingModelStamp.issue2511.bun' },
   });
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
 
   const provider: IProvider = {
     name: 'stub',
@@ -158,6 +161,8 @@ function buildConversationManager(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
   });
 
@@ -256,15 +261,13 @@ function buildChatSessionWithLiveProvider(
   settingsService.set('providers.stub.model', 'stub-model');
 
   const providerRuntime: ProviderRuntimeContext = createProviderRuntimeContext({
-    settingsService,
-    config,
     runtimeId: 'test.runtime.turnprocessor.modelStamp',
     metadata: { source: 'generatingModelStamp.issue2511.bun' },
   });
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
 
   const provider: IProvider = {
     name: 'stub',
@@ -326,11 +329,20 @@ function buildChatSessionWithLiveProvider(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
   });
 
   const chat = new ChatSession(
-    view,
+    chatSessionPorts(view),
+    config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {
       generateContent: async () => emptyModelOutput(),
       // Intentionally yields nothing; these tests exercise the non-streaming

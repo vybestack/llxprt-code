@@ -5,7 +5,7 @@
  */
 
 import { vi } from 'bun:test';
-import { createUiSessionOwner } from './uiSessionOwner.js';
+import { createUiSessionOwner, uiFixtureResources } from './uiSessionOwner.js';
 import { Config } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
@@ -18,21 +18,23 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
  * ongoing Agent-prop migration (#1595) from turning future contract tweaks into
  * multi-file copy edits.
  */
-export function createMockAgent(config: Config): Agent {
-  const owner = createUiSessionOwner(
+export async function createMockAgent(config: Config): Promise<Agent> {
+  const owner = await createUiSessionOwner(
     config instanceof Config ? config : undefined,
   );
   return {
     workspace: owner.workspace,
+    providerReads: owner.providerReads,
+    authentication: owner.authentication,
     dispose: vi.fn().mockResolvedValue(undefined),
-    hasActiveProvider: () => owner.providerManager.hasActiveProvider(),
+    hasActiveProvider: () =>
+      uiFixtureResources(owner).manager.hasActiveProvider(),
     getProviderContextLimit: () =>
-      owner.providerManager.getActiveProvider()?.getContextLimit?.(),
+      uiFixtureResources(owner)
+        .manager.getActiveProvider()
+        ?.getContextLimit?.(),
     listAvailableModels: (provider?: string) =>
-      owner.providerManager.getAvailableModels(provider),
+      uiFixtureResources(owner).manager.getAvailableModels(provider),
     sessionClient: owner.sessionClient,
-    get agentClient() {
-      return owner.agentClient;
-    },
   } as unknown as Agent;
 }

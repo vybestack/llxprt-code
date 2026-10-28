@@ -5,6 +5,7 @@
  */
 
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 /**
  * Factory that builds a lazy resolveBackend closure for GenerateImageTool.
  *
@@ -76,7 +77,7 @@ export interface ResolvedImageBackendLike {
 export interface CodexImageBackendResolverDeps {
   readonly oauthManager: OAuthManager | undefined;
   readonly getActiveProvider: () => IProvider | RuntimeProvider | undefined;
-  readonly fetchImpl?: typeof fetch;
+  readonly fetchImpl: NetworkFetch;
   readonly getBaseUrl?: () => string | undefined;
 }
 
@@ -158,7 +159,7 @@ export function createCodexImageBackendResolver(
     const backendDeps: CodexImageBackendDeps = {
       getCredential: () => resolveFreshCredential(oauthManager),
       getBaseUrl: () => baseUrl,
-      ...(deps.fetchImpl !== undefined ? { fetchImpl: deps.fetchImpl } : {}),
+      fetchImpl: deps.fetchImpl,
     };
 
     return new CodexImageBackend(backendDeps);

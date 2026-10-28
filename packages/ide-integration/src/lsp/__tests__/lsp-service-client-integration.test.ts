@@ -48,6 +48,7 @@ const createLspProcess = () => {
     kill = vi.fn((_signal?: NodeJS.Signals | number) => {
       this.killed = true;
       this.emit('exit', 0, null);
+      this.emit('close', 0, null);
       return true;
     });
   }

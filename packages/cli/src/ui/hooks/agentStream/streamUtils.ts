@@ -48,7 +48,6 @@ import {
   type ApiErrorRuntimeInfo,
 } from '../../../utils/apiErrorFormatting.js';
 import { REFUSAL_NOTICE_MESSAGE } from '../../../utils/refusalNotice.js';
-import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 // ─── Re-exported constant ────────────────────────────────────────────────────
 
@@ -473,7 +472,9 @@ export async function processSlashCommandResult(
 export function handleSubmissionError(
   error: unknown,
   addItem: UseHistoryManagerReturn['addItem'],
-  runtime: StreamRuntime,
+  getProvider: () => string | undefined,
+  readSelectedProvider: () => string | undefined,
+  getModel: () => string,
   onAuthError: () => void,
   timestamp: number,
 ): boolean {
@@ -499,7 +500,11 @@ export function handleSubmissionError(
   }
   const isAbortError = error instanceof Error && error.name === 'AbortError';
   if (!isAbortError) {
-    const apiErrorInfo = buildApiErrorInfo(runtime);
+    const apiErrorInfo = buildApiErrorInfo(
+      getProvider,
+      readSelectedProvider,
+      getModel,
+    );
     const providerName = getActiveProviderNameForApiError(apiErrorInfo);
     const fallbackModel = getErrorFallbackModel(apiErrorInfo, providerName);
     addItem(
@@ -524,14 +529,18 @@ export function handleSubmissionError(
 
 /**
  * Builds a narrow adapter satisfying {@link ApiErrorRuntimeInfo} from the
- * nested StreamRuntime, so API-error helpers receive focused capability
+ * nested runtime, so API-error helpers receive focused capability
  * objects rather than a flat aggregate.
  */
-export function buildApiErrorInfo(runtime: StreamRuntime): ApiErrorRuntimeInfo {
+export function buildApiErrorInfo(
+  getProvider: () => string | undefined,
+  readSelectedProvider: () => string | undefined,
+  getModel: () => string,
+): ApiErrorRuntimeInfo {
   return {
-    getProvider: () => runtime.model.getProvider(),
-    readSelectedProvider: () => runtime.settings.readSelectedProvider(),
-    getModel: () => runtime.model.getModel(),
+    getProvider,
+    readSelectedProvider,
+    getModel,
   };
 }
 
@@ -544,10 +553,10 @@ export function buildApiErrorInfo(runtime: StreamRuntime): ApiErrorRuntimeInfo {
  */
 export function showCitations(
   settings: LoadedSettings,
-  runtime: StreamRuntime,
+  readCitations: () => unknown,
 ): boolean {
   try {
-    const enabled = runtime.settings.readCitations();
+    const enabled = readCitations();
     if (enabled !== undefined) {
       return enabled as boolean;
     }
@@ -564,9 +573,11 @@ export function showCitations(
  * Reads the live value rather than relying on React state, ensuring
  * profile changes via slash commands are immediately reflected.
  */
-export function getCurrentProfileName(runtime: StreamRuntime): string | null {
+export function getCurrentProfileName(
+  readProfileName: () => string | null,
+): string | null {
   try {
-    return runtime.settings.readProfileName() ?? null;
+    return readProfileName() ?? null;
   } catch {
     // Fall through if settings service unavailable
   }

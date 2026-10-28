@@ -1,121 +1,44 @@
-import { cliSkillOperations } from './config/configBuilder.js';
-import { createGitHubBrokerClient } from './config/githubBrokerClient.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { createSessionModelCommand } from './runtime/session-model-command.js';
-
 import {
-  type SessionSettingsOwner,
-  type RuntimePolicyOwner,
-  type Config,
-  type WorkspaceTrustReadPort,
-  parseAndFormatApiError,
-  ExitCodes,
-  FatalInputError,
   EmojiFilter,
+  ExitCodes,
   OutputFormat,
   JsonStreamEventType,
   StreamJsonFormatter,
   coreEvents,
   CoreEvent,
-  type UserFeedbackPayload,
-  type EmojiFilterMode,
-  type MessageBus,
   type AgentRequestInput,
-  PLACEHOLDER_MODEL,
+  type EmojiFilterMode,
+  type UserFeedbackPayload,
 } from '@vybestack/llxprt-code-core';
-
-import {
-  MCPOAuthTokenStorage,
-  KeychainTokenStorage,
-} from '@vybestack/llxprt-code-mcp';
-import { defaultBrowserLauncher } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
-
-import { McpRuntimeOwner } from '@vybestack/llxprt-code-agents';
-
-import {
-  uiTelemetryService,
-  debugLogger,
-} from '@vybestack/llxprt-code-telemetry';
-import {
-  fromConfig,
-  type Agent,
-  type AgentToolHandle,
-  type AgentInput,
-  type ProviderActivationIntent,
-} from '@vybestack/llxprt-code-agents';
-
 import readline from 'node:readline';
-import { isSlashCommand } from './ui/utils/commandUtils.js';
-import type { LoadedSettings } from './config/settings.js';
-import type { BootstrapProfileArgs } from './config/profileBootstrap.js';
-
-import { handleSlashCommand } from './nonInteractiveCliCommands.js';
-import { createRuntimeApi } from './ui/contexts/RuntimeContext.js';
-import { createRuntimeOwnerFeatures } from './runtime/createRuntimeOwnerFeatures.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
-import type { FindMcpResource } from './ui/hooks/atCommandProcessorHelpers.js';
-import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
-import { processAgentStream } from './nonInteractiveCliSupport.js';
-import {
-  getActiveProviderNameForApiError,
-  getErrorFallbackModel,
-} from './utils/apiErrorFormatting.js';
-import { firstNonEmptyString } from './utils/coalesce.js';
-import {
-  resolveContentPrefixIdentity,
-  createCliModelIdentityRuntime,
-} from './ui/utils/modelIdentity.js';
-import {
-  isProviderConfigured,
-  reportUnconfiguredProviderError,
-} from './unconfiguredProviderGuard.js';
 import { runExitCleanup } from './utils/cleanup.js';
 
-interface RunNonInteractiveParams {
-  readonly oauthManager?: OAuthManager;
-  readonly providerFileLifecycle?: ProviderFileLifecycle;
-  runtimeSettings?: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  };
-  config: Config;
-  settings: LoadedSettings;
-  input: string;
-  prompt_id: string;
-  runtimeMessageBus?: MessageBus;
-  policyOwner?: RuntimePolicyOwner;
-  providerManager?: Agent['providerManager'];
-  deferTelemetryShutdown?: boolean;
-  /**
-   * The single session Agent created at the CLI composition root (#2378). When
-   * supplied, runNonInteractive REUSES it (and does NOT dispose it — the
-   * composition root owns its lifecycle via registerCleanup) instead of
-   * building a second Agent via fromConfig. When omitted (direct callers /
-   * tests), runNonInteractive builds its own Agent from the activation intent
-   * and disposes it in the finally block, preserving the previous contract.
-   * @plan:PLAN-20270110-ISSUE2378.P02
-   * @requirement:REQ-2378-002
-   */
-  agent?: Agent;
+export interface TurnOutput {
+  jsonOutput: boolean;
+  streamJsonOutput: boolean;
+  streamFormatter: StreamJsonFormatter | null;
+  emojiFilter: EmojiFilter | undefined;
+  startTime: number;
 }
-
-function requireRuntimeSettings(
-  params: RunNonInteractiveParams,
-): NonNullable<RunNonInteractiveParams['runtimeSettings']> {
-  if (params.runtimeSettings === undefined)
-    throw new Error(
-      'Noninteractive settings commands require the explicit session owner and store',
-    );
-  return params.runtimeSettings;
+export interface NonInteractiveTurn {
+  resolveInput: (
+    input: string,
+    signal: AbortSignal,
+  ) => Promise<AgentRequestInput>;
+  stream: (
+    query: AgentRequestInput,
+    promptId: string,
+    signal: AbortSignal,
+    output: TurnOutput,
+  ) => Promise<void>;
+  release: () => Promise<void>;
 }
-
 export function createProfileNameWriter(
   jsonOutput: boolean,
   streamFormatter: StreamJsonFormatter | null,
@@ -132,26 +55,6 @@ export function createProfileNameWriter(
     firstEventInTurn = false;
   };
 }
-function createUserFeedbackHandler(
-  config: Config,
-): (payload: UserFeedbackPayload) => void {
-  return (payload) => {
-    const prefix = payload.severity.toUpperCase();
-    process.stderr.write(`[${prefix}] ${payload.message}\n`);
-    if (
-      payload.error !== undefined &&
-      payload.error !== null &&
-      config.getDebugMode()
-    ) {
-      const errorToLog =
-        payload.error instanceof Error
-          ? firstNonEmptyString(payload.error.stack, payload.error.message)
-          : String(payload.error);
-      process.stderr.write(`${errorToLog}\n`);
-    }
-  };
-}
-
 export function createStdinCancellation(abortController: AbortController): {
   setup: () => void;
   cleanup: () => void;
@@ -205,400 +108,7 @@ export function createStdinCancellation(abortController: AbortController): {
   };
 }
 
-function emitStreamInit(
-  streamFormatter: StreamJsonFormatter | null,
-  config: Config,
-): void {
-  streamFormatter?.emitEvent({
-    type: JsonStreamEventType.INIT,
-    timestamp: new Date().toISOString(),
-    session_id: config.getSessionId(),
-    model: config.getModel(),
-  });
-}
-
-function createEmojiFilter(
-  params: RunNonInteractiveParams,
-): EmojiFilter | undefined {
-  const configuredEmojiFilterMode =
-    params.agent === undefined
-      ? requireRuntimeSettings(params).owner.readNamedParameter('emojifilter')
-      : params.agent.getEphemeralSetting('emojifilter');
-  const emojiFilterMode: EmojiFilterMode =
-    configuredEmojiFilterMode === 'allowed' ||
-    configuredEmojiFilterMode === 'warn' ||
-    configuredEmojiFilterMode === 'error'
-      ? configuredEmojiFilterMode
-      : 'auto';
-  return emojiFilterMode !== 'allowed'
-    ? new EmojiFilter({ mode: emojiFilterMode })
-    : undefined;
-}
-
-/**
- * Resolves a slash command to its submitted prompt parts, or undefined when
- * the input is not a slash command (or the command produced no content).
- * A preconstructed Agent provides an owner API; commands without one cannot
- * use runtime operations.
- */
-async function resolveSlashQuery(
-  input: string,
-  abortController: AbortController,
-  config: Config,
-  settings: LoadedSettings,
-  agent: Agent | undefined,
-  providerManager: Agent['providerManager'] | undefined,
-  runtimeSettings: RunNonInteractiveParams['runtimeSettings'],
-  trust: WorkspaceTrustReadPort | undefined,
-  oauthManager?: OAuthManager,
-): Promise<AgentRequestInput | undefined> {
-  if (!isSlashCommand(input)) {
-    return undefined;
-  }
-  if (runtimeSettings === undefined)
-    throw new Error(
-      'Slash command settings require the explicit session owner',
-    );
-  const slashCommandResult = await handleSlashCommand(
-    input,
-    abortController,
-    config,
-    settings,
-    agent,
-    agent
-      ? createRuntimeApi(
-          agent,
-          createRuntimeOwnerFeatures(
-            config,
-            agent.providerManager,
-            () => agent.workspace.getDirectories(),
-            createSessionModelCommand(agent),
-            runtimeSettings.owner,
-            runtimeSettings.store,
-            agent.workspace,
-          ),
-        )
-      : undefined,
-    providerManager,
-    trust,
-    () => oauthManager,
-    runtimeSettings.owner,
-  );
-  if (
-    slashCommandResult !== undefined &&
-    (typeof slashCommandResult !== 'string' || slashCommandResult.length > 0)
-  ) {
-    return slashCommandResult as AgentRequestInput;
-  }
-  return undefined;
-}
-
-async function resolveAtQuery(
-  input: string,
-  abortController: AbortController,
-  config: Config,
-  workspace: Agent['workspace'],
-  getToolHandle: (name: string) => AgentToolHandle | undefined,
-  readResource: (server: string, uri: string) => Promise<unknown>,
-  findResource: FindMcpResource,
-): Promise<AgentRequestInput> {
-  const { processedQuery, error } = await handleAtCommand({
-    query: input,
-    config: {
-      getFileFilteringOptions: () => config.getFileFilteringOptions(),
-      ignore: workspace,
-      getEnableRecursiveFileSearch: () => config.getEnableRecursiveFileSearch(),
-      directories: () => workspace.getDirectories(),
-      contains: (filePath) => workspace.containsPath(filePath),
-    },
-    // Tool lookups resolve through the public Agent.tools API (issue #2376):
-    // the caller supplies getToolHandle from the already-created Agent.
-    getToolHandle,
-    readResource,
-    findResource,
-    addItem: (_item, _timestamp) => 0,
-    onDebugMessage: () => {},
-    messageId: Date.now(),
-    signal: abortController.signal,
-  });
-  if (error !== undefined || processedQuery === null) {
-    const fatalMessage =
-      error !== undefined && error !== ''
-        ? error
-        : 'Exiting due to an error processing the @ command.';
-    throw new FatalInputError(fatalMessage);
-  }
-  return processedQuery;
-}
-
-function emitUserMessage(
-  streamFormatter: StreamJsonFormatter | null,
-  input: string,
-): void {
-  streamFormatter?.emitEvent({
-    type: JsonStreamEventType.MESSAGE,
-    timestamp: new Date().toISOString(),
-    role: 'user',
-    content: input,
-  });
-}
-type ConfigWithBootstrapArgs = Config & {
-  readonly _bootstrapArgs?: BootstrapProfileArgs;
-  readonly _profileModelParams?: Record<string, unknown>;
-  readonly _cliModelParams?: Record<string, unknown>;
-};
-
-function readBootstrapArgs(config: Config): BootstrapProfileArgs | undefined {
-  return (config as ConfigWithBootstrapArgs)._bootstrapArgs;
-}
-
-function buildActivationCliOverrides(
-  config: Config,
-): ProviderActivationIntent['cliOverrides'] | undefined {
-  const bootstrapArgs = readBootstrapArgs(config);
-  if (bootstrapArgs === undefined) {
-    return undefined;
-  }
-  const overrides = {
-    ...(bootstrapArgs.keyOverride !== null
-      ? { key: bootstrapArgs.keyOverride }
-      : {}),
-    ...(bootstrapArgs.keyfileOverride !== null
-      ? { keyfile: bootstrapArgs.keyfileOverride }
-      : {}),
-    ...(bootstrapArgs.keyNameOverride !== null
-      ? { keyName: bootstrapArgs.keyNameOverride }
-      : {}),
-    ...(bootstrapArgs.baseurlOverride !== null
-      ? { baseUrl: bootstrapArgs.baseurlOverride }
-      : {}),
-    ...(bootstrapArgs.setOverrides !== null
-      ? { set: bootstrapArgs.setOverrides }
-      : {}),
-  };
-  return Object.keys(overrides).length > 0 ? overrides : undefined;
-}
-
-function collectActivationModelParams(
-  config: Config,
-): ProviderActivationIntent['modelParams'] | undefined {
-  const configWithParams = config as ConfigWithBootstrapArgs;
-  const mergedModelParams: Record<string, unknown> = {};
-
-  // Profile model params apply regardless of provider source. A CLI provider
-  // override suppresses the profile's provider/model selection, not its model
-  // params (see profileResolution.ts contract).
-  if (configWithParams._profileModelParams) {
-    Object.assign(mergedModelParams, configWithParams._profileModelParams);
-  }
-  if (configWithParams._cliModelParams) {
-    Object.assign(mergedModelParams, configWithParams._cliModelParams);
-  }
-
-  return Object.keys(mergedModelParams).length > 0
-    ? mergedModelParams
-    : undefined;
-}
-
-async function processQuery(
-  query: AgentRequestInput,
-  agent: Agent,
-  params: RunNonInteractiveParams,
-  options: {
-    abortController: AbortController;
-    jsonOutput: boolean;
-    streamJsonOutput: boolean;
-    streamFormatter: StreamJsonFormatter | null;
-    emojiFilter: EmojiFilter | undefined;
-    startTime: number;
-  },
-): Promise<void> {
-  const eventStream = agent.stream(query as AgentInput, {
-    signal: options.abortController.signal,
-    promptId: params.prompt_id,
-    maxTurns: params.config.getMaxSessionTurns(),
-  });
-  await processAgentStream(
-    eventStream,
-    {
-      config: params.config,
-      jsonOutput: options.jsonOutput,
-      streamJsonOutput: options.streamJsonOutput,
-      quiet: params.config.getQuiet(),
-      streamFormatter: options.streamFormatter,
-      emojiFilter: options.emojiFilter,
-      includeThinking:
-        agent.getEphemeralSetting('reasoning.includeInResponse') !== false,
-      createProfileNameWriter: () =>
-        createProfileNameWriter(
-          options.jsonOutput,
-          options.streamFormatter,
-          () =>
-            resolveContentPrefixIdentity(createCliModelIdentityRuntime(agent)),
-        ),
-    },
-    options.startTime,
-    () => uiTelemetryService.getMetrics(),
-  );
-}
-
-function buildNonInteractiveActivationIntent(
-  params: RunNonInteractiveParams,
-): ProviderActivationIntent {
-  const useExternalAuth = params.settings.merged.useExternalAuth === true;
-  const cliOverrides = buildActivationCliOverrides(params.config);
-  const bootstrapArgs = readBootstrapArgs(params.config);
-  const modelParams = collectActivationModelParams(params.config);
-  const configModel = params.config.getModel();
-  const resolvedModel =
-    bootstrapArgs?.modelOverride ??
-    (configModel !== PLACEHOLDER_MODEL ? configModel : undefined);
-  const configProvider =
-    params.config.getProvider() ?? bootstrapArgs?.providerOverride ?? undefined;
-  const activeProvider =
-    configProvider === undefined ? params.config.getProvider() : undefined;
-  return {
-    ...(configProvider !== undefined ? { provider: configProvider } : {}),
-    ...(activeProvider !== undefined
-      ? { defaultProvider: activeProvider }
-      : {}),
-    authMode: useExternalAuth ? 'none' : 'auto',
-    ...(typeof resolvedModel === 'string' && resolvedModel.trim().length > 0
-      ? { model: resolvedModel.trim() }
-      : {}),
-    ...(modelParams !== undefined ? { modelParams } : {}),
-    ...(cliOverrides !== undefined ? { cliOverrides } : {}),
-  };
-}
-
-/**
- * Resolves the query, streams the response, and disposes the agent. Extracted
- * from runNonInteractive to keep function length within lint limits.
- *
- * Slash commands are RESOLVED before the Agent is created so a slash command
- * that throws (e.g. a confirmation/validation failure) surfaces its error
- * before any provider/Agent setup runs. The Agent is then created
- * unconditionally because BOTH paths need it to stream: `processQuery` runs the
- * resolved query through `agent`, and the @-command fallback additionally uses
- * `agent.tools.get` for tool lookups (the public Agent.tools API, issue #2376).
- * If `resolveSlashQuery` returns content it becomes the query; otherwise the
- * input falls through to @-command/prompt handling. The Agent is always
- * disposed in the `finally` below.
- *
- * #2374: non-interactive auth is now performed by fromConfig's activation
- * intent, NOT by validateNonInteractiveAuth. The intent mirrors the previous
- * validateNonInteractiveAuth executor call: provider from config, fallback
- * 'gemini', authMode 'none' when useExternalAuth is true (skip auth refresh),
- * else 'auto' (provider auth refresh + fallback). At HEAD, the auth refresh
- * threw on failure -> runNonInteractiveSession caught -> SessionEnd + report +
- * exit 1. Now fromConfig throws AgentBootstrapError on authFailed and the same
- * handler emits the failure.
- */
-async function resolveAndStream(
-  params: RunNonInteractiveParams,
-  options: {
-    abortController: AbortController;
-    jsonOutput: boolean;
-    streamJsonOutput: boolean;
-    streamFormatter: StreamJsonFormatter | null;
-    emojiFilter: EmojiFilter | undefined;
-    startTime: number;
-  },
-): Promise<void> {
-  const { config, input, settings } = params;
-  const slashQuery = await resolveSlashQuery(
-    input,
-    options.abortController,
-    config,
-    settings,
-    params.agent,
-    params.providerManager,
-    params.runtimeSettings,
-    params.policyOwner?.trust,
-    params.oauthManager,
-  );
-  // #2378: reuse the composition-root Agent when supplied. The composition
-  // root owns its lifecycle (registerCleanup disposes it), so a reused Agent
-  // must NOT be disposed here. Only an Agent this function built (the direct-
-  // caller / test path) is disposed in the finally below.
-  const reusedAgent = params.agent;
-  const agent = reusedAgent ?? (await createNonInteractiveAgent(params));
-  const failures: unknown[] = [];
-  try {
-    const query =
-      slashQuery ??
-      (await resolveAtQuery(
-        input,
-        options.abortController,
-        config,
-        agent.workspace,
-        (name) => agent.tools.get(name),
-        (server, uri) => agent.mcp.readResource(server, uri),
-        (identifier) => agent.mcp.findResource(identifier),
-      ));
-    emitUserMessage(options.streamFormatter, input);
-    await processQuery(query, agent, params, options);
-  } catch (primary) {
-    failures.push(primary);
-  } finally {
-    if (reusedAgent === undefined)
-      await releaseNonInteractiveResources(failures, [() => agent.dispose()]);
-  }
-  if (failures.length === 1) throw failures[0];
-  if (failures.length > 1)
-    throw new AggregateError(
-      failures,
-      'Noninteractive execution and Agent disposal failed',
-    );
-}
-
-async function createNonInteractiveAgent(
-  params: RunNonInteractiveParams,
-): Promise<Agent> {
-  const { config } = params;
-  return fromConfig({
-    githubBrokerClient: createGitHubBrokerClient(),
-    oauthManager: params.oauthManager,
-    providerFileLifecycle: params.providerFileLifecycle,
-    settingsService: requireRuntimeSettings(params).store,
-    settingsOwner: requireRuntimeSettings(params).owner,
-    providerManager: params.providerManager,
-    config,
-    mcpRuntime: await McpRuntimeOwner.create(
-      {
-        tokenStorage: new MCPOAuthTokenStorage(
-          new KeychainTokenStorage('llxprt-cli-mcp-oauth'),
-        ),
-        openBrowser: defaultBrowserLauncher,
-      },
-      config,
-      params.runtimeMessageBus,
-      undefined,
-      undefined,
-      undefined,
-      params.policyOwner,
-      'runtime',
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      cliSkillOperations(config),
-    ),
-    mcpOwnership: 'agent',
-    messageBus: params.runtimeMessageBus,
-    sessionId: config.getSessionId(),
-    sessionIdentityOwnership: 'config',
-    activation: buildNonInteractiveActivationIntent(params),
-  });
-}
-
-async function releaseNonInteractiveResources(
+async function releaseResources(
   failures: unknown[],
   releases: ReadonlyArray<() => void | Promise<void>>,
 ): Promise<void> {
@@ -611,86 +121,131 @@ async function releaseNonInteractiveResources(
     );
   }
 }
-
-export async function runNonInteractive(
-  params: RunNonInteractiveParams,
+function throwFailures(failures: unknown[], message: string): void {
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) throw new AggregateError(failures, message);
+}
+async function resolveAndStream(
+  input: string,
+  promptId: string,
+  controller: AbortController,
+  resolveSlash: (
+    input: string,
+    controller: AbortController,
+  ) => Promise<AgentRequestInput | undefined>,
+  acquireTurn: () => Promise<NonInteractiveTurn>,
+  output: TurnOutput,
 ): Promise<void> {
-  const { config, deferTelemetryShutdown = false } = params;
-
-  if (
-    !isProviderConfigured(
-      params.agent?.providerManager ?? params.providerManager,
-    )
-  ) {
-    reportUnconfiguredProviderError(config);
+  const slashQuery = await resolveSlash(input, controller);
+  const turn = await acquireTurn();
+  const failures: unknown[] = [];
+  try {
+    const query =
+      slashQuery ?? (await turn.resolveInput(input, controller.signal));
+    output.streamFormatter?.emitEvent({
+      type: JsonStreamEventType.MESSAGE,
+      timestamp: new Date().toISOString(),
+      role: 'user',
+      content: input,
+    });
+    await turn.stream(query, promptId, controller.signal, output);
+  } catch (error) {
+    failures.push(error);
+  } finally {
+    await releaseResources(failures, [turn.release]);
+  }
+  throwFailures(failures, 'Noninteractive execution and Agent disposal failed');
+}
+function makeEmojiFilter(mode: unknown): EmojiFilter | undefined {
+  const selected: EmojiFilterMode =
+    mode === 'allowed' || mode === 'warn' || mode === 'error' ? mode : 'auto';
+  return selected === 'allowed'
+    ? undefined
+    : new EmojiFilter({ mode: selected });
+}
+export async function runNonInteractive(
+  input: string,
+  promptId: string,
+  isConfigured: () => boolean,
+  reportUnconfigured: () => void,
+  readOutputFormat: () => OutputFormat,
+  readDebugMode: () => boolean,
+  readSessionId: () => string,
+  readModel: () => string,
+  onFeedback: (payload: UserFeedbackPayload) => void,
+  readEmojiMode: () => unknown,
+  resolveSlash: (
+    input: string,
+    controller: AbortController,
+  ) => Promise<AgentRequestInput | undefined>,
+  acquireTurn: () => Promise<NonInteractiveTurn>,
+  reportError: (error: unknown) => void,
+  flush: () => void | Promise<void>,
+): Promise<void> {
+  if (!isConfigured()) {
+    reportUnconfigured();
     try {
       await runExitCleanup();
     } finally {
       process.exit(ExitCodes.FATAL_CONFIG_ERROR);
     }
   }
-
-  const outputFormat = config.getOutputFormat();
+  const outputFormat = readOutputFormat();
   const jsonOutput = outputFormat === OutputFormat.JSON;
   const streamJsonOutput = outputFormat === OutputFormat.STREAM_JSON;
   const startTime = Date.now();
   const streamFormatter = streamJsonOutput ? new StreamJsonFormatter() : null;
-  const consolePatcher = new ConsolePatcher({
+  const patcher = new ConsolePatcher({
     stderr: !jsonOutput,
-    debugMode: jsonOutput ? false : config.getDebugMode(),
+    debugMode: jsonOutput ? false : readDebugMode(),
   });
-  const handleUserFeedback = createUserFeedbackHandler(config);
-  const abortController = new AbortController();
-  const stdinCancellation = createStdinCancellation(abortController);
+  const controller = new AbortController();
+  const stdin = createStdinCancellation(controller);
   const failures: unknown[] = [];
   try {
-    consolePatcher.patch();
-    coreEvents.on(CoreEvent.UserFeedback, handleUserFeedback);
+    patcher.patch();
+    coreEvents.on(CoreEvent.UserFeedback, onFeedback);
     coreEvents.drainFeedbackBacklog();
-    process.stdout.on('error', (err: NodeJS.ErrnoException) => {
-      if (err.code === 'EPIPE') {
-        process.exit(0);
-      }
+    installPipeExit();
+    streamFormatter?.emitEvent({
+      type: JsonStreamEventType.INIT,
+      timestamp: new Date().toISOString(),
+      session_id: readSessionId(),
+      model: readModel(),
     });
-    emitStreamInit(streamFormatter, config);
-    stdinCancellation.setup();
-    await resolveAndStream(params, {
-      abortController,
-      jsonOutput,
-      streamJsonOutput,
-      streamFormatter,
-      emojiFilter: createEmojiFilter(params),
-      startTime,
-    });
+    stdin.setup();
+    await resolveAndStream(
+      input,
+      promptId,
+      controller,
+      resolveSlash,
+      acquireTurn,
+      {
+        jsonOutput,
+        streamJsonOutput,
+        streamFormatter,
+        emojiFilter: makeEmojiFilter(readEmojiMode()),
+        startTime,
+      },
+    );
   } catch (error) {
-    if (!jsonOutput) {
-      const providerName = getActiveProviderNameForApiError(config);
-      debugLogger.error(
-        parseAndFormatApiError(
-          error,
-          getErrorFallbackModel(config, providerName),
-          providerName,
-        ),
-      );
-    }
+    if (!jsonOutput) reportError(error);
     failures.push(error);
   } finally {
-    await releaseNonInteractiveResources(failures, [
-      () => stdinCancellation.cleanup(),
-      () => consolePatcher.cleanup(),
+    await releaseResources(failures, [
+      () => stdin.cleanup(),
+      () => patcher.cleanup(),
       () => {
-        coreEvents.off(CoreEvent.UserFeedback, handleUserFeedback);
+        coreEvents.off(CoreEvent.UserFeedback, onFeedback);
       },
-      () =>
-        deferTelemetryShutdown
-          ? undefined
-          : requireRuntimeSettings(params).owner.telemetry.flush(),
+      flush,
     ]);
   }
-  if (failures.length === 1) throw failures[0];
-  if (failures.length > 1)
-    throw new AggregateError(
-      failures,
-      'Noninteractive execution and cleanup failed',
-    );
+  throwFailures(failures, 'Noninteractive execution and cleanup failed');
+}
+
+function installPipeExit(): void {
+  process.stdout.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code === 'EPIPE') process.exit(0);
+  });
 }

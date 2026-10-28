@@ -1,3 +1,4 @@
+import type { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -47,7 +48,6 @@ import { setSimulate429 } from '@vybestack/llxprt-code-core/utils/testUtils.js';
 import { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -69,6 +69,7 @@ export async function fromAsync<T>(
 }
 
 export interface ClientTestContext {
+  metrics: UiTelemetryService;
   client: AgentClient;
   mockConfig: Config;
   instructionData: {
@@ -101,11 +102,6 @@ export interface ClientMockFns {
 /** Reset all mocks and re-apply the shared service mocks. */
 function resetAndApplyServiceMocks(): void {
   vi.resetAllMocks();
-  (
-    uiTelemetryService.setLastPromptTokenCount as Mock<
-      typeof uiTelemetryService.setLastPromptTokenCount
-    >
-  ).mockClear();
 
   (
     getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
@@ -324,8 +320,11 @@ export async function setupAgentClient(
     mockFns.model,
   );
   const mockConfig = client['config'];
+  const telemetry = client['telemetryRoot'];
+  if (telemetry === undefined) throw new Error('Expected bound test telemetry');
   return {
     client,
+    metrics: telemetry.localMetrics,
     mockConfig,
     instructionData,
     instructionReads: instructions,

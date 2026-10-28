@@ -1,30 +1,34 @@
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type {
+  SessionMcpSettingsReads,
+  SessionSettingsOwner,
+} from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
-
-import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 import {
   MCPOAuthTokenStorage,
   KeychainTokenStorage,
+  McpClientManager,
 } from '@vybestack/llxprt-code-mcp';
+import { defaultFeedbackSink } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 import { openBrowserSecurely } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentConfig } from './config-types.js';
+import type {
+  McpCapability,
+  McpOwnerHandoff,
+  McpPolicyHandoff,
+  McpTrustHandoff,
+} from './mcp-runtime-construction.js';
 import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 
 export type MemoryHandoff =
   | { readonly owner: WorkspaceMemoryOwner; readonly ownership?: 'caller' }
   | { readonly owner: WorkspaceMemoryOwner; readonly ownership: 'runtime' };
-
-export function ownsMcpMemory(handoff: MemoryHandoff | undefined): boolean {
-  return handoff === undefined || handoff.ownership === 'runtime';
-}
 
 export type McpAssemblyOptions = Pick<
   AgentConfig,
@@ -37,18 +41,42 @@ export type McpAssemblyOptions = Pick<
   | 'lspOwnership'
   | 'definitionOwner'
   | 'definitionOwnership'
+  | 'filesystemService'
   | 'filesystemOwner'
   | 'filesystemOwnership'
 >;
 
-export async function assembleMcpRuntime(
-  config: Config,
-  messageBus: MessageBus | undefined,
-  options: McpAssemblyOptions & { readonly trustCleanup?: () => Promise<void> },
-  policyOwner?: RuntimePolicyOwner,
-  policyOwnership: 'runtime' | 'caller' = 'caller',
-  settingsOwner?: SessionSettingsOwner,
-): Promise<McpRuntimeOwner> {
+export interface McpTransferHandoff {
+  /**
+   * Called once MCP construction has taken responsibility for every supplied
+   * owner handed over with runtime ownership.
+   */
+  readonly onTransferAccepted?: () => void;
+}
+
+/**
+ * The host's explicit choice of who releases an owner it hands over. A key the
+ * host set to `agent` means MCP owns it; an omitted key keeps the handover
+ * caller-owned, which is what the option meant before it had a name.
+ */
+function handoffOf<Owner>(
+  owner: Owner | undefined,
+  ownership: 'agent' | 'runtime' | 'caller' | undefined,
+): McpOwnerHandoff<Owner> {
+  if (owner === undefined) return { kind: 'none' };
+  return {
+    kind: 'supplied',
+    owner,
+    ownership:
+      ownership === 'agent' || ownership === 'runtime' ? 'runtime' : 'caller',
+  };
+}
+
+/**
+ * A host that states caller ownership has named nothing for the caller to
+ * release unless it also supplies the owner.
+ */
+function requireCallerWorkspaceRoots(options: McpAssemblyOptions): void {
   if (options.lspOwnership === 'caller' && options.lspOwner === undefined)
     throw new Error('Caller-owned LSP requires an explicit workspace root');
   if (
@@ -65,49 +93,83 @@ export async function assembleMcpRuntime(
     throw new Error(
       'Caller-owned definitions require an explicit workspace root',
     );
-  const feedback = options.mcpHost?.emitFeedback;
-  const ownership =
-    options.lspOwnership ??
-    (options.lspOwner === undefined ? 'agent' : 'caller');
-  const filesystemOwnership =
-    options.filesystemOwnership ??
-    (options.filesystemOwner === undefined ? 'agent' : 'caller');
-  return McpRuntimeOwner.create(
-    {
-      getAuthProviderFactory: options.mcpHost?.getAuthProviderFactory,
-      tokenStorage: new MCPOAuthTokenStorage(
-        options.mcpTokenStorage ??
-          new KeychainTokenStorage('llxprt-cli-mcp-oauth', feedback),
-      ),
-      openBrowser: options.mcpHost?.openBrowser ?? openBrowserSecurely,
-    },
-    config,
-    messageBus,
-    { emitFeedback: feedback },
-    undefined,
-    undefined,
-    policyOwner,
-    policyOwnership,
-    options.lspOwner,
-    ownership === 'agent' ? 'runtime' : 'caller',
-    options.filesystemOwner,
-    filesystemOwnership === 'agent' ? 'runtime' : 'caller',
-    options.memoryOwner === undefined
-      ? undefined
+}
+
+export async function assembleMcpRuntime(
+  config: Config,
+  options: McpAssemblyOptions &
+    McpTransferHandoff & { readonly trustCleanup?: () => Promise<void> },
+  policy: McpPolicyHandoff,
+  settingsOwner?: SessionSettingsOwner,
+): Promise<McpRuntimeOwner> {
+  requireCallerWorkspaceRoots(options);
+  const feedback = options.mcpHost?.emitFeedback ?? defaultFeedbackSink;
+  const trust: McpTrustHandoff =
+    options.trustPort === undefined
+      ? { kind: 'none' }
       : {
-          owner: options.memoryOwner.owner,
-          ownership:
-            options.memoryOwner.ownership === 'agent' ? 'runtime' : 'caller',
-        },
-    options.definitionOwner,
-    options.definitionOwnership === 'agent' ||
-      options.definitionOwner === undefined
-      ? 'runtime'
-      : 'caller',
-    options.trustPort,
-    options.idePort,
-    options.trustCleanup,
-    undefined,
-    settingsOwner?.readMcpSettingsBinding(),
+          kind: 'supplied',
+          owner: options.trustPort,
+          cleanup: options.trustCleanup,
+        };
+  const settingsReads = settingsOwner?.readMcpSettingsBinding();
+  const mcpSettings: McpCapability<SessionMcpSettingsReads> =
+    settingsReads === undefined
+      ? { kind: 'none' }
+      : { kind: 'supplied', capability: settingsReads };
+  // create() retains the supplied owners synchronously, before its first
+  // await, so the handoff below never leaves a window without an authority.
+  const runtime = McpRuntimeOwner.create(
+    {
+      oauth: {
+        getAuthProviderFactory: options.mcpHost?.getAuthProviderFactory,
+        tokenStorage: new MCPOAuthTokenStorage(
+          options.mcpTokenStorage ??
+            new KeychainTokenStorage('llxprt-cli-mcp-oauth', feedback),
+        ),
+        openBrowser: options.mcpHost?.openBrowser ?? openBrowserSecurely,
+      },
+      config,
+      managerFactory: McpClientManager,
+      extensionLoader: { kind: 'none' },
+      policy,
+      lsp: handoffOf(options.lspOwner, options.lspOwnership),
+      filesystem: handoffOf(
+        options.filesystemOwner,
+        options.filesystemOwnership,
+      ),
+      filesystemService:
+        options.filesystemService === undefined
+          ? { kind: 'none' }
+          : {
+              kind: 'supplied',
+              owner: options.filesystemService,
+              ownership: 'caller',
+            },
+      memory:
+        options.memoryOwner === undefined
+          ? { kind: 'none' }
+          : {
+              kind: 'supplied',
+              owner: options.memoryOwner.owner,
+              ownership:
+                options.memoryOwner.ownership === 'agent'
+                  ? 'runtime'
+                  : 'caller',
+            },
+      definitions: handoffOf(
+        options.definitionOwner,
+        options.definitionOwnership,
+      ),
+      trust,
+      ide: handoffOf(options.idePort, 'caller'),
+    },
+    {
+      emitFeedback: feedback,
+      skillOperations: { kind: 'none' },
+      mcpSettings,
+    },
   );
+  options.onTransferAccepted?.();
+  return runtime;
 }

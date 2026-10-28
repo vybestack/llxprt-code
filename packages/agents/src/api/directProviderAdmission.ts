@@ -7,10 +7,10 @@
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { AdmittedProviderRoute } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
-import { admitModelParameters } from '@vybestack/llxprt-code-providers/runtime/admitModelParameters.js';
-import { admitLoadBalancerModelParameters } from '@vybestack/llxprt-code-providers/runtime/admitLoadBalancerModelParameters.js';
+import { admitModelParameters } from '@vybestack/llxprt-code-core/runtime/admit-model-parameters.js';
+import { admitLoadBalancerModelParameters } from './admit-load-balancer-model-parameters.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { LoopHolder } from './loop/rebuildLoop.js';
+import type { SessionExecution } from '../session/session-execution-owner.js';
 import {
   captureAdmittedCredential,
   assertSupportedReplacementRoute,
@@ -24,7 +24,7 @@ export interface ActiveRun {
   readonly close: () => Promise<void>;
   retirements: ReadonlyArray<() => Promise<void>>;
   modelParameters?: AdmittedModelParameters;
-  loop?: Pick<NonNullable<LoopHolder['current']>, 'run' | 'injectSteer'>;
+  loop?: SessionExecution;
 }
 
 export interface DirectProviderAdmission {
@@ -49,12 +49,15 @@ function admitDirectProviderModelParameters(
 ): AdmittedModelParameters | undefined {
   const provider = manager.getActiveProvider();
   if (!provider) throw new Error('Ready agent has no active provider');
-  const providerName = provider.name;
   const parameters =
-    providerName === 'load-balancer'
+    provider.name === 'load-balancer'
       ? admitLoadBalancerModelParameters(provider, settingsService)
-      : admitModelParameters(settingsService, providerName);
-  const providerSettings = settingsService.getProviderSettings(providerName);
+      : admitModelParameters(
+          settingsService.getAllGlobalSettings(),
+          settingsService.getProviderSettings(provider.name),
+          provider.name,
+        );
+  const providerSettings = settingsService.getProviderSettings(provider.name);
   const hasInlineKey = [
     settingsService.get('auth-key'),
     providerSettings['auth-key'],
@@ -62,7 +65,7 @@ function admitDirectProviderModelParameters(
   const readCurrentEndpoint = (): string | undefined => {
     const current =
       settingsService.get('base-url') ??
-      settingsService.getProviderSettings(providerName)['base-url'];
+      settingsService.getProviderSettings(provider.name)['base-url'];
     return typeof current === 'string' ? current : undefined;
   };
   const endpoint = readCurrentEndpoint();
@@ -87,14 +90,14 @@ function admitDirectProviderModelParameters(
   );
   const admittedCredential = captureAdmittedCredential(
     settingsService,
-    providerName,
+    provider.name,
   );
   const route: AdmittedProviderRoute = Object.freeze({
     provider,
     model: readModel(),
     profileName: settingsService.getCurrentProfileName(),
     hasInlineKey,
-    ...(providerName !== 'load-balancer' && endpoint
+    ...(provider.name !== 'load-balancer' && endpoint
       ? { baseURL: endpoint }
       : {}),
     ...(members ? { members: Object.freeze(members) } : {}),

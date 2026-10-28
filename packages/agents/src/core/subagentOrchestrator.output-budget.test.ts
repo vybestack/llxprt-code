@@ -12,6 +12,8 @@ import {
   extractRunConfig,
 } from './__tests__/subagentOrchestrator-test-helpers.js';
 
+const parentSignal = new AbortController().signal;
+
 const baseProfile: Profile = {
   version: 1,
   provider: 'gemini',
@@ -48,14 +50,20 @@ describe('SubagentOrchestrator aggregate output budget resolution', () => {
       foregroundConfig: foregroundWithOutputBudget(33),
     });
 
-    await orchestrator.launch({
-      name: 'output-precedence-helper',
-      runConfig: {
-        max_time_minutes: 5,
-        max_output_tokens_total: 11,
+    await orchestrator.launch(
+      {
+        name: 'output-precedence-helper',
+        runConfig: {
+          max_time_minutes: 5,
+          max_output_tokens_total: 11,
+        },
       },
-    });
-    await orchestrator.launch({ name: 'output-precedence-helper' });
+      parentSignal,
+    );
+    await orchestrator.launch(
+      { name: 'output-precedence-helper' },
+      parentSignal,
+    );
 
     const explicit = extractRunConfig(factory, 0);
     const profileResolved = extractRunConfig(factory, 1);
@@ -75,7 +83,10 @@ describe('SubagentOrchestrator aggregate output budget resolution', () => {
       foregroundConfig: foregroundWithOutputBudget(33),
     });
 
-    await orchestrator.launch({ name: 'parent-output-budget-helper' });
+    await orchestrator.launch(
+      { name: 'parent-output-budget-helper' },
+      parentSignal,
+    );
 
     expect(extractRunConfig(factory).max_output_tokens_total).toBe(33);
   });
@@ -92,7 +103,10 @@ describe('SubagentOrchestrator aggregate output budget resolution', () => {
       foregroundConfig: foregroundWithOutputBudget(undefined),
     });
 
-    await orchestrator.launch({ name: 'derived-output-budget-helper' });
+    await orchestrator.launch(
+      { name: 'derived-output-budget-helper' },
+      parentSignal,
+    );
 
     expect(extractRunConfig(factory).max_output_tokens_total).toBe(400);
   });
@@ -104,7 +118,10 @@ describe('SubagentOrchestrator aggregate output budget resolution', () => {
       foregroundConfig: foregroundWithOutputBudget(undefined),
     });
 
-    await orchestrator.launch({ name: 'flat-output-budget-helper' });
+    await orchestrator.launch(
+      { name: 'flat-output-budget-helper' },
+      parentSignal,
+    );
 
     expect(extractRunConfig(factory).max_output_tokens_total).toBe(2_000_000);
   });
@@ -124,7 +141,10 @@ describe('SubagentOrchestrator aggregate output budget resolution', () => {
       foregroundConfig: foregroundWithOutputBudget(undefined),
     });
 
-    await orchestrator.launch({ name: 'clamped-output-budget-helper' });
+    await orchestrator.launch(
+      { name: 'clamped-output-budget-helper' },
+      parentSignal,
+    );
 
     const resolved = extractRunConfig(factory).max_output_tokens_total;
     expect(resolved).toBe(2_000_000);
@@ -150,7 +170,10 @@ describe('SubagentOrchestrator aggregate output budget resolution', () => {
         foregroundConfig: foregroundWithOutputBudget(value),
       });
 
-      await orchestrator.launch({ name: 'nonfinite-output-budget-helper' });
+      await orchestrator.launch(
+        { name: 'nonfinite-output-budget-helper' },
+        parentSignal,
+      );
 
       const resolved = extractRunConfig(factory).max_output_tokens_total;
       expect(Number.isFinite(resolved)).toBe(true);
@@ -173,13 +196,16 @@ describe('SubagentOrchestrator aggregate output budget resolution', () => {
       foregroundConfig: foregroundWithOutputBudget(33),
     });
 
-    await orchestrator.launch({
-      name: 'unlimited-output-budget-helper',
-      runConfig: {
-        max_time_minutes: 5,
-        max_output_tokens_total: -1,
+    await orchestrator.launch(
+      {
+        name: 'unlimited-output-budget-helper',
+        runConfig: {
+          max_time_minutes: 5,
+          max_output_tokens_total: -1,
+        },
       },
-    });
+      parentSignal,
+    );
 
     expect(extractRunConfig(factory).max_output_tokens_total).toBeUndefined();
   });

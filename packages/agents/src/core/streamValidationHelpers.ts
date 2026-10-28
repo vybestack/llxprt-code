@@ -16,8 +16,9 @@ import { isMissingFinishReason } from './streamResponseHelpers.js';
 import type { ConversationManager } from './ConversationManager.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { ReasoningInclusionPolicy } from './runtimePorts.js';
 
 /**
  * Extracts visible text from ContentBlock[].
@@ -161,7 +162,7 @@ export async function recordHistoryWithUsage(
   conversationManager: ConversationManager,
   historyService: HistoryService,
   compressionHandler: CompressionHandler,
-  runtimeContext: AgentRuntimeContext,
+  reasoningInclusion: ReasoningInclusionPolicy,
   userInput: IContent | IContent[],
   acc: ModelOutput,
   userInputFlags?: {
@@ -171,8 +172,7 @@ export async function recordHistoryWithUsage(
   afterPublication?: () => void | Promise<void>,
   origin?: object,
 ): Promise<void> {
-  const includeThoughts =
-    runtimeContext.ephemerals.reasoning.includeInContext();
+  const includeThoughts = reasoningInclusion.includeInContext();
 
   const outputBlocks = includeThoughts
     ? acc.content.blocks
@@ -234,14 +234,14 @@ export async function recordHistoryWithUsage(
  */
 export function enrichSchemaDepthError(
   error: unknown,
-  runtimeContext: AgentRuntimeContext,
+  tools: ToolRegistryView,
 ): void {
   if (isStructuredError(error) && isSchemaDepthError(error.message)) {
-    const toolNames = runtimeContext.tools.listToolNames();
+    const toolNames = tools.listToolNames();
     const cyclicSchemaTools: string[] = [];
 
     for (const toolName of toolNames) {
-      const metadata = runtimeContext.tools.getToolMetadata(toolName);
+      const metadata = tools.getToolMetadata(toolName);
       if (
         metadata?.parameterSchema &&
         hasCycleInSchema(metadata.parameterSchema)

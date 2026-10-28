@@ -16,6 +16,10 @@ import { OpenAIProvider } from './openai/OpenAIProvider.js';
 import { RetryOrchestrator } from './RetryOrchestrator.js';
 import type { GenerateChatOptions } from './IProvider.js';
 import type { OnAuthErrorHandler } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 async function consume(
   provider: RetryOrchestrator,
@@ -109,7 +113,12 @@ describe('owner-selected retry authentication over HTTP', () => {
         { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
       ],
       invocation: captureProviderInvocation(
-        { settingsService: settings, runtimeId: 'same-label' },
+        {
+          fetch: requestFetch,
+          runtimeId: 'same-label',
+          globalSettings: settings.getAllGlobalSettings(),
+          providerSettings: settings.getProviderSettings('openai'),
+        },
         'openai',
       ),
       resolved: {
@@ -262,10 +271,14 @@ describe('owner-selected retry authentication over HTTP', () => {
 
   it('selects the member profile recovery instead of the parent callbacks over HTTP', async () => {
     const fixture = await owner();
-    const manager = new ProviderManager({
-      settingsService: fixture.settings,
-      config: fixture.config,
-    });
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      fixture.settings,
+      fixture.config,
+    );
     manager.registerProvider(new OpenAIProvider(undefined));
     manager.setRetryOperationsFactory((_providerName, profileId) => ({
       handleAuthError: async () => {

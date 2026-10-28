@@ -41,7 +41,6 @@
  * production code.
  */
 
-import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -63,7 +62,6 @@ import { ClipboardService } from '@vybestack/llxprt-code-providers/auth/Clipboar
 
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { AuthCommandExecutor } from './authCommand.js';
-import type { CommandContext } from './types.js';
 
 // ─── In-memory ISecureStore (never touches the filesystem or keychain) ──────
 
@@ -152,7 +150,11 @@ function buildObjectGraph(tempDir: string): ObjectGraph {
   const settings = new InMemoryOAuthSettings();
   const oauthManager = new OAuthManager(tokenStore, settings);
 
-  registerStandardOAuthProviders(oauthManager, tokenStore);
+  registerStandardOAuthProviders(
+    oauthManager,
+    (input, init) => globalThis.fetch(input, init),
+    tokenStore,
+  );
 
   // Construct the AnthropicProvider with the SAME OAuthManager instance, the
   // way createAnthropicAliasProvider binds the `claudecode` alias.
@@ -166,8 +168,6 @@ function buildObjectGraph(tempDir: string): ObjectGraph {
   return { tempDir, tokenStore, settings, oauthManager, anthropicProvider };
 }
 
-// `execute()` never reads `context` on the login path; it only parses args.
-// A minimal context avoids pulling in the full UI/runtime construction.
 /**
  * Fetch a registered OAuth provider, failing loudly when absent. Lives at
  * module scope so the narrowing guard is not a conditional inside a test body.
@@ -178,20 +178,6 @@ function requireOAuthProvider(oauthManager: OAuthManager, name: string) {
     throw new Error(`OAuth provider '${name}' is not registered`);
   }
   return provider;
-}
-
-function makeCommandContext(): CommandContext {
-  return {
-    runtimeApi: createMockRuntimeApi(),
-    services: {
-      config: null,
-      settings: {} as never,
-      git: undefined,
-      logger: {} as never,
-    },
-    ui: {} as never,
-    session: {} as never,
-  } as unknown as CommandContext;
 }
 
 function requireTempDir(dir: string | undefined): string {
@@ -265,10 +251,7 @@ describe('Issue #2891 (b) (characterization) — /auth claudecode login makes th
     // This routes through execute() → loginWithBucket(), which is the ONLY
     // place fix #3 (clearProviderCache) lives.
     initiateAuthShouldSucceed = true;
-    const loginResult = await executor.execute(
-      makeCommandContext(),
-      'claudecode login',
-    );
+    const loginResult = await executor.execute('claudecode login');
     initiateAuthShouldSucceed = false; // reset; guard against re-trigger
 
     // The command reports success to the user.
@@ -366,7 +349,6 @@ describe('Issue #2891 (b) (characterization) — /auth claudecode login makes th
       };
       await request();
       const result = await executor.execute(
-        makeCommandContext(),
         `claudecode login${bucket ? ` ${bucket}` : ''}`,
       );
       const output = await request();

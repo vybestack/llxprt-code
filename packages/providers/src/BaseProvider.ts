@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import {
   readInvocationPolicyRecord,
@@ -32,13 +33,11 @@ import { firstTruthyString } from './utils/falsyFallback.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
-  type AuthPrecedenceConfig,
   CredentialResolutionError,
   type OAuthManager,
   type IProviderKeyStorage,
 } from '@vybestack/llxprt-code-auth';
-import { AuthPrecedenceResolver } from '@vybestack/llxprt-code-auth/precedence.js';
-import { createProviderKeyStorage } from './auth/proxy/credential-store-factory.js';
+import type { AuthPrecedenceResolver } from '@vybestack/llxprt-code-auth/precedence.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type IProviderConfig } from './types/IProviderConfig.js';
 import {
@@ -47,6 +46,7 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
+  createProviderAuthResolver,
   assertProviderRequestData,
   isRuntimeInvocationContext,
   normalizeProviderGenerateChatOptions,
@@ -76,10 +76,7 @@ export interface BaseProviderConfig {
   // Override for supportsOAuth when method can't be used in constructor
   supportsOAuth?: boolean;
 
-  // Named API key storage used to resolve `auth-key-name` references.
-  // Optional DI seam: when omitted, BaseProvider falls back to the sanctioned
-  // createProviderKeyStorage() factory, which routes through the credential
-  // proxy inside a sandbox and direct storage on the host.
+  // Named keys are supplied by the credential owner, never acquired ambiently.
   providerKeyStorage?: IProviderKeyStorage;
   mediaTransportCapabilities?: ProviderMediaTransportCapabilities;
 }
@@ -100,6 +97,10 @@ export interface NormalizedGenerateChatOptions extends GenerateChatOptions {
     streaming?: boolean;
   };
 }
+// Left undefined, the OpenAI, Anthropic and Google SDKs would substitute the
+// global fetch, so an unbound provider gets a transport that refuses instead.
+const unboundProviderFetch: NetworkFetch = () =>
+  Promise.reject(new Error('Provider request requires the owner transport'));
 
 /**
  * Abstract base provider class that implements authentication precedence logic
@@ -142,46 +143,41 @@ export abstract class BaseProvider implements IProvider {
 
     const fallbackSettingsService = settingsService ?? new SettingsService();
 
-    const precedenceConfig: AuthPrecedenceConfig = {
-      apiKey: config.apiKey,
-      envKeyNames: config.envKeyNames ?? [],
-      isOAuthEnabled: config.isOAuthEnabled ?? false,
-      // Use supportsOAuth from config if provided (for cases where method can't be used in constructor)
-      supportsOAuth: config.supportsOAuth ?? this.supportsOAuth(),
-      oauthProvider: config.oauthProvider,
-      providerId: this.name,
-    };
-
-    // @plan:PLAN-20260608-ISSUE1586.P15 — options-object constructor (unified with C-CB-06/C-CB-09)
-    // SettingsService satisfies ISettingsService by structural typing.
-    // providerKeyStorage is injected so the resolver can resolve named keys
-    // (`auth-key-name`) on its own. The sanctioned factory is used as the
-    // fallback so named-key resolution routes through the credential proxy
-    // inside a sandbox (when LLXPRT_CREDENTIAL_SOCKET is set) and falls back
-    // to direct storage on the host. Callers may still inject their own
-    // storage via config.providerKeyStorage.
-    this.authResolver = new AuthPrecedenceResolver(precedenceConfig, {
-      oauthManager: config.oauthManager,
-      settingsService: fallbackSettingsService,
-      providerKeyStorage:
-        config.providerKeyStorage ?? createProviderKeyStorage(),
-    });
+    this.authResolver = createProviderAuthResolver(
+      config,
+      this.supportsOAuth(),
+      fallbackSettingsService,
+      config.providerKeyStorage,
+    );
     this.owner = composeProviderOwner(
       this.name,
       fallbackSettingsService,
       () => this.authResolver,
     );
   }
-  bindOwnerAuthentication(settings: SettingsService): this {
-    const owner = composeProviderOwner(
-      this.name,
-      settings,
-      () => this.authResolver,
-    );
+  protected readonly requestFetch: NetworkFetch = unboundProviderFetch;
+
+  bindOwnerAuthentication(
+    settings: SettingsService,
+    readFetch: () => NetworkFetch,
+    providerKeyStorage?: IProviderKeyStorage,
+  ): this {
+    const resolver =
+      providerKeyStorage === undefined
+        ? this.authResolver
+        : createProviderAuthResolver(
+            this.baseProviderConfig,
+            this.supportsOAuth(),
+            settings,
+            this.baseProviderConfig.providerKeyStorage ?? providerKeyStorage,
+          );
+    const owner = composeProviderOwner(this.name, settings, () => resolver);
     const readAuthentication = owner.captureAuthentication();
     return new Proxy(this, {
       get(target, property, receiver): unknown {
         if (property === 'owner') return owner;
+        if (property === 'authResolver') return resolver;
+        if (property === 'requestFetch') return readFetch();
         if (property === 'requestAuthentication') return readAuthentication;
         return Reflect.get(target, property, receiver);
       },
@@ -839,6 +835,7 @@ export abstract class BaseProvider implements IProvider {
       ephemeralsSnapshot,
       providerDefaults,
       configuredHeaders: configuredHeaders ?? {},
+      requestFetch: this.requestFetch,
     });
   }
 

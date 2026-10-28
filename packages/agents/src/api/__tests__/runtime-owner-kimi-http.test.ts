@@ -11,11 +11,10 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-core';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { createRuntimeActivationBindings } from '@vybestack/llxprt-code-providers/runtime.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers/providerFilePolicy.js';
-import { createAgent, fromConfig, type Agent } from '../index.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createAgent, type Agent } from '../index.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { startLocalConnectProxy } from './helpers/local-connect-proxy.js';
+import { openRouteAAgent, type RouteAAgent } from './helpers/route-a-agent.js';
 
 class MemoryStore implements TokenStore {
   private readonly tokens = new Map<string, OAuthToken>();
@@ -47,7 +46,19 @@ class MemoryStore implements TokenStore {
   async releaseRefreshLock(): Promise<void> {}
 }
 
+function proxyConnections(
+  proxy: Awaited<ReturnType<typeof startLocalConnectProxy>> | undefined,
+): number {
+  return proxy?.readConnections() ?? 0;
+}
+
+function maintenanceConnections(proxied: boolean, failed: boolean): number {
+  if (!proxied) return 0;
+  return failed ? 2 : 1;
+}
+
 describe('public Agent same-label Kimi files', () => {
+  const credentials = useOwnedCredentials();
   const oldHome = process.env.LLXPRT_CONFIG_HOME;
   const oldFake = process.env.LLXPRT_FAKE_RESPONSES;
   let home: string;
@@ -65,16 +76,21 @@ describe('public Agent same-label Kimi files', () => {
     await rm(home, { recursive: true, force: true });
   });
   it.each([
-    { failDeletion: false, adoptConfig: false },
-    { failDeletion: true, adoptConfig: false },
-    { failDeletion: false, adoptConfig: true },
-    { failDeletion: true, adoptConfig: true },
+    ...[false, true].flatMap((adoptConfig) =>
+      [false, true].flatMap((failDeletion) =>
+        [false, true].map((proxied) => ({
+          adoptConfig,
+          failDeletion,
+          proxied,
+        })),
+      ),
+    ),
   ])(
     'keeps same-label Kimi uploads alive across caller scope and cleanup policy %j',
-    async ({ failDeletion, adoptConfig }) => {
+    async ({ failDeletion, adoptConfig, proxied }) => {
+      const proxy = proxied ? await startLocalConnectProxy() : undefined;
       const agents: Agent[] = [];
-      const configs: Config[] = [];
-      const lifecycles: ProviderFileLifecycle[] = [];
+      const routes: RouteAAgent[] = [];
       const deleted: string[] = [];
       const requests: string[] = [];
       let deletionFailed = false;
@@ -187,57 +203,46 @@ describe('public Agent same-label Kimi files', () => {
       };
       try {
         for (const index of [0, 1]) {
-          const base = createRuntimeActivationBindings();
           agents.push(
             await (async (): Promise<Agent> => {
+              if (adoptConfig) {
+                const route = await openRouteAAgent({
+                  config: {
+                    sessionId: 'distinct-caller-config-scope',
+                    workingDir: process.cwd(),
+                    provider: 'kimi',
+                    model: 'kimi-k3',
+                    proxy: proxy?.url,
+                  },
+                  intent: {
+                    sessionId: 'same-kimi-label',
+                    activation: {
+                      provider: 'kimi',
+                      model: 'kimi-k3',
+                      cliOverrides: {
+                        key: `test-key-${index}`,
+                        baseUrl: endpoint,
+                      },
+                    },
+                  },
+                  authority: credentials().authority,
+                });
+                routes.push(route);
+                route.settings.set('provider-files', 'session');
+                route.settings.set('kimi.experimental-video', true);
+                return route.agent;
+              }
               const options = {
+                credentialAuthority: credentials().authority,
                 provider: 'kimi',
                 model: 'kimi-k3',
+                proxy: proxy?.url,
                 workingDir: process.cwd(),
                 sessionId: 'same-kimi-label',
                 tokenStore: new MemoryStore(),
                 auth: { apiKey: `test-key-${index}`, baseUrl: endpoint },
-                runtimeActivationBindings: {
-                  ...base,
-                  setRuntimeContext(
-                    ...[settings, config, options]: Parameters<
-                      typeof base.setRuntimeContext
-                    >
-                  ) {
-                    settings.set('provider-files', 'session');
-                    settings.set('kimi.experimental-video', true);
-                    const lifecycle = options.providerFileLifecycle;
-                    if (lifecycle instanceof ProviderFileLifecycle)
-                      lifecycles[index] = lifecycle;
-                    return base.setRuntimeContext(settings, config, options);
-                  },
-                },
               };
-              if (!adoptConfig) return createAgent(options);
-              const config = new Config({
-                sessionId: 'distinct-caller-config-scope',
-                cwd: process.cwd(),
-                targetDir: process.cwd(),
-                debugMode: false,
-                provider: 'kimi',
-                model: 'kimi-k3',
-              });
-              configs.push(config);
-              return fromConfig({
-                config,
-                settingsService: new SettingsService(),
-                sessionId: options.sessionId,
-                tokenStore: options.tokenStore,
-                runtimeActivationBindings: options.runtimeActivationBindings,
-                activation: {
-                  provider: options.provider,
-                  model: options.model,
-                  cliOverrides: {
-                    key: options.auth.apiKey,
-                    baseUrl: options.auth.baseUrl,
-                  },
-                },
-              });
+              return createAgent(options);
             })(),
           );
         }
@@ -261,15 +266,26 @@ describe('public Agent same-label Kimi files', () => {
         await first;
         expect(firstAttempts).toBeGreaterThan(1);
         expect(uploaded).toBe(2);
+        const connectionsBeforeRelease = proxyConnections(proxy);
         const disposal = await agents[0].dispose().then(
           () => null,
           (error: unknown) => error,
         );
-        const stateBeforeRetry = lifecycles.map(
-          (owner) => owner.snapshot().retainedFiles,
+        expect(credentials().snapshot()).toStrictEqual(
+          adoptConfig ? [1, 0] : [],
+        );
+        expect(
+          routes.map((route) => route.config.getSessionId()),
+        ).toStrictEqual(
+          adoptConfig
+            ? ['distinct-caller-config-scope', 'distinct-caller-config-scope']
+            : [],
+        );
+        const stateBeforeRetry = agents.map(
+          (owner) => owner.captureProviderFiles().retainedFiles,
         );
         const deletionBeforeRetry = [...deleted];
-        const retried = await lifecycles[0].retryDeletions();
+        const retried = await agents[0].retryProviderFileDeletions();
         expect(disposal === null ? '' : String(disposal)).toMatch(
           failDeletion ? /cleanup/ : /^$/,
         );
@@ -278,9 +294,12 @@ describe('public Agent same-label Kimi files', () => {
         );
         expect(stateBeforeRetry).toStrictEqual(failDeletion ? [1, 1] : [0, 1]);
         expect(retried.failed).toBe(0);
+        expect(proxyConnections(proxy) - connectionsBeforeRelease).toBe(
+          maintenanceConnections(proxied, failDeletion),
+        );
         expect(deleted).toStrictEqual(['public-file-0']);
         expect(
-          lifecycles.map((owner) => owner.snapshot().retainedFiles),
+          agents.map((owner) => owner.captureProviderFiles().retainedFiles),
         ).toStrictEqual([0, 1]);
         releaseHeld();
         await second;
@@ -288,8 +307,15 @@ describe('public Agent same-label Kimi files', () => {
         await expect(agents[0].generate(media)).rejects.toThrow(
           'Agent is closed',
         );
+        const connectionsBeforePeerRelease = proxyConnections(proxy);
         await agents[1].dispose();
+        expect(proxyConnections(proxy) - connectionsBeforePeerRelease).toBe(
+          proxied ? 1 : 0,
+        );
         expect(deleted).toStrictEqual(['public-file-0', 'public-file-1']);
+        expect(credentials().snapshot()).toStrictEqual(
+          adoptConfig ? [1, 1] : [],
+        );
         expect(
           requests
             .filter((entry) => entry.includes('/chat/completions'))
@@ -301,6 +327,7 @@ describe('public Agent same-label Kimi files', () => {
           'POST /v1/chat/completions owner=1',
         ]);
         expect(requests).toContain('response 503 owner=0');
+        expect(proxyConnections(proxy)).toBeGreaterThanOrEqual(proxied ? 4 : 0);
         expect(requests.some((entry) => entry.startsWith('clientError'))).toBe(
           false,
         );
@@ -311,11 +338,12 @@ describe('public Agent same-label Kimi files', () => {
       } finally {
         releaseHeld();
         await Promise.allSettled(agents.map((agent) => agent.dispose()));
-        await Promise.allSettled(configs.map((config) => config.dispose()));
+        await Promise.allSettled(routes.map((route) => route.close()));
         await new Promise<void>((resolve, reject) => {
           server.close((error) => (error ? reject(error) : resolve()));
           server.closeAllConnections();
         });
+        await proxy?.close();
       }
     },
   );

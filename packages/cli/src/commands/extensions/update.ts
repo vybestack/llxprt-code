@@ -45,7 +45,7 @@ function loadUpdateExtensions(args: UpdateArgs, workingDir: string) {
     ExtensionStorage.getUserExtensionsDir(),
     // Force enable named extensions, otherwise we will only update the enabled
     // ones.
-    args.name ? [args.name] : [],
+    { enabledOverride: args.name ? [args.name] : [] },
   );
   const allExtensions = loadExtensions(extensionEnablementManager);
   return annotateActiveExtensions(

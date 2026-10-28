@@ -32,7 +32,13 @@ import {
   type TextEmphasis,
 } from './ToolShared.js';
 import { ToolResultDisplay } from './ToolResultDisplay.js';
-import type { ShellState } from '../../cliUiRuntime.js';
+/**
+ * Shell read the tool message makes: whether the embedded shell is enabled,
+ * which decides if the shell input prompt is rendered.
+ */
+export interface ShellSessionRuntime {
+  getEnableInteractiveShell(): boolean;
+}
 import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
 export type { TextEmphasis } from './ToolShared.js';
@@ -155,7 +161,7 @@ function computeShellFocusState(
   ptyId: number | undefined,
   activeShellPtyId: number | null | undefined,
   embeddedShellFocused: boolean | undefined,
-  shell: ShellState | undefined,
+  shell: ShellSessionRuntime | undefined,
 ): ShellFocusState {
   const isShellTool = name === SHELL_COMMAND_NAME || name === SHELL_NAME;
   const lastActivePtyId = ShellExecutionService.getLastActivePtyId();
@@ -230,7 +236,7 @@ function renderCurrentSubcommand(
  */
 function renderShellInput(
   isThisShellFocused: boolean,
-  shell: ShellState | undefined,
+  shell: ShellSessionRuntime | undefined,
   activeShellPtyId: number | null | undefined,
   embeddedShellFocused: boolean | undefined,
 ): React.ReactNode {
@@ -370,7 +376,7 @@ function renderToolMessageContent(
   availableTerminalHeight: number | undefined,
   renderOutputAsMarkdown: boolean,
   isThisShellFocused: boolean,
-  shell: ShellState | undefined,
+  shell: ShellSessionRuntime | undefined,
   activeShellPtyId: number | null | undefined,
   embeddedShellFocused: boolean | undefined,
 ): React.ReactNode {
@@ -415,7 +421,7 @@ export interface ToolMessageProps extends IndividualToolCallDisplay {
   renderOutputAsMarkdown?: boolean;
   activeShellPtyId?: number | null;
   embeddedShellFocused?: boolean;
-  shell?: ShellState;
+  shell?: ShellSessionRuntime;
   isFirst?: boolean;
   borderColor?: string;
   borderDimColor?: boolean;

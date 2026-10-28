@@ -13,8 +13,11 @@ import type { Mock } from 'bun:test';
 import { beforeEach, vi } from 'bun:test';
 import * as path from 'node:path';
 import { useCallback, useState, type FC } from 'react';
-import { createMockCommandContext } from './mockCommandContext.js';
-import type { CommandContext, SlashCommand } from '../ui/commands/types.js';
+import {
+  createMockCommandContext,
+  type CommandOwnerFixture,
+} from './mockCommandContext.js';
+import type { SlashCommand } from '../ui/commands/types.js';
 import { CommandKind } from '../ui/commands/types.js';
 import type { UseCommandCompletionReturn } from '../ui/hooks/useCommandCompletion.js';
 import { useCommandCompletion } from '../ui/hooks/useCommandCompletion.js';
@@ -248,9 +251,11 @@ function createCompletion(): UseCommandCompletionReturn {
 
 function createProps(
   buffer: TextBuffer,
-  commandContext: CommandContext,
+  commandContext: CommandOwnerFixture,
 ): InputPromptProps {
   return {
+    enableFuzzyFiltering: true,
+    generatePromptContent: null,
     buffer,
     onSubmit: vi.fn(),
     userMessages: [],
@@ -281,7 +286,7 @@ export function usePasteTestHarness() {
   let mockInputHistory: ReturnType<typeof useInputHistory>;
   let mockReverseSearchCompletion: UseReverseSearchCompletionReturn;
   let mockBuffer: TextBuffer;
-  let mockCommandContext: CommandContext;
+  let mockCommandContext: CommandOwnerFixture;
 
   const mockedUseShellHistory = useShellHistory as Mock<typeof useShellHistory>;
   const mockedUseCommandCompletion = useCommandCompletion as Mock<

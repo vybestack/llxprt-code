@@ -23,13 +23,16 @@ import { REGISTRY_ENTRIES_PART_1 } from './registry/registry-entries-1.js';
 import { REGISTRY_ENTRIES_PART_2 } from './registry/registry-entries-2.js';
 import { REGISTRY_ENTRIES_PART_3 } from './registry/registry-entries-3.js';
 import { isStrictNumericString } from './numericString.js';
-import { LEGACY_SETTING_KEY_MIGRATIONS } from './legacyKeyMigration.js';
+import { legacySettingCanonicalKey } from './legacyKeyMigration.js';
+import { deepFreezeTable } from './immutableTable.js';
 
-export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
+export const SETTINGS_REGISTRY: readonly SettingSpec[] = deepFreezeTable<
+  readonly SettingSpec[]
+>([
   ...REGISTRY_ENTRIES_PART_1,
   ...REGISTRY_ENTRIES_PART_2,
   ...REGISTRY_ENTRIES_PART_3,
-];
+]);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -79,7 +82,7 @@ export function normalizeSetting(key: string, value: unknown): unknown {
   return value;
 }
 
-const INTERNAL_SETTINGS_KEYS = new Set([
+const INTERNAL_SETTINGS_KEYS: readonly string[] = Object.freeze([
   'activeProvider',
   'currentProfile',
   'tools',
@@ -92,14 +95,14 @@ const INTERNAL_SETTINGS_KEYS = new Set([
 ]);
 
 export function isInternalSettingKey(key: string): boolean {
-  return INTERNAL_SETTINGS_KEYS.has(key);
+  return INTERNAL_SETTINGS_KEYS.includes(key);
 }
 
 export function getInternalSettingKeys(): string[] {
   return [...INTERNAL_SETTINGS_KEYS];
 }
 
-const SESSION_SCOPED_SETTING_KEYS: ReadonlySet<string> = new Set(
+const SESSION_SCOPED_SETTING_KEYS: readonly string[] = Object.freeze(
   SETTINGS_REGISTRY.filter((s) => s.sessionScope === true).map((s) => s.key),
 );
 
@@ -117,7 +120,7 @@ for (const spec of SETTINGS_REGISTRY) {
 }
 
 export function isSessionScopedSettingKey(key: string): boolean {
-  return SESSION_SCOPED_SETTING_KEYS.has(key);
+  return SESSION_SCOPED_SETTING_KEYS.includes(key);
 }
 
 export function getSessionScopedSettingKeys(): readonly string[] {
@@ -135,7 +138,7 @@ export function getSessionScopedSettingKeys(): readonly string[] {
  */
 export function assertSessionScopedKey(key: string): string {
   const canonicalKey = resolveAlias(key);
-  if (!SESSION_SCOPED_SETTING_KEYS.has(canonicalKey)) {
+  if (!SESSION_SCOPED_SETTING_KEYS.includes(canonicalKey)) {
     const allowed = [...SESSION_SCOPED_SETTING_KEYS].join(', ');
     throw new Error(
       `"${key}" is not a registry-classified session-scoped setting ` +
@@ -230,15 +233,15 @@ function flattenRegistryPrefixedObjects(
   source: Record<string, unknown>,
   stripSynthesizedContainers: boolean,
 ): Record<string, unknown> {
-  const { prefixes, bareKeys } = getRegistryStructure();
+  const { prefixes, bareKeys } = REGISTRY_STRUCTURE;
   const result: Record<string, unknown> = { ...source };
 
   for (const [key, value] of Object.entries(source)) {
-    if (!isPlainObject(value) || !prefixes.has(key)) {
+    if (!isPlainObject(value) || !prefixes.includes(key)) {
       continue;
     }
     emitFlattenedEntries(result, key, value);
-    if (!bareKeys.has(key)) {
+    if (!bareKeys.includes(key)) {
       delete result[key];
     } else if (stripSynthesizedContainers) {
       stripRegisteredSubKeysFromContainer(result, key, bareKeys);
@@ -257,7 +260,7 @@ function flattenRegistryPrefixedObjects(
 function stripRegisteredSubKeysFromContainer(
   result: Record<string, unknown>,
   containerKey: string,
-  bareKeys: Set<string>,
+  bareKeys: readonly string[],
 ): void {
   const container = result[containerKey];
   if (!isPlainObject(container)) {
@@ -266,7 +269,7 @@ function stripRegisteredSubKeysFromContainer(
   const stripped: Record<string, unknown> = {};
   for (const [subKey, subValue] of Object.entries(container)) {
     const dottedKey = `${containerKey}.${subKey}`;
-    if (bareKeys.has(dottedKey)) {
+    if (bareKeys.includes(dottedKey)) {
       continue;
     }
     stripped[subKey] = subValue;
@@ -283,12 +286,12 @@ function emitFlattenedEntries(
   dottedKey: string,
   value: Record<string, unknown>,
 ): void {
-  const { prefixes, bareKeys } = getRegistryStructure();
+  const { prefixes, bareKeys } = REGISTRY_STRUCTURE;
   for (const [subKey, subValue] of Object.entries(value)) {
     const childKey = `${dottedKey}.${subKey}`;
-    if (isPlainObject(subValue) && prefixes.has(childKey)) {
+    if (isPlainObject(subValue) && prefixes.includes(childKey)) {
       emitFlattenedEntries(result, childKey, subValue);
-      if (!bareKeys.has(childKey)) {
+      if (!bareKeys.includes(childKey)) {
         continue;
       }
     }
@@ -296,39 +299,50 @@ function emitFlattenedEntries(
     // OpenRouter's `reasoning.exclude`) would otherwise become a literal
     // `reasoning.exclude` model param and reach the wire as a bogus top-level
     // field; it stays inside its container instead (issue #2896).
-    if (bareKeys.has(childKey) && !(childKey in result)) {
+    if (bareKeys.includes(childKey) && !(childKey in result)) {
       result[childKey] = subValue;
     }
   }
 }
 
-let registryStructureCache: {
-  prefixes: Set<string>;
-  bareKeys: Set<string>;
-} | null = null;
+interface RegistryStructure {
+  readonly prefixes: readonly string[];
+  readonly bareKeys: readonly string[];
+}
 
-function getRegistryStructure(): {
-  prefixes: Set<string>;
-  bareKeys: Set<string>;
-} {
-  if (registryStructureCache !== null) {
-    return registryStructureCache;
-  }
-  const prefixes = new Set<string>();
-  const bareKeys = new Set<string>();
+/** Ancestors of every registered dotted key, e.g. `reasoning` for `reasoning.effort`. */
+function collectRegistryPrefixes(): readonly string[] {
+  const prefixes: string[] = [];
   for (const spec of SETTINGS_REGISTRY) {
-    bareKeys.add(spec.key);
     let prefix = spec.key;
     let dotIndex = prefix.lastIndexOf('.');
     while (dotIndex > 0) {
       prefix = prefix.slice(0, dotIndex);
-      prefixes.add(prefix);
+      if (!prefixes.includes(prefix)) {
+        prefixes.push(prefix);
+      }
       dotIndex = prefix.lastIndexOf('.');
     }
   }
-  registryStructureCache = { prefixes, bareKeys };
-  return registryStructureCache;
+  return prefixes;
 }
+
+/**
+ * Key structure of the registry, derived once at module load.
+ *
+ * The registry table is fixed and frozen, so this is immutable data owned by
+ * the module, not a lazily filled cache. Measured before deciding: rebuilding
+ * it costs ~3µs for the whole registry, but {@link separateSettings} walks
+ * nested containers recursively and would rebuild it several times per call.
+ */
+function buildRegistryStructure(): RegistryStructure {
+  return Object.freeze({
+    prefixes: Object.freeze(collectRegistryPrefixes()),
+    bareKeys: Object.freeze(SETTINGS_REGISTRY.map((spec) => spec.key)),
+  });
+}
+
+const REGISTRY_STRUCTURE: RegistryStructure = buildRegistryStructure();
 
 /**
  * Flatten provider overrides and reasoning sub-keys into a merged settings object.
@@ -364,7 +378,7 @@ function categorizeSettingEntry(
 ): void {
   if (value === undefined || value === null) return;
 
-  if (LEGACY_SETTING_KEY_MIGRATIONS.has(rawKey)) {
+  if (legacySettingCanonicalKey(rawKey) !== undefined) {
     return;
   }
 
@@ -380,7 +394,7 @@ function categorizeSettingEntry(
     return;
   }
 
-  if (INTERNAL_SETTINGS_KEYS.has(rawKey)) {
+  if (INTERNAL_SETTINGS_KEYS.includes(rawKey)) {
     buckets.cliSettings[rawKey] = value;
     return;
   }
@@ -648,18 +662,20 @@ export function getProtectedSettingKeys(): string[] {
   return keys;
 }
 
-const SENSITIVE_SETTING_KEYS: ReadonlySet<string> = new Set(
+const SENSITIVE_SETTING_KEYS: readonly string[] = Object.freeze(
   SETTINGS_REGISTRY.filter((s) => s.sensitive === true).map((s) => s.key),
 );
 
 export const REDACTED_VALUE = '[REDACTED]';
 
 export function isSensitiveSettingKey(key: string): boolean {
-  if (SENSITIVE_SETTING_KEYS.has(key)) {
+  if (SENSITIVE_SETTING_KEYS.includes(key)) {
     return true;
   }
   const lastDot = key.lastIndexOf('.');
-  return lastDot >= 0 && SENSITIVE_SETTING_KEYS.has(key.slice(lastDot + 1));
+  return (
+    lastDot >= 0 && SENSITIVE_SETTING_KEYS.includes(key.slice(lastDot + 1))
+  );
 }
 
 /** Returns a shallow copy with sensitive top-level setting values redacted. */

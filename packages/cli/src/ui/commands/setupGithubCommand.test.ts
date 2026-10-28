@@ -3,6 +3,9 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
+
+import { bindGithubSetup } from './setupGithubCommandHost.js';
 
 import { automock, waitFor } from '@vybestack/llxprt-code-test-utils';
 import os from 'node:os';
@@ -20,11 +23,11 @@ import {
 } from 'bun:test';
 import * as gitUtils from '../../utils/gitUtils.js';
 import {
-  setupGithubCommand,
+  createSetupGithubCommand,
   updateGitignore,
   GITHUB_WORKFLOW_PATHS,
 } from './setupGithubCommand.js';
-import type { CommandContext, ToolActionReturn } from './types.js';
+import type { ToolActionReturn } from './types.js';
 import * as commandUtils from '../utils/commandUtils.js';
 import { assertTruthy } from '../../__tests__/assertions.js';
 
@@ -67,10 +70,10 @@ void vi.mock('../utils/commandUtils.js', () => ({
  * The command only reads `signal` off the context, so a minimal context with a
  * real signal is enough and keeps the fixture honest about what is required.
  */
-function makeContext(signal?: AbortSignal): CommandContext {
+function makeContext(signal?: AbortSignal): CommandOwnerFixture {
   return {
     signal: signal ?? new AbortController().signal,
-  } as CommandContext;
+  } as CommandOwnerFixture;
 }
 
 describe('setupGithubCommand', () => {
@@ -131,10 +134,9 @@ describe('setupGithubCommand', () => {
       >
     ).mockReturnValueOnce('fakeOpenCommand');
 
-    const result = (await setupGithubCommand.action?.(
-      makeContext(),
-      '',
-    )) as ToolActionReturn;
+    const result = (await createSetupGithubCommand(
+      bindGithubSetup(process.cwd(), undefined),
+    ).action?.(makeContext(), '')) as ToolActionReturn;
 
     const { command } = result.toolArgs;
 
@@ -212,10 +214,9 @@ describe('setupGithubCommand', () => {
       >
     ).mockReturnValueOnce('fakeOpenCommand');
 
-    const result = (await setupGithubCommand.action?.(
-      makeContext(),
-      '',
-    )) as ToolActionReturn;
+    const result = (await createSetupGithubCommand(
+      bindGithubSetup(process.cwd(), undefined),
+    ).action?.(makeContext(), '')) as ToolActionReturn;
 
     const { command } = result.toolArgs;
 
@@ -281,7 +282,9 @@ describe('setupGithubCommand', () => {
     });
 
     await expect(
-      setupGithubCommand.action?.(makeContext(), ''),
+      createSetupGithubCommand(
+        bindGithubSetup(process.cwd(), undefined),
+      ).action?.(makeContext(), ''),
     ).rejects.toThrow(/Invalid response code downloading.*404 - Not Found/);
   });
 
@@ -318,10 +321,9 @@ describe('setupGithubCommand', () => {
       gitUtils.getGitHubRepoInfo as Mock<typeof gitUtils.getGitHubRepoInfo>
     ).mockReturnValue({ owner: 'fake', repo: 'repo' });
 
-    const pending = setupGithubCommand.action?.(
-      makeContext(invocation.signal),
-      '',
-    );
+    const pending = createSetupGithubCommand(
+      bindGithubSetup(process.cwd(), undefined),
+    ).action?.(makeContext(invocation.signal), '');
     // The download is genuinely in flight; nothing has settled it yet.
     await waitFor(() => expect(downloadSignal).toBeDefined());
 

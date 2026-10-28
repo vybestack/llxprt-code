@@ -7,26 +7,58 @@
  * and recordings written when the CLI started with no provider configured.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  spyOn,
+  beforeAll,
+  afterAll,
+} from 'bun:test';
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   Config,
   SessionRecordingService,
   getProjectHash,
-  type AgentClientContract,
+  type IContent,
   readSessionHeader,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
-import type { ParsedCliArgs } from './cliBootstrap.js';
-import { LiveProviderConfig } from './__tests__/liveProviderConfig.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import {
-  buildNewRecordingService,
-  createOrResumeRecording,
-  setupSessionRecording,
-  type ResolvedRecording,
-} from './cliSessionBootstrap.js';
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { buildAgentClientFactory } from '../../agents/src/api/agentBootstrap.js';
+import {
+  createCapturedSessionOwner,
+  ownerClients,
+} from '../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import type { SessionClientOwner } from '../../agents/src/session/session-client-owner.js';
+import { readCurrentOwnerHistory } from './__tests__/session-owner-history-read.js';
+import type { SessionControl } from '../../agents/src/api/control/sessionControl.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { buildTestMcpRuntime } from '../../agents/src/api/__tests__/helpers/mcp-owner-fixture.js';
+import { FakeProvider } from '../../providers/src/fake/FakeProvider.js';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { fileURLToPath } from 'node:url';
+import { LiveProviderConfig } from './__tests__/liveProviderConfig.js';
+import { setupOwnerSessionRecording } from './cliSessionBootstrap.js';
 
 let projectHash = '';
 const CORRUPT_REASON =
@@ -100,8 +132,8 @@ async function writeCorruptSession(
 function configFor(
   root: string,
   overrides: { continueSession?: boolean | string; provider?: string } = {},
-): LiveProviderConfig {
-  return new LiveProviderConfig({
+): StartupConfig {
+  return new StartupConfig(root, {
     cwd: root,
     targetDir: root,
     debugMode: false,
@@ -119,44 +151,46 @@ function configFor(
 }
 
 /** A real Config whose chats directory is the test's temp dir (never the user's global temp). */
-class StartupConfig extends Config {
+class StartupConfig extends LiveProviderConfig {
+  override readonly projectTempDir: string;
+  override readonly projectChatsDir: string;
   constructor(
-    private readonly chatsRoot: string,
+    chatsRoot: string,
     params: ConstructorParameters<typeof Config>[0],
   ) {
     super(params);
-  }
-
-  override getProjectTempDir(): string {
-    return this.chatsRoot;
+    this.projectTempDir = join(chatsRoot, getProjectHash(params.targetDir));
+    this.projectChatsDir = join(chatsRoot, 'chats');
   }
 }
 
-/**
- * The session client the CLI hands recording bootstrap: the agent client that
- * records what the CLI restores into it, and the workspace directories.
- */
-function sessionClientFor(root: string, restoreError?: Error) {
-  const restored: unknown[][] = [];
-  const client = {
-    getAgentClient: () =>
-      ({
-        restoreHistory: async (history: readonly unknown[]) => {
-          restored.push([...history]);
-          if (restoreError) throw restoreError;
-        },
-        resetChat: async () => {},
-      }) as unknown as AgentClientContract,
-    workspaceDirectories: () => [root],
-  };
-  return { client, restored };
+interface StartupResult {
+  readonly resumedSessionId: string | null;
+  readonly resumedHistory: IContent[] | null;
+  readonly startupWarnings: string[];
+  readonly session: SessionControl;
 }
 
 describe('startup recording with unreadable and no-provider sessions (issue #3732)', () => {
   let root: string;
   let chatsDir: string;
   let warnings: string[] = [];
-  const resolved: ResolvedRecording[] = [];
+  const sessions: SessionControl[] = [];
+  const configs: Config[] = [];
+  const restores: Array<() => void> = [];
+  const workspaceClosers: Array<() => Promise<void>> = [];
+  let prompts: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    prompts = await mkdtemp(join(tmpdir(), 'startup-owner-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = prompts;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(prompts, { recursive: true, force: true });
+  });
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'recording-bootstrap-3732-'));
@@ -166,54 +200,148 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
   });
 
   afterEach(async () => {
-    for (const entry of resolved.splice(0)) {
-      await entry.recordingService.dispose();
-      await entry.resumedLockHandle?.release();
-    }
+    for (const session of sessions.splice(0)) await session.dispose();
+    for (const restore of restores.splice(0)) restore();
+    for (const close of workspaceClosers.splice(0).reverse()) await close();
+    for (const config of configs.splice(0)) await config.dispose();
     await rm(root, { recursive: true, force: true });
   });
 
-  async function startup(
-    continueSession: boolean | string,
-  ): Promise<ResolvedRecording> {
-    const entry = await createOrResumeRecording(
-      configFor(root, { continueSession, provider: 'test-provider' }),
-      projectHash,
-      chatsDir,
-      sessionClientFor(root).client,
+  async function acquireSession(
+    config: StartupConfig,
+    restoreError?: Error,
+    restoreIdentities?: string[],
+  ) {
+    configs.push(config);
+    const settings = new SettingsService();
+    for (const [key, value] of Object.entries(config.getInitialSettings()))
+      settings.set(key, value);
+    const settingsOwner = new SessionSettingsOwner(settings);
+    settingsOwner.bindTelemetry(config);
+    settingsOwner.initializeProviderSelection(
+      config.getProvider(),
+      config.getModel(),
     );
-    resolved.push(entry);
-    warnings = entry.startupWarnings;
-    return entry;
+    workspaceClosers.push(() => settingsOwner.dispose());
+    const policy = new RuntimePolicyOwner(config);
+    workspaceClosers.push(() => policy.dispose());
+    const mcp = await buildTestMcpRuntime(
+      config,
+      policy.session.messageBus,
+      {},
+      undefined,
+      policy,
+    );
+    workspaceClosers.push(() => mcp.dispose());
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      config,
+      undefined,
+      undefined,
+      settingsOwner,
+    );
+    workspaceClosers.push(async () => {
+      manager.dispose();
+    });
+    const media = new SessionMediaOwner(config.projectTempDir, 1024 * 1024);
+    workspaceClosers.push(() => media.dispose());
+    const sessionClient = await createCapturedSessionOwner(
+      config,
+      assembleTaskSchemaPolicy(settings),
+      manager,
+      buildAgentClientFactory(media.store),
+      media.store,
+      mcp.readInstructions,
+      mcp.workspacePaths,
+      settingsOwner,
+      createRuntimeContentGeneratorFactory(),
+      configureProviderTokenizer(manager),
+    );
+    workspaceClosers.push(() => sessionClient.dispose());
+    sessionClient.bindMcpRuntime(mcp);
+    await mcp.initialize();
+    await sessionClient.initializeTools();
+    const provider = new FakeProvider(
+      fileURLToPath(
+        new URL(
+          '../../agents/src/api/__tests__/fixtures/multi-turn-text.jsonl',
+          import.meta.url,
+        ),
+      ),
+      root,
+    );
+    provider.name = config.getProvider() ?? 'test-provider';
+    manager.registerProvider(provider);
+    manager.setActiveProvider(provider.name);
+    if (config.getProvider() !== undefined)
+      await sessionClient.clients.refreshAuth();
+    sessionClient.clients.conversationBinding.initializeConversation();
+    // The production path reaches the current client; every client the
+    // owner's factory built carries the same instance spy.
+    const clients = ownerClients(sessionClient);
+    const restored: unknown[][] = [];
+    for (const client of clients) {
+      const restoreHistory = client.restoreHistory;
+      const restore = spyOn(client, 'restoreHistory').mockImplementation(
+        async (history, origin) => {
+          restored.push([...history]);
+          if (restoreError) throw restoreError;
+          restoreIdentities?.push(config.getSessionId());
+          await restoreHistory.call(client, history, origin);
+          restoreIdentities?.push(config.getSessionId());
+        },
+      );
+      restores.push(() => restore.mockRestore());
+    }
+    const session = sessionClient.createSessionControl(
+      'config',
+      () => config.getSessionId(),
+      (operation) => operation(),
+      () => {},
+      () => {},
+      () => config.getProvider() ?? 'unknown',
+      () => config.getModel(),
+    );
+    sessions.push(session);
+    return { session, restored, sessionClient, clients };
   }
 
-  /** The real CLI startup path, with a Config rooted at the temp dir. */
+  async function startup(
+    continueSession: boolean | string,
+  ): Promise<StartupResult> {
+    const { setup } = await startupViaSetup(continueSession);
+    warnings = setup.startupWarnings;
+    return setup;
+  }
+
   async function startupViaSetup(
     continueSession: boolean | string,
     restoreError?: Error,
-  ): Promise<{
-    setup: Awaited<ReturnType<typeof setupSessionRecording>>;
-    restored: unknown[][];
-  }> {
-    const config = new StartupConfig(root, {
-      cwd: root,
-      targetDir: root,
-      debugMode: false,
-      question: undefined,
-      userMemory: '',
-      sessionId: 'fresh-session',
-      model: 'test-model',
-      provider: 'test-provider',
+  ) {
+    const config = configFor(root, {
       continueSession,
+      provider: 'test-provider',
     });
-    const { client, restored } = sessionClientFor(root, restoreError);
-    const setup = await setupSessionRecording(
+    const { session, restored } = await acquireSession(config, restoreError);
+    const startupWarnings: string[] = [];
+    const resumedHistory = await setupOwnerSessionRecording(
       config,
-      {} as ParsedCliArgs,
+      session,
+      session.listBrowserTargetsDetailed,
+      { listSessions: false, deleteSession: undefined },
       null,
-      client,
-    );
-    resolved.push(setup);
+      startupWarnings,
+    ).then(({ history }) => history);
+    const setup: StartupResult = {
+      resumedSessionId: resumedHistory === null ? null : session.getSessionId(),
+      resumedHistory,
+      startupWarnings,
+      session,
+    };
     return { setup, restored };
   }
 
@@ -221,40 +349,54 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
    * What the CLI does when a profile is loaded: the live Config takes the new
    * provider/model and the switch is recorded as history.
    */
-  function loadProfile(
+  async function loadProfile(
     live: LiveProviderConfig,
-    recording: SessionRecordingService,
+    recording: SessionControl,
     provider: string,
     model: string,
-  ): void {
+  ): Promise<void> {
     live.setProvider(provider);
     live.setModel(model);
-    recording.recordProviderSwitch(provider, model);
+    await recording.flushRecording({
+      type: 'provider_switch',
+      provider,
+      model,
+    });
   }
 
   async function recordFirstMessage(
-    recording: SessionRecordingService,
+    session: SessionControl,
+    sessionClient: SessionClientOwner,
   ): Promise<string> {
-    recording.recordContent({
+    const history = readCurrentOwnerHistory(sessionClient);
+    if (history === null) throw new Error('Missing acquired startup history');
+    history.add({
       speaker: 'human',
       blocks: [{ type: 'text', text: 'first message' }],
     });
-    await recording.flush();
-    return recording.getFilePath()!;
+    await session.flushRecording();
+    const path = session.getRecording().path;
+    if (path === undefined) throw new Error('First message was not recorded');
+    return path;
   }
 
   it('resumes a session recorded after a no-provider start and a profile load', async () => {
     const noProviderConfig = configFor(root);
-    const first = await buildNewRecordingService(
+    const { session: first, sessionClient } =
+      await acquireSession(noProviderConfig);
+    await setupOwnerSessionRecording(
       noProviderConfig,
-      projectHash,
-      chatsDir,
-      sessionClientFor(root).client,
-    );
+      first,
+      first.listBrowserTargetsDetailed,
+      { listSessions: false, deleteSession: undefined },
+      null,
+    ).then(({ history }) => history);
     let header: Awaited<ReturnType<typeof readSessionHeader>>;
     try {
-      loadProfile(noProviderConfig, first, 'codex', 'gpt-6-luna');
-      header = await readSessionHeader(await recordFirstMessage(first));
+      await loadProfile(noProviderConfig, first, 'codex', 'gpt-6-luna');
+      header = await readSessionHeader(
+        await recordFirstMessage(first, sessionClient),
+      );
     } finally {
       await first.dispose();
     }
@@ -276,17 +418,20 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
 
   it('writes the live provider/model into the header when the change never reaches recordProviderSwitch', async () => {
     const liveConfig = configFor(root);
-    const recording = await buildNewRecordingService(
+    const { session: recording, sessionClient } =
+      await acquireSession(liveConfig);
+    await setupOwnerSessionRecording(
       liveConfig,
-      projectHash,
-      chatsDir,
-      sessionClientFor(root).client,
-    );
+      recording,
+      recording.listBrowserTargetsDetailed,
+      { listSessions: false, deleteSession: undefined },
+      null,
+    ).then(({ history }) => history);
     try {
       liveConfig.setProvider('anthropic');
       liveConfig.setModel('claude-opus-5-5');
       const header = await readSessionHeader(
-        await recordFirstMessage(recording),
+        await recordFirstMessage(recording, sessionClient),
       );
 
       expect({
@@ -334,7 +479,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
 
     expect({
       resumedSessionId: setup.resumedSessionId,
-      newSessionId: setup.recordingService.getSessionId(),
+      newSessionId: setup.session.getSessionId(),
       warningCount: setup.startupWarnings.length,
       namesFile: setup.startupWarnings[0]?.includes(corruptPath),
       namesReason: setup.startupWarnings[0]?.includes(CORRUPT_REASON),
@@ -443,7 +588,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
     expect({
       resumedSessionId: entry.resumedSessionId,
       resumedHistory: entry.resumedHistory,
-      newSessionId: entry.recordingService.getSessionId(),
+      newSessionId: entry.session.getSessionId(),
       warningCount: warnings.length,
       namesRef: warnings[0]?.includes('corrupt-0004'),
       namesFile: warnings[0]?.includes(corruptPath),
@@ -470,13 +615,90 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
 
     expect({
       resumedSessionId: entry.resumedSessionId,
-      newSessionId: entry.recordingService.getSessionId(),
+      newSessionId: entry.session.getSessionId(),
       namesFile: warnings.some((warning) => warning.includes(corruptPath)),
     }).toStrictEqual({
       resumedSessionId: null,
       newSessionId: 'fresh-session',
       namesFile: true,
     });
+  });
+
+  it('publishes the resumed identity only after native startup history restoration succeeds', async () => {
+    await writeHealthySession(
+      chatsDir,
+      'identity-after-restore',
+      '2026-10-08T00:00:00Z',
+    );
+    const config = configFor(root, {
+      continueSession: true,
+      provider: 'test-provider',
+    });
+    const identities: string[] = [];
+    const { session } = await acquireSession(config, undefined, identities);
+    const history = await setupOwnerSessionRecording(
+      config,
+      session,
+      session.listBrowserTargetsDetailed,
+      { listSessions: false, deleteSession: undefined },
+      null,
+    ).then(({ history }) => history);
+    if (history === null) throw new Error('Expected restored startup history');
+    expect(identities).toStrictEqual(['fresh-session', 'fresh-session']);
+    expect(config.getSessionId()).toBe('identity-after-restore');
+    expect(session.readHistorySnapshot()?.messages).toStrictEqual(history);
+  });
+
+  it('propagates native restore and rollback failures without starting a replacement recording', async () => {
+    await writeHealthySession(
+      chatsDir,
+      'terminal-native-restore',
+      '2026-10-08T00:00:00Z',
+    );
+    const config = configFor(root, {
+      continueSession: true,
+      provider: 'test-provider',
+    });
+    const primary = new Error('native startup restore failed');
+    const rollback = new Error('native prior-history rollback failed');
+    const { session, clients } = await acquireSession(config, primary);
+    const resets: string[] = [];
+    for (const client of clients) {
+      const resetChat = client.resetChat;
+      const reset = spyOn(client, 'resetChat').mockImplementation(async () => {
+        resets.push(config.getSessionId());
+        await resetChat.call(client);
+      });
+      const setHistory = spyOn(client, 'setHistory').mockRejectedValue(
+        rollback,
+      );
+      restores.push(
+        () => setHistory.mockRestore(),
+        () => reset.mockRestore(),
+      );
+    }
+    const outcome = await setupOwnerSessionRecording(
+      config,
+      session,
+      session.listBrowserTargetsDetailed,
+      { listSessions: false, deleteSession: undefined },
+      null,
+      warnings,
+    )
+      .then(({ history }) => history)
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    if (!(outcome instanceof AggregateError)) throw outcome;
+    expect(outcome.errors).toStrictEqual([primary, rollback]);
+    expect(resets).toStrictEqual(['fresh-session']);
+    expect(config.getSessionId()).toBe('fresh-session');
+    expect(session.getRecording().enabled).toBe(false);
+    expect(warnings).toStrictEqual([]);
+    expect(
+      (await readdir(chatsDir)).filter((name) => name.endsWith('.lock')),
+    ).toStrictEqual([]);
   });
 
   describe('recordings whose first line is not a session_start', () => {
@@ -554,7 +776,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
 
         expect({
           resumedSessionId: entry.resumedSessionId,
-          newSessionId: entry.recordingService.getSessionId(),
+          newSessionId: entry.session.getSessionId(),
           warningCount: warnings.length,
           namesFile: warnings[0]?.includes(filePath),
           namesReason: warnings[0]?.includes(malformed.reason),

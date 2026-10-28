@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 /**
  * @plan PLAN-20260130-ASYNCTASK.P16
@@ -13,8 +14,10 @@ import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testH
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { TasksControl } from '../../../../agents/src/api/control/tasksControl.js';
 import { createFakeAgent } from '../hooks/agentStream/__tests__/helpers/createFakeAgent.js';
-import { taskCommand, tasksCommands } from './tasksCommand.js';
-import type { CommandContext } from './types.js';
+import { registerTaskCommand } from '../../__tests__/hook-task-command-test-owner.js';
+import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
+import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
+
 import {
   AsyncTaskManager,
   SubagentTerminateMode,
@@ -26,7 +29,7 @@ import type { SessionStatsState } from '../contexts/SessionContext.js';
 
 describe('tasksCommand', () => {
   let asyncTaskManager: AsyncTaskManager;
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
   let addItemMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -36,7 +39,7 @@ describe('tasksCommand', () => {
     context = {
       runtimeApi: createMockRuntimeApi(),
       refreshProviderAliases: vi.fn(async () => {}),
-      oauthControl: {} as CommandContext['oauthControl'],
+      oauthControl: {} as CommandOwnerFixture['oauthControl'],
       signal: new AbortController().signal,
       services: {
         config: null,
@@ -72,20 +75,27 @@ describe('tasksCommand', () => {
   });
 
   it('should export taskCommand with subCommands', () => {
-    expect(taskCommand.name).toBe('task');
-    expect(taskCommand.subCommands).toHaveLength(2);
-    expect(taskCommand.subCommands?.[0].name).toBe('list');
-    expect(taskCommand.subCommands?.[1].name).toBe('end');
+    expect(registerTaskCommand(context).name).toBe('task');
+    expect(registerTaskCommand(context).subCommands).toHaveLength(2);
+    expect(registerTaskCommand(context).subCommands?.[0].name).toBe('list');
+    expect(registerTaskCommand(context).subCommands?.[1].name).toBe('end');
   });
 
   it('should export tasksCommands array with taskCommand', () => {
+    const taskCommand = registerTaskCommand(context);
+    const tasksCommands = new BuiltinCommandLoader(
+      { ...createUnconfiguredBuiltinOwners(), taskCommand },
+      null,
+    )
+      .loadCommandsSync()
+      .filter((command) => command.name === 'task');
     expect(tasksCommands).toHaveLength(1);
     expect(tasksCommands[0]).toBe(taskCommand);
   });
 
   describe('/task list', () => {
     it('should return "No async tasks" when there are no tasks', () => {
-      const listSubCommand = taskCommand.subCommands?.find(
+      const listSubCommand = registerTaskCommand(context).subCommands?.find(
         (c) => c.name === 'list',
       );
       void listSubCommand?.action?.(context, '');
@@ -107,7 +117,7 @@ describe('tasksCommand', () => {
         abortController: new AbortController(),
       });
 
-      const listSubCommand = taskCommand.subCommands?.find(
+      const listSubCommand = registerTaskCommand(context).subCommands?.find(
         (c) => c.name === 'list',
       );
       void listSubCommand?.action?.(context, '');
@@ -140,7 +150,7 @@ describe('tasksCommand', () => {
         terminate_reason: SubagentTerminateMode.GOAL,
       });
 
-      const listSubCommand = taskCommand.subCommands?.find(
+      const listSubCommand = registerTaskCommand(context).subCommands?.find(
         (c) => c.name === 'list',
       );
       void listSubCommand?.action?.(context, '');
@@ -168,7 +178,7 @@ describe('tasksCommand', () => {
         abortController: new AbortController(),
       });
 
-      const endSubCommand = taskCommand.subCommands?.find(
+      const endSubCommand = registerTaskCommand(context).subCommands?.find(
         (c) => c.name === 'end',
       );
       await endSubCommand?.action?.(context, 'task-789');
@@ -190,7 +200,7 @@ describe('tasksCommand', () => {
         abortController: new AbortController(),
       });
 
-      const endSubCommand = taskCommand.subCommands?.find(
+      const endSubCommand = registerTaskCommand(context).subCommands?.find(
         (c) => c.name === 'end',
       );
       await endSubCommand?.action?.(context, 'task-abc');
@@ -219,7 +229,7 @@ describe('tasksCommand', () => {
         abortController: new AbortController(),
       });
 
-      const endSubCommand = taskCommand.subCommands?.find(
+      const endSubCommand = registerTaskCommand(context).subCommands?.find(
         (c) => c.name === 'end',
       );
       void endSubCommand?.action?.(context, 'task-ab');
@@ -239,7 +249,7 @@ describe('tasksCommand', () => {
     });
 
     it('should show error for unknown task ID', () => {
-      const endSubCommand = taskCommand.subCommands?.find(
+      const endSubCommand = registerTaskCommand(context).subCommands?.find(
         (c) => c.name === 'end',
       );
       void endSubCommand?.action?.(context, 'unknown-id');
@@ -267,7 +277,7 @@ describe('tasksCommand', () => {
         terminate_reason: SubagentTerminateMode.GOAL,
       });
 
-      const endSubCommand = taskCommand.subCommands?.find(
+      const endSubCommand = registerTaskCommand(context).subCommands?.find(
         (c) => c.name === 'end',
       );
       void endSubCommand?.action?.(context, 'task-xyz');
@@ -283,7 +293,7 @@ describe('tasksCommand', () => {
     });
 
     it('should show usage error when no task ID provided', () => {
-      const endSubCommand = taskCommand.subCommands?.find(
+      const endSubCommand = registerTaskCommand(context).subCommands?.find(
         (c) => c.name === 'end',
       );
       void endSubCommand?.action?.(context, '');
@@ -319,7 +329,7 @@ describe('tasksCommand', () => {
         terminate_reason: SubagentTerminateMode.GOAL,
       });
 
-      const endSubCommand = taskCommand.subCommands?.find(
+      const endSubCommand = registerTaskCommand(context).subCommands?.find(
         (c) => c.name === 'end',
       );
       const completions = await endSubCommand?.completion?.(context, '');
@@ -344,7 +354,7 @@ describe('tasksCommand', () => {
         abortController: new AbortController(),
       });
 
-      const endSubCommand = taskCommand.subCommands?.find(
+      const endSubCommand = registerTaskCommand(context).subCommands?.find(
         (c) => c.name === 'end',
       );
       const completions = await endSubCommand?.completion?.(context, 'task-a');

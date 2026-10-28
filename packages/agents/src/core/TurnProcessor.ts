@@ -4,91 +4,99 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
-import { withRetryRequestState } from './retry-request-state.js';
-import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  INVALID_CONTENT_RETRY_OPTIONS,
+  StreamEventType,
+  type StreamEvent,
+} from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
-import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
-import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
+import type { TurnProcessorRuntime } from './chatSessionPorts.js';
+import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
+import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type {
+  ProviderFileBindingStore,
+  ProviderRequestCollaborators,
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
   IContent,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import type { CompressionHandler } from '../compression/CompressionHandler.js';
+import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
+import { resolveGeneratingModel } from './generatingModelResolver.js';
+import {
+  filterAfcByHookRestrictions,
+  filterHookRestrictedBlocks,
+} from './hookToolRestrictions.js';
+import { normalizeToolInteractionInput } from './MessageConverter.js';
 import {
   bindPreparedTransportSignal,
   buildProviderChatOptions,
   enforceAndSendWithPromptEnvelopeRetries,
   prepareAtSendSeam,
 } from './promptEnvelopeSendSeam.js';
-import { resolveGeneratingModel } from './generatingModelResolver.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { CompressionHandler } from '../compression/CompressionHandler.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { withRetryRequestState } from './retry-request-state.js';
 import type { StreamProcessor } from './StreamProcessor.js';
-import { normalizeToolInteractionInput } from './MessageConverter.js';
-import {
-  StreamEventType,
-  type StreamEvent,
-  INVALID_CONTENT_RETRY_OPTIONS,
-} from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-import {
-  filterHookRestrictedBlocks,
-  filterAfcByHookRestrictions,
-} from './hookToolRestrictions.js';
+import { withReportedUsage } from './streamRequestHelpers.js';
+import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import {
-  shouldRetryStreamAttempt,
   applyRetryTemperature,
   chunkHasVisibleOutput,
+  shouldRetryStreamAttempt,
 } from './turnAbortHelpers.js';
-import { withReportedUsage } from './streamRequestHelpers.js';
 
 import {
-  AgentExecutionStoppedError,
   AgentExecutionBlockedError,
+  AgentExecutionStoppedError,
 } from './chatSession.js';
 import {
   createProviderSendTiming,
   logModelOutputResponse,
   readProviderStreamResponse,
+  turnTelemetryPorts,
   validateProviderForSend,
   type ProviderSendTiming,
 } from './turnLogging.js';
 import { throwTurnSendError } from './turnSendError.js';
+import { reasoningInclusionPolicy } from './runtimePorts.js';
 
 import type {
-  ModelStreamChunk,
   ModelOutput,
+  ModelStreamChunk,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
-  toModelStreamChunk,
   emptyModelOutput,
+  toModelStreamChunk,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { recordAbandonedStreamAttempt } from './tokenUsageActualLogger.js';
-import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
-import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
-
-type SemanticMediaPurgeFactory = () => Promise<
-  SemanticMediaPurgeAttempt | undefined
->;
 import {
   prepareAdmittedUserTurn,
   type PreparedUserTurn,
 } from './mediaAdmissionSeam.js';
-import { enforceTurnMediaRequestContents } from './turnMediaRequest.js';
+import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
+import { recordAbandonedStreamAttempt } from './tokenUsageActualLogger.js';
 import { commitTurnHistory } from './turnHistoryCommit.js';
 import {
   failedTurnCleanup,
   throwAfterFailedTurnCleanup,
   wrapStreamGeneratorLifecycle,
 } from './turnMediaAdmissionLifecycle.js';
+import { enforceTurnMediaRequestContents } from './turnMediaRequest.js';
+import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
+
+type SemanticMediaPurgeFactory = () => Promise<
+  SemanticMediaPurgeAttempt | undefined
+>;
 
 interface ToolSelectionHookResult {
   tools: ToolDeclaration[] | undefined;
@@ -113,6 +121,10 @@ function wrapChunk(chunk: ModelStreamChunk): StreamEvent {
  * Orchestrates non-streaming sends and delegates streaming to StreamProcessor.
  */
 export class TurnProcessor {
+  private loggingPorts() {
+    return turnTelemetryPorts(this.ports.state, this.ports.telemetry);
+  }
+
   private logger = new DebugLogger('llxprt:turn-processor');
   private sendPromise: Promise<void> = Promise.resolve();
   private lastPromptTokenCount: number | null = null;
@@ -134,13 +146,22 @@ export class TurnProcessor {
     return this.currentPromptEnvelopeEstimate;
   }
 
-  rebindHistory(runtimeContext: AgentRuntimeContext): void {
-    this.runtimeContext = runtimeContext;
-    this.historyService = runtimeContext.history;
+  rebindHistory(
+    ports: TurnProcessorRuntime,
+    providerFileBindings: ProviderFileBindingStore,
+  ): void {
+    this.ports = ports;
+    this.historyService = ports.history;
+    this.providerFileBindings = providerFileBindings;
   }
 
   constructor(
-    private runtimeContext: AgentRuntimeContext,
+    private ports: TurnProcessorRuntime,
+    private readonly config: Config | undefined,
+    private readonly mediaResolver: RequestMediaResolutionService | undefined,
+    private readonly requestMediaBudgetBytes: number | undefined,
+    private providerFileBindings: ProviderFileBindingStore | undefined,
+    private readonly providerFileLifecycle: ProviderFileLifecycle | undefined,
     private readonly compressionHandler: CompressionHandler,
     private readonly providerResolver: (contextLabel: string) => IProvider,
     private readonly providerRuntimeBuilder: (
@@ -169,7 +190,7 @@ export class TurnProcessor {
     this._resetPerTurnState();
 
     const prepared = await prepareAdmittedUserTurn(
-      this.runtimeContext,
+      this.ports,
       this.historyService,
       this._normalizeUserContent(params),
       prompt_id,
@@ -232,7 +253,7 @@ export class TurnProcessor {
     this._resetPerTurnState();
 
     const prepared = await prepareAdmittedUserTurn(
-      this.runtimeContext,
+      this.ports,
       this.historyService,
       this._normalizeUserContent(params),
       prompt_id,
@@ -501,7 +522,7 @@ export class TurnProcessor {
         semanticMediaPurge,
       );
       logModelOutputResponse(
-        this.runtimeContext,
+        this.loggingPorts(),
         prompt_id,
         timing.elapsedSinceSend(),
         response,
@@ -511,7 +532,7 @@ export class TurnProcessor {
       this.sendPromise = Promise.resolve();
       return throwTurnSendError(
         error,
-        this.runtimeContext,
+        this.loggingPorts(),
         prompt_id,
         timing.elapsedSinceSend(),
         this._normalizeRequestTools(params),
@@ -523,11 +544,8 @@ export class TurnProcessor {
   }
 
   private _validateProvider(provider: IProvider): void {
-    validateProviderForSend(
-      provider,
-      this.logger,
-      this.runtimeContext.state.model,
-      () => this.resolveProviderBaseUrl(provider),
+    validateProviderForSend(provider, this.logger, this.ports.state.model, () =>
+      this.resolveProviderBaseUrl(provider),
     );
   }
 
@@ -563,15 +581,15 @@ export class TurnProcessor {
     );
     provider = bindProviderMediaAndFiles(
       provider,
-      runtimeContext.mediaResolver,
-      runtimeContext.requestMediaBudgetBytes,
-      runtimeContext.providerFileBindings,
-      runtimeContext.providerFileLifecycle,
-      runtimeContext.config?.getTargetDir(),
+      this.mediaResolver,
+      this.requestMediaBudgetBytes,
+      this.providerFileBindings,
+      this.providerFileLifecycle,
+      this.config?.getTargetDir(),
     );
     return enforceAndSendWithPromptEnvelopeRetries({
       provider,
-      tokenizerFactory: this.runtimeContext.promptEstimator,
+      tokenizerFactory: this.ports.promptEstimator,
       contents: userIContents,
       buildOptions: (contents) =>
         this._buildProviderChatOptions(
@@ -584,7 +602,7 @@ export class TurnProcessor {
         ),
       enforce: (contents, estimate) =>
         enforceTurnMediaRequestContents({
-          runtimeContext: this.runtimeContext,
+          telemetry: this.loggingPorts(),
           historyService: this.historyService,
           compressionHandler: this.compressionHandler,
           userContents: contents,
@@ -657,14 +675,14 @@ export class TurnProcessor {
             params.config?.providerRequestContext,
             provider.name,
           ),
-          this.runtimeContext.promptEstimator,
+          this.ports.promptEstimator,
         ));
       this.currentPromptEnvelopeEstimate = prepared.estimate;
       recordSendSeamTelemetry({
         usageLogger: this.compressionHandler.tokenUsageLogger,
         promptId,
         estimate: prepared.estimate,
-        runtimeState: this.runtimeContext.state,
+        runtimeState: this.ports.state,
         historyService: this.historyService,
         requestContents,
         tools,
@@ -733,7 +751,7 @@ export class TurnProcessor {
       requestContents,
       tools,
       runtimeContext.metadata,
-      this.runtimeContext.prepareProviderInvocation(
+      this.ports.prepareProviderInvocation(
         providerName,
         undefined,
         timeoutSignal,
@@ -758,7 +776,7 @@ export class TurnProcessor {
     const blocks: IContent['blocks'] = [];
     const iterator = streamResponse[Symbol.asyncIterator]();
     const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(
-      this.runtimeContext.readStreamTimeoutPolicy(),
+      this.ports.readStreamTimeoutPolicy(),
     );
 
     let nextResponse = await readProviderStreamResponse(
@@ -818,7 +836,7 @@ export class TurnProcessor {
       return { tools: toolsFromConfig, allowedFunctionNames: undefined };
     const toolSelectionResult = await hookOwner.beforeToolSelection(
       {
-        model: this.runtimeContext.state.model,
+        model: this.ports.state.model,
         contents: [],
         tools: toolsFromConfig,
       },
@@ -861,7 +879,7 @@ export class TurnProcessor {
       () => '[TurnProcessor] Calling provider.generateChatCompletion',
       {
         providerName: provider.name,
-        model: this.runtimeContext.state.model,
+        model: this.ports.state.model,
         toolCount: Array.isArray(tools) ? tools.length : 0,
         baseUrl,
       },
@@ -878,11 +896,12 @@ export class TurnProcessor {
     provider: IProvider,
     origin?: object,
   ): Promise<void> {
-    const currentModel = resolveGeneratingModel(this.runtimeContext, provider);
+    const currentModel = resolveGeneratingModel(this.ports, provider);
     this.stampingBaseUrl = this.resolveProviderBaseUrl(provider);
     return commitTurnHistory({
       origin,
-      runtimeContext: this.runtimeContext,
+      mediaRuntime: { mediaAdmission: this.ports.mediaAdmission },
+      reasoningInclusion: reasoningInclusionPolicy(this.ports),
       historyService: this.historyService,
       compressionHandler: this.compressionHandler,
       response,

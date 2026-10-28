@@ -1,5 +1,5 @@
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 import { WorkspaceAuthorityComposition } from '../workspace-authority-composition.js';
 /**
  * @license
@@ -8,7 +8,7 @@ import { WorkspaceAuthorityComposition } from '../workspace-authority-compositio
  */
 
 import { describe, expect, it } from 'bun:test';
-import { fromConfig, toConfigParameters } from '@vybestack/llxprt-code-agents';
+import { createAgent, toConfigParameters } from '@vybestack/llxprt-code-agents';
 import {
   Config,
   ApprovalMode,
@@ -18,7 +18,7 @@ import {
   coreEvents,
   CoreEvent,
 } from '@vybestack/llxprt-code-core/utils/events.js';
-import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 
 function declaration(): Config {
   return new Config(
@@ -46,8 +46,9 @@ function deferred(): { promise: Promise<void>; resolve(): void } {
 }
 
 describe('Production workspace trust authority', () => {
+  useFakeResponsesReplay('plain-text.jsonl');
+
   it('denies immediately through a borrowed authority before transition settlement and preserves that authority after facade retirement', async () => {
-    const config = declaration();
     const trust = new WorkspaceTrustLifecycle({ localTrust: true });
     const gate = deferred();
     const release = trust.subscribeTrustTransition(() => gate.promise);
@@ -56,9 +57,17 @@ describe('Production workspace trust authority', () => {
       events.push(trusted);
     };
     coreEvents.on(CoreEvent.FolderTrustChanged, listener);
-    const agent = await fromConfig({
-      config,
-      ...createSessionSettingsFixture(config),
+    const agent = await createAgent({
+      provider: 'fake',
+      model: 'fake-model',
+      workingDir: process.cwd(),
+      sessionId: 'shared-trust-root',
+      folderTrust: true,
+      approvalMode: ApprovalMode.AUTO_EDIT,
+      telemetry: { enabled: false },
+      recording: { enabled: false },
+      mcpEnabled: false,
+      skillsSupport: false,
       trustPort: trust,
     });
     let denied: Promise<void> | undefined;
@@ -86,7 +95,6 @@ describe('Production workspace trust authority', () => {
       await agent.dispose();
       coreEvents.off(CoreEvent.FolderTrustChanged, listener);
       await trust.dispose();
-      await config.dispose();
     }
   });
   it('rejects authority initialization after retirement without republishing borrowed trust events', async (): Promise<void> => {
@@ -117,9 +125,9 @@ describe('Production workspace trust authority', () => {
 
   it('rejects renewed initialization at the public MCP root after its retained initialization retires', async (): Promise<void> => {
     const config = declaration();
-    const owner = await McpRuntimeOwner.create(
-      createTestOAuthBinding(),
-      config,
+    const owner = await createTestMcpRuntime(
+      { oauth: createTestOAuthBinding(), config },
+      {},
     );
     try {
       await owner.initialize();

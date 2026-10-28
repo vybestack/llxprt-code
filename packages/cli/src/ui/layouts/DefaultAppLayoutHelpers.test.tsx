@@ -22,7 +22,7 @@ import type React from 'react';
 import { Config } from '@vybestack/llxprt-code-core';
 import { renderHook } from '../../__tests__/render.js';
 import { LoadedSettings } from '../../config/settings.js';
-import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
+import { buildLayoutRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 import { useStaticItems } from './DefaultAppLayoutHelpers.js';
 import { AppHeader } from '../components/AppHeader.js';
 import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
@@ -30,7 +30,7 @@ import type { HistoryItem } from '../types.js';
 
 const SUPPRESS_STATIC_HEADER = 'LLXPRT_CODE_SUPPRESS_STATIC_HEADER';
 
-const config = buildSlashCommandRuntime(
+const config = buildLayoutRuntimeForTest(
   new Config({
     sessionId: 'default-app-layout-helpers-test',
     targetDir: tmpdir(),
@@ -38,7 +38,7 @@ const config = buildSlashCommandRuntime(
     debugMode: false,
     model: 'test-model',
   }),
-  createUiSessionOwner(),
+  await createUiSessionOwner(),
 );
 
 const settings = new LoadedSettings(
@@ -58,6 +58,10 @@ function buildHistory(...ids: number[]): HistoryItem[] {
 function renderStaticItems(history: HistoryItem[]): React.ReactElement[] {
   const { result } = renderHook(() =>
     useStaticItems(
+      () => false,
+      () => false,
+      () => () => {},
+      async () => {},
       config,
       settings,
       '1.0.0',

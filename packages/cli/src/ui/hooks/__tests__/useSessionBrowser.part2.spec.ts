@@ -4,6 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  rawBrowserCatalog,
+  type BrowserFixtureOverrides,
+} from '../../../__tests__/browser-catalog-fixture.js';
+
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P13
  * @requirement REQ-SB-002, REQ-SB-004, REQ-SB-005, REQ-SB-008, REQ-SB-009, REQ-SB-010
@@ -132,12 +137,18 @@ function makeKey(
  */
 function makeHookProps(
   chatsDir: string,
-  overrides: Partial<UseSessionBrowserProps> = {},
+  overrides: BrowserFixtureOverrides = {},
 ): UseSessionBrowserProps {
   return {
     chatsDir,
     projectHash: PROJECT_HASH,
     currentSessionId: overrides.currentSessionId ?? 'current-session-id',
+    ...rawBrowserCatalog(
+      chatsDir,
+      PROJECT_HASH,
+      overrides.currentSessionId ?? 'current-session-id',
+      overrides.activeRecording,
+    ),
     onSelect:
       overrides.onSelect ??
       (async (): Promise<PerformResumeResult> => ({
@@ -659,14 +670,11 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       recording.recordContent(makeContent('checkpoint body'));
       await recording.createCheckpoint('release-cut-branch');
       try {
-        const { result } = renderHook(() =>
-          useSessionBrowser(
-            makeHookProps(chatsDir, {
-              currentSessionId: 'different-current-session',
-              activeRecording: recording,
-            }),
-          ),
-        );
+        const props = makeHookProps(chatsDir, {
+          currentSessionId: 'different-current-session',
+          activeRecording: recording,
+        });
+        const { result } = renderHook(() => useSessionBrowser(props));
         await waitFor(() => {
           expect(result.current.sessions.length).toBe(2);
           expect(

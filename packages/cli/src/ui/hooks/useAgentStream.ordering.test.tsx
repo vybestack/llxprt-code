@@ -22,7 +22,7 @@ import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import React, { act } from 'react';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import * as ReactDOM from 'react-dom';
-import { useAgentStream } from './agentStream/index.js';
+import { useTestAgentStream as useAgentStream } from './__tests__/use-stream-owner-inputs.js';
 import { createStreamRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 import type { TrackedToolCall } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
@@ -170,11 +170,13 @@ void vi.mock('./slashCommandProcessor.js', () => ({
 // --- END MOCKS ---
 
 describe('useAgentStream - ThinkingBlock Integration', () => {
-  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]>;
+  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]['addItem']>;
   let mockConfig: Config;
   let mockSettings: LoadedSettings;
   let mockOnDebugMessage: Mock<(message: string) => void>;
-  let mockHandleSlashCommand: Mock<Parameters<typeof useAgentStream>[6]>;
+  let mockHandleSlashCommand: Mock<
+    Parameters<typeof useAgentStream>[2]['handleSlashCommand']
+  >;
   let mockScheduleToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[1]>;
   let mockCancelAllToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[3]>;
   let mockMarkToolsAsDisplayCleared: Mock<
@@ -184,7 +186,9 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]>(() => 0);
+    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]['addItem']>(
+      () => 0,
+    );
 
     const mockGetAgentClient = vi.fn().mockImplementation(() => {
       const clientInstance = new MockedAgentClientClass(mockConfig);
@@ -283,7 +287,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
     setValue: vi.fn(),
   } as unknown as LoadedSettings;
 
-  const renderTestHook = (
+  const renderTestHook = async (
     initialToolCalls: TrackedToolCall[] = [],
     agentClient?: Parameters<typeof createFakeAgentFromMockClient>[0],
   ) => {
@@ -303,18 +307,20 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       vi.fn(),
     ]);
 
-    const client = createFakeAgentFromMockClient(
+    const client = await createFakeAgentFromMockClient(
       agentClient ?? new MockedAgentClientClass(mockConfig),
     );
 
     const { result, rerender } = renderHook(
       (props: {
         client: Parameters<typeof useAgentStream>[0];
-        history: Parameters<typeof useAgentStream>[1];
+        history: Parameters<typeof useAgentStream>[2]['history'];
         addItem: UseHistoryManagerReturn['addItem'];
         runtime: ReturnType<typeof createStreamRuntimeForTest>;
         onDebugMessage: (message: string) => void;
-        handleSlashCommand: Parameters<typeof useAgentStream>[6];
+        handleSlashCommand: Parameters<
+          typeof useAgentStream
+        >[2]['handleSlashCommand'];
         shellModeActive: boolean;
         loadedSettings: LoadedSettings;
         toolCalls?: TrackedToolCall[];
@@ -324,19 +330,24 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         }
         return useAgentStream(
           props.client,
-          props.history,
-          props.addItem,
           props.runtime,
-          mockSettings,
-          props.onDebugMessage,
-          props.handleSlashCommand,
-          props.shellModeActive,
-          () => 'vscode' as EditorType,
-          () => {},
-          () => Promise.resolve(),
-          () => {},
-          () => {},
-          () => {},
+          {
+            history: props.history,
+            addItem: props.addItem,
+            settings: mockSettings,
+            onDebugMessage: props.onDebugMessage,
+            handleSlashCommand: props.handleSlashCommand,
+            shellModeActive: props.shellModeActive,
+            getPreferredEditor: () => 'vscode' as EditorType,
+            onAuthError: () => {},
+            performMemoryRefresh: () => Promise.resolve(),
+            onEditorClose: () => {},
+            onCancelSubmit: () => {},
+            setShellInputFocused: () => {},
+          },
+          undefined,
+          undefined,
+          undefined,
         );
       },
       {
@@ -392,22 +403,30 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       })(),
     );
 
+    const agentForHook1 = await createFakeAgentFromMockClient(
+      new MockedAgentClientClass(mockConfig),
+    );
     const { result } = renderHook(() =>
       useAgentStream(
-        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
-        [],
-        mockAddItem,
+        agentForHook1,
         createStreamRuntimeForTest(mockConfig),
-        settingsWithoutReasoning,
-        mockOnDebugMessage,
-        mockHandleSlashCommand,
-        false,
-        () => 'vscode' as EditorType,
-        () => {},
-        () => Promise.resolve(),
-        () => {},
-        () => {},
-        () => {},
+        {
+          history: [],
+          addItem: mockAddItem,
+          settings: settingsWithoutReasoning,
+          onDebugMessage: mockOnDebugMessage,
+          handleSlashCommand: mockHandleSlashCommand,
+          shellModeActive: false,
+          getPreferredEditor: () => 'vscode' as EditorType,
+          onAuthError: () => {},
+          performMemoryRefresh: () => Promise.resolve(),
+          onEditorClose: () => {},
+          onCancelSubmit: () => {},
+          setShellInputFocused: () => {},
+        },
+        undefined,
+        undefined,
+        undefined,
       ),
     );
 
@@ -458,7 +477,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       })(),
     );
 
-    const { result } = renderTestHook();
+    const { result } = await renderTestHook();
 
     await act(async () => {
       await result.current.submitQuery('first query');
@@ -550,7 +569,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       })(),
     );
 
-    const { result } = renderTestHook();
+    const { result } = await renderTestHook();
 
     await act(async () => {
       await result.current.submitQuery('test query');
@@ -608,7 +627,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         })(),
       );
 
-      const { result } = renderTestHook();
+      const { result } = await renderTestHook();
 
       await act(async () => {
         await result.current.submitQuery('test query');
@@ -692,7 +711,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         })(),
       );
 
-      const { result } = renderTestHook();
+      const { result } = await renderTestHook();
 
       await act(async () => {
         await result.current.submitQuery('test query');
@@ -761,7 +780,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         })(),
       );
 
-      const { result } = renderTestHook();
+      const { result } = await renderTestHook();
 
       await act(async () => {
         await result.current.submitQuery('test query');

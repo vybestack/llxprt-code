@@ -113,6 +113,11 @@ import type { TodoContinuationService } from '../TodoContinuationService.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { installChatSessionFactoryConfigFixture } from '../chatSessionFactoryConfigFixture.js';
 import { createChatSession } from '../ChatSessionFactory.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
+
 const createFixtureConfig = installChatSessionFactoryConfigFixture();
 
 export function makeConfig(
@@ -168,7 +173,14 @@ export function makeGenerationDeps(
       parameters?: AdmittedModelParameters,
       signal?: AbortSignal,
     ) =>
-      owner.prepareProviderInvocation(runtimeId, provider, parameters, signal),
+      owner.prepareProviderInvocation(
+        runtimeId,
+        provider,
+        parameters,
+        signal,
+        undefined,
+        requestFetch,
+      ),
     contentGenerator: makeContentGenerator(),
     generateContentConfig: {},
     toolRegistry: undefined,

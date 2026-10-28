@@ -3,26 +3,6 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { Agent } from './helpers/agentHarness.js';
-
-function activationSettings(agent: Agent): SettingsService {
-  if (
-    !('deps' in agent) ||
-    typeof agent.deps !== 'object' ||
-    agent.deps === null
-  ) {
-    throw new Error('Expected the actual adopted activation store');
-  }
-  if (
-    !('settingsService' in agent.deps) ||
-    !(agent.deps.settingsService instanceof SettingsService)
-  ) {
-    throw new Error('Expected the actual adopted activation store');
-  }
-  return agent.deps.settingsService;
-}
-
 import { describe, expect, it } from 'bun:test';
 import { canonicalProviderActivationIntent } from '../activationPreflightState.js';
 import { PLACEHOLDER_MODEL, UNCONFIGURED_PROVIDER } from '../constants.js';
@@ -31,23 +11,48 @@ import {
   buildAgent,
   createAgent,
   tempRoot,
+  type Agent,
   type AgentConfig,
 } from './helpers/agentHarness.js';
 
-async function activationSnapshot(overrides: Partial<AgentConfig>) {
+/**
+ * A history round trip runs through the session client, so it fails when
+ * construction left the agent without a client. Unlike a turn it needs no
+ * provider credentials, so it also covers the unconfigured and no-replay modes.
+ */
+async function expectClientBacked(agent: Agent): Promise<void> {
+  await agent.setHistory([
+    { speaker: 'human', blocks: [{ type: 'text', text: 'client-probe' }] },
+  ]);
+  expect(JSON.stringify(await agent.getHistory())).toContain('client-probe');
+}
+
+function activeProviderName(agent: Agent): string | undefined {
+  return agent.providerReads.inspection.getActiveProviderDetails()?.name;
+}
+
+/**
+ * The Agent-observable halves of a legacy-versus-explicit activation. The
+ * provider-scope records (`model`, `auth-key`, `base-url`) are asserted in
+ * providerActivation.scopePersistence.behavior.test.ts, where the test owns the
+ * `SettingsService`. `withTurn` proves the session client is ready by running
+ * a turn; it is omitted for the unconfigured provider, which has no turn.
+ */
+async function activationSnapshot(
+  overrides: Partial<AgentConfig>,
+  { withTurn }: { readonly withTurn: boolean } = { withTurn: true },
+) {
   const { agent, cleanup } = await buildAgent('plain-text.jsonl', overrides);
   try {
-    const settings = activationSettings(agent);
+    if (!withTurn) await expectClientBacked(agent);
     return {
       provider: agent.getProvider(),
       model: agent.getModel(),
-      activeProvider: agent.providerManager.getActiveProviderName(),
-      activeModel: settings.getProviderSettings('fake').model,
+      activeProvider: activeProviderName(agent),
       key: agent.getEphemeralSetting('auth-key'),
       keyfile: agent.getEphemeralSetting('auth-keyfile'),
       baseUrl: agent.getEphemeralSetting('base-url'),
-      settings: settings.getProviderSettings('fake'),
-      clientReady: agent.agentClient.getContentGeneratorConfig() !== undefined,
+      reply: withTurn ? (await agent.chat('hello')).text : undefined,
     };
   } finally {
     await cleanup();
@@ -68,8 +73,8 @@ describe('createAgent single activation transition (#2534)', () => {
     expect(legacy).toMatchObject({
       provider: 'fake',
       model: 'chosen-model',
-      activeModel: 'chosen-model',
-      clientReady: true,
+      activeProvider: 'fake',
+      reply: 'a plain text reply',
     });
   });
 
@@ -88,7 +93,7 @@ describe('createAgent single activation transition (#2534)', () => {
     expect(legacy).toMatchObject({
       key: auth.apiKey,
       baseUrl: auth.baseUrl,
-      clientReady: true,
+      reply: 'a plain text reply',
     });
     expect(legacy.keyfile).toBeUndefined();
   });
@@ -106,11 +111,8 @@ describe('createAgent single activation transition (#2534)', () => {
         overrides,
       );
       try {
-        const settings = activationSettings(agent);
         return {
-          activeProvider: agent.providerManager.getActiveProviderName(),
-          activeScope: settings.getProviderSettings('fake'),
-          requestedScope: settings.getProviderSettings('gemini'),
+          activeProvider: activeProviderName(agent),
           ephemeralKey: agent.getEphemeralSetting('auth-key'),
           ephemeralBaseUrl: agent.getEphemeralSetting('base-url'),
         };
@@ -125,12 +127,9 @@ describe('createAgent single activation transition (#2534)', () => {
       auth,
     });
     expect(legacy.activeProvider).toBe('fake');
-    // Credentials persisted into the post-switch ACTIVE provider's scope —
-    // the scope that the NEXT session loads — not the outgoing one's.
-    expect(legacy.activeScope['auth-key']).toBe(auth.apiKey);
-    expect(legacy.activeScope['base-url']).toBe(auth.baseUrl);
-    expect(legacy.requestedScope['auth-key']).toBeUndefined();
-    expect(legacy.requestedScope['base-url']).toBeUndefined();
+    // The credentials' persistence into the post-switch ACTIVE provider's scope
+    // (not the outgoing one's) is asserted in
+    // providerActivation.scopePersistence.behavior.test.ts.
     // Session-level overrides identical either way.
     expect(legacy.ephemeralKey).toBe(auth.apiKey);
     expect(legacy.ephemeralBaseUrl).toBe(auth.baseUrl);
@@ -152,22 +151,23 @@ describe('createAgent single activation transition (#2534)', () => {
         cliOverrides: { key: auth.apiKey, baseUrl: auth.baseUrl },
       },
     });
-    expect(legacy.activeScope).toStrictEqual(explicit.activeScope);
-    expect(legacy.requestedScope).toStrictEqual(explicit.requestedScope);
     expect(legacy.activeProvider).toBe(explicit.activeProvider);
     expect(legacy.ephemeralKey).toBe(explicit.ephemeralKey);
     expect(legacy.ephemeralBaseUrl).toBe(explicit.ephemeralBaseUrl);
   });
 
   it('the A2A unconfigured shape remains usable without writing the placeholder model', async () => {
-    const result = await activationSnapshot({
-      provider: UNCONFIGURED_PROVIDER,
-      model: PLACEHOLDER_MODEL,
-    });
+    const result = await activationSnapshot(
+      {
+        provider: UNCONFIGURED_PROVIDER,
+        model: PLACEHOLDER_MODEL,
+      },
+      { withTurn: false },
+    );
 
-    expect(result.clientReady).toBe(true);
     expect(result.provider).toBe(UNCONFIGURED_PROVIDER);
-    expect(result.settings.model).not.toBe(PLACEHOLDER_MODEL);
+    // The placeholder model's absence from the provider scope is asserted in
+    // providerActivation.scopePersistence.behavior.test.ts.
   });
 
   it('preflight distinguishes auth methods and switch-failure policies', () => {
@@ -194,7 +194,7 @@ describe('createAgent single activation transition (#2534)', () => {
     expect(result).toMatchObject({
       provider: 'gemini',
       activeProvider: 'fake',
-      clientReady: true,
+      reply: 'a plain text reply',
     });
   });
 
@@ -204,25 +204,22 @@ describe('createAgent single activation transition (#2534)', () => {
       model: 'phase2-model',
       explicit: false,
       active: 'openai',
-      storedModel: 'phase2-model',
     },
     {
       provider: 'openai',
       model: 'phase2-model',
       explicit: true,
       active: 'openai',
-      storedModel: 'phase2-model',
     },
     {
       provider: UNCONFIGURED_PROVIDER,
       model: PLACEHOLDER_MODEL,
       explicit: false,
       active: undefined,
-      storedModel: undefined,
     },
   ])(
     'constructs an agent without fake responses: %j',
-    async ({ provider, model, explicit, active, storedModel }) => {
+    async ({ provider, model, explicit, active }) => {
       const previous = process.env.LLXPRT_FAKE_RESPONSES;
       delete process.env.LLXPRT_FAKE_RESPONSES;
       try {
@@ -233,14 +230,10 @@ describe('createAgent single activation transition (#2534)', () => {
           ...(explicit ? { activation: { provider, model } } : {}),
         });
         try {
-          const settings = activationSettings(agent);
           expect(agent.getProvider()).toBe(provider);
           expect(agent.getModel()).toBe(model);
-          expect(agent.providerManager.getActiveProviderName()).toBe(active);
-          expect(agent.agentClient).toBeDefined();
-          expect(settings.getProviderSettings(provider).model).toBe(
-            storedModel,
-          );
+          expect(activeProviderName(agent)).toBe(active);
+          await expectClientBacked(agent);
         } finally {
           await agent.dispose();
         }

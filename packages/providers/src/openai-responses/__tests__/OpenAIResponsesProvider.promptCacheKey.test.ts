@@ -21,6 +21,10 @@ import {
 } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import type { CodexOAuthToken } from '@vybestack/llxprt-code-auth';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 function buildCodexCallOptions(
   provider: OpenAIResponsesProvider,
@@ -142,12 +146,11 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'test-runtime-id-123',
-      config,
     });
 
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 
@@ -205,12 +208,11 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'test-runtime-id-123',
-      config,
     });
 
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 
@@ -283,12 +285,11 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'test-runtime-id-123',
-      config,
     });
 
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 
@@ -361,12 +362,11 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'fallback-runtime-id',
-      config,
     });
 
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 
@@ -419,12 +419,11 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'test-runtime-id-123',
-      config,
     });
 
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 
@@ -486,12 +485,11 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: longRuntimeId,
-      config,
     });
 
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 
@@ -553,14 +551,13 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'short-runtime-id',
-      config,
     });
 
     // Unknown ephemeral settings pass through separateSettings() as
     // modelParams, which translateRequestOverrides() copies onto the request.
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 
@@ -622,12 +619,11 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'short-runtime-id',
-      config,
     });
 
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 

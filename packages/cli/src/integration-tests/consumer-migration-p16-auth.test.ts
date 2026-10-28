@@ -213,10 +213,10 @@ describe('CLI auth consumers resolve auth-package symbols at runtime', () => {
 
   it('credential-store-factory imports KeyringTokenStore and ProxyTokenStore from auth', async () => {
     const mod = await import('@vybestack/llxprt-code-providers/auth.js');
-    // createTokenStore is the real factory that constructs auth-package types
-    expect(typeof mod.createTokenStore).toBe('function');
+    // CredentialAuthority constructs the auth-package stores for each owner.
+    expect(typeof mod.CredentialAuthority).toBe('function');
     expect(typeof mod.createProviderKeyStorage).toBe('function');
-    expect(typeof mod.resetFactorySingletons).toBe('function');
+    expect(typeof mod.HostCredentialOwner).toBe('function');
   });
 
   it('oauth-manager structurally satisfies auth OAuthManager interface at compile time', async () => {

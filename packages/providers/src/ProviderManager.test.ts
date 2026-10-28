@@ -40,12 +40,8 @@ function createRuntimeConfigStub(): Config {
 // active context (some assertions read settings back through the singleton).
 // The manager itself always receives the runtime EXPLICITLY — it never reads
 // ambient global state (issue #2300).
-function setTestRuntimeContext(
-  settingsService = new SettingsService(),
-): ProviderRuntimeContext {
+function setTestRuntimeContext(): ProviderRuntimeContext {
   const runtime = createProviderRuntimeContext({
-    settingsService,
-    config: createRuntimeConfigStub(),
     metadata: { source: 'ProviderManager.test' },
   });
   return runtime;
@@ -61,12 +57,22 @@ describe('ProviderManager provider ordering', () => {
     }) as unknown as IProvider;
 
   let runtime: ProviderRuntimeContext;
+  let settingsService: SettingsService;
   beforeEach(() => {
+    settingsService = new SettingsService();
     runtime = setTestRuntimeContext();
   });
 
   it('prioritizes core providers and sorts remaining alphabetically', () => {
-    const manager = new ProviderManager(runtime);
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      createRuntimeConfigStub(),
+      runtime,
+    );
 
     const providerNames = [
       'openai-responses',
@@ -101,17 +107,27 @@ describe('ProviderManager provider ordering', () => {
     // only { settingsService } — it must NOT backfill config from ambient
     // state, so no LoggingProviderWrapper is applied.
 
-    const withoutConfig = new ProviderManager({ settingsService });
+    const withoutConfig = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+    );
     withoutConfig.registerProvider(createProvider('no-config-provider'));
     expect(
       withoutConfig.getProviderByName('no-config-provider'),
     ).not.toBeInstanceOf(LoggingProviderWrapper);
 
     // The same construction WITH an explicit config gets the wrapper.
-    const withConfig = new ProviderManager({
+    const withConfig = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
-      config: runtimeConfig,
-    });
+      runtimeConfig,
+    );
     withConfig.registerProvider(createProvider('with-config-provider'));
     expect(withConfig.getProviderByName('with-config-provider')).toBeInstanceOf(
       LoggingProviderWrapper,
@@ -122,13 +138,25 @@ describe('ProviderManager provider ordering', () => {
 describe('ProviderPerformanceTracker', () => {
   let mockProvider: IProvider;
   let runtime: ProviderRuntimeContext;
+  let settingsService: SettingsService;
 
   it('returns null metrics when no active provider is set', () => {
-    const manager = new ProviderManager(setTestRuntimeContext());
+    const settingsService = new SettingsService();
+    runtime = setTestRuntimeContext();
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      createRuntimeConfigStub(),
+      runtime,
+    );
 
     expect(manager.getProviderMetrics()).toBeNull();
   });
   beforeEach(() => {
+    settingsService = new SettingsService();
     runtime = setTestRuntimeContext();
     mockProvider = {
       name: 'test-provider',
@@ -140,7 +168,15 @@ describe('ProviderPerformanceTracker', () => {
   });
 
   it('should accumulate session tokens correctly', () => {
-    const manager = new ProviderManager(runtime);
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      createRuntimeConfigStub(),
+      runtime,
+    );
 
     // Register a mock provider
     manager.registerProvider(mockProvider);
@@ -194,7 +230,15 @@ describe('ProviderPerformanceTracker', () => {
   });
 
   it('should reset session token usage', () => {
-    const manager = new ProviderManager(runtime);
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      createRuntimeConfigStub(),
+      runtime,
+    );
 
     // Register a mock provider
     manager.registerProvider(mockProvider);

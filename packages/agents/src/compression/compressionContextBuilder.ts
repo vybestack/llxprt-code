@@ -4,10 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { CompressionHandlerRuntime } from '../core/chatSessionPorts.js';
+import type {
+  CompressionContext,
+  CompressionStrategyRuntime,
+} from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
@@ -28,7 +32,8 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
  */
 export async function buildCompressionContext(
   promptId: string,
-  runtimeContext: AgentRuntimeContext,
+  runtimeContext: CompressionHandlerRuntime,
+  config: Config | undefined,
   historyService: HistoryService,
   providerResolver: (
     profileName?: string,
@@ -53,12 +58,10 @@ export async function buildCompressionContext(
   // or swapped mid-session (resume) is reflected at the next compression.
   const transcriptPath = transcriptPathProvider?.();
 
-  const config = runtimeContext.providerRuntime.config;
-
   return {
     history: historyService.getCurated(),
     ...(modelParameters ? { modelParameters } : {}),
-    runtimeContext,
+    runtimeContext: strategyRuntime(runtimeContext),
     runtimeState: runtimeContext.state,
     estimateTokens: (contents) =>
       historyService.estimateTokensForContents(contents as IContent[]),
@@ -104,6 +107,19 @@ export async function buildCompressionContext(
       runtimeContext.ephemerals.compressionVerification(),
     ...(config ? { config } : {}),
     cacheAnchorSeq: historyService.getCacheAnchorSeq(),
+  };
+}
+
+/**
+ * Project the handler runtime onto the members a strategy resolves for its
+ * own split: the compression ephemerals and the provider runtime snapshot.
+ */
+function strategyRuntime(
+  runtimeContext: CompressionHandlerRuntime,
+): CompressionStrategyRuntime {
+  return {
+    ephemerals: runtimeContext.ephemerals,
+    providerRuntime: runtimeContext.providerRuntime,
   };
 }
 

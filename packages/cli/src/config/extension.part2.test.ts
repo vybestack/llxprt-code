@@ -231,7 +231,7 @@ describe('extension tests', () => {
         '/path/to/workspace',
         new ExtensionEnablementManager(
           ExtensionStorage.getUserExtensionsDir(),
-          ['ext1', 'ext3'],
+          { enabledOverride: ['ext1', 'ext3'] },
         ),
       );
       expect(activeExtensions).toHaveLength(3);
@@ -252,7 +252,7 @@ describe('extension tests', () => {
         '/path/to/workspace',
         new ExtensionEnablementManager(
           ExtensionStorage.getUserExtensionsDir(),
-          ['none'],
+          { enabledOverride: ['none'] },
         ),
       );
       expect(activeExtensions).toHaveLength(3);
@@ -265,7 +265,7 @@ describe('extension tests', () => {
         '/path/to/workspace',
         new ExtensionEnablementManager(
           ExtensionStorage.getUserExtensionsDir(),
-          ['EXT1'],
+          { enabledOverride: ['EXT1'] },
         ),
       );
       expect(activeExtensions.find((e) => e.name === 'ext1')?.isActive).toBe(
@@ -281,7 +281,7 @@ describe('extension tests', () => {
         '/path/to/workspace',
         new ExtensionEnablementManager(
           ExtensionStorage.getUserExtensionsDir(),
-          ['ext4'],
+          { enabledOverride: ['ext4'] },
         ),
       );
       expect(feedbackSpy).toHaveBeenCalledWith(

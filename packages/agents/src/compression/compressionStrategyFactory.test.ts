@@ -33,41 +33,89 @@ describe('compressionStrategyFactory @plan PLAN-20260211-COMPRESSION.P09', () =>
 
   describe('getCompressionStrategy @requirement REQ-CS-001.2', () => {
     it('returns a MiddleOutStrategy instance for middle-out', () => {
-      const strategy = getCompressionStrategy('middle-out');
+      const strategy = getCompressionStrategy(
+        'middle-out',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy).toBeInstanceOf(MiddleOutStrategy);
     });
 
     it('returns a TopDownTruncationStrategy instance for top-down-truncation', () => {
-      const strategy = getCompressionStrategy('top-down-truncation');
+      const strategy = getCompressionStrategy(
+        'top-down-truncation',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy).toBeInstanceOf(TopDownTruncationStrategy);
     });
 
     it('returned middle-out instance has correct name and requiresLLM', () => {
-      const strategy = getCompressionStrategy('middle-out');
+      const strategy = getCompressionStrategy(
+        'middle-out',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.name).toBe('middle-out');
       expect(strategy.requiresLLM).toBe(true);
     });
 
     it('returned top-down-truncation instance has correct name and requiresLLM', () => {
-      const strategy = getCompressionStrategy('top-down-truncation');
+      const strategy = getCompressionStrategy(
+        'top-down-truncation',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.name).toBe('top-down-truncation');
       expect(strategy.requiresLLM).toBe(false);
     });
 
     it('returns an OneShotStrategy instance for one-shot', () => {
-      const strategy = getCompressionStrategy('one-shot');
+      const strategy = getCompressionStrategy(
+        'one-shot',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy).toBeInstanceOf(OneShotStrategy);
     });
 
     it('returned one-shot instance has correct name and requiresLLM', () => {
-      const strategy = getCompressionStrategy('one-shot');
+      const strategy = getCompressionStrategy(
+        'one-shot',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.name).toBe('one-shot');
       expect(strategy.requiresLLM).toBe(true);
     });
 
     it('returns fresh instances on each call (not singletons)', () => {
-      const a = getCompressionStrategy('middle-out');
-      const b = getCompressionStrategy('middle-out');
+      const a = getCompressionStrategy(
+        'middle-out',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
+      const b = getCompressionStrategy(
+        'middle-out',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(a).not.toBe(b);
     });
   });
@@ -111,7 +159,13 @@ describe('compressionStrategyFactory @plan PLAN-20260211-COMPRESSION.P09', () =>
   describe('interface contract across all strategies @requirement REQ-CS-001.2', () => {
     for (const strategyName of COMPRESSION_STRATEGIES) {
       it(`${strategyName}: name matches, requiresLLM is boolean, compress is function`, () => {
-        const strategy = getCompressionStrategy(strategyName);
+        const strategy = getCompressionStrategy(
+          strategyName,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
         expect(strategy.name).toBe(strategyName);
         expect(typeof strategy.requiresLLM).toBe('boolean');
         expect(typeof strategy.compress).toBe('function');

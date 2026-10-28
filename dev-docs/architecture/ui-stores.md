@@ -143,8 +143,9 @@ so a dialog cannot be opened with the wrong payload shape.
 
 ## Runtime services and Agent ownership
 
-`RuntimeContext` binds provider and profile operations to the current runtime
-scope. It exposes service operations, not an interactive display-state store.
+`InteractiveContextHost` in `ui/contexts/RuntimeContext.tsx` receives the active
+agent's operations and supplies operation-specific React providers. These
+providers do not own interactive display state or select a process-wide runtime.
 `cliUiRuntime.ts` defines the capability interfaces used by UI domains, such as
 storage, shell, model, IDE, and session operations. These capabilities are
 passed into the composition root; the interactive stores do not construct or

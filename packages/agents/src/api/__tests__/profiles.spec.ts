@@ -25,21 +25,33 @@
 
 import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
+import { buildAgent, drain, countType } from './helpers/agentHarness.js';
 import {
-  buildAgent,
-  buildProfilesAgent,
-  drain,
-  countType,
-} from './helpers/agentHarness.js';
+  buildReplayProviderAgent,
+  fixtureKeys,
+} from './helpers/replay-provider-agent.js';
 import {
   createAgentAuthState,
   computeAuthWinner,
   type AuthWinner,
 } from '../control/authState.js';
 
+/**
+ * An agent that starts on a replaying provider; profiles apply to the built-in
+ * providers, whose named keys the agent's credential authority serves.
+ */
+function buildAgentWithStoredKeys(
+  fixtureRelPath: string,
+): ReturnType<typeof buildReplayProviderAgent> {
+  return buildReplayProviderAgent({
+    initial: { alias: 'fake', script: { fixtureRelPath } },
+    storedKeys: fixtureKeys('openai-prod', 'anthropic-prod', 'saved-key-ref'),
+  });
+}
+
 describe('Profiles/auth-winner @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008 @requirement:REQ-009', () => {
   it('T18d profiles CRUD + apply; durable store changes; apply preserves context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-009', async () => {
-    const { agent, cleanup } = await buildProfilesAgent(
+    const { agent, cleanup } = await buildAgentWithStoredKeys(
       'provider-switch-two-turn.jsonl',
     );
     try {
@@ -200,7 +212,7 @@ describe('Profiles/auth-winner @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-
     };
 
   it('T19a apply resolves a dir-scan LB profile and rebinds provider+model+keyName onto the live agent @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-009 @requirement:REQ-005', async () => {
-    const { agent, cleanup } = await buildProfilesAgent(
+    const { agent, cleanup } = await buildAgentWithStoredKeys(
       'provider-switch-two-turn.jsonl',
     );
     try {
@@ -489,7 +501,7 @@ describe('Profiles/auth-winner @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-
   });
 
   it('T19a apply resolves a SAVED (created) profile and rebinds provider+model+keyName via the saved-store path @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-009 @requirement:REQ-005', async () => {
-    const { agent, cleanup } = await buildProfilesAgent(
+    const { agent, cleanup } = await buildAgentWithStoredKeys(
       'provider-switch-two-turn.jsonl',
     );
     try {

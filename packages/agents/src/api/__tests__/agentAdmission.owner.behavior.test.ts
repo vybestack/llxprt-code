@@ -4,20 +4,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, spyOn } from 'bun:test';
-
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { beforeAll, afterAll, describe, expect, it, spyOn } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import {
+  GenerateChatOptions,
+  FakeProvider,
+  OpenAIProvider,
+} from '@vybestack/llxprt-code-providers';
 import {
   createAgent,
-  fromConfig,
   AgentBusyError,
   type Agent,
   type AgentEvent,
   type TurnOptions,
 } from '@vybestack/llxprt-code-agents';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateChatOptions } from '@vybestack/llxprt-code-providers';
-import { FakeProvider, OpenAIProvider } from '@vybestack/llxprt-code-providers';
+import { usePromptFixture } from './helpers/prompt-fixture.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openRouteAAgent } from './helpers/route-a-agent.js';
+import { createGatedRecordingMcp } from './helpers/gated-recording-mcp.js';
+import { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 function gate(): { promise: Promise<void>; release: () => void } {
   let release = (): void => {
@@ -173,6 +181,21 @@ async function withModelBoundary(
 }
 
 describe('Agent admission ownership (#2616 S2/C)', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  usePromptFixture();
+
   it('does not reserve admission for a never-started iterator and releases it on return', async () => {
     await withAgent(async (agent) => {
       await withModelBoundary(async (model) => {
@@ -272,47 +295,30 @@ describe('Agent admission ownership (#2616 S2/C)', () => {
     });
   }, 30_000);
 
-  it.each(['complete', 'fail', 'abort'])(
-    'owns admission before discovery and releases after %s',
-    async (outcome) => {
-      const built = await buildCliStyleConfig('plain-text.jsonl');
-      let agent: Agent | undefined;
-      try {
-        const adopted = await fromConfig({
-          settingsOwner: built.settingsOwner,
-          settingsService: built.settingsService,
-          agentClient: built.agentClient,
-          providerManager: built.providerManager,
-          config: built.config,
-          mcpRuntime: built.mcpRuntime,
-          messageBus: built.messageBus,
-        });
+  describe('with an MCP server on a fromConfig agent', () => {
+    useFakeResponsesReplay('plain-text.jsonl');
 
-        agent = adopted;
-        await withModelBoundary(
-          async (model) => {
-            model.release();
-            expectSuccessful(
-              await model.start(adopted, 'Sequential discovery baseline', {}),
-            );
-            const discoveryEntered = gate();
-            const discoveryRelease = gate();
-            let discoveryWaits = 0;
-            const abort = new AbortController();
-            const discoveryError = new Error('Injected discovery failure');
-            const discovery = spyOn(
-              built.mcpRuntime,
-              'awaitDiscovery',
-            ).mockImplementation(
-              async (): Promise<ReadonlyMap<string, string>> => {
-                discoveryWaits += 1;
-                discoveryEntered.release();
-                await discoveryRelease.promise;
-                if (outcome === 'fail') throw discoveryError;
-                return new Map();
-              },
-            );
-            try {
+    it.each(['complete', 'abort'] as const)(
+      'owns admission before discovery and releases after %s',
+      async (outcome) => {
+        const mcp = await createGatedRecordingMcp({
+          toolName: 'external_record',
+          gateDiscovery: true,
+        });
+        const route = await openRouteAAgent({
+          config: { mcpServers: mcp.mcpServers },
+        });
+        try {
+          const adopted = route.agent;
+          await withModelBoundary(
+            async (model) => {
+              model.release();
+              expectSuccessful(
+                await model.start(adopted, 'Sequential discovery baseline', {
+                  mcpDiscovery: 'skip',
+                }),
+              );
+              const abort = new AbortController();
               const first = model.start(adopted, 'Waiting for discovery', {
                 signal: abort.signal,
               });
@@ -321,59 +327,93 @@ describe('Agent admission ownership (#2616 S2/C)', () => {
                 'Must be rejected before discovery',
                 {},
               );
-              if (
-                (await beforeNextIO(discoveryEntered.promise)) === 'pending'
-              ) {
-                throw new Error(
-                  'Setup: the first stream did not reach the external discovery boundary',
-                );
-              }
+              await mcp.discoveryEntered();
               const rejection = await beforeNextIO(second);
               expect(model.requests()).toHaveLength(1);
               expectTypedBusy(rejection);
-              expect(discoveryWaits).toBe(1);
+              expect(
+                (await mcp.effects()).filter(
+                  (effect) => effect.event === 'discovery-entered',
+                ),
+              ).toHaveLength(1);
               if (outcome === 'abort') abort.abort();
-              discoveryRelease.release();
+              await mcp.releaseDiscovery();
               const result = await first;
-              expect(result.rejection).toBe(
-                outcome === 'fail' ? discoveryError : undefined,
-              );
+              expect(result.rejection).toBeUndefined();
               const reason = outcome === 'abort' ? 'aborted' : 'stop';
-              const expectedDone = (
-                outcome === 'fail' ? [] : [{ type: 'done', reason }]
-              ) satisfies AgentEvent[];
               expect(
                 result.events.filter((event) => event.type === 'done'),
-              ).toStrictEqual(expectedDone);
+              ).toStrictEqual([{ type: 'done', reason }]);
               expect(
                 result.events.filter((event) => event.type === 'error'),
               ).toStrictEqual([]);
               expect(model.requests()).toHaveLength(
                 outcome === 'complete' ? 2 : 1,
               );
-              discovery.mockRestore();
               expectSuccessful(
                 await model.start(adopted, 'After discovery turn', {}),
               );
-            } finally {
-              discoveryRelease.release();
-              discoveryEntered.release();
-              discovery.mockRestore();
-            }
+            },
+            false,
+            'fake',
+          );
+        } finally {
+          await mcp.releaseDiscovery();
+          try {
+            await route.close();
+          } finally {
+            await mcp.close();
+          }
+        }
+      },
+      30_000,
+    );
+
+    it('a failing MCP server yields a notice and admission is released after the turn', async () => {
+      const route = await openRouteAAgent({
+        config: {
+          mcpServers: {
+            broken: {
+              command: process.execPath,
+              args: ['-e', 'process.exit(1)'],
+            },
+          },
+        },
+      });
+      try {
+        await withModelBoundary(
+          async (model) => {
+            model.release();
+            const turn = await model.start(
+              route.agent,
+              'Turn with a failing server',
+              {},
+            );
+            expect(
+              turn.events.filter((event) => event.type === 'notice'),
+            ).toStrictEqual([
+              expect.objectContaining({
+                type: 'notice',
+                message: expect.stringContaining(
+                  "MCP server 'broken' discovery failed",
+                ),
+              }),
+            ]);
+            expectSuccessful(turn);
+            expect(model.requests()).toHaveLength(1);
+            expectSuccessful(
+              await model.start(route.agent, 'After failing discovery', {}),
+            );
+            expect(model.requests()).toHaveLength(2);
           },
           false,
           'fake',
         );
       } finally {
-        try {
-          await agent?.dispose();
-        } finally {
-          await built.cleanup();
-        }
+        await route.close();
       }
-    },
-    30_000,
-  );
+    }, 30_000);
+  });
 
   it('releases admission after cancellation so the next ordinary stream completes', async () => {
     await withAgent(async (agent) => {

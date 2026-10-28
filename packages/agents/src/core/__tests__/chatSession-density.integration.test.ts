@@ -13,17 +13,18 @@
  * safety). Sibling to chatSession-density.test.ts.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { ChatSession } from '../chatSession.js';
+import { chatSessionPorts } from '../chatSessionPorts.js';
 import {
-  resetCallIds,
-  makeUserMessage,
-  makeAiText,
   addPrunableReadWritePair,
-  buildRuntimeContext,
   buildMockContentGenerator,
+  buildRuntimeContext,
   getInternals,
+  makeAiText,
+  makeUserMessage,
+  resetCallIds,
 } from './chatSession-density-helpers.js';
 
 describe('Density Optimization Integration (P19)', () => {
@@ -73,7 +74,14 @@ describe('Density Optimization Integration (P19)', () => {
         historyService.add(makeAiText('File updated'));
 
         const chat = new ChatSession(
-          runtimeContext,
+          chatSessionPorts(runtimeContext),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
           mockContentGenerator,
           {},
           [],
@@ -132,7 +140,14 @@ describe('Density Optimization Integration (P19)', () => {
       const historyBefore = historyService.getRawHistory().length;
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -182,7 +197,14 @@ describe('Density Optimization Integration (P19)', () => {
       historyService.add(makeAiText('Done'));
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -249,7 +271,14 @@ describe('Density Optimization Integration (P19)', () => {
       historyService.add(makeAiText('Done'));
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -314,7 +343,14 @@ describe('Density Optimization Integration (P19)', () => {
       const rawBefore = historyService.getRawHistory().length;
 
       const chat = new ChatSession(
-        runtimeContext,
+        chatSessionPorts(runtimeContext),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],

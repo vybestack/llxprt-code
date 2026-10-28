@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'bun:test';
+import { describeOwnedChild, runOwnedChild } from './owned-child-process.ts';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const fixture = join(repoRoot, 'scripts/tests/fixtures/gpt56-bundle-smoke.ts');
@@ -23,6 +24,7 @@ const tokenizerWasm = join(
   repoRoot,
   'node_modules/@dqbd/tiktoken/tiktoken_bg.wasm',
 );
+const bundleRunTimeoutMs = 60_000;
 const tempDirectories: string[] = [];
 const bunAvailable =
   spawnSync(process.execPath, ['--version'], { encoding: 'utf8' }).status === 0;
@@ -90,7 +92,7 @@ await Bun.build({
 }
 
 describe.skipIf(!bunAvailable)('GPT-5.6 bundled runtime', () => {
-  it('executes o200k from an isolated bundle and adjacent WASM', () => {
+  it('executes o200k from an isolated bundle and adjacent WASM', async () => {
     const buildDirectory = createTemporaryDirectory('llxprt-gpt56-build-');
     run(process.execPath, [writePortableBuildScript(buildDirectory)], repoRoot);
     copyFileSync(tokenizerWasm, join(buildDirectory, 'tiktoken_bg.wasm'));
@@ -101,6 +103,14 @@ describe.skipIf(!bunAvailable)('GPT-5.6 bundled runtime', () => {
     );
 
     const executionDirectory = createTemporaryDirectory('llxprt-gpt56-cwd-');
-    expect(run(process.execPath, [bundle], executionDirectory)).toBe('10');
+    const result = await runOwnedChild(process.execPath, [bundle], {
+      cwd: executionDirectory,
+      env: { ...process.env, NO_PROXY: '*', no_proxy: '*' },
+      timeoutMs: bundleRunTimeoutMs,
+    });
+    const diagnostics = describeOwnedChild(result);
+    expect(result.timedOut, diagnostics).toBe(false);
+    expect(result.exitCode, diagnostics).toBe(0);
+    expect(result.stdout.trim(), diagnostics).toBe('10');
   });
 });

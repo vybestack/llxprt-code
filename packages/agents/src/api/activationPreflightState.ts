@@ -3,118 +3,132 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core';
-import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
+import {
+  Config,
+  openBrowserSecurely,
+  type MessageBus,
+  type ProviderSwitcher,
+  type RuntimeProviderManager,
+  type SessionSettingsOwner,
+  type WorkspaceFilesystemOwner,
+  type WorkspaceMemoryOwner,
+  type WorkspaceTrustControlPort,
+} from '@vybestack/llxprt-code-core';
 
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-
-import type { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
-import type { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import type { SessionClientOwner } from '../session/session-client-owner.js';
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
-
+import { type RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import type { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { ProviderActivationResult } from './providerActivationExecutor.js';
-import type {
-  ProviderActivationIntent,
-  FromConfigOptions,
-} from './config-types.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  type ProviderRuntimeContext,
+  type RuntimeKind,
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+
+import {
+  KeychainTokenStorage,
+  MCPOAuthTokenStorage,
+  McpClientManager,
+} from '@vybestack/llxprt-code-mcp';
+import { defaultFeedbackSink } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
+
+import {
+  type CredentialAuthority,
+  type OAuthManager,
+} from '@vybestack/llxprt-code-providers/auth.js';
+import { type ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import { type SettingsService } from '@vybestack/llxprt-code-settings';
+
+import { runCleanupSteps } from '../core/subagent-cleanup.js';
+import { type SessionClientOwner } from '../session/session-client-owner.js';
+import {
+  type ActivationPreflight,
+  type ActivationPreflightToken,
+  type AgentActivationOperation,
+  type AgentActivationPreflightResult,
+} from './activation-types.js';
+import { AdoptedAgentAssembly } from './adopted-agent-assembly.js';
+import { type Agent } from './agent.js';
 import { AgentBootstrapError } from './agentBootstrap.js';
+import {
+  type AgentAdoptionIntent,
+  type AgentForegroundHost,
+  type ProviderActivationIntent,
+} from './config-types.js';
+import { retireActivationOwners } from './activationOwnerRetirement.js';
+import {
+  acquireActivationSession,
+  executeActivationSession,
+  type ActivationSessionClient,
+  type ActivationSessionResources,
+} from './fromConfig-session.js';
+import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
 
-export type ActivationPreflightToken = Readonly<object>;
-export type AgentActivationPreflightResult = ProviderActivationResult & {
-  readonly token?: ActivationPreflightToken;
-};
-export interface AgentActivationOperation {
-  readonly oauthManager?: OAuthManager;
-  readonly messageBus?: MessageBus;
-  readonly tokenizerFactory?: SessionClientOwner['tokenizerFactory'];
-  readonly contentGeneratorFactory?: SessionClientOwner['contentGeneratorFactory'];
-  readonly providerFileLifecycle?: ProviderFileLifecycle;
-  readonly workspaceTrust: WorkspaceTrustControlPort;
-  readonly trustCleanup: (() => Promise<void>) | undefined;
-  readonly workspaceDefinitions: WorkspaceDefinitionOwner;
-  readonly workspaceFilesystem: WorkspaceFilesystemOwner;
-  readonly workspaceMemory: WorkspaceMemoryOwner;
-  readonly workspaceMemoryOwnership: 'borrowed' | 'transferred';
-  preflight(
-    intent: ProviderActivationIntent,
-  ): Promise<AgentActivationPreflightResult>;
-  dispose(): void | Promise<void>;
-  takeMediaOwner(config: Config): SessionMediaOwner | undefined;
-  readonly sessionClient: {
-    runImageOperation: SessionClientOwner['runImageOperation'];
-    workspaceDirectories(): readonly string[];
-    getAgentClient(): ReturnType<SessionClientOwner['getAgentClient']>;
-    refreshAuth(authMethod?: string): Promise<void>;
-  };
-  takeSessionClient(config: Config): SessionClientOwner;
-  takeSettingsOwner(settings: SettingsService): SessionSettingsOwner;
-  readonly settingsOwnerOwnership: 'borrowed' | 'transferred';
-}
-export interface ActivationPreflight {
-  readonly operation: AgentActivationOperation;
-  readonly token: ActivationPreflightToken;
+import { assembleHostGitHubBroker } from './host-github-broker-owner.js';
+import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
+import type {
+  McpCapability,
+  McpRuntimeAcquisition,
+  McpRuntimeOperations,
+} from './mcp-runtime-construction.js';
+import type { ForegroundMcpPort, PublishedMcpPort } from './mcpRuntimePorts.js';
+import type { SessionMcpSettingsReads } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { type PreparedProfileFacade } from './profileApplicationAssembly.js';
+import { canonicalProviderActivationIntent } from './provider-activation-intent.js';
+import { type ProviderActivationResult } from './providerActivationExecutor.js';
+
+import { DEFAULT_SKILL_OPERATIONS } from './workspace-skill-assembly.js';
+export type {
+  ActivationPreflight,
+  ActivationPreflightToken,
+  AgentActivationOperation,
+  AgentActivationPreflightResult,
+} from './activation-types.js';
+export { canonicalProviderActivationIntent } from './provider-activation-intent.js';
+
+export interface PreflightActivationInput {
+  readKind(): RuntimeKind | undefined;
+  providerLifetime(): Promise<void>;
+  filesystem: WorkspaceFilesystemOwner;
+  memory: WorkspaceMemoryOwner;
+  trust: WorkspaceTrustControlPort;
+  trustCleanup: (() => Promise<void>) | undefined;
+  files: ProviderFileLifecycle;
+  policy: RuntimePolicyOwner;
+  authority: CredentialAuthority;
+  runtimeContext: ProviderRuntimeContext;
+  releaseForegroundProviders(): Promise<void>;
+  bus: MessageBus | undefined;
 }
 
-function normalize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(normalize);
-  if (value !== null && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, item]) => [key, normalize(item)]),
-    );
-  }
-  return value;
+export interface PreflightSettingsInput {
+  settingsOwner: SessionSettingsOwner;
+  settingsOwnership: 'borrowed' | 'transferred';
 }
 
-export function canonicalProviderActivationIntent(
-  intent: ProviderActivationIntent,
-): string {
-  const overrides = intent.cliOverrides;
-  return JSON.stringify(
-    normalize({
-      ...intent,
-      provider: intent.provider ?? '',
-      defaultProvider: intent.defaultProvider ?? '',
-      model: intent.model ?? '',
-      authMode: intent.authMode ?? 'auto',
-      authMethod: intent.authMethod ?? '',
-      providerSwitchPolicy: intent.providerSwitchPolicy ?? 'strict',
-      cliOverrides:
-        overrides === undefined
-          ? undefined
-          : {
-              ...overrides,
-              set:
-                overrides.set === undefined
-                  ? undefined
-                  : [...overrides.set].sort(),
-            },
-    }),
-  );
+export interface PreflightProviderInput {
+  settings: SettingsService;
+  manager: RuntimeProviderManager;
+}
+
+export interface PreflightAuthInput {
+  oauth: OAuthManager;
+}
+
+function assertAdoptionConfig(config: unknown): asserts config is Config {
+  if (!(config instanceof Config))
+    throw new AgentBootstrapError('fromConfig requires an existing Config');
 }
 
 export class AgentActivationBootstrap implements AgentActivationOperation {
   readonly #config: Config;
-  readonly #manager: RuntimeProviderManager | undefined;
+  #assembly: AdoptedAgentAssembly | undefined;
   readonly #execute: (
     intent: ProviderActivationIntent,
   ) => Promise<ProviderActivationResult>;
-  #mediaOwner: SessionMediaOwner | undefined;
-  #ownsSessionClient = true;
-  #ownsSettings = true;
-  #ownsMemory: boolean;
   #attempt = 0;
   #disposed = false;
   #closing: Promise<void> | undefined;
   #tail: Promise<unknown> = Promise.resolve();
+  #publicClosed = false;
+  readonly #publicWork = new Set<Promise<unknown>>();
   #receipt:
     | {
         token: ActivationPreflightToken;
@@ -124,59 +138,372 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
     | undefined;
 
   readonly sessionClient: AgentActivationOperation['sessionClient'];
-  get tokenizerFactory(): SessionClientOwner['tokenizerFactory'] {
-    return this.ownedSessionClient.tokenizerFactory;
-  }
-  get contentGeneratorFactory(): SessionClientOwner['contentGeneratorFactory'] {
-    return this.ownedSessionClient.contentGeneratorFactory;
-  }
-  get providerFileLifecycle(): ProviderFileLifecycle | undefined {
-    const files = this.ownedSessionClient.providerFiles;
-    if (files === undefined) return undefined;
-    if (!(files instanceof ProviderFileLifecycle))
-      throw new Error('Preflight requires its selected provider file owner');
-    return files;
+  readonly #providers: PreflightProviderInput;
+  readonly #auth: PreflightAuthInput;
+  readonly #sessionResources: ActivationSessionResources;
+  readonly #sessionClient: SessionClientOwner;
+  #mcp: ForegroundMcpPort | undefined;
+  #mediaOwner: SessionMediaOwner | undefined;
+  readonly #releaseForegroundProviders: () => Promise<void>;
+  #ownsFilesystem = true;
+  #trustCleanupOwnership = { owned: true };
+  #ownsDefinitions = true;
+  #ownsMemory = true;
+  #ownsSessionClient = true;
+  #ownsSettings = true;
+  private constructor(
+    input: {
+      readonly config: Config;
+      readonly activation: PreflightActivationInput;
+    },
+    providers: PreflightProviderInput,
+    auth: PreflightAuthInput,
+    resources: ActivationSessionResources,
+    session: ActivationSessionClient,
+  ) {
+    const { config, activation } = input;
+    const { client, switcher } = session;
+    this.#config = config;
+    this.#assembly = AdoptedAgentAssembly.forPreflight(config);
+    this.#providers = providers;
+    this.#auth = auth;
+    this.#policy = activation.policy;
+    this.#runtimeContext = activation.runtimeContext;
+    this.#releaseForegroundProviders = activation.releaseForegroundProviders;
+    this.#sessionResources = resources;
+    this.#mediaOwner = resources.media;
+    this.#sessionClient = client;
+    this.sessionClient = {
+      workspaceDirectories: () =>
+        resources.workspaceFilesystem.paths.directories(),
+      refreshAuth: (method) =>
+        this.#admitPublic(() => client.clients.refreshAuth(method)),
+      runImageOperation: (operation) =>
+        this.#admitPublic(() => client.runImageOperation(operation)),
+    };
+    this.#execute = (intent) =>
+      executeActivationSession(config, intent, switcher, providers, {
+        settingsOwner: resources.settingsOwner,
+        refreshAuth: (method) => client.clients.refreshAuth(method),
+      });
   }
 
-  constructor(
+  static forPreflight(
     config: Config,
-    manager: RuntimeProviderManager | undefined,
-    execute: (
-      intent: ProviderActivationIntent,
-    ) => Promise<ProviderActivationResult>,
-    mediaOwner: SessionMediaOwner | undefined,
-    private readonly ownedSessionClient: SessionClientOwner,
-    readonly workspaceFilesystem: WorkspaceFilesystemOwner,
-    readonly workspaceMemory: WorkspaceMemoryOwner,
-    private ownsFilesystem: boolean,
-    private readonly settingsOwner: SessionSettingsOwner,
-    readonly settingsOwnerOwnership: 'borrowed' | 'transferred' = 'transferred',
-    readonly workspaceDefinitions: WorkspaceDefinitionOwner,
-    private ownsDefinitions: boolean,
-    readonly workspaceTrust: WorkspaceTrustControlPort,
-    readonly trustCleanup: (() => Promise<void>) | undefined = undefined,
-    readonly oauthManager?: OAuthManager,
-    readonly messageBus?: MessageBus,
-    readonly workspaceMemoryOwnership:
-      | 'borrowed'
-      | 'transferred' = ownsFilesystem ? 'transferred' : 'borrowed',
-  ) {
-    this.#ownsMemory = workspaceMemoryOwnership === 'transferred';
-    this.sessionClient = {
-      workspaceDirectories: () => workspaceFilesystem.paths.directories(),
-      getAgentClient: () => ownedSessionClient.getAgentClient(),
-      refreshAuth: (method) => ownedSessionClient.refreshAuth(method),
-      runImageOperation: (input) => ownedSessionClient.runImageOperation(input),
+    activation: PreflightActivationInput,
+    settings: PreflightSettingsInput,
+    providers: PreflightProviderInput,
+    auth: PreflightAuthInput,
+  ): {
+    readonly prepared: Promise<{
+      readonly activation: AgentActivationBootstrap;
+      readonly switcher: ProviderSwitcher;
+    }>;
+    dispose(): Promise<void>;
+  } {
+    const prepared = acquireActivationSession(
+      config,
+      activation,
+      settings,
+      providers,
+      auth,
+      (resources, session) => ({
+        activation: new AgentActivationBootstrap(
+          { config, activation },
+          providers,
+          auth,
+          resources,
+          session,
+        ),
+        switcher: session.switcher,
+      }),
+    );
+    return {
+      prepared,
+      dispose: () =>
+        prepared.then(
+          ({ activation: acquired }) => acquired.dispose(),
+          () => undefined,
+        ),
     };
-    this.#mediaOwner = mediaOwner;
-    this.#config = config;
-    this.#manager = manager;
-    this.#execute = execute;
+  }
+
+  listProfiles() {
+    return this.#sessionResources.workspaceDefinitions.profileReads.listProfiles();
+  }
+  loadProfile(name: string) {
+    return this.#sessionResources.workspaceDefinitions.profileReads.loadProfile(
+      name,
+    );
+  }
+  readHistory(): ReturnType<SessionClientOwner['clients']['readHistory']> {
+    return this.#admitPublic(() => this.#sessionClient.clients.readHistory());
+  }
+  #foregroundAgent: Agent | undefined;
+  #foregroundPending: Promise<Agent> | undefined;
+  #publicClosing: Promise<void> | undefined;
+  readonly #policy: RuntimePolicyOwner;
+  readonly #runtimeContext: ProviderRuntimeContext;
+
+  closeForegroundAdmission(): void {
+    this.#assembly?.closeConstructionAdmission();
+  }
+
+  async disposeForeground(): Promise<void> {
+    await this.#foregroundAgent?.dispose();
+  }
+
+  createForeground(
+    token: ActivationPreflightToken,
+    intent: ProviderActivationIntent,
+    host: AgentForegroundHost,
+  ): Promise<Agent> {
+    this.#assertPublicOpen();
+    const assembly = this.#requireAssembly();
+    assembly.assertOpen();
+    AgentActivationBootstrap.#validate(
+      { operation: this, token },
+      this.#config,
+      intent,
+      this.#providers.manager,
+      this.#providers.settings,
+    );
+    this.#providers.manager.setRuntimeContext(
+      this.#runtimeContext,
+      this.#sessionResources.settingsOwner,
+      this.#providers.settings,
+      this.#config,
+    );
+    this.#publicClosed = true;
+    this.#foregroundPending = this.#trackConstruction(
+      this.#completeForeground(assembly, token, intent, host),
+    );
+    return this.#foregroundPending;
+  }
+
+  #trackConstruction(publication: Promise<Agent>): Promise<Agent> {
+    return publication.finally(() => {
+      this.#assembly = undefined;
+    });
+  }
+
+  #requireAssembly(): AdoptedAgentAssembly {
+    const assembly = this.#assembly;
+    if (assembly === undefined)
+      throw new AgentBootstrapError(
+        'Activation bootstrap construction has already settled',
+      );
+    return assembly;
+  }
+
+  async #joinPublicWork(): Promise<void> {
+    await Promise.allSettled([this.#tail, ...this.#publicWork]);
+  }
+
+  async #completeForeground(
+    assembly: AdoptedAgentAssembly,
+    token: ActivationPreflightToken,
+    intent: ProviderActivationIntent,
+    host: AgentForegroundHost,
+  ): Promise<Agent> {
+    let broker: ReturnType<typeof assembleHostGitHubBroker>;
+    try {
+      await this.#joinPublicWork();
+      assembly.assertOpen();
+      AgentActivationBootstrap.#consume(
+        { operation: this, token },
+        this.#config,
+        intent,
+        this.#providers.manager,
+        this.#providers.settings,
+      );
+      broker = assembleHostGitHubBroker(host);
+      const mcp = await this.#constructForegroundMcp(host);
+      assembly.assertOpen();
+      const client = await this.#bindForegroundClient(broker, mcp);
+      assembly.assertOpen();
+      const publishedMcp: PublishedMcpPort = mcp;
+      assembly.acceptPreflightTransfer(
+        {
+          mcp: publishedMcp,
+          mediaOwner: this.#mediaOwner,
+          sessionClient: client,
+          release: this.#releaseForegroundProviders,
+        },
+        { settingsOwner: this.#sessionResources.settingsOwner },
+        this.#providers,
+        this.#auth,
+      );
+      const agent = await assembly.finishForeground();
+      this.#foregroundAgent = agent;
+      this.#ownsSessionClient = false;
+      this.#ownsSettings = false;
+      this.#mediaOwner = undefined;
+      assembly.assertOpen();
+      await this.#disposeAcquisition();
+      host.onSkills?.(mcp.workspaceSkills.operations);
+      host.onExtensionRestart?.(
+        mcp.extensionOperations.restart.bind(mcp.extensionOperations),
+      );
+      return agent;
+    } catch (primary) {
+      const agent = this.#foregroundAgent;
+      if (agent !== undefined) {
+        try {
+          await agent.dispose();
+        } catch (cleanup) {
+          throw new AggregateError(
+            [primary, cleanup],
+            'Foreground publication and cleanup failed',
+          );
+        }
+        throw primary;
+      }
+      const mcp = this.#mcp;
+      return cleanupFailedAdoption(
+        primary,
+        () =>
+          runCleanupSteps([
+            () => this.#disposeAcquisition(),
+            () => this.#releaseForegroundProviders(),
+            () => broker?.cleanupFailedConstruction(),
+          ]),
+        mcp?.dispose.bind(mcp),
+        undefined,
+        undefined,
+      );
+    }
+  }
+
+  async #bindForegroundClient(
+    broker: ReturnType<typeof assembleHostGitHubBroker>,
+    mcp: ForegroundMcpPort,
+  ): Promise<SessionClientOwner> {
+    const client = this.#sessionClient;
+    client.bindHostGitHub(broker);
+    client.bindMcpRuntime(mcp, mcp.profileDefinitions, mcp.subagentDefinitions);
+    if (!client.hasHookComposition()) client.bindHooks();
+    await mcp.initialize();
+    await client.initializeTools();
+    return client;
+  }
+
+  async #constructForegroundMcp(
+    host: AgentForegroundHost,
+  ): Promise<ForegroundMcpPort> {
+    const transport = host.mcpHost;
+    const feedback = transport?.emitFeedback ?? defaultFeedbackSink;
+    const policyOwner = this.#policy;
+    const acquisition: McpRuntimeAcquisition = {
+      oauth: {
+        getAuthProviderFactory: transport?.getAuthProviderFactory,
+        tokenStorage: new MCPOAuthTokenStorage(
+          new KeychainTokenStorage('llxprt-cli-mcp-oauth', feedback),
+        ),
+        openBrowser: transport?.openBrowser ?? openBrowserSecurely,
+      },
+      config: this.#config,
+      managerFactory: McpClientManager,
+      extensionLoader: { kind: 'none' },
+      policy: { kind: 'supplied', owner: policyOwner, ownership: 'caller' },
+      lsp: { kind: 'none' },
+      filesystem: {
+        kind: 'supplied',
+        owner: this.#sessionResources.workspaceFilesystem,
+        ownership: 'runtime',
+      },
+      filesystemService: { kind: 'none' },
+      memory: {
+        kind: 'supplied',
+        owner: this.#sessionResources.workspaceMemory,
+        ownership: 'runtime',
+      },
+      definitions: {
+        kind: 'supplied',
+        owner: this.#sessionResources.workspaceDefinitions,
+        ownership: 'runtime',
+      },
+      trust: {
+        kind: 'supplied',
+        owner: this.#sessionResources.workspaceTrust,
+        cleanup: transferTrustCleanup(
+          this.#trustCleanupOwnership,
+          this.#sessionResources.trustCleanup,
+        ),
+      },
+      ide: { kind: 'none' },
+    };
+    const operations: McpRuntimeOperations = {
+      emitFeedback: feedback,
+      skillOperations: {
+        kind: 'supplied',
+        capability: {
+          reloadPolicy:
+            host.skillPolicy ?? DEFAULT_SKILL_OPERATIONS.reloadPolicy,
+          registerTools:
+            host.registerSkillTools ?? DEFAULT_SKILL_OPERATIONS.registerTools,
+        },
+      },
+      mcpSettings: this.#readMcpSettingsCapability(),
+    };
+    this.#ownsFilesystem = false;
+    this.#ownsDefinitions = false;
+    this.#ownsMemory = false;
+    const mcp = await McpRuntimeOwner.create(acquisition, operations);
+    this.#trustCleanupOwnership.owned = false;
+    this.#mcp = mcp;
+    return mcp;
+  }
+
+  #readMcpSettingsCapability(): McpCapability<SessionMcpSettingsReads> {
+    const reads = this.#sessionResources.settingsOwner.readMcpSettingsBinding();
+    return reads === undefined
+      ? { kind: 'none' }
+      : { kind: 'supplied', capability: reads };
+  }
+
+  prepareProfileActivation(
+    signal: AbortSignal,
+  ): Promise<PreparedProfileFacade> {
+    return this.#admitPublic(async () => {
+      signal.throwIfAborted();
+      const replacement =
+        await this.#sessionClient.clients.prepareProfileActivation(signal);
+      try {
+        signal.throwIfAborted();
+        const commitHistory = await replacement.prepareHistoryCommit();
+        signal.throwIfAborted();
+        return {
+          publish: () => {
+            commitHistory();
+            replacement.publish();
+          },
+          retire: replacement.retire,
+          discard: replacement.discard,
+        };
+      } catch (error) {
+        try {
+          await replacement.discard();
+        } catch (cleanupError) {
+          throw new AggregateError(
+            [error, cleanupError],
+            'Profile preparation failed and candidate cleanup was incomplete',
+          );
+        }
+        throw error;
+      }
+    });
   }
 
   preflight(
     intent: ProviderActivationIntent,
   ): Promise<AgentActivationPreflightResult> {
+    if (this.#publicClosed)
+      return Promise.resolve({
+        authFailed: true,
+        infoMessages: [],
+        authError: new AgentBootstrapError('Activation bootstrap is disposed'),
+      });
     const attempt = ++this.#attempt;
     this.#receipt = undefined;
     const captured = structuredClone(intent);
@@ -211,94 +538,85 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
     return !this.#disposed && attempt === this.#attempt;
   }
 
+  #assertPublicOpen(): void {
+    if (this.#publicClosed)
+      throw new AgentBootstrapError('Activation bootstrap is disposed');
+  }
+
+  async #admitPublic<T>(operation: () => Promise<T>): Promise<T> {
+    this.#assertPublicOpen();
+    const accepted = operation();
+    this.#publicWork.add(accepted);
+    try {
+      return await accepted;
+    } finally {
+      this.#publicWork.delete(accepted);
+    }
+  }
+
   dispose(): Promise<void> {
+    const publication = this.#foregroundPending;
+    if (publication === undefined) return this.#disposeAcquisition();
+    this.closeForegroundAdmission();
+    this.#publicClosing ??= publication.then(
+      () => this.#disposeAcquisition(),
+      () => this.#disposeAcquisition(),
+    );
+    return this.#publicClosing;
+  }
+
+  #disposeAcquisition(): Promise<void> {
     if (this.#closing !== undefined) return this.#closing;
+    this.#publicClosed = true;
     this.#disposed = true;
     ++this.#attempt;
     this.#receipt = undefined;
-    if (this.ownsDefinitions) this.workspaceDefinitions.closeAdmission();
+    const resources = this.#sessionResources;
+    const client = this.#sessionClient;
+    if (this.#ownsDefinitions) resources.workspaceDefinitions.closeAdmission();
     const memoryClosing = this.#ownsMemory
-      ? this.workspaceMemory.dispose()
+      ? resources.workspaceMemory.dispose()
       : undefined;
     void memoryClosing?.catch(() => undefined);
-    this.#closing = this.#tail.then(async () => {
-      const client = this.#ownsSessionClient
-        ? this.ownedSessionClient
-        : undefined;
-      const memoryCleanup = await Promise.allSettled([memoryClosing]);
-      const clientCleanup = await Promise.allSettled([client?.dispose()]);
-      const mediaCleanup = await Promise.allSettled([
-        this.ownsDefinitions ? this.workspaceDefinitions.dispose() : undefined,
-        this.#mediaOwner?.dispose(),
-        this.ownsFilesystem ? this.trustCleanup?.() : undefined,
-        this.ownsFilesystem ? this.workspaceFilesystem.dispose() : undefined,
-      ]);
-      const failures = [
-        ...clientCleanup,
-        ...memoryCleanup,
-        ...mediaCleanup,
-      ].flatMap((result) =>
-        result.status === 'rejected' ? [result.reason] : [],
-      );
-      if (this.#ownsSettings && this.settingsOwnerOwnership === 'transferred') {
-        const settingsCleanup = await Promise.allSettled([
-          this.settingsOwner.dispose(),
-        ]);
-        for (const result of settingsCleanup)
-          if (result.status === 'rejected') failures.push(result.reason);
-      }
-      if (failures.length > 0)
-        throw new AggregateError(failures, 'Activation owner cleanup failed');
+    this.#closing = retireActivationOwners({
+      publicWork: Promise.allSettled([this.#tail, ...this.#publicWork]),
+      memory: memoryClosing,
+      sessionClient: () =>
+        this.#ownsSessionClient ? client.dispose() : undefined,
+      afterClient: [
+        () =>
+          this.#ownsDefinitions
+            ? resources.workspaceDefinitions.dispose()
+            : undefined,
+        () => this.#mediaOwner?.dispose(),
+        () =>
+          this.#trustCleanupOwnership.owned
+            ? resources.trustCleanup?.()
+            : undefined,
+        () =>
+          this.#ownsFilesystem
+            ? resources.workspaceFilesystem.dispose()
+            : undefined,
+      ],
+      settings: () =>
+        this.#ownsSettings && resources.settingsOwnership === 'transferred'
+          ? resources.settingsOwner.dispose()
+          : undefined,
     });
     return this.#closing;
   }
 
-  takeSettingsOwner(settings: SettingsService): SessionSettingsOwner {
-    if (this.#disposed || !this.#ownsSettings)
-      throw new AgentBootstrapError(
-        'Session settings ownership is unavailable',
-      );
-    this.settingsOwner.assertSettingsIdentity(settings);
-    this.#ownsSettings = false;
-    return this.settingsOwner;
-  }
-
-  takeSessionClient(config: Config): SessionClientOwner {
-    if (config !== this.#config)
-      throw new AgentBootstrapError(
-        'Session client belongs to a different Config',
-      );
-    if (!this.#ownsSessionClient)
-      throw new AgentBootstrapError(
-        'Session client ownership was already transferred',
-      );
-    this.#ownsSessionClient = false;
-    this.ownsFilesystem = false;
-    this.ownsDefinitions = false;
-    this.#ownsMemory = false;
-    return this.ownedSessionClient;
-  }
-
-  takeMediaOwner(config: Config): SessionMediaOwner | undefined {
-    if (config !== this.#config)
-      throw new AgentBootstrapError(
-        'Media ownership belongs to a different Config',
-      );
-    const owner = this.#mediaOwner;
-    this.#mediaOwner = undefined;
-    return owner;
-  }
-
-  static validate(
+  static #validate(
     preflight: ActivationPreflight,
     config: Config,
     intent: ProviderActivationIntent | undefined,
     manager: RuntimeProviderManager | undefined,
+    settings: SettingsService,
   ): void {
     const operation = preflight.operation;
     if (
       !(operation instanceof AgentActivationBootstrap) ||
-      !(#config in operation)
+      !(#attempt in operation)
     )
       throw new AgentBootstrapError('Invalid activation bootstrap operation');
     if (
@@ -313,10 +631,11 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
       throw new AgentBootstrapError(
         'Activation preflight belongs to a different Config',
       );
-    if (operation.#manager !== manager)
+    if (operation.#providers.manager !== manager)
       throw new AgentBootstrapError(
         'Activation preflight belongs to a different ProviderManager',
       );
+    operation.#sessionResources.settingsOwner.assertSettingsIdentity(settings);
     if (
       intent === undefined ||
       operation.#receipt.fingerprint !==
@@ -327,13 +646,20 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
       );
   }
 
-  static consume(
+  static #consume(
     preflight: ActivationPreflight,
     config: Config,
     intent: ProviderActivationIntent,
     manager: RuntimeProviderManager | undefined,
+    settings: SettingsService,
   ): ProviderActivationResult {
-    AgentActivationBootstrap.validate(preflight, config, intent, manager);
+    AgentActivationBootstrap.#validate(
+      preflight,
+      config,
+      intent,
+      manager,
+      settings,
+    );
     const operation = preflight.operation;
     if (
       !(operation instanceof AgentActivationBootstrap) ||
@@ -348,33 +674,51 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
   }
 
   static async close(operation: AgentActivationOperation): Promise<void> {
-    if (operation instanceof AgentActivationBootstrap && #config in operation) {
+    if (
+      operation instanceof AgentActivationBootstrap &&
+      #attempt in operation
+    ) {
       await operation.dispose();
     }
   }
+  static async adopt(
+    config: Config,
+    settingsService: SettingsService,
+    intent: AgentAdoptionIntent,
+    credentialAuthority: CredentialAuthority,
+  ): Promise<Agent> {
+    const assembly = AdoptedAgentAssembly.forAdoption(
+      { config, settingsService, intent, credentialAuthority },
+      {
+        validateIdentity: () => assertAdoptionConfig(config),
+        publish: async (agent) => {
+          try {
+            assembly.assertOpen();
+          } catch (primary) {
+            try {
+              await agent.dispose();
+            } catch (cleanup) {
+              throw new AggregateError(
+                [primary, cleanup],
+                'Adoption publication and cleanup failed',
+              );
+            }
+            throw primary;
+          }
+          return agent;
+        },
+      },
+    );
+    return assembly.assembleAdoption();
+  }
 }
 
-export function assertPreflightOwners(options: FromConfigOptions): void {
-  const preflight = options.activationPreflight?.operation;
-  if (preflight === undefined) return;
-  if (options.imageOperation !== undefined)
-    throw new AgentBootstrapError(
-      'Preflight image operations cannot be replaced during adoption',
-    );
-  for (const [supplied, retained] of [
-    [options.oauthManager, preflight.oauthManager],
-    [options.messageBus, preflight.messageBus],
-    [options.tokenizerFactory, preflight.tokenizerFactory],
-    [options.contentGeneratorFactory, preflight.contentGeneratorFactory],
-    [options.providerFileLifecycle, preflight.providerFileLifecycle],
-  ]) {
-    if (
-      supplied !== undefined &&
-      retained !== undefined &&
-      supplied !== retained
-    )
-      throw new AgentBootstrapError(
-        'Preflight owners cannot be replaced during adoption',
-      );
-  }
+function transferTrustCleanup(
+  ownership: { owned: boolean },
+  cleanup: (() => Promise<void>) | undefined,
+): () => Promise<void> {
+  return async () => {
+    ownership.owned = false;
+    if (cleanup !== undefined) await cleanup();
+  };
 }

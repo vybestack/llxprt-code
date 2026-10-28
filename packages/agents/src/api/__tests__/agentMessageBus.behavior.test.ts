@@ -4,114 +4,85 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { describe, expect, it } from 'bun:test';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import type { Agent, ToolConfirmation } from '@vybestack/llxprt-code-agents';
+import {
+  buildAgent,
+  drain,
+  ToolConfirmationOutcome,
+} from './helpers/agentHarness.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openRouteAAgent } from './helpers/route-a-agent.js';
+
 /**
  * @plan:PLAN-20270110-ISSUE2378.P01
  * @requirement:REQ-2378-001
  *
- * BEHAVIORAL suite for the public Agent bus accessor (`getMessageBus`).
- *
- * The #2378 remediation makes agent construction own the single session
- * MessageBus and expose it read-only through the public Agent facade, so
- * UI / non-interactive CLI consumers obtain the Agent-owned bus instead of
- * constructing (or threading) their own. These assertions observe the
- * OUTCOME (identity + liveness) via the public surface only — no structural
- * probes, no mock sequences.
+ * BEHAVIORAL suite for the Agent-owned session MessageBus. The agent owns the
+ * single session bus; the observable proof that the bus is live is that a tool
+ * confirmation raised during a turn reaches `agent.tools.onConfirmationRequest`
+ * and is answered through `agent.tools.respondToConfirmation`.
  */
 
-import { describe, it, expect } from 'bun:test';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
-import {
-  buildCliStyleConfig,
-  type MessageBus,
-} from './helpers/buildCliStyleConfig.js';
-import { buildAgent } from './helpers/agentHarness.js';
+const declinedOutput = join(
+  process.cwd(),
+  'message-bus-confirmation-output.txt',
+);
+
+async function answerConfirmationsDuring(
+  agent: Agent,
+  turn: () => Promise<unknown>,
+): Promise<readonly ToolConfirmation[]> {
+  const confirmations: ToolConfirmation[] = [];
+  const unsubscribe = agent.tools.onConfirmationRequest((request) => {
+    confirmations.push(request);
+    agent.tools.respondToConfirmation(
+      request.confirmationId,
+      ToolConfirmationOutcome.Cancel,
+    );
+  });
+  try {
+    await turn();
+  } finally {
+    unsubscribe();
+  }
+  return confirmations;
+}
 
 describe('Agent.getMessageBus @plan:PLAN-20270110-ISSUE2378.P01 @requirement:REQ-2378-001', () => {
-  it('exposes the caller-supplied MessageBus as the SAME instance through the public accessor', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+  useFakeResponsesReplay('write-file-then-answer.jsonl');
+
+  it('a fromConfig agent answers a tool confirmation raised during a turn through its own bus', async () => {
+    const route = await openRouteAAgent({
+      config: { workingDir: process.cwd(), interactive: true },
+    });
     try {
-      const callerBus: MessageBus = built.messageBus;
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-        messageBus: callerBus,
-      });
-      try {
-        // The public accessor returns the EXACT caller bus — no second bus.
-        expect(agent.getMessageBus()).toBe(callerBus);
-      } finally {
-        await agent.dispose();
-      }
+      const confirmations = await answerConfirmationsDuring(route.agent, () =>
+        drain(route.agent.stream('confirm the tool')),
+      );
+      expect(confirmations.length).toBeGreaterThanOrEqual(1);
+      expect(confirmations[0].confirmationId).toBeTruthy();
+      expect(confirmations[0].name).toBe('write_file');
+      expect(existsSync(declinedOutput)).toBe(false);
     } finally {
-      await built.cleanup();
+      await route.close();
     }
   });
 
-  it('returns a single defined bus when none is supplied, stable across repeated reads', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+  it('a createAgent-built agent answers a tool confirmation raised during a turn through its own bus', async () => {
+    const { agent, cleanup } = await buildAgent('write-file-then-answer.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-      });
-      try {
-        const first = agent.getMessageBus();
-        const second = agent.getMessageBus();
-        expect(first).toBeDefined();
-        // Idempotent read: the accessor never builds a bus on demand.
-        expect(second).toBe(first);
-        expect(first).toBe(built.messageBus);
-      } finally {
-        await agent.dispose();
-      }
-    } finally {
-      await built.cleanup();
-    }
-  });
-
-  it('a createAgent-built agent also exposes its owned bus via the public accessor', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    try {
-      const bus = agent.getMessageBus();
-      expect(bus).toBeDefined();
-      // Same instance on every read.
-      expect(agent.getMessageBus()).toBe(bus);
+      const confirmations = await answerConfirmationsDuring(agent, () =>
+        drain(agent.stream('confirm the tool')),
+      );
+      expect(confirmations.length).toBeGreaterThanOrEqual(1);
+      expect(confirmations[0].confirmationId).toBeTruthy();
+      expect(confirmations[0].name).toBe('write_file');
+      expect(existsSync(declinedOutput)).toBe(false);
     } finally {
       await cleanup();
-    }
-  });
-
-  it('the exposed bus is the one the agent actually uses: a caller subscription survives on the accessor-returned bus', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    try {
-      const callerBus: MessageBus = built.messageBus;
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-        messageBus: callerBus,
-      });
-      try {
-        const exposed = agent.getMessageBus();
-        // The exposed bus IS the caller bus, so a subscription on the caller bus
-        // is observable through the accessor-returned reference (identity).
-        expect(exposed).toBe(callerBus);
-      } finally {
-        await agent.dispose();
-      }
-    } finally {
-      await built.cleanup();
     }
   });
 });

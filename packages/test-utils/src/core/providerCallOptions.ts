@@ -11,6 +11,7 @@ import type {
   RuntimeProviderToolset as ProviderToolset,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
@@ -19,11 +20,15 @@ import {
   createRuntimeInvocationContext,
   type RuntimeInvocationContext,
 } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from './runtime.js';
 
 const DEFAULT_RUNTIME_SOURCE = 'test-utils#createProviderCallOptions';
 
 let runtimeSequence = 0;
+
+// Resolved at call time so tests that stub globalThis.fetch to capture requests
+// still observe them through the invocation's explicit transport.
+const globalTestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 interface SettingsOverrides {
   global?: Record<string, unknown>;
@@ -46,6 +51,7 @@ export interface ProviderCallOptionsInit {
   runtimeId?: string;
   runtimeMetadata?: Record<string, unknown>;
   invocation?: RuntimeInvocationContext;
+  fetch?: NetworkFetch;
   ephemerals?: Record<string, unknown>;
 }
 
@@ -92,43 +98,8 @@ function buildEphemeralsSnapshot(
   return snapshot;
 }
 
-function ensureConfig(
-  providerName: string,
-  settings: SettingsService,
-  explicitConfig?: Config,
-  overrides?: Partial<Record<string, unknown>>,
-): Config {
-  if (explicitConfig) {
-    return explicitConfig;
-  }
-
-  const defaultOverrides: Partial<Record<string, unknown>> = {
-    getProvider: () => providerName,
-    getProviderSettings: () => settings.getProviderSettings(providerName),
-    getEphemeralSettings: () => ({
-      ...settings.getAllGlobalSettings(),
-      ...settings.getProviderSettings(providerName),
-    }),
-    getEphemeralSetting: (key: string) => {
-      const providerSettings = settings.getProviderSettings(providerName);
-      if (key in providerSettings) {
-        return providerSettings[key];
-      }
-      return settings.get(key);
-    },
-    getSettingsService: () => settings,
-  };
-
-  return createRuntimeConfigStub(settings, {
-    ...defaultOverrides,
-    ...(overrides ?? {}),
-  });
-}
-
 function ensureRuntime(
   providerName: string,
-  settings: SettingsService,
-  config: Config,
   init: ProviderCallOptionsInit,
 ): ProviderRuntimeContext {
   const resolvedRuntimeId =
@@ -146,16 +117,13 @@ function ensureRuntime(
   if (init.runtime) {
     return {
       ...init.runtime,
-      settingsService: settings,
-      config: init.runtime.config ?? config,
+
       runtimeId: resolvedRuntimeId,
       metadata: runtimeMetadata,
     };
   }
 
   return createProviderRuntimeContext({
-    settingsService: settings,
-    config,
     runtimeId: resolvedRuntimeId,
     metadata: runtimeMetadata,
   });
@@ -188,6 +156,7 @@ function ensureInvocation(
 
   return createRuntimeInvocationContext({
     runtimeId: runtime.runtimeId,
+    fetch: init.fetch ?? globalTestFetch,
     runtimeMetadata: runtime.metadata,
 
     providerName,
@@ -218,14 +187,7 @@ export function createProviderCallOptions(
   const settings = init.settings ?? new SettingsService();
   applySettingsOverrides(init.providerName, settings, init.settingsOverrides);
 
-  const config = ensureConfig(
-    init.providerName,
-    settings,
-    init.config,
-    init.configOverrides,
-  );
-
-  const runtime = ensureRuntime(init.providerName, settings, config, init);
+  const runtime = ensureRuntime(init.providerName, init);
 
   const mergedMetadata: Record<string, unknown> = {
     ...(runtime.metadata ?? {}),

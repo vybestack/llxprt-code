@@ -16,6 +16,10 @@ import type {
   ReadonlySettingsSnapshot,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const roots: SessionSettingsOwner[] = [];
 afterEach(async () => {
@@ -59,7 +63,6 @@ export function createHistoryRuntimeFixture(options: {
     },
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
     providerRuntime: createProviderRuntimeContext({
-      settingsService,
       runtimeId: options.state.runtimeId,
     }),
     prepareProviderInvocation: (name, parameters, signal) =>
@@ -68,6 +71,8 @@ export function createHistoryRuntimeFixture(options: {
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
   });
 }

@@ -1,3 +1,12 @@
+import type { BucketAuthConsentRequest } from './auth-consent-contract.js';
+export type { BucketAuthConsentRequest } from './auth-consent-contract.js';
+import type { AgentSessionAuthentication } from './control/session-authentication.js';
+import type { AgentProviderFileOperations } from './provider-file-domain.js';
+import type { AgentModelParametersControl } from './model-parameters.js';
+import type { AgentSettingsControl } from './control/settings-control.js';
+import type { AgentToolFormatControl } from './control/tool-format-control.js';
+import type { SessionProviderReads } from './session-provider-reads.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import type {
   SessionStartSource,
@@ -9,19 +18,22 @@ import type {
   SubagentDefinitionReads,
   SubagentDefinitionWrites,
   WorkspaceCheckpointOperations,
+  ChronologyTraceEntry,
+  RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
 import type { DiscoveredMCPPrompt } from '@vybestack/llxprt-code-mcp';
 import type {
   WorkspaceIgnoreOperations,
   WorkspaceSearchOperations,
+  WorkspaceTextOperations,
 } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 /**
  * @plan:PLAN-20260617-COREAPI.P05
  * @requirement:REQ-001, REQ-017
  * @plan:PLAN-20260621-COREAPIREMED.P06
  */
-import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
+import type { AgentIdeControl } from './ide-control-contract.js';
+export type { AgentIdeControl } from './ide-control-contract.js';
 
 import type { ChildToolDisplayCallbacks } from '../session/childToolDisplay.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';
@@ -29,13 +41,13 @@ import type { AgentProfileApplication } from './profileApplicationAssembly.js';
 import type { AgentExecutionCoordinator } from './agentExecutionCoordinator.js';
 
 import type { SessionRecordingEvent } from './control/recordSessionEvent.js';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { AgentInput, GenerateOptions } from './generation-options.js';
+export type { AgentInput, GenerateOptions } from './generation-options.js';
 import type {
   ApprovalMode,
   MCPServerConfig,
 } from '@vybestack/llxprt-code-core/config/config.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type {
   HookEventName,
   HookInput,
@@ -51,8 +63,8 @@ import type {
   ToolCallsUpdateHandler,
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type {
-  RuntimeProviderManager,
   RuntimeModel,
+  ApiKeyUpdateResult,
   PolicyDecision,
   DiscoveredMCPResource,
   ContinueTarget,
@@ -69,17 +81,14 @@ import type {
   ToolUpdate,
 } from './event-types.js';
 
+import type { SessionStats, CompressionResult } from './agentMetrics.js';
+import type { SessionMetricOperations } from '@vybestack/llxprt-code-telemetry';
+export type { SessionStats, CompressionResult } from './agentMetrics.js';
+
 export type Unsubscribe = () => void;
 
 export type AgentMessage = IContent;
 export type AgentHistoryItem = IContent;
-
-export type AgentInput =
-  | string
-  | readonly ContentBlock[]
-  | Readonly<{ readonly text: string; readonly role?: 'user' | 'system' }>
-  | IContent
-  | readonly IContent[];
 
 export type McpDiscoveryMode = 'await' | 'skip';
 
@@ -109,49 +118,12 @@ export interface TurnOptions {
   readonly mcpDiscovery?: McpDiscoveryMode;
 }
 
-export interface GenerateOptions {
-  readonly model?: string;
-  readonly config?: Readonly<Record<string, unknown>>;
-  readonly signal?: AbortSignal;
-  readonly promptId?: string;
-  readonly readHistory?: boolean;
-  readonly writeHistory?: boolean;
-}
-
-export interface SessionStats {
-  readonly promptTokens: number;
-  readonly candidateTokens: number;
-  readonly totalTokens: number;
-  readonly cachedTokens: number;
-  readonly contextWindowSize: number;
-  readonly contextWindowUsed: number;
-  readonly turnCount: number;
-  readonly apiRequests: number;
-  readonly apiErrors: number;
-  readonly toolCalls: number;
-  readonly toolSuccesses: number;
-  readonly toolFailures: number;
-  readonly toolCancellations: number;
-  readonly totalApiLatencyMs: number;
-  readonly totalToolDurationMs: number;
-  readonly completeTokensPerMinute: number;
-  readonly agentActiveTimeMs: number;
-  readonly sessionWallMs: number;
-}
-
 export interface AgentResult {
   readonly text: string;
   readonly toolCalls: readonly AgentToolCall[];
   readonly finishReason: DoneReason;
   readonly error?: AgentError;
   readonly usage?: SessionStats;
-}
-
-export interface CompressionResult {
-  readonly status: 'compressed' | 'skipped' | 'failed' | 'noop';
-  readonly originalTokenCount?: number;
-  readonly newTokenCount?: number;
-  readonly promptId?: string;
 }
 
 export interface ProviderInfo {
@@ -713,7 +685,7 @@ export interface AgentAuthKeysControl {
   setRaw(
     apiKey: string | null,
     opts?: { readonly provider?: string },
-  ): Promise<void>;
+  ): Promise<ApiKeyUpdateResult>;
   setKeyFile(
     path: string | null,
     opts?: { readonly provider?: string },
@@ -721,6 +693,10 @@ export interface AgentAuthKeysControl {
 }
 
 export interface AgentAuthControl {
+  subscribeBucketConsent(
+    listener: (request: BucketAuthConsentRequest) => void,
+  ): Unsubscribe;
+  respondToBucketConsent(correlationId: string, confirmed: boolean): void;
   login(provider: string, opts?: { readonly bucket?: string }): Promise<void>;
   logout(
     provider: string,
@@ -743,24 +719,6 @@ export interface AgentAuthControl {
   listBucketStatuses(provider: string): Promise<readonly AuthBucketStatus[]>;
 }
 
-export interface AgentIdeControl {
-  isTrustedFolder(): boolean;
-  getIdeTrust(): boolean | undefined;
-  setTrustedFolderLive(trusted: boolean): Promise<void>;
-  whenTrustTransitionSettled(): Promise<void>;
-  getIdeClient(): IdeClient | undefined;
-  getIdeMode(): boolean;
-  setIdeMode(enabled: boolean): void;
-  setIdeClientConnected(): Promise<void>;
-  setIdeClientDisconnected(): Promise<void>;
-  current(): IdeInfo | null;
-  detected(): readonly IdeInfo[];
-  trust(name: string): Promise<void>;
-  status(): IdeStatus;
-  openEditor(): Promise<void>;
-  closeEditor(): Promise<void>;
-}
-
 export interface AgentSessionControl {
   /**
    * Resumes a previously recorded session (by 'latest' or a session
@@ -776,7 +734,14 @@ export interface AgentSessionControl {
    */
   resume(
     target: 'latest' | string,
-    options?: { readonly prefix?: boolean },
+    options?: {
+      readonly prefix?: boolean;
+      readonly startup?: boolean;
+      readonly onStartupRestoreFailure?: (
+        sessionId: string,
+        reason: string,
+      ) => void;
+    },
   ): Promise<readonly AgentHistoryItem[]>;
   /** Creates a durable branch point in the active recording. */
   createCheckpoint(
@@ -788,6 +753,19 @@ export interface AgentSessionControl {
     readonly remainingHistory: readonly AgentHistoryItem[];
     readonly itemsRemoved: number;
   }>;
+  /** Native values only; chronology and media references are preserved. */
+  readHistorySnapshot(): {
+    readonly messages: IContent[];
+    readonly chronology: ChronologyTraceEntry[];
+  } | null;
+  isHistoryInitialized(): boolean;
+  readInitializedHistory(): readonly IContent[] | null;
+  replaceHistory(history: readonly IContent[]): Promise<void>;
+  subscribeHistoryTokens(publish: (count: number) => void): Unsubscribe;
+  attachRecordingHistory(recording: RecordingIntegration): void;
+  connectRecordingHistory(
+    readRecording: () => RecordingIntegration | null,
+  ): Unsubscribe;
   /** Reads live conversation history through the session owner. */
   getHistory(): Promise<readonly AgentHistoryItem[]>;
   /**
@@ -856,7 +834,18 @@ export interface AgentSessionStartResult {
   readonly additionalContext?: string;
 }
 
+export type HookExecutionPhase =
+  | {
+      readonly phase: 'start';
+      readonly eventName: string;
+      readonly correlationId: string;
+    }
+  | { readonly phase: 'end'; readonly correlationId: string };
+
 export interface AgentHookControl {
+  subscribeExecutionPhase(
+    listener: (phase: HookExecutionPhase) => void,
+  ): Unsubscribe;
   onHookExecution(
     cb: (req: HookExecutionRequest, resp: HookExecutionResponse) => void,
   ): Unsubscribe;
@@ -1030,7 +1019,8 @@ export interface AgentSkillsControl {
  */
 export interface AgentWorkspaceControl
   extends WorkspaceIgnoreOperations,
-    WorkspaceSearchOperations {
+    WorkspaceSearchOperations,
+    WorkspaceTextOperations {
   readonly checkpoints: WorkspaceCheckpointOperations;
   readonly profileDefinitions: ProfileDefinitionReads;
   readonly profileWrites: ProfileDefinitionWrites;
@@ -1077,15 +1067,17 @@ export interface AgentLspControl {
   status(): Promise<LspStatusSnapshot>;
 }
 
-export interface Agent {
+export interface Agent extends AgentProviderFileOperations {
+  readonly modelParameters: AgentModelParametersControl;
+  readonly settings: AgentSettingsControl;
+  readonly toolFormat: AgentToolFormatControl;
+  readonly providerReads: SessionProviderReads;
   readonly sessionClient: {
+    readonly fetch: NetworkFetch;
     readonly runImageOperation: ImageOperationRunner;
     refreshAuth(authMethod?: string): Promise<void>;
     publishTools(): Promise<void>;
-    createDetachedAgentClient(id?: string): Promise<AgentClientContract>;
   };
-  readonly agentClient: AgentClientContract;
-  readonly providerManager: RuntimeProviderManager;
   captureProfile(): Profile;
   saveProfileSnapshot(
     name: string,
@@ -1158,7 +1150,6 @@ export interface Agent {
    * @plan:PLAN-20270110-ISSUE2378.P01
    * @requirement:REQ-2378-001
    */
-  getMessageBus(): MessageBus;
   /** @plan:PLAN-20260621-COREAPIREMED.P10 @requirement:REQ-002 */
   getEphemeralSetting(key: string): unknown;
   /** @plan:PLAN-20260621-COREAPIREMED.P10 @requirement:REQ-002 */
@@ -1178,8 +1169,10 @@ export interface Agent {
   readonly tools: AgentToolControl;
   readonly mcp: AgentMcpControl;
   readonly auth: AgentAuthControl;
+  readonly authentication: AgentSessionAuthentication;
   readonly ide: AgentIdeControl;
   readonly session: AgentSessionControl;
+  readonly metrics: SessionMetricOperations;
   readonly hooks: AgentHookControl;
   readonly policy: AgentPolicyControl;
   /** @plan:PLAN-20260622-COREAPIGAP.P08 @requirement:REQ-003 */
@@ -1207,6 +1200,7 @@ export interface Agent {
   getStats(): SessionStats;
   onStats(cb: (stats: SessionStats) => void): Unsubscribe;
 
+  /** Runs model hooks without a tool loop; history reads and writes are opt-in. */
   generate(input: AgentInput, opts?: GenerateOptions): Promise<string>;
   generateJson(
     contents: readonly AgentMessage[],

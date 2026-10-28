@@ -39,7 +39,9 @@
     "pack:smoke": "npm pack --dry-run"
   },
   "dependencies": {
-    "@ai-sdk/google": "4.0.56"
+    "@ai-sdk/google": "4.0.56",
+    "@ai-sdk/google-vertex": "5.0.68",
+    "google-auth-library": "10.6.2"
   },
   "peerDependencies": {
     "@vybestack/llxprt-code-core": "^0.12.0",

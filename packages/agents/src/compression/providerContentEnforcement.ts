@@ -11,7 +11,6 @@ import {
   invalidateResponsesStatefulChain,
   type IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type {
   RuntimeProvider as IProvider,
   RuntimeCompressionGuardInfo,
@@ -32,10 +31,22 @@ import {
   type UnifiedTruncationResult,
 } from './toolResultTruncator.js';
 
+/**
+ * The runtime reads the enforcement path makes: the current model name for
+ * history stamps, and the two compression thresholds.
+ */
+export interface CompressionLimitsRuntime {
+  readonly state: { readonly model: string };
+  readonly ephemerals: {
+    compressionThreshold(): number;
+    contextLimit(): number;
+  };
+}
+
 export interface ProviderContentEnforcementDeps {
   historyService: HistoryService;
   historyOrigin?: object;
-  runtimeContext: AgentRuntimeContext;
+  runtimeContext: CompressionLimitsRuntime;
   generationConfig: ModelGenerationSettings;
   readCompletionBudgetSetting: () => unknown;
   logger: DebugLogger;

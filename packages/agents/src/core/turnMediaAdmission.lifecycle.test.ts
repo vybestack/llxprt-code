@@ -1,6 +1,6 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { afterEach as closeInvocationRoots } from 'bun:test';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 const retainedInvocationOwners: SessionSettingsOwner[] = [];
 
 /**
@@ -9,11 +9,7 @@ const retainedInvocationOwners: SessionSettingsOwner[] = [];
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { ChatSession } from './chatSession.js';
+import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
@@ -21,7 +17,6 @@ import {
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
   IContent,
@@ -33,7 +28,18 @@ import type {
   GenerateChatOptions,
   IProvider,
 } from '@vybestack/llxprt-code-providers/IProvider.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ChatSession } from './chatSession.js';
+import { chatSessionPorts } from './chatSessionPorts.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
+
 const INPUT_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
 const OUTPUT_JPEG =
@@ -264,6 +270,8 @@ async function createFixture(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
     state: createAgentRuntimeState({
       runtimeId: `turn-media-${behavior}`,
@@ -290,7 +298,7 @@ async function createFixture(
       }),
     ),
     tools: createToolRegistryViewFromRegistry(),
-    providerRuntime: { ...setup.runtime, config: setup.config },
+    providerRuntime: { ...setup.runtime },
     mediaStore: store,
     mediaAdmission: new MediaAdmissionService(store),
   });
@@ -301,7 +309,19 @@ async function createFixture(
     embedContent: vi.fn(),
   };
   return {
-    chat: new ChatSession(runtime, contentGenerator, {}, []),
+    chat: new ChatSession(
+      chatSessionPorts(runtime),
+      setup.config,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      contentGenerator,
+      {},
+      [],
+    ),
     store,
     rootDirectory,
     providerStarted,

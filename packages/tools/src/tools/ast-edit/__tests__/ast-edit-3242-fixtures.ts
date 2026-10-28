@@ -20,7 +20,11 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { gitCommitAll, gitInit } from './ast-read-git-fixtures.js';
+import {
+  gitCommitAll,
+  gitCommitAllBulk,
+  gitInit,
+} from './ast-read-git-fixtures.js';
 
 /** Exact line count of the generated Rust target (including final newline). */
 export const RUST_FIXTURE_LINE_COUNT = 5250;
@@ -209,7 +213,7 @@ export function generateIssue3242Workspace(): string {
     }
 
     writeFileSync(join(dir, 'oversized_dep.rs'), oversizedRustFile(), 'utf-8');
-    gitCommitAll(dir, 'issue-3242 fan-out fixture');
+    gitCommitAllBulk(dir, 'issue-3242 fan-out fixture');
     return dir;
   } catch (error) {
     rmSync(dir, { recursive: true, force: true });

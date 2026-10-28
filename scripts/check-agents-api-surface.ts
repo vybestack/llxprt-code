@@ -49,7 +49,7 @@ import { isRecord } from './utils/error-guards.ts';
 import {
   parseExportedNames,
   loadExpectedSurface,
-  DENIED_INTERNAL_NAMES,
+  isDeniedInternalName,
   API_SURFACE_REPORT_PATH,
 } from '../packages/agents/src/api/apiSurfaceParser.ts';
 
@@ -341,7 +341,7 @@ function main(): void {
 
   // Hard guard: denied internal names must never appear on the public root
   // surface.
-  const leaked = sortedNames.filter((name) => DENIED_INTERNAL_NAMES.has(name));
+  const leaked = sortedNames.filter((name) => isDeniedInternalName(name));
   if (leaked.length > 0) {
     failed = true;
     console.error(

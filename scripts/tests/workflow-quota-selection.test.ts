@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import {
   asRecord,
   asString,
+  compositeActionSteps,
   jobSteps,
   parseWorkflowYaml,
   workflowJobOptional,
@@ -26,6 +27,15 @@ type Workflow = WorkflowDocument;
 function readWorkflow(name: string): Workflow {
   return parseWorkflowYaml(
     fs.readFileSync(path.join(ROOT, '.github/workflows', name), 'utf-8'),
+  );
+}
+
+function readSetupLocalGemmaSteps(): TypedWorkflowStep[] {
+  return compositeActionSteps(
+    fs.readFileSync(
+      path.join(ROOT, '.github/actions/setup-local-gemma/action.yml'),
+      'utf-8',
+    ),
   );
 }
 
@@ -98,11 +108,29 @@ describe('quota-selected workflow credentials', () => {
       'Check API quota and select optimal key',
     );
     const tests = stepNamed(steps, 'Run E2E tests');
-    expect(asRecord(tests.env).OPENAI_API_KEY).toBe('ollama-local-only');
-    expect(asRecord(tests.env).OPENAI_BASE_URL).toBe(
-      'http://127.0.0.1:12644/v1',
+    // The local-model provider environment is exported by the shared setup
+    // action, which must run before the tests and contain no credentials.
+    const setup = stepNamed(steps, 'Set up local Gemma 4 E2B model');
+    expect(setup.uses).toBe('./.github/actions/setup-local-gemma');
+    expect(steps.indexOf(setup)).toBeLessThan(steps.indexOf(tests));
+    const exportEnvironment = asString(
+      stepNamed(
+        readSetupLocalGemmaSteps(),
+        'Export local model test environment',
+      ).run,
     );
-    expect(asRecord(tests.env).LLXPRT_DEFAULT_MODEL).toBe('gemma4:e2b-it-qat');
+    expect(exportEnvironment).toContain(
+      "echo 'OPENAI_API_KEY=ollama-local-only'",
+    );
+    expect(exportEnvironment).toContain(
+      "echo 'OPENAI_BASE_URL=http://127.0.0.1:12644/v1'",
+    );
+    expect(exportEnvironment).toContain(
+      "echo 'LLXPRT_DEFAULT_MODEL=gemma4:e2b-it-qat'",
+    );
+    expect(hasSecret(readSetupLocalGemmaSteps())).toBe(false);
+    expect(JSON.stringify(readSetupLocalGemmaSteps())).not.toContain('vars.');
+    expect(asRecord(tests.env)).not.toHaveProperty('OPENAI_API_KEY');
   });
 
   it('runs PR walkthrough with credential-free local inference instead of quota-selected provider keys', () => {

@@ -22,6 +22,7 @@ const DEFAULT_MAX_ATTEMPTS = 3;
  * Options for generateJson method
  */
 export interface GenerateJsonOptions {
+  abortSignal?: AbortSignal;
   prompt: string;
   schema?: Record<string, unknown>;
   model: string;
@@ -38,6 +39,7 @@ export interface GenerateJsonOptions {
  * Options for generateEmbedding method
  */
 export interface GenerateEmbeddingOptions {
+  abortSignal?: AbortSignal;
   text: string | string[];
   model: string;
 }
@@ -196,6 +198,7 @@ export class BaseLLMClient {
       {
         model,
         contents: icontents,
+        abortSignal: options.abortSignal,
         settings,
         modelParams:
           Object.keys(modelParams).length > 0 ? modelParams : undefined,
@@ -240,6 +243,7 @@ export class BaseLLMClient {
 
       const result = await this.contentGenerator!.embedContent({
         texts,
+        abortSignal: options.abortSignal,
       });
 
       if (result.embeddings.length === 0) {

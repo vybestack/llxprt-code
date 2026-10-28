@@ -9,6 +9,7 @@ import {
   type ServerResponse,
 } from 'node:http';
 import { createHash } from 'node:crypto';
+import type { Socket } from 'node:net';
 import { z } from 'zod';
 
 export interface CutoverFixtureServer {
@@ -228,4 +229,209 @@ export function listenCutoverFixtureServer(
       resolve();
     });
   });
+}
+
+export interface NoAuthMcpFixture {
+  readonly base: string;
+  readonly events: string[];
+  liveSessions(): number;
+  liveSockets(): number;
+  hold(method: string): void;
+  waitUntilHeld(method: string): Promise<void>;
+  release(method: string): void;
+  /** Withholds the response to every session DELETE until the client gives up. */
+  holdSessionDeletes(): void;
+  close(): Promise<void>;
+}
+
+interface HeldRequest {
+  readonly respond: () => void;
+}
+
+function readSessionResult(method: string): unknown {
+  if (method === 'initialize')
+    return {
+      protocolVersion: '2024-11-05',
+      capabilities: { resources: {} },
+      serverInfo: { name: 'same', version: '1' },
+    };
+  if (method === 'resources/list')
+    return { resources: [{ uri: 'test://same', name: 'same' }] };
+  if (method === 'resources/read')
+    return { contents: [{ uri: 'test://same', text: 'plain' }] };
+  return {};
+}
+
+async function listenOnLoopback(
+  server: ReturnType<typeof createServer>,
+): Promise<number> {
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address();
+  if (address === null || typeof address === 'string')
+    throw new Error('Missing server address');
+  return address.port;
+}
+
+function sendJsonRpcResult(
+  response: ServerResponse,
+  message: z.infer<typeof jsonRpcMessageSchema>,
+  sessionId: string | undefined,
+): void {
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+  };
+  if (sessionId !== undefined) headers['mcp-session-id'] = sessionId;
+  response.writeHead(200, headers);
+  response.end(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id: message.id,
+      result: readSessionResult(message.method),
+    }),
+  );
+}
+
+interface NoAuthServerState {
+  readonly events: string[];
+  readonly armed: Set<string>;
+  readonly held: Map<string, HeldRequest>;
+  readonly waiters: Map<string, Array<() => void>>;
+  readonly sessions: Set<string>;
+  sessionCounter: number;
+  holdDeletes: boolean;
+}
+
+function serveNoAuthRequest(
+  state: NoAuthServerState,
+  request: IncomingMessage,
+  response: ServerResponse,
+): void {
+  const { events, armed, held, waiters, sessions } = state;
+  response.setHeader('connection', 'close');
+  let body = '';
+  request.on('data', (chunk: Buffer) => {
+    body += chunk.toString();
+  });
+  request.on('end', () => {
+    if (request.method === 'DELETE') {
+      const sessionId = String(request.headers['mcp-session-id']);
+      events.push(`delete:${sessionId}`);
+      if (state.holdDeletes) {
+        response.on('close', () => {
+          if (!response.writableEnded)
+            events.push(`delete-abandoned:${sessionId}`);
+        });
+        return;
+      }
+      sessions.delete(sessionId);
+      response.writeHead(200);
+      response.end();
+      return;
+    }
+    if (request.method !== 'POST') {
+      response.writeHead(405);
+      response.end();
+      return;
+    }
+    const message = jsonRpcMessageSchema.parse(JSON.parse(body));
+    if (message.id === undefined) {
+      response.writeHead(202);
+      response.end();
+      return;
+    }
+    events.push(`request:${message.method}`);
+    const reply = (): void => {
+      const sessionId =
+        message.method === 'initialize'
+          ? `session-${++state.sessionCounter}`
+          : undefined;
+      if (sessionId !== undefined) sessions.add(sessionId);
+      sendJsonRpcResult(response, message, sessionId);
+    };
+    if (!armed.delete(message.method)) {
+      reply();
+      return;
+    }
+    events.push(`held:${message.method}`);
+    held.set(message.method, { respond: reply });
+    for (const wake of waiters.get(message.method) ?? []) wake();
+    waiters.delete(message.method);
+    response.on('close', () => {
+      if (held.get(message.method)?.respond === reply) {
+        held.delete(message.method);
+        events.push(`abandoned:${message.method}`);
+      }
+    });
+  });
+}
+
+/**
+ * Unauthenticated streamable-HTTP MCP server. `hold(method)` withholds the
+ * response to the next JSON-RPC request with that method until `release`, and a
+ * held request whose socket closes is abandoned (recorded as `abandoned:<method>`),
+ * so a client abort ends it. Every response closes its connection, so a socket
+ * that is still open is one whose request has not been answered or abandoned.
+ * It records every request, session DELETE and socket close in `events`, and
+ * counts the sessions and sockets still open so a test can prove retirement
+ * before the fixture's own `close` force-closes whatever remains.
+ */
+export async function startNoAuthMcpFixture(): Promise<NoAuthMcpFixture> {
+  const state: NoAuthServerState = {
+    events: [],
+    armed: new Set(),
+    held: new Map(),
+    waiters: new Map(),
+    sessions: new Set(),
+    sessionCounter: 0,
+    holdDeletes: false,
+  };
+  const { events, armed, held, waiters, sessions } = state;
+  const sockets = new Set<Socket>();
+  const server = createServer((request, response) =>
+    serveNoAuthRequest(state, request, response),
+  );
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => {
+      sockets.delete(socket);
+      events.push('socket-closed');
+    });
+  });
+  const port = await listenOnLoopback(server);
+  return {
+    base: `http://127.0.0.1:${port}`,
+    events,
+    liveSessions: () => sessions.size,
+    liveSockets: () => sockets.size,
+    hold: (method) => {
+      armed.add(method);
+    },
+    waitUntilHeld: (method) =>
+      held.has(method)
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => {
+            waiters.set(method, [...(waiters.get(method) ?? []), resolve]);
+          }),
+    holdSessionDeletes: () => {
+      state.holdDeletes = true;
+    },
+    release: (method) => {
+      const request = held.get(method);
+      if (request === undefined) return;
+      held.delete(method);
+      events.push(`released:${method}`);
+      request.respond();
+    },
+    close: async () => {
+      for (const method of [...held.keys()]) {
+        held.get(method)?.respond();
+        held.delete(method);
+      }
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
 }

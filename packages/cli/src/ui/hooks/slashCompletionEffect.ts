@@ -36,7 +36,11 @@ import {
   sortSuggestions,
 } from './atCompletionUtils.js';
 import type { SlashCommandCompletionContext } from './slashCompletionTypes.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type {
+  FileFilteringOptions,
+  WorkspaceIgnoreOperations,
+  WorkspaceSearchOperations,
+} from '@vybestack/llxprt-code-core';
 
 const debugLogger = new DebugLogger('llxprt:ui:slash-completion');
 
@@ -49,7 +53,19 @@ const debugLogger = new DebugLogger('llxprt:ui:slash-completion');
 // moves on.
 export const SCHEMA_COMPLETION_DEBOUNCE_MS = 100;
 
-type RuntimeExtensionConfig = Partial<Pick<CliUiRuntime, 'isExtensionEnabled'>>;
+type RuntimeExtensionConfig = Partial<{
+  isExtensionEnabled(extensionName: string): boolean;
+}>;
+
+/**
+ * Filesystem search and ignore reads the `@path` completion effect needs.
+ */
+export interface AtPathCompletionRuntime {
+  readonly search: WorkspaceSearchOperations['search'];
+  readonly ignore: Pick<WorkspaceIgnoreOperations, 'shouldIgnoreFile'>;
+  getEnableRecursiveFileSearch(): boolean;
+  getFileFilteringOptions(): FileFilteringOptions;
+}
 
 type CompletionSetters = {
   setSuggestions: (s: Suggestion[]) => void;
@@ -87,6 +103,7 @@ export type StateRefs = {
 };
 
 function handleSchemaAsync(
+  enableFuzzyFiltering: boolean,
   leafCommand: SlashCommand,
   commandContext: CommandContext,
   argString: string,
@@ -100,6 +117,7 @@ function handleSchemaAsync(
 ): void {
   setters.setIsLoadingSuggestions(true);
   handleSchemaCompletion(
+    enableFuzzyFiltering,
     leafCommand,
     commandContext,
     argString,
@@ -156,6 +174,7 @@ function updateCmdSuggestions(
 }
 
 function handleSchemaArg(
+  enableFuzzyFiltering: boolean,
   leaf: SlashCommand,
   ctx: CommandContext,
   trail: boolean,
@@ -172,6 +191,7 @@ function handleSchemaArg(
     a.push(argPartial);
   }
   handleSchemaAsync(
+    enableFuzzyFiltering,
     leaf,
     ctx,
     a.join(' '),
@@ -291,6 +311,7 @@ function updateCtx(
 }
 
 function processSlash(
+  enableFuzzyFiltering: boolean,
   line: string,
   cmdIdx: number,
   cmds: readonly SlashCommand[],
@@ -321,6 +342,7 @@ function processSlash(
     // keystrokes whose timers were cleared before firing) are discarded. The
     // effect cleanup also clears the timer.
     const schemaArgs: Parameters<typeof handleSchemaArg> = [
+      enableFuzzyFiltering,
       leaf,
       ctx,
       trail,
@@ -356,7 +378,7 @@ async function fetchForDir(
   dir: string,
   cwd: string,
   at: ReturnType<typeof parseAtPath>,
-  cfg: CliUiRuntime | undefined,
+  cfg: AtPathCompletionRuntime | undefined,
 ): Promise<Suggestion[]> {
   const fds = cfg ? cfg.ignore : null;
   const rec = cfg?.getEnableRecursiveFileSearch() ?? true;
@@ -406,7 +428,7 @@ async function fetchAt(
   dirs: readonly string[],
   cwd: string,
   at: ReturnType<typeof parseAtPath>,
-  cfg: CliUiRuntime | undefined,
+  cfg: AtPathCompletionRuntime | undefined,
   mounted: { current: boolean },
   setters: AtSetters,
 ): Promise<void> {
@@ -457,7 +479,7 @@ function handleAtEff(
   col: number,
   dirs: readonly string[],
   cwd: string,
-  cfg: CliUiRuntime | undefined,
+  cfg: AtPathCompletionRuntime | undefined,
   startRef: React.MutableRefObject<number>,
   endRef: React.MutableRefObject<number>,
   setters: AtSetters,
@@ -481,6 +503,7 @@ function handleAtEff(
 }
 
 function prepare(
+  enableFuzzyFiltering: boolean,
   mi: { line: string; commandIndex: number; cursorCol: number } | null,
   cmdIdx: number,
   col: number,
@@ -489,7 +512,7 @@ function prepare(
   seqRef: React.MutableRefObject<number>,
 ): { line: string; seq: number; cps: string[] } | null {
   if (!mi) return null;
-  const key = `${mi.line}:${cmdIdx}:${col}:${cmds.length}`;
+  const key = `${mi.line}:${cmdIdx}:${col}:${cmds.length}:${enableFuzzyFiltering}`;
   if (prev.current === key) {
     debugLogger.debug(() => 'Input unchanged');
     return null;
@@ -501,13 +524,14 @@ function prepare(
 }
 
 export function handleCompletionEffect(
+  enableFuzzyFiltering: boolean,
   mi: { line: string; commandIndex: number; cursorCol: number } | null,
   cmdIdx: number,
   col: number,
   cmds: readonly SlashCommand[],
   extCfg: RuntimeExtensionConfig | null | undefined,
   ctx: CommandContext,
-  cfg: CliUiRuntime | undefined,
+  cfg: AtPathCompletionRuntime | undefined,
   dirs: readonly string[],
   cwd: string,
   refs: StateRefs,
@@ -527,6 +551,7 @@ export function handleCompletionEffect(
     return undefined;
   }
   const p = prepare(
+    enableFuzzyFiltering,
     mi,
     cmdIdx,
     col,
@@ -537,6 +562,7 @@ export function handleCompletionEffect(
   if (!p) return undefined;
   if (p.cps[cmdIdx] === '/') {
     processSlash(
+      enableFuzzyFiltering,
       p.line,
       cmdIdx,
       cmds,

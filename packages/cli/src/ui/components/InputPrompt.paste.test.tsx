@@ -634,6 +634,13 @@ describe('InputPrompt', () => {
   });
 
   describe('mouse interaction', () => {
+    const nativePlatform = process.platform;
+    beforeEach(() => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+    });
+    afterEach(() => {
+      Object.defineProperty(process, 'platform', { value: nativePlatform });
+    });
     beforeEach(() => enableMouseEvents());
     afterEach(() => disableMouseEvents());
     afterEach(() => vi.restoreAllMocks());

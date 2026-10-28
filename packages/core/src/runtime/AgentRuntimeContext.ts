@@ -371,6 +371,7 @@ import type { MediaAdmissionService } from '../storage/media-admission-service.j
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 import type { RequestMediaResolver } from '../storage/request-media-resolver.js';
 import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import type { ProviderRequestCollaborators } from './providerRuntimeContext.js';
 
 /**
@@ -396,6 +397,7 @@ export interface AgentRuntimeProviderAdapter {
   getActiveProvider(): IProvider;
   setActiveProvider(name: string): void;
   getProviderByName?(name: string): IProvider | undefined;
+  getProviderKeys(): ProviderKeyStorageLike;
 }
 
 /**

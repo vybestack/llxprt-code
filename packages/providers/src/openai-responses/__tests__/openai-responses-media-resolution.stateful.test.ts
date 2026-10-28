@@ -30,6 +30,10 @@ import {
   SocketHarness,
 } from './openAIResponsesWebSocketTransport.test-helpers.js';
 import { buildCodexOAuthManager } from './codexStateful.test-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 describe('openai-responses-media-resolution', () => {
   const OPENAI_BASE_URL = 'https://api.openai.com/v1';
@@ -158,13 +162,10 @@ describe('openai-responses-media-resolution', () => {
     settings.setProviderSetting(provider.name, 'model', 'gpt-5.6');
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
-      config,
       runtimeId: 'responses-media-stateful',
-      mediaResolver: resolver,
-      requestMediaBudgetBytes: budget,
     });
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 
@@ -183,8 +184,8 @@ describe('openai-responses-media-resolution', () => {
 
     for await (const _content of bindProviderMedia(
       provider,
-      runtime.mediaResolver,
-      runtime.requestMediaBudgetBytes,
+      resolver,
+      budget,
     ).generateChatCompletion(options)) {
       // Drain the real transport parser.
     }

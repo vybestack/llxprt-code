@@ -3,15 +3,15 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { readdir, readFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createAgent } from '@vybestack/llxprt-code-agents';
-import { AgentImpl } from '../agentImpl.js';
-import { HookControl } from '../control/hooks.js';
+import { SessionClientOwner } from '../../session/session-client-owner.js';
+import type { ToolControl } from '../control/toolControl.js';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
 import { makeScratchDir } from './helpers/scratch-dir.js';
 import {
@@ -26,13 +26,6 @@ async function bootstrapFailure(denyObservation: boolean): Promise<number> {
   const gate = await shellOwnerGate();
   const marker = join(root, 'bootstrap.marker');
   const primary = new Error('injected SessionStart bootstrap failure');
-  const originalDescriptor = Object.getOwnPropertyDescriptor(
-    AgentImpl.prototype,
-    'buildHookControl',
-  );
-  const originalBuild: unknown = originalDescriptor?.value;
-  if (typeof originalBuild !== 'function' || !originalDescriptor)
-    throw new Error('Agent hook construction seam missing');
   const environment = new Map(
     [
       'TMPDIR',
@@ -62,16 +55,49 @@ async function bootstrapFailure(denyObservation: boolean): Promise<number> {
   let denied = 0;
   const forbidden: Array<string | number | undefined> = [];
   const originalKill = process.kill;
-  Object.defineProperty(AgentImpl.prototype, 'buildHookControl', {
-    ...originalDescriptor,
-    value(this: AgentImpl): HookControl {
-      const control: unknown = Reflect.apply(originalBuild, this, []);
-      if (!(control instanceof HookControl))
-        throw new Error('Expected real hook control');
+  function denyGroupObservation(unsafeGroup: number): void {
+    process.kill = (target, signal): true => {
+      if (target === -unsafeGroup) {
+        if (signal !== 0) {
+          forbidden.push(signal);
+          throw new Error(
+            'Refusing numeric group signal on uncertain ownership',
+          );
+        }
+        denied++;
+        throw Object.assign(new Error('ownership observation denied'), {
+          code: 'EPERM',
+        });
+      }
+      return originalKill.call(process, target, signal);
+    };
+  }
+  const toolsByOwner = new WeakMap<SessionClientOwner, ToolControl>();
+  const createTools = SessionClientOwner.prototype.createToolControl;
+  const createHooks = SessionClientOwner.prototype.createHookControl;
+  const restore: Array<() => void> = [];
+  try {
+    const toolCapture = spyOn(
+      SessionClientOwner.prototype,
+      'createToolControl',
+    ).mockImplementation(function (this: SessionClientOwner, ...args) {
+      const control = createTools.call(this, ...args);
+      toolsByOwner.set(this, control);
+      return control;
+    });
+    restore.push(() => toolCapture.mockRestore());
+    const hookCapture = spyOn(
+      SessionClientOwner.prototype,
+      'createHookControl',
+    ).mockImplementation(function (this: SessionClientOwner, ...args) {
+      const control = createHooks.call(this, ...args);
+      const tools = toolsByOwner.get(this);
+      if (tools === undefined)
+        throw new Error('Expected tools from the same acquired session owner');
       const originalStart = control.triggerSessionStart.bind(control);
       control.triggerSessionStart = async () => {
         await originalStart();
-        const shell = this.tools.get('run_shell_command');
+        const shell = tools.get('run_shell_command');
         if (!shell) throw new Error('Bootstrap Agent has no shell tool');
         const launched = await deadline(
           shell.buildAndExecute(
@@ -89,6 +115,7 @@ async function bootstrapFailure(denyObservation: boolean): Promise<number> {
         const pid = Number(await readFile(`${marker}.pid`, 'utf8'));
         const group = spawnSync('ps', ['-o', 'pgid=', '-p', String(pid)], {
           encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
         });
         pgid = Number(group.stdout.trim());
         if (group.status !== 0 || !Number.isSafeInteger(pgid) || pgid <= 1)
@@ -108,29 +135,13 @@ async function bootstrapFailure(denyObservation: boolean): Promise<number> {
           'waiting for shell owner gate',
         );
         if (denyObservation) {
-          const unsafeGroup = pgid;
-          process.kill = (target, signal): true => {
-            if (target === -unsafeGroup) {
-              if (signal !== 0) {
-                forbidden.push(signal);
-                throw new Error(
-                  'Refusing numeric group signal on uncertain ownership',
-                );
-              }
-              denied++;
-              throw Object.assign(new Error('ownership observation denied'), {
-                code: 'EPERM',
-              });
-            }
-            return originalKill.call(process, target, signal);
-          };
+          denyGroupObservation(pgid);
         }
         throw primary;
       };
       return control;
-    },
-  });
-  try {
+    });
+    restore.push(() => hookCapture.mockRestore());
     const failure = await deadline(
       createAgent({
         provider: 'openai',
@@ -181,11 +192,7 @@ async function bootstrapFailure(denyObservation: boolean): Promise<number> {
     return pgid;
   } finally {
     process.kill = originalKill;
-    Object.defineProperty(
-      AgentImpl.prototype,
-      'buildHookControl',
-      originalDescriptor,
-    );
+    for (const undo of restore.reverse()) undo();
     await gate.stop();
     if (pgid !== undefined) await awaitShellGroupAbsence(pgid);
     await rm(root, { recursive: true, force: true });

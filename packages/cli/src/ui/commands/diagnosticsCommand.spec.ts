@@ -3,10 +3,11 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
-import { diagnosticsCommand } from './diagnosticsCommand.js';
-import type { CommandContext, MessageActionReturn } from './types.js';
+import { registerDiagnosticsCommand } from '../../__tests__/diagnostics-command-test-owner.js';
+import type { MessageActionReturn } from './types.js';
 import { type MCPOAuthCredentials } from '@vybestack/llxprt-code-core';
 import {
   createTestToken,
@@ -41,7 +42,7 @@ async function isGithubProvider(provider: string): Promise<boolean> {
 }
 
 describe('diagnosticsCommand OAuth token display', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   let mockTokenStore: Map<string, MCPOAuthCredentials>;
   let setup: DiagnosticsTestSetup;
 
@@ -100,7 +101,10 @@ describe('diagnosticsCommand OAuth token display', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -148,7 +152,10 @@ describe('diagnosticsCommand OAuth token display', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -191,7 +198,10 @@ describe('diagnosticsCommand OAuth token display', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -242,7 +252,10 @@ describe('diagnosticsCommand OAuth token display', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -295,7 +308,10 @@ describe('diagnosticsCommand OAuth token display', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -334,7 +350,10 @@ describe('diagnosticsCommand OAuth token display', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -373,7 +392,10 @@ describe('diagnosticsCommand OAuth token display', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -409,7 +431,10 @@ describe('diagnosticsCommand OAuth token display', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -451,7 +476,10 @@ describe('diagnosticsCommand OAuth token display', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -491,7 +519,10 @@ describe('diagnosticsCommand OAuth token display', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -536,7 +567,10 @@ describe('diagnosticsCommand OAuth token display', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -575,7 +609,10 @@ describe('diagnosticsCommand OAuth token display', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -615,7 +652,10 @@ describe('diagnosticsCommand OAuth token display', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
@@ -654,7 +694,10 @@ describe('diagnosticsCommand OAuth token display', () => {
         oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const result = await registerDiagnosticsCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
 
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;

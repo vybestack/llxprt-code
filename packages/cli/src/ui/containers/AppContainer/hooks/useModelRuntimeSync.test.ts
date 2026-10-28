@@ -5,6 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { renderHook } from '../../../../__tests__/render.js';
 import { useModelRuntimeSync } from './useModelRuntimeSync.js';
 import {
@@ -13,19 +15,23 @@ import {
   type ModelProfileInfoPayload,
 } from '@vybestack/llxprt-code-core';
 
-function createConfig(
-  model = 'config-model',
-  contextLimit?: number,
-): {
-  getModel: () => string;
-  getEphemeralSetting: (key: string) => number | undefined;
-} {
+function createConfig(model = 'config-model', contextLimit?: number) {
+  const owner = new SessionSettingsOwner(new SettingsService());
+  owner.initializeProviderSelection('openai', model);
   return {
-    getModel: vi.fn().mockReturnValue(model),
-    getEphemeralSetting: vi.fn().mockReturnValue(contextLimit),
-  } as unknown as {
-    getModel: () => string;
-    getEphemeralSetting: (key: string) => number | undefined;
+    owner,
+    getModel: vi.fn(() => model),
+    getEphemeralSetting: vi.fn(() => contextLimit),
+    subscribeModelSelection: (
+      listener: (profile?: ModelProfileInfoPayload) => void,
+    ) => owner.subscribeModelChanges(listener),
+    publishModelProfile: (profile: ModelProfileInfoPayload) =>
+      owner.publishModelProfile(profile),
+    publishModelChanged: (next: string) => {
+      const publication = owner.beginModelPublication();
+      owner.chooseModel(next);
+      publication.commit();
+    },
   };
 }
 
@@ -127,7 +133,7 @@ describe('useModelRuntimeSync', () => {
       profileName: 'work',
       displayLabel: 'work',
     };
-    coreEvents.emitModelProfileChanged(payload);
+    config.publishModelProfile(payload);
 
     expect(setCurrentModel).toHaveBeenCalledWith('provider-b');
   });
@@ -152,7 +158,7 @@ describe('useModelRuntimeSync', () => {
     expect(setCurrentModel).not.toHaveBeenCalled();
 
     getActiveModelName.mockReturnValue('model-b');
-    coreEvents.emitModelChanged('model-b');
+    config.publishModelChanged('model-b');
 
     expect(setCurrentModel).toHaveBeenCalledWith('model-b');
   });
@@ -225,12 +231,20 @@ describe('useModelRuntimeSync', () => {
       }),
     );
 
-    expect(coreEvents.listenerCount(CoreEvent.ModelChanged)).toBeGreaterThan(0);
+    expect(
+      config.owner['modelNotifications'].listenerCount(CoreEvent.ModelChanged),
+    ).toBeGreaterThan(0);
 
     unmount();
 
-    expect(coreEvents.listenerCount(CoreEvent.ModelChanged)).toBe(0);
-    expect(coreEvents.listenerCount(CoreEvent.ModelProfileChanged)).toBe(0);
+    expect(
+      config.owner['modelNotifications'].listenerCount(CoreEvent.ModelChanged),
+    ).toBe(0);
+    expect(
+      config.owner['modelNotifications'].listenerCount(
+        CoreEvent.ModelProfileChanged,
+      ),
+    ).toBe(0);
     expect(coreEvents.listenerCount(CoreEvent.SettingsChanged)).toBe(0);
   });
 
@@ -339,7 +353,7 @@ describe('useModelRuntimeSync', () => {
       expect(setCurrentModel).not.toHaveBeenCalled();
 
       // Profile changes from 'work' to 'personal' but model string stays 'gpt-4o'
-      coreEvents.emitModelProfileChanged({
+      config.publishModelProfile({
         model: 'gpt-4o',
         providerName: 'openai',
         profileName: 'personal',
@@ -373,7 +387,7 @@ describe('useModelRuntimeSync', () => {
       );
 
       // Provider changes from ollama to groq but model string stays 'llama3'
-      coreEvents.emitModelProfileChanged({
+      config.publishModelProfile({
         model: 'llama3',
         providerName: 'groq',
         profileName: null,
@@ -406,7 +420,7 @@ describe('useModelRuntimeSync', () => {
         }),
       );
 
-      coreEvents.emitModelProfileChanged({
+      config.publishModelProfile({
         model: 'gpt-4o',
         providerName: 'openai',
         profileName: 'work',
@@ -468,7 +482,7 @@ describe('useModelRuntimeSync', () => {
       // Model changes via ModelChanged event (e.g. user switched model in-session)
       getActiveModelName.mockReturnValue('claude-sonnet');
       getActiveProviderName.mockReturnValue('anthropic');
-      coreEvents.emitModelChanged('claude-sonnet');
+      config.publishModelChanged('claude-sonnet');
 
       // Label should update from stale 'work-profile' to reflect new model
       expect(setCurrentModelLabel).toHaveBeenCalledWith(
@@ -614,7 +628,7 @@ describe('useModelRuntimeSync profile-qualified footer identity (issue #2193)', 
     );
 
     setCurrentModelLabel.mockClear();
-    coreEvents.emitModelChanged('gpt-4');
+    config.publishModelChanged('gpt-4');
 
     expect(setCurrentModelLabel).not.toHaveBeenCalled();
   });

@@ -1,3 +1,7 @@
+import {
+  MessageBusType,
+  type BucketAuthConfirmationRequest,
+} from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -16,7 +20,7 @@
 // delegation, not spies/stubs.
 //
 // `AuthControlDeps` carries `getOAuthManager` (see `makeDeps`), and `makeControl`
-// instantiates `new AuthControl(deps)` directly with no cast — the masked
+// instantiates `new AuthControl(...)` directly with no cast — the masked
 // detail methods delegate live to the real manager.
 
 import { describe, it, expect } from 'bun:test';
@@ -27,8 +31,8 @@ import type {
   OAuthProvider,
   TokenStore,
 } from '@vybestack/llxprt-code-providers/auth.js';
+import { MessageBus } from '@vybestack/llxprt-code-core';
 import { AuthControl } from '../control/authControl.js';
-import type { AuthControlDeps } from '../control/authControl.js';
 import { createAgentAuthState } from '../control/authState.js';
 import type { AuthStatus } from '../agent.js';
 
@@ -134,30 +138,34 @@ async function makeManager(): Promise<{
   return { mgr, store };
 }
 
-/** Builds a real AuthControlDeps over the live manager. */
-function makeDeps(mgr: OAuthManager): AuthControlDeps {
-  const authState = createAgentAuthState();
-  return {
-    authState,
-    getCurrentProvider: () => PROVIDER,
-    getKeyName: () => undefined,
-    getStatus: (): AuthStatus => 'unauthenticated',
-    onOAuthPrompt: undefined,
-    setBaseUrl: async () => {},
-    keysDeps: {
-      authState,
-      getKeyName: () => undefined,
-      setKeyName: () => {},
-      updateProviderApiKey: async () => {},
-    },
-    getOAuthManager: () => mgr,
-  };
-}
-
-/** Builds the control directly over the real manager (direct-construction seam). */
 function makeControl(mgr: OAuthManager): AuthControl {
-  const deps = makeDeps(mgr);
-  return new AuthControl(deps);
+  const bus = new MessageBus();
+  return new AuthControl(
+    createAgentAuthState(),
+    () => PROVIDER,
+    (): AuthStatus => 'unauthenticated',
+    undefined,
+    async () => {},
+    () => undefined,
+    () => {},
+    async () => ({
+      changed: false,
+      providerName: PROVIDER,
+      message: 'No credential mutation',
+    }),
+    (provider) => mgr.isOAuthEnabled(provider),
+    (provider) => mgr.isAuthenticated(provider),
+    async (provider) => (await mgr.peekStoredToken(provider))?.expiry,
+    (provider) => mgr.getHigherPriorityAuth(provider),
+    (provider) => mgr.getAuthStatusWithBuckets(provider),
+    (listener) =>
+      bus.subscribe<BucketAuthConfirmationRequest>(
+        MessageBusType.BUCKET_AUTH_CONFIRMATION_REQUEST,
+        listener,
+      ),
+    (correlationId, confirmed) =>
+      bus.respondToBucketAuthConfirmation(correlationId, confirmed),
+  );
 }
 
 /** Deep-collects every object key reachable from a value (arrays + nested objs). */

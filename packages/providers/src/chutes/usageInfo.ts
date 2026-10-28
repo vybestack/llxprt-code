@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -116,6 +117,7 @@ function parseChutesResponses(
 }
 
 export async function fetchChutesUsage(
+  requestFetch: NetworkFetch,
   apiKey: string,
 ): Promise<ChutesUsageInfo | null> {
   if (!apiKey || typeof apiKey !== 'string') {
@@ -130,12 +132,12 @@ export async function fetchChutesUsage(
 
   try {
     const [quotasResponse, userResponse] = await Promise.all([
-      fetch(CHUTES_QUOTAS_ENDPOINT, {
+      requestFetch(CHUTES_QUOTAS_ENDPOINT, {
         method: 'GET',
         headers,
         signal: AbortSignal.timeout(10_000),
       }),
-      fetch(CHUTES_USER_ENDPOINT, {
+      requestFetch(CHUTES_USER_ENDPOINT, {
         method: 'GET',
         headers,
         signal: AbortSignal.timeout(10_000),

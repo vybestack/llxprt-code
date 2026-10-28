@@ -1,3 +1,4 @@
+import type { OAuthFetch } from '@vybestack/llxprt-code-auth/types.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -38,6 +39,7 @@ const oauthLogger = new DebugLogger('llxprt:oauth:registration');
 export function ensureOAuthProviderRegistered(
   providerName: string,
   oauthManager: OAuthRegistrationManager,
+  requestFetch: OAuthFetch,
   tokenStore?: TokenStore,
   addItem?: AddItemCallback,
 ): void {
@@ -69,6 +71,7 @@ export function ensureOAuthProviderRegistered(
   switch (providerName) {
     case 'claudecode':
       oauthProvider = new AnthropicOAuthProvider(
+        requestFetch,
         effectiveTokenStore,
         addItem,
         () => oauthManager.isBrowserDisabled?.() ?? false,
@@ -81,6 +84,7 @@ export function ensureOAuthProviderRegistered(
       break;
     case 'codex':
       oauthProvider = new CodexOAuthProvider(
+        requestFetch,
         effectiveTokenStore,
         addItem,
         () => oauthManager.isBrowserDisabled?.() ?? false,
@@ -112,16 +116,24 @@ export function ensureOAuthProviderRegistered(
  */
 export function registerStandardOAuthProviders(
   oauthManager: OAuthRegistrationManager,
+  requestFetch: OAuthFetch,
   tokenStore?: TokenStore,
   addItem?: AddItemCallback,
 ): void {
   ensureOAuthProviderRegistered(
     'claudecode',
     oauthManager,
+    requestFetch,
     tokenStore,
     addItem,
   );
-  ensureOAuthProviderRegistered('codex', oauthManager, tokenStore, addItem);
+  ensureOAuthProviderRegistered(
+    'codex',
+    oauthManager,
+    requestFetch,
+    tokenStore,
+    addItem,
+  );
 }
 
 /**

@@ -1,46 +1,230 @@
+import {
+  createCapturedSessionOwner,
+  ownerClients,
+} from './helpers/session-client-capture.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import {
+  loadAgentRuntime,
+  type ToolSelectedRuntimeLoaderResult,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { Storage } from '@vybestack/llxprt-code-storage';
+import { fileURLToPath } from 'node:url';
+import type { TestChildLaunchOptions } from '../../core/__tests__/child-launch-fixture.js';
+import { createTestChildOrchestrator } from '../../core/__tests__/child-launch-fixture.js';
+import {
+  cleanupAfterFailure,
+  runCleanupSteps,
+} from '../../core/subagent-cleanup.js';
+import { SessionClientOwner } from '../../session/session-client-owner.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
+import { preparePreferredProviderCompletion } from '../preferred-provider-acquisition.js';
+import {
+  acquirePreferredOAuth,
+  acquirePreferredProviderManager,
+} from './helpers/provider-acquisition.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
-import { describe, expect, it } from 'bun:test';
-import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
-import {
-  ProfileManager,
-  type SettingsService,
-} from '@vybestack/llxprt-code-settings';
+import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import {
   ContextState,
   SubagentTerminateMode,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
-import {
-  SubagentOrchestrator,
-  type SubagentOrchestratorOptions,
-} from '../../core/subagentOrchestrator.js';
-import {
-  createSessionClientEngineFixture,
-  type SessionClientEngineFixture,
-} from './helpers/session-client-engine-fixture.js';
+  ProfileManager,
+  SettingsService,
+} from '@vybestack/llxprt-code-settings';
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
+import { SubagentOrchestrator } from '../../core/subagentOrchestrator.js';
+
+const parentSignal = new AbortController().signal;
+
+interface TrackedChildClient {
+  disposed: boolean;
+}
+
+/** The client the owner's factory most recently returned, which is the published one. */
+function currentClient(owner: SessionClientOwner): AgentClientContract {
+  const clients = ownerClients(owner);
+  if (clients.length === 0)
+    throw new Error('Session owner has not built a client');
+  return clients[clients.length - 1];
+}
 
 async function withChildOwner(
   scenario: (
     orchestrator: SubagentOrchestrator,
-    parent: SessionClientEngineFixture,
+    parentSettings: SettingsService,
+    parentOwner: SessionClientOwner,
+    parentMcp: McpRuntimeOwner,
     childSettings: () => SettingsService,
+    clients: readonly TrackedChildClient[],
   ) => Promise<void>,
-  runtimeLoader?: SubagentOrchestratorOptions['runtimeLoader'],
+  authority: CredentialAuthority,
+  runtimeLoader?: TestChildLaunchOptions['runtimeLoader'],
 ): Promise<void> {
-  const built = await createSessionClientEngineFixture();
+  const builtPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+  process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+    new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
+  );
+  const builtDirectory = await realpath(
+    await mkdtemp(join(tmpdir(), 'explicit-engine-owner-')),
+  );
+  await initializePromptSystem();
+  const builtConfig = new Config(
+    toConfigParameters({
+      provider: 'fake',
+      model: 'fake-model',
+      sessionId: randomUUID(),
+      workingDir: builtDirectory,
+    }),
+  );
+  const builtSettings = new SettingsService();
+  const builtPolicy = new RuntimePolicyOwner(builtConfig);
+  const builtMessageBus = builtPolicy.session.messageBus;
+  const builtMcp = await createTestMcpRuntime(
+    {
+      oauth: {
+        openBrowser: async () => {
+          throw new Error('Unexpected browser request');
+        },
+        tokenStorage: new MCPOAuthTokenStorage({
+          getCredentials: async () => null,
+          setCredentials: async () => {
+            throw new Error('Unexpected token write');
+          },
+          deleteCredentials: async () => {},
+          listServers: async () => [],
+          getAllCredentials: async () => new Map(),
+          clearAll: async () => {},
+        }),
+      },
+      config: builtConfig,
+      policy: { owner: builtPolicy, ownership: 'runtime' },
+    },
+    {},
+  );
+
+  const builtRuntimeId = 'engine-' + randomUUID();
+  const builtRelease = new AcquisitionRelease();
+  const builtSettingsOwner = new SessionSettingsOwner(builtSettings);
+  builtRelease.acquire('settings', () => builtSettingsOwner.dispose());
+  builtSettingsOwner.initializeProviderSelection(
+    builtConfig.getProvider(),
+    builtConfig.getModel(),
+  );
+  builtSettingsOwner.bindTelemetry(builtConfig);
+  const builtFiles = new ProviderFileLifecycle({
+    maxFiles: 100,
+    maxBytes: 512 * 1024 * 1024,
+  });
+  for (const scope of [builtRuntimeId, builtConfig.getSessionId()])
+    builtRelease.acquire('files', () =>
+      releaseAdoptedFileScope(builtFiles, scope),
+    );
+  const builtManager = acquirePreferredProviderManager(
+    builtConfig,
+    builtSettings,
+    builtSettingsOwner,
+    builtFiles,
+    builtRuntimeId,
+    authority,
+    builtRelease,
+  );
+  const builtTokenizer = configureProviderTokenizer(builtManager);
+  const builtContent = createRuntimeContentGeneratorFactory();
+  const builtOAuth = acquirePreferredOAuth(
+    undefined,
+    builtMessageBus,
+    builtConfig,
+    builtSettings,
+    builtManager,
+    builtRuntimeId,
+    builtMcp.profileDefinitions,
+    authority,
+    builtRelease,
+    undefined,
+  );
+  const builtMedia = new SessionMediaOwner(
+    builtConfig.projectTempDir,
+    1024 * 1024,
+  );
+  const builtOwner = await createCapturedSessionOwner(
+    builtConfig,
+    assembleTaskSchemaPolicy(builtSettings),
+    builtManager,
+    buildAgentClientFactory(),
+    builtMedia.store,
+    builtMcp.readInstructions,
+    builtMcp.workspacePaths,
+    builtSettingsOwner,
+    builtContent,
+    builtTokenizer,
+  );
+  builtOwner.bindMcpRuntime(builtMcp);
+  builtOwner.bindHooks();
+  const builtClose = settleEngineRelease.bind(
+    undefined,
+    [
+      () => builtOwner.dispose(),
+      () => builtRelease.close(),
+      () => builtMedia.dispose(),
+      () => builtMcp.dispose(),
+      () => builtConfig.dispose(),
+      () => rm(builtDirectory, { recursive: true, force: true }),
+    ],
+    builtPreviousReplay,
+  );
+  try {
+    await preparePreferredProviderCompletion(
+      builtConfig,
+      builtSettings,
+      builtSettingsOwner,
+      builtManager,
+      builtOAuth,
+      builtRuntimeId,
+      builtTokenizer,
+      undefined,
+      process.env.LLXPRT_FAKE_RESPONSES,
+    );
+    await builtMcp.initialize();
+    await builtOwner.initializeTools();
+    await builtOwner.clients.refreshAuth();
+    await currentClient(builtOwner).startChat();
+  } catch (primary) {
+    await cleanupAfterFailure(primary, builtClose);
+  }
+
+  const clients: TrackedChildClient[] = [];
   const directory = join(
-    built.config.projectTempDir,
+    builtConfig.projectTempDir,
     `child-owner-${randomUUID()}`,
   );
   const profiles = new ProfileManager(join(directory, 'profiles'));
@@ -58,64 +242,118 @@ async function withChildOwner(
       'child-profile',
       'Answer the parent question.',
     );
+    const buildChildClient = buildAgentClientFactory();
     let adoptedChildSettings: SettingsService | undefined;
-    const orchestrator = new SubagentOrchestrator({
-      workspaceTrust: built.mcp.trust,
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: authority,
+      agentClientFactory: (...operands) => {
+        const client = buildChildClient(...operands);
+        const tracked: TrackedChildClient = { disposed: false };
+        const dispose = client.dispose.bind(client);
+        client.dispose = async () => {
+          await dispose();
+          tracked.disposed = true;
+        };
+        clients.push(tracked);
+        return client;
+      },
+      workspaceTrust: builtMcp.trust,
       instructions: emptyInstructionReads,
-      toolRegistry: built.owner.getAgentClient().tools,
-      workspacePaths: built.mcp.workspacePaths,
+      toolRegistry: currentClient(builtOwner).tools,
+      workspacePaths: builtMcp.workspacePaths,
       profileManager: profiles,
       subagentManager: subagents,
-      foregroundConfig: built.config,
+      foregroundConfig: builtConfig,
       createChildSettings: () => {
-        adoptedChildSettings = built.handle.settingsOwner.createChildStore();
+        adoptedChildSettings = builtSettingsOwner.createChildStore();
         return adoptedChildSettings;
       },
-      readRunPolicy: () => built.handle.settingsOwner.readSubagentRunPolicy(),
-      messageBus: built.messageBus,
-      readMcpInstructions: built.mcp.readInstructions,
+      readRunPolicy: () => builtSettingsOwner.readSubagentRunPolicy(),
+      messageBus: builtMessageBus,
+      readMcpInstructions: builtMcp.readInstructions,
       runtimeLoader,
     });
-    await scenario(orchestrator, built, () => {
-      if (adoptedChildSettings === undefined)
-        throw new Error('Child store has not been adopted');
-      return adoptedChildSettings;
-    });
+    await scenario(
+      orchestrator,
+      builtSettings,
+      builtOwner,
+      builtMcp,
+      () => {
+        if (adoptedChildSettings === undefined)
+          throw new Error('Child store has not been adopted');
+        return adoptedChildSettings;
+      },
+      clients,
+    );
   } finally {
-    await built.cleanup();
+    await builtClose();
   }
 }
 
 describe('Isolated child session client ownership', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'child-owner-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+  const credentials = useOwnedCredentials();
   it('withdraws child tool metadata immediately after adopted-store governance changes', async () => {
-    await withChildOwner(async (orchestrator, parent, childSettings) => {
-      const child = await orchestrator.launch({ name: 'child' });
-      try {
-        expect(child.runtime.toolsView.listToolNames()).toContain('read_file');
-        childSettings().set('tools.allowed', []);
-        expect(child.runtime.toolsView.listToolNames()).toStrictEqual([]);
-        expect(
-          child.runtime.toolsView.getToolMetadata('read_file'),
-        ).toBeUndefined();
-        expect(
-          child.runtime.runtimeContext.readToolGovernance().allowedExplicit,
-        ).toBe(true);
-        expect(
-          parent.owner
-            .getAgentClient()
-            .tools.getFunctionDeclarations()
-            .map((tool) => tool.name),
-        ).toContain('read_file');
-      } finally {
-        await child.dispose();
-      }
-    });
+    let childRuntime: ToolSelectedRuntimeLoaderResult | undefined;
+    await withChildOwner(
+      async (
+        orchestrator,
+        parentSettings,
+        parentOwner,
+        parentMcp,
+        childSettings,
+      ) => {
+        const child = await orchestrator.launch(
+          { name: 'child' },
+          parentSignal,
+        );
+        if (childRuntime === undefined)
+          throw new Error('Child runtime was not acquired');
+        try {
+          expect(childRuntime.toolsView.listToolNames()).toContain('read_file');
+          childSettings().set('tools.allowed', []);
+          expect(childRuntime.toolsView.listToolNames()).toStrictEqual([]);
+          expect(
+            childRuntime.toolsView.getToolMetadata('read_file'),
+          ).toBeUndefined();
+          expect(
+            childRuntime.runtimeContext.readToolGovernance().allowedExplicit,
+          ).toBe(true);
+          expect(
+            currentClient(parentOwner)
+              .tools.getFunctionDeclarations()
+              .map((tool) => tool.name),
+          ).toContain('read_file');
+        } finally {
+          await child.dispose();
+        }
+      },
+      credentials().authority,
+      async (options) => {
+        childRuntime = await loadAgentRuntime(options);
+        return childRuntime;
+      },
+    );
   }, 30000);
 
   it('enforces live caller-store output limits in each child launch', async () => {
-    await withChildOwner(async (orchestrator, parent) => {
-      parent.settingsService.set('subagent-max-output-tokens-total', 0);
-      const limited = await orchestrator.launch({ name: 'child' });
+    await withChildOwner(async (orchestrator, parentSettings) => {
+      parentSettings.set('subagent-max-output-tokens-total', 0);
+      const limited = await orchestrator.launch(
+        { name: 'child' },
+        parentSignal,
+      );
       try {
         await limited.scope.runNonInteractive(new ContextState());
         expect(limited.scope.output.terminate_reason).toBe(
@@ -125,8 +363,11 @@ describe('Isolated child session client ownership', () => {
       } finally {
         await limited.dispose();
       }
-      parent.settingsService.set('subagent-max-output-tokens-total', -1);
-      const continuing = await orchestrator.launch({ name: 'child' });
+      parentSettings.set('subagent-max-output-tokens-total', -1);
+      const continuing = await orchestrator.launch(
+        { name: 'child' },
+        parentSignal,
+      );
       try {
         await continuing.scope.runNonInteractive(new ContextState());
         expect(continuing.scope.output.terminate_reason).toBe(
@@ -136,61 +377,129 @@ describe('Isolated child session client ownership', () => {
       } finally {
         await continuing.dispose();
       }
-    });
+    }, credentials().authority);
+  }, 30000);
+  it('roots the child media store in the parent workspace project directory', async () => {
+    let childRuntime: ToolSelectedRuntimeLoaderResult | undefined;
+    await withChildOwner(
+      async (orchestrator, _settings, _owner, parentMcp) => {
+        const [parentDirectory] = parentMcp.workspacePaths.directories();
+        const parentProjectDirectory = join(
+          Storage.getGlobalLogDir(),
+          'tmp',
+          Storage.getProjectHistoryKey(parentDirectory),
+        );
+        const launchDirectoryProjectDirectory = join(
+          Storage.getGlobalLogDir(),
+          'tmp',
+          Storage.getProjectHistoryKey(process.cwd()),
+        );
+        expect(parentProjectDirectory).not.toBe(
+          launchDirectoryProjectDirectory,
+        );
+        const child = await orchestrator.launch(
+          { name: 'child' },
+          parentSignal,
+        );
+        try {
+          const mediaRoot =
+            childRuntime?.runtimeContext.mediaStore?.rootDirectory;
+          if (mediaRoot === undefined)
+            throw new Error('Child runtime has no media store');
+          expect(
+            mediaRoot.startsWith(join(parentProjectDirectory, 'media-live')),
+          ).toBe(true);
+          expect(mediaRoot.startsWith(launchDirectoryProjectDirectory)).toBe(
+            false,
+          );
+        } finally {
+          await child.dispose();
+        }
+      },
+      credentials().authority,
+      async (options) => {
+        childRuntime = await loadAgentRuntime(options);
+        return childRuntime;
+      },
+    );
   }, 30000);
   it('closes the child client after success without closing its parent', async () => {
-    await withChildOwner(async (orchestrator, parent) => {
-      const baseline = new Set(coreEvents.listeners(CoreEvent.ModelChanged));
-      const child = await orchestrator.launch({ name: 'child' });
-      expect(
-        coreEvents
-          .listeners(CoreEvent.ModelChanged)
-          .filter((listener) => !baseline.has(listener)),
-      ).not.toHaveLength(0);
-      await child.dispose();
-      expect(
-        coreEvents
-          .listeners(CoreEvent.ModelChanged)
-          .filter((listener) => !baseline.has(listener)),
-      ).toHaveLength(0);
-      await parent.mcp.refreshContext();
-      await parent.owner.getAgentClient().addHistory({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'parent continues' }],
-      });
-      expect(
-        (await parent.owner.getAgentClient().getHistory()).filter(
-          (item) => item.speaker === 'human',
-        ),
-      ).toHaveLength(1);
-    });
-  }, 30000);
-  it('closes the child client after loader failure without closing its parent', async () => {
     await withChildOwner(
-      async (orchestrator, parent) => {
-        const baseline = new Set(coreEvents.listeners(CoreEvent.ModelChanged));
-        await expect(orchestrator.launch({ name: 'child' })).rejects.toThrow(
-          'Child loader failure',
+      async (
+        orchestrator,
+        parentSettings,
+        parentOwner,
+        parentMcp,
+        _childSettings,
+        clients,
+      ) => {
+        const baseline = parentSettings.listenerCount('provider-change');
+        const child = await orchestrator.launch(
+          { name: 'child' },
+          parentSignal,
         );
-        expect(
-          coreEvents
-            .listeners(CoreEvent.ModelChanged)
-            .filter((listener) => !baseline.has(listener)),
-        ).toHaveLength(0);
-        await parent.mcp.refreshContext();
-        await parent.owner.getAgentClient().addHistory({
+        expect(clients.length).toBeGreaterThan(0);
+        expect(clients.some((client) => !client.disposed)).toBe(true);
+        await child.dispose();
+        expect(clients.every((client) => client.disposed)).toBe(true);
+        expect(parentSettings.listenerCount('provider-change')).toBe(baseline);
+        await parentMcp.refreshContext();
+        await currentClient(parentOwner).addHistory({
           speaker: 'human',
           blocks: [{ type: 'text', text: 'parent continues' }],
         });
         expect(
-          (await parent.owner.getAgentClient().getHistory()).filter(
+          (await currentClient(parentOwner).getHistory()).filter(
             (item) => item.speaker === 'human',
           ),
         ).toHaveLength(1);
       },
+      credentials().authority,
+    );
+  }, 30000);
+  it('closes the child client after loader failure without closing its parent', async () => {
+    await withChildOwner(
+      async (
+        orchestrator,
+        parentSettings,
+        parentOwner,
+        parentMcp,
+        _childSettings,
+        clients,
+      ) => {
+        const baseline = parentSettings.listenerCount('provider-change');
+        await expect(
+          orchestrator.launch({ name: 'child' }, parentSignal),
+        ).rejects.toThrow('Child loader failure');
+        expect(clients.every((client) => client.disposed)).toBe(true);
+        expect(parentSettings.listenerCount('provider-change')).toBe(baseline);
+        await parentMcp.refreshContext();
+        await currentClient(parentOwner).addHistory({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'parent continues' }],
+        });
+        expect(
+          (await currentClient(parentOwner).getHistory()).filter(
+            (item) => item.speaker === 'human',
+          ),
+        ).toHaveLength(1);
+      },
+      credentials().authority,
       async () => {
         throw new Error('Child loader failure');
       },
     );
   }, 30000);
 });
+
+async function settleEngineRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previousReplay: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
+  }
+}

@@ -171,7 +171,10 @@ export interface ProviderClientConfig {
 export async function createOpenAIClient(
   options: NormalizedGenerateChatOptions,
   clientConfig: ProviderClientConfig,
-  customFetch?: typeof fetch,
+  customFetch?: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>,
   logger: Pick<DebugLogger, 'debug'> = new DebugLogger(
     'llxprt:provider:openaivercel',
   ),
@@ -204,8 +207,8 @@ export async function createOpenAIClient(
 
   const headers = clientConfig.customHeaders;
   const fetchWithCompatibility = shouldForceSystemRole
-    ? createDeveloperRoleToSystemFetch(customFetch ?? fetch)
-    : customFetch;
+    ? createDeveloperRoleToSystemFetch(customFetch ?? options.invocation.fetch)
+    : (customFetch ?? options.invocation.fetch);
 
   // The @ai-sdk/openai factory validates `apiKey` via `loadApiKey`, which throws
   // `LoadAPIKeyError` for `undefined` before any request is made. The guard above
@@ -238,7 +241,11 @@ export async function createConfiguredModel(
 ): Promise<{ model: LanguageModel }> {
   const customFetch =
     streamingEnabled && rsEnabled
-      ? createReasoningCaptureFetch(captureBuffer, logger)
+      ? createReasoningCaptureFetch(
+          captureBuffer,
+          logger,
+          options.invocation.fetch,
+        )
       : undefined;
   const openaiProvider = await createOpenAIClient(
     options,

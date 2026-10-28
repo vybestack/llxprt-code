@@ -7,59 +7,36 @@
 import * as fs from 'fs/promises';
 import path from 'path';
 import {
-  type CommandContext,
   type SlashCommand,
   type SlashCommandActionReturn,
   CommandKind,
 } from './types.js';
-
 import { type CommandArgumentSchema } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 
 const checkpointSuggestionDescription = 'Restorable tool call checkpoint';
+type LoadHistory = UseHistoryManagerReturn['loadHistory'];
+type AddItem = UseHistoryManagerReturn['addItem'];
+type ClientHistory = Parameters<Agent['setHistory']>[0];
 
-type LoadHistory = CommandContext['ui']['loadHistory'];
-
-function getRuntimeLoadHistory(
-  ui: CommandContext['ui'],
-): LoadHistory | undefined {
-  return ui.loadHistory;
+export interface RestoreCommandOperations {
+  readonly enabled: boolean;
+  readonly checkpointDirectory: string | undefined;
+  readonly setClientHistory: (history: ClientHistory) => Promise<void>;
+  readonly restoreProjectSnapshot:
+    | ((commitHash: string) => Promise<void>)
+    | undefined;
 }
 
-const restoreSchema: CommandArgumentSchema = [
-  {
-    kind: 'value',
-    name: 'checkpoint',
-    description: 'Select checkpoint to restore',
-    /**
-     * @plan:PLAN-20251013-AUTOCOMPLETE.P11
-     * @requirement:REQ-004
-     * @requirement:REQ-006
-     * Deprecation: Legacy completion removed in favour of schema completer.
-     */
-    completer: withFuzzyFilter(async (ctx) => {
-      const checkpointDir = ctx.services.config?.projectCheckpointsDir;
-      if (!checkpointDir) {
-        return [];
-      }
-
-      try {
-        const files = await fs.readdir(checkpointDir);
-        return files
-          .filter((file) => file.endsWith('.json'))
-          .map((file) => file.replace(/\.json$/, ''))
-          .sort()
-          .map((name) => ({
-            value: name,
-            description: checkpointSuggestionDescription,
-          }));
-      } catch {
-        return [];
-      }
-    }),
-  },
-];
+interface ToolCallCheckpoint {
+  history?: Parameters<NonNullable<LoadHistory>>[0];
+  clientHistory?: ClientHistory;
+  commitHash?: string;
+  toolCall: { name: string; args: Record<string, unknown> };
+}
 
 function listCheckpoints(jsonFiles: string[]): SlashCommandActionReturn {
   if (jsonFiles.length === 0) {
@@ -69,61 +46,29 @@ function listCheckpoints(jsonFiles: string[]): SlashCommandActionReturn {
       content: 'No restorable tool calls found.',
     };
   }
-  const truncatedFiles = jsonFiles.map((file) => {
-    const components = file.split('.');
-    if (components.length <= 1) {
-      return file;
-    }
-    components.pop();
-    return components.join('.');
-  });
-  const fileList = truncatedFiles.join('\n');
+  const files = jsonFiles.map((file) => file.replace(/\.json$/, ''));
   return {
     type: 'message',
     messageType: 'info',
-    content: `Available tool calls to restore:\n\n${fileList}`,
+    content: `Available tool calls to restore:\n\n${files.join('\n')}`,
   };
 }
 
-interface ToolCallCheckpoint {
-  history?: Parameters<NonNullable<LoadHistory>>[0];
-  clientHistory?: Parameters<
-    NonNullable<
-      CommandContext['services']['agent']
-    >['agentClient']['setHistory']
-  >[0];
-  commitHash?: string;
-  toolCall: { name: string; args: Record<string, unknown> };
-}
-
 async function applyCheckpointRestoration(
-  context: CommandContext,
-  config: CliUiRuntime,
-  toolCallData: ToolCallCheckpoint,
+  loadHistory: LoadHistory,
+  addItem: AddItem,
+  operations: RestoreCommandOperations,
+  data: ToolCallCheckpoint,
 ): Promise<void> {
-  const { services, ui } = context;
-  const { git: gitService } = services;
-  const loadHistory = getRuntimeLoadHistory(ui);
-
-  if (Array.isArray(toolCallData.history)) {
-    if (loadHistory == null) {
-      throw new Error('loadHistory function is not available.');
-    }
-    loadHistory(toolCallData.history);
+  if (Array.isArray(data.history)) {
+    loadHistory(data.history);
   }
-
-  if (Array.isArray(toolCallData.clientHistory)) {
-    const agent = services.agent;
-    if (!agent) throw new Error('Session agent is unavailable');
-    await agent.setHistory(toolCallData.clientHistory);
+  if (Array.isArray(data.clientHistory)) {
+    await operations.setClientHistory(data.clientHistory);
   }
-
-  if (
-    typeof toolCallData.commitHash === 'string' &&
-    toolCallData.commitHash.length > 0
-  ) {
-    await gitService?.restoreProjectFromSnapshot(toolCallData.commitHash);
-    ui.addItem(
+  if (typeof data.commitHash === 'string' && data.commitHash.length > 0) {
+    await operations.restoreProjectSnapshot?.(data.commitHash);
+    addItem(
       {
         type: 'info',
         text: 'Restored project to the state before the tool call.',
@@ -133,88 +78,42 @@ async function applyCheckpointRestoration(
   }
 }
 
-async function restoreCheckpoint(
-  context: CommandContext,
-  config: CliUiRuntime,
+async function restoreFromDirectory(
+  loadHistory: LoadHistory,
+  addItem: AddItem,
+  operations: RestoreCommandOperations,
+  checkpointDirectory: string,
   args: string,
-  checkpointDir: string,
-  jsonFiles: string[],
-): Promise<void | SlashCommandActionReturn> {
-  const selectedFile = args.endsWith('.json') ? args : `${args}.json`;
-
-  if (!jsonFiles.includes(selectedFile)) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: `File not found: ${selectedFile}`,
-    };
-  }
-
-  const filePath = path.join(checkpointDir, selectedFile);
-  const data = await fs.readFile(filePath, 'utf-8');
-  const toolCallData = JSON.parse(data) as ToolCallCheckpoint;
-
-  await applyCheckpointRestoration(context, config, toolCallData);
-
-  return {
-    type: 'tool',
-    toolName: toolCallData.toolCall.name,
-    toolArgs: toolCallData.toolCall.args,
-  };
-}
-
-async function restoreAction(
-  context: CommandContext,
-  args: string,
-): Promise<void | SlashCommandActionReturn> {
-  const { services } = context;
-  const { config } = services;
-
-  if (!config) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: 'Could not determine the configuration directory path.',
-    };
-  }
-
-  const checkpointDir = config.projectCheckpointsDir;
-
-  if (!checkpointDir) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: 'Could not determine the configuration directory path.',
-    };
-  }
-
+): Promise<SlashCommandActionReturn> {
   try {
-    await fs.mkdir(checkpointDir, { recursive: true });
-    const files = await fs.readdir(checkpointDir);
+    await fs.mkdir(checkpointDirectory, { recursive: true });
+    const files = await fs.readdir(checkpointDirectory);
     const jsonFiles = files.filter((file) => file.endsWith('.json')).sort();
+    if (!args) return listCheckpoints(jsonFiles);
 
-    if (!args) {
-      return listCheckpoints(jsonFiles);
-    }
-
-    return await restoreCheckpoint(
-      context,
-      config,
-      args,
-      checkpointDir,
-      jsonFiles,
-    );
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message === 'loadHistory function is not available.'
-    ) {
+    const selectedFile = args.endsWith('.json') ? args : `${args}.json`;
+    if (!jsonFiles.includes(selectedFile)) {
       return {
         type: 'message',
         messageType: 'error',
-        content: error.message,
+        content: `File not found: ${selectedFile}`,
       };
     }
+    const filePath = path.join(checkpointDirectory, selectedFile);
+    const text = await fs.readFile(filePath, 'utf-8');
+    const checkpoint = JSON.parse(text) as ToolCallCheckpoint;
+    await applyCheckpointRestoration(
+      loadHistory,
+      addItem,
+      operations,
+      checkpoint,
+    );
+    return {
+      type: 'tool',
+      toolName: checkpoint.toolCall.name,
+      toolArgs: checkpoint.toolCall.args,
+    };
+  } catch (error) {
     return {
       type: 'message',
       messageType: 'error',
@@ -223,12 +122,38 @@ async function restoreAction(
   }
 }
 
-export const restoreCommand = (
-  config: CliUiRuntime | null,
-): SlashCommand | null => {
-  if (config?.getCheckpointingEnabled() !== true) {
-    return null;
-  }
+export function createRestoreCommand(
+  operations: RestoreCommandOperations,
+  readFuzzyFiltering: () => boolean,
+  loadHistory: LoadHistory,
+  addItem: AddItem,
+): SlashCommand | null {
+  if (!operations.enabled) return null;
+
+  const checkpointDirectory = operations.checkpointDirectory;
+  const restoreSchema: CommandArgumentSchema = [
+    {
+      kind: 'value',
+      name: 'checkpoint',
+      description: 'Select checkpoint to restore',
+      completer: withFuzzyFilter(async () => {
+        if (!checkpointDirectory) return [];
+        try {
+          const files = await fs.readdir(checkpointDirectory);
+          return files
+            .filter((file) => file.endsWith('.json'))
+            .map((file) => file.replace(/\.json$/, ''))
+            .sort()
+            .map((name) => ({
+              value: name,
+              description: checkpointSuggestionDescription,
+            }));
+        } catch {
+          return [];
+        }
+      }, readFuzzyFiltering),
+    },
+  ];
 
   return {
     name: 'restore',
@@ -236,7 +161,22 @@ export const restoreCommand = (
       'Restore a tool call. This will reset the conversation and file history to the state it was in when the tool call was suggested',
     kind: CommandKind.BUILT_IN,
     autoExecute: true,
-    action: restoreAction,
     schema: restoreSchema,
+    action: async (_invocation, args) => {
+      if (!checkpointDirectory) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Could not determine the configuration directory path.',
+        };
+      }
+      return restoreFromDirectory(
+        loadHistory,
+        addItem,
+        operations,
+        checkpointDirectory,
+        args,
+      );
+    },
   };
-};
+}

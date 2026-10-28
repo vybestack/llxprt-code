@@ -5,7 +5,6 @@
  */
 
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
-import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 /**
  * Resets or carries-over per-turn state depending on whether this is a new
@@ -13,21 +12,23 @@ import type { StreamRuntime } from '../../cliUiRuntime.js';
  */
 export async function prepareTurnForQuery(
   isContinuation: boolean,
-  runtime: StreamRuntime,
+  resetBuckets: () => void,
   startNewPrompt: () => void,
   setThought: (t: null) => void,
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>,
+  resetBucketSession: () => void,
+  ensureBucketsAuthenticated: () => Promise<void>,
 ): Promise<void> {
   if (!isContinuation) {
     startNewPrompt();
     setThought(null);
     thinkingBlocksRef.current = [];
-    runtime.bucketFailover.resetBuckets?.();
+    resetBuckets();
   } else {
-    runtime.bucketFailover.resetBucketSession?.();
+    resetBucketSession();
   }
   try {
-    await runtime.bucketFailover.ensureBucketsAuthenticated?.();
+    await ensureBucketsAuthenticated();
   } catch {
     // Swallow — partial auth is acceptable.
   }

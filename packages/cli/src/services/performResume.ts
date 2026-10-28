@@ -41,9 +41,9 @@ import {
   type LockHandle,
   type SessionMetadata,
   type SessionSummary,
-  type HistoryService,
   type LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
+import type { AgentSessionControl } from '@vybestack/llxprt-code-agents';
 import { type DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 /**
@@ -76,7 +76,10 @@ export interface ResumeContext {
   maxQueueBytes?: number;
   persistenceFactory?: (sessionId: string) => SessionPersistenceService;
   recordingCallbacks: RecordingSwapCallbacks;
-  historyService?: HistoryService | null;
+  history?: Pick<
+    AgentSessionControl,
+    'getHistory' | 'replaceHistory' | 'attachRecordingHistory'
+  >;
   adoptSessionId?: (sessionId: string) => void;
   logger?: DebugLogger;
 }
@@ -334,13 +337,13 @@ async function resolveTarget(
 }
 
 async function restorePreviousHistory(
-  historyService: HistoryService,
-  previousHistory: IContent[] | null,
+  replaceHistory: AgentSessionControl['replaceHistory'],
+  previousHistory: readonly IContent[] | null,
   logger?: DebugLogger,
 ): Promise<unknown | undefined> {
   if (previousHistory === null) return undefined;
   try {
-    await historyService.replaceAll(previousHistory);
+    await replaceHistory(previousHistory);
     return undefined;
   } catch (error: unknown) {
     logger?.warn(`Failed to restore prior session history: ${error}`);
@@ -382,35 +385,40 @@ async function commitPreparedTransition(
   context: ResumeContext,
   discardOnFailure: boolean,
 ): Promise<{ ok: true; warnings: string[] } | { ok: false; error: string }> {
-  const callbacks = context.recordingCallbacks;
+  const { recordingCallbacks: callbacks, history: historyOwner } = context;
   const oldRecording = callbacks.getCurrentRecording();
   const oldIntegration = callbacks.getCurrentIntegration();
   const oldLock = callbacks.getCurrentLockHandle();
-  const historyService = context.historyService ?? null;
-  const previousHistory =
-    historyService === null ? null : [...historyService.getAll()];
+  let previousHistory: readonly IContent[] | null = null;
   const integration = new RecordingIntegration(
     recording,
     context.persistenceFactory?.(recording.getSessionId()),
   );
   try {
-    if (historyService !== null) {
-      await historyService.replaceAll(history);
-      integration.subscribeToHistory(historyService);
+    if (historyOwner !== undefined) {
+      previousHistory = await historyOwner.getHistory();
+      oldIntegration?.unsubscribeFromHistory();
+      await historyOwner.replaceHistory(history);
+      historyOwner.attachRecordingHistory(integration);
     }
     context.adoptSessionId?.(metadata.sessionId);
     callbacks.setRecording(recording, integration, lockHandle, metadata);
   } catch (error: unknown) {
     const rollbackFailures: unknown[] = [];
     await runRollbackStep(rollbackFailures, () => integration.dispose());
-    if (historyService !== null) {
+    if (historyOwner !== undefined) {
       const historyRollbackError = await restorePreviousHistory(
-        historyService,
+        historyOwner.replaceHistory,
         previousHistory,
         context.logger,
       );
       if (historyRollbackError !== undefined) {
         rollbackFailures.push(historyRollbackError);
+      }
+      if (oldIntegration !== null) {
+        await runRollbackStep(rollbackFailures, () =>
+          historyOwner.attachRecordingHistory(oldIntegration),
+        );
       }
     }
     await runRollbackStep(rollbackFailures, () => {

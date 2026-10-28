@@ -287,9 +287,11 @@ The remaining fixture-less tests fall into two groups, and both are listed in
 
 - tests where the CLI exits before any model turn (`mixed-input-crash.test.ts`,
   `stdin-context.test.ts`, `extensions-install.test.ts`), budgeted at zero; and
-- real-model tests that `e2e.yml` does not select, so they cost nothing per leg
-  but also provide no CI coverage (three cases in `run_shell_command.test.ts`,
-  plus the opt-in `codexImage.real.test.ts`).
+- real-model tests that the PR `e2e.yml` does not select, so they cost nothing
+  per leg and run only in the nightly full E2E (the three cases in
+  `run_shell_command.full.*.test.ts`, one per file so each file's serial model
+  rounds fit the per-file process budget), plus the opt-in
+  `codexImage.real.test.ts`, which never runs in CI.
 
 Files skipped entirely under `CI` (`ctrl-c-exit`, `simple-mcp-server`,
 `mcp_server_cyclic_schema`, `todo-ui-integration`, `web-search-provider`,

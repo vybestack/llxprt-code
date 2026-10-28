@@ -46,7 +46,7 @@
  * published file set to the allow-listed layout.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import {
   cpSync,
@@ -63,10 +63,8 @@ import { tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import {
-  OAuthManager,
-  createTokenStore,
-} from '@vybestack/llxprt-code-providers/auth.js';
+import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { useOwnedCredentials } from '../../packages/agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
   discoverRuntimePluginPackages,
   loadRuntimePlugins,
@@ -186,6 +184,7 @@ const HOST_PEER_PACKAGES = [
   '@vybestack/llxprt-code-mcp',
   '@vybestack/llxprt-code-providers',
   '@vybestack/llxprt-code-settings',
+  '@vybestack/llxprt-code-storage',
   '@vybestack/llxprt-code-telemetry',
 ] as const;
 
@@ -237,15 +236,16 @@ function linkPluginLocalDependencies(sourceDir: string, destDir: string): void {
 }
 
 /**
- * Links a directory into the fixture. Windows symlinks need privileges, so
- * that platform gets a dereferencing copy, which resolves identically.
+ * Links a directory into the fixture. The link target is the real workspace
+ * directory, so the module graph resolves its own dependencies (hoisted
+ * third-party packages, workspace packages such as storage) from the repo's
+ * node_modules, exactly as the POSIX symlink does. Directory symlinks need
+ * elevated privileges on Windows; junctions do not and resolve identically.
+ * A dereferencing copy would sever that ancestor lookup and leave the copied
+ * package without strip-json-comments, debug and the workspace packages.
  */
 function materializeNode(source: string, dest: string): void {
-  if (isWindows) {
-    cpSync(source, dest, { recursive: true, dereference: true });
-    return;
-  }
-  symlinkSync(source, dest, 'dir');
+  symlinkSync(source, dest, isWindows ? 'junction' : 'dir');
 }
 
 function parseJsonObjectFile(path: string): Record<string, unknown> {
@@ -375,17 +375,33 @@ const LEFTOVER_GEMINI_ALIAS: ProviderAliasEntry = {
   source: 'user',
 };
 
-const BASE_ONLY_OAUTH_MANAGER = new OAuthManager(
-  createTokenStore(),
-  undefined,
-  {},
-);
+function useBaseOnlyOAuth(): () => OAuthManager {
+  const credentials = useOwnedCredentials();
+  let oauth: OAuthManager;
+  beforeEach(() => {
+    oauth = new OAuthManager(
+      credentials().authority.createTokenStore(),
+      undefined,
+      {},
+    );
+  });
+  afterEach(() => oauth.dispose());
+  return () => oauth;
+}
 
 function makeBaseOnlyManager(): ProviderManager {
-  return new ProviderManager({
-    settingsService: new SettingsService() as never,
-    runtimeId: 'issue-2603-plugin-install-layouts',
-  });
+  return new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new SettingsService(),
+    undefined,
+    {
+      runtimeId: 'issue-2603-plugin-install-layouts',
+      runtimeKind: 'agent',
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -393,6 +409,7 @@ function makeBaseOnlyManager(): ProviderManager {
 // ---------------------------------------------------------------------------
 
 describe('base-only install (issue-2603 layout, no plugin packages)', () => {
+  const baseOnlyOAuth = useBaseOnlyOAuth();
   it('discovers no runtime plugins', () => {
     withInstalledFixture([], (root) => {
       const discovered = discoverRuntimePluginPackages(discoveryDeps(root));
@@ -442,7 +459,7 @@ describe('base-only install (issue-2603 layout, no plugin packages)', () => {
           undefined,
           undefined,
           {},
-          BASE_ONLY_OAUTH_MANAGER,
+          baseOnlyOAuth(),
           undefined,
           false,
           { providerContributions: baseOnlyRegistry },
@@ -469,6 +486,7 @@ describe('base-only install (issue-2603 layout, no plugin packages)', () => {
 // ---------------------------------------------------------------------------
 
 describe('base + @vybestack/llxprt-plugin-google-gemini install', () => {
+  const baseOnlyOAuth = useBaseOnlyOAuth();
   const release = releaseByDir('google-gemini');
 
   it('discovers exactly the installed plugin by its manifest marker', () => {
@@ -532,7 +550,7 @@ describe('base + @vybestack/llxprt-plugin-google-gemini install', () => {
           openaiApiKey: undefined,
           openaiBaseUrl: undefined,
           openaiProviderConfig: {},
-          oauthManager: BASE_ONLY_OAUTH_MANAGER,
+          oauthManager: baseOnlyOAuth(),
           config: undefined,
           authOnlyEnabled: false,
         },

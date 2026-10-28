@@ -1,18 +1,89 @@
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { MCPDiscoveryState, McpClient } from '@vybestack/llxprt-code-mcp';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { mkdtemp, realpath, rm, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../core/subagent-cleanup.js';
+import { beforeAll, afterAll, describe, expect, it, spyOn } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
+import { AgentConfig } from '../config-types.js';
+import { fromConfig } from '../fromConfig.js';
+import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { awaitMcpDiscoveryReady } from './helpers/mcp-discovery-ready.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it, spyOn } from 'bun:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
-import { MCPDiscoveryState, McpClient } from '@vybestack/llxprt-code-mcp';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-import { fromConfig } from '../fromConfig.js';
 
 describe('MCP Agent operations', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  useFakeResponsesReplay('plain-text.jsonl');
+  const credentials = useOwnedCredentials();
+
+  async function openRuntimeOwner(overrides: Partial<AgentConfig>): Promise<{
+    readonly mcp: McpRuntimeOwner;
+    readonly close: () => Promise<void>;
+  }> {
+    const directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'mcp-runtime-owner-')),
+    );
+    const config = new Config({
+      ...toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        ...overrides,
+        workingDir: directory,
+      }),
+      interactive: true,
+    });
+    const policy = new RuntimePolicyOwner(config);
+    const mcp = await buildTestMcpRuntime(
+      config,
+      policy.session.messageBus,
+      overrides,
+      undefined,
+      policy,
+    );
+    const close = (): Promise<void> =>
+      runCleanupSteps([
+        () => mcp.dispose(),
+        () => config.dispose(),
+        () => rm(directory, { recursive: true, force: true }),
+      ]);
+    try {
+      await mcp.initialize();
+    } catch (primary) {
+      return cleanupAfterFailure(primary, close);
+    }
+    return { mcp, close };
+  }
+
   it('joins configured discovery when disposing the retained MCP owner', async () => {
     let signalEntered!: () => void;
     const entered = new Promise<void>((resolveEntered) => {
@@ -28,7 +99,7 @@ describe('MCP Agent operations', () => {
         await pending;
       },
     );
-    const built = await buildCliStyleConfig('plain-text.jsonl', {
+    const owner = await openRuntimeOwner({
       folderTrust: true,
       mcpServers: {
         held: { command: process.execPath, args: ['-e', 'process.exit(0)'] },
@@ -36,46 +107,58 @@ describe('MCP Agent operations', () => {
       telemetry: { enabled: false },
       recording: { enabled: false },
     });
+    const { mcp } = owner;
     try {
       await entered;
-      expect(built.mcpRuntime.status()?.discoveryState).toBe(
-        MCPDiscoveryState.IN_PROGRESS,
-      );
+      expect(mcp.status()?.discoveryState).toBe(MCPDiscoveryState.IN_PROGRESS);
       let disposed = false;
-      const disposal = built.mcpRuntime.dispose().then(() => {
+      const disposal = mcp.dispose().then(() => {
         disposed = true;
       });
       await new Promise<void>((resolveTurn) => setImmediate(resolveTurn));
       expect(disposed).toBe(false);
       release();
       await disposal;
-      expect(built.mcpRuntime.isStopped()).toBe(true);
+      expect(mcp.isStopped()).toBe(true);
     } finally {
       release();
       connection.mockRestore();
-      await built.cleanup();
+      await owner.close();
     }
   }, 30000);
 
   it('uses retained MCP discovery and refresh for an adopted Agent without Config runtime delegates', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'mcp-agent-operations-'));
-    const built = await buildCliStyleConfig('plain-text.jsonl', {
-      folderTrust: true,
-      mcpServers: {
-        arithmetic: {
-          command: process.execPath,
-          args: [
-            resolveRepositoryFixture(
-              import.meta.url,
-              'scripts/tests/mcp-standalone-stdio-fixture.ts',
-            ),
-            directory,
-          ],
+    const workspace = await realpath(
+      await mkdtemp(join(tmpdir(), 'mcp-agent-operations-workspace-')),
+    );
+    const config = new Config(
+      toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        workingDir: workspace,
+        interactive: true,
+        folderTrust: true,
+        mcpServers: {
+          arithmetic: {
+            command: process.execPath,
+            args: [
+              resolveRepositoryFixture(
+                import.meta.url,
+                'scripts/tests/mcp-standalone-stdio-fixture.ts',
+              ),
+              directory,
+            ],
+          },
         },
-      },
-      telemetry: { enabled: false },
-      recording: { enabled: false },
-    });
+        telemetry: { enabled: false },
+        recording: { enabled: false },
+      }),
+    );
+    const settings = new SettingsService();
+    for (const [key, value] of Object.entries(config.getInitialSettings()))
+      settings.set(key, value);
     const obsolete = [
       'getMcpRuntimeStatus',
       'refreshMcpServers',
@@ -83,7 +166,7 @@ describe('MCP Agent operations', () => {
       'getMcpClientManager',
     ];
     for (const name of obsolete) {
-      Object.defineProperty(built.config, name, {
+      Object.defineProperty(config, name, {
         configurable: true,
         value: () => {
           throw new Error(
@@ -92,15 +175,14 @@ describe('MCP Agent operations', () => {
         },
       });
     }
-    const agent = await fromConfig({
-      settingsOwner: built.settingsOwner,
-      settingsService: built.settingsService,
-      agentClient: built.agentClient,
-      providerManager: built.providerManager,
-      config: built.config,
-      mcpRuntime: built.mcpRuntime,
-    });
+    const agent = await fromConfig(
+      config,
+      settings,
+      { activation: { provider: 'fake', model: 'fake-model' } },
+      credentials().authority,
+    );
     try {
+      await awaitMcpDiscoveryReady(agent);
       const controller = new AbortController();
       controller.abort();
       const events = [];
@@ -111,7 +193,7 @@ describe('MCP Agent operations', () => {
       }
       expect(events).toStrictEqual([{ type: 'done', reason: 'aborted' }]);
       expect(agent.mcp.discoveryState()).toBe('ready');
-      Object.defineProperty(built.config, 'getResourceRegistry', {
+      Object.defineProperty(config, 'getResourceRegistry', {
         configurable: true,
         value: () => {
           throw new Error('Lookup must retain its original resource catalog');
@@ -128,7 +210,7 @@ describe('MCP Agent operations', () => {
           agent.mcp.findResource('absent:fixture:///arithmetic'),
         ).toBeUndefined();
       } finally {
-        Reflect.deleteProperty(built.config, 'getResourceRegistry');
+        Reflect.deleteProperty(config, 'getResourceRegistry');
       }
       expect(
         await agent.mcp.readResource('arithmetic', 'fixture:///arithmetic'),
@@ -143,39 +225,21 @@ describe('MCP Agent operations', () => {
       expect(
         requests.split('\n').filter((line) => line === 'tools/list'),
       ).toHaveLength(2);
-      const prompt = built.mcpRuntime.listPrompts('arithmetic')[0];
       await agent.dispose();
-      expect(built.mcpRuntime.isStopped()).toBe(false);
       expect(() =>
         agent.mcp.findResource('arithmetic:fixture:///arithmetic'),
       ).toThrow('closed');
-      expect(
-        built.mcpRuntime.findResource('arithmetic:fixture:///arithmetic'),
-      ).toBeDefined();
       await expect(
         agent.mcp.readResource('arithmetic', 'fixture:///arithmetic'),
       ).rejects.toThrow('closed');
-      expect(
-        await built.mcpRuntime.readResource(
-          'arithmetic',
-          'fixture:///arithmetic',
-        ),
-      ).toMatchObject({
-        contents: [{ text: 'Addition combines quantities.' }],
-      });
-      expect(
-        (await prompt.invoke({ value: 'nine' })).messages[0]?.content,
-      ).toMatchObject({ text: 'Explain nine' });
-      const revocation = built.mcpRuntime.trust.setTrustedFolderLive(false);
-      await expect(
-        built.mcpRuntime.readResource('arithmetic', 'fixture:///arithmetic'),
-      ).rejects.toThrow(/not available|not authorized|not connected/i);
-      await revocation;
     } finally {
-      for (const name of obsolete) Reflect.deleteProperty(built.config, name);
-      await agent.dispose();
-      await built.cleanup();
-      await rm(directory, { recursive: true, force: true });
+      for (const name of obsolete) Reflect.deleteProperty(config, name);
+      await runCleanupSteps([
+        () => agent.dispose(),
+        () => config.dispose(),
+        () => rm(workspace, { recursive: true, force: true }),
+        () => rm(directory, { recursive: true, force: true }),
+      ]);
     }
   }, 30000);
 });

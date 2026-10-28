@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { beforeEach, describe, it, expect, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import { createCompletionHandler, tokenize } from './index.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
@@ -17,9 +17,6 @@ import type {
 } from './types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { firstNonEmptyString } from '../../../utils/coalesce.js';
-
-// Mock command context for tests
-const mockContext = createMockCommandContext();
 
 // Helper functions to create test arguments
 const literal = (
@@ -62,10 +59,10 @@ function processToken(
   hasQuotes: boolean,
 ): string {
   if (hasEscapes && Math.random() > 0.5) {
-    return token.replace(/'/g, "\\'");
+    return JSON.stringify(token);
   }
   if (hasQuotes && Math.random() > 0.5) {
-    return `"${token}"`;
+    return JSON.stringify(token);
   }
   return token;
 }
@@ -121,11 +118,15 @@ function completerForErrorMode(isAsyncError: boolean): CompleterFn {
 }
 
 describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
+  let mockContext: ReturnType<typeof createMockCommandContext>;
+  beforeEach(() => {
+    mockContext = createMockCommandContext();
+  });
   describe('Basic functionality', () => {
     it('handles empty input gracefully @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', async () => {
       const schema: CommandArgumentSchema = [value('arg1', 'First argument')];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       const result = await handler(mockContext, '', '/');
       expect(result).toHaveProperty('suggestions');
@@ -145,7 +146,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         ),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       const result = await handler(mockContext, '', '/username');
       expect(result.hint).toBe('Enter a valid username');
@@ -157,7 +158,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         literal('create', 'Create a resource'),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       const result = await handler(mockContext, '', '/subagent ');
       expect(result.hint).toBe('Create a resource');
@@ -173,7 +174,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         literal('delete', 'Delete a resource'),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
       const result = await handler(mockContext, '', '/subagent cr');
 
       expect(result.suggestions).toStrictEqual([
@@ -187,7 +188,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         literal('delete', 'Delete a resource'),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
       const result = await handler(mockContext, '', '/subagent zz');
 
       expect(result.suggestions).toStrictEqual([]);
@@ -198,7 +199,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         value('mode', '', ['manual', 'auto'], undefined, 'Select mode'),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       const result = await handler(mockContext, '', '/command ');
       expect(result.hint).toBe('Select mode');
@@ -217,7 +218,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         value('mode', '', ['manual', 'auto'], undefined, dynamicHint),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       const result = await handler(mockContext, '', '/command m');
       expect(dynamicHint).toHaveBeenCalledTimes(1);
@@ -233,7 +234,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         value('mode', 'Mode description', ['manual', 'auto']),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       const result = await handler(mockContext, '', '/command ');
       expect(result.hint).toBe('Mode description');
@@ -246,7 +247,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         value('mode', '', ['manual', 'auto']),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       const result = await handler(mockContext, '', '/command ');
       expect(result.hint).toBe('');
@@ -257,7 +258,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       await fc.assert(
         fc.asyncProperty(fc.string(), async (input) => {
           const schema: CommandArgumentSchema = [value('mode', '', undefined)];
-          const handler = createCompletionHandler(schema);
+          const handler = createCompletionHandler(schema, true);
           const result = await handler(mockContext, '', `/command ${input}`);
           expect(result.suggestions).toStrictEqual([]);
         }),
@@ -269,7 +270,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         value('mode', 'Mode description', ['manual', 'auto', 'archive']),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
       const result = await handler(mockContext, '', '/command ar');
 
       expect(result.suggestions).toStrictEqual([
@@ -283,7 +284,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
           const warnSpy = vi
             .spyOn(DebugLogger.prototype, 'warn')
             .mockImplementation(() => {});
-          const handler = createCompletionHandler([]);
+          const handler = createCompletionHandler([], true);
           const result = await handler(mockContext, '', input);
           expect(result.suggestions).toStrictEqual([]);
           expect(result.hint).toBe('');
@@ -306,7 +307,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         value('mode', '', undefined, failingCompleter),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       const result = await handler(mockContext, '', '/command ');
       expect(result.suggestions).toStrictEqual([]);
@@ -325,7 +326,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         value('type', 'Resource type', ['user', 'project', 'task']),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       // Test after 'create' with trailing space - should suggest type options
       const afterCreateResult = await handler(mockContext, '', '/create ');
@@ -390,7 +391,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
     it('tokenize removes command prefix and command name correctly @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', async () => {
       const schema: CommandArgumentSchema = [value('arg1', 'First argument')];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       // Test that "/command arg1" correctly removes "/command"
       const result1 = await handler(mockContext, '', '/command arg1');
@@ -480,7 +481,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         literal('manual', 'Manual prompt required'),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
       const result = await handler(
         mockContext,
         {
@@ -509,7 +510,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         value('type', 'Resource type', ['user', 'project']),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       // After "/create", should suggest type options
       const result1 = await handler(mockContext, '', '/create ');
@@ -529,7 +530,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         ]),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       // After "/subagent create", should suggest mode options (not be stuck on 'create')
       const result1 = await handler(mockContext, '', '/subagent create ');
@@ -562,7 +563,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         ]),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       // After "/subagent create", position should reflect we're at mode argument (position 0 of schema after command)
       const result1 = await handler(mockContext, '', '/subagent create ');
@@ -589,7 +590,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         ]),
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       // After "/subagent create manual ", schema branch should be complete
       // Should not return suggestions for mode since it's already been provided
@@ -635,7 +636,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         },
       ];
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
 
       // While typing "ma" for mode, should suggest manual, not jump to prompt
       const result = await handler(mockContext, '', '/subagent create ma');
@@ -687,7 +688,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
 
             // Use the completion handler to test tokenization indirectly
             const schema: CommandArgumentSchema = [value('arg1', 'Argument 1')];
-            const handler = createCompletionHandler(schema);
+            const handler = createCompletionHandler(schema, true);
 
             const result = await handler(mockContext, '', `/${input}`);
 
@@ -730,7 +731,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
               value('arg', 'Argument', processedOptions),
             ];
 
-            const handler = createCompletionHandler(schema);
+            const handler = createCompletionHandler(schema, true);
 
             // Test multiple calls for stability
             const results1 = await handler(mockContext, '', '/cmd ');
@@ -770,7 +771,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
               value('mode', '', ['manual', 'auto'], undefined, hintText),
             ];
 
-            const handler = createCompletionHandler(schema);
+            const handler = createCompletionHandler(schema, true);
             const result = await handler(mockContext, '', '/command ');
 
             expect(result.hint).toBe(hintText);
@@ -812,7 +813,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
             // Build a simple schema with one element
             const schema = traversalSchema(tokenValue, useLiteral);
 
-            const handler = createCompletionHandler(schema);
+            const handler = createCompletionHandler(schema, true);
             const originalSchema = JSON.parse(JSON.stringify(schema));
 
             // Test with various input combinations
@@ -869,7 +870,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
               value('arg1', 'Argument 1', undefined, errorCompleter),
             ];
 
-            const handler = createCompletionHandler(schema);
+            const handler = createCompletionHandler(schema, true);
             const input = processedTokens.join(' ');
 
             // Property 1: Should never throw, always return valid result
@@ -903,7 +904,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
               ]),
             ];
 
-            const handler = createCompletionHandler(schema);
+            const handler = createCompletionHandler(schema, true);
 
             // Test various command prefixes
             const prefixes = ['/', '@'];

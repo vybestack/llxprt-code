@@ -24,7 +24,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   BANNED_AMBIENT_SYMBOLS,
@@ -275,7 +275,7 @@ describe('ambient runtime symbols guard', () => {
 
   it('enumerates every package with a src directory (no hardcoded list)', () => {
     const roots = repoPackageSrcRoots();
-    const packageNames = roots.map((root) => root.split('/').at(-2));
+    const packageNames = roots.map((root) => basename(dirname(root)));
 
     // Packages the pre-dynamic list missed must be covered.
     for (const required of [

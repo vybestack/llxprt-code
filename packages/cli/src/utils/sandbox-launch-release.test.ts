@@ -74,13 +74,14 @@ void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
     fs.mkdirSync(path.dirname(proxyFake.markerPath), { recursive: true });
     fs.writeFileSync(proxyFake.markerPath, 'running\n');
     proxyFake.socketPath = path.join(config.socketPath, 'issue3469.sock');
-    return { stop: async () => {} };
-  }),
-  getProxySocketPath: vi.fn(() => proxyFake.socketPath),
-  getProxyCapabilityToken: vi.fn(() => 'issue3469-fake-capability-token'),
-  stopProxy: vi.fn(async () => {
-    fs.rmSync(proxyFake.markerPath, { force: true });
-    proxyFake.socketPath = undefined;
+    return {
+      socketPath: proxyFake.socketPath,
+      capabilityToken: 'issue3469-fake-capability-token',
+      stop: async () => {
+        fs.rmSync(proxyFake.markerPath, { force: true });
+        proxyFake.socketPath = undefined;
+      },
+    };
   }),
 }));
 
@@ -195,13 +196,21 @@ describe('#3469 launch resource release', () => {
    * #3533 remediation regression: a fully terminated and reaped sidecar
    * leaves no living or zombie member in its process group; probing the
    * group then fails with ESRCH. Only groups this run created are probed.
+   *
+   * On darwin, probing a group whose only remaining members are zombies not
+   * yet reaped fails with EPERM instead of succeeding (reproduced in
+   * tmp/pr3911/T6.F2/repro.log; slow reaping under heavy load exposes it).
+   * That is a group that still has members, so it counts as alive and the
+   * caller keeps polling until ESRCH. Elsewhere EPERM stays an error.
    */
   function processGroupAlive(groupId: number): boolean {
     try {
       process.kill(-groupId, 0);
       return true;
     } catch (err) {
-      if (errnoCode(err) !== 'ESRCH') throw err;
+      const code = errnoCode(err);
+      if (code === 'EPERM' && process.platform === 'darwin') return true;
+      if (code !== 'ESRCH') throw err;
       return false;
     }
   }
@@ -445,8 +454,12 @@ describe('#3469 launch resource release', () => {
     proxyPort = await allocateEphemeralPort();
     proxyUrl = `http://127.0.0.1:${proxyPort}`;
     environmentSnapshot = { ...process.env };
-    // Unix socket fixtures must fit even with a long session-scoped TMPDIR.
-    const socketTempBase = process.platform === 'win32' ? os.tmpdir() : '/tmp';
+    // Unix socket fixtures must fit even with a long session-scoped TMPDIR,
+    // because the simulated Darwin launch rejects an SSH_AUTH_SOCK over 103
+    // bytes. Windows has no /tmp, and its session TMPDIR alone is longer than
+    // that limit, so the fixture lives directly under the temp drive's root.
+    const socketTempBase =
+      process.platform === 'win32' ? path.parse(os.tmpdir()).root : '/tmp';
     fixturePath = fs.mkdtempSync(path.join(socketTempBase, 'launch-3469-'));
     isolatedCacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue3469-uc-'));
     process.env.LLXPRT_CACHE_HOME = isolatedCacheDir;

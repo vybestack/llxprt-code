@@ -8,19 +8,10 @@ import { useCallback } from 'react';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
-  agentProviderSwitchRecorder,
+  type ProviderSwitchRecorder,
   recordProviderSwitchReportingFailure,
 } from '../utils/recordActiveProviderSwitch.js';
-
-interface ModelDialogCommandContext {
-  recordingIntegration?: {
-    recordProviderSwitch(provider: string, model: string): void;
-  };
-  recordingOwner?: 'agent';
-  services?: { agent: Agent | null };
-}
 
 /** The part of the runtime API a model selection uses. */
 interface ModelSwitchRuntime {
@@ -114,7 +105,7 @@ export function useModelDialogHandler(
   addItem: UseHistoryManagerReturn['addItem'],
   store: DialogStore,
   currentProvider: string | null,
-  commandContext: ModelDialogCommandContext,
+  recordModelSwitch: ProviderSwitchRecorder['recordProviderSwitch'],
 ) {
   return useCallback(
     (model: HydratedModel) => {
@@ -122,22 +113,7 @@ export function useModelDialogHandler(
         let switchSucceeded = false;
         try {
           const selectedProvider = model.provider;
-          if (
-            commandContext.recordingOwner === 'agent' &&
-            !commandContext.services?.agent
-          ) {
-            throw new Error('Session agent is unavailable');
-          }
-          // The Agent session owner is the single recording writer in owner
-          // mode; otherwise the raw integration records.
-          const recorder =
-            commandContext.recordingOwner === 'agent'
-              ? agentProviderSwitchRecorder((event) =>
-                  commandContext.services?.agent?.session.recordRecordingEvent(
-                    event,
-                  ),
-                )
-              : commandContext.recordingIntegration;
+          const recorder = { recordProviderSwitch: recordModelSwitch };
           if (selectedProvider !== currentProvider) {
             const switchResult = await runtime.setProvider(selectedProvider);
             await runtime.setActiveModel(model.id);
@@ -184,6 +160,6 @@ export function useModelDialogHandler(
         }
       })();
     },
-    [runtime, addItem, store, currentProvider, commandContext],
+    [runtime, addItem, store, currentProvider, recordModelSwitch],
   );
 }

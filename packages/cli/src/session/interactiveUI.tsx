@@ -1,6 +1,12 @@
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { InteractiveApplicationInputs } from './interactiveApplicationInputs.js';
+import { ObservationContext } from '../observation/ObservationContext.js';
+import type { ObservationCallbacks } from '../observation/jspWiring.js';
+import type { TerminalHost } from './terminalHost.js';
+import { bindDebugCommand } from '../ui/commands/debugCommandHost.js';
+import { InteractiveApplication } from './interactiveApplication.js';
+import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFeatures.js';
+
 import {
-  type SessionSettingsOwner,
   type LlxprtExtension,
   type WorkspaceSkillOperations,
   type Config,
@@ -8,14 +14,13 @@ import {
   type RecordingIntegration,
   type IContent,
   type LockHandle,
-  type MessageBus,
   type TelemetrySettings,
   resolvePerfSettings,
   getProjectHash,
   writeToStdout,
 } from '@vybestack/llxprt-code-core';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import type { BucketFailoverRuntime } from '../ui/cliUiRuntime.js';
-import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 
 import React, { type ErrorInfo } from 'react';
 import { render as inkRender } from 'ink';
@@ -26,7 +31,6 @@ import { render as inkRender } from 'ink';
  * which is unsupported under Bun's native test runner) can replace this
  * via the exported __setRenderForTesting seam.
  */
-import { createSessionModelCommand } from '../runtime/session-model-command.js';
 
 let render: typeof inkRender = inkRender;
 
@@ -37,7 +41,11 @@ import { AppWrapper } from '../ui/App.js';
 import { ErrorBoundary } from '../ui/components/ErrorBoundary.js';
 import { basename } from 'node:path';
 import { type LoadedSettings } from '../config/settings.js';
-import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import {
+  debugLogger,
+  type ConfigurationManager,
+  DebugLogger,
+} from '@vybestack/llxprt-code-telemetry';
 import { getCliVersion } from '../utils/version.js';
 import { enableMouseEvents, disableMouseEvents } from '../ui/utils/mouse.js';
 import { restoreTerminalProtocolsSync } from '../ui/utils/terminalProtocolCleanup.js';
@@ -62,7 +70,6 @@ import type { CliSessionPersistencePort } from '../cliSessionPersistence.js';
 import { appendInteractiveUiDebug } from './debugLog.js';
 import { mouseEventsExitHandler } from './terminalCleanup.js';
 import {
-  cleanupInstanceAndOwner,
   rollbackInteractiveFailure,
   type InteractiveInstanceCapability,
   type InteractiveOwnerCapability,
@@ -70,111 +77,42 @@ import {
   type InteractiveTerminalRestore,
 } from './interactiveUiLifecycle.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import {
-  createRuntimeOwnerFeatures,
-  createProviderAliasRefresh,
-} from '../runtime/createRuntimeOwnerFeatures.js';
-import { createOAuthControl } from '../runtime/createOAuthControl.js';
-import {
-  buildUiRuntimeFromSource,
-  buildSlashCommandRuntime,
-} from '../ui/cliUiRuntime.js';
+import { InteractiveContextHost } from '../runtime/InteractiveContextHost.js';
+import { buildInteractiveUiPorts } from './interactiveUiPorts.js';
+import { type InteractiveCommandPorts } from '../ui/cliCommandPorts.js';
 
-/**
- * Module-level reference to the latest rendered Ink instance.
- *
- * startInteractiveUI may be called more than once in a long-lived process
- * (e.g. tests). registerCleanup appends to a module-level array, so a bare
- * registerCleanup inside startInteractiveUI would accumulate a fresh closure
- * (capturing that call's local `instance`) on every invocation. By tracking
- * the latest instance here and registering the cleanup callback at most once,
- * repeated calls simply update this reference — the single registered
- * callback always tears down whichever instance is current.
- */
-let latestInstance: InteractiveInstanceCapability | undefined;
-
-/**
- * Idempotent flag so the cleanup callback is registered at most once per
- * process, regardless of how many times startInteractiveUI is called.
- */
-let cleanupRegistered = false;
-
-/**
- * Idempotent flag so the synchronous terminal-protocol cleanup is registered
- * at most once per process. registerSyncCleanup appends to a module-level
- * array (it does not dedup), so without this guard repeated startInteractiveUI
- * calls would accumulate duplicate restoreTerminalProtocolsSync entries in
- * syncCleanupFunctions. Mirrors the dedup pattern used by cleanupRegistered
- * and titleResetExitListenerRegistered.
- */
-let syncCleanupRegistered = false;
-
-function handleError(error: Error, errorInfo: ErrorInfo) {
+function handleError(
+  error: Error,
+  errorInfo: ErrorInfo,
+  logger: Pick<DebugLogger, 'error'>,
+) {
   appendInteractiveUiDebug(
     `error-boundary ${error.message}\n${error.stack ?? ''}\n${errorInfo.componentStack}`,
   );
   // Log to console for debugging
-  debugLogger.error('Application Error:', error);
-  debugLogger.error('Component Stack:', errorInfo.componentStack);
+  logger.error('Application Error:', error);
+  logger.error('Component Stack:', errorInfo.componentStack);
 
   // Special handling for maximum update depth errors
   if (error.message.includes('Maximum update depth exceeded')) {
-    debugLogger.error('\nCRITICAL: RENDER LOOP DETECTED!');
-    debugLogger.error('This is likely caused by:');
-    debugLogger.error('- State updates during render');
-    debugLogger.error('- Incorrect useEffect dependencies');
-    debugLogger.error('- Non-memoized props causing re-renders');
-    debugLogger.error('\nCheck recent changes to React components and hooks.');
+    logger.error('\nCRITICAL: RENDER LOOP DETECTED!');
+    logger.error('This is likely caused by:');
+    logger.error('- State updates during render');
+    logger.error('- Incorrect useEffect dependencies');
+    logger.error('- Non-memoized props causing re-renders');
+    logger.error('\nCheck recent changes to React components and hooks.');
   }
 }
-
-/**
- * Module-level reference to the latest interactive perf runtime owner.
- * Mirrors the latestInstance pattern: startInteractiveUI may be called more
- * than once in a long-lived process, so we track the latest owner and dispose
- * it in the single registered cleanup callback.
- */
-let latestPerfOwner: InteractiveOwnerCapability | null = null;
-
-/**
- * Module-level guard ensuring the title-reset exit listener is registered at
- * most once per process. setWindowTitle is called on every interactive
- * session; without this guard, each call appends a duplicate process.on('exit')
- * listener that accumulates over the process lifetime.
- */
-let titleResetExitListenerRegistered = false;
 
 function resetTitleExitHandler() {
   writeToStdout(`\x1b]0;\x07`);
 }
 
-export function __resetInteractiveUIStateForTesting() {
-  latestInstance = undefined;
-  latestPerfOwner = null;
-  cleanupRegistered = false;
-  titleResetExitListenerRegistered = false;
-  syncCleanupRegistered = false;
-  process.off('exit', resetTitleExitHandler);
-  process.off('exit', mouseEventsExitHandler);
-  process.off('exit', restoreTerminalProtocolsSync);
-}
-
-/**
- * Narrow test-only seam to install a tracked latest instance and perf owner so
- * a behavior test can drive the ACTUAL exported
- * {@link replacePreviousInstanceAndOwner} against real tracked state. Does not
- * reset state without cleanup in production paths — only tests call this to
- * stage ownership before invoking the real replacement routine.
- */
-export function __setTrackedInstanceAndOwnerForTesting(
-  instance: InteractiveInstanceCapability | undefined,
-  owner: InteractiveOwnerCapability | null,
-): void {
-  latestInstance = instance;
-  latestPerfOwner = owner;
-}
-
-export function setWindowTitle(title: string, settings: LoadedSettings) {
+export function setWindowTitle(
+  title: string,
+  settings: LoadedSettings,
+  terminalHost: TerminalHost,
+) {
   if (settings.merged.ui.hideWindowTitle !== true) {
     // Initial state before React loop starts
     const windowTitle = computeTerminalTitle({
@@ -189,8 +127,8 @@ export function setWindowTitle(title: string, settings: LoadedSettings) {
     // Register the title-reset listener only once per process; multiple
     // interactive sessions in the same process would otherwise accumulate
     // duplicate exit listeners.
-    if (!titleResetExitListenerRegistered) {
-      titleResetExitListenerRegistered = true;
+    if (!terminalHost.titleResetExitListenerRegistered) {
+      terminalHost.titleResetExitListenerRegistered = true;
       process.off('exit', resetTitleExitHandler);
       process.on('exit', resetTitleExitHandler);
     }
@@ -298,18 +236,12 @@ function extractTerminalRows(stream: { rows?: number }): number {
  * max-lines-per-function limit.
  */
 function buildRenderElement(
-  uiRuntime: ReturnType<typeof buildUiRuntimeFromSource>,
-  slashCommandRuntime: ReturnType<typeof buildSlashCommandRuntime>,
+  commandPorts: InteractiveCommandPorts,
   agent: Agent,
-  runtimeOwner: Config,
-  runtimeSettings: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  },
+  runtimeSettings: SessionSettingsOperations,
   settings: LoadedSettings,
   startupWarnings: string[],
   version: string,
-  runtimeMessageBus: MessageBus | undefined,
   recordingIntegration: RecordingIntegration | undefined,
   resumedHistory: IContent[] | undefined,
   initialRecordingService: SessionRecordingService | undefined,
@@ -317,55 +249,69 @@ function buildRenderElement(
   suppressStartupWelcome: boolean | undefined,
   perfOwner: InteractivePerfRuntime | null,
   recordingOwner?: 'agent' | 'raw',
-  oauthManager?: OAuthManager,
 ): React.ReactElement {
-  const runtimeOwnerFeatures = () =>
-    createRuntimeOwnerFeatures(
-      runtimeOwner,
-      agent.providerManager,
-      () => agent.workspace.getDirectories(),
-      createSessionModelCommand(agent),
-      runtimeSettings.owner,
-      runtimeSettings.store,
-      agent.workspace,
-    );
+  const contextHost = new InteractiveContextHost(agent, () =>
+    runtimeSettings.readDefaultProfileName(),
+  );
   return (
-    <React.StrictMode>
-      <ErrorBoundary onError={handleError}>
-        <SettingsContext.Provider value={settings}>
-          <AppWrapper
-            uiRuntime={uiRuntime}
-            slashCommandRuntime={slashCommandRuntime}
-            agent={agent}
-            runtimeOwner={{ create: runtimeOwnerFeatures }}
-            providerAliasRefresh={createProviderAliasRefresh(
-              agent.providerManager,
-            )}
-            oauthControl={createOAuthControl(
-              () => oauthManager,
-              agent.providerManager,
-            )}
-            settings={settings}
-            runtimeMessageBus={runtimeMessageBus}
-            startupWarnings={startupWarnings}
-            version={version}
-            terminalBackgroundColor={uiRuntime.shell.getTerminalBackground()}
-            {...(recordingOwner === 'agent'
-              ? { recordingOwner, resumedHistory, suppressStartupWelcome }
-              : {
-                  recordingIntegration,
-                  recordingOwner,
-                  resumedHistory,
-                  initialRecordingService,
-                  initialLockHandle,
-                  suppressStartupWelcome,
-                })}
-            operationLifecycle={perfOwner?.registry}
-            memoryController={perfOwner?.memoryController ?? undefined}
-          />
-        </SettingsContext.Provider>
-      </ErrorBoundary>
-    </React.StrictMode>
+    <AppWrapper
+      {...new InteractiveApplication({
+        containerApp: commandPorts.containerApp,
+        containerSession: commandPorts.containerSession,
+        containerTerminal: commandPorts.containerTerminal,
+        containerMemory: commandPorts.containerMemory,
+        containerInput: commandPorts.containerInput,
+        inputPolicy: commandPorts.inputPolicy,
+        commandRegistry: commandPorts.commandRegistry,
+        fileCommands: commandPorts.fileCommands,
+        workspaceCommands: commandPorts.workspaceCommands,
+        chatCommands: commandPorts.chatCommands,
+        keyCommands: commandPorts.keyCommands,
+        approval: commandPorts.approval,
+        browserSession: commandPorts.browserSession,
+        emojiFilter: commandPorts.emojiFilter,
+        containerRuntime: commandPorts.containerRuntime,
+        slashCommandPorts: commandPorts.slashCommandPorts,
+        layoutRuntime: commandPorts.layoutRuntime,
+        dialogsRuntime: commandPorts.dialogsRuntime,
+        ...bindApplicationOperations(agent),
+        renderRuntime: contextHost.renderRuntime,
+        detectProviderQuota: contextHost.detectProviderQuota,
+        fetch: contextHost.fetch,
+        getActiveModelName: contextHost.getActiveModelName,
+        getActiveProviderAliasConfig: contextHost.getActiveProviderAliasConfig,
+        getActiveProviderName: contextHost.getActiveProviderName,
+        getActiveToolFormatState: contextHost.getActiveToolFormatState,
+        getEphemeralSetting: contextHost.getEphemeralSetting,
+        getEphemeralSettings: contextHost.getEphemeralSettings,
+        listSavedProfiles: contextHost.listSavedProfiles,
+        providerStatus: contextHost.providerStatus,
+        saveLoadBalancerProfile: contextHost.saveLoadBalancerProfile,
+        setActiveModel: contextHost.setActiveModel,
+        setActiveToolFormatOverride: contextHost.setActiveToolFormatOverride,
+        setEphemeralSetting: contextHost.setEphemeralSetting,
+        updateActiveProviderApiKey: contextHost.updateActiveProviderApiKey,
+        providerAliasRefresh: agent.providerReads.refreshAliases,
+        oauthControl: agent.authentication,
+        settings,
+        startupWarnings,
+        version,
+        terminalBackgroundColor:
+          commandPorts.containerTerminal.getTerminalBackground(),
+        ...(recordingOwner === 'agent'
+          ? { recordingOwner, resumedHistory, suppressStartupWelcome }
+          : {
+              recordingIntegration,
+              recordingOwner,
+              resumedHistory,
+              initialRecordingService,
+              initialLockHandle,
+              suppressStartupWelcome,
+            }),
+        operationLifecycle: perfOwner?.registry,
+        memoryController: perfOwner?.memoryController ?? undefined,
+      }).createAppProps()}
+    />
   );
 }
 
@@ -391,123 +337,118 @@ function setupTerminalExitHandlers(
   process.on('exit', restoreTerminalProtocolsSync);
 }
 
+/**
+ * The key storage handle created for one interactive UI root by the credential
+ * authority. It is released by exactly one owner at a time: the pre-commit
+ * catch in {@link startInteractiveUI}, then the rollback of
+ * {@link commitInteractiveStartup}, then the published instance's teardown.
+ */
+export type InteractiveProviderKeys = ProviderKeyStorageLike & {
+  close(): void;
+};
+
 export interface OwnerInteractiveStartup {
-  readonly oauthManager?: OAuthManager;
-  readonly runtimeSettings: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  };
+  readonly terminalHost: TerminalHost;
+  readonly observation: ObservationCallbacks;
+  readonly debugConfiguration: ConfigurationManager;
+  readonly providerKeys: InteractiveProviderKeys;
+  readonly runtimeSettings: SessionSettingsOperations;
   readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
   readonly skillOperations?: Pick<
     WorkspaceSkillOperations,
     'list' | 'find' | 'reload' | 'isAdminEnabled'
   >;
   readonly recordingOwner: 'agent';
-  readonly runtimeMessageBus?: MessageBus;
   readonly resumedHistory?: IContent[];
   readonly suppressStartupWelcome?: boolean;
 }
 
-export function startInteractiveUI(
-  config: Config,
-  agent: Agent,
-  settings: LoadedSettings,
-  startupWarnings: string[],
-  workspaceRoot: string,
-  startup: OwnerInteractiveStartup,
-): Promise<InteractiveInstanceCapability>;
-export function startInteractiveUI(
-  config: Config,
-  agent: Agent,
-  settings: LoadedSettings,
-  startupWarnings: string[],
-  workspaceRoot: string,
-  runtimeMessageBus?: MessageBus,
-  recordingIntegration?: RecordingIntegration,
-  resumedHistory?: IContent[],
-  initialRecordingService?: SessionRecordingService,
-  initialLockHandle?: LockHandle | null,
-  suppressStartupWelcome?: boolean,
-  recordingOwner?: 'raw',
-  sessionPersistence?: CliSessionPersistencePort,
-  runtimeSettings?: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  },
-): Promise<InteractiveInstanceCapability>;
+export interface RawInteractiveStartup {
+  readonly terminalHost: TerminalHost;
+  readonly observation: ObservationCallbacks;
+  readonly debugConfiguration: ConfigurationManager;
+  readonly providerKeys: InteractiveProviderKeys;
+  readonly recordingOwner: 'raw';
+  readonly runtimeSettings: SessionSettingsOperations;
+  readonly sessionPersistence: CliSessionPersistencePort | undefined;
+  readonly recordingIntegration?: RecordingIntegration;
+  readonly resumedHistory?: IContent[];
+  readonly initialRecordingService?: SessionRecordingService;
+  readonly initialLockHandle?: LockHandle | null;
+  readonly suppressStartupWelcome?: boolean;
+}
 export async function startInteractiveUI(
   config: Config,
   agent: Agent,
   settings: LoadedSettings,
   startupWarnings: string[],
   workspaceRoot: string,
-  startup?: OwnerInteractiveStartup | MessageBus,
-  recordingIntegration?: RecordingIntegration,
-  resumedHistory?: IContent[],
-  initialRecordingService?: SessionRecordingService,
-  initialLockHandle?: LockHandle | null,
-  suppressStartupWelcome?: boolean,
-  recordingOwner?: 'raw',
-  sessionPersistence?: CliSessionPersistencePort,
-  runtimeSettings?: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  },
-) {
-  const ownerStartup =
-    startup && 'recordingOwner' in startup ? startup : undefined;
-  const runtimeMessageBus =
-    startup && 'recordingOwner' in startup
-      ? startup.runtimeMessageBus
-      : startup;
-
-  if (!ownerStartup && !sessionPersistence) {
-    throw new Error(
-      'Raw interactive startup requires its own CLI session persistence',
-    );
-  }
-
-  const version = await initializeInteractivePresentation(
-    workspaceRoot,
-    settings,
-  );
-
-  // Deterministic pre-start replacement: tear down any previous instance and
-  // perf owner BEFORE constructing/starting a new owner. This prevents
-  // observer-conflict: a new owner's installObservers() must not collide with
-  // a previous owner's still-installed observers.
-  await replacePreviousInstanceAndOwner();
-  const perfOwner = await buildAndStartPerfOwner(
+  startup: OwnerInteractiveStartup | RawInteractiveStartup,
+): Promise<InteractiveInstanceCapability> {
+  const { version, perfOwner } = await prepareInteractiveStartup(
     config,
     agent,
     settings,
-    version,
+    workspaceRoot,
+    startup,
   );
-  const selectedSettings = ownerStartup?.runtimeSettings ?? runtimeSettings;
-  if (selectedSettings === undefined)
-    throw new Error(
-      'Interactive startup requires explicit session settings ownership',
-    );
   return commitInteractiveStartup({
-    oauthManager: ownerStartup?.oauthManager,
     config,
     agent,
     settings,
     perfOwner,
     version,
     startupWarnings,
-    runtimeMessageBus,
-    ...(ownerStartup ?? {
-      runtimeSettings: selectedSettings,
-      recordingOwner,
-      recordingIntegration,
-      resumedHistory,
-      initialRecordingService,
-      initialLockHandle,
-      suppressStartupWelcome,
-      sessionPersistence,
-    }),
+    ...startup,
   });
+}
+
+/**
+ * Runs the stages before {@link commitInteractiveStartup} takes the key handle,
+ * including the raw-startup persistence requirement.
+ * Until the commit starts, this function is the handle's only owner, so a
+ * failure in any stage closes it once and rethrows the stage's error; a close
+ * failure is joined behind the primary error.
+ */
+async function prepareInteractiveStartup(
+  config: Config,
+  agent: Agent,
+  settings: LoadedSettings,
+  workspaceRoot: string,
+  startup: OwnerInteractiveStartup | RawInteractiveStartup,
+): Promise<{ version: string; perfOwner: InteractivePerfRuntime | null }> {
+  try {
+    if (
+      startup.recordingOwner === 'raw' &&
+      startup.sessionPersistence === undefined
+    )
+      throw new Error(
+        'Raw interactive startup requires its own CLI session persistence',
+      );
+    const version = await initializeInteractivePresentation(
+      workspaceRoot,
+      settings,
+      startup.terminalHost,
+    );
+    await startup.terminalHost.cleanup();
+    const perfOwner = await buildAndStartPerfOwner(
+      config,
+      agent,
+      settings,
+      version,
+    );
+    return { version, perfOwner };
+  } catch (primaryError) {
+    try {
+      startup.providerKeys.close();
+    } catch (closeError) {
+      throw new AggregateError(
+        [primaryError, closeError],
+        'interactive startup failed and its key handle did not close',
+      );
+    }
+    throw primaryError;
+  }
 }
 
 /**
@@ -541,8 +482,7 @@ function buildTerminalRollbackCapabilities(mouseEventsEnabled: boolean): {
  */
 export interface InteractiveStartupPorts {
   readonly renderOptions: typeof inkRenderOptions;
-  readonly buildUiRuntime: typeof buildUiRuntimeFromSource;
-  readonly buildSlashRuntime: typeof buildSlashCommandRuntime;
+  readonly buildCommandPorts: typeof buildInteractiveUiPorts;
   readonly debugAppend: (line: string) => void;
   readonly setupTerminal: typeof setupTerminalExitHandlers;
   readonly isMouseEnabled: typeof isMouseEventsEnabled;
@@ -561,8 +501,7 @@ export interface InteractiveStartupPorts {
  */
 const defaultStartupPorts: InteractiveStartupPorts = {
   renderOptions: inkRenderOptions,
-  buildUiRuntime: buildUiRuntimeFromSource,
-  buildSlashRuntime: buildSlashCommandRuntime,
+  buildCommandPorts: buildInteractiveUiPorts,
   debugAppend: appendInteractiveUiDebug,
   setupTerminal: setupTerminalExitHandlers,
   isMouseEnabled: isMouseEventsEnabled,
@@ -578,7 +517,7 @@ const defaultStartupPorts: InteractiveStartupPorts = {
  * mouse. `instance` is undefined until render succeeds.
  */
 interface StartupTransactionState {
-  readonly owner: InteractiveOwnerCapability | null;
+  readonly owner: InteractiveOwnerCapability;
   mouseStaged: boolean;
   instance: InteractiveInstanceCapability | undefined;
 }
@@ -588,24 +527,23 @@ interface StartupTransactionState {
  * perf owner successfully starts runs inside this one transaction.
  */
 export type CommitInteractiveStartupArgs = {
-  readonly oauthManager?: OAuthManager;
+  readonly terminalHost: TerminalHost;
+  readonly observation: ObservationCallbacks;
+  readonly debugConfiguration: ConfigurationManager;
   readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
   readonly skillOperations?: Pick<
     WorkspaceSkillOperations,
     'list' | 'find' | 'reload' | 'isAdminEnabled'
   >;
-  readonly runtimeSettings: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  };
+  readonly runtimeSettings: SessionSettingsOperations;
   readonly config: Config;
   readonly agent: Agent;
   readonly settings: LoadedSettings;
   readonly perfOwner: InteractivePerfRuntime | null;
+  readonly providerKeys: InteractiveProviderKeys;
   readonly version: string;
   readonly startupWarnings: string[];
   readonly ports?: Partial<InteractiveStartupPorts>;
-  readonly runtimeMessageBus?: MessageBus;
   readonly resumedHistory?: IContent[];
   readonly suppressStartupWelcome?: boolean;
 } & (
@@ -626,12 +564,12 @@ export type CommitInteractiveStartupArgs = {
 
 /**
  * Runs every fallible stage after a perf owner successfully starts as ONE
- * transaction: inkRenderOptions, buildUiRuntimeFromSource,
- * buildSlashCommandRuntime, debug append, terminal/mouse staging, render,
+ * transaction: inkRenderOptions, the command-port
+ * build, debug append, terminal/mouse staging, render,
  * sync-cleanup registration, and setupInstanceLifecycle.
  *
  * On ANY failure the single transactional rollback: preserves the primary
- * failure first, atomically clears tracked module refs (so no later global
+ * failure first, atomically clears tracked host resources (so no later
  * cleanup double-disposes), independently disposes the owner, clears/unmounts
  * any produced instance, disables staged mouse state + removes the listener,
  * and restores terminal protocols + removes the listener. Stages before mouse
@@ -642,10 +580,10 @@ export type CommitInteractiveStartupArgs = {
  */
 function composeUiBucketOperations(
   config: Config,
-  oauth: OAuthManager | undefined,
+  oauth: Agent['authentication'],
 ): BucketFailoverRuntime {
   const readProviderName = () => config.getProvider() ?? '';
-  return oauth instanceof OAuthManager
+  return oauth.isAvailable()
     ? {
         resetBuckets: () => oauth.resetBuckets(readProviderName(), false),
         resetBucketSession: () => oauth.resetBuckets(readProviderName(), true),
@@ -658,8 +596,40 @@ function composeUiBucketOperations(
     : {};
 }
 
+/**
+ * The one owner capability a published interactive instance carries: the perf
+ * owner (when perf is enabled) is disposed first, then the key handle is
+ * closed. Both steps always run; their errors surface together.
+ */
+function composeInstanceOwner(
+  perfOwner: InteractiveOwnerCapability | null,
+  providerKeys: InteractiveProviderKeys,
+): InteractiveOwnerCapability {
+  return {
+    dispose: async () => {
+      const errors: unknown[] = [];
+      if (perfOwner !== null) {
+        try {
+          await perfOwner.dispose();
+        } catch (err) {
+          errors.push(err);
+        }
+      }
+      try {
+        providerKeys.close();
+      } catch (err) {
+        errors.push(err);
+      }
+      if (errors.length === 1) throw errors[0];
+      if (errors.length > 1) {
+        throw new AggregateError(errors, 'interactive owner disposal failed');
+      }
+    },
+  };
+}
+
 function startupBucketOperations(args: CommitInteractiveStartupArgs) {
-  return composeUiBucketOperations(args.config, args.oauthManager);
+  return composeUiBucketOperations(args.config, args.agent.authentication);
 }
 
 function startupCommandRuntimes(
@@ -667,23 +637,30 @@ function startupCommandRuntimes(
   ports: InteractiveStartupPorts,
   operations: ReturnType<typeof startupBucketOperations>,
 ) {
-  const uiRuntime = ports.buildUiRuntime(
-    args.config,
-    args.agent,
-    operations,
-    args.runtimeSettings.owner,
-  );
-  const slashCommandRuntime = ports.buildSlashRuntime(
-    args.config,
-    args.agent,
-    args.perfOwner?.snapshotCapability ?? null,
-    args.recordingOwner === 'agent' ? undefined : args.sessionPersistence,
-    operations,
-    args.skillOperations,
-    args.restartExtension,
-    args.runtimeSettings.owner,
-  );
-  return { uiRuntime, slashCommandRuntime };
+  const commandPorts = ports.buildCommandPorts({
+    debug: bindDebugCommand(args.debugConfiguration),
+    source: args.config,
+    appOperations: args.agent,
+    modelOperations: args.agent,
+    fileOperations: args.agent,
+    memoryOperations: args.agent,
+    hookOperations: args.agent.hooks,
+    mcpOperations: args.agent.mcp,
+    settingOperations: args.agent,
+    approvalOperations: args.agent,
+    checkpoints: args.agent.workspace.checkpoints,
+    readEphemeralSetting: args.agent.getEphemeralSetting.bind(args.agent),
+    bucketFailover: operations,
+    telemetrySettings: args.runtimeSettings,
+    providerKeys: args.providerKeys,
+    describeToolConfiguration: () => args.agent.tools.describeConfiguration(),
+    restartExtension: args.restartExtension,
+    skillOperations: args.skillOperations,
+    sessionPersistence:
+      args.recordingOwner === 'agent' ? undefined : args.sessionPersistence,
+    perfSnapshotCapability: args.perfOwner?.snapshotCapability ?? null,
+  });
+  return { commandPorts };
 }
 
 export async function commitInteractiveStartup(
@@ -694,7 +671,7 @@ export async function commitInteractiveStartup(
     ...args.ports,
   };
   const state: StartupTransactionState = {
-    owner: args.perfOwner,
+    owner: composeInstanceOwner(args.perfOwner, args.providerKeys),
     mouseStaged: false,
     instance: undefined,
   };
@@ -702,11 +679,7 @@ export async function commitInteractiveStartup(
   try {
     const renderOptions = ports.renderOptions(args.config, args.settings);
     const operations = startupBucketOperations(args);
-    const { uiRuntime, slashCommandRuntime } = startupCommandRuntimes(
-      args,
-      ports,
-      operations,
-    );
+    const { commandPorts } = startupCommandRuntimes(args, ports, operations);
     ports.debugAppend(
       `renderOptions alternateBuffer=${String(renderOptions.alternateBuffer)} incrementalRendering=${String(renderOptions.incrementalRendering)} stdoutColumns=${String(renderOptions.stdout?.columns)} stdoutRows=${String(renderOptions.stdout?.rows)}`,
     );
@@ -718,32 +691,34 @@ export async function commitInteractiveStartup(
     ports.setupTerminal(renderOptions, args.settings);
 
     state.instance = ports.render(
-      buildRenderElement(
-        uiRuntime,
-        slashCommandRuntime,
-        args.agent,
-        args.config,
-        args.runtimeSettings,
+      renderInteractiveShell(
+        <ObservationContext.Provider value={args.observation}>
+          {buildRenderElement(
+            commandPorts,
+            args.agent,
+            args.runtimeSettings,
+            args.settings,
+            args.startupWarnings,
+            args.version,
+            args.recordingIntegration,
+            args.resumedHistory,
+            args.initialRecordingService,
+            args.initialLockHandle,
+            args.suppressStartupWelcome,
+            args.perfOwner,
+            args.recordingOwner,
+          )}
+        </ObservationContext.Provider>,
         args.settings,
-        args.startupWarnings,
-        args.version,
-        args.runtimeMessageBus,
-        args.recordingIntegration,
-        args.resumedHistory,
-        args.initialRecordingService,
-        args.initialLockHandle,
-        args.suppressStartupWelcome,
-        args.perfOwner,
-        args.recordingOwner,
-        args.oauthManager,
+        new DebugLogger('llxprt:interactive', args.debugConfiguration),
       ),
       renderOptions,
     );
 
     // Sync-cleanup registration (guarded against duplicate registration).
-    if (!syncCleanupRegistered) {
+    if (!args.terminalHost.syncCleanupRegistered) {
       ports.registerSync(restoreTerminalProtocolsSync);
-      syncCleanupRegistered = true;
+      args.terminalHost.syncCleanupRegistered = true;
     }
 
     await ports.setupLifecycle(
@@ -753,18 +728,19 @@ export async function commitInteractiveStartup(
         projectRoot: args.config.getProjectRoot(),
         debugMode: args.config.getDebugMode(),
       },
-      args.perfOwner,
+      state.owner,
+      args.terminalHost,
     );
 
     return state.instance;
   } catch (primaryError) {
-    // Single transactional rollback. Atomically clear tracked module refs so
+    // Single transactional rollback. Atomically clear tracked host resources so
     // the registered global cleanup cannot double-dispose the same
     // instance/owner. Then tear down staged instance/owner/mouse/terminal
     // independently. The primary failure is preserved first; every cleanup
     // error aggregates behind it. Stages before mouse activation leave
     // mouseStaged=false so unstaged mouse is NOT falsely disabled.
-    captureAndClearTrackedInstanceAndOwner();
+    args.terminalHost.release();
     const { mouse, restore } = buildTerminalRollbackCapabilities(
       state.mouseStaged,
     );
@@ -781,7 +757,8 @@ async function setupInstanceLifecycle(
   instance: InteractiveInstanceCapability,
   settings: LoadedSettings,
   runtimeScalars: { projectRoot: string; debugMode: boolean },
-  perfOwner: InteractivePerfRuntime | null,
+  owner: InteractiveOwnerCapability,
+  terminalHost: TerminalHost,
 ): Promise<void> {
   checkForUpdates(settings)
     .then((info) => {
@@ -794,73 +771,120 @@ async function setupInstanceLifecycle(
       }
     });
 
-  // Prior instance/owner cleanup has ALREADY been done by
-  // replacePreviousInstanceAndOwner() before buildAndStartPerfOwner(). Here
-  // we only track the new instance and register the cleanup callback.
-
-  latestInstance = instance;
-  latestPerfOwner = perfOwner;
-  if (!cleanupRegistered) {
-    cleanupRegistered = true;
-    // Registered global cleanup uses the SAME capture+clear+dispose helper as
-    // replacePreviousInstanceAndOwner: capture and clear module refs BEFORE
-    // disposal so exactly-once is guaranteed even when disposal throws. If a
-    // replacement already captured+cleared, this callback finds empty slots
-    // and is a no-op; if this callback runs first, the replacement is a no-op.
-    registerCleanup(async () => {
-      const { instance, owner } = captureAndClearTrackedInstanceAndOwner();
-      await cleanupInstanceAndOwner(instance, owner);
-    });
+  terminalHost.publish(instance, owner);
+  if (!terminalHost.cleanupRegistered) {
+    terminalHost.cleanupRegistered = true;
+    registerCleanup(() => terminalHost.cleanup());
   }
-}
-
-/**
- * Atomically captures the currently tracked instance/owner and clears the
- * module-level references. Used by the registered global cleanup,
- * {@link replacePreviousInstanceAndOwner}, and the setup-failure transactional
- * catch so all three paths share one exactly-once disposal point: the
- * capture+clear happens before any disposal attempt, so even when disposal
- * throws the slots are already empty and no second path can re-dispose the
- * same instance/owner.
- */
-function captureAndClearTrackedInstanceAndOwner(): {
-  instance: InteractiveInstanceCapability | undefined;
-  owner: InteractiveOwnerCapability | null;
-} {
-  const instance = latestInstance;
-  const owner = latestPerfOwner;
-  latestInstance = undefined;
-  latestPerfOwner = null;
-  return { instance, owner };
-}
-
-/**
- * Deterministic pre-start replacement: tears down any previous interactive
- * instance and perf owner BEFORE a new owner is constructed and started. This
- * prevents observer-conflict: a new owner's installObservers() must not
- * collide with a previous owner's still-installed observers.
- *
- * Delegates to {@link captureAndClearTrackedInstanceAndOwner} +
- * {@link cleanupInstanceAndOwner} so clear, unmount, and dispose run
- * independently and internal errors surface as one Error or AggregateError.
- * Tracking is cleared BEFORE cleanup so the slots are reclaimable even when
- * cleanup throws.
- */
-export async function replacePreviousInstanceAndOwner(): Promise<void> {
-  const { instance, owner } = captureAndClearTrackedInstanceAndOwner();
-  await cleanupInstanceAndOwner(instance, owner);
 }
 
 async function initializeInteractivePresentation(
   workspaceRoot: string,
   settings: LoadedSettings,
+  terminalHost: TerminalHost,
 ): Promise<string> {
   const version = await getCliVersion();
 
   appendInteractiveUiDebug(
     `startInteractiveUI version=${version} stdoutTTY=${String(process.stdout.isTTY)} columns=${String(process.stdout.columns)} rows=${String(process.stdout.rows)} builtinOnly=${String(process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY)} suppressStatic=${String(process.env.LLXPRT_CODE_SUPPRESS_STATIC_HEADER)}`,
   );
-  setWindowTitle(basename(workspaceRoot), settings);
+  setWindowTitle(basename(workspaceRoot), settings, terminalHost);
 
   return version;
+}
+
+function renderInteractiveShell(
+  element: React.ReactElement,
+  settings: LoadedSettings,
+  logger: Pick<DebugLogger, 'error'>,
+): React.ReactElement {
+  const errorHandler = {
+    handle(error: Error, info: ErrorInfo): void {
+      handleError(error, info, logger);
+    },
+  };
+  return (
+    <React.StrictMode>
+      <ErrorBoundary onError={errorHandler.handle}>
+        <SettingsContext.Provider value={settings}>
+          {element}
+        </SettingsContext.Provider>
+      </ErrorBoundary>
+    </React.StrictMode>
+  );
+}
+
+function bindApplicationOperations(
+  agent: Pick<
+    InteractiveApplicationInputs,
+    | 'addHistory'
+    | 'getHistory'
+    | 'stream'
+    | 'injectSteer'
+    | 'getProviderContextLimit'
+    | 'dispose'
+    | 'getApprovalMode'
+    | 'setApprovalMode'
+    | 'generate'
+    | 'getModel'
+    | 'getProvider'
+    | 'getCurrentSequenceModel'
+    | 'getActiveProfileName'
+    | 'addDirectoryContext'
+    | 'compress'
+    | 'setProvider'
+    | 'saveProfileSnapshot'
+    | 'deleteProfileByName'
+    | 'setDefaultProfileName'
+    | 'listProviders'
+    | 'session'
+    | 'providerReads'
+    | 'policy'
+    | 'ide'
+    | 'hooks'
+    | 'auth'
+    | 'sessionClient'
+    | 'profiles'
+    | 'workspace'
+    | 'tools'
+    | 'mcp'
+    | 'tasks'
+    | 'metrics'
+  >,
+) {
+  return {
+    addHistory: agent.addHistory.bind(agent),
+    getHistory: agent.getHistory.bind(agent),
+    stream: agent.stream.bind(agent),
+    injectSteer: agent.injectSteer.bind(agent),
+    getProviderContextLimit: agent.getProviderContextLimit.bind(agent),
+    dispose: agent.dispose.bind(agent),
+    getApprovalMode: agent.getApprovalMode.bind(agent),
+    setApprovalMode: agent.setApprovalMode.bind(agent),
+    generate: agent.generate.bind(agent),
+    getModel: agent.getModel.bind(agent),
+    getProvider: agent.getProvider.bind(agent),
+    getCurrentSequenceModel: agent.getCurrentSequenceModel.bind(agent),
+    getActiveProfileName: agent.getActiveProfileName.bind(agent),
+    addDirectoryContext: agent.addDirectoryContext.bind(agent),
+    compress: agent.compress.bind(agent),
+    setProvider: agent.setProvider.bind(agent),
+    saveProfileSnapshot: agent.saveProfileSnapshot.bind(agent),
+    deleteProfileByName: agent.deleteProfileByName.bind(agent),
+    setDefaultProfileName: agent.setDefaultProfileName.bind(agent),
+    listProviders: agent.listProviders.bind(agent),
+    session: agent.session,
+    providerReads: agent.providerReads,
+    policy: agent.policy,
+    ide: agent.ide,
+    hooks: agent.hooks,
+    auth: agent.auth,
+    sessionClient: agent.sessionClient,
+    profiles: agent.profiles,
+    workspace: agent.workspace,
+    tools: agent.tools,
+    mcp: agent.mcp,
+    tasks: agent.tasks,
+    metrics: agent.metrics,
+  };
 }

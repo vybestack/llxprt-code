@@ -3,7 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { RuntimeOwnerFeatures } from '../ui/contexts/RuntimeContext.js';
+import type { SetActiveModelOperation } from '../ui/contexts/RuntimeContext.js';
 
 interface SessionModelCommands {
   getModel(): string;
@@ -13,7 +13,7 @@ interface SessionModelCommands {
 
 export function createSessionModelCommand(
   session: SessionModelCommands,
-): RuntimeOwnerFeatures['setActiveModel'] {
+): SetActiveModelOperation {
   return async (model) => {
     const previousModel = session.getModel();
     await session.setModel(model);

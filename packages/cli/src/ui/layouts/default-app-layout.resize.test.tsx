@@ -17,13 +17,29 @@ const realInk: typeof import('ink') = await import(import.meta.resolve('ink'));
 const { render: renderInk, measureElement } = realInk;
 void vi.mock('ink', () => realInk);
 const runtimeContext = await import('../contexts/RuntimeContext.js');
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  ...runtimeContext,
-  useRuntimeApi: () => ({
-    getEphemeralSetting: () => undefined,
-    getWorkspaceDirectories: () => [],
-  }),
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => ({
+      getEphemeralSetting: () => undefined,
+      getWorkspaceDirectories: () => [],
+    });
+    return {
+      ...runtimeContext,
+
+      useGetEphemeralSetting: () =>
+        useSelectedTestRuntime().getEphemeralSetting,
+
+      useGetWorkspaceDirectories: () =>
+        useSelectedTestRuntime().getWorkspaceDirectories,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 const { Config } = await import('@vybestack/llxprt-code-core');
 const { createUiSessionOwner } = await import(
@@ -33,8 +49,11 @@ const { wrapWithProviders, createMockSettings } = await import(
   '../../__tests__/render.js'
 );
 const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
-const { buildSlashCommandRuntime, buildUiRuntimeFromSource } = await import(
-  '../cliUiRuntime.js'
+const { buildUiRuntimeFromSource } = await import(
+  '../../__tests__/ui-runtime-composition-fixture.js'
+);
+const { buildLayoutRuntimeForTest } = await import(
+  '../../__tests__/slash-command-runtime-fixture.js'
 );
 const { TerminalProvider } = await import(
   '../stores/terminal/TerminalContext.js'
@@ -168,19 +187,30 @@ async function withLayout(
     debugMode: false,
     model: 'test-model',
   });
-  const owner = createUiSessionOwner(config);
+  const owner = await createUiSessionOwner(config);
   const rootUiRef: { current: DOMElement | null } = { current: null };
   const mainControlsRef: { current: DOMElement | null } = { current: null };
   const pendingHistoryItemRef: { current: DOMElement | null } = {
     current: null,
   };
+  const uiRuntime = buildUiRuntimeFromSource(config, owner);
   const view = renderInAct(
     wrapWithProviders(
       <TerminalProvider store={terminal}>
         <TurnProvider store={turn}>
           <DefaultAppLayout
-            uiRuntime={buildUiRuntimeFromSource(config, owner)}
-            slashCommandRuntime={buildSlashCommandRuntime(config, owner)}
+            readIdeMode={() => false}
+            readIdeDiffingEnabled={() => false}
+            subscribeIdeDiffing={() => () => {}}
+            resolveIdeDiff={async () => {}}
+            readIdeWorkspaceTrust={() => undefined}
+            subscribeIdeWorkspaceTrust={() => () => {}}
+            screenReaderEnabled={uiRuntime.app.getScreenReader()}
+            disableLoadingPhrases={
+              uiRuntime.app.getAccessibility().disableLoadingPhrases === true
+            }
+            debugMode={uiRuntime.app.getDebugMode()}
+            layoutRuntime={buildLayoutRuntimeForTest(config, owner)}
             settings={settings}
             startupWarnings={[]}
             version="test"

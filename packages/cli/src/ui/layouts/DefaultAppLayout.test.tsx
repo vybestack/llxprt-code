@@ -32,10 +32,8 @@ import {
   type DialogKind,
   type DialogStore,
 } from '../stores/dialog/dialogStore.js';
-import {
-  buildSlashCommandRuntime,
-  buildUiRuntimeFromSource,
-} from '../cliUiRuntime.js';
+import { buildUiRuntimeFromSource } from '../../__tests__/ui-runtime-composition-fixture.js';
+import { buildLayoutRuntimeForTest } from '../../__tests__/slash-command-runtime-fixture.js';
 
 const DIALOG_MANAGER_SENTINEL = 'DIALOG_MANAGER_RENDERED';
 const STANDARD_BUFFER_SENTINEL = 'STANDARD_BUFFER_HISTORY';
@@ -115,15 +113,6 @@ void vi.mock('../colors.js', () => ({
   SemanticColors: new Proxy({}, { get: () => '#808080' }),
 }));
 
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  ephemeralSettingHelp: {},
-  parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
-    success: true,
-    value: rawValue,
-  })),
-  applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
-}));
-
 function createConfigStub() {
   return {
     getScreenReader: () => false,
@@ -131,6 +120,7 @@ function createConfigStub() {
     getMcpServers: () => [],
     getBlockedMcpServers: () => [],
     getTargetDir: () => '/tmp',
+    getProjectTempDir: () => '/tmp',
     getDebugMode: () => false,
     getEphemeralSetting: () => undefined,
     isTrustedFolder: () => true,
@@ -227,18 +217,32 @@ interface RenderLayoutOptions {
   store?: DialogStore;
 }
 
-function renderDefaultAppLayout({
+async function renderDefaultAppLayout({
   settings = createSettingsStub(),
   store = createDialogStore(),
-}: RenderLayoutOptions = {}): ReturnType<typeof render> {
+}: RenderLayoutOptions = {}): Promise<ReturnType<typeof render>> {
   const config = createConfigStub() as never;
 
+  const uiRuntime = buildUiRuntimeFromSource(
+    config,
+    await createUiSessionOwner(),
+  );
   const inner = (
     <DefaultAppLayout
-      uiRuntime={buildUiRuntimeFromSource(config, createUiSessionOwner())}
-      slashCommandRuntime={buildSlashCommandRuntime(
+      readIdeMode={() => false}
+      readIdeDiffingEnabled={() => false}
+      subscribeIdeDiffing={() => () => {}}
+      resolveIdeDiff={async () => {}}
+      readIdeWorkspaceTrust={() => undefined}
+      subscribeIdeWorkspaceTrust={() => () => {}}
+      screenReaderEnabled={uiRuntime.app.getScreenReader()}
+      disableLoadingPhrases={
+        uiRuntime.app.getAccessibility().disableLoadingPhrases === true
+      }
+      debugMode={uiRuntime.app.getDebugMode()}
+      layoutRuntime={buildLayoutRuntimeForTest(
         config,
-        createUiSessionOwner(),
+        await createUiSessionOwner(),
       )}
       settings={settings as never}
       startupWarnings={[]}
@@ -288,11 +292,11 @@ describe('DefaultAppLayout', () => {
 
   it.each(STORE_DRIVEN_DIALOG_KINDS.map((kind) => [kind] as const))(
     'renders DialogManager instead of Composer when the %s dialog is open in the DialogStore',
-    (kind) => {
+    async (kind) => {
       const store = createDialogStore();
       openStoreDialog(store, kind);
 
-      const rendered = renderDefaultAppLayout({ store });
+      const rendered = await renderDefaultAppLayout({ store });
       const frame = rendered.lastFrame();
 
       expect(frame).toContain(DIALOG_MANAGER_SENTINEL);
@@ -301,8 +305,8 @@ describe('DefaultAppLayout', () => {
     },
   );
 
-  it('renders Composer when no dialog is open', () => {
-    const rendered = renderDefaultAppLayout();
+  it('renders Composer when no dialog is open', async () => {
+    const rendered = await renderDefaultAppLayout();
     const frame = rendered.lastFrame();
 
     expect(frame).toContain(COMPOSER_SENTINEL);
@@ -310,12 +314,12 @@ describe('DefaultAppLayout', () => {
     rendered.unmount();
   });
 
-  it('renders standard and alternate buffer layout branches according to settings', () => {
-    const alternateBuffer = renderDefaultAppLayout();
+  it('renders standard and alternate buffer layout branches according to settings', async () => {
+    const alternateBuffer = await renderDefaultAppLayout();
     const alternateBufferFrame = alternateBuffer.lastFrame();
     alternateBuffer.unmount();
 
-    const standardBuffer = renderDefaultAppLayout({
+    const standardBuffer = await renderDefaultAppLayout({
       settings: createSettingsStub({ useAlternateBuffer: false }),
     });
     const standardBufferFrame = standardBuffer.lastFrame();

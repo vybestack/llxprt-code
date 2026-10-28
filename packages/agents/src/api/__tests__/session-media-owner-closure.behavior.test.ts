@@ -3,48 +3,97 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+
+import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { mkdtemp, readdir, realpath, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createHash } from 'node:crypto';
-import type { MediaReferenceBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { buildAgent, internalConfig } from './helpers/agentHarness.js';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-import { isMediaReferenceBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import {
-  LocalMediaStore,
-  requireMediaStore,
-} from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { createRuntimeActivationBindings } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
-import { fromConfig } from '../fromConfig.js';
-import type { Agent } from '../agent.js';
+  MediaReferenceBlock,
+  isMediaReferenceBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { createAgent } from '../createAgent.js';
+import { Agent } from '../agent.js';
+import type { AgentConfig } from '../config-types.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { openRouteAAgent } from './helpers/route-a-agent.js';
+
+const SESSION_LABEL = 'identical-session-label';
+
+interface SameLabelRoots {
+  readonly workingDir: string;
+  readonly projectTempDir: string;
+  readonly firstStore: LocalMediaStore;
+  readonly secondStore: LocalMediaStore;
+}
+
+async function readProjectMedia(
+  workingDir: string,
+): Promise<{ projectTempDir: string; quotaBytes: number }> {
+  const probe = new Config(
+    toConfigParameters({
+      provider: 'fake',
+      model: 'fake-model',
+      sessionId: SESSION_LABEL,
+      workingDir,
+    }),
+  );
+  try {
+    return {
+      projectTempDir: probe.projectTempDir,
+      quotaBytes: probe.getMediaStoreQuotaByteLimit(),
+    };
+  } finally {
+    await probe.dispose();
+  }
+}
 
 async function withSameLabelAgents(
-  scenario: (first: Agent, second: Agent) => Promise<void>,
+  scenario: (
+    first: Agent,
+    second: Agent,
+    roots: SameLabelRoots,
+  ) => Promise<void>,
 ): Promise<void> {
-  const workingDir = await mkdtemp(join(tmpdir(), 'session-media-owner-'));
-  const first = await buildAgent('multi-turn-text.jsonl', {
+  const workingDir = await realpath(
+    await mkdtemp(join(tmpdir(), 'session-media-owner-')),
+  );
+  const { projectTempDir, quotaBytes } = await readProjectMedia(workingDir);
+  const firstMedia = new SessionMediaOwner(projectTempDir, quotaBytes);
+  const secondMedia = new SessionMediaOwner(projectTempDir, quotaBytes);
+  const sameLabelConfig = (mediaOwner: SessionMediaOwner): AgentConfig => ({
+    provider: 'fake',
+    model: 'fake-model',
+    credentialAuthority: new CredentialAuthority(),
     workingDir,
-    sessionId: 'identical-session-label',
+    sessionId: SESSION_LABEL,
+    mediaOwner,
   });
-  const projectTemp = internalConfig(first.agent).projectTempDir;
+  const first = await createAgent(sameLabelConfig(firstMedia));
   try {
-    const second = await buildAgent('multi-turn-text.jsonl', {
-      workingDir,
-      sessionId: 'identical-session-label',
-    });
+    const second = await createAgent(sameLabelConfig(secondMedia));
     try {
-      await scenario(first.agent, second.agent);
+      await scenario(first, second, {
+        workingDir,
+        projectTempDir,
+        firstStore: firstMedia.store,
+        secondStore: secondMedia.store,
+      });
     } finally {
-      await second.cleanup();
+      await second.dispose();
     }
   } finally {
     try {
-      await first.cleanup();
+      await first.dispose();
     } finally {
-      await rm(projectTemp, { recursive: true, force: true });
+      await rm(projectTempDir, { recursive: true, force: true });
       await rm(workingDir, { recursive: true, force: true });
     }
   }
@@ -76,6 +125,21 @@ function contentIdFor(data: string): string {
 }
 
 describe('public Agent session media ownership closure', () => {
+  useFakeResponsesReplay('multi-turn-text.jsonl');
+
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
   it('rejects an unpersisted sibling reference despite identical project and session labels', async () => {
     await withSameLabelAgents(async (first, second) => {
       await ingest(first, 'AQIDBA==');
@@ -89,11 +153,11 @@ describe('public Agent session media ownership closure', () => {
   }, 30000);
 
   it('isolates physical roots, leases and purge for same-label public Agents', async () => {
-    await withSameLabelAgents(async (first, second) => {
+    await withSameLabelAgents(async (first, second, roots) => {
       await ingest(first, 'AQIDBA==');
       await ingest(second, 'BQYHCA==');
-      const firstStore = requireMediaStore(first.agentClient);
-      const secondStore = requireMediaStore(second.agentClient);
+      const firstStore = roots.firstStore;
+      const secondStore = roots.secondStore;
       const reference = firstMedia(await second.getHistory());
       await secondStore.reserve(reference, 'external-test-lease');
       await first.setHistory([]);
@@ -125,10 +189,10 @@ describe('public Agent session media ownership closure', () => {
   }, 30000);
 
   it('closes an owned media store after disposing its public Agent', async () => {
-    await withSameLabelAgents(async (first, second) => {
+    await withSameLabelAgents(async (first, second, roots) => {
       await ingest(first, 'AQIDBA==');
       await ingest(second, 'BQYHCA==');
-      const store = requireMediaStore(first.agentClient);
+      const store = roots.firstStore;
       const reference = firstMedia(await first.getHistory());
       await first.dispose();
       await expect(store.readVerified(reference)).rejects.toThrow(/closed/i);
@@ -180,76 +244,58 @@ describe('public Agent session media ownership closure', () => {
     });
   }, 30000);
 
-  it('preserves the adopted Config, client and caller-owned media lifetime', async () => {
-    const built = await buildCliStyleConfig('multi-turn-text.jsonl');
-    await built.sessionClient.refreshAuth(undefined);
-    const client = built.agentClient;
-    await client.startChat();
-    const store = requireMediaStore(built.agentClient);
-    const agent = await fromConfig({
-      settingsOwner: built.settingsOwner,
-      settingsService: built.settingsService,
-      agentClient: built.agentClient,
-      providerManager: built.providerManager,
-      config: built.config,
-      messageBus: built.messageBus,
-      mcpRuntime: built.mcpRuntime,
+  it('adopts the caller Config and admits media through it', async () => {
+    const route = await openRouteAAgent({
+      config: { sessionId: SESSION_LABEL },
     });
     try {
-      expect({
-        retainedConfig: internalConfig(agent) === built.config,
-        retainedClient: built.agentClient === client,
-      }).toStrictEqual({ retainedConfig: true, retainedClient: true });
-      await ingest(agent, 'AQIDBA==');
-      const history = await agent.getHistory();
-      await agent.dispose();
-      await client.setHistory(history);
-      expect(await store.readVerified(firstMedia(history))).toStrictEqual(
-        new Uint8Array([1, 2, 3, 4]),
+      await ingest(route.agent, 'AQIDBA==');
+      expect(firstMedia(await route.agent.getHistory()).contentId).toBe(
+        contentIdFor('AQIDBA=='),
       );
+      expect(
+        await readdir(join(route.config.projectTempDir, 'media-live')),
+      ).toHaveLength(1);
     } finally {
-      await agent.dispose();
-      await built.cleanup();
-      await store.close();
+      await route.close();
     }
   }, 30000);
 
   it('closes failed activation media without closing a same-label sibling', async () => {
-    await withSameLabelAgents(async (first, second) => {
+    await withSameLabelAgents(async (first, second, roots) => {
       await ingest(first, 'AQIDBA==');
       await ingest(second, 'BQYHCA==');
-      const real = createRuntimeActivationBindings();
       const failedOwner = new SessionMediaOwner(
-        internalConfig(first).projectTempDir,
+        roots.projectTempDir,
         1024 * 1024,
       );
-      let failedStore: LocalMediaStore | undefined;
+      const failedStore = failedOwner.store;
+      const admitted = await failedStore.admit({
+        bytes: new Uint8Array([9, 10, 11, 12]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      });
+      expect(await failedStore.readVerified(admitted)).toStrictEqual(
+        new Uint8Array([9, 10, 11, 12]),
+      );
       await expect(
-        buildAgent('multi-turn-text.jsonl', {
-          workingDir: internalConfig(first).getWorkingDir(),
-          sessionId: 'identical-session-label',
+        createAgent({
+          provider: 'fake',
+          model: 'fake-model',
+          credentialAuthority: new CredentialAuthority(),
+          workingDir: roots.workingDir,
+          sessionId: SESSION_LABEL,
           mediaOwner: failedOwner,
           activation: {
             provider: 'unregistered-failure-provider',
             providerSwitchPolicy: 'strict',
           },
-          runtimeActivationBindings: {
-            ...real,
-            registerInfrastructure: async (manager, oauth, options) => {
-              await real.registerInfrastructure(manager, oauth, options);
-              if (!options.config) throw new Error('Missing activation Config');
-              failedStore = failedOwner.store;
-              await failedStore.admit({
-                bytes: new Uint8Array([9, 10, 11, 12]),
-                mimeType: 'image/png',
-                semanticMetadata: {},
-              });
-            },
-          },
         }),
       ).rejects.toThrow('createAgent activation failed');
-      if (failedStore === undefined) throw new Error('Missing failed owner');
       await expect(failedStore.getStoredByteLength()).rejects.toThrow(
+        /closed/i,
+      );
+      await expect(failedStore.readVerified(admitted)).rejects.toThrow(
         /closed/i,
       );
       await second.setHistory(await second.getHistory());

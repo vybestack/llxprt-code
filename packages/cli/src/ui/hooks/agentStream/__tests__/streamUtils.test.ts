@@ -526,7 +526,9 @@ describe('handleSubmissionError', () => {
     const result = handleSubmissionError(
       err,
       mockAddItem,
-      mockConfig,
+      () => mockConfig.model.getProvider(),
+      () => mockConfig.settings.readSelectedProvider(),
+      () => mockConfig.model.getModel(),
       mockOnAuthError,
       Date.now(),
     );
@@ -539,7 +541,9 @@ describe('handleSubmissionError', () => {
     const result = handleSubmissionError(
       new Error('Something broke'),
       mockAddItem,
-      mockConfig,
+      () => mockConfig.model.getProvider(),
+      () => mockConfig.settings.readSelectedProvider(),
+      () => mockConfig.model.getModel(),
       mockOnAuthError,
       Date.now(),
     );
@@ -555,7 +559,9 @@ describe('handleSubmissionError', () => {
     handleSubmissionError(
       new Error('Rate limited'),
       mockAddItem,
-      makeConfig('anthropic'),
+      () => makeConfig('anthropic').model.getProvider(),
+      () => makeConfig('anthropic').settings.readSelectedProvider(),
+      () => makeConfig('anthropic').model.getModel(),
       mockOnAuthError,
       Date.now(),
     );
@@ -570,7 +576,9 @@ describe('handleSubmissionError', () => {
     handleSubmissionError(
       new Error('Rate limited'),
       mockAddItem,
-      makeConfig('Gemini'),
+      () => makeConfig('Gemini').model.getProvider(),
+      () => makeConfig('Gemini').settings.readSelectedProvider(),
+      () => makeConfig('Gemini').model.getModel(),
       mockOnAuthError,
       Date.now(),
     );
@@ -585,7 +593,9 @@ describe('handleSubmissionError', () => {
     handleSubmissionError(
       new Error('Rate limited'),
       mockAddItem,
-      makeConfig('   '),
+      () => makeConfig('   ').model.getProvider(),
+      () => makeConfig('   ').settings.readSelectedProvider(),
+      () => makeConfig('   ').model.getModel(),
       mockOnAuthError,
       Date.now(),
     );
@@ -604,7 +614,9 @@ describe('handleSubmissionError', () => {
     const result = handleSubmissionError(
       abortErr,
       mockAddItem,
-      mockConfig,
+      () => mockConfig.model.getProvider(),
+      () => mockConfig.settings.readSelectedProvider(),
+      () => mockConfig.model.getModel(),
       mockOnAuthError,
       Date.now(),
     );
@@ -627,7 +639,9 @@ describe('handleSubmissionError', () => {
     const submissionHandled = handleSubmissionError(
       abortErrWithoutCode,
       mockAddItem,
-      mockConfig,
+      () => mockConfig.model.getProvider(),
+      () => mockConfig.settings.readSelectedProvider(),
+      () => mockConfig.model.getModel(),
       mockOnAuthError,
       Date.now(),
     );
@@ -667,7 +681,11 @@ describe('showCitations', () => {
     const config = makeConfig({
       readCitations: () => mockSettingsService.get(),
     });
-    expect(showCitations(makeSettings(undefined), config)).toBe(true);
+    expect(
+      showCitations(makeSettings(undefined), () =>
+        config.settings.readCitations(),
+      ),
+    ).toBe(true);
   });
 
   it('returns false when settingsService overrides merged settings', () => {
@@ -675,7 +693,9 @@ describe('showCitations', () => {
     const config = makeConfig({
       readCitations: () => mockSettingsService.get(),
     });
-    expect(showCitations(makeSettings(true), config)).toBe(false);
+    expect(
+      showCitations(makeSettings(true), () => config.settings.readCitations()),
+    ).toBe(false);
   });
 
   it('falls through to settings.merged when settingsService.get returns undefined', () => {
@@ -683,7 +703,9 @@ describe('showCitations', () => {
     const config = makeConfig({
       readCitations: () => mockSettingsService.get(),
     });
-    expect(showCitations(makeSettings(true), config)).toBe(true);
+    expect(
+      showCitations(makeSettings(true), () => config.settings.readCitations()),
+    ).toBe(true);
   });
 
   it('falls through to settings.merged when settingsService throws', () => {
@@ -692,17 +714,25 @@ describe('showCitations', () => {
         throw new Error('unavailable');
       }),
     });
-    expect(showCitations(makeSettings(false), config)).toBe(false);
+    expect(
+      showCitations(makeSettings(false), () => config.settings.readCitations()),
+    ).toBe(false);
   });
 
   it('falls through to settings.merged when settingsService returns null', () => {
     const config = makeConfig({ readCitations: () => undefined });
-    expect(showCitations(makeSettings(true), config)).toBe(true);
+    expect(
+      showCitations(makeSettings(true), () => config.settings.readCitations()),
+    ).toBe(true);
   });
 
   it('returns false when both settings sources are absent (no tier fallback)', () => {
     const config = makeConfig({ readCitations: () => undefined });
-    expect(showCitations(makeSettings(undefined), config)).toBe(false);
+    expect(
+      showCitations(makeSettings(undefined), () =>
+        config.settings.readCitations(),
+      ),
+    ).toBe(false);
   });
 });
 
@@ -718,7 +748,9 @@ describe('getCurrentProfileName', () => {
     const config = makeConfig({
       readProfileName: () => mockSettingsService.getCurrentProfileName(),
     });
-    expect(getCurrentProfileName(config)).toBe('custom-profile');
+    expect(getCurrentProfileName(() => config.settings.readProfileName())).toBe(
+      'custom-profile',
+    );
   });
 
   it('returns null when settingsService.getCurrentProfileName returns null', () => {
@@ -726,12 +758,16 @@ describe('getCurrentProfileName', () => {
     const config = makeConfig({
       readProfileName: () => mockSettingsService.getCurrentProfileName(),
     });
-    expect(getCurrentProfileName(config)).toBeNull();
+    expect(
+      getCurrentProfileName(() => config.settings.readProfileName()),
+    ).toBeNull();
   });
 
   it('returns null when settingsService returns null', () => {
     const config = makeConfig({ readProfileName: () => null });
-    expect(getCurrentProfileName(config)).toBeNull();
+    expect(
+      getCurrentProfileName(() => config.settings.readProfileName()),
+    ).toBeNull();
   });
 
   it('returns null when getSettingsService throws', () => {
@@ -740,7 +776,9 @@ describe('getCurrentProfileName', () => {
         throw new Error('unavailable');
       }),
     });
-    expect(getCurrentProfileName(config)).toBeNull();
+    expect(
+      getCurrentProfileName(() => config.settings.readProfileName()),
+    ).toBeNull();
   });
 
   it('returns null when settingsService has no getCurrentProfileName method', () => {
@@ -748,7 +786,9 @@ describe('getCurrentProfileName', () => {
     const config = makeConfig({
       readProfileName: () => mockSettingsService.getCurrentProfileName(),
     });
-    expect(getCurrentProfileName(config)).toBeNull();
+    expect(
+      getCurrentProfileName(() => config.settings.readProfileName()),
+    ).toBeNull();
   });
 });
 

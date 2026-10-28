@@ -15,12 +15,12 @@
  * ephemerals — preserving the issue #2364 fix inside agent construction.
  */
 
-const PROFILE_AUTH_EPHEMERAL_KEYS = [
+const PROFILE_AUTH_EPHEMERAL_KEYS = Object.freeze([
   'auth-key',
   'auth-keyfile',
   'auth-key-name',
   'base-url',
-] as const;
+] as const);
 
 export type ProfileAuthEphemeralSnapshot = Partial<
   Record<(typeof PROFILE_AUTH_EPHEMERAL_KEYS)[number], unknown>

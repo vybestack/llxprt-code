@@ -15,18 +15,36 @@ describe('save_memory', () => {
   evalTest('ALWAYS_PASSES', {
     name: 'should be able to save to memory',
     params: {
+      // The nightly model runs on CPU, where prompt prefill is the cost. The
+      // default registry sends about 14.6k prompt tokens, which cannot finish
+      // inside the rig's 240 s timeout. This case needs only save_memory, so
+      // register just that tool (tools.core) and drop the task tools that the
+      // registry always adds back; the real model call and assertions are
+      // unchanged.
       settings: {
-        excludeTools: ['todo_read', 'todo_write', 'todo_pause'],
+        tools: { core: ['save_memory'] },
+        excludeTools: [
+          'todo_read',
+          'todo_write',
+          'todo_pause',
+          'task',
+          'list_subagents',
+        ],
       },
     },
     prompt: [
       'Follow these instructions exactly.',
       '',
-      '1. Call the save_memory tool with the fact argument set exactly to:',
+      '1. Invoke the save_memory tool provided to you, using the native',
+      '   tool-calling mechanism, with the fact argument set exactly to:',
       '   "My favorite color is blue"',
+      '   Do not print, quote, or describe the tool call as text or JSON;',
+      '   actually invoke the tool.',
       '   Do not add, rephrase, qualify, or correct the fact in any way.',
+      '   Write no text before the tool call.',
       '',
-      '2. Then answer with exactly this text and nothing else:',
+      '2. Only after the tool result has been returned, answer with exactly',
+      '   this text and nothing else, once:',
       '   $blue$',
       '   Do not add any other words, punctuation, or explanation.',
     ].join('\n'),

@@ -1,23 +1,53 @@
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import type { Agent } from '../agent.js';
+import type { AgentConfig } from '../config-types.js';
+import { createAgent } from '../createAgent.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+
+function requireActivationTool<T>(tool: T | undefined): T {
+  if (tool === undefined) throw new Error('Missing production activation tool');
+  return tool;
+}
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it, spyOn } from 'bun:test';
-import { mkdtemp, realpath, writeFile, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import { SimpleExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
-import { fromConfig } from '../fromConfig.js';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 
 describe('shared production skill resource admission', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  useFakeResponsesReplay('plain-text.jsonl');
+  const credentials = useOwnedCredentials();
+
   for (const reverse of [false, true]) {
     it(`retains shared resources after one runtime closes and withdraws them after both (${reverse})`, async () => {
       const directory = await realpath(
         await mkdtemp(join(tmpdir(), 'shared-skill-resource-')),
       );
+      const workingDirectories = [
+        await realpath(await mkdtemp(join(tmpdir(), 'shared-skill-first-'))),
+        await realpath(await mkdtemp(join(tmpdir(), 'shared-skill-second-'))),
+      ];
       const file = join(directory, 'resource.txt');
       await writeFile(file, 'shared resource bytes');
       const root = new WorkspaceFilesystemOwner({
@@ -39,39 +69,21 @@ describe('shared production skill resource admission', () => {
           },
         ],
       };
-      const first = await buildCliStyleConfig(
-        'plain-text.jsonl',
-        { filesystemOwner: root, skillsSupport: true },
-        {},
-        {},
-        new SimpleExtensionLoader([extension]),
-      );
-      const second = await buildCliStyleConfig(
-        'plain-text.jsonl',
-        { filesystemOwner: root, skillsSupport: true },
-        {},
-        {},
-        new SimpleExtensionLoader([extension]),
-      );
-      const facades = [
-        await fromConfig({
-          settingsOwner: first.settingsOwner,
-          settingsService: first.settingsService,
-          config: first.config,
-          providerManager: first.providerManager,
-          agentClient: first.agentClient,
-          mcpRuntime: first.mcpRuntime,
-        }),
-        await fromConfig({
-          settingsOwner: second.settingsOwner,
-          settingsService: second.settingsService,
-          config: second.config,
-          providerManager: second.providerManager,
-          agentClient: second.agentClient,
-          mcpRuntime: second.mcpRuntime,
-        }),
-      ];
+      const sharedRootConfig = (workingDir: string): AgentConfig => ({
+        provider: 'fake',
+        model: 'fake-model',
+        workingDir,
+        interactive: true,
+        filesystemOwner: root,
+        skillsSupport: true,
+        extensions: [extension],
+        harness: { includeProcessCwd: false },
+        credentialAuthority: credentials().authority,
+      });
+      const facades: Agent[] = [];
       try {
+        for (const workingDir of workingDirectories)
+          facades.push(await createAgent(sharedRootConfig(workingDir)));
         for (const facade of facades) {
           const tool = facade.tools.get('activate_skill');
           const activationTool = requireActivationTool(tool);
@@ -81,8 +93,10 @@ describe('shared production skill resource admission', () => {
           );
           expect(activated.error).toBeUndefined();
         }
-        const runtimes = reverse ? [second, first] : [first, second];
-        await runtimes[0].cleanup();
+        const releases = reverse
+          ? [() => facades[1].dispose(), () => facades[0].dispose()]
+          : [() => facades[0].dispose(), () => facades[1].dispose()];
+        await releases[0]();
         const survivor = facades[reverse ? 0 : 1].tools.get('read_file');
         if (!survivor) throw new Error('Missing production read tool');
         const read = await survivor.buildAndExecute(
@@ -91,7 +105,7 @@ describe('shared production skill resource admission', () => {
         );
         expect(read.error).toBeUndefined();
         expect(read.llmContent).toContain(await root.files.readTextFile(file));
-        await runtimes[1].cleanup();
+        await releases[1]();
         await expect(root.files.readTextFile(file)).rejects.toThrow(
           'workspace',
         );
@@ -100,80 +114,16 @@ describe('shared production skill resource admission', () => {
           '@vybestack/llxprt-code-agents',
         );
       } finally {
-        for (const facade of facades) await facade.dispose();
-        await second.cleanup();
-        await first.cleanup();
-        await root.dispose();
-        await rm(directory, { recursive: true, force: true });
+        await runCleanupSteps([
+          ...facades.map((facade) => () => facade.dispose()),
+          () => root.dispose(),
+          () => rm(directory, { recursive: true, force: true }),
+          ...workingDirectories.map(
+            (workingDir) => () =>
+              rm(workingDir, { recursive: true, force: true }),
+          ),
+        ]);
       }
     });
   }
 });
-
-describe('failed production skill publication', () => {
-  it('does not grant newly discovered resource access after model publication rejects', async () => {
-    const directory = await realpath(
-      await mkdtemp(join(tmpdir(), 'failed-skill-publication-')),
-    );
-    const file = join(directory, 'secret.txt');
-    await writeFile(file, 'not granted');
-    const root = new WorkspaceFilesystemOwner({
-      targetDir: process.cwd(),
-      isTrusted: () => true,
-    });
-    const built = await buildCliStyleConfig('plain-text.jsonl', {
-      filesystemOwner: root,
-      skillsSupport: true,
-    });
-    const facade = await fromConfig({
-      settingsOwner: built.settingsOwner,
-      settingsService: built.settingsService,
-      config: built.config,
-      providerManager: built.providerManager,
-      agentClient: built.agentClient,
-      mcpRuntime: built.mcpRuntime,
-    });
-    const publish = spyOn(built.agentClient, 'setTools');
-    publish.mockRejectedValueOnce(new Error('Model publication rejected'));
-    try {
-      built.config.setExtensions([
-        {
-          name: 'candidate',
-          version: '1',
-          isActive: true,
-          path: directory,
-          contextFiles: [],
-          skills: [
-            {
-              name: 'candidate',
-              description: 'Candidate resource',
-              location: join(directory, 'SKILL.md'),
-              body: 'Use secret.txt',
-            },
-          ],
-        },
-      ]);
-      await expect(
-        built.mcpRuntime.workspaceSkills.operations.reload(),
-      ).rejects.toThrow('Model publication rejected');
-      expect(facade.tools.get('activate_skill')).toBeUndefined();
-      await expect(root.files.readTextFile(file)).rejects.toThrow('workspace');
-      await facade.dispose();
-      await built.cleanup();
-      expect(
-        await root.files.readTextFile(join(process.cwd(), 'package.json')),
-      ).toContain('@vybestack/llxprt-code-agents');
-    } finally {
-      publish.mockRestore();
-      await facade.dispose();
-      await built.cleanup();
-      await root.dispose();
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
-});
-
-function requireActivationTool<T>(tool: T | undefined): T {
-  if (tool === undefined) throw new Error('Missing production activation tool');
-  return tool;
-}

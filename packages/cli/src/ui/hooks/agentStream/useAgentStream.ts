@@ -15,8 +15,6 @@
 import { useMemo } from 'react';
 import {
   type EditorType,
-  type MessageBus,
-  type RecordingIntegration,
   type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
@@ -35,78 +33,56 @@ import { useCheckpointPersistence } from './checkpointPersistence.js';
 import type { useStreamState } from './useStreamState.js';
 import type { AgentStreamOrchestrationDeps } from './useAgentStreamOrchestration.js';
 import { useAgentStreamOrchestration } from './useAgentStreamOrchestration.js';
-import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
 import type { OperationLifecycleRegistry } from './operationLifecycle.js';
 
-export const useAgentStream = (
-  agent: Agent,
-  history: HistoryItem[],
-  addItem: UseHistoryManagerReturn['addItem'],
-  runtime: StreamRuntime,
-  settings: LoadedSettings,
-  onDebugMessage: (message: string) => void,
+export interface StreamInteractionInputs {
+  history: HistoryItem[];
+  addItem: UseHistoryManagerReturn['addItem'];
+  settings: LoadedSettings;
+  onDebugMessage: (message: string) => void;
   handleSlashCommand: (
     cmd: AgentRequestInput,
-  ) => Promise<SlashCommandProcessorResult | false>,
-  shellModeActive: boolean,
-  getPreferredEditor: () => EditorType | undefined,
-  onAuthError: () => void,
-  performMemoryRefresh: () => Promise<void>,
-  onEditorClose: () => void,
-  onCancelSubmit: (shouldRestorePrompt?: boolean) => void,
-  setShellInputFocused: (value: boolean) => void,
-  terminalWidth?: number,
-  terminalHeight?: number,
-  onEditorOpen: () => void = () => {},
-  recordingIntegration?: RecordingIntegration,
-  runtimeMessageBus?: MessageBus,
-  subagentManager?: UiSubagentManager,
-  removeItems?: RemoveHistoryItems,
-  operationLifecycle?: OperationLifecycleRegistry,
-  cancelActiveSlashCommand?: () => boolean,
-  recordingOwner?: 'agent' | 'raw',
-) => {
-  const orchestration = useAgentStreamOrchestration({
-    agent,
-    addItem,
-    removeItems,
-    runtime,
-    settings,
-    onDebugMessage,
-    handleSlashCommand,
-    shellModeActive,
-    getPreferredEditor,
-    onAuthError,
-    performMemoryRefresh,
-    onEditorClose,
-    onCancelSubmit,
-    setShellInputFocused,
-    terminalWidth,
-    terminalHeight,
-    onEditorOpen,
-    recordingIntegration,
-    recordingOwner,
-    runtimeMessageBus,
-    subagentManager,
-    operationLifecycle,
-    cancelActiveSlashCommand,
-  } satisfies AgentStreamOrchestrationDeps);
+  ) => Promise<SlashCommandProcessorResult | false>;
+  shellModeActive: boolean;
+  getPreferredEditor: () => EditorType | undefined;
+  onAuthError: () => void;
+  performMemoryRefresh: () => Promise<void>;
+  onEditorClose: () => void;
+  onCancelSubmit: (shouldRestorePrompt?: boolean) => void;
+  setShellInputFocused: (value: boolean) => void;
+  terminalWidth?: number;
+  terminalHeight?: number;
+  onEditorOpen?: () => void;
+  removeItems?: RemoveHistoryItems;
+  operationLifecycle?: OperationLifecycleRegistry;
+  cancelActiveSlashCommand?: () => boolean;
+}
 
+export interface AgentStreamInputs extends AgentStreamOrchestrationDeps {
+  history: HistoryItem[];
+  readHistory: Agent['getHistory'];
+  isCheckpointingEnabled: () => boolean;
+  projectCheckpointsDir: string;
+}
+
+export function useAgentStream(input: AgentStreamInputs) {
+  const orchestration = useAgentStreamOrchestration(input);
   return useAgentStreamReturn(
     orchestration,
-    runtime,
-    history,
-    agent,
-
-    onDebugMessage,
+    input.history,
+    input.readHistory,
+    input.isCheckpointingEnabled,
+    input.projectCheckpointsDir,
+    input.onDebugMessage,
   );
-};
+}
 
 function useAgentStreamReturn(
   orchestration: ReturnType<typeof useAgentStreamOrchestration>,
-  runtime: StreamRuntime,
   history: HistoryItem[],
-  agent: Agent,
+  readHistory: Agent['getHistory'],
+  isCheckpointingEnabled: () => boolean,
+  projectCheckpointsDir: string,
   onDebugMessage: (message: string) => void,
 ) {
   const pendingHistoryItems = usePendingHistoryItems(
@@ -116,11 +92,11 @@ function useAgentStreamReturn(
 
   useCheckpointPersistence(
     orchestration.toolCalls,
-    runtime,
+    isCheckpointingEnabled,
     orchestration.st.gitService,
     history,
-    agent,
-    runtime.projectCheckpointsDir,
+    readHistory,
+    projectCheckpointsDir,
     onDebugMessage,
   );
 

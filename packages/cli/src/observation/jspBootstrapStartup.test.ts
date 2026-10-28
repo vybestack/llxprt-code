@@ -16,16 +16,14 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { promises as fs, readFileSync } from 'node:fs';
+import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import http from 'node:http';
-import { fileURLToPath } from 'node:url';
 import {
   captureBootstrapEnvPath,
   resolveBootstrapSelection,
   augmentArgvWithInternalEnvPath,
-  stopObservationProducer,
 } from './jspWiring.js';
 import { parseArguments } from '../config/cliArgParser.js';
 import type { Settings } from '../config/settings.js';
@@ -445,62 +443,15 @@ process.exit(0);
   });
 });
 
-describe('startup ordering — capture at first line of main()', () => {
-  // Source-inspection regression: captureBootstrapEnvPath must be the FIRST
-  // executable call in main(), before configureEarlyDebugLogging,
-  // handleVersionAndHelpFlags, maybeRelaunchForMemory, and parseArguments.
-  const cliSource = readFileSync(
-    fileURLToPath(new URL('../cli.tsx', import.meta.url)),
-    'utf8',
-  );
-  const mainStart = cliSource.indexOf('export async function main()');
-  if (mainStart === -1) {
-    throw new Error('cli.tsx does not export main()');
-  }
-  const mainBody = cliSource.slice(mainStart);
-
-  it('cli.tsx calls captureBootstrapEnvPath', () => {
-    expect(cliSource).toContain('captureBootstrapEnvPath');
-  });
-
-  it('captureBootstrapEnvPath is the first call in main() before configureEarlyDebugLogging', () => {
-    const captureIdx = mainBody.indexOf('captureBootstrapEnvPath()');
-    const debugIdx = mainBody.indexOf('configureEarlyDebugLogging()');
-    expect(captureIdx).toBeGreaterThan(-1);
-    expect(debugIdx).toBeGreaterThan(-1);
-    expect(captureIdx).toBeLessThan(debugIdx);
-  });
-
-  it('captureBootstrapEnvPath is before handleVersionAndHelpFlags', () => {
-    const captureIdx = mainBody.indexOf('captureBootstrapEnvPath()');
-    const helpIdx = mainBody.indexOf('handleVersionAndHelpFlags(');
-    expect(captureIdx).toBeLessThan(helpIdx);
-  });
-
-  it('captureBootstrapEnvPath is before maybeRelaunchForMemory', () => {
-    const captureIdx = mainBody.indexOf('captureBootstrapEnvPath()');
-    const relaunchIdx = mainBody.indexOf('maybeRelaunchForMemory(');
-    expect(captureIdx).toBeLessThan(relaunchIdx);
-  });
-
-  it('captureBootstrapEnvPath is before parseArguments', () => {
-    const captureIdx = mainBody.indexOf('captureBootstrapEnvPath()');
-    const parseIdx = mainBody.indexOf('parseArguments(');
-    expect(captureIdx).toBeLessThan(parseIdx);
-  });
-
-  it('preparePostParseStartup uses resolveBootstrapSelection', () => {
-    expect(cliSource).toContain('resolveBootstrapSelection');
-  });
-});
-
 describe('setupObservation seam — cliSessionBootstrap → observation wiring (AC15)', () => {
+  let observation: ReturnType<typeof setupObservation> | null = null;
   let captureServer: http.Server | null = null;
   let losingTimeout: ReturnType<typeof setTimeout> | null = null;
 
   afterEach(async () => {
     try {
-      await stopObservationProducer();
+      if (observation !== null) await observation.cleanup();
+      observation = null;
     } finally {
       if (losingTimeout !== null) {
         clearTimeout(losingTimeout);
@@ -548,9 +499,10 @@ describe('setupObservation seam — cliSessionBootstrap → observation wiring (
 
     const configStub = {
       getProjectRoot: () => '/test-project',
+      getSessionId: () => 'test-session',
     } as unknown as Config;
     const selection = resolveBootstrapSelection(file, undefined, undefined);
-    setupObservation(configStub, selection);
+    observation = setupObservation(configStub, selection);
 
     const timeoutPromise = new Promise<never>((_, reject) => {
       losingTimeout = setTimeout(

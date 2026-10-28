@@ -12,7 +12,8 @@
  * via the injected AuthenticatorInterface to avoid a circular import cycle.
  */
 
-import type { ProfileManager } from '@vybestack/llxprt-code-settings';
+import type { InteractiveAuthRequestPort } from './interactive-auth-coordinator.js';
+import type { OAuthProfileReads } from './oauth-profile-reads.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type {
@@ -25,7 +26,9 @@ import type {
 
 import {
   refreshTokenUnderLock,
+  RefreshLockReleases,
   performDiskCheckUnderLock,
+  type RefreshErrorPolicy,
 } from './token-refresh-helper.js';
 import {
   resolveForceRefreshBaseline,
@@ -47,7 +50,7 @@ import {
   requiresInteractiveAuthentication,
 } from './interactive-auth-request.js';
 import {
-  extractRequestMetadata,
+  resolveTokenRequestBucket,
   resolveImplicitBucketToCheck,
 } from './token-request-args.js';
 import type { OAuthManagerRuntimeMessageBusDeps } from './types.js';
@@ -64,8 +67,6 @@ const logger = new DebugLogger('llxprt:oauth:token');
  * - TOCTOU double-check pattern around refresh
  * - Delegates auth flows to injected AuthenticatorInterface
  */
-
-type OAuthProfileReads = Pick<ProfileManager, 'loadProfile'>;
 
 export class TokenAccessCoordinator {
   private bucketResolutionLocks: Map<string, Promise<void>> = new Map();
@@ -87,6 +88,7 @@ export class TokenAccessCoordinator {
     private readonly proactiveRenewalManager: ProactiveRenewalManager,
     private readonly bucketManager: OAuthBucketManager,
     private readonly facadeRef: BucketFailoverOAuthManagerLike,
+    private readonly interactiveAuth: InteractiveAuthRequestPort,
     private readonly settings?: IOAuthSettingsProvider,
     private readonly readCurrentProfileName: () => string | null = () => null,
     private readonly readBucketPrompt: () => boolean = () => false,
@@ -94,7 +96,19 @@ export class TokenAccessCoordinator {
     private readonly readInteractiveAuthTimeout: () => unknown = () =>
       undefined,
     private readonly profiles?: OAuthProfileReads,
-  ) {}
+  ) {
+    this.refreshLockReleases = new RefreshLockReleases(tokenStore);
+  }
+
+  private readonly refreshLockReleases: RefreshLockReleases;
+
+  /**
+   * Reports refresh-lock release failures that happened while callers were
+   * refreshing. Called once, after the owner joined its accepted operations.
+   */
+  dispose(): void {
+    this.refreshLockReleases.throwRetained();
+  }
 
   // --------------------------------------------------------------------------
   // Authenticator injection (set after construction to avoid cycles)
@@ -202,6 +216,7 @@ export class TokenAccessCoordinator {
   async getOAuthToken(
     providerName: string,
     bucket?: string | unknown,
+    signal?: AbortSignal,
   ): Promise<OAuthToken | null> {
     logger.debug(
       () => `[FLOW] getOAuthToken() called for provider: ${providerName}`,
@@ -215,7 +230,7 @@ export class TokenAccessCoordinator {
     }
 
     const { explicitBucket, requestMetadata } =
-      this.resolveTokenRequestBucket(bucket);
+      resolveTokenRequestBucket(bucket);
     const effectiveMetadata = await this.resolveEffectiveMetadata(
       providerName,
       explicitBucket,
@@ -226,6 +241,7 @@ export class TokenAccessCoordinator {
       explicitBucket,
       bucket,
       effectiveMetadata,
+      signal,
     );
   }
 
@@ -253,6 +269,7 @@ export class TokenAccessCoordinator {
     bucketToUse: string | undefined,
     signal?: AbortSignal,
     renewals: ProactiveRenewalManager = this.proactiveRenewalManager,
+    errorPolicy: RefreshErrorPolicy = signal ? 'throw' : 'return-null',
   ): Promise<OAuthToken | null> {
     logger.debug(
       () => `[FLOW] Reading token from tokenStore for ${providerName}...`,
@@ -277,13 +294,22 @@ export class TokenAccessCoordinator {
     );
 
     if (token.expiry <= thirtySecondsFromNow) {
-      return this.refreshExpiredToken(
+      /**
+       * Handle token refresh when token is expired or expiring soon.
+       * Acquires refresh lock with TOCTOU double-check.
+       * Lock parameters: waitMs:10000 (hot path, not on user-facing single-bucket flow).
+       */
+      return refreshTokenUnderLock(
         providerName,
         bucketToUse,
         token,
         thirtySecondsFromNow,
-        signal,
+        this.tokenStore,
+        this.providerRegistry,
         renewals,
+        this.refreshLockReleases,
+        signal,
+        errorPolicy,
       );
     }
 
@@ -300,14 +326,9 @@ export class TokenAccessCoordinator {
     providerName: string,
     requestMetadata: OAuthTokenRequestMetadata | undefined,
   ): Promise<string | undefined> {
-    let bucketToUse: string | undefined;
-    await this.withBucketResolutionLock(providerName, async () => {
-      bucketToUse = await this.resolveBucketWithFailover(
-        providerName,
-        requestMetadata,
-      );
-    });
-    return bucketToUse;
+    return this.withBucketResolutionLock(providerName, () =>
+      this.resolveBucketWithFailover(providerName, requestMetadata),
+    );
   }
 
   /**
@@ -366,31 +387,6 @@ export class TokenAccessCoordinator {
     return bucketToUse;
   }
 
-  /**
-   * Handle token refresh when token is expired or expiring soon.
-   * Acquires refresh lock with TOCTOU double-check.
-   * Lock parameters: waitMs:10000 (hot path, not on user-facing single-bucket flow).
-   */
-  private async refreshExpiredToken(
-    providerName: string,
-    bucketToUse: string | undefined,
-    token: OAuthToken,
-    thirtySecondsFromNow: number,
-    signal?: AbortSignal,
-    renewals: ProactiveRenewalManager = this.proactiveRenewalManager,
-  ): Promise<OAuthToken | null> {
-    return refreshTokenUnderLock(
-      providerName,
-      bucketToUse,
-      token,
-      thirtySecondsFromNow,
-      this.tokenStore,
-      this.providerRegistry,
-      renewals,
-      signal,
-    );
-  }
-
   private async resolveEffectiveMetadata(
     providerName: string,
     explicitBucket: boolean,
@@ -406,17 +402,21 @@ export class TokenAccessCoordinator {
     explicitBucket: boolean,
     bucket: string | unknown,
     effectiveMetadata: OAuthTokenRequestMetadata | undefined,
+    signal?: AbortSignal,
   ): Promise<OAuthToken | null> {
     const bucketToUse = explicitBucket
       ? (bucket as string)
       : await this.resolveImplicitBucket(providerName, effectiveMetadata);
     try {
-      return await this.readAndValidateToken(providerName, bucketToUse);
-    } catch (error) {
-      logger.debug(
-        () =>
-          `[FLOW] getOAuthToken() ERROR for ${providerName}: ${error instanceof Error ? error.message : error}`,
+      return await this.readAndValidateToken(
+        providerName,
+        bucketToUse,
+        signal,
+        this.proactiveRenewalManager,
+        'return-null',
       );
+    } catch (error) {
+      if (signal) throw error;
       if (
         error instanceof Error &&
         error.message.includes('Unknown provider')
@@ -426,15 +426,6 @@ export class TokenAccessCoordinator {
       rethrowIfStoreOutage(error);
       return null;
     }
-  }
-
-  private resolveTokenRequestBucket(bucket: string | unknown): {
-    explicitBucket: boolean;
-    requestMetadata: OAuthTokenRequestMetadata | undefined;
-  } {
-    const explicitBucket = typeof bucket === 'string';
-    const requestMetadata = extractRequestMetadata(bucket);
-    return { explicitBucket, requestMetadata };
   }
 
   private async peekImplicitTokenRequest(
@@ -459,6 +450,7 @@ export class TokenAccessCoordinator {
   async getToken(
     providerName: string,
     bucket?: string | unknown,
+    signal?: AbortSignal,
   ): Promise<string | null> {
     logger.debug(
       () => `[FLOW] getToken() called for provider: ${providerName}`,
@@ -487,7 +479,7 @@ export class TokenAccessCoordinator {
       () => `[FLOW] Attempting to get existing token for ${providerName}...`,
     );
     const { explicitBucket, requestMetadata } =
-      this.resolveTokenRequestBucket(bucket);
+      resolveTokenRequestBucket(bucket);
     const effectiveMetadata = await this.resolveEffectiveMetadata(
       providerName,
       explicitBucket,
@@ -499,6 +491,7 @@ export class TokenAccessCoordinator {
       explicitBucket,
       bucket,
       effectiveMetadata,
+      signal,
     );
 
     if (token) {
@@ -540,6 +533,7 @@ export class TokenAccessCoordinator {
       authRequestContext,
       explicitBucket,
       effectiveMetadata,
+      signal,
     );
   }
 
@@ -585,6 +579,7 @@ export class TokenAccessCoordinator {
     bucket: string | unknown,
     explicitBucket: boolean,
     requestMetadata: OAuthTokenRequestMetadata | undefined,
+    signal?: AbortSignal,
   ): Promise<string | null> {
     logger.debug(
       () =>
@@ -632,6 +627,7 @@ export class TokenAccessCoordinator {
       requestMetadata,
       explicitBucket,
       challengeReason,
+      signal,
     );
   }
 
@@ -724,7 +720,7 @@ export class TokenAccessCoordinator {
           this.providerRegistry,
         );
       } finally {
-        await this.tokenStore.releaseRefreshLock(providerName, bucketToCheck);
+        await this.refreshLockReleases.release(providerName, bucketToCheck);
       }
     }
 
@@ -763,20 +759,24 @@ export class TokenAccessCoordinator {
     requestMetadata: OAuthTokenRequestMetadata | undefined,
     explicitBucket: boolean,
     reason: 'authentication-required' | 'reauthentication-required',
+    signal?: AbortSignal,
   ): Promise<string | null> {
+    signal?.throwIfAborted();
     // @plan PLAN-20260827-ISSUE2562.P04
     // @requirement REQ-2562-3
     const identity = this.readAuthIdentity?.();
     const runtimeKind = identity?.runtimeKind;
-    if (requiresInteractiveAuthentication(runtimeKind)) {
+    if (requiresInteractiveAuthentication(this.interactiveAuth, runtimeKind)) {
       const authenticatedBucket = bucketToCheck ?? 'default';
       await requestInteractiveAuthentication(
+        this.interactiveAuth,
         providerName,
         authenticatedBucket,
         runtimeKind,
         reason,
         this.readInteractiveAuthTimeout(),
         identity,
+        signal,
       );
       this.facadeRef.setSessionBucket(
         providerName,
@@ -784,9 +784,8 @@ export class TokenAccessCoordinator {
         requestMetadata,
       );
     } else {
-      // Use requireAuthenticator to validate the authenticator is wired, but
-      // route all calls through facadeRef so that spies on manager.authenticate
-      // intercept them (preserving the pre-refactor behaviour).
+      // The calls go through facadeRef so the manager's admission and owner
+      // signal apply; requireAuthenticator only validates the wiring.
       this.requireAuthenticator();
 
       const prompt = this.readBucketPrompt();
@@ -799,6 +798,7 @@ export class TokenAccessCoordinator {
           providerName,
           effectiveBuckets,
           requestMetadata,
+          signal,
         );
         const authenticatedBucket = effectiveBuckets[0];
         if (authenticatedBucket) {
@@ -810,7 +810,9 @@ export class TokenAccessCoordinator {
         }
       } else {
         const authenticatedBucket = bucketToCheck ?? 'default';
-        await this.facadeRef.authenticate(providerName, authenticatedBucket);
+        await this.facadeRef.authenticate(providerName, authenticatedBucket, {
+          signal,
+        });
         if (authenticatedBucket) {
           this.facadeRef.setSessionBucket(
             providerName,
@@ -824,6 +826,7 @@ export class TokenAccessCoordinator {
     const newToken = await this.getOAuthToken(
       providerName,
       explicitBucket ? bucketToCheck : requestMetadata,
+      signal,
     );
     return newToken ? newToken.access_token : null;
   }
@@ -961,6 +964,7 @@ export class TokenAccessCoordinator {
     providerName: string,
     failedAccessToken: string,
     bucket?: string,
+    signal?: AbortSignal,
   ): Promise<OAuthToken | null> {
     if (!this.providerRegistry.getProvider(providerName)) {
       logger.debug(
@@ -1021,16 +1025,17 @@ export class TokenAccessCoordinator {
       if (storedToken.access_token !== effectiveFailedToken) {
         return storedToken;
       }
-      const refreshedToken = await refreshStoredToken(
+      return await refreshStoredToken(
         providerName,
         storedToken,
         effectiveBucket,
         this.tokenStore,
         this.providerRegistry,
         this.proactiveRenewalManager,
+        signal,
       );
-      return refreshedToken;
     } catch (refreshError) {
+      if (signal?.aborted === true) throw refreshError;
       rethrowIfStoreOutage(refreshError);
       logger.debug(
         () =>
@@ -1038,7 +1043,7 @@ export class TokenAccessCoordinator {
       );
       return null;
     } finally {
-      await this.tokenStore.releaseRefreshLock(providerName, effectiveBucket);
+      await this.refreshLockReleases.release(providerName, effectiveBucket);
     }
   }
 }

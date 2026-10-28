@@ -1,3 +1,4 @@
+import { ToolKeysControl } from '../control/toolKeysControl.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -27,14 +28,13 @@ const fixtureRoot = installSchedulerToolFixture();
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import { Kind } from '@vybestack/llxprt-code-tools';
-import { ToolControl } from '../control/toolControl.js';
-import type { ToolControlDeps } from '../control/toolControl.js';
+import { ToolControl, wrapToolHandle } from '../control/toolControl.js';
 import { createToolControlDeps } from './helpers/fakeToolControlDeps.js';
-import { projectRegistryTool } from '../agentBootstrap.js';
+import { buildToolInfos, projectRegistryTool } from '../agentBootstrap.js';
 import { McpControl } from '../control/mcpControl.js';
 import type { McpControlDeps } from '../control/mcpControl.js';
 import type { EditorCallbacks } from '../config-types.js';
-import { getToolKeyStorage } from '@vybestack/llxprt-code-core';
+import { ToolKeyStorage } from '@vybestack/llxprt-code-core';
 
 const noopEditorCallbacks: EditorCallbacks = {
   getPreferredEditor: () => undefined,
@@ -51,32 +51,53 @@ const noopEditorCallbacks: EditorCallbacks = {
 function buildDepsWithRealTools(
   tools: readonly AnyDeclarativeTool[],
   opts: { readonly enabledNames?: readonly string[] } = {},
-): ToolControlDeps {
+): ToolControl {
   const fixture = fixtureRoot(tools, { enabledNames: opts.enabledNames });
-  return {
-    selection: fixture.selection,
-    describeConfiguration: () => ({
+  const storage = new ToolKeyStorage();
+  return new ToolControl(
+    () => {
+      throw new Error('Tool projection does not acquire a client channel');
+    },
+    undefined,
+    undefined,
+    (...args) => fixture.messageBus.respondToConfirmation(...args),
+    () =>
+      Object.freeze(
+        buildToolInfos(
+          fixture.selection
+            .getAllTools()
+            .map((tool) => projectRegistryTool(tool)),
+          new Set(fixture.selection.getEnabledTools().map((tool) => tool.name)),
+        ),
+      ),
+    (name) => {
+      const tool = fixture.selection.getTool(name);
+      return tool === undefined ? undefined : wrapToolHandle(tool);
+    },
+    (names) => fixture.settingsOwner.setAllowedTools(names),
+    () => ({
       registered: tools.map((tool) => ({ displayName: tool.displayName })),
       unregistered: [],
     }),
-    messageBus: fixture.messageBus,
-    config: fixture.config,
-    setAllowedTools: (names) => fixture.settingsOwner.setAllowedTools(names),
-    readExecutionPolicy: () => fixture.settingsOwner.readToolExecutionPolicy(),
-    getToolGovernance: () =>
-      fixture.settingsOwner.readToolGovernance(
-        fixture.config.getExcludeTools() ?? [],
-      ),
-    shellOwner: fixture.shellOwner,
-    editorCallbacksHolder: { editorCallbacks: noopEditorCallbacks },
-    displayCallbacksHolder: {},
-    resolveClient: () => {
+    { editorCallbacks: noopEditorCallbacks },
+    {},
+    () => {
       throw new Error(
         'Client resolution is outside the tool projection fixture',
       );
     },
-    keysDeps: { getStorage: () => getToolKeyStorage() },
-  };
+    new ToolKeysControl(
+      async (name) => ({
+        key: await storage.getKey(name),
+        keyFile: await storage.getKeyfilePath(name),
+      }),
+      (name, key) => storage.saveKey(name, key),
+      (name) => storage.deleteKey(name),
+      (name, file) => storage.setKeyfilePath(name, file),
+      (name) => storage.clearKeyfilePath(name),
+      (name) => storage.getKeyfilePath(name),
+    ),
+  );
 }
 
 describe('ToolControl.list enriched projection @plan:ISSUE-2376', () => {
@@ -87,7 +108,7 @@ describe('ToolControl.list enriched projection @plan:ISSUE-2376', () => {
       description: 'Reads many files at once.',
     });
     const deps = buildDepsWithRealTools([tool]);
-    const control = new ToolControl(deps);
+    const control = deps;
     const tools = control.list();
     expect(Object.isFrozen(tools)).toBe(true);
     const info = tools.find((t) => t.name === 'read_many_files');
@@ -114,7 +135,7 @@ describe('ToolControl.list enriched projection @plan:ISSUE-2376', () => {
     const tool = new MockTool({ name: 'disabled_tool' });
     // Pass an empty enabled set so the tool is present but NOT enabled.
     const deps = buildDepsWithRealTools([tool], { enabledNames: [] });
-    const control = new ToolControl(deps);
+    const control = deps;
     const info = control.list().find((t) => t.name === 'disabled_tool');
     expect(info).toBeDefined();
     expect(info?.enabled).toBe(false);
@@ -136,7 +157,7 @@ describe('ToolControl.list enriched projection @plan:ISSUE-2376', () => {
   it('projects source builtin/server for builtin tools and omits serverToolName for non-MCP tools', () => {
     const tool = new MockTool({ name: 'glob' });
     const deps = buildDepsWithRealTools([tool]);
-    const control = new ToolControl(deps);
+    const control = deps;
     const info = control.list().find((t) => t.name === 'glob');
     expect(info?.source).toBe('builtin');
     expect(info?.server).toBeUndefined();
@@ -147,7 +168,7 @@ describe('ToolControl.list enriched projection @plan:ISSUE-2376', () => {
 describe('ToolControl.get named-tool lookup handle @plan:ISSUE-2376', () => {
   it('returns undefined for an unknown tool name', () => {
     const deps = buildDepsWithRealTools([new MockTool({ name: 'glob' })]);
-    const control = new ToolControl(deps);
+    const control = deps;
     expect(control.get('nonexistent')).toBeUndefined();
   });
 
@@ -158,7 +179,7 @@ describe('ToolControl.get named-tool lookup handle @plan:ISSUE-2376', () => {
       description: 'Reads many files.',
     });
     const deps = buildDepsWithRealTools([tool]);
-    const control = new ToolControl(deps);
+    const control = deps;
     const handle = control.get('read_many_files');
     expect(handle).toBeDefined();
     expect(handle?.name).toBe('read_many_files');
@@ -181,7 +202,7 @@ describe('ToolControl.get named-tool lookup handle @plan:ISSUE-2376', () => {
       }),
     });
     const deps = buildDepsWithRealTools([tool]);
-    const control = new ToolControl(deps);
+    const control = deps;
     const handle = control.get('read_many_files');
     const invocation = handle!.build({});
     const result = await invocation.execute(new AbortController().signal);
@@ -199,7 +220,7 @@ describe('ToolControl.get named-tool lookup handle @plan:ISSUE-2376', () => {
       }),
     });
     const deps = buildDepsWithRealTools([tool]);
-    const control = new ToolControl(deps);
+    const control = deps;
     const handle = control.get('glob');
     const result = await handle!.buildAndExecute(
       { pattern: '*.ts' },
@@ -215,7 +236,7 @@ describe('ToolControl.get named-tool lookup handle @plan:ISSUE-2376', () => {
       displayName: 'Edit',
     });
     const deps = buildDepsWithRealTools([tool]);
-    const control = new ToolControl(deps);
+    const control = deps;
     const handle = control.get('edit');
     const invocation = handle!.build({});
     // MockTool defaults shouldConfirm to false → shouldConfirmExecute resolves false.
@@ -242,7 +263,7 @@ describe('ToolControl.get named-tool lookup handle @plan:ISSUE-2376', () => {
       configurable: true,
     });
     const deps = buildDepsWithRealTools([tool]);
-    const control = new ToolControl(deps);
+    const control = deps;
     const handle = control.get('shell');
     expect(typeof handle?.setContext).toBe('function');
     handle!.setContext!({ sessionId: 's1', interactiveMode: true });
@@ -255,7 +276,7 @@ describe('ToolControl.get named-tool lookup handle @plan:ISSUE-2376', () => {
   it('setContext() is absent on a plain (non-context-aware) tool', () => {
     const tool = new MockTool({ name: 'glob' });
     const deps = buildDepsWithRealTools([tool]);
-    const control = new ToolControl(deps);
+    const control = deps;
     const handle = control.get('glob');
     // A plain MockTool has no `context` property, so setContext is NOT attached.
     expect(handle?.setContext).toBeUndefined();
@@ -306,10 +327,9 @@ describe('McpControl details() resource description projection @plan:ISSUE-2376'
 
 describe('ToolControl.get via hardened fakeToolControlDeps @plan:ISSUE-2376', () => {
   it('returns real invocable tools whose build().execute() returns real behavior', async () => {
-    const { deps } = createToolControlDeps([
+    const { control } = createToolControlDeps([
       { name: 'fake_tool', enabled: true },
     ]);
-    const control = new ToolControl(deps);
     const handle = control.get('fake_tool');
     expect(handle).toBeDefined();
     expect(handle?.name).toBe('fake_tool');
@@ -325,10 +345,9 @@ describe('ToolControl.get via hardened fakeToolControlDeps @plan:ISSUE-2376', ()
   });
 
   it('buildAndExecute() runs build + execute end-to-end through the public surface', async () => {
-    const { deps } = createToolControlDeps([
+    const { control } = createToolControlDeps([
       { name: 'batch_tool', enabled: true },
     ]);
-    const control = new ToolControl(deps);
     const handle = control.get('batch_tool');
     const result = await handle!.buildAndExecute(
       { key: 'val' },
@@ -339,10 +358,9 @@ describe('ToolControl.get via hardened fakeToolControlDeps @plan:ISSUE-2376', ()
   });
 
   it('projects serverName/serverToolName for MCP tools in list()', () => {
-    const { deps } = createToolControlDeps([
+    const { control } = createToolControlDeps([
       { name: 'mcp_tool', serverName: 'srv', serverToolName: 'remote_tool' },
     ]);
-    const control = new ToolControl(deps);
     const info = control.list().find((t) => t.name === 'mcp_tool');
     expect(info).toBeDefined();
     expect(info?.source).toBe('mcp');
@@ -354,11 +372,10 @@ describe('ToolControl.get via hardened fakeToolControlDeps @plan:ISSUE-2376', ()
     // Covers wrapToolHandle's MCP detection, which now uses the same
     // readOptionalStringProp accessor as list() so both surfaces classify
     // tools identically (@plan:ISSUE-2376).
-    const { deps } = createToolControlDeps([
+    const { control } = createToolControlDeps([
       { name: 'mcp_tool', serverName: 'srv', serverToolName: 'remote_tool' },
       { name: 'builtin_tool' },
     ]);
-    const control = new ToolControl(deps);
     expect(control.get('mcp_tool')?.source).toBe('mcp');
     expect(control.get('builtin_tool')?.source).toBe('builtin');
   });

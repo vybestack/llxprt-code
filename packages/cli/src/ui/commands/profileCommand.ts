@@ -1,13 +1,7 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
- */
-
-/**
- * @plan:PLAN-20260603-ISSUE1584.P12
- * @requirement:REQ-API-001
- * @pseudocode consumer-migration.md lines 10-15
  */
 
 import type {
@@ -17,484 +11,257 @@ import type {
   OpenDialogActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { SettingScope } from '../../config/settings.js';
 import {
-  profileSaveSchema,
-  profileLoadSchema,
-  profileDeleteSchema,
-  profileSetDefaultSchema,
-  profileShowSchema,
-  profileEditSchema,
   extractProfileName,
   validateProfileName,
-  listProfiles,
+  type ProfileSchemas,
 } from './profileSchemas.js';
 import {
-  saveModelProfile,
-  saveLoadBalancerProfile,
-} from './profileLoadBalancer.js';
-import {
   classifyLoadError,
-  applyLoadedProfileConfig,
-  recordProviderSwitch,
-  schedulePaymentModeCheck,
   formatProfileMessages,
   logger,
   type ProfileLoadResultView,
 } from './profileLoad.js';
 
-/**
- * Profile save subcommand
- */
-const saveCommand: SlashCommand = {
-  name: 'save',
-  description: 'save current configuration to a profile',
-  kind: CommandKind.BUILT_IN,
-  schema: profileSaveSchema,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
-    const trimmedArgs = args.trim();
+export interface ProfileCommandOperations {
+  readonly schemas: ProfileSchemas;
+  saveModelProfile(
+    parts: readonly string[],
+  ): Promise<MessageActionReturn | OpenDialogActionReturn>;
+  saveLoadBalancerProfile(
+    parts: readonly string[],
+  ): Promise<MessageActionReturn | OpenDialogActionReturn>;
+  loadProfile(
+    profileName: string,
+  ): Promise<ProfileLoadResultView & { providerName?: string }>;
+  publishLoadedProfile(): Promise<void>;
+  recordProviderSwitch(
+    result: { providerName?: string },
+    profileLoadResult: ProfileLoadResultView,
+    reportFailure: (message: string) => void,
+  ): Promise<void>;
+  deleteProfile(profileName: string): Promise<void>;
+  listProfiles(): Promise<readonly string[]>;
+  setDefaultProfileName(profileName: string | null): Promise<void>;
+}
 
-    if (!trimmedArgs) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content:
+function usageError(content: string): MessageActionReturn {
+  return { type: 'message', messageType: 'error', content };
+}
+
+function message(
+  messageType: MessageActionReturn['messageType'],
+  content: string,
+): MessageActionReturn {
+  return { type: 'message', messageType, content };
+}
+
+function createSaveCommand(operations: ProfileCommandOperations): SlashCommand {
+  return {
+    name: 'save',
+    description: 'save current configuration to a profile',
+    kind: CommandKind.BUILT_IN,
+    schema: operations.schemas.profileSaveSchema,
+    action: async (_context: CommandContext, args: string) => {
+      const trimmedArgs = args.trim();
+      if (!trimmedArgs)
+        return usageError(
           'Usage: /profile save model <name> or /profile save loadbalancer <lb-name> <roundrobin|failover> [--context-limit N] <profile1> <profile2> [...]',
-      };
-    }
-
-    const parts = trimmedArgs.split(/\s+/);
-    const profileType = parts[0];
-
-    if (profileType === 'model') {
-      return saveModelProfile(
-        parts,
-        context.runtimeApi,
-        context.services.agent,
-      );
-    }
-
-    if (profileType === 'loadbalancer') {
-      return saveLoadBalancerProfile(parts, context.runtimeApi);
-    }
-
-    return {
-      type: 'message',
-      messageType: 'error',
-      content:
+        );
+      const parts = trimmedArgs.split(/\s+/);
+      if (parts[0] === 'model') return operations.saveModelProfile(parts);
+      if (parts[0] === 'loadbalancer')
+        return operations.saveLoadBalancerProfile(parts);
+      return usageError(
         'Usage: /profile save model <name> or /profile save loadbalancer <lb-name> <roundrobin|failover> [--context-limit N] <profile1> <profile2> [...]',
-    };
-  },
-};
-
-/**
- * Profile load subcommand
- */
-const loadCommand: SlashCommand = {
-  name: 'load',
-  description: 'load configuration from a saved profile',
-  kind: CommandKind.BUILT_IN,
-  schema: profileLoadSchema,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
-    const trimmedArgs = args.trim();
-
-    if (!trimmedArgs) {
-      return {
-        type: 'dialog',
-        dialog: 'loadProfile',
-      };
-    }
-
-    const profileName = extractProfileName(trimmedArgs);
-
-    if (!profileName) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Usage: /profile load "<profile-name>"',
-      };
-    }
-
-    const nameError = validateProfileName(profileName);
-    if (nameError) {
-      return nameError;
-    }
-
-    const agent = context.services.agent;
-    if (!agent) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Agent unavailable. Restart before loading a profile.',
-      };
-    }
-    try {
-      const previousProvider = agent.getProvider();
-      const result = await agent.profiles.load(profileName);
-      const profileLoadResult = result as ProfileLoadResultView;
-      const infoMessages = formatProfileMessages(
-        profileLoadResult.infoMessages,
-        '- ',
       );
-      const warningMessages = formatProfileMessages(
-        profileLoadResult.warnings,
-        '⚠ ',
-      );
-      await applyLoadedProfileConfig(context);
-      let recordingFailureMessage = '';
-      await recordProviderSwitch(
-        context,
-        result,
-        profileLoadResult,
-        (message) => {
-          recordingFailureMessage = `\n\u26A0 ${message}`;
-        },
-      );
-      schedulePaymentModeCheck(context, previousProvider);
+    },
+  };
+}
 
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Profile '${profileName}' loaded${infoMessages}${warningMessages}${recordingFailureMessage}`,
-      };
-    } catch (error) {
-      logger.error(
-        () =>
-          `[profile] failed to load '${profileName}': ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
-      );
-      return classifyLoadError(error, profileName);
-    }
-  },
-};
+function createLoadCommand(operations: ProfileCommandOperations): SlashCommand {
+  return {
+    name: 'load',
+    description: 'load configuration from a saved profile',
+    kind: CommandKind.BUILT_IN,
+    schema: operations.schemas.profileLoadSchema,
+    action: async (_context: CommandContext, args: string) => {
+      const trimmedArgs = args.trim();
+      if (!trimmedArgs) return { type: 'dialog', dialog: 'loadProfile' };
+      const profileName = extractProfileName(trimmedArgs);
+      if (!profileName)
+        return usageError('Usage: /profile load "<profile-name>"');
+      const nameError = validateProfileName(profileName);
+      if (nameError) return nameError;
 
-/**
- * Profile delete subcommand
- */
-const deleteCommand: SlashCommand = {
-  name: 'delete',
-  description: 'delete a saved profile',
-  kind: CommandKind.BUILT_IN,
-  schema: profileDeleteSchema,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
-    const trimmedArgs = args.trim();
-
-    if (!trimmedArgs) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Usage: /profile delete "<profile-name>"',
-      };
-    }
-
-    const profileName = extractProfileName(trimmedArgs);
-
-    if (!profileName) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Usage: /profile delete "<profile-name>"',
-      };
-    }
-
-    const nameError = validateProfileName(profileName);
-    if (nameError) {
-      return nameError;
-    }
-
-    try {
-      const runtime = context.services.agent ?? context.runtimeApi;
-      await runtime.deleteProfileByName(profileName);
-
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Profile '${profileName}' deleted`,
-      };
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message.includes('not found')) {
-          return {
-            type: 'message',
-            messageType: 'error',
-            content: `Profile '${profileName}' not found`,
-          };
-        }
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Failed to delete profile: ${error.message}`,
-        };
+      try {
+        const result = await operations.loadProfile(profileName);
+        const infoMessages = formatProfileMessages(result.infoMessages, '- ');
+        const warningMessages = formatProfileMessages(result.warnings, '⚠ ');
+        await operations.publishLoadedProfile();
+        let recordingFailureMessage = '';
+        await operations.recordProviderSwitch(result, result, (failure) => {
+          recordingFailureMessage = `\n⚠ ${failure}`;
+        });
+        return message(
+          'info',
+          `Profile '${profileName}' loaded${infoMessages}${warningMessages}${recordingFailureMessage}`,
+        );
+      } catch (error) {
+        logger.error(
+          () =>
+            `[profile] failed to load '${profileName}': ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+        );
+        return classifyLoadError(error, profileName);
       }
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Failed to delete profile: ${String(error)}`,
-      };
-    }
-  },
-};
+    },
+  };
+}
 
-/**
- * Profile set-default subcommand
- */
-const setDefaultCommand: SlashCommand = {
-  name: 'set-default',
-  description: 'set a profile to load automatically on startup',
-  kind: CommandKind.BUILT_IN,
-  schema: profileSetDefaultSchema,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<MessageActionReturn> => {
-    const trimmedArgs = args.trim();
-
-    if (!trimmedArgs) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content:
-          'Usage: /profile set-default "<profile-name>" or /profile set-default none',
-      };
-    }
-
-    const profileName = extractProfileName(trimmedArgs);
-
-    if (!profileName) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content:
-          'Usage: /profile set-default "<profile-name>" or /profile set-default none',
-      };
-    }
-
-    try {
-      if (profileName.toLowerCase() === 'none') {
-        (context.services.agent ?? context.runtimeApi).setDefaultProfileName(
-          null,
+function createDeleteCommand(
+  operations: ProfileCommandOperations,
+): SlashCommand {
+  return {
+    name: 'delete',
+    description: 'delete a saved profile',
+    kind: CommandKind.BUILT_IN,
+    schema: operations.schemas.profileDeleteSchema,
+    action: async (_context: CommandContext, args: string) => {
+      const trimmedArgs = args.trim();
+      if (!trimmedArgs)
+        return usageError('Usage: /profile delete "<profile-name>"');
+      const profileName = extractProfileName(trimmedArgs);
+      if (!profileName)
+        return usageError('Usage: /profile delete "<profile-name>"');
+      const nameError = validateProfileName(profileName);
+      if (nameError) return nameError;
+      try {
+        await operations.deleteProfile(profileName);
+        return message('info', `Profile '${profileName}' deleted`);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('not found'))
+          return message('error', `Profile '${profileName}' not found`);
+        return message(
+          'error',
+          `Failed to delete profile: ${error instanceof Error ? error.message : String(error)}`,
         );
-        context.services.settings.setValue(
-          SettingScope.User,
-          'defaultProfile',
-          undefined,
+      }
+    },
+  };
+}
+
+function createSetDefaultCommand(
+  operations: ProfileCommandOperations,
+): SlashCommand {
+  return {
+    name: 'set-default',
+    description: 'set a profile to load automatically on startup',
+    kind: CommandKind.BUILT_IN,
+    schema: operations.schemas.profileSetDefaultSchema,
+    action: async (_context: CommandContext, args: string) => {
+      const trimmedArgs = args.trim();
+      if (!trimmedArgs)
+        return usageError(
+          'Usage: /profile set-default "<profile-name>" or /profile set-default none',
         );
-        return {
-          type: 'message',
-          messageType: 'info',
-          content:
+      const profileName = extractProfileName(trimmedArgs);
+      if (!profileName)
+        return usageError(
+          'Usage: /profile set-default "<profile-name>" or /profile set-default none',
+        );
+      try {
+        if (profileName.toLowerCase() === 'none') {
+          await operations.setDefaultProfileName(null);
+          return message(
+            'info',
             'Default profile cleared. Gemini will start with default settings.',
-        };
+          );
+        }
+        const profiles = await operations.listProfiles();
+        if (!profiles.includes(profileName))
+          return message(
+            'error',
+            `Profile '${profileName}' not found. Use /profile list to see available profiles.`,
+          );
+        await operations.setDefaultProfileName(profileName);
+        return message(
+          'info',
+          `Profile '${profileName}' set as default. It will be loaded automatically on startup.`,
+        );
+      } catch (error) {
+        return message(
+          'error',
+          `Failed to set default profile: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
+    },
+  };
+}
 
-      const profiles = context.services.agent
-        ? await context.services.agent.workspace.profileDefinitions.listProfiles()
-        : await listProfiles(context.runtimeApi);
-      if (!profiles.includes(profileName)) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Profile '${profileName}' not found. Use /profile list to see available profiles.`,
-        };
-      }
-
-      (context.services.agent ?? context.runtimeApi).setDefaultProfileName(
-        profileName,
-      );
-      context.services.settings.setValue(
-        SettingScope.User,
-        'defaultProfile',
-        profileName,
-      );
-
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Profile '${profileName}' set as default. It will be loaded automatically on startup.`,
-      };
-    } catch (error) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Failed to set default profile: ${error instanceof Error ? error.message : String(error)}`,
-      };
-    }
-  },
-};
-
-/**
- * Profile create subcommand
- */
-const createCommand: SlashCommand = {
-  name: 'create',
-  description: 'interactive wizard to create a new profile',
-  kind: CommandKind.BUILT_IN,
-  action: async (
-    _context: CommandContext,
-    _args: string,
-  ): Promise<OpenDialogActionReturn> => ({
-    type: 'dialog',
-    dialog: 'createProfile',
-  }),
-};
-
-/**
- * Profile list subcommand
- */
-const listCommand: SlashCommand = {
-  name: 'list',
-  description: 'list all saved profiles (interactive)',
-  kind: CommandKind.BUILT_IN,
-  action: async (
-    _context: CommandContext,
-    _args: string,
-  ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
-    logger.log(() => 'list action returning profileList dialog');
-    return {
+function createCreateCommand(): SlashCommand {
+  return {
+    name: 'create',
+    description: 'interactive wizard to create a new profile',
+    kind: CommandKind.BUILT_IN,
+    action: async (
+      _context: CommandContext,
+    ): Promise<OpenDialogActionReturn> => ({
       type: 'dialog',
-      dialog: 'profileList',
-    };
-  },
-};
+      dialog: 'createProfile',
+    }),
+  };
+}
 
-/**
- * Profile show subcommand
- */
-const showCommand: SlashCommand = {
-  name: 'show',
-  description: 'view details of a specific profile',
-  kind: CommandKind.BUILT_IN,
-  schema: profileShowSchema,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
-    const trimmedArgs = args.trim();
+function createListCommand(): SlashCommand {
+  return {
+    name: 'list',
+    description: 'list all saved profiles (interactive)',
+    kind: CommandKind.BUILT_IN,
+    action: async (_context: CommandContext) => {
+      logger.log(() => 'list action returning profileList dialog');
+      return { type: 'dialog', dialog: 'profileList' };
+    },
+  };
+}
 
-    if (!trimmedArgs) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Usage: /profile show <profile-name>',
-      };
-    }
-
-    const profileName = extractProfileName(trimmedArgs);
-
-    if (!profileName) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Usage: /profile show <profile-name>',
-      };
-    }
-
-    try {
-      const profiles = await listProfiles(context.runtimeApi);
-      if (!profiles.includes(profileName)) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Profile '${profileName}' not found. Use /profile list to see available profiles.`,
-        };
+function createProfileSelectionCommand(
+  name: 'show' | 'edit',
+  description: string,
+  dialog: 'profileDetail' | 'profileEditor',
+  schema: ProfileSchemas['profileShowSchema'],
+  operations: ProfileCommandOperations,
+): SlashCommand {
+  return {
+    name,
+    description,
+    kind: CommandKind.BUILT_IN,
+    schema,
+    action: async (_context: CommandContext, args: string) => {
+      const trimmedArgs = args.trim();
+      if (!trimmedArgs)
+        return usageError(`Usage: /profile ${name} <profile-name>`);
+      const profileName = extractProfileName(trimmedArgs);
+      if (!profileName)
+        return usageError(`Usage: /profile ${name} <profile-name>`);
+      try {
+        const profiles = await operations.listProfiles();
+        if (!profiles.includes(profileName))
+          return message(
+            'error',
+            `Profile '${profileName}' not found. Use /profile list to see available profiles.`,
+          );
+      } catch {
+        // The profile dialog reports errors from its own data source.
       }
-    } catch {
-      // Continue anyway, the dialog will show the error
-    }
+      return { type: 'dialog', dialog, dialogData: { profileName } };
+    },
+  };
+}
 
-    return {
-      type: 'dialog',
-      dialog: 'profileDetail',
-      dialogData: { profileName },
-    };
-  },
-};
-
-/**
- * Profile edit subcommand
- */
-const editCommand: SlashCommand = {
-  name: 'edit',
-  description: 'edit a specific profile',
-  kind: CommandKind.BUILT_IN,
-  schema: profileEditSchema,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
-    const trimmedArgs = args.trim();
-
-    if (!trimmedArgs) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Usage: /profile edit <profile-name>',
-      };
-    }
-
-    const profileName = extractProfileName(trimmedArgs);
-
-    if (!profileName) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Usage: /profile edit <profile-name>',
-      };
-    }
-
-    try {
-      const profiles = await listProfiles(context.runtimeApi);
-      if (!profiles.includes(profileName)) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Profile '${profileName}' not found. Use /profile list to see available profiles.`,
-        };
-      }
-    } catch {
-      // Continue anyway, the dialog will show the error
-    }
-
-    return {
-      type: 'dialog',
-      dialog: 'profileEditor',
-      dialogData: { profileName },
-    };
-  },
-};
-
-/**
- * Main profile command that handles subcommands
- */
-export const profileCommand: SlashCommand = {
-  name: 'profile',
-  description: 'manage configuration profiles',
-  kind: CommandKind.BUILT_IN,
-  subCommands: [
-    saveCommand,
-    loadCommand,
-    createCommand,
-    deleteCommand,
-    setDefaultCommand,
-    listCommand,
-    showCommand,
-    editCommand,
-  ],
-  action: async (
-    _context: CommandContext,
-    _args: string,
-  ): Promise<MessageActionReturn> => ({
-    type: 'message',
-    messageType: 'info',
-    content: `Profile management commands:
+function profileHelp(): MessageActionReturn {
+  return message(
+    'info',
+    `Profile management commands:
   /profile save model <name>    - Save current model configuration
   /profile save loadbalancer <lb-name> <roundrobin|failover> [--context-limit N] <profile1> <profile2> [...]
                                 - Save a load balancer profile
@@ -505,5 +272,39 @@ export const profileCommand: SlashCommand = {
   /profile delete <name>        - Delete a saved profile
   /profile set-default <name>   - Set profile to load on startup (or "none")
   /profile list                 - List all saved profiles`,
-  }),
-};
+  );
+}
+
+export function createProfileCommand(
+  operations: ProfileCommandOperations,
+): SlashCommand {
+  return {
+    name: 'profile',
+    description: 'manage configuration profiles',
+    kind: CommandKind.BUILT_IN,
+    subCommands: [
+      createSaveCommand(operations),
+      createLoadCommand(operations),
+      createCreateCommand(),
+      createDeleteCommand(operations),
+      createSetDefaultCommand(operations),
+      createListCommand(),
+      createProfileSelectionCommand(
+        'show',
+        'view details of a specific profile',
+        'profileDetail',
+        operations.schemas.profileShowSchema,
+        operations,
+      ),
+      createProfileSelectionCommand(
+        'edit',
+        'edit a specific profile',
+        'profileEditor',
+        operations.schemas.profileEditSchema,
+        operations,
+      ),
+    ],
+    action: async (_context: CommandContext): Promise<MessageActionReturn> =>
+      profileHelp(),
+  };
+}

@@ -1,14 +1,6 @@
 import { installWorkspaceRuntimeFixture } from '../../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
-import {
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  beforeAll,
-} from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 
 const runWithScopeMock = vi.fn((callback: () => unknown) => callback());
 const getRuntimeBridgeMock = vi.fn(() => ({
@@ -18,27 +10,6 @@ const getRuntimeBridgeMock = vi.fn(() => ({
 void vi.mock('../../contexts/RuntimeContext.js', () => ({
   getRuntimeBridge: getRuntimeBridgeMock,
 }));
-
-let generateAutoPromptOverride: ((...args: unknown[]) => unknown) | null = null;
-
-const actual = { ...(await import('../../utils/autoPromptGenerator.js')) };
-void vi.mock('../../utils/autoPromptGenerator.js', () => {
-  // Capture the real function before mock.module patches the namespace
-  // in place — otherwise actual.generateAutoPrompt becomes the override
-  // itself, causing infinite recursion.
-  const realGenerateAutoPrompt = actual.generateAutoPrompt;
-  return {
-    ...actual,
-    generateAutoPrompt: (...args: unknown[]) => {
-      if (generateAutoPromptOverride) {
-        return generateAutoPromptOverride(...args);
-      }
-      return realGenerateAutoPrompt(
-        ...(args as Parameters<typeof actual.generateAutoPrompt>),
-      );
-    },
-  };
-});
 
 /**
  * COMPLETION SYSTEM REQUIREMENTS
@@ -56,8 +27,10 @@ void vi.mock('../../utils/autoPromptGenerator.js', () => {
  *
  * See: project-plans/subagentconfig/analysis/findings.md for Phase 01 results
  */
+import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
+
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
-import { createUiSessionOwner } from '../../../__tests__/uiSessionOwner.js';
+import { usePromptTransport } from '../../../__tests__/prompt-transport-fixture.js';
 import { createMockRuntimeApi } from '../../components/__tests__/StatsDisplay.testHelpers.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -68,7 +41,6 @@ import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { SubagentView } from '../../components/SubagentManagement/types.js';
 import { MessageType } from '../../types.js';
 import type {
-  CommandContext,
   MessageActionReturn,
   ConfirmActionReturn,
   SlashCommandActionReturn,
@@ -77,17 +49,11 @@ import type { LoadedSettings } from '../../../config/settings.js';
 import type { SessionStatsState } from '../../contexts/SessionContext.js';
 import { testRegex } from '../../../__tests__/regex.js';
 
-let subagentCommand: typeof import('../subagentCommand.js').subagentCommand;
-
-const findSubCommand = (name: string) =>
-  subagentCommand.subCommands!.find((cmd) => cmd.name === name)!;
-
-const loadSubagentCommandModule = async () => {
-  // Import module — each test file runs in its own Bun process, so the
-  // module registry is already fresh with the mocks registered above.
-  const mod = await import('../subagentCommand.js');
-  subagentCommand = mod.subagentCommand;
-};
+import { registerSubagentCommand } from '../../../__tests__/subagent-command-test-owner.js';
+const findSubCommand = (name: string, context: CommandOwnerFixture) =>
+  registerSubagentCommand(context).subCommands!.find(
+    (cmd) => cmd.name === name,
+  )!;
 
 type TestContextOptions = {
   subagentManager?: SubagentManager;
@@ -99,7 +65,7 @@ const createTestContext = ({
   subagentManager,
   profileManager,
   overwriteConfirmed,
-}: TestContextOptions = {}): CommandContext => {
+}: TestContextOptions = {}): CommandOwnerFixture => {
   const settings = { merged: {} } as LoadedSettings;
   const logger = {
     log: vi.fn(),
@@ -178,7 +144,7 @@ const createTestContext = ({
   return {
     runtimeApi: createMockRuntimeApi(),
     refreshProviderAliases: vi.fn(async () => {}),
-    oauthControl: {} as CommandContext['oauthControl'],
+    oauthControl: {} as CommandOwnerFixture['oauthControl'],
     signal: new AbortController().signal,
     invocation: {
       raw: '',
@@ -268,12 +234,8 @@ const ensureDialog = (
  * Mock AgentClient, use real file system
  */
 describe('subagentCommand', () => {
-  beforeAll(async () => {
-    await loadSubagentCommandModule();
-  });
-
   describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () => {
-    let context: CommandContext;
+    let context: CommandOwnerFixture;
     let subagentManager: SubagentManager;
     let profileManager: ProfileManager;
     let tempDir: string;
@@ -314,7 +276,7 @@ describe('subagentCommand', () => {
       it('should save new subagent with manual mode', async () => {
         const args = 'testagent testprofile manual "You are a test agent"';
         const result = ensureMessage(
-          await findSubCommand('save').action!(context, args),
+          await findSubCommand('save', context).action!(context, args),
         );
 
         expect(result.messageType).toBe('info');
@@ -339,7 +301,7 @@ describe('subagentCommand', () => {
 
         for (const args of invalidArgs) {
           const result = ensureMessage(
-            await findSubCommand('save').action!(context, args),
+            await findSubCommand('save', context).action!(context, args),
           );
           expect(result.messageType).toBe('error');
           expect(result.content).toMatch(testRegex('usage|syntax', 'i'));
@@ -353,7 +315,7 @@ describe('subagentCommand', () => {
         });
 
         const result = ensureMessage(
-          await findSubCommand('save').action!(
+          await findSubCommand('save', contextWithoutManager).action!(
             contextWithoutManager,
             'testagent testprofile manual "Prompt"',
           ),
@@ -368,7 +330,7 @@ describe('subagentCommand', () => {
       it('should reject non-existent profile @requirement:REQ-013', async () => {
         const args = 'testagent nonexistent manual "prompt"';
         const result = ensureMessage(
-          await findSubCommand('save').action!(context, args),
+          await findSubCommand('save', context).action!(context, args),
         );
 
         expect(result.messageType).toBe('error');
@@ -386,7 +348,7 @@ describe('subagentCommand', () => {
         // Try to overwrite without confirmation
         const args = 'testagent testprofile manual "New prompt"';
         const result = ensureConfirm(
-          await findSubCommand('save').action!(context, args),
+          await findSubCommand('save', context).action!(context, args),
         );
 
         // Check that prompt is a React element
@@ -408,7 +370,7 @@ describe('subagentCommand', () => {
 
         const args = 'testagent testprofile manual "New prompt"';
         const result = ensureMessage(
-          await findSubCommand('save').action!(context, args),
+          await findSubCommand('save', context).action!(context, args),
         );
 
         expect(result.messageType).toBe('info');
@@ -425,7 +387,10 @@ describe('subagentCommand', () => {
         await subagentManager.saveSubagent('agent1', 'testprofile', 'Prompt 1');
         await subagentManager.saveSubagent('agent2', 'testprofile', 'Prompt 2');
 
-        const result = await findSubCommand('list').action!(context, '');
+        const result = await findSubCommand('list', context).action!(
+          context,
+          '',
+        );
 
         expect(result).toBeUndefined();
         expect(context.ui.addItem).toHaveBeenCalled();
@@ -439,7 +404,10 @@ describe('subagentCommand', () => {
       });
 
       it('should display message when no subagents exist', async () => {
-        const result = await findSubCommand('list').action!(context, '');
+        const result = await findSubCommand('list', context).action!(
+          context,
+          '',
+        );
 
         expect(result).toBeUndefined();
         expect(context.ui.addItem).toHaveBeenCalled();
@@ -456,10 +424,8 @@ describe('subagentCommand', () => {
           subagentManager: undefined,
         });
 
-        const result = await findSubCommand('list').action!(
-          contextWithoutManager,
-          '',
-        );
+        const result = await findSubCommand('list', contextWithoutManager)
+          .action!(contextWithoutManager, '');
 
         expect(result).toBeUndefined();
         expect(contextWithoutManager.ui.addItem).toHaveBeenCalled();
@@ -481,7 +447,7 @@ describe('subagentCommand', () => {
         );
 
         const result = ensureDialog(
-          await findSubCommand('show').action!(context, 'testagent'),
+          await findSubCommand('show', context).action!(context, 'testagent'),
         );
 
         expect(result.dialog).toBe('subagent');
@@ -491,7 +457,7 @@ describe('subagentCommand', () => {
 
       it('should error for non-existent subagent', async () => {
         const result = ensureMessage(
-          await findSubCommand('show').action!(context, 'nonexistent'),
+          await findSubCommand('show', context).action!(context, 'nonexistent'),
         );
 
         expect(result.messageType).toBe('error');
@@ -500,7 +466,7 @@ describe('subagentCommand', () => {
 
       it('should error when name not provided', async () => {
         const result = ensureMessage(
-          await findSubCommand('show').action!(context, ''),
+          await findSubCommand('show', context).action!(context, ''),
         );
 
         expect(result.messageType).toBe('error');
@@ -518,7 +484,7 @@ describe('subagentCommand', () => {
 
         // deleteCommand now opens interactive dialog for confirmation
         const result = ensureDialog(
-          await findSubCommand('delete').action!(context, 'testagent'),
+          await findSubCommand('delete', context).action!(context, 'testagent'),
         );
 
         expect(result.dialog).toBe('subagent');
@@ -528,7 +494,10 @@ describe('subagentCommand', () => {
 
       it('should error for non-existent subagent', async () => {
         const result = ensureMessage(
-          await findSubCommand('delete').action!(context, 'nonexistent'),
+          await findSubCommand('delete', context).action!(
+            context,
+            'nonexistent',
+          ),
         );
 
         expect(result.messageType).toBe('error');
@@ -537,7 +506,7 @@ describe('subagentCommand', () => {
 
       it('should error when name not provided', async () => {
         const result = ensureMessage(
-          await findSubCommand('delete').action!(context, ''),
+          await findSubCommand('delete', context).action!(context, ''),
         );
 
         expect(result.messageType).toBe('error');
@@ -547,7 +516,9 @@ describe('subagentCommand', () => {
 
     describe('base subagent command (no subcommand)', () => {
       it('should open menu dialog when called without subcommand', async () => {
-        const result = ensureDialog(await subagentCommand.action!(context, ''));
+        const result = ensureDialog(
+          await registerSubagentCommand(context).action!(context, ''),
+        );
 
         expect(result.dialog).toBe('subagent');
         expect(result.dialogData?.initialView).toBe(SubagentView.MENU);
@@ -565,7 +536,7 @@ describe('subagentCommand', () => {
    * Editor-based tests removed in favor of dialog-based UI.
    */
   describe('editCommand @requirement:REQ-008', () => {
-    let context: CommandContext;
+    let context: CommandOwnerFixture;
     let subagentManager: SubagentManager;
     let profileManager: ProfileManager;
     let tempDir: string;
@@ -603,7 +574,7 @@ describe('subagentCommand', () => {
 
     it('should error when name not provided', async () => {
       const result = ensureMessage(
-        await findSubCommand('edit').action!(context, ''),
+        await findSubCommand('edit', context).action!(context, ''),
       );
 
       expect(result.messageType).toBe('error');
@@ -612,7 +583,7 @@ describe('subagentCommand', () => {
 
     it('should error for non-existent subagent', async () => {
       const result = ensureMessage(
-        await findSubCommand('edit').action!(context, 'nonexistent'),
+        await findSubCommand('edit', context).action!(context, 'nonexistent'),
       );
 
       expect(result.messageType).toBe('error');
@@ -627,7 +598,7 @@ describe('subagentCommand', () => {
       );
 
       const result = ensureDialog(
-        await findSubCommand('edit').action!(context, 'testagent'),
+        await findSubCommand('edit', context).action!(context, 'testagent'),
       );
 
       expect(result.dialog).toBe('subagent');
@@ -648,7 +619,9 @@ describe('subagentCommand', () => {
    */
   describe('completion @requirement:REQ-009', () => {
     it('is temporarily skipped pending schema-driven slash completion migration', () => {
-      expect(subagentCommand.schema).toBeUndefined();
+      expect(
+        registerSubagentCommand(createMockCommandContext()).schema,
+      ).toBeUndefined();
     });
   });
 
@@ -660,13 +633,11 @@ describe('subagentCommand', () => {
    * @requirement:REQ-003
    */
   describe('saveCommand - auto mode @requirement:REQ-003', () => {
-    let context: CommandContext;
+    const transport = usePromptTransport();
+    let context: CommandOwnerFixture;
     let subagentManager: SubagentManager;
     let profileManager: ProfileManager;
     let tempDir: string;
-    let mockAgentClient: {
-      generateDirectMessage: ReturnType<typeof vi.fn>;
-    };
 
     const autoConfigs: Config[] = [];
     beforeEach(async () => {
@@ -694,16 +665,6 @@ describe('subagentCommand', () => {
         subagentManager,
       });
 
-      // Mock AgentClient
-      mockAgentClient = {
-        generateDirectMessage: vi.fn().mockResolvedValue({
-          content: {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'Auto generated prompt' }],
-          },
-        }),
-      };
-
       const config = new Config({
         sessionId: crypto.randomUUID(),
         cwd: tempDir,
@@ -712,50 +673,38 @@ describe('subagentCommand', () => {
         debugMode: false,
       });
       autoConfigs.push(config);
-      const owner = createUiSessionOwner(config);
       context.services.config = composeFixtureRuntime(config);
-      Object.assign(owner.agentClient, mockAgentClient);
-      context.services.agent = createMockCommandContext({
-        services: { agent: { ...owner, getProvider: () => 'openai' } },
-      }).services.agent;
+      context.services.agent = transport().agent;
     });
 
     afterEach(async () => {
       await autoConfigs.pop()?.dispose();
       await fs.rm(tempDir, { recursive: true, force: true });
-      generateAutoPromptOverride = null;
     });
 
     it('should generate system prompt using LLM', async () => {
-      // Mock LLM response
-      mockAgentClient.generateDirectMessage.mockResolvedValue({
-        content: {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'text',
-              text: 'You are an expert Python debugger specializing in finding and fixing bugs.',
-            },
-          ],
-        },
-      });
+      transport().respondWith([
+        'You are an expert Python debugger ',
+        'specializing in finding and fixing bugs.',
+      ]);
 
       const args = 'testagent testprofile auto "expert Python debugger"';
       // Access the save subcommand directly from the imported module
-      const result = await findSubCommand('save').action!(context, args);
+      const result = await findSubCommand('save', context).action!(
+        context,
+        args,
+      );
 
-      // Verify LLM was called
-      expect(mockAgentClient.generateDirectMessage).toHaveBeenCalledTimes(1);
-      const callArgs = mockAgentClient.generateDirectMessage.mock.calls[0][0];
-      expect(callArgs.message).toMatch(testRegex('expert Python debugger', ''));
-      expect(callArgs.message).toMatch(testRegex('system prompt', 'i'));
-      expect(callArgs.config).toStrictEqual({
-        toolConfig: {
-          functionCallingConfig: {
-            mode: 'NONE',
-          },
-        },
-      });
+      expect(transport().requests()).toHaveLength(1);
+      const callArgs = transport().requests()[0];
+      expect(JSON.stringify(callArgs.messages)).toMatch(
+        testRegex('expert Python debugger', ''),
+      );
+      expect(JSON.stringify(callArgs.messages)).toMatch(
+        testRegex('system prompt', 'i'),
+      );
+      expect(callArgs.tools).toBeUndefined();
+      expect(callArgs.tool_choice).toBeUndefined();
 
       // Verify success message type and content
       const message = ensureMessage(result);
@@ -770,119 +719,86 @@ describe('subagentCommand', () => {
     });
 
     it('should handle LLM generation failure', async () => {
-      // Mock LLM error
-      mockAgentClient.generateDirectMessage.mockRejectedValue(
-        new Error('Network error'),
-      );
+      transport().failWith('Network error');
 
       const args = 'testagent testprofile auto "expert debugger"';
-      const result = await findSubCommand('save').action!(context, args);
+      const result = await findSubCommand('save', context).action!(
+        context,
+        args,
+      );
 
       const message = ensureMessage(result);
       expect(message.messageType).toBe('error');
       expect(message.content).toMatch(testRegex('Network error', ''));
-      expect(mockAgentClient.generateDirectMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          config: {
-            toolConfig: {
-              functionCallingConfig: {
-                mode: 'NONE',
-              },
-            },
-          },
-        }),
-        expect.any(String),
-      );
+      expect(transport().requests()).toHaveLength(1);
+      expect(transport().requests()[0].tools).toBeUndefined();
+      expect(transport().requests()[0].tool_choice).toBeUndefined();
     });
 
     it('should handle empty LLM response', async () => {
-      // Mock empty response
-      mockAgentClient.generateDirectMessage.mockResolvedValue({
-        content: {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: '' }],
-        },
-      });
+      transport().respondWith(['']);
 
       const args = 'testagent testprofile auto "expert debugger"';
-      const result = await findSubCommand('save').action!(context, args);
+      const result = await findSubCommand('save', context).action!(
+        context,
+        args,
+      );
 
       const message = ensureMessage(result);
       expect(message.messageType).toBe('error');
       expect(message.content).toMatch(
         testRegex('empty.*response|manual mode', 'i'),
       );
-      expect(mockAgentClient.generateDirectMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          config: {
-            toolConfig: {
-              functionCallingConfig: {
-                mode: 'NONE',
-              },
-            },
-          },
-        }),
-        expect.any(String),
-      );
+      expect(transport().requests()).toHaveLength(1);
+      expect(transport().requests()[0].tools).toBeUndefined();
+      expect(transport().requests()[0].tool_choice).toBeUndefined();
     });
 
     it('saves auto-generated prompt via generateAutoPrompt utility', async () => {
       const generatedText =
         'You are an expert prompt engineer specializing in prompt creation.';
 
-      context.services.agent = createMockCommandContext({
-        services: {
-          agent: { ...createUiSessionOwner(), getProvider: () => 'gemini' },
-        },
-      }).services.agent;
-
-      generateAutoPromptOverride = vi.fn().mockResolvedValue(generatedText);
-
-      const saveSpy = vi.spyOn(subagentManager, 'saveSubagent');
+      transport().respondWith([
+        'You are an expert prompt engineer ',
+        'specializing in prompt creation.',
+      ]);
 
       const args = 'testagent testprofile auto "expert prompt"';
-      const actionResult = await findSubCommand('save').action!(context, args);
+      const actionResult = await findSubCommand('save', context).action!(
+        context,
+        args,
+      );
 
-      expect(generateAutoPromptOverride).toHaveBeenCalledWith(
-        expect.objectContaining({
-          getProvider: expect.any(Function),
-        }),
+      expect(transport().requests()).toHaveLength(1);
+      expect(JSON.stringify(transport().requests()[0].messages)).toContain(
         'expert prompt',
-        context.services.config?.getContentGeneratorConfig(),
       );
-      expect(saveSpy).toHaveBeenCalledWith(
-        'testagent',
-        'testprofile',
-        generatedText,
-      );
+      expect(await subagentManager.loadSubagent('testagent')).toMatchObject({
+        name: 'testagent',
+        profile: 'testprofile',
+        systemPrompt: generatedText,
+      });
       const actionMessage = ensureMessage(actionResult);
       expect(actionMessage.messageType).toBe('info');
       expect(actionMessage.content).toContain('Subagent');
     });
 
     it('should use correct prompt template for LLM', async () => {
-      mockAgentClient.generateDirectMessage.mockResolvedValue({
-        content: {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'Generated prompt' }],
-        },
-      });
+      transport().respondWith(['Generated ', 'prompt']);
 
       const description = 'expert code reviewer';
       const args = `testagent testprofile auto "${description}"`;
-      await findSubCommand('save').action!(context, args);
+      await findSubCommand('save', context).action!(context, args);
 
-      const callArgs = mockAgentClient.generateDirectMessage.mock.calls[0][0];
+      const message = JSON.stringify(transport().requests()[0].messages);
 
       // Verify prompt includes description
-      expect(callArgs.message).toContain(description);
+      expect(message).toContain(description);
 
       // Verify prompt includes instructions
-      expect(callArgs.message).toMatch(testRegex('comprehensive', 'i'));
-      expect(callArgs.message).toMatch(
-        testRegex('role.*capabilities.*behavior', 'i'),
-      );
-      expect(callArgs.message).toMatch(testRegex('output.*only', 'i'));
+      expect(message).toMatch(testRegex('comprehensive', 'i'));
+      expect(message).toMatch(testRegex('role.*capabilities.*behavior', 'i'));
+      expect(message).toMatch(testRegex('output.*only', 'i'));
     });
   });
 });

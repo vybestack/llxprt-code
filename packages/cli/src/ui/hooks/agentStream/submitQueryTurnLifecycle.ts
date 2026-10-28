@@ -15,10 +15,7 @@
 import type { AgentRequestInput } from '@vybestack/llxprt-code-core';
 import { prepareTurnForQuery } from './turnPreparation.js';
 import { handleSubmissionError } from './streamUtils.js';
-import {
-  observeTurnFailed,
-  observeTurnStarted,
-} from '../../../observation/jspWiring.js';
+import type { ObservationCallbacks } from '../../../observation/jspWiring.js';
 import type {
   OperationLifecycleRegistry,
   OperationStatus,
@@ -34,6 +31,10 @@ export interface TurnInit {
 }
 
 export interface SubmitQueryCallbackDeps extends UseSubmitQueryDeps {
+  observation: Pick<
+    ObservationCallbacks,
+    'observeTurnStarted' | 'observeTurnFailed'
+  >;
   displayUserMessage: (q: string, t: number) => void;
   prepareQueryForAgent: (
     query: AgentRequestInput,
@@ -171,11 +172,13 @@ function handleProviderError(
   error: unknown,
 ): void {
   if (isCurrentTurn(cbd, turn.abortSignal)) {
-    observeTurnFailed();
+    cbd.observation.observeTurnFailed();
     handleSubmissionError(
       error,
       cbd.addItem,
-      cbd.runtime,
+      cbd.getProvider,
+      cbd.readSelectedProvider,
+      cbd.getModel,
       cbd.onAuthError,
       turn.userMessageTimestamp,
     );
@@ -257,10 +260,12 @@ async function prepareAndCheckProceed(
   try {
     await prepareTurnForQuery(
       false,
-      cbd.runtime,
+      cbd.resetBuckets,
       cbd.startNewPrompt,
       cbd.setThought,
       cbd.thinkingBlocksRef,
+      cbd.resetBucketSession,
+      cbd.ensureBucketsAuthenticated,
     );
   } catch (prepError) {
     if (isCancellation(prepError, turn.abortSignal)) {
@@ -321,18 +326,6 @@ async function executeStream(
     handleLoopDetectedEvent();
   }
   return outcome;
-}
-
-async function flushTurnRecording(cbd: SubmitQueryCallbackDeps): Promise<void> {
-  if (cbd.recordingOwner === 'agent') {
-    await cbd.agent.session.flushRecording();
-    return;
-  }
-  try {
-    await cbd.recordingIntegration?.flushAtTurnBoundary();
-  } catch {
-    /* non-fatal */
-  }
 }
 
 async function finaliseStreamOutcome(
@@ -405,7 +398,7 @@ async function streamAndFinalise(
       cbd.setIsResponding(false);
     }
     if (isCurrentTurn(cbd, turn.abortSignal)) {
-      await flushTurnRecording(cbd);
+      await cbd.flushRecording();
     }
   }
 }
@@ -421,7 +414,7 @@ export async function runSubmitQueryCore(
   try {
     cbd.setIsResponding(true);
     cbd.setInitError(null);
-    observeTurnStarted();
+    cbd.observation.observeTurnStarted();
     cbd.pendingResponse.beginCommittedSegments();
   } catch (error) {
     await finaliseTurnStartFailure(cbd, turn, error);

@@ -13,27 +13,30 @@ import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
 import type { RuntimeSettingsState } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SessionAuthPolicy } from '../auth/types.js';
 
-import { createOwnerAuthCacheInvalidator } from '../auth/owner-cache-invalidation.js';
+import type {
+  IOAuthSettingsProvider,
+  OAuthUICallback,
+} from '@vybestack/llxprt-code-auth';
 import {
+  DebugLogger,
   type Config,
-  type RuntimeContentGeneratorFactory,
   type ContentGenerator,
+  type MessageBus,
+  type RuntimeContentGeneratorFactory,
   type RuntimeProviderManager,
-  type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { UNCONFIGURED_PROVIDER } from '@vybestack/llxprt-code-core/config/models.js';
-import { ProviderManager } from '../ProviderManager.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
+import stripJsonComments from 'strip-json-comments';
+import { OAuthManager } from '../auth/index.js';
+import { createOwnerAuthCacheInvalidator } from '../auth/owner-cache-invalidation.js';
+import type { TokenStore } from '../auth/types.js';
 import { FakeProvider } from '../fake/FakeProvider.js';
 import { ProviderContentGenerator } from '../ProviderContentGenerator.js';
-import { createRuntimeTokenizerFactory } from './runtimeTokenizerFactory.js';
+import { ProviderManager } from '../ProviderManager.js';
 import type { IFileSystem } from './IFileSystem.js';
-import type { ProviderManagerFactoryOptions } from './providerManagerFactoryOptions.js';
-import stripJsonComments from 'strip-json-comments';
-import { Storage } from '@vybestack/llxprt-code-settings';
-import { OAuthManager, createTokenStore } from '../auth/index.js';
 import { registerStandardOAuthProviders } from './oauth-provider-registration.js';
-import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
+import { createRuntimeTokenizerFactory } from './runtimeTokenizerFactory.js';
 
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import {
@@ -42,8 +45,8 @@ import {
 } from './providerAliases.js';
 
 import {
-  sanitizeApiKey,
   registerAliasProviders,
+  sanitizeApiKey,
 } from './aliasProviderFactory.js';
 import type { ProviderContributionRegistry } from './runtimePlugins/types.js';
 
@@ -52,57 +55,20 @@ export { createRuntimeTokenizerFactory } from './runtimeTokenizerFactory.js';
 
 const logger = new DebugLogger('llxprt:provider:manager:instance');
 
-type RuntimeContextShape = ProviderRuntimeContext;
-
-interface OpenAIRegistrationContext {
-  apiKey?: string;
-  baseUrl?: string;
-  providerConfig: IProviderConfig;
-  oauthManager: OAuthManager;
-  config?: Config;
-  authOnlyEnabled: boolean;
-  /**
-   * The registry alias construction used for this manager. Stored so
-   * {@link refreshAliasProviders} re-registers through the SAME registry
-   * instance rather than re-importing plugins.
-   */
-  providerContributions?: ProviderContributionRegistry;
-}
-
-function createRuntimeContentGeneratorFactory(): RuntimeContentGeneratorFactory<ContentGenerator> {
+export function createRuntimeContentGeneratorFactory(): RuntimeContentGeneratorFactory<ContentGenerator> {
   return {
     createContentGenerator: () => new ProviderContentGenerator(),
   };
 }
 
-/**
- * @plan:PLAN-20260603-ISSUE1584.P16a
- * @requirement:REQ-DEP-001
- */
-export function configureProviderRuntimeFactories(
-  _config: Config,
+export function configureProviderTokenizer(
   manager: RuntimeProviderManager,
-  supplied: {
-    readonly tokenizerFactory?: RuntimeTokenizerFactory;
-    readonly contentGeneratorFactory?: RuntimeContentGeneratorFactory<ContentGenerator>;
-  } = {},
-): {
-  readonly tokenizerFactory: RuntimeTokenizerFactory;
-  readonly contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>;
-} {
-  const installedTokenizerFactory = manager.getTokenizerFactory?.();
-  const tokenizerFactory =
-    supplied.tokenizerFactory ??
-    installedTokenizerFactory ??
-    createRuntimeTokenizerFactory();
-  if (tokenizerFactory !== installedTokenizerFactory)
-    manager.setTokenizerFactory?.(tokenizerFactory);
-  return {
-    tokenizerFactory,
-    contentGeneratorFactory:
-      supplied.contentGeneratorFactory ??
-      createRuntimeContentGeneratorFactory(),
-  };
+  supplied: RuntimeTokenizerFactory | undefined = undefined,
+): RuntimeTokenizerFactory {
+  const installed = manager.getTokenizerFactory?.();
+  const selected = supplied ?? installed ?? createRuntimeTokenizerFactory();
+  if (selected !== installed) manager.setTokenizerFactory?.(selected);
+  return selected;
 }
 
 /**
@@ -140,7 +106,7 @@ function normalizeExplicitProvider(value: unknown): string | undefined {
  */
 function resolveExplicitProvider(
   config: Config | undefined,
-  context: RuntimeContextShape,
+  settings: Pick<RuntimeSettingsState, 'get'>,
   userSettings: UserSettingsView | undefined,
 ): string | undefined {
   // 1. Config provider (set by CLI --provider, --profile-load, or
@@ -155,7 +121,7 @@ function resolveExplicitProvider(
 
   // 2. SettingsService activeProvider (ephemeral runtime state, not
   // persisted — set by a prior switchActiveProvider or from profile load).
-  const settingsActiveProvider = context.settingsService.get('activeProvider');
+  const settingsActiveProvider = settings.get('activeProvider');
   const resolvedSettings = normalizeExplicitProvider(settingsActiveProvider);
   if (resolvedSettings !== undefined) {
     return resolvedSettings;
@@ -293,7 +259,7 @@ function resolveOpenaiBaseUrl(
 }
 
 function resolveAuthOnlyFlag(
-  settingsService: RuntimeContextShape['settingsService'],
+  settingsService: Pick<RuntimeSettingsState, 'get'>,
   userSettings?: UserSettingsView,
 ): boolean {
   const sessionAuthOnly = coerceAuthOnly(settingsService.get('authOnly'));
@@ -322,18 +288,9 @@ function resolveAuthOnlyFlag(
   return false;
 }
 
-/** Registers OAuth providers for authentication support. */
-function registerOAuthProviders(
-  oauthManager: OAuthManager,
-  tokenStore: ReturnType<typeof createTokenStore>,
-  addItem: ProviderManagerFactoryOptions['addItem'],
-): void {
-  registerStandardOAuthProviders(oauthManager, tokenStore, addItem);
-}
-
 /** Resolves OpenAI-specific settings from user settings and ephemeral overrides. */
 function resolveOpenaiSettings(
-  settings: RuntimeContextShape['settingsService'],
+  settings: Pick<RuntimeSettingsState, 'get'>,
   userSettings: UserSettingsView | undefined,
   authOnlyEnabled: boolean,
   allowBrowserEnvironment: boolean,
@@ -389,6 +346,14 @@ function resolveOpenaiSettings(
   const openaiBaseUrl = resolveOpenaiBaseUrl(ephemeralBaseUrl, providerBaseUrl);
 
   const openaiProviderConfig: IProviderConfig = {
+    googleAuthDefaults: Object.freeze({
+      GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
+      GOOGLE_CLOUD_LOCATION: process.env.GOOGLE_CLOUD_LOCATION,
+      GOOGLE_GENAI_USE_VERTEXAI: process.env.GOOGLE_GENAI_USE_VERTEXAI,
+      GOOGLE_APPLICATION_CREDENTIALS:
+        process.env.GOOGLE_APPLICATION_CREDENTIALS,
+      GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+    }),
     enableTextToolCallParsing:
       (settingsData.enableTextToolCallParsing as boolean | undefined) ?? false,
     textToolCallModels:
@@ -413,10 +378,10 @@ function registerAllProviders(
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
-  tokenStore: ReturnType<typeof createTokenStore>,
+  tokenStore: TokenStore,
   config: Config | undefined,
   authOnlyEnabled: boolean,
-  addItem: ProviderManagerFactoryOptions['addItem'],
+  addItem: OAuthUICallback | undefined,
   providerContributions: ProviderContributionRegistry | undefined,
 ): void {
   registerAliasProviders(
@@ -431,7 +396,12 @@ function registerAllProviders(
     { providerContributions },
   );
 
-  registerOAuthProviders(oauthManager, tokenStore, addItem);
+  registerStandardOAuthProviders(
+    oauthManager,
+    manager.fetchNetwork,
+    tokenStore,
+    addItem,
+  );
 }
 
 /**
@@ -449,12 +419,12 @@ function registerAllProviders(
 function activateExplicitProvider(
   manager: ProviderManager,
   config: Config | undefined,
-  context: RuntimeContextShape,
+  settings: Pick<RuntimeSettingsState, 'get'>,
   userSettings: UserSettingsView | undefined,
 ): void {
   const explicitProvider = resolveExplicitProvider(
     config,
-    context,
+    settings,
     userSettings,
   );
   if (explicitProvider === undefined) {
@@ -479,14 +449,14 @@ function activateExplicitProvider(
 function tryActivateFakeProvider(
   manager: ProviderManager,
   config: Config | undefined,
-): { manager: ProviderManager } | null {
-  const fakeResponsesPath = process.env.LLXPRT_FAKE_RESPONSES;
+  fakeResponsesPath: string | undefined,
+): boolean {
   if (!fakeResponsesPath) {
-    return null;
+    return false;
   }
   if (config) {
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
   }
   const fakeProvider = new FakeProvider(fakeResponsesPath, process.cwd());
   manager.registerProvider(fakeProvider);
@@ -494,11 +464,11 @@ function tryActivateFakeProvider(
   logger.debug(
     () => `FakeProvider active — replaying from ${fakeResponsesPath}`,
   );
-  return { manager };
+  return true;
 }
 
 function readOwnerAuthPolicy(
-  settings: RuntimeSettingsState,
+  settings: Pick<RuntimeSettingsState, 'get'>,
 ): SessionAuthPolicy {
   const baseUrl = settings.get('base-url');
   const profile = settings.get('currentProfile');
@@ -513,100 +483,168 @@ function readOwnerAuthPolicy(
   };
 }
 
-export function createProviderManager(
-  context: RuntimeContextShape,
-  options: ProviderManagerFactoryOptions,
-): { manager: ProviderManager; oauthManager: OAuthManager } {
-  const userSettings = resolveUserSettings(options.fileSystem);
-  const manager = options.manager ?? new ProviderManager(context);
-
-  // @plan:PLAN-20250214-CREDPROXY.P33
-  const tokenStore = createTokenStore();
-  /**
-   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
-   * @requirement REQ-D01-002
-   * @requirement REQ-D01-003
-   * @pseudocode lines 122-133
-   */
-  const oauthManager = new OAuthManager(tokenStore, options.oauthSettings, {
-    messageBus: options.runtimeMessageBus,
-    config: options.config,
-    readAuthIdentity: () => manager.getAuthIdentity(),
-    readSessionAuthPolicy: () => readOwnerAuthPolicy(context.settingsService),
-    invalidateAuthCaches: createOwnerAuthCacheInvalidator((name) =>
-      manager.getProviderByName(name),
-    ),
-  });
-
-  bindOwnerRetryOperations(manager, oauthManager);
-
-  const {
-    config,
-    allowBrowserEnvironment = false,
-    activateConfiguredProvider = true,
-    addItem,
-    providerContributions,
-  } = options;
-
-  const fakeResult = tryActivateFakeProvider(manager, config);
-  if (fakeResult) {
-    return { manager: fakeResult.manager, oauthManager };
-  }
-
-  logger.debug('createProviderManager config check', {
-    hasConfig: config !== undefined,
-    configType: config?.constructor.name,
-  });
-
-  if (config) {
-    manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
-  }
-
-  const authOnlyEnabled = resolveAuthOnlyFlag(
-    context.settingsService,
-    userSettings,
+export function createOwnedOAuthManager(
+  tokenStore: TokenStore,
+  settings: IOAuthSettingsProvider | undefined,
+  messageBus: MessageBus | undefined,
+  config: Config | undefined,
+  manager: ProviderManager,
+  runtimeSettings: RuntimeSettingsState,
+): OAuthManager {
+  return new OAuthManager(
+    tokenStore,
+    settings,
+    {
+      messageBus,
+      config,
+      readAuthIdentity: () => manager.getAuthIdentity(),
+      readSessionAuthPolicy: () => readOwnerAuthPolicy(runtimeSettings),
+      invalidateAuthCaches: createOwnerAuthCacheInvalidator((name) =>
+        manager.getProviderByName(name),
+      ),
+    },
+    'owned',
   );
-  const { openaiApiKey, openaiBaseUrl, openaiProviderConfig } =
-    resolveOpenaiSettings(
-      context.settingsService,
-      userSettings,
-      authOnlyEnabled,
-      allowBrowserEnvironment,
-    );
+}
 
-  const aliasEntries = loadProviderAliasEntries();
-  registerAllProviders(
-    manager,
-    aliasEntries,
+interface ProviderRegistrationOptions {
+  readonly config: Config | undefined;
+  readonly providerContributions: ProviderContributionRegistry | undefined;
+  readonly addItem: OAuthUICallback | undefined;
+  readonly authOnlyEnabled: boolean;
+  readonly openaiApiKey: string | undefined;
+  readonly openaiBaseUrl: string | undefined;
+  readonly openaiProviderConfig: IProviderConfig;
+}
+
+interface ProviderPopulationTarget {
+  bindRetryOperations(): void;
+  activateReplay(config: Config | undefined, path: string | undefined): boolean;
+  configure(config: Config): void;
+  registerProviders(options: ProviderRegistrationOptions): void;
+  activateConfigured(
+    config: Config | undefined,
+    settings: Pick<RuntimeSettingsState, 'get'>,
+    user: UserSettingsView | undefined,
+  ): void;
+  attachMessages(callback: OAuthUICallback | undefined): void;
+  bindAliasRefresh(options: ProviderRegistrationOptions): void;
+}
+
+export function createProviderPopulationTarget(
+  manager: ProviderManager,
+  oauth: OAuthManager,
+  tokens: TokenStore,
+): ProviderPopulationTarget {
+  return {
+    bindRetryOperations: () => bindOwnerRetryOperations(manager, oauth),
+    activateReplay: (config, path) =>
+      tryActivateFakeProvider(manager, config, path),
+    configure: (config) => {
+      manager.setConfig(config);
+      configureProviderTokenizer(manager);
+    },
+    registerProviders: (options) =>
+      registerAllProviders(
+        manager,
+        loadProviderAliasEntries(),
+        options.openaiApiKey,
+        options.openaiBaseUrl,
+        options.openaiProviderConfig,
+        oauth,
+        tokens,
+        options.config,
+        options.authOnlyEnabled,
+        options.addItem,
+        options.providerContributions,
+      ),
+    activateConfigured: (config, settings, user) =>
+      activateExplicitProvider(manager, config, settings, user),
+    attachMessages: (callback) =>
+      attachAddItemToOAuthProviders(oauth, callback),
+    bindAliasRefresh: (options) =>
+      registerAliasRefresher(
+        manager,
+        options.openaiApiKey,
+        options.openaiBaseUrl,
+        options.openaiProviderConfig,
+        oauth,
+        options.config,
+        options.authOnlyEnabled,
+        options.providerContributions,
+      ),
+  };
+}
+
+export interface ProviderPopulationInput {
+  readonly target: ProviderPopulationTarget;
+  readonly readSetting: RuntimeSettingsState['get'];
+  readonly fileSystem: IFileSystem;
+  readonly configuration:
+    | { readonly kind: 'pre-config' }
+    | { readonly kind: 'configured'; readonly config: Config };
+  readonly contributions:
+    | { readonly kind: 'none' }
+    | {
+        readonly kind: 'supplied';
+        readonly registry: ProviderContributionRegistry;
+      };
+  readonly messages:
+    | { readonly kind: 'none' }
+    | { readonly kind: 'attached'; readonly callback: OAuthUICallback };
+  readonly allowBrowser: boolean;
+  readonly activateConfiguredProvider: boolean;
+  readonly fakeResponses:
+    | { readonly kind: 'disabled' }
+    | { readonly kind: 'replay'; readonly path: string };
+}
+
+export function populateProviderManager(input: ProviderPopulationInput): void {
+  const {
+    target,
+    readSetting,
+    fileSystem,
+    allowBrowser,
+    activateConfiguredProvider,
+  } = input;
+  const config =
+    input.configuration.kind === 'configured'
+      ? input.configuration.config
+      : undefined;
+  const providerContributions =
+    input.contributions.kind === 'supplied'
+      ? input.contributions.registry
+      : undefined;
+  const addItem =
+    input.messages.kind === 'attached' ? input.messages.callback : undefined;
+  const fakeResponsesPath =
+    input.fakeResponses.kind === 'replay'
+      ? input.fakeResponses.path
+      : undefined;
+  const settings = { get: readSetting };
+  const user = resolveUserSettings(fileSystem);
+  target.bindRetryOperations();
+  if (target.activateReplay(config, fakeResponsesPath)) return;
+  if (config) target.configure(config);
+
+  const authOnlyEnabled = resolveAuthOnlyFlag(settings, user);
+  const { openaiApiKey, openaiBaseUrl, openaiProviderConfig } =
+    resolveOpenaiSettings(settings, user, authOnlyEnabled, allowBrowser);
+
+  const registration: ProviderRegistrationOptions = {
+    config,
+    providerContributions,
+    addItem,
+    authOnlyEnabled,
     openaiApiKey,
     openaiBaseUrl,
     openaiProviderConfig,
-    oauthManager,
-    tokenStore,
-    config,
-    authOnlyEnabled,
-    addItem,
-    providerContributions,
-  );
-
-  if (activateConfiguredProvider) {
-    activateExplicitProvider(manager, config, context, userSettings);
-  }
-  attachAddItemToOAuthProviders(oauthManager, addItem);
-
-  const openAIContext: OpenAIRegistrationContext = {
-    apiKey: openaiApiKey ?? undefined,
-    baseUrl: openaiBaseUrl ?? undefined,
-    providerConfig: openaiProviderConfig,
-    oauthManager,
-    config,
-    authOnlyEnabled,
-    providerContributions,
   };
-  registerAliasRefresher(manager, openAIContext);
-
-  return { manager, oauthManager };
+  target.registerProviders(registration);
+  if (activateConfiguredProvider)
+    target.activateConfigured(config, settings, user);
+  target.attachMessages(addItem);
+  target.bindAliasRefresh(registration);
 }
 
 function bindOwnerRetryOperations(
@@ -623,19 +661,25 @@ function bindOwnerRetryOperations(
 
 function registerAliasRefresher(
   manager: ProviderManager,
-  context: OpenAIRegistrationContext,
+  apiKey: string | undefined,
+  baseUrl: string | undefined,
+  providerConfig: IProviderConfig,
+  oauthManager: OAuthManager,
+  config: Config | undefined,
+  authOnlyEnabled: boolean,
+  providerContributions: ProviderContributionRegistry | undefined,
 ): void {
   manager.registerAliasRefresher(() => {
     registerAliasProviders(
       manager,
       loadProviderAliasEntries(),
-      context.apiKey,
-      context.baseUrl,
-      context.providerConfig,
-      context.oauthManager,
-      context.config,
-      context.authOnlyEnabled,
-      { providerContributions: context.providerContributions },
+      apiKey,
+      baseUrl,
+      providerConfig,
+      oauthManager,
+      config,
+      authOnlyEnabled,
+      { providerContributions },
     );
   });
 }

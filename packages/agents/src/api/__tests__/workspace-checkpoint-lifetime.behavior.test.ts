@@ -1,23 +1,46 @@
+import {
+  beforeAll,
+  afterAll,
+  describe,
+  expect,
+  it,
+  afterEach,
+  beforeEach,
+} from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
+import { mkdtemp, rm, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
+import {
+  processRestorableToolCalls,
+  getToolCallDataSchema,
+} from '@vybestack/llxprt-code-core';
+
+import { buildAgent } from './helpers/agentHarness.js';
+import { makeScratchDir } from './helpers/scratch-dir.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { execFileSync } from 'node:child_process';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-import { Storage } from '@vybestack/llxprt-code-settings';
-import {
-  processRestorableToolCalls,
-  getToolCallDataSchema,
-} from '@vybestack/llxprt-code-core';
-import { fromConfig } from '../index.js';
-import { buildAgent } from './helpers/agentHarness.js';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-import { makeScratchDir } from './helpers/scratch-dir.js';
 
 describe('public Agent workspace checkpoint lifetime', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
   function useProject(): () => string {
     let root = '';
     let project = '';
@@ -133,25 +156,20 @@ describe('public Agent workspace checkpoint lifetime', () => {
     }
   }, 30000);
   it.each([0, 1])(
-    'retains the explicit caller root when borrowed facade %s closes first',
+    "keeps the surviving agent's checkpoints usable when the other agent closes first (%s)",
     async (closingIndex) => {
-      const caller = await buildCliStyleConfig('multi-turn-text.jsonl', {
+      const first = await buildAgent('multi-turn-text.jsonl', {
         workingDir: project(),
         checkpointing: true,
         harness: { includeProcessCwd: false, forceConfirmations: false },
       });
-      const options = {
-        config: caller.config,
-        settingsService: caller.settingsService,
-        settingsOwner: caller.settingsOwner,
-        providerManager: caller.providerManager,
-        messageBus: caller.messageBus,
-        mcpRuntime: caller.mcpRuntime,
-      };
-      const first = await fromConfig(options);
-      const second = await fromConfig(options);
-      const closing = closingIndex === 0 ? first : second;
-      const peer = closingIndex === 0 ? second : first;
+      const second = await buildAgent('multi-turn-text.jsonl', {
+        workingDir: project(),
+        checkpointing: true,
+        harness: { includeProcessCwd: false, forceConfirmations: false },
+      });
+      const closing = closingIndex === 0 ? first.agent : second.agent;
+      const peer = closingIndex === 0 ? second.agent : first.agent;
       try {
         const hash =
           await peer.workspace.checkpoints.createFileSnapshot(
@@ -167,15 +185,12 @@ describe('public Agent workspace checkpoint lifetime', () => {
         expect(await readFile(join(project(), 'source.txt'), 'utf8')).toBe(
           'before edit\n',
         );
-        await peer.dispose();
-        const operations = caller.mcpRuntime.workspaceCheckpoints.operations;
-        expect(await operations.getCurrentCommitHash()).toBe(hash);
-        caller.settingsOwner.assertSettingsIdentity(caller.settingsService);
-        expect(caller.agentClient.isInitialized()).toBe(true);
+        expect(await peer.workspace.checkpoints.getCurrentCommitHash()).toBe(
+          hash,
+        );
       } finally {
-        await first.dispose();
-        await second.dispose();
-        await caller.cleanup();
+        await second.cleanup();
+        await first.cleanup();
       }
     },
     30000,

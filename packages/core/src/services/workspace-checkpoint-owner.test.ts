@@ -17,6 +17,7 @@ import {
 import { join } from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { WorkspaceCheckpointOwner } from './workspace-checkpoint-owner.js';
+import { CHECKPOINT_STORE_MARKER_FILENAME } from './gitService.js';
 
 describe('workspace checkpoint owner physical operations', () => {
   function useWorkspace(): () => string {
@@ -186,6 +187,28 @@ while ! test -f ${quote(released)}; do /bin/sleep 0.01; done
     } finally {
       await Promise.all(owners.map((owner) => owner.dispose()));
     }
+  });
+
+  it('reports a physical startup failure once without turning its settled join into a new release failure', async () => {
+    const project = join(root(), 'failed-startup');
+    await mkdir(project);
+    const history = new Storage(project).getHistoryDir();
+    await mkdir(join(history, '.gitconfig'), { recursive: true });
+    await writeFile(join(history, CHECKPOINT_STORE_MARKER_FILENAME), 'fixture');
+    const owner = new WorkspaceCheckpointOwner(project, history, true);
+    await expect(owner.initialize()).rejects.toThrow(
+      'Failed to initialize checkpointing',
+    );
+    const closing = owner.dispose();
+    const concurrentDisposals = new Set([closing, owner.dispose()]);
+    expect(concurrentDisposals.size).toBe(1);
+    await expect(closing).resolves.toBeUndefined();
+    expect(() => owner.initialize()).toThrow(
+      'Workspace checkpoint owner is closed',
+    );
+    expect(() => owner.operations.createFileSnapshot('after failure')).toThrow(
+      'closed',
+    );
   });
 
   it('does not initialize a physical repository when checkpointing is disabled', async () => {

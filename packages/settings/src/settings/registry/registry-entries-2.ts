@@ -5,8 +5,11 @@
  */
 
 import type { SettingSpec, ValidationResult } from './registry-types.js';
+import { deepFreezeTable } from '../immutableTable.js';
 
-export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
+export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = deepFreezeTable<
+  readonly SettingSpec[]
+>([
   {
     key: 'tool-output-item-size-limit',
     category: 'cli-behavior',
@@ -624,7 +627,7 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     type: 'string-array',
     persistToProfile: true,
   },
-];
+]);
 
 function validateTaskMaxAsync(value: unknown): ValidationResult {
   if (typeof value !== 'number' || !Number.isInteger(value)) {

@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../__tests__/mockCommandContext.js';
 
 import * as glob from 'glob';
 import * as path from 'node:path';
@@ -24,7 +25,7 @@ import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 import { SHORTHAND_ARGS_PLACEHOLDER } from './prompt-processors/types.js';
 import { ShellProcessor } from './prompt-processors/shellProcessor.js';
 import { DefaultArgumentProcessor } from './prompt-processors/argumentProcessor.js';
-import type { CommandContext } from '../ui/commands/types.js';
+
 import { FsMockContext } from './__testhelpers__/mockFs.js';
 
 const realGlobModule = { ...(await import('glob')) };
@@ -80,14 +81,17 @@ const fsMock = new FsMockContext();
 
 describe('FileCommandLoader', () => {
   function createLoader(): FileCommandLoader {
-    return new FileCommandLoader({
-      userCommandsDir: fsMock.userCommandsDir,
-      projectCommandsDir: fsMock.projectCommandsDir,
-      getProjectRoot: () => fsMock.root,
-      getExtensions: () => [],
-      getFolderTrust: () => false,
-      isTrustedFolder: () => true,
-    });
+    return new FileCommandLoader(
+      {
+        userCommandsDir: fsMock.userCommandsDir,
+        projectCommandsDir: fsMock.projectCommandsDir,
+        getProjectRoot: () => fsMock.root,
+        getExtensions: () => [],
+        getFolderTrust: () => false,
+        isTrustedFolder: () => true,
+      },
+      null,
+    );
   }
   const signal: AbortSignal = new AbortController().signal;
 
@@ -97,7 +101,7 @@ describe('FileCommandLoader', () => {
     const actualGlob = realGlobModule.glob;
     vi.spyOn(glob, 'glob').mockImplementation(actualGlob);
     mockShellProcess.mockImplementation(
-      (prompt: string, context: CommandContext) => {
+      (prompt: string, context: CommandOwnerFixture) => {
         const userArgsRaw = context.invocation?.args ?? '';
         const processedPrompt = prompt.replaceAll(
           SHORTHAND_ARGS_PLACEHOLDER,
@@ -223,7 +227,7 @@ describe('FileCommandLoader', () => {
       getFolderTrust: vi.fn(() => false),
       isTrustedFolder: vi.fn(() => false),
     } satisfies FileCommandRuntime;
-    const loader = new FileCommandLoader(mockConfig);
+    const loader = new FileCommandLoader(mockConfig, null);
     const commands = await loader.loadCommands(signal);
     expect(commands).toHaveLength(1);
     expect(commands[0].name).toBe('gcp:pipelines:run');
@@ -264,7 +268,7 @@ describe('FileCommandLoader', () => {
       getFolderTrust: vi.fn(() => false),
       isTrustedFolder: vi.fn(() => false),
     } satisfies FileCommandRuntime;
-    const loader = new FileCommandLoader(mockConfig);
+    const loader = new FileCommandLoader(mockConfig, null);
     const commands = await loader.loadCommands(signal);
 
     expect(commands).toHaveLength(2);
@@ -479,7 +483,7 @@ describe('FileCommandLoader', () => {
         getFolderTrust: vi.fn(() => false),
         isTrustedFolder: vi.fn(() => false),
       } satisfies FileCommandRuntime;
-      const loader = new FileCommandLoader(mockConfig);
+      const loader = new FileCommandLoader(mockConfig, null);
       const commands = await loader.loadCommands(signal);
 
       expect(commands).toHaveLength(3);
@@ -531,7 +535,7 @@ describe('FileCommandLoader', () => {
         getFolderTrust: vi.fn(() => false),
         isTrustedFolder: vi.fn(() => false),
       } satisfies FileCommandRuntime;
-      const loader = new FileCommandLoader(mockConfig);
+      const loader = new FileCommandLoader(mockConfig, null);
       const commands = await loader.loadCommands(signal);
 
       // Return all commands, even duplicates
@@ -646,7 +650,7 @@ describe('FileCommandLoader', () => {
         getFolderTrust: vi.fn(() => false),
         isTrustedFolder: vi.fn(() => false),
       } satisfies FileCommandRuntime;
-      const loader = new FileCommandLoader(mockConfig);
+      const loader = new FileCommandLoader(mockConfig, null);
       const commands = await loader.loadCommands(signal);
 
       expect(commands).toHaveLength(1);
@@ -684,7 +688,7 @@ describe('FileCommandLoader', () => {
         getFolderTrust: vi.fn(() => false),
         isTrustedFolder: vi.fn(() => false),
       } satisfies FileCommandRuntime;
-      const loader = new FileCommandLoader(mockConfig);
+      const loader = new FileCommandLoader(mockConfig, null);
       const commands = await loader.loadCommands(signal);
       expect(commands).toHaveLength(0);
     });
@@ -718,7 +722,7 @@ describe('FileCommandLoader', () => {
         getFolderTrust: vi.fn(() => false),
         isTrustedFolder: vi.fn(() => false),
       } satisfies FileCommandRuntime;
-      const loader = new FileCommandLoader(mockConfig);
+      const loader = new FileCommandLoader(mockConfig, null);
       const commands = await loader.loadCommands(signal);
 
       expect(commands).toHaveLength(3);
@@ -789,7 +793,7 @@ describe('FileCommandLoader', () => {
         isTrustedFolder: () => trusted,
       } satisfies FileCommandRuntime;
       return {
-        loader: new FileCommandLoader(config),
+        loader: new FileCommandLoader(config, null),
         setTrusted: (value: boolean) => {
           trusted = value;
         },

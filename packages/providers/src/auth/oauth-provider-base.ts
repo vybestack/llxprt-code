@@ -110,6 +110,8 @@ export class AuthCodeDialog {
   private resolver?: (code: string) => void;
   private rejecter?: (error: Error) => void;
 
+  constructor(private readonly onCodeSettled: () => void) {}
+
   /**
    * Returns a promise that resolves when submitAuthCode() is called,
    * or rejects when cancelAuth() is called.
@@ -135,8 +137,7 @@ export class AuthCodeDialog {
    * dialog pending state.
    */
   rejectWithError(error: Error): void {
-    (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code =
-      false;
+    this.onCodeSettled();
     if (this.rejecter) {
       this.rejecter(error);
       this.resolver = undefined;

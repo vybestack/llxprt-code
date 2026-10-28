@@ -40,6 +40,36 @@ describe('Explicit workspace trust lifetime', () => {
     await Promise.all([first.dispose(), peer.dispose()]);
   });
 
+  it('ignores setTrustedFolderLive(false) when the IDE says trusted', async (): Promise<void> => {
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: false,
+      ideTrust: true,
+    });
+    const admissions: boolean[] = [];
+    trust.subscribeTrustChange((transition) => {
+      admissions.push(transition.trusted);
+    });
+    await trust.setTrustedFolderLive(false);
+    expect(trust.isTrustedFolder()).toBe(true);
+    expect(admissions).toStrictEqual([]);
+    await trust.dispose();
+  });
+
+  it('ignores setTrustedFolderLive(true) when the IDE says untrusted', async (): Promise<void> => {
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: true,
+      ideTrust: false,
+    });
+    const admissions: boolean[] = [];
+    trust.subscribeTrustChange((transition) => {
+      admissions.push(transition.trusted);
+    });
+    await trust.setTrustedFolderLive(true);
+    expect(trust.isTrustedFolder()).toBe(false);
+    expect(admissions).toStrictEqual([]);
+    await trust.dispose();
+  });
+
   it('publishes effective admission immediately despite blocked asynchronous settlement and ignores redundant writes', async (): Promise<void> => {
     const trust = new WorkspaceTrustLifecycle({ localTrust: false });
     const entered = deferred();
@@ -114,6 +144,59 @@ describe('Explicit workspace trust lifetime', () => {
     release.resolve();
     await Promise.all([grant, denial, closing]);
     expect(settled).toStrictEqual([true, false]);
+  });
+
+  it('keeps disposal pending while a subscriber holds an unobserved transition', async (): Promise<void> => {
+    const trust = new WorkspaceTrustLifecycle({ localTrust: false });
+    const entered = deferred();
+    const release = deferred();
+    trust.subscribeTrustTransition(async (): Promise<void> => {
+      entered.resolve();
+      await release.promise;
+    });
+    void trust.setTrustedFolderLive(true);
+    await entered.promise;
+    let disposed = false;
+    const closing = trust.dispose().then(() => {
+      disposed = true;
+    });
+    await new Promise<void>((turn) => setImmediate(turn));
+    expect(disposed).toBe(false);
+    release.resolve();
+    await closing;
+    expect(disposed).toBe(true);
+  });
+
+  it('rejects disposal with the failure of an unobserved transition and leaves no unhandled rejection', async (): Promise<void> => {
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', record);
+    try {
+      const trust = new WorkspaceTrustLifecycle({ localTrust: false });
+      const entered = deferred();
+      const release = deferred();
+      const failure = new Error('held trust subscriber failed');
+      trust.subscribeTrustTransition(async (): Promise<void> => {
+        entered.resolve();
+        await release.promise;
+        throw failure;
+      });
+      void trust.setTrustedFolderLive(true);
+      await entered.promise;
+      const closing = trust.dispose();
+      const outcome = closing.then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+      release.resolve();
+      expect(await outcome).toBe(failure);
+      await new Promise<void>((turn) => setImmediate(turn));
+      expect(unhandled).toStrictEqual([]);
+    } finally {
+      process.off('unhandledRejection', record);
+    }
   });
 
   it('retains synchronous subscriber errors alongside asynchronous failures', async (): Promise<void> => {

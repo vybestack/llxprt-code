@@ -30,19 +30,25 @@ describe('kimiUsageInfo', () => {
     });
 
     it('should return null for empty API key', async () => {
-      const result = await fetchKimiUsage('');
+      const result = await fetchKimiUsage(globalThis.fetch, '');
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('should return null for invalid API key', async () => {
-      const result = await fetchKimiUsage(undefined as unknown as string);
+      const result = await fetchKimiUsage(
+        globalThis.fetch,
+        undefined as unknown as string,
+      );
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('should return null for Kimi Code subscription keys (sk-kimi-)', async () => {
-      const result = await fetchKimiUsage('sk-kimi-some-subscription-key');
+      const result = await fetchKimiUsage(
+        globalThis.fetch,
+        'sk-kimi-some-subscription-key',
+      );
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -59,7 +65,10 @@ describe('kimiUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchKimiUsage('sk-standard-api-key');
+      const result = await fetchKimiUsage(
+        globalThis.fetch,
+        'sk-standard-api-key',
+      );
 
       expect(fetchMock).toHaveBeenCalledWith(
         'https://api.moonshot.ai/v1/users/me/balance',
@@ -82,14 +91,20 @@ describe('kimiUsageInfo', () => {
         statusText: 'Unauthorized',
       } as Response);
 
-      const result = await fetchKimiUsage('sk-standard-api-key');
+      const result = await fetchKimiUsage(
+        globalThis.fetch,
+        'sk-standard-api-key',
+      );
       expect(result).toBeNull();
     });
 
     it('should handle network errors', async () => {
       fetchMock.mockRejectedValueOnce(new Error('Network error'));
 
-      const result = await fetchKimiUsage('sk-standard-api-key');
+      const result = await fetchKimiUsage(
+        globalThis.fetch,
+        'sk-standard-api-key',
+      );
       expect(result).toBeNull();
     });
 
@@ -103,7 +118,11 @@ describe('kimiUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      await fetchKimiUsage('sk-standard-api-key', 'https://api.moonshot.cn/v1');
+      await fetchKimiUsage(
+        globalThis.fetch,
+        'sk-standard-api-key',
+        'https://api.moonshot.cn/v1',
+      );
 
       expect(fetchMock).toHaveBeenCalledWith(
         'https://api.moonshot.cn/v1/users/me/balance',
@@ -123,7 +142,11 @@ describe('kimiUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      await fetchKimiUsage('sk-standard-api-key', 'https://api.kimi.com/v1');
+      await fetchKimiUsage(
+        globalThis.fetch,
+        'sk-standard-api-key',
+        'https://api.kimi.com/v1',
+      );
 
       expect(fetchMock).toHaveBeenCalledWith(
         'https://api.moonshot.ai/v1/users/me/balance',
@@ -146,7 +169,10 @@ describe('kimiUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchKimiUsage('sk-standard-api-key');
+      const result = await fetchKimiUsage(
+        globalThis.fetch,
+        'sk-standard-api-key',
+      );
       expect(result).toBeDefined();
       expect((result as Record<string, unknown>)['new_field']).toBe(
         'extra_data',
@@ -163,7 +189,7 @@ describe('kimiUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      await fetchKimiUsage('sk-standard-api-key');
+      await fetchKimiUsage(globalThis.fetch, 'sk-standard-api-key');
 
       const secondArg = fetchMock.mock.calls[0]?.[1] as {
         signal?: unknown;
@@ -244,13 +270,16 @@ describe('kimiUsageInfo', () => {
     });
 
     it('should return null for empty API key', async () => {
-      const result = await fetchKimiCodeUsage('');
+      const result = await fetchKimiCodeUsage(globalThis.fetch, '');
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('should return null for invalid API key', async () => {
-      const result = await fetchKimiCodeUsage(undefined as unknown as string);
+      const result = await fetchKimiCodeUsage(
+        globalThis.fetch,
+        undefined as unknown as string,
+      );
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -284,7 +313,10 @@ describe('kimiUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchKimiCodeUsage('sk-kimi-test-key');
+      const result = await fetchKimiCodeUsage(
+        globalThis.fetch,
+        'sk-kimi-test-key',
+      );
 
       expect(fetchMock).toHaveBeenCalledWith(
         'https://api.kimi.com/coding/v1/usages',
@@ -311,6 +343,7 @@ describe('kimiUsageInfo', () => {
       } as Response);
 
       await fetchKimiCodeUsage(
+        globalThis.fetch,
         'sk-kimi-test-key',
         'https://api.kimi.com/coding/v1',
       );
@@ -331,7 +364,7 @@ describe('kimiUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      await fetchKimiCodeUsage('sk-kimi-test-key');
+      await fetchKimiCodeUsage(globalThis.fetch, 'sk-kimi-test-key');
 
       expect(fetchMock).toHaveBeenCalledWith(
         'https://api.kimi.com/coding/v1/usages',
@@ -346,14 +379,20 @@ describe('kimiUsageInfo', () => {
         statusText: 'Unauthorized',
       } as Response);
 
-      const result = await fetchKimiCodeUsage('sk-kimi-test-key');
+      const result = await fetchKimiCodeUsage(
+        globalThis.fetch,
+        'sk-kimi-test-key',
+      );
       expect(result).toBeNull();
     });
 
     it('should handle network errors', async () => {
       fetchMock.mockRejectedValueOnce(new Error('Network error'));
 
-      const result = await fetchKimiCodeUsage('sk-kimi-test-key');
+      const result = await fetchKimiCodeUsage(
+        globalThis.fetch,
+        'sk-kimi-test-key',
+      );
       expect(result).toBeNull();
     });
 
@@ -368,7 +407,10 @@ describe('kimiUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchKimiCodeUsage('sk-kimi-test-key');
+      const result = await fetchKimiCodeUsage(
+        globalThis.fetch,
+        'sk-kimi-test-key',
+      );
       expect(result).toBeDefined();
       expect((result as Record<string, unknown>)['extra_field']).toBe(
         'extra_data',
@@ -385,7 +427,7 @@ describe('kimiUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      await fetchKimiCodeUsage('sk-kimi-test-key');
+      await fetchKimiCodeUsage(globalThis.fetch, 'sk-kimi-test-key');
 
       const secondArg = fetchMock.mock.calls[0]?.[1] as {
         signal?: unknown;

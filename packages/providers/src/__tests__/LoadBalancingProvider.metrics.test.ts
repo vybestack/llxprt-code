@@ -1,5 +1,5 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -44,12 +44,17 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
     {
       const settingsService = new SettingsService();
       const config = createRuntimeConfigStub(settingsService);
-      providerManager = new ProviderManager({
-        sessionSettings: fixtureOwners.adopt(config, settingsService)
-          .settingsOwner,
+      providerManager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         settingsService,
         config,
-      });
+        undefined,
+        undefined,
+        fixtureOwnersBorrowedSettings(config, settingsService),
+      );
     }
     config = {
       profileName: 'test-lb',

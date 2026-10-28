@@ -28,14 +28,11 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
  *   BEFORE the provider call, so the LB guard callback is never invoked.
  */
 
-import { afterEach, describe, it, expect, beforeEach, vi } from 'bun:test';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   LoadBalancerContextLimitError,
   LoadBalancingProvider,
@@ -48,13 +45,18 @@ import type {
   IProvider,
   ProviderToolset,
 } from '@vybestack/llxprt-code-providers/IProvider.js';
-import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import {
   buildMockContentGenerator,
   buildRuntimeContext,
 } from '../../core/__tests__/chatSession-density-helpers.js';
 import { ChatSession } from '../../core/chatSession.js';
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
 import { preparePromptEnvelopeAfterEnforcement } from '../../core/promptEnvelopeSendSeam.js';
+import { makeLoadBalancerInvocation } from '../../../../providers/src/__tests__/loadBalancerTestHelpers.js';
+import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
 
 const MODEL = 'test-model';
 const HISTORY_MESSAGES = 14;
@@ -213,11 +215,17 @@ function createLoadBalancer(options: {
   const config = createRuntimeConfigStub(settingsService);
   const settingsOwner = new SessionSettingsOwner(settingsService);
   settingsOwner.bindTelemetry(config);
-  const providerManager = new ProviderManager({
+  const providerManager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
     config,
-    sessionSettings: settingsOwner,
-  });
+    undefined,
+    undefined,
+    settingsOwner,
+  );
   ownedReleases.push(
     () => providerManager.dispose(),
     () => settingsOwner.dispose(),
@@ -291,7 +299,14 @@ function createEnforcementSession(options: {
     compressionThreshold: 0.8,
   });
   const chat = new ChatSession(
-    runtimeContext,
+    chatSessionPorts(runtimeContext),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     buildMockContentGenerator(),
     {},
     [],
@@ -361,6 +376,7 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
     const projection = await lb.projectPromptEnvelope({
       contents,
       tools: TOOLSET,
+      invocation: makeLoadBalancerInvocation(),
     });
     expect(projection).toBeDefined();
     const envelopeTokens = await projection!.legacyEstimate();
@@ -368,7 +384,11 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
     expect(envelopeTokens).toBeGreaterThan(contextLimit);
 
     const chunks = await consume(
-      lb.generateChatCompletion({ contents, tools: TOOLSET }),
+      lb.generateChatCompletion({
+        contents,
+        tools: TOOLSET,
+        invocation: makeLoadBalancerInvocation(),
+      }),
     );
 
     // The guard handed its real estimate and limit to the real callback.
@@ -428,6 +448,7 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
       for await (const chunk of lb.generateChatCompletion({
         contents,
         tools: TOOLSET,
+        invocation: makeLoadBalancerInvocation(),
       })) {
         chunks.push(chunk);
       }
@@ -492,6 +513,7 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
       buildOptions: (candidate) => ({
         contents: candidate,
         tools: TOOLSET,
+        invocation: makeLoadBalancerInvocation(),
       }),
       enforce: (candidate, estimate) =>
         handler.enforceProviderContents(
@@ -511,7 +533,11 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
     expect(reducedTokens).toBeLessThan(contentsOnlyTokens);
 
     const chunks = await consume(
-      lb.generateChatCompletion({ contents: reduced, tools: TOOLSET }),
+      lb.generateChatCompletion({
+        contents: reduced,
+        tools: TOOLSET,
+        invocation: makeLoadBalancerInvocation(),
+      }),
     );
 
     // The ordinary pre-send ladder already brought the envelope under the

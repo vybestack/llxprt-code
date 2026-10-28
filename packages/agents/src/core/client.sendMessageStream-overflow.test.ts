@@ -1,3 +1,5 @@
+import type { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+let metricSource: UiTelemetryService;
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -27,7 +29,6 @@ import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType, PerformCompressionResult } from './turn.js';
-import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import {
   fromAsync,
@@ -207,12 +208,6 @@ void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
     ),
   };
 });
-void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
-  uiTelemetryService: {
-    setLastPromptTokenCount: vi.fn(),
-    getLastPromptTokenCount: vi.fn(),
-  },
-}));
 
 describe('AgentClient (client.ts)', () => {
   let client: AgentClient;
@@ -224,6 +219,7 @@ describe('AgentClient (client.ts)', () => {
       mockEmbedContentFn,
     });
     client = ctx.client;
+    metricSource = ctx.metrics;
 
     mockTodoStoreConstructor.mockImplementation(() => ({
       readTodos: todoStoreReadMock,
@@ -307,11 +303,7 @@ describe('AgentClient (client.ts)', () => {
 
       // Set last prompt token count
       const lastPromptTokenCount = 900;
-      (
-        uiTelemetryService.getLastPromptTokenCount as Mock<
-          typeof uiTelemetryService.getLastPromptTokenCount
-        >
-      ).mockReturnValue(lastPromptTokenCount);
+      metricSource.setLastPromptTokenCount(lastPromptTokenCount);
 
       // Mock the chat to return the lastPromptTokenCount
       const mockChat = installMockChat(lastPromptTokenCount, {
@@ -363,11 +355,7 @@ describe('AgentClient (client.ts)', () => {
 
       // e.g. 249,442 stored tokens against a 200,000-token model.
       const lastPromptTokenCount = 249442;
-      (
-        uiTelemetryService.getLastPromptTokenCount as Mock<
-          typeof uiTelemetryService.getLastPromptTokenCount
-        >
-      ).mockReturnValue(lastPromptTokenCount);
+      metricSource.setLastPromptTokenCount(lastPromptTokenCount);
 
       installMockChat(lastPromptTokenCount, {
         convertPartListUnionToIContent: vi
@@ -410,11 +398,7 @@ describe('AgentClient (client.ts)', () => {
       );
 
       const lastPromptTokenCount = 249442;
-      (
-        uiTelemetryService.getLastPromptTokenCount as Mock<
-          typeof uiTelemetryService.getLastPromptTokenCount
-        >
-      ).mockReturnValue(lastPromptTokenCount);
+      metricSource.setLastPromptTokenCount(lastPromptTokenCount);
 
       installMockChat(lastPromptTokenCount, {
         convertPartListUnionToIContent: vi.fn().mockReturnValue({
@@ -462,11 +446,7 @@ describe('AgentClient (client.ts)', () => {
         MOCKED_TOKEN_LIMIT,
       );
       const lastPromptTokenCount = 1000;
-      (
-        uiTelemetryService.getLastPromptTokenCount as Mock<
-          typeof uiTelemetryService.getLastPromptTokenCount
-        >
-      ).mockReturnValue(lastPromptTokenCount);
+      metricSource.setLastPromptTokenCount(lastPromptTokenCount);
 
       const estimateSpy = vi.fn();
       installMockChat(lastPromptTokenCount, {
@@ -499,11 +479,7 @@ describe('AgentClient (client.ts)', () => {
         MOCKED_TOKEN_LIMIT,
       );
       const lastPromptTokenCount = 249442;
-      (
-        uiTelemetryService.getLastPromptTokenCount as Mock<
-          typeof uiTelemetryService.getLastPromptTokenCount
-        >
-      ).mockReturnValue(lastPromptTokenCount);
+      metricSource.setLastPromptTokenCount(lastPromptTokenCount);
 
       const convertSpy = vi.fn();
       const estimateSpy = vi.fn();
@@ -541,11 +517,7 @@ describe('AgentClient (client.ts)', () => {
         MOCKED_TOKEN_LIMIT,
       );
       const lastPromptTokenCount = 0;
-      (
-        uiTelemetryService.getLastPromptTokenCount as Mock<
-          typeof uiTelemetryService.getLastPromptTokenCount
-        >
-      ).mockReturnValue(lastPromptTokenCount);
+      metricSource.setLastPromptTokenCount(lastPromptTokenCount);
 
       installMockChat(lastPromptTokenCount);
 
@@ -587,11 +559,7 @@ describe('AgentClient (client.ts)', () => {
         MOCKED_TOKEN_LIMIT,
       );
       const lastPromptTokenCount = 0;
-      (
-        uiTelemetryService.getLastPromptTokenCount as Mock<
-          typeof uiTelemetryService.getLastPromptTokenCount
-        >
-      ).mockReturnValue(lastPromptTokenCount);
+      metricSource.setLastPromptTokenCount(lastPromptTokenCount);
 
       installMockChat(lastPromptTokenCount, {
         estimatePendingTokens: vi
@@ -631,11 +599,7 @@ describe('AgentClient (client.ts)', () => {
         MOCKED_TOKEN_LIMIT,
       );
       const lastPromptTokenCount = 0;
-      (
-        uiTelemetryService.getLastPromptTokenCount as Mock<
-          typeof uiTelemetryService.getLastPromptTokenCount
-        >
-      ).mockReturnValue(lastPromptTokenCount);
+      metricSource.setLastPromptTokenCount(lastPromptTokenCount);
 
       installMockChat(lastPromptTokenCount);
 
@@ -675,11 +639,7 @@ describe('AgentClient (client.ts)', () => {
         STICKY_MODEL_LIMIT,
       );
       const lastPromptTokenCount = 900;
-      (
-        uiTelemetryService.getLastPromptTokenCount as Mock<
-          typeof uiTelemetryService.getLastPromptTokenCount
-        >
-      ).mockReturnValue(lastPromptTokenCount);
+      metricSource.setLastPromptTokenCount(lastPromptTokenCount);
       const mockChat = installMockChat(lastPromptTokenCount);
 
       installCountTokensGenerator();

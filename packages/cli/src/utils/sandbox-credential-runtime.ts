@@ -21,6 +21,10 @@ export interface CredentialSocketRuntime {
   readonly cleanup: () => void;
 }
 
+export function removeCredentialSessionTmpdir(sessionTmpdir: string): void {
+  fs.rmSync(sessionTmpdir, { recursive: true, force: true });
+}
+
 export function cleanupCredentialSocketRuntime(
   socketRuntime: CredentialSocketRuntime,
   sessionTmpdir: string,
@@ -28,7 +32,7 @@ export function cleanupCredentialSocketRuntime(
   const errors: unknown[] = [];
   for (const cleanup of [
     socketRuntime.cleanup,
-    () => fs.rmSync(sessionTmpdir, { recursive: true, force: true }),
+    () => removeCredentialSessionTmpdir(sessionTmpdir),
   ]) {
     try {
       cleanup();

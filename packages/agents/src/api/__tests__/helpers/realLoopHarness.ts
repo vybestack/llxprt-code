@@ -1,3 +1,5 @@
+import { bindTurnModel } from '../../../session/bind-turn-model.js';
+import { TurnToolExecutionOwner } from '../../../session/turn-tool-execution-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { createLoopSettingsFixture } from '../../../core/agenticLoop/__tests__/loop-settings-fixture.js';
 import { CoreToolScheduler } from '../../../core/coreToolScheduler.js';
@@ -108,6 +110,9 @@ function createScriptedAgentClient(scripts: TurnScript[]): ScriptedClient {
 
 function makeScriptedChat(history: IContent[]): AgentChatContract {
   return {
+    appendGeneration: async () => {
+      throw new Error('Scripted loop does not publish detached generation');
+    },
     sendMessage: async () => emptyModelOutput(),
     sendMessageStream: async () => {
       async function* emptyStream() {}
@@ -136,7 +141,7 @@ function makeScriptedClientContract(
 ): AgentClientContract {
   const tools = new ClientToolSelection();
   return {
-    ...scriptedClientIdentity(),
+    ...scriptedClientBindings(),
     get tools() {
       return tools.read();
     },
@@ -291,26 +296,28 @@ export async function runRealLoopExecuteTool(): Promise<
   ]);
   client.bindToolSelection(toolRegistry);
   const loop = new AgenticLoop({
-    createSchedulerOwner: bindSchedulerOwner(
-      config,
-      messageBus,
-      config.isInteractive(),
-      toolRegistry,
-      (options) => new CoreToolScheduler(options),
-      () => settingsOwner.readToolExecutionPolicy(),
-      () => settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
-      undefined,
-      RootTelemetry.prepare({
-        enabled: false,
-        sessionId: 'isolated-caller-fixture',
-        maxBytes: 1024,
-        maxFiles: 1,
-      }),
-    ),
-    agentClient: client,
     config,
-    messageBus,
-    approvalHandler,
+    ...bindTurnModel(client),
+    tools: new TurnToolExecutionOwner(
+      messageBus,
+      approvalHandler,
+      bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => settingsOwner.readToolExecutionPolicy(),
+        () => settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
+        undefined,
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+      ),
+    ),
   });
   const events: AgenticLoopEvent[] = [];
   for await (const event of loop.run('go', new AbortController().signal)) {
@@ -339,25 +346,28 @@ export async function runRealLoopAbort(): Promise<readonly AgenticLoopEvent[]> {
   ]);
   client.bindToolSelection(toolRegistry);
   const loop = new AgenticLoop({
-    createSchedulerOwner: bindSchedulerOwner(
-      config,
-      messageBus,
-      config.isInteractive(),
-      toolRegistry,
-      (options) => new CoreToolScheduler(options),
-      () => settingsOwner.readToolExecutionPolicy(),
-      () => settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
-      undefined,
-      RootTelemetry.prepare({
-        enabled: false,
-        sessionId: 'isolated-caller-fixture',
-        maxBytes: 1024,
-        maxFiles: 1,
-      }),
-    ),
-    agentClient: client,
     config,
-    messageBus,
+    ...bindTurnModel(client),
+    tools: new TurnToolExecutionOwner(
+      messageBus,
+      undefined,
+      bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => settingsOwner.readToolExecutionPolicy(),
+        () => settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
+        undefined,
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+      ),
+    ),
   });
   const events: AgenticLoopEvent[] = [];
   const iterator = loop.run('go', controller.signal);
@@ -372,11 +382,24 @@ export async function runRealLoopAbort(): Promise<readonly AgenticLoopEvent[]> {
   return events;
 }
 
-function scriptedClientIdentity(): Pick<
+function scriptedClientBindings(): Pick<
   AgentClientContract,
-  'assertConfig' | 'assertProviderManager'
+  | 'assertConfig'
+  | 'assertProviderManager'
+  | 'bindModelNotifications'
+  | 'bindIdeContext'
+  | 'bindWorkspaceDefinitions'
+  | 'bindProviderFiles'
+  | 'bindTokenization'
+  | 'bindProviderSelection'
 > {
   return {
+    bindModelNotifications: () => {},
+    bindIdeContext: () => {},
+    bindWorkspaceDefinitions: () => {},
+    bindProviderFiles: () => {},
+    bindTokenization: () => {},
+    bindProviderSelection: () => {},
     assertConfig: () => {
       throw new Error('Scripted loop client cannot be adopted');
     },

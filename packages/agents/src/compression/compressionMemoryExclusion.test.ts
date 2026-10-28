@@ -48,6 +48,10 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.
 import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
 import { buildCompressionSystemInstruction } from './compressionSystemPrompt.js';
 import { OneShotStrategy } from './OneShotStrategy.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 // ---------------------------------------------------------------------------
 // Sentinels
@@ -150,7 +154,6 @@ const noopLogger = {
 
 function createStubProviderRuntime(): ProviderRuntimeContext {
   return {
-    settingsService: new SettingsService(),
     config: undefined,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
@@ -166,9 +169,16 @@ function buildCompressionContext(
 ): CompressionContext {
   const provider =
     overrides.provider ?? createOptionsCapturingProvider([], VALID_SNAPSHOT);
+  const settingsService = new SettingsService();
   const resolveProvider = (): CompressionProviderResult => ({
     invocation: captureProviderInvocation(
-      createStubProviderRuntime(),
+      {
+        fetch: requestFetch,
+        runtimeId: createStubProviderRuntime().runtimeId,
+        metadata: createStubProviderRuntime().metadata,
+        globalSettings: settingsService.getAllGlobalSettings(),
+        providerSettings: settingsService.getProviderSettings(provider.name),
+      },
       provider.name,
     ),
     provider,
@@ -315,7 +325,12 @@ describe('Compression memory exclusion (issue #3174)', () => {
         provider,
       });
 
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(context);
 
       const request = captured[0];

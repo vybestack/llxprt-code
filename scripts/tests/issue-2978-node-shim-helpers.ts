@@ -9,11 +9,15 @@ import {
   chmodSync,
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   realpathSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
+  writeSync,
 } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -64,6 +68,28 @@ export function makeLayout(tempRoot: string): Layout {
 export const defaultEntryBody =
   'console.log(JSON.stringify({exe:process.execPath,argv:process.argv.slice(2)}));' +
   'let c=Number(process.env.LLXPRT_TEST_EXIT||"0");if(c)process.exit(c);';
+
+/**
+ * Fixed source for the profiled child that proves one terminal SIGINT reaches
+ * it once. Its two output paths arrive through SIGNAL_READY_PATH and
+ * SIGNAL_COUNT_PATH so no test value is ever spliced into this code.
+ */
+export const signalBridgeEntryBody = [
+  'import { writeFileSync } from "node:fs";',
+  'if (process.env.LLXPRT_INTERNAL_MEMPROFILE_SIGNAL_BRIDGE !== "1") throw new Error("signal bridge marker missing");',
+  'const countPath = process.env.SIGNAL_COUNT_PATH;',
+  'const readyPath = process.env.SIGNAL_READY_PATH;',
+  'if (countPath === undefined || readyPath === undefined) throw new Error("signal bridge paths missing");',
+  'let signalCount = 0;',
+  'process.on("SIGINT", () => {',
+  '  signalCount++;',
+  '  if (signalCount === 1) {',
+  '    setTimeout(() => { writeFileSync(countPath, String(signalCount)); process.exit(0); }, 250);',
+  '  }',
+  '});',
+  'writeFileSync(readyPath, "ready");',
+  'setInterval(() => {}, 1000);',
+].join('\n');
 
 export function writeSourceEntry(pkgRoot: string, body: string): void {
   writeFileSync(path.join(pkgRoot, 'index.ts'), body);
@@ -224,7 +250,10 @@ export function runShim(
     'node',
     ['-e', captureChildOutput, stdoutPath, stderrPath, layout.shim, ...args],
     {
-      cwd: layout.root,
+      // The fixture root must not be any launched process's working
+      // directory: Windows keeps a directory handle open for a process cwd
+      // and refuses to remove the directory while the process is tearing down.
+      cwd: path.dirname(layout.root),
       timeout: LAUNCH_TIMEOUT_MS,
       env: { ...process.env, ...extraEnv },
       stdio: 'ignore',
@@ -251,5 +280,146 @@ export function parseEntryOutput(
     return JSON.parse(line) as { exe: string; argv: string[] };
   } catch {
     return null;
+  }
+}
+
+export function isNativeExecutable(stdout: string, native: string): boolean {
+  const output = parseEntryOutput(stdout);
+  if (output === null) throw new Error(`Missing application output: ${stdout}`);
+  return realpathSync(output.exe) === realpathSync(native);
+}
+
+export function parseHandleOwners(
+  output: string,
+): Array<{ image: string; pid: number; kind: string; handle: string }> {
+  return [
+    ...output.matchAll(
+      /^(\S+)\s+pid:\s+(\d+)\s+type:\s+(\S+)\s+([\da-f]+):/gim,
+    ),
+  ].map((match) => ({
+    image: path.win32.basename(match[1] ?? ''),
+    pid: Number(match[2]),
+    kind: match[3] ?? '',
+    handle: match[4] ?? '',
+  }));
+}
+
+export interface FixtureEntry {
+  readonly name: string;
+  readonly kind: 'directory' | 'file' | 'other';
+  readonly size: number;
+}
+
+const MAX_REPORTED_FIXTURE_ENTRIES = 32;
+
+/**
+ * Lists what a failed recursive removal left behind. `rm -r` deletes every
+ * entry it can before it fails, so the survivors are the locked objects; an
+ * empty list means only the fixture root itself is held. A directory's own
+ * lstat size is always 0 on NTFS and says nothing about emptiness.
+ */
+export function listFixtureEntries(fixture: string): FixtureEntry[] {
+  return readdirSync(fixture, { recursive: true })
+    .slice(0, MAX_REPORTED_FIXTURE_ENTRIES)
+    .map((name) => {
+      const stat = lstatSync(path.join(fixture, name), {
+        throwIfNoEntry: false,
+      });
+      let kind: FixtureEntry['kind'] = 'other';
+      if (stat?.isDirectory()) kind = 'directory';
+      else if (stat?.isFile()) kind = 'file';
+      return { name, kind, size: stat?.size ?? -1 };
+    });
+}
+
+export function throwShimCleanupError(
+  error: unknown,
+  fixture: string,
+  deadline: number,
+): never {
+  if (
+    !isWin ||
+    !(error instanceof Error) ||
+    !('code' in error) ||
+    error.code !== 'EBUSY'
+  ) {
+    throw error;
+  }
+  const emit = (details: object): void => {
+    try {
+      writeSync(2, `shim-cleanup-lock ${JSON.stringify(details)}\n`);
+    } catch {
+      // A closed CI diagnostic stream must not replace the cleanup exception.
+    }
+  };
+  try {
+    emit({
+      phase: 'profile-afterEach',
+      fixture: path.basename(fixture),
+      pid: process.pid,
+      ppid: process.ppid,
+      at: new Date().toISOString(),
+      owner: 'unproven',
+    });
+    const directory = lstatSync(fixture, { throwIfNoEntry: false });
+    emit({
+      directory: directory && {
+        mode: directory.mode,
+        modified: directory.mtimeMs,
+      },
+      remainingEntries: listFixtureEntries(fixture),
+    });
+    const probe = (command: string, args: string[]): string => {
+      const remaining = Math.floor(deadline - performance.now());
+      if (remaining <= 0) throw new Error('diagnostic budget exhausted');
+      const result = spawnSync(command, args, {
+        encoding: 'utf8',
+        timeout: Math.min(1000, remaining),
+        maxBuffer: 32 * 1024,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        windowsHide: true,
+        cwd: path.dirname(fixture),
+        env: { ...process.env, LLXPRT_TEST_LOCK_PATH: fixture },
+      });
+      emit({
+        probe: path.basename(command),
+        status: result.status,
+        signal: result.signal,
+        failed: Boolean(result.error),
+      });
+      return result.status === 0 && !result.error ? result.stdout : '';
+    };
+    const script = [
+      "$ErrorActionPreference='Stop'; $needle=[regex]::Escape($env:LLXPRT_TEST_LOCK_PATH);",
+      `@(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -eq ${process.pid} -or ($_.ProcessId -ne $PID -and ($_.ExecutablePath -match $needle -or $_.CommandLine -match $needle)) } |`,
+      "ForEach-Object { [pscustomobject]@{ pid=$_.ProcessId; ppid=$_.ParentProcessId; image=[IO.Path]::GetFileName($_.ExecutablePath); started=$_.CreationDate.ToUniversalTime().ToString('o') } }) | ConvertTo-Json -Compress",
+    ].join(' ');
+    const processes = probe('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      script,
+    ]);
+    const processCandidates: unknown = JSON.parse(processes || '[]');
+    emit({ processCandidates });
+    const handle = Bun.which('handle.exe') ?? Bun.which('handle64.exe');
+    if (handle === null) {
+      emit({ probe: 'handles', available: false });
+    } else {
+      const result = probe(handle, ['-nobanner', fixture]);
+      emit({ handleOwners: parseHandleOwners(result) });
+    }
+  } catch {
+    emit({ probeFailed: true });
+  }
+  throw error;
+}
+
+export function removeProfileFixture(tempDir: string): void {
+  const deadline = performance.now() + 2000;
+  try {
+    rmSync(tempDir, { recursive: true, force: true });
+  } catch (error) {
+    throwShimCleanupError(error, tempDir, deadline);
   }
 }

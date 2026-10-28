@@ -16,7 +16,7 @@ import { mapHistoryToSessionUpdates } from './zed-session-replay.js';
 
 import { readdir } from 'node:fs/promises';
 import * as acp from '@agentclientprotocol/sdk';
-import type { Config, IContent } from '@vybestack/llxprt-code-core';
+import type { IContent } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
@@ -55,16 +55,16 @@ const logger = new DebugLogger('llxprt:zed-integration:session-loader');
  * read/replayed") rather than being misreported as resourceNotFound (FINDING B).
  */
 export async function resumeAgentHistory(
-  agent: Agent,
+  resume: Agent['session']['resume'],
   sessionId: string,
-  sessionConfig: Config,
+  chatsDir: string,
   listFiles: ChatSessionFileLister = nodeChatSessionFileLister,
 ): Promise<readonly IContent[]> {
   try {
-    return await agent.session.resume(sessionId);
+    return await resume(sessionId);
   } catch (error) {
     throw await classifyResumeFailure(sessionId, error, () =>
-      listSessionFileNames(sessionConfig, listFiles),
+      listFiles(chatsDir),
     );
   }
 }
@@ -80,14 +80,6 @@ export async function resumeAgentHistory(
  * missing; other → indeterminate/internalError) so the original resume failure
  * is never silently masked.
  */
-async function listSessionFileNames(
-  sessionConfig: Config,
-  listFiles: ChatSessionFileLister,
-): Promise<readonly string[]> {
-  const chatsDir = chatsDirFor(sessionConfig);
-  return listFiles(chatsDir);
-}
-
 /**
  * Re-attach decision probe (#1604): true when a recorded session file for
  * `sessionId` already exists on disk under the ZedAgent config's chats dir.
@@ -108,12 +100,11 @@ async function listSessionFileNames(
  * ({@link findMatchingSessionFile}), keeping the two in lockstep.
  */
 export async function hasRecordedSessionFile(
-  config: Config,
+  chatsDir: string,
   sessionId: string,
   listFiles: ChatSessionFileLister = nodeChatSessionFileLister,
 ): Promise<boolean> {
   try {
-    const chatsDir = chatsDirFor(config);
     const entries = await listFiles(chatsDir);
     return findMatchingSessionFile(sessionId, entries) !== null;
   } catch (error) {
@@ -137,9 +128,9 @@ export async function hasRecordedSessionFile(
  * empty history, yielding an empty array (zero replay updates).
  */
 export async function readAgentHistoryAsIContent(
-  agent: Pick<Agent, 'getHistory'>,
+  readHistory: Agent['getHistory'],
 ): Promise<readonly IContent[]> {
-  return [...(await agent.getHistory())];
+  return [...(await readHistory())];
 }
 
 /**
@@ -150,11 +141,11 @@ export async function readAgentHistoryAsIContent(
  * disk-resume path's error semantics.
  */
 export async function readAgentHistoryForReplay(
-  agent: Pick<Agent, 'getHistory'>,
+  readHistory: Agent['getHistory'],
   sessionId: string,
 ): Promise<readonly IContent[]> {
   try {
-    return await readAgentHistoryAsIContent(agent);
+    return await readAgentHistoryAsIContent(readHistory);
   } catch (error) {
     throw wrapReplayFailure(sessionId, error);
   }
@@ -167,10 +158,6 @@ export async function readAgentHistoryForReplay(
  * so the probe↔recording filename match can never drift on the location
  * (FINDING C3).
  */
-function chatsDirFor(config: Config): string {
-  return config.projectChatsDir;
-}
-
 /**
  * Normalizes a post-fromConfig load failure into an ACP RequestError (FINDING E).
  * An error that is ALREADY a RequestError (e.g. the precise error returned by

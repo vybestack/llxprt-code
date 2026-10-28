@@ -19,11 +19,15 @@ import type {
  */
 export const MIN_LOAD_BALANCER_MEMBERS = 1;
 
-const dangerousKeys = new Set(['__proto__', 'constructor', 'prototype']);
-const promptCachingValues = ['off', '5m', '1h', '24h'] as const;
+const dangerousKeys: readonly string[] = Object.freeze([
+  '__proto__',
+  'constructor',
+  'prototype',
+]);
+const promptCachingValues = Object.freeze(['off', '5m', '1h', '24h'] as const);
 
 export function isDangerousPropertyKey(key: string): boolean {
-  return dangerousKeys.has(key);
+  return dangerousKeys.includes(key);
 }
 
 type PromptCachingValue = (typeof promptCachingValues)[number];
@@ -64,7 +68,7 @@ export function hasDangerousKey(value: unknown): boolean {
     return false;
   }
   return Object.entries(value).some(
-    ([key, entry]) => dangerousKeys.has(key) || hasDangerousKey(entry),
+    ([key, entry]) => dangerousKeys.includes(key) || hasDangerousKey(entry),
   );
 }
 
@@ -189,7 +193,7 @@ function parseTrustedProviders(value: unknown): TrustedProvidersMap {
     return providers;
   }
   for (const [provider, settings] of Object.entries(value)) {
-    if (dangerousKeys.has(provider)) {
+    if (dangerousKeys.includes(provider)) {
       continue;
     }
     const parsed = trustedProviderRecordSchema.safeParse(settings);

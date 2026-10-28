@@ -31,6 +31,10 @@ import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type { ResolvedSubProfile } from '../LoadBalancingProvider.js';
 import { shouldDump, type DumpMode } from '../utils/dumpContext.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const noopLogger = {
   debug: () => {},
@@ -39,10 +43,8 @@ const noopLogger = {
   info: () => {},
 } as unknown as import('@vybestack/llxprt-code-core/debug/DebugLogger.js').DebugLogger;
 
-function makeRuntime(settings: SettingsService): ProviderRuntimeContext {
+function makeRuntime(): ProviderRuntimeContext {
   return {
-    settingsService: settings,
-    config: undefined,
     runtimeId: 'test-lb-runtime',
     metadata: {},
   };
@@ -58,8 +60,9 @@ function makeUpstreamInvocation(
   settings: SettingsService,
 ): RuntimeInvocationContext {
   return createRuntimeInvocationContext({
-    runtimeId: makeRuntime(settings).runtimeId,
-    runtimeMetadata: makeRuntime(settings).metadata,
+    fetch: requestFetch,
+    runtimeId: makeRuntime().runtimeId,
+    runtimeMetadata: makeRuntime().metadata,
 
     providerName: 'load-balancer',
     ephemeralsSnapshot: settings.getAllGlobalSettings(),
@@ -75,7 +78,7 @@ function makeBaseOptions(
   return {
     contents: [],
     settings,
-    runtime: makeRuntime(settings),
+    runtime: makeRuntime(),
     config: { getModel: () => 'test-model' } as unknown as Config,
     invocation,
     resolved: {

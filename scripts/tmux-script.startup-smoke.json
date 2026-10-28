@@ -30,6 +30,12 @@
       "contains": "Tips for getting started",
       "equals": 0
     },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "regex": "\\([^)\\n]+\\)\\s+Context:",
+      "timeoutMs": 30000
+    },
     { "type": "line", "text": "/quit", "submitKeys": ["Enter"] },
     { "type": "waitForExit", "timeoutMs": 15000 }
   ]

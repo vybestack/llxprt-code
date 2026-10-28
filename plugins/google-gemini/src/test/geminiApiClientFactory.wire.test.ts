@@ -28,6 +28,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createGeminiApiClient } from '../gemini/geminiApiClientFactory.js';
+import { createOwnerTransport } from './vertexOwnerTransport.js';
 import {
   SchemaType,
   type GenerateContentParameters,
@@ -88,6 +89,55 @@ function textResponse(text: string): Record<string, unknown> {
 }
 
 describe('geminiApiClientFactory', () => {
+  it('routes two live Vertex clients through their explicit project and location', async () => {
+    const transport = await createOwnerTransport('routing');
+    const credentials = {
+      type: 'authorized_user',
+      client_id: 'client-id',
+      client_secret: 'client-secret',
+      refresh_token: 'refresh-token',
+    };
+    const credentialEnvironment = { wellKnownFile: '/nonexistent/adc.json' };
+    const a = await createGeminiApiClient({
+      vertexai: true,
+      credentials,
+      credentialEnvironment,
+      project: 'project-a',
+      location: 'us-central1',
+      httpOptions: { headers: { Authorization: 'Bearer test' } },
+      fetch: transport.fetch,
+    });
+    const b = await createGeminiApiClient({
+      vertexai: true,
+      credentials,
+      credentialEnvironment,
+      project: 'project-b',
+      location: 'europe-west4',
+      httpOptions: { headers: { Authorization: 'Bearer test' } },
+      fetch: transport.fetch,
+    });
+    const params = {
+      model: 'gemini-2.5-flash',
+      contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
+    };
+    try {
+      await a.models.generateContent(params);
+      await b.models.generateContent(params);
+      await a.models.generateContent(params);
+      expect(
+        transport.requests
+          .filter((request) => request.kind === 'model')
+          .map((request) => request.url),
+      ).toStrictEqual([
+        'https://us-central1-aiplatform.googleapis.com/v1beta1/projects/project-a/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent',
+        'https://europe-west4-aiplatform.googleapis.com/v1beta1/projects/project-b/locations/europe-west4/publishers/google/models/gemini-2.5-flash:generateContent',
+        'https://us-central1-aiplatform.googleapis.com/v1beta1/projects/project-a/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent',
+      ]);
+    } finally {
+      await transport.close();
+    }
+  });
+
   beforeAll(async () => {
     server = createServer((req, res) => {
       const chunks: Buffer[] = [];
@@ -136,6 +186,7 @@ describe('geminiApiClientFactory', () => {
     nextResponse = textResponse('ok');
     const client = await createGeminiApiClient({
       apiKey: 'test-key',
+      fetch: (input, init) => globalThis.fetch(input, init),
       // The BARE origin, which is what llxprt carries: @google/genai appended the
       // API version itself.
       httpOptions: { baseUrl: origin() },

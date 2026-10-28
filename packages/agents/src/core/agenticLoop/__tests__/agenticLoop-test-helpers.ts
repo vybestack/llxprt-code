@@ -100,6 +100,9 @@ interface ScriptedClientState {
 function buildScriptedChat(state: ScriptedClientState): AgentChatContract {
   const { history, recordedToolCalls } = state;
   return {
+    appendGeneration: async () => {
+      throw new Error('Scripted loop does not publish detached generation');
+    },
     sendMessage: async () => emptyModelOutput(),
     sendMessageStream: async () => {
       async function* emptyStream() {}
@@ -129,6 +132,12 @@ function buildScriptedClient(state: ScriptedClientState): AgentClientContract {
   const chat = buildScriptedChat(state);
   let tools = emptyScriptedTools();
   return {
+    bindModelNotifications: () => {},
+    bindIdeContext: () => {},
+    bindWorkspaceDefinitions: () => {},
+    bindProviderFiles: () => {},
+    bindTokenization: () => {},
+    bindProviderSelection: () => {},
     get tools() {
       return tools;
     },

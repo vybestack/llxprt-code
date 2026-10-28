@@ -12,6 +12,123 @@ import {
 const filename = 'packages/providers/src/BaseProvider.ts';
 
 describe('runtime state structure scanner', () => {
+  it.each([
+    'export default { current: undefined };',
+    'class Holder {} export default new Holder();',
+    'function* values() { yield 1; } const cursor = values();',
+    'async function* values() { yield 1; } const cursor = values();',
+    'const values = function* () { yield 1; }; const cursor = values();',
+  ])('rejects anonymous exports and module generator state in %s', (source) => {
+    expect(
+      scanRuntimeStateStructure(filename, source, [], undefined, {
+        allowlist: [],
+      }),
+    ).toContainEqual(expect.objectContaining({ kind: 'mutable-state' }));
+  });
+
+  it.each([
+    'globalThis.current = 1;',
+    'globalThis[Symbol.for("runtime")] = {};',
+    'function update() { globalThis.current = 1; }',
+    'delete globalThis.current;',
+    'Object.assign(globalThis, { current: 1 });',
+  ])('rejects global runtime writes in %s', (source) => {
+    expect(scanRuntimeStateStructure(filename, source)).toContainEqual(
+      expect.objectContaining({ kind: 'module-mutation' }),
+    );
+  });
+
+  it.each([
+    'export default Object.freeze({ current: 1 });',
+    'export default function create() { return { current: 1 }; }',
+    'function* values() { yield 1; } export function create() { return values(); }',
+    'export function read() { return globalThis.current; }',
+    'export function update(globalThis) { globalThis.current = 1; }',
+  ])(
+    'permits owned generators, frozen exports and global reads in %s',
+    (source) => {
+      expect(
+        scanRuntimeStateStructure(filename, source, [], undefined, {
+          allowlist: [],
+        }),
+      ).toEqual([]);
+    },
+  );
+
+  it.each([
+    'class Writer { store(target) { target.current = 1; } } function run() { new Writer().store(sessions); }',
+    'const writer = { store(target) { target.current = 1; } }; function run() { writer.store(sessions); }',
+    'const writer = { store: (target) => { target.current = 1; } }; function run() { writer.store(sessions); }',
+    'class Writer { store(target) { this.relay(target); } relay(target) { target.current = 1; } } function run() { new Writer().store(sessions); }',
+    'class Writer { store(target) { this.relay(target); } relay(target) { this.store(target); target.current = 1; } } function run() { new Writer().store(sessions); }',
+  ])('rejects module storage passed to a mutating method in %s', (body) => {
+    expect(
+      scanRuntimeStateStructure(filename, `const sessions = {}; ${body}`),
+    ).toContainEqual(
+      expect.objectContaining({
+        declaration: 'sessions',
+        kind: 'module-mutation',
+      }),
+    );
+  });
+
+  it.each([
+    'class Owner { state = {}; store(target) { target.current = 1; } run() { this.store(this.state); } }',
+    'class Reader { read(target) { return target.current; } } const labels = Object.freeze({ current: 1 }); function run() { return new Reader().read(labels); }',
+    'class Relay { run(target) { this.run(target); } } const labels = Object.freeze({ current: 1 }); function run() { new Relay().run(labels); }',
+  ])('permits instance mutation and read-only method calls in %s', (source) => {
+    expect(scanRuntimeStateStructure(filename, source)).toEqual([]);
+  });
+
+  it.each([
+    'function run() { const { sessions: held } = { sessions }; held.current = 1; }',
+    'function run() { const { nested: { sessions: held } } = { nested: { sessions } }; held.current = 1; }',
+    'function run() { const [held] = [sessions]; held.current = 1; }',
+    'function run() { let held = {}; held = sessions; held.current = 1; }',
+    'function run() { let held = {}; if (condition) held = sessions; held.current = 1; }',
+    'function run() { let held = sessions; if (condition) held = {}; held.current = 1; }',
+    'function run() { const { sessions: held } = { sessions }; fill(held); } function fill(target) { target.current = 1; }',
+    'function fill({ nested: { target } }) { target.current = 1; } function run() { fill({ nested: { target: sessions } }); }',
+  ])(
+    'rejects mutation through destructured or reassigned storage aliases in %s',
+    (body) => {
+      expect(
+        scanRuntimeStateStructure(filename, `const sessions = {}; ${body}`),
+      ).toContainEqual(
+        expect.objectContaining({
+          declaration: 'sessions',
+          kind: 'module-mutation',
+        }),
+      );
+    },
+  );
+
+  it('rejects mutation through a nested binding into module container storage', () => {
+    const source =
+      'const registry = { nested: { state: {} } }; function run() { const { nested: { state: held } } = registry; held.current = 1; }';
+    expect(scanRuntimeStateStructure(filename, source)).toContainEqual(
+      expect.objectContaining({
+        declaration: 'registry',
+        kind: 'module-mutation',
+      }),
+    );
+  });
+
+  it.each([
+    'const sessions = {}; function run() { const { sessions: held } = { sessions }; return held.current; }',
+    'const sessions = {}; function run() { let { sessions: held } = { sessions }; held = {}; held.current = 1; }',
+    'const sessions = {}; function run() { const held = { ...sessions }; held.current = 1; }',
+    'const sessions = {}; function run() { const [held] = [...sessions]; held.current = 1; }',
+    'function run() { const sessions = {}; const { sessions: held } = { sessions }; held.current = 1; }',
+    'function run() { let alias = source(); alias = alias.current; alias.current = 1; }',
+    'const sessions = {}; function fill(target) { target = {}; target.current = 1; } function run() { fill(sessions); }',
+  ])(
+    'permits read-only bindings, fresh copies and local rebinding in %s',
+    (source) => {
+      expect(scanRuntimeStateStructure(filename, source)).toEqual([]);
+    },
+  );
+
   it('detects mutable object storage captured by a returned closure', () => {
     const source = `function make() { const state = {}; return { set(value) { state.current = value; }, get() { return state.current; } }; } const registry = make();`;
     expect(scanRuntimeStateStructure(filename, source)).toContainEqual(

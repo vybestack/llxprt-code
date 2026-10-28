@@ -339,7 +339,8 @@ export function buildUsageUpdate(
  * user-override → provider-limit → model-name precedence (issues #2251 / #2815).
  */
 export function resolveZedContextWindowSize(
-  config: { getModel(): string; getEphemeralSetting(key: string): unknown },
+  readModel: () => string,
+  readSetting: (key: string) => unknown,
   readProviderLimit: () => number | undefined,
 ): number {
   let providerLimit: number | undefined;
@@ -349,8 +350,8 @@ export function resolveZedContextWindowSize(
     providerLimit = undefined;
   }
   return resolveEffectiveContextLimit(
-    config.getModel(),
-    resolveUserContextLimit(config.getEphemeralSetting('context-limit')),
+    readModel(),
+    resolveUserContextLimit(readSetting('context-limit')),
     providerLimit,
   );
 }
@@ -389,7 +390,10 @@ export function subscribeSessionTodos(
 }
 
 export async function sendZedSessionUpdate(
-  connection: acp.AgentSideConnection,
+  connection: Pick<
+    acp.AgentSideConnection,
+    'sessionUpdate' | 'requestPermission'
+  >,
   sessionId: string,
   update: acp.SessionUpdate,
   logger: DebugLogger,

@@ -29,6 +29,7 @@
  */
 
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import { RESPONSES_API_MODELS } from '../../openai/RESPONSES_API_MODELS.js';
@@ -116,7 +117,7 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
         STANDARD_BASE_URL,
-      );
+      ).bindOwnerAuthentication(new SettingsService(), () => fetchSpy);
       const models = await provider.getModels();
       const modelIds = models.map((m) => m.id);
 
@@ -143,7 +144,7 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
         STANDARD_BASE_URL,
-      );
+      ).bindOwnerAuthentication(new SettingsService(), () => fetchSpy);
       const models = await provider.getModels();
       const modelIds = models.map((m) => m.id);
 
@@ -160,7 +161,7 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
         STANDARD_BASE_URL,
-      );
+      ).bindOwnerAuthentication(new SettingsService(), () => fetchSpy);
       const models = await provider.getModels();
       const modelIds = models.map((m) => m.id);
 
@@ -180,7 +181,7 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
         STANDARD_BASE_URL,
-      );
+      ).bindOwnerAuthentication(new SettingsService(), () => fetchSpy);
       const models = await provider.getModels();
       const modelIds = models.map((m) => m.id);
 
@@ -193,7 +194,7 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
       const provider = new OpenAIResponsesProvider(
         undefined,
         STANDARD_BASE_URL,
-      );
+      ).bindOwnerAuthentication(new SettingsService(), () => fetchSpy);
       const models = await provider.getModels();
       const modelIds = models.map((m) => m.id);
 
@@ -223,7 +224,7 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
         CODEX_BASE_URL,
-      );
+      ).bindOwnerAuthentication(new SettingsService(), () => fetchSpy);
       const models = await provider.getModels();
       const modelIds = models.map((m) => m.id);
 
@@ -265,7 +266,7 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
         CODEX_BASE_URL,
-      );
+      ).bindOwnerAuthentication(new SettingsService(), () => fetchSpy);
       const models = await provider.getModels();
       const modelIds = models.map((m) => m.id);
 
@@ -279,7 +280,10 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
     });
 
     it('should fall back to RESPONSES_API_MODELS (no fetch) when unauthenticated Codex-URL provider', async () => {
-      const provider = new OpenAIResponsesProvider(undefined, CODEX_BASE_URL);
+      const provider = new OpenAIResponsesProvider(
+        undefined,
+        CODEX_BASE_URL,
+      ).bindOwnerAuthentication(new SettingsService(), () => fetchSpy);
       const models = await provider.getModels();
       const modelIds = models.map((m) => m.id);
 

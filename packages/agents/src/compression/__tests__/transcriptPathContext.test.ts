@@ -13,24 +13,25 @@
  * execution path follows a mutable recorder through materialization and swap.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
-import * as path from 'node:path';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type {
   CompressionContext,
   CompressionProviderResult,
   CompressionStrategy,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
-import { CompressionHandler } from '../CompressionHandler.js';
 import { ChatSession } from '../../core/chatSession.js';
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
+import { CompressionHandler } from '../CompressionHandler.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 
 function makeHandler(historyService: HistoryService): CompressionHandler {
@@ -48,7 +49,12 @@ function makeHandler(historyService: HistoryService): CompressionHandler {
   };
   return new CompressionHandler(
     runtimeContext,
+    undefined,
     historyService,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {},
     vi.fn().mockResolvedValue(providerResult),
     vi.fn().mockResolvedValue(undefined),
@@ -228,7 +234,14 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
       historyService.add(textContent(text));
     }
     const chat = new ChatSession(
-      runtimeContext,
+      chatSessionPorts(runtimeContext),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       {},
       [],
@@ -272,7 +285,19 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
     for (const text of ['one', 'two', 'three', 'four']) {
       history.add(textContent(text));
     }
-    const chat = new ChatSession(runtime, {} as ContentGenerator, {}, []);
+    const chat = new ChatSession(
+      chatSessionPorts(runtime),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {} as ContentGenerator,
+      {},
+      [],
+    );
     let seenContext: CompressionContext | undefined;
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockReturnValue({
       name: 'one-shot',

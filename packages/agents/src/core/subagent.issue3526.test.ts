@@ -1,3 +1,5 @@
+import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 /**
  * @license
@@ -32,11 +34,15 @@ import {
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
-import { SubAgentScope } from './subagent.js';
+import type { ChildAgentScope } from './subagentOrchestrator.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
 import {
   createCompletedToolCallResponse,
-  createMockConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
+  createSubagentConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   createRuntimeOverrides,
   createStatelessRuntimeBundle,
   defaultModelConfig,
@@ -94,7 +100,7 @@ type HookMode =
 
 interface RuntimeHarness {
   readonly requests: GenerateChatOptions[];
-  readonly scope: SubAgentScope;
+  readonly scope: ChildAgentScope;
 }
 
 type CompletedToolCallFixture = Omit<
@@ -272,13 +278,23 @@ function createHookExecution(
   };
 }
 
-async function createHarness(params: {
-  readonly responses: readonly IContent[];
-  readonly hookMode?: HookMode;
-  readonly toolConfig?: { readonly tools: readonly string[] };
-  readonly outputConfig?: OutputConfig | null;
-}): Promise<RuntimeHarness> {
-  const { config, toolRegistry, mcpRuntime } = await createMockConfig();
+async function createHarness(
+  retainSubagentCleanup: (close: () => void | Promise<void>) => () => void,
+  params: {
+    readonly responses: readonly IContent[];
+    readonly hookMode?: HookMode;
+    readonly toolConfig?: { readonly tools: readonly string[] };
+    readonly outputConfig?: OutputConfig | null;
+  },
+): Promise<RuntimeHarness> {
+  const configSettings = seedSubagentSettings();
+  const config = createSubagentConfig(configSettings, retainSubagentCleanup);
+  await acquireSubagentSettings(config, configSettings, retainSubagentCleanup);
+  const mcpRuntime = await acquireSubagentWorkspace(
+    config,
+    retainSubagentCleanup,
+  );
+  const toolRegistry = mcpRuntime.toolSelection;
   const requests: GenerateChatOptions[] = [];
   let responseIndex = 0;
   function generateChatCompletion(
@@ -312,6 +328,9 @@ async function createHarness(params: {
     getActiveProvider: () => provider,
     getProviderByName: () => provider,
     setActiveProvider: vi.fn(),
+    getProviderKeys: () => {
+      throw new Error('Test provider adapter has no key storage');
+    },
   };
   const toolsView: ToolRegistryView = {
     listToolNames: () => ['read_file', 'run_shell_command', 'todo_pause'],
@@ -335,7 +354,6 @@ async function createHarness(params: {
     ...baseBundle.runtimeContext,
     providerRuntime: {
       ...baseBundle.runtimeContext.providerRuntime,
-      config,
     },
   };
   const runtimeBundle = { ...baseBundle, runtimeContext };
@@ -346,17 +364,21 @@ async function createHarness(params: {
   const toolConfig = params.toolConfig
     ? { tools: [...params.toolConfig.tools] }
     : undefined;
-  const scope = await SubAgentScope.create(
-    'issue3526-agent',
-    config,
-    { systemPrompt: 'Complete the task and emit each required output.' },
-    defaultModelConfig,
-    defaultRunConfig,
-    toolConfig,
-    params.outputConfig === null
-      ? undefined
-      : (params.outputConfig ?? OUTPUT_CONFIG),
-    { ...overrides, hookOwner },
+  const scope = await createSubagentScope(
+    {
+      name: 'issue3526-agent',
+      prompt: {
+        systemPrompt: 'Complete the task and emit each required output.',
+      },
+      model: defaultModelConfig,
+      run: defaultRunConfig,
+      toolConfig,
+      outputConfig:
+        params.outputConfig === null
+          ? undefined
+          : (params.outputConfig ?? OUTPUT_CONFIG),
+    },
+    ...scopeInputs(config, { ...overrides, hookOwner }),
   );
   return { requests, scope };
 }
@@ -369,6 +391,8 @@ const FOUR_VALUES = [
 ] as const;
 
 describe('non-interactive scope-local output emitter', () => {
+  const retainSubagentCleanup = installSubagentCleanup();
+
   beforeEach(() => {
     vi.clearAllMocks();
     readTodos.mockResolvedValue([]);
@@ -393,7 +417,7 @@ describe('non-interactive scope-local output emitter', () => {
   ])(
     'provides one correctly shaped emitter for %s',
     async (_name, toolConfig, hookMode) => {
-      const harness = await createHarness({
+      const harness = await createHarness(retainSubagentCleanup, {
         responses: [nativeEmissions(FOUR_VALUES), stopped()],
         toolConfig,
         hookMode,
@@ -424,7 +448,7 @@ describe('non-interactive scope-local output emitter', () => {
   ])(
     'retains the emitter while filtering ordinary tools for %s',
     async (_name, allowedFunctionNames, expectedOrdinaryNames) => {
-      const harness = await createHarness({
+      const harness = await createHarness(retainSubagentCleanup, {
         responses: [nativeEmissions(FOUR_VALUES), stopped()],
         hookMode: { enabled: true, allowedFunctionNames },
       });
@@ -442,7 +466,7 @@ describe('non-interactive scope-local output emitter', () => {
   );
 
   it('completes four native emissions with GOAL after one provider request', async () => {
-    const harness = await createHarness({
+    const harness = await createHarness(retainSubagentCleanup, {
       responses: [nativeEmissions(FOUR_VALUES)],
     });
 
@@ -464,7 +488,7 @@ describe('non-interactive scope-local output emitter', () => {
   });
 
   it('completes four Hermes emissions with GOAL after one provider request', async () => {
-    const harness = await createHarness({
+    const harness = await createHarness(retainSubagentCleanup, {
       responses: [hermesEmissions(FOUR_VALUES)],
     });
 
@@ -486,7 +510,7 @@ describe('non-interactive scope-local output emitter', () => {
   });
 
   it('terminates on the provider request containing the final partial emissions', async () => {
-    const harness = await createHarness({
+    const harness = await createHarness(retainSubagentCleanup, {
       responses: [
         nativeEmissions(FOUR_VALUES.slice(0, 2)),
         stopped('Waiting.'),
@@ -525,7 +549,7 @@ describe('non-interactive scope-local output emitter', () => {
   });
 
   it('stops immediately with ERROR after a successful case-insensitive todo_pause', async () => {
-    const harness = await createHarness({
+    const harness = await createHarness(retainSubagentCleanup, {
       responses: [
         {
           speaker: 'ai',
@@ -558,7 +582,7 @@ describe('non-interactive scope-local output emitter', () => {
   ])(
     'reports GOAL when successful todo_pause has %s',
     async (_name, outputConfig) => {
-      const harness = await createHarness({
+      const harness = await createHarness(retainSubagentCleanup, {
         responses: [
           {
             speaker: 'ai',
@@ -585,7 +609,7 @@ describe('non-interactive scope-local output emitter', () => {
   );
 
   it('does not treat an inherited emitted_vars property as a completed output before todo_pause', async () => {
-    const harness = await createHarness({
+    const harness = await createHarness(retainSubagentCleanup, {
       responses: [
         {
           speaker: 'ai',
@@ -611,7 +635,7 @@ describe('non-interactive scope-local output emitter', () => {
   });
 
   it('reports GOAL when successful todo_pause follows the final required emissions', async () => {
-    const harness = await createHarness({
+    const harness = await createHarness(retainSubagentCleanup, {
       responses: [
         {
           speaker: 'ai',
@@ -640,7 +664,7 @@ describe('non-interactive scope-local output emitter', () => {
   });
 
   it('does not count shell output as declared output emission', async () => {
-    const harness = await createHarness({
+    const harness = await createHarness(retainSubagentCleanup, {
       responses: [
         {
           speaker: 'ai',
@@ -683,7 +707,7 @@ describe('non-interactive scope-local output emitter', () => {
   });
 
   it('returns a cancelled todo_pause result to the model and continues', async () => {
-    const harness = await createHarness({
+    const harness = await createHarness(retainSubagentCleanup, {
       responses: [
         {
           speaker: 'ai',
@@ -720,7 +744,7 @@ describe('non-interactive scope-local output emitter', () => {
   ])(
     'returns a %s todo_pause failure to the model and continues',
     async (_name, errorMessage, error, errorType) => {
-      const harness = await createHarness({
+      const harness = await createHarness(retainSubagentCleanup, {
         responses: [
           {
             speaker: 'ai',

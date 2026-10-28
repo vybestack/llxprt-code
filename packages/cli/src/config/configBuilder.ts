@@ -19,7 +19,6 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { getEnableHooks, getEnableHooksUI } from './settingsSchema.js';
 import type { Settings } from './settings.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { CliArgs } from './cliArgParser.js';
 import type { ContextResolutionResult } from './interactiveContext.js';
 import type { ProviderModelResult } from './providerModelResolver.js';
@@ -35,7 +34,7 @@ export interface ConfigBuildInput {
    * construction never adopts ambient runtime state (issue #2300) — the CLI
    * composition boundary owns which settings instance the session uses.
    */
-  readonly settingsService: SettingsService;
+  readonly initialSettings: Record<string, unknown>;
   readonly argv: CliArgs;
   readonly profileSettingsWithTools: Settings;
   readonly context: ContextResolutionResult;
@@ -163,7 +162,7 @@ function buildSessionBaseArgs(
   const {
     sessionId,
     cwd,
-    settingsService,
+    initialSettings,
     argv,
     profileSettingsWithTools,
     context,
@@ -180,7 +179,7 @@ function buildSessionBaseArgs(
   } = input;
   return {
     sessionId,
-    initialSettings: settingsService.getAllGlobalSettings(),
+    initialSettings,
     // #2534 review Finding 6: the service above is injected, but it was
     // created by this CLI bootstrap for this Config's exclusive use
     // (cliSessionBootstrap → runtimeOverrides → prepareRuntimeForProfile —
@@ -338,7 +337,7 @@ export function buildConfig(input: ConfigBuildInput): Config {
  * Priority: CLI arg > HTTPS_PROXY > https_proxy > HTTP_PROXY > http_proxy
  * Intentionally uses falsy coalescing (empty string should fall back to env vars).
  */
-function resolveProxy(cliProxy: string | undefined): string | undefined {
+export function resolveProxy(cliProxy: string | undefined): string | undefined {
   const httpsProxy = firstNonEmptyString(
     process.env.HTTPS_PROXY,
     process.env.https_proxy,

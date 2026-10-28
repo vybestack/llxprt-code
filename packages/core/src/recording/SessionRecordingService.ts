@@ -52,6 +52,14 @@ import {
 } from './types.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 import { replaySession } from './ReplayEngine.js';
+import { RecordingBatchCompletions } from './recording-batch-completion.js';
+import {
+  type PendingRecord,
+  toPendingRecord,
+  toContentBatchRecords,
+  totalRecordBytes,
+  recordingVersion,
+} from './recording-pending-record.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 
 export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
@@ -75,18 +83,6 @@ type RecordingLifecycle =
   | { readonly status: 'failure-reported' }
   | { readonly status: 'disposed' };
 
-/**
- * A record that has already been serialised. Serialising at enqueue time keeps
- * byte accounting free and means each record — including large media payloads —
- * is stringified exactly once instead of once for accounting and again for the
- * write (issue #2852). Only the serialized form is retained: the live payload
- * object graph is not pinned until drain (issue #3432).
- */
-interface PendingRecord {
-  readonly json: string;
-  readonly bytes: number;
-}
-
 /** The session_start line as built at construction, before any rebinding. */
 interface PendingSessionStart {
   readonly line: SessionRecordLine;
@@ -101,59 +97,12 @@ interface HeaderRebind {
   readonly growth: number;
 }
 
-export interface PreparedContentBatch {
+export interface PreparedContentBatch<
+  Completion extends void | Promise<void> = void,
+> {
   publish(): void;
   rollback(): void;
-  finalize(): void;
-}
-
-function toPendingRecord(line: SessionRecordLine): PendingRecord {
-  const json = JSON.stringify(line);
-  return { json, bytes: Buffer.byteLength(json, 'utf8') + 1 };
-}
-
-function toContentBatchRecords(
-  contents: readonly IContent[],
-  lastSeq: number,
-): PendingRecord[] {
-  return contents.map((content, index) =>
-    toPendingRecord({
-      v: recordingVersion({ content }),
-      seq: lastSeq + index + 1,
-      ts: new Date().toISOString(),
-      type: 'content',
-      payload: { content },
-    }),
-  );
-}
-
-function totalRecordBytes(records: readonly PendingRecord[]): number {
-  return records.reduce((total, record) => total + record.bytes, 0);
-}
-
-function containsMediaReference(
-  value: unknown,
-  seen = new WeakSet<object>(),
-): boolean {
-  if (typeof value !== 'object' || value === null) return false;
-  if (seen.has(value)) return false;
-  seen.add(value);
-  if (
-    Reflect.get(value, 'type') === 'media' &&
-    Reflect.get(value, 'encoding') === 'reference'
-  ) {
-    return true;
-  }
-  if (Array.isArray(value)) {
-    return value.some((entry) => containsMediaReference(entry, seen));
-  }
-  return Reflect.ownKeys(value).some((key) =>
-    containsMediaReference(Reflect.get(value, key), seen),
-  );
-}
-
-function recordingVersion(payload: unknown): number {
-  return containsMediaReference(payload) ? 2 : 1;
+  finalize(): Completion;
 }
 
 /**
@@ -174,6 +123,7 @@ export class SessionRecordingService {
   private lifecycle: RecordingLifecycle = { status: 'active' };
   private draining: boolean = false;
   private drainPromise: Promise<void> | null = null;
+  private readonly batchCompletions = new RecordingBatchCompletions();
   private readonly sessionId: string;
   private readonly projectHash: string;
   private readonly chatsDir: string;
@@ -390,6 +340,7 @@ export class SessionRecordingService {
               'Session recording write and watcher cleanup failed',
             ),
     };
+    this.batchCompletions.fail(this.lifecycle.error);
   }
 
   /**
@@ -505,6 +456,7 @@ export class SessionRecordingService {
           (total, record) => total + record.bytes,
           0,
         );
+        this.batchCompletions.complete(batch);
       }
     } finally {
       this.draining = false;
@@ -809,7 +761,19 @@ export class SessionRecordingService {
     this.enqueue('content', { content });
   }
 
-  prepareContentBatch(contents: readonly IContent[]): PreparedContentBatch {
+  prepareContentBatch(contents: readonly IContent[]): PreparedContentBatch;
+  prepareContentBatch(
+    contents: readonly IContent[],
+    completion: 'appended',
+  ): PreparedContentBatch<Promise<void>>;
+  prepareContentBatch(
+    contents: readonly IContent[],
+    completion: 'appended' | undefined,
+  ): PreparedContentBatch<void | Promise<void>>;
+  prepareContentBatch(
+    contents: readonly IContent[],
+    mode?: 'appended',
+  ): PreparedContentBatch<void | Promise<void>> {
     if (this.lifecycle.status !== 'active') {
       throw new Error('Cannot record content batch: recording is not active');
     }
@@ -835,6 +799,7 @@ export class SessionRecordingService {
     const watcherBefore = this.chatsDirWatcher;
     let published = false;
     let finalized = false;
+    let completion: Promise<void> | undefined;
 
     return {
       publish: () => {
@@ -879,8 +844,13 @@ export class SessionRecordingService {
         if (!published) {
           throw new Error('Cannot finalize an unpublished content batch');
         }
+        if (finalized) return completion;
         finalized = true;
+        if (mode === 'appended') {
+          completion = this.batchCompletions.waitFor(records);
+        }
         this.scheduleDrain();
+        return completion;
       },
     };
   }

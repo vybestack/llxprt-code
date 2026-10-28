@@ -233,7 +233,9 @@ describe('ExtensionEnablementManager', () => {
 
   describe('extension overrides (-e <name>)', () => {
     beforeEach(() => {
-      manager = new ExtensionEnablementManager(configDir, ['ext-test']);
+      manager = new ExtensionEnablementManager(configDir, {
+        enabledOverride: ['ext-test'],
+      });
     });
 
     it('can enable extensions, case-insensitive', () => {
@@ -247,7 +249,9 @@ describe('ExtensionEnablementManager', () => {
     });
 
     it('disable all other extensions', () => {
-      manager = new ExtensionEnablementManager(configDir, ['ext-test']);
+      manager = new ExtensionEnablementManager(configDir, {
+        enabledOverride: ['ext-test'],
+      });
       manager.enable('ext-test-2', true, '/');
       expect(manager.isEnabled('ext-test-2', '/')).toBe(false);
       // Double check that it would have been enabled otherwise
@@ -257,13 +261,41 @@ describe('ExtensionEnablementManager', () => {
     });
 
     it('none disables all extensions', () => {
-      manager = new ExtensionEnablementManager(configDir, ['none']);
+      manager = new ExtensionEnablementManager(configDir, {
+        enabledOverride: ['none'],
+      });
       manager.enable('ext-test', true, '/');
       expect(manager.isEnabled('ext-test', '/path/to/dir')).toBe(false);
       // Double check that it would have been enabled otherwise
       expect(
         new ExtensionEnablementManager(configDir).isEnabled('ext-test', '/'),
       ).toBe(true);
+    });
+  });
+
+  describe('disabled list (extensions.disabled)', () => {
+    it('disables the listed extensions case-insensitively and leaves the rest enabled', () => {
+      manager = new ExtensionEnablementManager(configDir, {
+        disabled: ['Ext-Test'],
+      });
+      expect(manager.isEnabled('ext-test', '/')).toBe(false);
+      expect(manager.isEnabled('ext-other', '/')).toBe(true);
+    });
+
+    it('is overridden by -e naming the extension', () => {
+      manager = new ExtensionEnablementManager(configDir, {
+        enabledOverride: ['ext-test'],
+        disabled: ['ext-test'],
+      });
+      expect(manager.isEnabled('ext-test', '/')).toBe(true);
+    });
+
+    it('is overridden by session state', () => {
+      manager = new ExtensionEnablementManager(configDir, {
+        disabled: ['ext-test'],
+      });
+      manager.enable('ext-test', true, SettingScope.Session);
+      expect(manager.isEnabled('ext-test', '/')).toBe(true);
     });
   });
 
@@ -279,16 +311,17 @@ describe('ExtensionEnablementManager', () => {
     });
 
     it('should not log an error if enabledExtensionNamesOverride is empty', () => {
-      const manager = new ExtensionEnablementManager(configDir, []);
+      const manager = new ExtensionEnablementManager(configDir, {
+        enabledOverride: [],
+      });
       manager.validateExtensionOverrides([]);
       expect(coreEventsEmitSpy).not.toHaveBeenCalled();
     });
 
     it('should not log an error if all enabledExtensionNamesOverride are valid', () => {
-      const manager = new ExtensionEnablementManager(configDir, [
-        'ext-one',
-        'ext-two',
-      ]);
+      const manager = new ExtensionEnablementManager(configDir, {
+        enabledOverride: ['ext-one', 'ext-two'],
+      });
       const extensions = [
         { name: 'ext-one' },
         { name: 'ext-two' },
@@ -298,11 +331,9 @@ describe('ExtensionEnablementManager', () => {
     });
 
     it('should log an error for each invalid extension name in enabledExtensionNamesOverride', () => {
-      const manager = new ExtensionEnablementManager(configDir, [
-        'ext-one',
-        'ext-invalid',
-        'ext-another-invalid',
-      ]);
+      const manager = new ExtensionEnablementManager(configDir, {
+        enabledOverride: ['ext-one', 'ext-invalid', 'ext-another-invalid'],
+      });
       const extensions = [
         { name: 'ext-one' },
         { name: 'ext-two' },
@@ -320,7 +351,9 @@ describe('ExtensionEnablementManager', () => {
     });
 
     it('should not log an error if "none" is in enabledExtensionNamesOverride', () => {
-      const manager = new ExtensionEnablementManager(configDir, ['none']);
+      const manager = new ExtensionEnablementManager(configDir, {
+        enabledOverride: ['none'],
+      });
       manager.validateExtensionOverrides([]);
       expect(coreEventsEmitSpy).not.toHaveBeenCalled();
     });

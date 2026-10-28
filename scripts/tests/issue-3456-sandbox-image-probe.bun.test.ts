@@ -6,13 +6,7 @@
 
 import { afterEach, describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import {
-  chmodSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -75,28 +69,21 @@ process.exit(64);
     'utf8',
   );
 
-  const launcherName = process.platform === 'win32' ? 'docker.cmd' : 'docker';
+  // Compile the fake engine into a native executable: Windows batch launchers
+  // cannot receive the probe's shell-program argument under Bun 1.4+, and the
+  // real engine is a native executable as well.
+  const launcherName = process.platform === 'win32' ? 'docker.exe' : 'docker';
   const launcher = join(directory, launcherName);
-  if (process.platform === 'win32') {
-    writeFileSync(
-      launcher,
-      '@echo off\r\n"%BUN_EXECUTABLE%" "%FAKE_ENGINE_SCRIPT%" %*\r\n',
-      'utf8',
-    );
-  } else {
-    writeFileSync(
-      launcher,
-      '#!/bin/sh\nexec "$BUN_EXECUTABLE" "$FAKE_ENGINE_SCRIPT" "$@"\n',
-      'utf8',
-    );
-    chmodSync(launcher, 0o755);
-  }
+  const compiled = spawnSync(
+    bunExecutable,
+    ['build', '--compile', engineScript, '--outfile', launcher],
+    { cwd: directory, encoding: 'utf8' },
+  );
+  expect(compiled.status, `${compiled.stdout}${compiled.stderr}`).toBe(0);
 
   return {
     ...process.env,
-    BUN_EXECUTABLE: bunExecutable,
     FAKE_ENGINE_MODE: mode,
-    FAKE_ENGINE_SCRIPT: engineScript,
     PATH: `${directory}${delimiter}${process.env.PATH ?? ''}`,
   };
 }

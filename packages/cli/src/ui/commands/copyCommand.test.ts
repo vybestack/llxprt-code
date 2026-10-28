@@ -6,151 +6,80 @@
 
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import type { Mock } from 'bun:test';
-import { copyCommand } from './copyCommand.js';
-import { type CommandContext } from './types.js';
-import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { copyToClipboard } from '../utils/commandUtils.js';
+import { createCopyCommand, type CopyCommandOutput } from './copyCommand.js';
 
 void vi.mock('../utils/commandUtils.js', () => ({
   copyToClipboard: vi.fn(),
 }));
 
 describe('copyCommand', () => {
-  let mockContext: CommandContext;
   let mockCopyToClipboard: Mock<typeof copyToClipboard>;
-  let mockGetChat: Mock<() => { getHistory: () => unknown }>;
-  let mockGetHistory: Mock<() => unknown>;
+  let latestOutput: CopyCommandOutput;
+  let copyCommand: ReturnType<typeof createCopyCommand>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-
     mockCopyToClipboard = copyToClipboard as Mock<typeof copyToClipboard>;
-    mockGetChat = vi.fn();
-    mockGetHistory = vi.fn();
-
-    mockContext = createMockCommandContext({
-      services: {
-        agent: {
-          agentClient: {
-            getChat: mockGetChat,
-            hasChatInitialized: vi.fn().mockReturnValue(true),
-            getHistory: vi.fn().mockResolvedValue([]),
-          },
-        },
-        config: {},
-      },
-    });
-
-    mockGetChat.mockReturnValue({
-      getHistory: mockGetHistory,
-    });
+    latestOutput = { kind: 'no-chat' };
+    copyCommand = createCopyCommand(async () => latestOutput, copyToClipboard);
   });
 
   it('should return info message when no history is available', async () => {
-    // Mock no chat initialized
-    mockContext = createMockCommandContext({
-      services: {
-        agent: {
-          agentClient: {
-            getChat: mockGetChat,
-            hasChatInitialized: vi.fn().mockReturnValue(false),
-            getHistory: vi.fn().mockResolvedValue([]),
-          },
-        },
-        config: {},
-      },
-    });
-
-    const result = await copyCommand.action!(mockContext, '');
+    latestOutput = { kind: 'no-chat' };
+    const result = await copyCommand.action();
 
     expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'No chat history available yet',
     });
-
     expect(mockCopyToClipboard).not.toHaveBeenCalled();
   });
 
   it('should return info message when history is empty', async () => {
-    mockGetHistory.mockReturnValue([]);
-
-    const result = await copyCommand.action!(mockContext, '');
+    latestOutput = { kind: 'no-output' };
+    const result = await copyCommand.action();
 
     expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'No output in history',
     });
-
     expect(mockCopyToClipboard).not.toHaveBeenCalled();
   });
 
   it('should return info message when no AI messages are found in history', async () => {
-    const historyWithUserOnly = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'Hello' }],
-      },
-    ];
-
-    mockGetHistory.mockReturnValue(historyWithUserOnly);
-
-    const result = await copyCommand.action!(mockContext, '');
+    latestOutput = { kind: 'no-output' };
+    const result = await copyCommand.action();
 
     expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'No output in history',
     });
-
     expect(mockCopyToClipboard).not.toHaveBeenCalled();
   });
 
-  it('should copy last AI message to clipboard successfully', async () => {
-    const historyWithAiMessage = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'Hello' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'Hi there! How can I help you?' }],
-      },
-    ];
-
-    mockGetHistory.mockReturnValue(historyWithAiMessage);
+  it('should copy the last AI message to the clipboard successfully', async () => {
+    latestOutput = { kind: 'text', text: 'Hi there! How can I help you?' };
     mockCopyToClipboard.mockResolvedValue(undefined);
-
-    const result = await copyCommand.action!(mockContext, '');
+    const result = await copyCommand.action();
 
     expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'Last output copied to the clipboard',
     });
-
     expect(mockCopyToClipboard).toHaveBeenCalledWith(
       'Hi there! How can I help you?',
     );
   });
 
-  it('should handle multiple text parts in AI message', async () => {
-    const historyWithMultipleParts = [
-      {
-        speaker: 'ai',
-        blocks: [
-          { type: 'text', text: 'Part 1: ' },
-          { type: 'text', text: 'Part 2: ' },
-          { type: 'text', text: 'Part 3' },
-        ],
-      },
-    ];
-
-    mockGetHistory.mockReturnValue(historyWithMultipleParts);
+  it('should handle multiple text parts in the latest output', async () => {
+    latestOutput = { kind: 'text', text: 'Part 1: Part 2: Part 3' };
     mockCopyToClipboard.mockResolvedValue(undefined);
-
-    const result = await copyCommand.action!(mockContext, '');
+    const result = await copyCommand.action();
 
     expect(mockCopyToClipboard).toHaveBeenCalledWith('Part 1: Part 2: Part 3');
     expect(result).toStrictEqual({
@@ -160,22 +89,10 @@ describe('copyCommand', () => {
     });
   });
 
-  it('should filter out non-text parts', async () => {
-    const historyWithMixedParts = [
-      {
-        speaker: 'ai',
-        blocks: [
-          { type: 'text', text: 'Text part' },
-          { type: 'media', mediaType: 'image/jpeg', data: 'base64data' },
-          { type: 'text', text: ' more text' },
-        ],
-      },
-    ];
-
-    mockGetHistory.mockReturnValue(historyWithMixedParts);
+  it('should copy text extracted from output containing non-text blocks', async () => {
+    latestOutput = { kind: 'text', text: 'Text part more text' };
     mockCopyToClipboard.mockResolvedValue(undefined);
-
-    const result = await copyCommand.action!(mockContext, '');
+    const result = await copyCommand.action();
 
     expect(mockCopyToClipboard).toHaveBeenCalledWith('Text part more text');
     expect(result).toStrictEqual({
@@ -185,26 +102,10 @@ describe('copyCommand', () => {
     });
   });
 
-  it('should get the last AI message when multiple AI messages exist', async () => {
-    const historyWithMultipleAiMessages = [
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'First AI response' }],
-      },
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'User message' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'Second AI response' }],
-      },
-    ];
-
-    mockGetHistory.mockReturnValue(historyWithMultipleAiMessages);
+  it('should copy the latest AI output when multiple AI messages exist', async () => {
+    latestOutput = { kind: 'text', text: 'Second AI response' };
     mockCopyToClipboard.mockResolvedValue(undefined);
-
-    const result = await copyCommand.action!(mockContext, '');
+    const result = await copyCommand.action();
 
     expect(mockCopyToClipboard).toHaveBeenCalledWith('Second AI response');
     expect(result).toStrictEqual({
@@ -215,18 +116,10 @@ describe('copyCommand', () => {
   });
 
   it('should handle clipboard copy error', async () => {
-    const historyWithAiMessage = [
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'AI response' }],
-      },
-    ];
-
-    mockGetHistory.mockReturnValue(historyWithAiMessage);
+    latestOutput = { kind: 'text', text: 'AI response' };
     const clipboardError = new Error('Clipboard access denied');
     mockCopyToClipboard.mockRejectedValue(clipboardError);
-
-    const result = await copyCommand.action!(mockContext, '');
+    const result = await copyCommand.action();
 
     expect(result).toStrictEqual({
       type: 'message',
@@ -236,18 +129,10 @@ describe('copyCommand', () => {
   });
 
   it('should handle non-Error clipboard errors', async () => {
-    const historyWithAiMessage = [
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'AI response' }],
-      },
-    ];
-
-    mockGetHistory.mockReturnValue(historyWithAiMessage);
+    latestOutput = { kind: 'text', text: 'AI response' };
     const rejectedValue = 'String error';
     mockCopyToClipboard.mockRejectedValue(rejectedValue);
-
-    const result = await copyCommand.action!(mockContext, '');
+    const result = await copyCommand.action();
 
     expect(result).toStrictEqual({
       type: 'message',
@@ -256,42 +141,27 @@ describe('copyCommand', () => {
     });
   });
 
-  it('should return info message when no text parts found in AI message', async () => {
-    const historyWithEmptyParts = [
-      {
-        speaker: 'ai',
-        blocks: [
-          { type: 'media', mediaType: 'image/jpeg', data: 'base64data' },
-        ], // No text blocks
-      },
-    ];
-
-    mockGetHistory.mockReturnValue(historyWithEmptyParts);
-
-    const result = await copyCommand.action!(mockContext, '');
+  it('should return info message when no text parts exist in the AI output', async () => {
+    latestOutput = { kind: 'empty' };
+    const result = await copyCommand.action();
 
     expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'Last AI output contains no text to copy.',
     });
-
     expect(mockCopyToClipboard).not.toHaveBeenCalled();
   });
 
-  it('should handle unavailable config service', async () => {
-    const nullConfigContext = createMockCommandContext({
-      services: { config: null },
-    });
-
-    const result = await copyCommand.action!(nullConfigContext, '');
+  it('should report when the registered owner has no chat', async () => {
+    latestOutput = { kind: 'no-chat' };
+    const result = await copyCommand.action();
 
     expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'No chat history available yet',
     });
-
     expect(mockCopyToClipboard).not.toHaveBeenCalled();
   });
 });

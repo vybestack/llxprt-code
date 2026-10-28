@@ -3,11 +3,12 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { restoreEnv } from '@vybestack/llxprt-code-test-utils';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { createDocsCommand } from './docsCommand.js';
-import { type CommandContext, type SlashCommand } from './types.js';
+import { type SlashCommand } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import { assertDefined } from '../../__tests__/assertions.js';
@@ -16,7 +17,7 @@ const docsUrl =
   'https://github.com/vybestack/llxprt-code/blob/main/docs/index.md';
 
 describe('docsCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   let command: SlashCommand;
   let browserLaunchDisabled: boolean;
   const mockOpen = vi.fn(async (_url: string): Promise<void> => {});
@@ -25,7 +26,7 @@ describe('docsCommand', () => {
     mockContext = createMockCommandContext();
     mockOpen.mockClear();
     browserLaunchDisabled = false;
-    command = createDocsCommand({
+    command = createDocsCommand(mockContext.ui.addItem, {
       openUrl: mockOpen,
       isBrowserLaunchDisabledDuringTests: () => browserLaunchDisabled,
     });

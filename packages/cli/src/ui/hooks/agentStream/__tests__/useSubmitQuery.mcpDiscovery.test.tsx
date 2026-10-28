@@ -1,8 +1,10 @@
+import { submissionOperations } from './submission-operations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 /**
  * Regression tests for issue #2516: "With MCP servers configured, ordinary
@@ -140,8 +142,15 @@ function renderUseSubmitQuery(
   mcpOverrides?: Parameters<typeof createStreamRuntimeForTest>[1],
 ) {
   const hookDeps: UseSubmitQueryDeps = {
-    runtime: createStreamRuntimeForTest({}, mcpOverrides),
-    agent: createMockAgentClient() as unknown as Agent,
+    ...{ runtime: createStreamRuntimeForTest({}, mcpOverrides) },
+    ...streamPolicyOperations(createStreamRuntimeForTest({}, mcpOverrides)),
+    ...submissionOperations(
+      createMockAgentClient() as unknown as Agent,
+      {
+        flushAtTurnBoundary: vi.fn(),
+      } as unknown as RecordingIntegration,
+      undefined,
+    ),
     addItem: deps.addItem,
     settings: {} as never,
     onDebugMessage: vi.fn(),
@@ -195,9 +204,6 @@ function renderUseSubmitQuery(
     submitQueryRef: { current: null },
     isResponding: false,
     streamingState: StreamingState.Idle,
-    recordingIntegration: {
-      flushAtTurnBoundary: vi.fn(),
-    } as unknown as RecordingIntegration,
   };
   return renderHook(() => useSubmitQuery(hookDeps));
 }

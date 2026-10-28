@@ -70,6 +70,7 @@ export interface HookControlDepsHandle {
 }
 
 export interface CreateHookControlDepsOptions {
+  readonly messageBus?: MessageBus;
   /** Whether the fake Config reports hooks enabled (default true). */
   readonly enableHooks?: boolean;
   /** Whether the fake Config exposes a hook system (default true). */
@@ -78,6 +79,17 @@ export interface CreateHookControlDepsOptions {
   readonly lifecycle?: FakeLifecycleResult;
   readonly sessionId?: string;
   readonly cwd?: string;
+}
+
+function aggregateHookOutput(output: Partial<HookOutput> | undefined) {
+  return {
+    success: true,
+    finalOutput:
+      output === undefined ? undefined : new DefaultHookOutput(output),
+    allOutputs: output === undefined ? [] : [new DefaultHookOutput(output)],
+    errors: [],
+    totalDuration: 0,
+  };
 }
 
 /**
@@ -93,17 +105,9 @@ export function createHookControlDeps(
   const cwd = options.cwd ?? '/work/dir';
   const lifecycle = options.lifecycle ?? {};
 
-  const messageBus = new MessageBus();
+  const messageBus = options.messageBus ?? new MessageBus();
 
   let disabled: readonly string[] = [];
-  const aggregate = (output: Partial<HookOutput> | undefined) => ({
-    success: true,
-    finalOutput:
-      output === undefined ? undefined : new DefaultHookOutput(output),
-    allOutputs: output === undefined ? [] : [new DefaultHookOutput(output)],
-    errors: [],
-    totalDuration: 0,
-  });
   const hookOperations = {
     execution(
       identity: Pick<
@@ -115,14 +119,16 @@ export function createHookControlDeps(
         ...identity,
         sessionStart: async () =>
           enableHooks && withHookSystem
-            ? aggregate(lifecycle.start)
+            ? aggregateHookOutput(lifecycle.start)
             : undefined,
         sessionEnd: async () =>
-          enableHooks && withHookSystem ? aggregate(lifecycle.end) : undefined,
+          enableHooks && withHookSystem
+            ? aggregateHookOutput(lifecycle.end)
+            : undefined,
       };
     },
     closeAdmission: () => {},
-    finishSession: async () => aggregate(lifecycle.end),
+    finishSession: async () => aggregateHookOutput(lifecycle.end),
     listHooks: () => [],
     getDisabledHooks: () => [...disabled],
     setDisabledHooks: (names: readonly string[]) => {
@@ -132,7 +138,10 @@ export function createHookControlDeps(
 
   const control = new HookControl({
     hookOperations,
-    messageBus,
+    observeRequests: (listener) =>
+      messageBus.subscribe(MessageBusType.HOOK_EXECUTION_REQUEST, listener),
+    observeResponses: (listener) =>
+      messageBus.subscribe(MessageBusType.HOOK_EXECUTION_RESPONSE, listener),
     sessionId: () => sessionId,
     cwd: () => cwd,
   });

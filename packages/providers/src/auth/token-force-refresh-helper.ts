@@ -125,6 +125,7 @@ export async function refreshStoredToken(
   tokenStore: TokenStore,
   providerRegistry: ProviderRegistry,
   proactiveRenewalManager: ProactiveRenewalManager,
+  signal?: AbortSignal,
 ): Promise<OAuthToken | null> {
   const provider = providerRegistry.getProvider(providerName);
   if (!provider) {
@@ -136,7 +137,7 @@ export async function refreshStoredToken(
       `[FLOW] Executing force refresh for ${providerName} (token matches failed token)`,
   );
 
-  const refreshedToken = await provider.refreshToken(storedToken);
+  const refreshedToken = await provider.refreshToken(storedToken, signal);
 
   if (!refreshedToken) {
     logger.debug(
@@ -145,6 +146,7 @@ export async function refreshStoredToken(
     return null;
   }
 
+  // The upstream rotation must reach storage even when its caller retires.
   const mergedToken = mergeRefreshedToken(
     storedToken as OAuthTokenWithExtras,
     refreshedToken as Partial<OAuthTokenWithExtras>,
@@ -156,6 +158,7 @@ export async function refreshStoredToken(
   );
 
   await tokenStore.saveToken(providerName, mergedToken, bucket);
+  signal?.throwIfAborted();
   proactiveRenewalManager.scheduleProactiveRenewal(
     providerName,
     bucket,

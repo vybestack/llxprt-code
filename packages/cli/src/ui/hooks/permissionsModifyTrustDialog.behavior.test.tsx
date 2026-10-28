@@ -128,12 +128,18 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     const config: PermissionsTrustRuntime = {
       getWorkingDir: () => CONFIGURED_WORKSPACE,
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => true,
       setTrustedFolderLive: vi.fn(),
     };
 
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     expect(result.current.isIdeTrusted).toBe(true);
     expect(result.current.isParentTrusted).toBe(false);
@@ -150,14 +156,20 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     const config: PermissionsTrustRuntime = {
       getWorkingDir: () => CONFIGURED_WORKSPACE,
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => liveTrust,
       setTrustedFolderLive: async (trusted) => {
         await setTrustedFolderLive(trusted);
         liveTrust = trusted;
       },
     };
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     let firstResult: Awaited<
       ReturnType<typeof result.current.commitTrustLevel>
@@ -193,14 +205,20 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     const config: PermissionsTrustRuntime = {
       getWorkingDir: () => CONFIGURED_WORKSPACE,
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => false,
       setTrustedFolderLive: vi.fn().mockImplementation(() => {
         mockedUserConfig.value['/unrelated'] = TrustLevel.TRUST_PARENT;
         throw new Error('live update failed');
       }),
     };
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     await act(async () => {
       await result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
@@ -221,11 +239,17 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     const config: PermissionsTrustRuntime = {
       getWorkingDir: () => CONFIGURED_WORKSPACE,
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => false,
       setTrustedFolderLive: vi.fn(),
     };
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     await act(async () => {
       expect(
@@ -245,12 +269,18 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     const config: PermissionsTrustRuntime = {
       getWorkingDir: () => unnormalizedWorkspace,
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => false,
       setTrustedFolderLive: vi.fn(),
     };
 
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     expect(result.current.pendingTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
     expect(result.current.workingDirectory).toBe(CONFIGURED_WORKSPACE);
@@ -271,19 +301,24 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     const firstConfig: PermissionsTrustRuntime = {
       getWorkingDir: () => WORKSPACE_FIRST,
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => true,
       setTrustedFolderLive: vi.fn(),
     };
     const secondConfig: PermissionsTrustRuntime = {
       getWorkingDir: () => WORKSPACE_SECOND,
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => false,
       setTrustedFolderLive: vi.fn(),
     };
     const { result, rerender } = renderHook(
-      ({ config }) => usePermissionsModifyTrust(config),
+      ({ config }) =>
+        usePermissionsModifyTrust(
+          config,
+          () => undefined,
+          () => () => {},
+        ),
       { initialProps: { config: firstConfig } },
     );
 
@@ -317,12 +352,16 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     const config: PermissionsTrustRuntime = {
       getWorkingDir: () => workingDirectory,
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => liveTrust,
       setTrustedFolderLive,
     };
     const { result, rerender } = renderHook(() =>
-      usePermissionsModifyTrust(config),
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
     );
 
     let commit: ReturnType<typeof result.current.commitTrustLevel>;
@@ -362,11 +401,17 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     const config: PermissionsTrustRuntime = {
       getWorkingDir: () => CONFIGURED_WORKSPACE,
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => liveTrust,
       setTrustedFolderLive,
     };
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     let firstCommit: ReturnType<typeof result.current.commitTrustLevel>;
     let secondCommit: ReturnType<typeof result.current.commitTrustLevel>;
@@ -399,13 +444,19 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     const config: PermissionsTrustRuntime = {
       getWorkingDir: () => CONFIGURED_WORKSPACE,
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => false,
       setTrustedFolderLive: vi.fn().mockImplementation(() => {
         throw new Error('live update failed');
       }),
     };
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     await act(async () => {
       await result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
@@ -436,11 +487,17 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     const config: PermissionsTrustRuntime = {
       getWorkingDir: () => WORKSPACE_PROJECT,
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => true,
       setTrustedFolderLive: vi.fn(),
     };
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     expect(result.current.pendingTrustLevel).toBeUndefined();
     expect(result.current.isParentTrusted).toBe(true);
@@ -486,11 +543,17 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     const config: PermissionsTrustRuntime = {
       getWorkingDir: () => WORKSPACE_PROJECT,
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => false,
       setTrustedFolderLive: vi.fn(),
     };
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
     const wasParentTrusted = result.current.isParentTrusted;
 
     await act(async () => {
@@ -526,11 +589,17 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     const config: PermissionsTrustRuntime = {
       getWorkingDir: () => WORKSPACE_PROJECT,
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => false,
       setTrustedFolderLive: vi.fn(),
     };
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     expect(result.current.pendingTrustLevel).toBeUndefined();
     expect(result.current.isParentTrusted).toBe(true);

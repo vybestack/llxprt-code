@@ -11,6 +11,11 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { join } from 'node:path';
 import type { McpConstructionResources } from './mcp-construction-resources.js';
+import {
+  handoffOwner,
+  handoffOwnership,
+  type McpOwnerHandoff,
+} from './mcp-runtime-construction.js';
 import type { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 
 export function composeWorkspaceDefinitions(
@@ -20,9 +25,9 @@ export function composeWorkspaceDefinitions(
     readonly profileDirectory?: string;
     readonly subagentDirectory?: string;
   },
-  supplied: WorkspaceDefinitionOwner | undefined,
-  ownership: 'runtime' | 'caller',
+  handoff: McpOwnerHandoff<WorkspaceDefinitionOwner>,
 ): WorkspaceDefinitionOwner {
+  const supplied = handoffOwner(handoff);
   const owner =
     supplied ??
     new WorkspaceDefinitionOwner(
@@ -31,7 +36,8 @@ export function composeWorkspaceDefinitions(
       directories.subagentDirectory ??
         join(directories.globalConfigRoot, 'subagents'),
     );
-  if (ownership === 'runtime') resources.retain(() => owner.dispose());
+  if (handoffOwnership(handoff) === 'runtime' && supplied === undefined)
+    resources.retain(() => owner.dispose());
   return owner;
 }
 
@@ -114,29 +120,20 @@ export async function initializeWorkspaceDefinitions(
   await refresh();
 }
 
-export function assertDefinitionBootstrapConfig(started: boolean): void {
-  if (started)
-    throw new Error(
-      'An initialized Config requires its original MCP runtime handoff',
-    );
-}
-
 export function composeDefinitionRoots(
   resources: McpConstructionResources,
   directories: Parameters<typeof composeWorkspaceDefinitions>[1],
-  supplied: WorkspaceDefinitionOwner | undefined,
-  ownership: 'runtime' | 'caller',
+  handoff: McpOwnerHandoff<WorkspaceDefinitionOwner>,
 ): [WorkspaceDefinitionOwner, WorkspaceDefinitionOwner] {
   const definitions = composeWorkspaceDefinitions(
     resources,
     directories,
-    supplied,
-    ownership,
+    handoff,
   );
   const contributions = composeDefinitionContributions(
     resources,
     definitions,
-    ownership === 'runtime',
+    handoffOwnership(handoff) === 'runtime',
   );
   return [definitions, contributions];
 }

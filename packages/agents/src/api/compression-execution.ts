@@ -19,9 +19,11 @@ export async function executeCompression(
   prepare: () => Promise<void>,
   compress: () => Promise<PerformCompressionResult>,
   readTokenCount: () => number,
+  readRecentlyCompressed: () => boolean,
 ): Promise<CompressionResult> {
   await prepare();
   const originalTokenCount = readTokenCount();
+  const wasRecentlyCompressed = readRecentlyCompressed();
   const result = await compress();
   return projectCompressionResult(
     result,
@@ -30,6 +32,7 @@ export async function executeCompression(
     result === PerformCompressionResult.COMPRESSED
       ? readTokenCount()
       : originalTokenCount,
+    wasRecentlyCompressed,
   );
 }
 
@@ -44,12 +47,18 @@ export function executeHookCompression(
 ): Promise<CompressionResult> {
   return executeCompression(
     promptId,
-    prepare,
+    async () => {
+      await prepare();
+      if (readChat().getHistoryService() === null) {
+        throw new Error('Chat instance not available for compression.');
+      }
+    },
     () =>
       readChat().performCompression(
         promptId,
         createCompressionRecordingOptions(session, sessionId, hooks),
       ),
     () => readCompressionTokenCount(readHistory()),
+    () => readChat().wasRecentlyCompressed(),
   );
 }

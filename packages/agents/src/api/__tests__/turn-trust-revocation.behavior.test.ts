@@ -3,7 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
+import { openRouteAAgent } from './helpers/route-a-agent.js';
 
 import { describe, expect, it } from 'bun:test';
 import { once } from 'node:events';
@@ -13,17 +13,9 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { json } from 'node:stream/consumers';
-import {
-  fromConfig,
-  toConfigParameters,
-  type Agent,
-  type AgentEvent,
-} from '@vybestack/llxprt-code-agents';
+import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
 
-import {
-  Config,
-  ApprovalMode,
-} from '@vybestack/llxprt-code-core/config/config.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core/config/config.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
 function barrier(): { promise: Promise<void>; release(): void } {
@@ -149,12 +141,10 @@ async function collect(
       ) {
         answered.add(event.confirmation.confirmationId);
         markerAtConfirmation = [...markerAtConfirmation, existsSync(marker)];
-        agent
-          .getMessageBus()
-          .respondToConfirmation(
-            event.confirmation.confirmationId,
-            ToolConfirmationOutcome.Cancel,
-          );
+        agent.tools.respondToConfirmation(
+          event.confirmation.confirmationId,
+          ToolConfirmationOutcome.Cancel,
+        );
       }
     }
     return { events, markerAtConfirmation };
@@ -199,7 +189,7 @@ describe('Live workspace authority in captured turns', () => {
       delete process.env.LLXPRT_FAKE_RESPONSES;
       const controller = new AbortController();
       let endpoints: ReadonlyArray<Awaited<ReturnType<typeof transport>>> = [];
-      let owners: ReadonlyArray<{ agent: Agent; config: Config }> = [];
+      let closers: ReadonlyArray<() => Promise<void>> = [];
       let pending: ReadonlyArray<Promise<Observation>> = [];
       const start = (agent: Agent, marker: string): Promise<Observation> => {
         const result = collect(agent, marker, controller.signal);
@@ -210,7 +200,6 @@ describe('Live workspace authority in captured turns', () => {
         name: string,
       ): Promise<{
         agent: Agent;
-        config: Config;
         endpoint: Awaited<ReturnType<typeof transport>>;
         workingDir: string;
       }> => {
@@ -218,8 +207,8 @@ describe('Live workspace authority in captured turns', () => {
         endpoints = [...endpoints, endpoint];
         const workingDir = join(directory, name);
         await mkdir(workingDir);
-        const config = new Config({
-          ...toConfigParameters({
+        const { agent, close } = await openRouteAAgent({
+          config: {
             provider: 'openai',
             model: 'trust-conformance',
             workingDir,
@@ -230,30 +219,24 @@ describe('Live workspace authority in captured turns', () => {
             recording: { enabled: false },
             mcpEnabled: false,
             skillsSupport: false,
-          }),
-          interactive: true,
-        });
-        const agent = await fromConfig({
-          ...createSessionSettingsFixture(config),
-          config,
-          sessionId: 'same-trust-label',
-          activation: {
-            provider: 'openai',
-            model: 'trust-conformance',
-            cliOverrides: { key: 'local-trust-only', baseUrl: endpoint.url },
+            interactive: true,
+          },
+          intent: {
+            sessionId: 'same-trust-label',
+            activation: {
+              provider: 'openai',
+              model: 'trust-conformance',
+              cliOverrides: { key: 'local-trust-only', baseUrl: endpoint.url },
+            },
           },
         });
-
-        owners = [...owners, { agent, config }];
-        return { agent, config, endpoint, workingDir };
+        closers = [...closers, close];
+        return { agent, endpoint, workingDir };
       };
       try {
         const a = await owner('a');
         const b = await owner('b');
         expect(a.agent.getRuntimeId()).toBe(b.agent.getRuntimeId());
-        expect(a.agent.getMessageBus()).not.toBe(b.agent.getMessageBus());
-        expect(a.agent.agentClient.tools).not.toBe(b.agent.agentClient.tools);
-        expect(a.agent.getMessageBus()).not.toBe(b.agent.getMessageBus());
         expect(a.agent.ide.isTrustedFolder()).toBe(true);
         expect(a.agent.getApprovalMode()).toBe(approvalMode);
 
@@ -371,15 +354,7 @@ describe('Live workspace authority in captured turns', () => {
         for (const endpoint of endpoints) endpoint.release();
         try {
           await Promise.all(pending);
-          await Promise.all(
-            owners.map(async ({ agent, config }) => {
-              try {
-                await agent.dispose();
-              } finally {
-                await config.dispose();
-              }
-            }),
-          );
+          await Promise.all(closers.map((close) => close()));
         } finally {
           await Promise.all(endpoints.map((endpoint) => endpoint.stop()));
           restoreEnvironment(environment);

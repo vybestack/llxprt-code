@@ -1,6 +1,9 @@
+import { useFakeResponsesReplay } from '../../agents/src/api/__tests__/helpers/fake-responses-replay.js';
+import { fromConfig } from '@vybestack/llxprt-code-agents';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -44,7 +47,10 @@ import {
   ProviderManager,
   type IProvider,
 } from '@vybestack/llxprt-code-providers';
-import { runNonInteractive } from './nonInteractiveCli.js';
+import {
+  runNonInteractive,
+  buildNonInteractiveActivationIntent,
+} from './__tests__/noninteractive-run-fixture.js';
 import type { LoadedSettings } from './config/settings.js';
 import { __setWriteToStderrForTesting } from './session/errorReporting.js';
 
@@ -108,7 +114,11 @@ async function disposeOwnedConfigs(): Promise<void> {
   }
 }
 
-function makeUnconfiguredConfig(outputFormat?: OutputFormat): {
+function makeUnconfiguredConfig(
+  outputFormat?: OutputFormat,
+  selection?: { readonly provider: string; readonly model: string },
+): {
+  credentialAuthority: CredentialAuthority;
   config: Config;
   runtimeSettings: { store: SettingsService; owner: SessionSettingsOwner };
 } {
@@ -117,26 +127,40 @@ function makeUnconfiguredConfig(outputFormat?: OutputFormat): {
     sessionId: 'test-session',
     targetDir: directory,
     cwd: directory,
-    model: PLACEHOLDER_MODEL,
+    model: selection?.model ?? PLACEHOLDER_MODEL,
+    ...(selection !== undefined ? { provider: selection.provider } : {}),
     debugMode: false,
     interactive: false,
     outputFormat,
   });
   const store = new SettingsService();
   const owner = new SessionSettingsOwner(store);
+  owner.bindTelemetry(config);
   ownedConfigs.push({ config, directory, owner });
-  return { config, runtimeSettings: { store, owner } };
+  return {
+    credentialAuthority: new CredentialAuthority(),
+    config,
+    runtimeSettings: { store, owner },
+  };
 }
 
 function configureProvider(
   config: Config,
   name: string,
+  credentialAuthority: CredentialAuthority,
   runtimeSettings: { store: SettingsService; owner: SessionSettingsOwner },
 ): ProviderManager {
-  const manager = new ProviderManager({
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    runtimeSettings.store,
     config,
-    settingsService: runtimeSettings.store,
-  });
+    undefined,
+    credentialAuthority,
+    runtimeSettings.owner,
+  );
   const provider: IProvider = {
     name,
     getDefaultModel: () => PLACEHOLDER_MODEL,
@@ -148,7 +172,7 @@ function configureProvider(
   manager.registerProvider(provider);
   manager.setActiveProvider(name);
   runtimeSettings.owner.initializeProviderSelection(name, PLACEHOLDER_MODEL);
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
   return manager;
 }
 
@@ -172,6 +196,7 @@ function makeSettings(): LoadedSettings {
 }
 
 describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
+  useFakeResponsesReplay('plain-text.jsonl');
   afterEach(disposeOwnedConfigs);
   let originalEnv: Map<string, string | undefined>;
   let fromConfigMock: Mock<typeof original.fromConfig>;
@@ -241,7 +266,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -258,7 +283,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -275,7 +300,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -292,7 +317,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -308,7 +333,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -340,7 +365,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -363,7 +388,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -375,19 +400,33 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
   });
 
   it('passes through when a provider IS explicitly configured', async () => {
-    const { config, runtimeSettings } = makeUnconfiguredConfig();
+    const { config, runtimeSettings, credentialAuthority } =
+      makeUnconfiguredConfig(undefined, {
+        provider: 'fake',
+        model: 'fake-model',
+      });
     const providerManager = configureProvider(
       config,
       'openai',
+      credentialAuthority,
       runtimeSettings,
     );
 
     await runNonInteractive({
-      runtimeSettings,
+      hasActiveProvider: () => providerManager.hasActiveProvider(),
+      acquireAgent: async () =>
+        fromConfig(
+          config,
+          runtimeSettings.store,
+          {
+            activation: await buildNonInteractiveActivationIntent(config),
+          },
+          credentialAuthority,
+        ),
+      runtimeSettings: runtimeSettings.owner,
       config,
       settings: makeSettings(),
       input: 'hello',
-      providerManager,
       prompt_id: 'test-configured',
     });
 
@@ -396,19 +435,33 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
   it('passes through when LLXPRT_DEFAULT_PROVIDER selects a provider', async () => {
     process.env.LLXPRT_DEFAULT_PROVIDER = 'anthropic';
-    const { config, runtimeSettings } = makeUnconfiguredConfig();
+    const { config, runtimeSettings, credentialAuthority } =
+      makeUnconfiguredConfig(undefined, {
+        provider: 'fake',
+        model: 'fake-model',
+      });
     const providerManager = configureProvider(
       config,
       'anthropic',
+      credentialAuthority,
       runtimeSettings,
     );
 
     await runNonInteractive({
-      runtimeSettings,
+      hasActiveProvider: () => providerManager.hasActiveProvider(),
+      acquireAgent: async () =>
+        fromConfig(
+          config,
+          runtimeSettings.store,
+          {
+            activation: await buildNonInteractiveActivationIntent(config),
+          },
+          credentialAuthority,
+        ),
+      runtimeSettings: runtimeSettings.owner,
       config,
       settings: makeSettings(),
       input: 'hello',
-      providerManager,
       prompt_id: 'test-env-provider',
     });
 
@@ -487,7 +540,7 @@ describe('runNonInteractive: unconfigured error output format contracts (#2481)'
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -509,7 +562,7 @@ describe('runNonInteractive: unconfigured error output format contracts (#2481)'
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -533,7 +586,7 @@ describe('runNonInteractive: unconfigured error output format contracts (#2481)'
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',

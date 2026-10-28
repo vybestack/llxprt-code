@@ -1,3 +1,5 @@
+import { bindTurnModel } from '../../../session/bind-turn-model.js';
+import { TurnToolExecutionOwner } from '../../../session/turn-tool-execution-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
@@ -59,28 +61,31 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
     ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        RootTelemetry.prepare({
-          enabled: false,
-          sessionId: 'isolated-caller-fixture',
-          maxBytes: 1024,
-          maxFiles: 1,
-        }),
-      ),
-      agentClient: client,
       config,
-      messageBus,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-caller-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
+        ),
+      ),
     });
 
     const collected: AgenticLoopEvent[] = [];
@@ -145,28 +150,31 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
       ]);
 
       const loop = new AgenticLoop({
-        createSchedulerOwner: bindSchedulerOwner(
-          config,
-          messageBus,
-          config.isInteractive(),
-          toolRegistry,
-          (options) => new CoreToolScheduler(options),
-          () => configSettingsOwner.readToolExecutionPolicy(),
-          () =>
-            configSettingsOwner.readToolGovernance(
-              config.getExcludeTools() ?? [],
-            ),
-          undefined,
-          RootTelemetry.prepare({
-            enabled: false,
-            sessionId: 'isolated-caller-fixture',
-            maxBytes: 1024,
-            maxFiles: 1,
-          }),
-        ),
-        agentClient: client,
         config,
-        messageBus,
+        ...bindTurnModel(client),
+        tools: new TurnToolExecutionOwner(
+          messageBus,
+          undefined,
+          bindSchedulerOwner(
+            config,
+            messageBus,
+            config.isInteractive(),
+            toolRegistry,
+            (options) => new CoreToolScheduler(options),
+            () => configSettingsOwner.readToolExecutionPolicy(),
+            () =>
+              configSettingsOwner.readToolGovernance(
+                config.getExcludeTools() ?? [],
+              ),
+            undefined,
+            RootTelemetry.prepare({
+              enabled: false,
+              sessionId: 'isolated-caller-fixture',
+              maxBytes: 1024,
+              maxFiles: 1,
+            }),
+          ),
+        ),
       });
 
       async function driveAndAbortOnFirstTool(
@@ -247,27 +255,30 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
       [toolCallRequestEvent('delayed_tool', 'delayed'), finishedEvent()],
     ]);
     const loop = new AgenticLoop({
-      agentClient: client,
       config,
-      messageBus,
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
         messageBus,
-        false,
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
         undefined,
-        RootTelemetry.prepare({
-          enabled: false,
-          sessionId: 'isolated-caller-fixture',
-          maxBytes: 1024,
-          maxFiles: 1,
-        }),
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          false,
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-caller-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
+        ),
       ),
     });
     const controller = new AbortController();
@@ -341,29 +352,31 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
           ],
         ]);
         const loop = new AgenticLoop({
-          createSchedulerOwner: bindSchedulerOwner(
-            config,
-            messageBus,
-            config.isInteractive(),
-            toolRegistry,
-            (options) => new CoreToolScheduler(options),
-            () => configSettingsOwner.readToolExecutionPolicy(),
-            () =>
-              configSettingsOwner.readToolGovernance(
-                config.getExcludeTools() ?? [],
-              ),
-            undefined,
-            RootTelemetry.prepare({
-              enabled: false,
-              sessionId: 'isolated-caller-fixture',
-              maxBytes: 1024,
-              maxFiles: 1,
-            }),
-          ),
-          agentClient: client,
           config,
-          messageBus,
-          approvalHandler,
+          ...bindTurnModel(client),
+          tools: new TurnToolExecutionOwner(
+            messageBus,
+            approvalHandler,
+            bindSchedulerOwner(
+              config,
+              messageBus,
+              config.isInteractive(),
+              toolRegistry,
+              (options) => new CoreToolScheduler(options),
+              () => configSettingsOwner.readToolExecutionPolicy(),
+              () =>
+                configSettingsOwner.readToolGovernance(
+                  config.getExcludeTools() ?? [],
+                ),
+              undefined,
+              RootTelemetry.prepare({
+                enabled: false,
+                sessionId: 'isolated-caller-fixture',
+                maxBytes: 1024,
+                maxFiles: 1,
+              }),
+            ),
+          ),
         });
         const controller = new AbortController();
 
@@ -407,27 +420,30 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
       [toolCallRequestEvent('early_return_tool', 'early'), finishedEvent()],
     ]);
     const loop = new AgenticLoop({
-      agentClient: client,
       config,
-      messageBus,
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
         messageBus,
-        false,
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
         undefined,
-        RootTelemetry.prepare({
-          enabled: false,
-          sessionId: 'isolated-caller-fixture',
-          maxBytes: 1024,
-          maxFiles: 1,
-        }),
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          false,
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-caller-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
+        ),
       ),
     });
     const iterator = loop.run('go', new AbortController().signal);
@@ -495,28 +511,31 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
     ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        RootTelemetry.prepare({
-          enabled: false,
-          sessionId: 'isolated-caller-fixture',
-          maxBytes: 1024,
-          maxFiles: 1,
-        }),
-      ),
-      agentClient: client,
       config,
-      messageBus,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-caller-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
+        ),
+      ),
     });
 
     const events = await collectEvents(

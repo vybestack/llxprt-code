@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
 import { Config, SimpleExtensionLoader } from '@vybestack/llxprt-code-core';
 
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { createTestMcpRuntime } from './helpers/create-mcp-runtime.js';
 
 describe('retained MCP consumer operations', () => {
   it('updates extension tools and JIT memory through the retained MCP owner', async () => {
@@ -30,13 +30,13 @@ describe('retained MCP consumer operations', () => {
       enableExtensionReloading: true,
       telemetry: { enabled: false },
     });
-    const owner = await McpRuntimeOwner.create(
-      createTestOAuthBinding(),
-      config,
-      undefined,
-      undefined,
-      undefined,
-      loader,
+    const owner = await createTestMcpRuntime(
+      {
+        oauth: createTestOAuthBinding(),
+        config,
+        extensionLoader: loader,
+      },
+      {},
     );
     const extension = {
       name: 'arithmetic-extension',

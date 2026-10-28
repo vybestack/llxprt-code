@@ -1,3 +1,4 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -30,7 +31,7 @@ export async function disposeClientAndFiles(
  * Runs cleanup for an operation that already failed and then rethrows the
  * original failure. A cleanup failure is joined to it, never substituted.
  */
-async function rethrowAfterCleanup(
+export async function rethrowAfterCleanup(
   error: unknown,
   cleanup: () => Promise<void>,
   message: string,
@@ -43,12 +44,45 @@ async function rethrowAfterCleanup(
   throw error;
 }
 
+export function rethrowAfterClientCleanup(
+  error: unknown,
+  dispose: () => Promise<void>,
+  release: () => Promise<void>,
+): Promise<never> {
+  return rethrowAfterCleanup(
+    error,
+    () => disposeClientAndFiles({ dispose }, release),
+    'Session client binding cleanup failed',
+  );
+}
+
 /**
  * Tracks the clients a session owns with the provider-file scope each one
  * belongs to. A scope's files are released when its last client is released.
  */
 export class OwnedClientLedger {
   private readonly scopes = new Map<AgentClientContract, string>();
+  private readonly uses = new Map<AgentClientContract, Set<Promise<void>>>();
+  private readonly releaseFailures: unknown[] = [];
+
+  retain(client: AgentClientContract): () => void {
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const accepted = this.uses.get(client) ?? new Set<Promise<void>>();
+    accepted.add(pending);
+    this.uses.set(client, accepted);
+    return () => {
+      accepted.delete(pending);
+      if (accepted.size === 0) this.uses.delete(client);
+      release();
+    };
+  }
+
+  async join(client: AgentClientContract): Promise<void> {
+    await Promise.all(this.uses.get(client) ?? []);
+  }
 
   constructor(
     private readonly releaseScope: (scope: string) => Promise<void>,
@@ -63,14 +97,39 @@ export class OwnedClientLedger {
     this.scopes.delete(client);
   }
 
-  clients(): AgentClientContract[] {
-    return [...this.scopes.keys()];
+  /**
+   * Settles every client still registered and returns, ahead of those results,
+   * the failures of releases that other callers started and already reported
+   * to their own caller. Each failure is produced by one disposal and enters
+   * exactly one list.
+   */
+  async settleOwnedClients(): Promise<Array<PromiseSettledResult<void>>> {
+    const retained = this.releaseFailures
+      .splice(0)
+      .map((reason): PromiseRejectedResult => ({ status: 'rejected', reason }));
+    const batch = await Promise.allSettled(
+      [...this.scopes.keys()].map((client) => this.disposeEntry(client, false)),
+    );
+    return [...retained, ...batch];
   }
 
-  async dispose(client: AgentClientContract): Promise<void> {
+  dispose(client: AgentClientContract): Promise<void> {
+    return this.disposeEntry(client, true);
+  }
+
+  private async disposeEntry(
+    client: AgentClientContract,
+    retainFailure: boolean,
+  ): Promise<void> {
+    await this.join(client);
     const scope = this.scopes.get(client);
     if (scope === undefined) return;
-    await disposeClientAndFiles(client, () => this.release(client, scope));
+    try {
+      await disposeClientAndFiles(client, () => this.release(client, scope));
+    } catch (error) {
+      if (retainFailure) this.releaseFailures.push(error);
+      throw error;
+    }
   }
 
   /**
@@ -113,5 +172,59 @@ export class OwnedClientLedger {
     this.scopes.delete(client);
     if (![...this.scopes.values()].includes(scope))
       await this.releaseScope(scope);
+  }
+}
+
+export function finishCleanup(
+  ...groups: Array<ReadonlyArray<PromiseSettledResult<unknown>>>
+): void {
+  const failures = groups
+    .flat()
+    .flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+  if (failures.length > 0)
+    throw new AggregateError(failures, 'Session client cleanup failed');
+}
+
+export async function cleanupProviderScope(
+  files: ProviderFileLifecycle,
+  scope: string,
+): Promise<void> {
+  const result = await files.cleanupScope('session', scope);
+  if (result.failed > 0)
+    throw new Error(
+      `Provider file cleanup incomplete for scope ${scope}: ${JSON.stringify(files.snapshot().deletionFailures)}`,
+    );
+  if (result.deferred > 0) await files.waitForScopeCleanup('session', scope);
+}
+
+export class SessionClientWorkQueue {
+  private tail: Promise<void> = Promise.resolve();
+  constructor(private readonly assertAdmission: () => void) {}
+  enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    this.assertAdmission();
+    return this.enqueueAccepted(operation);
+  }
+  enqueueAccepted<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = this.tail.then(operation);
+    this.tail = pending.then(
+      () => undefined,
+      () => undefined,
+    );
+    return pending;
+  }
+  join(): Promise<void> {
+    return this.tail;
+  }
+}
+
+export async function initializeClientBinding(
+  bind: () => void,
+  dispose: () => Promise<void>,
+  release: () => Promise<void>,
+): Promise<void> {
+  try {
+    bind();
+  } catch (primary) {
+    await rethrowAfterClientCleanup(primary, dispose, release);
   }
 }

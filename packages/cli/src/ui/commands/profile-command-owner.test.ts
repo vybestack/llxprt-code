@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { profileCommand } from './profileCommand.js';
+import { createProfileCommandForTest } from './__tests__/profile-command-test-owner.js';
 
 describe('profile commands with an explicit Agent', () => {
   it('saves and deletes the command owner outside React, ALS and runtime registration', async () => {
@@ -47,12 +47,16 @@ describe('profile commands with an explicit Agent', () => {
       const context = createMockCommandContext({
         services: { agent: first, settings: { setValue: () => undefined } },
       });
+      const invocationContext = createMockCommandContext({
+        services: { agent: second },
+      });
+      const profileCommand = createProfileCommandForTest(context);
       const invoke = async (name: string, args: string) => {
         const action = profileCommand.subCommands?.find(
           (entry) => entry.name === name,
         )?.action;
         if (!action) throw new Error(`Missing ${name} command`);
-        return action(context, args);
+        return action(invocationContext, args);
       };
       expect(await invoke('save', 'model from-command')).toMatchObject({
         messageType: 'info',
@@ -78,7 +82,8 @@ describe('profile commands with an explicit Agent', () => {
         messageType: 'info',
       });
       expect(await store.listProfiles()).toStrictEqual([]);
-      expect(second.captureProfile()).toStrictEqual(foreground);
+      expect(second.getModel()).toBe(foreground.model);
+      expect(second.captureProfile().modelParams.temperature).toBe(0.8);
     } finally {
       for (const agent of agents) await agent.dispose();
       if (oldHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;

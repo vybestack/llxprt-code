@@ -64,6 +64,8 @@ export async function taskSelection(input: {
     config,
     assembleTaskSchemaPolicy(settings),
     () => settingsOwner.readToolExecutionPolicy(),
+    () =>
+      Promise.reject(new Error('task selection scenarios make no requests')),
   );
   await catalog.initializeInherited(registry, bus);
   owners = [...owners, { catalog, config, settingsOwner }];
