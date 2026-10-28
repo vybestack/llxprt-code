@@ -9,7 +9,11 @@ export function* completeChatToolArguments(
   state: StreamingState,
 ): Generator<IContent> {
   const calls = state.cachedPipelineResult?.normalized ?? [];
+  let blocks: IContent['blocks'] = [];
   for (const [index, block] of content.blocks.entries()) {
+    blocks.push(block);
+    if (block.type !== 'tool_call' && index !== content.blocks.length - 1)
+      continue;
     const call =
       block.type === 'tool_call'
         ? calls.find(
@@ -21,7 +25,7 @@ export function* completeChatToolArguments(
         : undefined;
     yield {
       speaker: content.speaker,
-      blocks: [block],
+      blocks,
       ...(index === content.blocks.length - 1 && content.metadata !== undefined
         ? { metadata: content.metadata }
         : {}),
@@ -39,5 +43,6 @@ export function* completeChatToolArguments(
           }
         : {}),
     };
+    blocks = [];
   }
 }

@@ -239,6 +239,13 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
     );
     expect(toolCalls!.length).toBe(1);
     expect(toolCalls![0].name).toBe('search');
+    expect(toolCallContent?.toolArgumentDelta).toMatchObject({
+      sourceId: '0',
+      id: toolCalls![0].id,
+      name: 'search',
+      complete: true,
+      replacementArguments: JSON.stringify({ query: 'deepseek reasoning' }),
+    });
 
     // Verify there is NO separate IContent that has only a ThinkingBlock
     // (the old behavior that caused the bug)
