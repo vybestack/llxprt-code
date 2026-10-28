@@ -12,11 +12,8 @@ import type { VersionSnapshot } from './versionSnapshot.js';
 import type { IContent } from '../services/history/IContent.js';
 import { testJournalSeams } from './__tests__/support/journalFixtures.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
+import { retainedAfterSettling } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 
-async function tick(): Promise<void> {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
-  Bun.gc(true);
-}
 function row(index: number): IContent {
   return {
     speaker: 'tool',
@@ -51,15 +48,18 @@ async function measuredQuery(
   snapshot: VersionSnapshot,
   revision: string,
   size: number,
-): Promise<number> {
+  keep?: object[],
+): Promise<{ nodeCalls: number; retained: number }> {
   let nodeCalls = 0;
   const node = ToolRankingTree.prototype.node;
   const decoded: Array<WeakRef<object>> = [];
-  ToolRankingTree.prototype.node = async function (this: ToolRankingTree, id) {
+  ToolRankingTree.prototype.node = function (this: ToolRankingTree, id) {
     nodeCalls++;
-    const value = await node.call(this, id);
-    decoded.push(new WeakRef(value));
-    return value;
+    return node.call(this, id).then((value) => {
+      decoded.push(new WeakRef(value));
+      keep?.push(value);
+      return value;
+    });
   };
   const noScan = spyOn(snapshot, 'entries').mockImplementation(() => {
     throw new Error('Ranking query scanned history');
@@ -69,11 +69,7 @@ async function measuredQuery(
     expect(nodeCalls).toBeLessThanOrEqual(
       6 * Math.ceil(Math.log2(size + 1)) + 8,
     );
-    await tick();
-    expect(decoded.filter((weak) => weak.deref() !== undefined)).toHaveLength(
-      0,
-    );
-    return nodeCalls;
+    return { nodeCalls, retained: await retainedAfterSettling(decoded) };
   } finally {
     noScan.mockRestore();
     ToolRankingTree.prototype.node = node;
@@ -132,7 +128,18 @@ describe('native tool ranking query cost', () => {
         counter.reads = 0;
         let nodeCalls: number;
         try {
-          nodeCalls = await measuredQuery(snapshot, policy.revision, size);
+          const measured = await measuredQuery(snapshot, policy.revision, size);
+          nodeCalls = measured.nodeCalls;
+          expect(measured.retained).toBe(0);
+          const kept: object[] = [];
+          const control = await measuredQuery(
+            snapshot,
+            policy.revision,
+            size,
+            kept,
+          );
+          expect(kept.length).toBeGreaterThan(0);
+          expect(control.retained).toBe(kept.length);
         } finally {
           await snapshot.close();
         }
