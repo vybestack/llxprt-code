@@ -41,10 +41,15 @@ async function seed(history: HistoryService, size: number): Promise<void> {
   );
 }
 
+// A paused async publisher can leave conservative-stack roots after collection.
+// Keep the same fixed bound across both cohorts, and reject a hold-all owner.
+const LIVE_OUTPUT_BOUND = 4;
+
 async function observePublication(
   history: HistoryService,
   size: number,
-): Promise<number> {
+  retained?: IContent[],
+): Promise<{ outputs: number; peak: number; final: number }> {
   const refs: Array<WeakRef<IContent>> = [];
   let samples = 0;
   let peak = 0;
@@ -70,12 +75,12 @@ async function observePublication(
             ...sink,
             appendDerived: async (ordinal, content) => {
               refs.push(new WeakRef(content));
+              retained?.push(content);
               await sink.appendDerived(ordinal, content);
               if (refs.length % 8 === 0) {
                 await collectGarbage();
                 samples++;
                 peak = Math.max(peak, live(refs));
-                expect(live(refs)).toBeLessThanOrEqual(2);
               }
             },
           }),
@@ -111,7 +116,7 @@ async function observePublication(
     await collectGarbage();
     expect(refs.length).toBe(size - 1);
     expect(samples).toBeGreaterThan(0);
-    expect(live(refs)).toBe(0);
+    const final = live(refs);
     let index = 0;
     for await (const content of history.streamRawHistory()) {
       expect(content.blocks).toStrictEqual(
@@ -121,26 +126,37 @@ async function observePublication(
     }
     expect(index).toBe(size - 1);
     process.stdout.write(
-      `PURGE_LIFETIME ${JSON.stringify({ size, outputs: refs.length, samples, peak, final: live(refs) })}\n`,
+      `PURGE_LIFETIME ${JSON.stringify({ size, outputs: refs.length, samples, peak, final })}\n`,
     );
-    return index;
+    return { outputs: index, peak, final };
   } finally {
     observer.mockRestore();
   }
 }
 
 describe('native semantic purge output lifetimes', () => {
-  for (const size of [65]) {
-    it(`releases actual output sink arguments at awaited backpressure over ${size} source rows`, async () => {
-      const history = new HistoryService({});
-      history.setTokenizerFactory(exactTokenizer());
-      try {
-        await seed(history, size);
-        expect(await observePublication(history, size)).toBe(size - 1);
-      } finally {
-        await history.dispose();
-      }
-    });
+  for (const size of [65, 650]) {
+    for (const trap of [false, true]) {
+      it(`${trap ? 'rejects a retaining output owner' : 'bounds live output sink arguments at awaited backpressure'} over ${size} source rows`, async () => {
+        const history = new HistoryService({});
+        history.setTokenizerFactory(exactTokenizer());
+        const retained: IContent[] = [];
+        try {
+          await seed(history, size);
+          const result = await observePublication(
+            history,
+            size,
+            trap ? retained : undefined,
+          );
+          expect(result.outputs).toBe(size - 1);
+          expect(result.peak <= LIVE_OUTPUT_BOUND).toBe(!trap);
+          expect(result.final).toBe(trap ? size - 1 : 0);
+          expect(retained.length).toBe(trap ? size - 1 : 0);
+        } finally {
+          await history.dispose();
+        }
+      });
+    }
   }
   it('preserves every byte of a greater-than-nine-MiB surviving value', async () => {
     const history = new HistoryService({});
