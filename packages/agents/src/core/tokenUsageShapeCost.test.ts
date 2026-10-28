@@ -90,6 +90,61 @@ describe('request-shape measurement cost guards (issue #3130)', () => {
   it('tokenizes a carried content once, not once per send', facadeCallback5);
 
   it('still reports the carried content cost on later sends', facadeCallback6);
+
+  it('counts unchanged instructions and schemas once across tracker lifetimes', () => {
+    const tokenizer = new CountingTokenizer();
+    const instructionsText = 'instructions '.repeat(100);
+    const tools = [{ name: 'read_file', description: 'read '.repeat(100) }];
+    const input = {
+      requestContents: [],
+      instructionsText,
+      tools,
+      countTokens: tokenizer.count,
+    };
+    const first = new RequestShapeTracker().recordRequestShape(input);
+    const expectedCost = instructionsText.length + JSON.stringify(tools).length;
+    expect(tokenizer.totalChars).toBe(expectedCost);
+    for (let index = 0; index < 100; index++) {
+      const next = new RequestShapeTracker().recordRequestShape(input);
+      expect(next.instructionsTokens).toBe(first.instructionsTokens);
+      expect(next.toolsSchemaTokens).toBe(first.toolsSchemaTokens);
+    }
+    expect(tokenizer.totalChars).toBe(expectedCost);
+  });
+
+  it('recounts changed static text and isolates different token counters', () => {
+    const tokenizer = new CountingTokenizer();
+    const tracker = new RequestShapeTracker();
+    const input = {
+      requestContents: [],
+      instructionsText: 'first',
+      tools: [{ name: 'read_file' }],
+      countTokens: tokenizer.count,
+    };
+    const first = tracker.recordRequestShape(input);
+    const changed = tracker.recordRequestShape({
+      ...input,
+      instructionsText: 'a longer instruction',
+      tools: [{ name: 'read_file', description: 'more schema text' }],
+    });
+    expect(changed.instructionsTokens).toBeGreaterThan(
+      first.instructionsTokens,
+    );
+    expect(changed.toolsSchemaTokens).toBeGreaterThan(first.toolsSchemaTokens);
+    const restored = tracker.recordRequestShape(input);
+    expect(restored.instructionsTokens).toBe(first.instructionsTokens);
+    expect(restored.toolsSchemaTokens).toBe(first.toolsSchemaTokens);
+    const differentCounter = tracker.recordRequestShape({
+      ...input,
+      countTokens: (text: string): number => text.length,
+    });
+    expect(differentCounter.instructionsTokens).toBe(
+      input.instructionsText.length,
+    );
+    expect(differentCounter.toolsSchemaTokens).toBeGreaterThan(
+      first.toolsSchemaTokens,
+    );
+  });
 });
 
 describe('bucket attribution against the real history pipeline (issue #3130)', () => {

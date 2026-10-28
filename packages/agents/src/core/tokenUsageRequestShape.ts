@@ -65,6 +65,35 @@ function nonempty(value: string | undefined): string | undefined {
   return value === '' ? undefined : value;
 }
 
+interface StaticTokenCount {
+  readonly digest: string;
+  readonly tokens: number;
+}
+
+// Keep only two digest/count pairs per live counter, never schema or prompt text.
+const staticTokenCounts = new WeakMap<
+  TokenCountFn,
+  { instructions?: StaticTokenCount; tools?: StaticTokenCount }
+>();
+
+function countStaticText(
+  text: string,
+  countTokens: TokenCountFn,
+  kind: 'instructions' | 'tools',
+): number {
+  let counts = staticTokenCounts.get(countTokens);
+  if (counts === undefined) {
+    counts = {};
+    staticTokenCounts.set(countTokens, counts);
+  }
+  const digest = createHash('sha256').update(text).digest('hex');
+  const prior = counts[kind];
+  if (prior?.digest === digest) return prior.tokens;
+  const tokens = countTokens(text);
+  counts[kind] = { digest, tokens };
+  return tokens;
+}
+
 class RequestShapeAccumulator {
   private historyTokens = 0;
   private mediaTokens = 0;
@@ -161,12 +190,16 @@ class RequestShapeAccumulator {
       .slice(0, FINGERPRINT_HEX_LENGTH);
     return {
       instructionsTokens: this.input.instructionsText
-        ? this.input.countTokens(this.input.instructionsText)
+        ? countStaticText(
+            this.input.instructionsText,
+            this.input.countTokens,
+            'instructions',
+          )
         : 0,
       toolsSchemaTokens:
         this.toolsJson === 'null' || this.toolsJson.length <= 2
           ? 0
-          : this.input.countTokens(this.toolsJson),
+          : countStaticText(this.toolsJson, this.input.countTokens, 'tools'),
       historyTokens: this.historyTokens,
       mediaTokens: this.mediaTokens,
       injectedTokens: this.injectedTokens,
