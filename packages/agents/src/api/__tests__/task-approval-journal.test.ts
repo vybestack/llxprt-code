@@ -60,6 +60,7 @@ async function exercise(
   interactive: boolean,
   writes: boolean,
   background: boolean,
+  responses = false,
 ): Promise<readonly string[]> {
   const directory = await mkdtemp(join(tmpdir(), 'task-approval-'));
   let childHistory: HistoryService | undefined;
@@ -109,8 +110,85 @@ async function exercise(
             }
           : { content: 'hello' };
       response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      const item = {
+        type: 'function_call',
+        id: `child-item-${requests}`,
+        call_id: `child-call-${requests}`,
+        name: 'run_shell_command',
+        arguments: JSON.stringify({ command: `printf approved > '${output}'` }),
+      };
+      const events = responses
+        ? [
+            {
+              type: 'response.created',
+              response: {
+                id: `response-${requests}`,
+                status: 'in_progress',
+                output: [],
+              },
+            },
+            ...(requests === 1
+              ? [
+                  {
+                    type: 'response.output_item.added',
+                    output_index: 0,
+                    item: { ...item, arguments: '' },
+                  },
+                  {
+                    type: 'response.function_call_arguments.delta',
+                    item_id: item.id,
+                    output_index: 0,
+                    delta: item.arguments,
+                  },
+                  {
+                    type: 'response.function_call_arguments.done',
+                    item_id: item.id,
+                    output_index: 0,
+                    arguments: item.arguments,
+                  },
+                  { type: 'response.output_item.done', output_index: 0, item },
+                ]
+              : [
+                  {
+                    type: 'response.reasoning_summary_text.delta',
+                    delta: 'Inspect',
+                  },
+                  {
+                    type: 'response.reasoning_summary_text.delta',
+                    delta: 'ing the branch ',
+                  },
+                  {
+                    type: 'response.reasoning_summary_text.done',
+                    text: 'Inspecting the branch ',
+                  },
+                  { type: 'response.output_text.delta', delta: 'hello' },
+                ]),
+            {
+              type: 'response.completed',
+              response: {
+                id: `response-${requests}`,
+                status: 'completed',
+                output: requests === 1 ? [item] : [],
+              },
+            },
+          ]
+        : [
+            {
+              id: 'child-response',
+              object: 'chat.completion.chunk',
+              model: 'child-model',
+              choices: [
+                {
+                  index: 0,
+                  delta,
+                  finish_reason: requests === 1 ? 'tool_calls' : 'stop',
+                },
+              ],
+            },
+          ];
       response.end(
-        `data: ${JSON.stringify({ id: 'child-response', object: 'chat.completion.chunk', model: 'child-model', choices: [{ index: 0, delta, finish_reason: requests === 1 ? 'tool_calls' : 'stop' }] })}\n\ndata: [DONE]\n\n`,
+        events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('') +
+          'data: [DONE]\n\n',
       );
     })().catch((error: unknown) => {
       failures.push(error);
@@ -132,7 +210,7 @@ async function exercise(
     const profiles = new ProfileManager(join(directory, 'profiles'));
     await profiles.saveProfile('approval-child', {
       version: 1,
-      provider: 'openai',
+      provider: responses ? 'openai-responses' : 'openai',
       model: 'child-model',
       modelParams: {},
       ephemeralSettings: { 'auth-key': 'local-test-key', 'base-url': baseUrl },
@@ -154,7 +232,12 @@ async function exercise(
         interactive,
         approvalMode: interactive ? ApprovalMode.DEFAULT : ApprovalMode.YOLO,
         folderTrust: true,
-        coreTools: ['task', 'write_file', 'list_directory'],
+        coreTools: [
+          'task',
+          'write_file',
+          'list_directory',
+          'run_shell_command',
+        ],
         telemetry: { enabled: false },
         recording: { enabled: false },
       }),
@@ -182,8 +265,11 @@ async function exercise(
             call.status === 'awaiting_approval' &&
             'onConfirm' in call.confirmationDetails
           ) {
-            void call.confirmationDetails
-              .onConfirm(ToolConfirmationOutcome.ProceedOnce)
+            const confirmation = call.confirmationDetails;
+            void Bun.sleep(150)
+              .then(() =>
+                confirmation.onConfirm(ToolConfirmationOutcome.ProceedOnce),
+              )
               .catch((error: unknown) => failures.push(error));
           }
         }
@@ -221,7 +307,7 @@ async function exercise(
           status: 'awaiting_approval',
           request: expect.objectContaining({
             callId: expect.stringContaining('child-call'),
-            name: 'write_file',
+            name: responses ? 'run_shell_command' : 'write_file',
             journalIdentity: expect.objectContaining({
               attemptId: expect.any(String),
             }),
@@ -238,7 +324,9 @@ async function exercise(
       expect(recorded).toStrictEqual([]);
     }
     if (writes)
-      expect(await readFile(output, 'utf8')).toBe('approved child output');
+      expect(await readFile(output, 'utf8')).toBe(
+        responses ? 'approved' : 'approved child output',
+      );
     return completed.map((call) => call.status);
   } finally {
     await channel?.release();
@@ -253,6 +341,9 @@ async function exercise(
 }
 
 describe('Task child approval journal ownership', () => {
+  it('continues a Responses child after a delayed shell approval', async () => {
+    expect(await exercise(true, true, false, true)).toStrictEqual(['success']);
+  });
   for (const interactive of [true, false]) {
     for (const background of [false, true]) {
       for (const writes of [false, true]) {

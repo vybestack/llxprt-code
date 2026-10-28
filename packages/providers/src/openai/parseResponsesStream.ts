@@ -172,7 +172,7 @@ function extractThoughtText(
     }
   }
 
-  return thoughtText.trim();
+  return thoughtText.trim() ? thoughtText : '';
 }
 
 /**
@@ -273,8 +273,8 @@ function* handleResponseCompleted(
     );
   }
 
-  const remainingReasoning = state.reasoningText.trim();
-  const remainingSummary = state.reasoningSummaryText.trim();
+  const remainingReasoning = state.reasoningText;
+  const remainingSummary = state.reasoningSummaryText;
   const terminalThought = chooseVisibleReasoningText(
     state.visibleReasoningSource,
     remainingReasoning,
@@ -425,7 +425,7 @@ function* handleReasoningDoneEvent(
   const sourceKind: ReasoningDeltaSource = isReasoningText
     ? 'reasoning_text'
     : 'reasoning_summary_text';
-  const content = (event.text ?? source).trim();
+  const content = event.text ?? source;
 
   if (content && state.visibleReasoningSource === sourceKind) {
     const allocated = allocateReasoningStreamId(state);
@@ -481,8 +481,8 @@ function* handleOutputItemDoneEvent(
     if (state.currentReasoningStreamId !== undefined) {
       const terminalThought = chooseVisibleReasoningText(
         state.visibleReasoningSource,
-        state.reasoningText.trim(),
-        state.reasoningSummaryText.trim(),
+        state.reasoningText,
+        state.reasoningSummaryText,
       );
       if (state.lastEmittedReasoningDelta !== undefined) {
         emittedThoughts.delete(state.lastEmittedReasoningDelta);
