@@ -816,7 +816,7 @@ describe('Claude 5 registry composition', () => {
       warnSpy.mockRestore();
     });
 
-    it('warns once per process that a point release inherits the family calibration', async () => {
+    it('warns once per registry that a point release inherits the family calibration', async () => {
       const estimate = () =>
         registry.estimatePrompt(
           request(
@@ -839,7 +839,7 @@ describe('Claude 5 registry composition', () => {
       expect(message).toContain('not directly calibrated');
     });
 
-    it('warns once per process that an unsanctioned lookalike falls back to the legacy estimate', async () => {
+    it('warns once per registry that an unsanctioned lookalike falls back to the legacy estimate', async () => {
       const estimate = () =>
         registry.estimatePrompt(
           request(
