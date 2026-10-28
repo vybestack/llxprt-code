@@ -57,6 +57,12 @@ export function createTestAgentClient(
     bindProviderInvocation: () => {},
     bindRuntimeSettings: () => {},
     bindTelemetry: () => {},
+    bindModelNotifications: () => {},
+    bindIdeContext: () => {},
+    bindWorkspaceDefinitions: () => {},
+    bindProviderFiles: () => {},
+    bindTokenization: () => {},
+    bindProviderSelection: () => {},
     bindToolSelection: (tools) => {
       selection = tools;
     },

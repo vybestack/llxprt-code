@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ModelRegistry } from '@vybestack/llxprt-code-core/models/registry.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
@@ -96,6 +97,8 @@ export class TestRuntimeProviderManager implements RuntimeProviderManager {
       total: 0,
     };
   }
+
+  bindModelRegistry(_registry: ModelRegistry): void {}
 
   setConfig(_config: Config): void {}
 

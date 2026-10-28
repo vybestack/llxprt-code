@@ -293,7 +293,7 @@ export class SessionClientOwner {
       },
     );
     this.modelRegistry = new ModelRegistry(factories.manager.fetchNetwork);
-    factories.manager.bindModelRegistry?.(this.modelRegistry);
+    factories.manager.bindModelRegistry(this.modelRegistry);
     this.toolCatalog = new SessionToolCatalogOwner(
       config,
       composition.readTaskSchemaPolicy,

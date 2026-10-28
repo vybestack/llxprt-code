@@ -88,7 +88,7 @@ export interface RuntimeProviderManager {
     config: Config | undefined,
   ): void;
   readonly fetchNetwork: NetworkFetch;
-  bindModelRegistry?(registry: ModelRegistry): void;
+  bindModelRegistry(registry: ModelRegistry): void;
   hasActiveProvider(): boolean;
   accumulateSessionTokens(providerName: string, usage: unknown): void;
 }
