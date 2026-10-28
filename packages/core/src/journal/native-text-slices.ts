@@ -22,6 +22,13 @@ async function* pages(
     header: { ...ids.header, blocks: [] },
     blocks: [],
   });
+  if (
+    metadata.speaker === 'human' &&
+    metadata.metadata?.displayText !== undefined
+  ) {
+    yield metadata;
+    return;
+  }
   for (let index = 0; index < ids.header.blocks.length; index++) {
     const block = ids.header.blocks[index];
     if (ids.head === undefined) throw new Error('Missing text row frame');
