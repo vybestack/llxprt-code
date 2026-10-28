@@ -147,7 +147,8 @@ export function createRecordAccess(
   reader: PositionalReader,
   trailer: AccessBounds,
   windowRows = false,
-  exactMetadata = false,
+  exactNodes = false,
+  nodeExtents?: ReadonlyMap<number, number>,
 ): RecordAccess {
   const window = windowRows
     ? rowReadWindow(reader, trailer.durableEnd)
@@ -161,15 +162,14 @@ export function createRecordAccess(
     readAhead = true,
   ): Promise<FrameStart> => {
     try {
-      const metadata =
-        exactMetadata && (what === 'RTNODE' || what === 'ITNODE');
+      const metadata = exactNodes && (what === 'RTNODE' || what === 'ITNODE');
       return await readFrameStart(
         readAhead && !metadata
           ? headReader(what, reader, window, nodeWindow)
           : reader,
         offset,
         trailer.durableEnd,
-        metadata ? undefined : prefetchBytes,
+        metadata ? nodeExtents?.get(offset) : prefetchBytes,
       );
     } catch (error) {
       if (

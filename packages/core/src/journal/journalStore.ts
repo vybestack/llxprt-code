@@ -870,6 +870,7 @@ export class JournalStore {
       trailer,
       true,
       true,
+      writtenNodes?.nodeExtents,
     );
   }
 

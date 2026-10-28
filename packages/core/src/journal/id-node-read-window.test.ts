@@ -19,6 +19,35 @@ function nodeFrame(value: number): Uint8Array {
 }
 
 describe('bounded id node readback', () => {
+  it('reads a published node with a known extent once without entering its neighbor', async () => {
+    const frame = nodeFrame(9);
+    const bytes = new Uint8Array(64 * 1024);
+    bytes.set(frame);
+    let reads = 0;
+    let furthestRead = 0;
+    const access = createRecordAccess(
+      '(known published id metadata)',
+      {
+        readAt: async (offset, length) => {
+          reads++;
+          furthestRead = Math.max(furthestRead, offset + length);
+          return bytes.slice(offset, offset + length);
+        },
+      },
+      { selfOffset: 0, durableEnd: bytes.length },
+      true,
+      true,
+      new Map([[0, frame.length]]),
+    );
+    const trie = new IdTrieReader(access, new BoundedIdNodeCache(0));
+    expect(await trie.readNode(0)).toStrictEqual({
+      kind: 'leaf',
+      entries: [{ hash: new Uint8Array(16), value: Uint8Array.of(9) }],
+    });
+    expect(reads).toBe(1);
+    expect(furthestRead).toBe(frame.length);
+  });
+
   it.each([false, true])(
     'does not read neighboring payloads from published id metadata with readAhead=%s',
     async (readAhead) => {

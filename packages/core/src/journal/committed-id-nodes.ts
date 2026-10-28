@@ -12,6 +12,7 @@ import type { RecordAppender } from './groupAppender.js';
 import { BoundedIdNodeCache, type IdNodeCache } from './idTrieCache.js';
 import { decodeIdTrieNode } from './idTrieNode.js';
 import { RECORD_KIND } from './recordKinds.js';
+import { frameLength } from './frame.js';
 import type {
   CommitAck,
   JournalGroupWriter,
@@ -19,9 +20,14 @@ import type {
 } from './groupWriter.js';
 import type { TrailerHeader } from './trailerRecord.js';
 
+/** Offsets and lengths only; no decoded nodes or row payloads survive here. */
+const MAX_KNOWN_NODE_EXTENTS = 4096;
+
 /** Written nodes become reusable only after their trailer has been acknowledged. */
 export class CommittedIdNodes {
   private readonly written = new BoundedIdNodeCache();
+  /** Encoded extents remain useful after the bounded payload cache evicts a node. */
+  readonly nodeExtents = new Map<number, number>();
   private transcript: { valueOffset: number; bytes: Uint8Array } | undefined;
 
   prepareGroup(
@@ -74,6 +80,20 @@ export class CommittedIdNodes {
       drain: () => target.drain(),
       append: async (record) => {
         const offset = await target.append(record);
+        if (
+          (record.kind === RECORD_KIND.ITNODE &&
+            decodeIdTrieNode(record.kindHeader).kind === 'internal') ||
+          record.kind === RECORD_KIND.RTNODE
+        ) {
+          this.nodeExtents.set(
+            offset,
+            frameLength(record.kindHeader.length, 0),
+          );
+          for (const previous of this.nodeExtents.keys()) {
+            if (this.nodeExtents.size <= MAX_KNOWN_NODE_EXTENTS) break;
+            this.nodeExtents.delete(previous);
+          }
+        }
         if (
           record.kind === RECORD_KIND.ITNODE ||
           record.kind === TRANSCRIPT_NODE_KIND
