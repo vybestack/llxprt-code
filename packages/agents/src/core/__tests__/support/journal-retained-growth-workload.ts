@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { randomUUID } from 'node:crypto';
+import { suspendJournalMaintenance } from '@vybestack/llxprt-code-core/journal/deferred-maintenance.js';
 import { basename, join } from 'node:path';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createLockedSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
@@ -339,14 +340,19 @@ export async function createWorkload(
       settings.set('context-limit', limit);
     },
     async runTurn(turn) {
-      if (turn > 1) addToolExchange(history, turn);
-      const output = await readLoggingChatStream(
-        chat,
-        { message: turnMessage(turn) },
-        `retained-growth-${turn}`,
-      );
-      if (output !== responseText(turn))
-        throw new Error(`Turn ${turn} returned unexpected text`);
+      const resumeMaintenance = await suspendJournalMaintenance();
+      try {
+        if (turn > 1) addToolExchange(history, turn);
+        const output = await readLoggingChatStream(
+          chat,
+          { message: turnMessage(turn) },
+          `retained-growth-${turn}`,
+        );
+        if (output !== responseText(turn))
+          throw new Error(`Turn ${turn} returned unexpected text`);
+      } finally {
+        resumeMaintenance();
+      }
     },
     async dispose() {
       await history.dispose();
