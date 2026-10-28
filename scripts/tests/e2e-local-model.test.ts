@@ -302,8 +302,12 @@ describe('ordinary local-model E2E', () => {
       OLLAMA_HOST: '127.0.0.1:12644',
       OLLAMA_CONTEXT_LENGTH: '32768',
       OLLAMA_NUM_PARALLEL: '1',
-      OLLAMA_MODELS: '${{ runner.temp }}\\ollama-models',
+      OLLAMA_MODELS: '${{ github.workspace }}\\tmp\\ollama-models',
       MODEL_CACHE_HIT: '${{ steps.model-cache.outputs.cache-hit }}',
+    });
+    expect(posix.env).toEqual({
+      ...windows.env,
+      OLLAMA_MODELS: '${{ github.workspace }}/tmp/ollama-models',
     });
     const script = asString(windows.run);
     expect(script).toContain("'0.31.1'");
@@ -324,22 +328,44 @@ describe('ordinary local-model E2E', () => {
     expect(save.uses).toMatch(/^actions\/cache\/save@[0-9a-f]{40}$/);
     expect(setupActionText).toContain('# ratchet:actions/cache/restore@v6');
     expect(setupActionText).toContain('# ratchet:actions/cache/save@v6');
-    const key = `ollama-models-\${{ runner.os }}-gemma4-e2b-it-qat-${digest}`;
+    const key = `ollama-models-portable-v1-gemma4-e2b-it-qat-${digest}`;
     for (const cacheStep of [restore, save]) {
       expect(asOptionalRecord(cacheStep.with)?.key).toBe(key);
-      expect(asOptionalRecord(cacheStep.with)?.path).toBe(
-        '${{ runner.temp }}/ollama-models',
-      );
+      expect(asOptionalRecord(cacheStep.with)?.path).toBe('tmp/ollama-models');
+      expect(asOptionalRecord(cacheStep.with)?.enableCrossOsArchive).toBe(true);
+      expect(
+        asOptionalRecord(cacheStep.with)?.['restore-keys'],
+      ).toBeUndefined();
     }
     expect(save.if).toBe("steps.model-cache.outputs.cache-hit != 'true'");
 
+    const restoredStore = actionStep('Verify restored model store');
+    const storeBeforeSave = actionStep('Verify model store before saving');
+    expect(restoredStore.if).toBe(
+      "steps.model-cache.outputs.cache-hit == 'true'",
+    );
+    expect(storeBeforeSave.if).toBe(save.if);
+    for (const verify of [restoredStore, storeBeforeSave]) {
+      expect(verify.shell).toBe('bash');
+      expect(verify.env).toEqual({ ACTION_PATH: '${{ github.action_path }}' });
+      expect(asString(verify.run).trim()).toBe(
+        'set -euo pipefail\nbun "$ACTION_PATH/verify-model-store.ts" "$GITHUB_WORKSPACE/tmp/ollama-models"',
+      );
+    }
+
     const names = setupActionSteps.map((candidate) => candidate.name);
     const index = (name: string): number => names.indexOf(name);
-    expect(index(restore.name ?? '')).toBeLessThan(
-      index('Start local Gemma 4 E2B model'),
+    expect(index(restoredStore.name ?? '')).toBeGreaterThan(
+      index(restore.name ?? ''),
     );
-    expect(index(restore.name ?? '')).toBeLessThan(
-      index('Start local Gemma 4 E2B model (Windows)'),
+    for (const startName of [
+      'Start local Gemma 4 E2B model',
+      'Start local Gemma 4 E2B model (Windows)',
+    ]) {
+      expect(index(restoredStore.name ?? '')).toBeLessThan(index(startName));
+    }
+    expect(index(storeBeforeSave.name ?? '')).toBeLessThan(
+      index(save.name ?? ''),
     );
     for (const verified of [
       'Start local Gemma 4 E2B model',
@@ -347,6 +373,9 @@ describe('ordinary local-model E2E', () => {
       'Verify CPU-only model inference',
       'Verify model inference (macOS and Windows)',
     ]) {
+      expect(index(storeBeforeSave.name ?? '')).toBeGreaterThan(
+        index(verified),
+      );
       expect(index(save.name ?? '')).toBeGreaterThan(index(verified));
     }
     expect(index(save.name ?? '')).toBeLessThan(

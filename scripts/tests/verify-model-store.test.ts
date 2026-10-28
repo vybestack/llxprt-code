@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { verifyModelStore } from './verify-model-store.ts';
+import { verifyModelStore } from '../../.github/actions/setup-local-gemma/verify-model-store.ts';
 
 const manifestPath = 'manifests/registry.ollama.ai/library/gemma4/e2b-it-qat';
 const sha256 = (data: string): string =>

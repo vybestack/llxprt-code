@@ -103,11 +103,9 @@ runs:
 
     - name: 'Test model store verification'
       shell: 'bash'
-      env:
-        ACTION_PATH: '${{ github.action_path }}'
       run: |
         set -euo pipefail
-        bun test "$ACTION_PATH/verify-model-store.test.ts"
+        bun test "$GITHUB_WORKSPACE/scripts/tests/verify-model-store.test.ts"
 
     # ---- Restore the verified model store, start the server, pull on miss -
     # Blobs and manifests are OS-independent: three OS-specific archives of
