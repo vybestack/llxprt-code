@@ -55,7 +55,7 @@ export class NativeJournalCursor {
   private responseIndex: NativeResponseIndex;
   private group: { readonly start: number; readonly end: number } | undefined;
   private publishedEnd: number | undefined;
-  private readonly orphanBeforeOffset: number;
+  private orphanBeforeTranscriptId: bigint;
 
   private constructor(
     private reader: NativeJournalPageReader,
@@ -68,7 +68,7 @@ export class NativeJournalCursor {
         : this.controller.signal,
     };
     this.publishedEnd = options.publishedEnd;
-    this.orphanBeforeOffset = options.orphanBeforeOffset ?? reader.size;
+    this.orphanBeforeTranscriptId = options.orphanBeforeTranscriptId ?? 0n;
     this.start = { row: this.rows, item: 0 };
     this.end = this.start;
     this.responseIndex = new NativeResponseIndex(reader);
@@ -86,6 +86,9 @@ export class NativeJournalCursor {
     );
     const cursor = new NativeJournalCursor(reader, options);
     try {
+      if (options.orphanBeforeTranscriptId === undefined && reader.rows > 0)
+        cursor.orphanBeforeTranscriptId =
+          (await reader.entryAt(reader.rows - 1)).transcriptId + 1n;
       options.signal?.throwIfAborted();
       options.counters?.recordDecoded();
       if (reader.rows > 0)
@@ -361,7 +364,7 @@ export class NativeJournalCursor {
         [page, ...responses.values()],
         this.options.emojiFilterMode,
       ),
-      first.recordOffset < this.orphanBeforeOffset,
+      first.transcriptId < this.orphanBeforeTranscriptId,
     );
   }
   private async *projectGroup(
@@ -738,6 +741,9 @@ export class NativeJournalCursor {
   }
   atFirstPageAtOffset(offset: number): boolean {
     return this.atStart() && offset === this.firstOffset;
+  }
+  orphanBoundary(): bigint {
+    return this.orphanBeforeTranscriptId;
   }
   size(): number {
     return this.reader.size;

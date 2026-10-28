@@ -130,7 +130,7 @@ describe('cancelled tool presentation', () => {
         );
         const cursor = await NativeJournalCursor.open(
           path,
-          { orphanBeforeOffset: 0 },
+          { orphanBeforeTranscriptId: 0n },
           16,
         );
         try {

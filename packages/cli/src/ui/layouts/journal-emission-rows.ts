@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { ScrollbackRow } from '../stores/turn/scrollbackPager.js';
 import { ToolCallStatus, type HistoryItemWithoutId } from '../types.js';
 
 interface DisplayRow {
@@ -21,4 +22,28 @@ export function settledTranscriptPrefix<T extends DisplayRow>(
   if (!responding) return rows.filter(completed);
   const incomplete = rows.findIndex((row) => !completed(row));
   return incomplete < 0 ? rows : rows.slice(0, incomplete);
+}
+
+export interface PrintedPosition {
+  readonly transcriptId: bigint;
+  readonly keys: ReadonlySet<string>;
+}
+
+export function transcriptPosition(row: ScrollbackRow): bigint | undefined {
+  if (row.identity.kind !== 'journal') return undefined;
+  if (row.identity.transcriptId === undefined)
+    throw new Error('Journal print position requires a transcript id');
+  return BigInt(row.identity.transcriptId);
+}
+
+export function unprinted(
+  row: ScrollbackRow,
+  printed: PrintedPosition,
+): boolean {
+  const position = transcriptPosition(row);
+  return (
+    position !== undefined &&
+    (position > printed.transcriptId ||
+      (position === printed.transcriptId && !printed.keys.has(row.key)))
+  );
 }

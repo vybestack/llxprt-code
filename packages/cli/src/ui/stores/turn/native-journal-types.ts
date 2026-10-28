@@ -14,7 +14,7 @@ export interface NativeJournalOptions {
   readonly journal?: NativeJournalReadDependencies;
   readonly publishedEnd?: number;
   /** Requests recorded before this boundary have no live approval owner. */
-  readonly orphanBeforeOffset?: number;
+  readonly orphanBeforeTranscriptId?: bigint;
 }
 
 export type NativeDisplayEntry =

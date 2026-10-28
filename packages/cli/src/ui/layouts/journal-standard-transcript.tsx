@@ -14,26 +14,17 @@ import { StreamingState } from '../types.js';
 import type { SlashCommandRuntime } from '../cliUiRuntime.js';
 import { SCROLLBACK_VIEWPORT_POLL_MS } from '../../constants/scrollbackLimits.js';
 
-import { settledTranscriptPrefix } from './journal-emission-rows.js';
+import {
+  settledTranscriptPrefix,
+  unprinted,
+  transcriptPosition,
+} from './journal-emission-rows.js';
 
 interface Emission {
   readonly serial: number;
   readonly rows: ScrollbackRow[];
   readonly width: number;
   readonly header: boolean;
-}
-
-interface PrintedPosition {
-  readonly offset: number;
-  readonly keys: ReadonlySet<string>;
-}
-
-function unprinted(row: ScrollbackRow, printed: PrintedPosition): boolean {
-  return (
-    row.offset !== null &&
-    (row.offset > printed.offset ||
-      (row.offset === printed.offset && !printed.keys.has(row.key)))
-  );
 }
 
 function useJournalEmission(
@@ -48,13 +39,13 @@ function useJournalEmission(
     width,
     header: true,
   });
-  const printed = useRef({ offset: -1, keys: new Set<string>() });
+  const printed = useRef({ transcriptId: -1n, keys: new Set<string>() });
   useEffect(() => {
     if (emission.rows.length > 0 || emission.header)
       setEmission((previous) => ({ ...previous, rows: [], header: false }));
   }, [emission]);
   useEffect(() => {
-    printed.current = { offset: -1, keys: new Set<string>() };
+    printed.current = { transcriptId: -1n, keys: new Set<string>() };
     setFrame(store.getState());
     const timer = setInterval(
       () => setFrame(store.getState()),
@@ -68,9 +59,10 @@ function useJournalEmission(
     const rows = stable.filter((row) => unprinted(row, printed.current));
     if (rows.length === 0) return;
     for (const row of rows) {
-      if (row.offset === null) continue;
-      if (row.offset > printed.current.offset) printed.current.keys.clear();
-      printed.current.offset = row.offset;
+      const position = transcriptPosition(row);
+      if (position === undefined) continue;
+      if (position > printed.current.transcriptId) printed.current.keys.clear();
+      printed.current.transcriptId = position;
       printed.current.keys.add(row.key);
     }
     setEmission((previous) => ({
