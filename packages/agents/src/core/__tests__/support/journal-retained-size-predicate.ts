@@ -1,10 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
   RETAINED_ALLOWANCE_BYTES,
+  median,
   type SettledCheckpoint,
 } from './journal-retained-growth-predicate.js';
 
-/** Compare the half-size and full-size runs, retaining the intermediate gates. */
+/** Fit median pairwise growth over the half/full-size span; gate every checkpoint. */
 export function evaluateRetainedSizes(
   baseline: SettledCheckpoint,
   checkpoints: readonly SettledCheckpoint[],
@@ -29,10 +30,24 @@ export function evaluateRetainedSizes(
         `retained ${checkpointDeltas[index]} bytes at turn ${checkpoints[index].turn} exceeds allowance ${RETAINED_ALLOWANCE_BYTES}`,
       );
   }
-  const growthBytes = large.heapBytes - small.heapBytes;
+  const slopes: number[] = [];
+  for (let first = 0; first < checkpoints.length - 1; first++) {
+    for (let last = first + 1; last < checkpoints.length; last++) {
+      const earlier = checkpoints[first];
+      const later = checkpoints[last];
+      if (later.turn <= earlier.turn)
+        throw new Error(
+          'Retained growth checkpoints must increase in turn count',
+        );
+      slopes.push(
+        (later.heapBytes - earlier.heapBytes) / (later.turn - earlier.turn),
+      );
+    }
+  }
+  const growthBytes = median(slopes) * (large.turn - small.turn);
   if (growthBytes >= RETAINED_ALLOWANCE_BYTES)
     failures.push(
-      `heap grew ${growthBytes} bytes between ${small.turn - baseline.turn} and ${large.turn - baseline.turn} measured turns, exceeds allowance ${RETAINED_ALLOWANCE_BYTES}`,
+      `median fitted heap grew ${growthBytes} bytes over ${large.turn - small.turn} measured turns, exceeds allowance ${RETAINED_ALLOWANCE_BYTES}`,
     );
   return {
     pass: failures.length === 0,

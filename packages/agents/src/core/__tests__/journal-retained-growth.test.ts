@@ -25,8 +25,9 @@ import {
 
 /**
  * Six checkpoints, 50 turns apart, follow a converged warm-up. Compare retained
- * heap at 150 and 300 measured turns under the unchanged 1 MiB growth allowance;
- * every intermediate checkpoint must also remain below 1 MiB over baseline.
+ * growth over the 150-turn half/full-size span using the median of all 15
+ * checkpoint-pair slopes under the unchanged 1 MiB growth allowance. Every
+ * intermediate checkpoint must also remain below 1 MiB over baseline.
  * Linux forced-collection diagnostics at 1,000 and 2,000 turns found flat row,
  * string and array counts despite short-window compiler/collector steps.
  * The two-size policy avoids interpreting those steps as sustained retention.
@@ -65,7 +66,36 @@ describe('repeated-turn retained growth over the real journal-backed send path',
       ),
     );
     expect(verdict.failures).toStrictEqual([]);
-    expect(verdict.growthBytes).toBe(701_131);
+    expect(verdict.growthBytes).toBeCloseTo(19_896, 6);
+  });
+
+  it('accepts the Linux endpoint dip using growth across all checkpoints', () => {
+    const verdict = evaluateRetainedSizes(
+      { turn: 605, heapBytes: 190_193_952 },
+      [-136_263, -561_347, -395_270, -402_862, 301_289, 678_097].map(
+        (delta, index) => ({
+          turn: 655 + index * CHECKPOINT_SPACING_TURNS,
+          heapBytes: 190_193_952 + delta,
+        }),
+      ),
+    );
+    expect(verdict.failures).toStrictEqual([]);
+    expect(verdict.growthBytes).toBe(498_231);
+  });
+
+  it('rejects the Linux checkpoint step even when median fitted growth is small', () => {
+    const verdict = evaluateRetainedSizes(
+      { turn: 675, heapBytes: 189_485_628 },
+      [127_657, 302_451, 522_890, 1_395_603, 1_309_926, 1_283_918].map(
+        (delta, index) => ({
+          turn: 725 + index * CHECKPOINT_SPACING_TURNS,
+          heapBytes: 189_485_628 + delta,
+        }),
+      ),
+    );
+    expect(verdict.growthBytes).toBeLessThan(RETAINED_ALLOWANCE_BYTES);
+    expect(verdict.pass).toBe(false);
+    expect(verdict.failures).toHaveLength(3);
   });
 
   it('rejects two-size growth even when both sizes are below the baseline allowance', () => {
@@ -79,6 +109,26 @@ describe('repeated-turn retained growth over the real journal-backed send path',
     expect(verdict.pass).toBe(false);
     expect(verdict.failures).toHaveLength(1);
     expect(verdict.growthBytes).toBeGreaterThan(RETAINED_ALLOWANCE_BYTES);
+  });
+
+  it('rejects sustained fitted growth even when every checkpoint is below the baseline allowance', () => {
+    const verdict = evaluateRetainedSizes(
+      { turn: 500, heapBytes: 190_000_000 },
+      [-900_000, -540_000, -180_000, 180_000, 540_000, 900_000].map(
+        (delta, index) => ({
+          turn: 550 + index * CHECKPOINT_SPACING_TURNS,
+          heapBytes: 190_000_000 + delta,
+        }),
+      ),
+    );
+    expect(
+      verdict.checkpointDeltas.every(
+        (delta) => delta < RETAINED_ALLOWANCE_BYTES,
+      ),
+    ).toBe(true);
+    expect(verdict.pass).toBe(false);
+    expect(verdict.failures).toHaveLength(1);
+    expect(verdict.growthBytes).toBe(1_080_000);
   });
 
   it('rejects an intermediate retained cohort even after release at full size', () => {
