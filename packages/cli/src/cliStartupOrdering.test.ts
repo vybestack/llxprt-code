@@ -1,3 +1,4 @@
+import { createObservationOwner } from './observation/jspWiring.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -62,7 +63,11 @@ const loadedProviderContributions = buildProviderContributionRegistry([]);
 const cliOAuthSettings = Object.freeze({ source: 'cli-adapter' });
 const zedIntegrationCalls: ZedIntegrationCall[] = [];
 
-function setupCommonMainMocks(callOrder: string[], config: Config): void {
+function setupCommonMainMocks(
+  callOrder: string[],
+  config: Config,
+  onEarlyDebug: () => void = () => {},
+): void {
   void mock.module('./cliProviderInit.js', () => ({
     activateConfiguredProvider: async (
       _config: unknown,
@@ -116,7 +121,13 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
       return config;
     },
     setupSessionRecording: async () => undefined,
-    setupOwnerSessionRecording: async () => null,
+    setupOwnerSessionRecording: async () => ({
+      history: null,
+      observation: createObservationOwner({
+        producer: null,
+        subscribeTodos: () => () => {},
+      }),
+    }),
   }));
   void mock.module('./session/nonInteractiveSession.js', () => ({
     runPipedOrPromptSession: async () => {
@@ -140,7 +151,7 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
   }));
   void mock.module('./cliBootstrap.js', () => ({
     captureBootstrapEnvPath: () => null,
-    configureEarlyDebugLogging: () => {},
+    configureEarlyDebugLogging: onEarlyDebug,
     createMemoizedStdinReader: () => async () => '',
     ensureStdinOrPromptProvided: async () => {},
     handleVersionAndHelpFlags: async () => {},
@@ -300,7 +311,10 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
     vi.restoreAllMocks();
   });
 
-  async function runMainWithConfig(config: Config): Promise<void> {
+  async function runMainWithConfig(
+    config: Config,
+    onEarlyDebug?: () => void,
+  ): Promise<void> {
     // Capture the real guard function BEFORE mocking. Bun's mock.module
     // patches the module namespace in-place, so any reference obtained after
     // mocking would point to the mock and recurse. We snapshot the function
@@ -318,7 +332,7 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
       },
       UNCONFIGURED_PROVIDER_MESSAGE,
     }));
-    setupCommonMainMocks(callOrder, config);
+    setupCommonMainMocks(callOrder, config, onEarlyDebug);
     const { main } = await import('./cli.js');
     await main();
   }
@@ -334,6 +348,21 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
     expect(callOrder).toContain('guard');
     expect(callOrder).not.toContain('activation');
     expect(callOrder).not.toContain('agent-construction');
+  });
+
+  it('scrubs the observation bootstrap path before early logging can inherit it', async () => {
+    const previous = process.env.LLXPRT_JSP_BOOTSTRAP_FILE;
+    const snapshots: Array<string | undefined> = [];
+    process.env.LLXPRT_JSP_BOOTSTRAP_FILE = '/session-only/bootstrap.json';
+    try {
+      await runMainWithConfig(makeConfig(true, false), () => {
+        snapshots.push(process.env.LLXPRT_JSP_BOOTSTRAP_FILE);
+      });
+      expect(snapshots).toStrictEqual([undefined]);
+    } finally {
+      if (previous === undefined) delete process.env.LLXPRT_JSP_BOOTSTRAP_FILE;
+      else process.env.LLXPRT_JSP_BOOTSTRAP_FILE = previous;
+    }
   });
 
   it('configured: guard falls through and activation + dispatch proceed', async () => {
@@ -544,7 +573,13 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       }),
       bootstrapRuntimeAndConfig: async () => config,
       setupSessionRecording: async () => undefined,
-      setupOwnerSessionRecording: async () => null,
+      setupOwnerSessionRecording: async () => ({
+        history: null,
+        observation: createObservationOwner({
+          producer: null,
+          subscribeTodos: () => () => {},
+        }),
+      }),
     }));
     void mock.module('./session/nonInteractiveSession.js', () => ({
       runPipedOrPromptSession: async () => {
