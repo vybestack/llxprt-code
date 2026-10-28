@@ -78,14 +78,22 @@ describe('ACP terminal-capable session acquisition rollback', () => {
       await config.dispose();
     }
   });
-  it('disposes the owned session Config when terminal setup fails during adoption', async () => {
+  it('releases acquired settings and credentials when terminal setup fails during adoption', async () => {
     vi.spyOn(
       SessionToolCatalogOwner.prototype,
       'bindShellExecution',
     ).mockImplementation(() => {
       throw new Error('terminal registry construction failed');
     });
-    const dispose = vi.spyOn(Config.prototype, 'dispose');
+    const owners: SessionSettingsOwner[] = [];
+    const bind = SessionSettingsOwner.prototype.bindTelemetry;
+    vi.spyOn(
+      SessionSettingsOwner.prototype,
+      'bindTelemetry',
+    ).mockImplementation(function (this: SessionSettingsOwner, ...args) {
+      owners.push(this);
+      return bind.apply(this, args);
+    });
     const config = new Config({
       sessionId: 'terminal-adoption-host',
       targetDir: process.cwd(),
@@ -113,7 +121,16 @@ describe('ACP terminal-capable session acquisition rollback', () => {
       await expect(
         zedAgent.newSession({ cwd: process.cwd(), mcpServers: [] }),
       ).rejects.toThrow('terminal registry construction failed');
-      expect(dispose).toHaveBeenCalledTimes(1);
+      expect(credentials().keySnapshot()).toStrictEqual([1]);
+      expect(credentials().snapshot()).toStrictEqual([1]);
+      const owner = owners.at(0);
+      if (owner === undefined)
+        throw new Error('Session settings were not acquired');
+      await expect(
+        owner.updateTelemetrySettings({ enabled: true }),
+      ).rejects.toThrow('Session settings owner is closed');
+      source.setSessionScoped('dumpcontext', 'on');
+      expect(source.getSessionScoped('dumpcontext')).toBe('on');
     } finally {
       await zedAgent.disposeAll();
       await config.dispose();
