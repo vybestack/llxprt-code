@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { mapRowStream } from '../../journal/mapped-row-stream.js';
 import type { NativeFactIndexRegistration } from '../../journal/nativeFactIndex.js';
 import { NEUTRAL_ROW_FACTS_THROUGH } from '../../journal/neutralRowFacts.js';
 import { tokenUsageFactRegistration } from './token-usage-facts.js';
@@ -261,15 +262,15 @@ export class JournalSession {
   }
 
   /** The entry a row holds. */
-  async readContent(entry: RowEntry): Promise<IContent> {
-    return decodeStoredRow(await this.store.readRow(entry));
+  readContent(entry: RowEntry): Promise<IContent> {
+    return this.store.readRow(entry).then(decodeStoredRow);
   }
 
   /** The live rows of the published version with their entries, one row in memory at a time. */
-  async *rows(from = 0): AsyncGenerator<SessionRow> {
-    for await (const entry of this.store.rows(from)) {
-      yield { entry, content: await this.readContent(entry) };
-    }
+  rows(from = 0): AsyncGenerator<SessionRow, void, unknown> {
+    return mapRowStream(this.store.rows(from), (entry) =>
+      this.readContent(entry).then((content) => ({ entry, content })),
+    );
   }
 
   close(): Promise<void> {

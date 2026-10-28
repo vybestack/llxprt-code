@@ -3,6 +3,15 @@ import { describe, expect, it } from 'bun:test';
 import { retainedAfterSettling } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { mapRowStream } from './mapped-row-stream.js';
 
+async function* closingSource(onClose: () => void): AsyncGenerator<number> {
+  try {
+    yield 1;
+    yield 2;
+  } finally {
+    onClose();
+  }
+}
+
 function ownedSource(): {
   stream: AsyncGenerator<number>;
   source: WeakRef<object>;
@@ -64,18 +73,73 @@ describe('mapped journal row streams', () => {
     expect(await stream.next()).toStrictEqual({ done: true, value: undefined });
   });
 
-  it('propagates a mapper failure and closes the source', async () => {
-    const failure = new Error('row conversion failed');
+  it('releases a mapped row while the output iterator is suspended', async () => {
+    const decoded: Array<WeakRef<object>> = [];
+    const stream = mapRowStream([1, 2], (value) => {
+      const row = { value, bytes: new Uint8Array(4 * 1024 * 1024) };
+      decoded.push(new WeakRef(row));
+      return row;
+    });
+    async function consume(): Promise<void> {
+      const next = await stream.next();
+      expect(next.done).toBe(false);
+      expect(next.value?.value).toBe(1);
+    }
+
+    await consume();
+
+    expect(await retainedAfterSettling(decoded)).toBe(0);
+    expect((await stream.next()).value?.value).toBe(2);
+    await stream.return();
+  });
+
+  it('serializes concurrent pulls and a return without retaining their results', async () => {
     let closed = false;
     async function* source(): AsyncGenerator<number> {
       try {
         yield 1;
         yield 2;
+        yield 3;
       } finally {
         closed = true;
       }
     }
-    const stream = mapRowStream(source(), () => {
+    const stream = mapRowStream(source(), (value) =>
+      Promise.resolve(value * 2),
+    );
+    const first = stream.next();
+    const second = stream.next();
+    const done = stream.return();
+    const after = stream.next();
+
+    expect(await first).toStrictEqual({ done: false, value: 2 });
+    expect(await second).toStrictEqual({ done: false, value: 4 });
+    expect(await done).toStrictEqual({ done: true, value: undefined });
+    expect(await after).toStrictEqual({ done: true, value: undefined });
+    expect(closed).toBe(true);
+  });
+
+  it('closes the source when a promised return rejects', async () => {
+    let closed = false;
+    const source = closingSource(() => {
+      closed = true;
+    });
+    const stream = mapRowStream(source, (value) => value * 2);
+    expect((await stream.next()).value).toBe(2);
+    const failure = new Error('return failed');
+
+    await expect(stream.return(Promise.reject(failure))).rejects.toBe(failure);
+    expect(closed).toBe(true);
+    expect(await stream.next()).toStrictEqual({ done: true, value: undefined });
+  });
+
+  it('propagates a mapper failure and closes the source', async () => {
+    const failure = new Error('row conversion failed');
+    let closed = false;
+    const source = closingSource(() => {
+      closed = true;
+    });
+    const stream = mapRowStream(source, () => {
       throw failure;
     });
 
