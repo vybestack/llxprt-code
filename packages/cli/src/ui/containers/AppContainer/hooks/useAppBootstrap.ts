@@ -98,6 +98,7 @@ export interface AppBootstrapResult {
    * minimal surface instead of dereferencing the runtime object inline.
    */
   agentClientSource: AgentClientSource;
+  stopTokenMetricsTracking: () => void;
   settings: LoadedSettings;
   runtime: ReturnType<typeof useRuntimeApi>;
   setLlxprtMdFileCount: (count: number) => void;
@@ -264,7 +265,7 @@ function useBootstrapEvents(
     agent: props.agent,
   });
   const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
-  const { tokenMetrics } = useTokenMetricsTracking({
+  const { tokenMetrics, stopTracking } = useTokenMetricsTracking({
     uiRuntime,
     updateHistoryTokenCount,
     recordingIntegrationRef,
@@ -280,6 +281,7 @@ function useBootstrapEvents(
     );
   }, [props.settingsStore, sessionStats.historyTokenCount]);
   return {
+    stopTokenMetricsTracking: stopTracking,
     recordingIntegrationRef,
     recordingSwapCallbacks,
     idePromptAnswered,
@@ -326,6 +328,7 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     streamRuntime,
     agent: props.agent,
     agentClientSource: streamRuntime.agentClientSource,
+    stopTokenMetricsTracking: e.stopTokenMetricsTracking,
     settings: props.settings,
     runtimeMessageBus: props.runtimeMessageBus,
     startupWarnings: props.startupWarnings ?? [],

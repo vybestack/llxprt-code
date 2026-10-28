@@ -15,7 +15,7 @@
  * @subscriptionStrategy Mixed (Stable subscription + Poll)
  */
 
-import { useEffect, useRef, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useMemo, useState } from 'react';
 import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
 import {
   DebugLogger,
@@ -46,6 +46,19 @@ interface UseTokenMetricsTrackingOptions {
 
 export interface UseTokenMetricsTrackingResult {
   tokenMetrics: TokenMetrics;
+  stopTracking: () => void;
+}
+
+function registerTrackingCleanup(
+  signal: AbortSignal,
+  cleanup: () => void,
+): () => void {
+  const stop = () => {
+    signal.removeEventListener('abort', stop);
+    cleanup();
+  };
+  signal.addEventListener('abort', stop, { once: true });
+  return stop;
 }
 type RuntimeHistoryService = Parameters<
   RecordingIntegration['subscribeToJournal']
@@ -67,12 +80,14 @@ function useHistoryTokenListener(
   uiRuntime: UiRuntime,
   updateHistoryTokenCount: (count: number) => void,
   tokenLogger: DebugLogger,
+  signal: AbortSignal,
 ): void {
   const historyTokenCleanupRef = useRef<(() => void) | null>(null);
   const lastHistoryServiceRef = useRef<unknown>(null);
   const lastPublishedHistoryTokensRef = useRef<number | null>(null);
 
   useEffect(() => {
+    if (signal.aborted) return undefined;
     let intervalCleared = false;
 
     const checkInterval = setInterval(() => {
@@ -124,7 +139,7 @@ function useHistoryTokenListener(
       }
     }, 100); // Check every 100ms
 
-    return () => {
+    return registerTrackingCleanup(signal, () => {
       clearInterval(checkInterval);
       intervalCleared = true;
       if (historyTokenCleanupRef.current) {
@@ -133,8 +148,8 @@ function useHistoryTokenListener(
       }
       lastHistoryServiceRef.current = null;
       lastPublishedHistoryTokensRef.current = null;
-    };
-  }, [uiRuntime, updateHistoryTokenCount, tokenLogger]);
+    });
+  }, [uiRuntime, updateHistoryTokenCount, tokenLogger, signal]);
 }
 
 /**
@@ -153,6 +168,7 @@ function useRecordingSubscription(
     | undefined,
   tokenLogger: DebugLogger,
   recordingOwner: 'agent' | 'raw' | undefined,
+  signal: AbortSignal,
 ): void {
   const recordingSubscribedServiceRef = useRef<unknown>(null);
 
@@ -162,7 +178,11 @@ function useRecordingSubscription(
     // recording integrations. The polling interval below handles this: each tick checks
     // recordingIntegrationRef.current?.subscribeToJournal, so a recording
     // integration that arrives after mount is automatically picked up on the next tick.
-    if (recordingOwner === 'agent' || !recordingIntegrationRef?.current) {
+    if (
+      signal.aborted ||
+      recordingOwner === 'agent' ||
+      !recordingIntegrationRef?.current
+    ) {
       return undefined;
     }
 
@@ -191,16 +211,17 @@ function useRecordingSubscription(
         );
     }, 100);
 
-    return () => {
+    return registerTrackingCleanup(signal, () => {
       clearInterval(checkInterval);
       intervalCleared = true;
       recordingSubscribedServiceRef.current = null;
-    };
-  }, [uiRuntime, recordingIntegrationRef, tokenLogger, recordingOwner]);
+    });
+  }, [uiRuntime, recordingIntegrationRef, tokenLogger, recordingOwner, signal]);
 }
 
 function useTokenMetricsPoll(
   runtime: ReturnType<typeof useRuntimeApi>,
+  signal: AbortSignal,
 ): TokenMetrics {
   const [tokenMetrics, setTokenMetrics] = useState<TokenMetrics>({
     tokensPerMinute: 0,
@@ -212,6 +233,7 @@ function useTokenMetricsPoll(
   const tokenMetricsSnapshotRef = useRef<TokenMetricsSnapshot | null>(null);
 
   useEffect(() => {
+    if (signal.aborted) return undefined;
     const updateTokenMetrics = () => {
       const metrics = runtime.getActiveProviderMetrics();
       const usage = runtime.getSessionTokenUsage();
@@ -251,8 +273,8 @@ function useTokenMetricsPoll(
     // Poll every second to show live updates
     const interval = setInterval(updateTokenMetrics, 1000);
 
-    return () => clearInterval(interval);
-  }, [runtime]);
+    return registerTrackingCleanup(signal, () => clearInterval(interval));
+  }, [runtime, signal]);
 
   return tokenMetrics;
 }
@@ -269,14 +291,22 @@ export function useTokenMetricsTracking({
     [],
   );
 
-  useHistoryTokenListener(uiRuntime, updateHistoryTokenCount, tokenLogger);
+  const controller = useMemo(() => new AbortController(), []);
+  const stopTracking = useCallback(() => controller.abort(), [controller]);
+  useHistoryTokenListener(
+    uiRuntime,
+    updateHistoryTokenCount,
+    tokenLogger,
+    controller.signal,
+  );
   useRecordingSubscription(
     uiRuntime,
     recordingIntegrationRef,
     tokenLogger,
     recordingOwner,
+    controller.signal,
   );
-  const tokenMetrics = useTokenMetricsPoll(runtime);
+  const tokenMetrics = useTokenMetricsPoll(runtime, controller.signal);
 
-  return { tokenMetrics };
+  return { tokenMetrics, stopTracking };
 }

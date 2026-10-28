@@ -179,6 +179,7 @@ function useAppInputRuntime(
   return useAppInput({
     uiRuntime: props.uiRuntime,
     streamRuntime: bootstrap.streamRuntime,
+    stopTokenMetricsTracking: bootstrap.stopTokenMetricsTracking,
     slashCommandRuntime: props.slashCommandRuntime,
     agent: props.agent,
     settings: props.settings,

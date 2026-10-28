@@ -73,6 +73,7 @@ export interface AppInputParams {
   streamRuntime: AppBootstrapResult['streamRuntime'];
   slashCommandRuntime: SlashCommandRuntime;
   agent: AppBootstrapResult['agent'];
+  stopTokenMetricsTracking: AppBootstrapResult['stopTokenMetricsTracking'];
   settings: AppBootstrapResult['settings'];
   subagentManager?: UiSubagentManager;
   /**
@@ -252,10 +253,11 @@ function useInputCoreProcessors(p: AppInputParams) {
       setQuittingMessagesRef.current(messages);
   }, []);
   const slashResult = useSlashCommandSetup(p, quitHandler, toggleVimEnabled);
-  const disposeAgentBeforeExit = useCallback(
-    () => p.agent.dispose(),
-    [p.agent],
-  );
+  const { agent, stopTokenMetricsTracking } = p;
+  const disposeAgentBeforeExit = useCallback(() => {
+    stopTokenMetricsTracking();
+    return agent.dispose();
+  }, [agent, stopTokenMetricsTracking]);
   const exitResult = useExitHandling({
     handleSlashCommand: slashResult.handleSlashCommand,
     config: p.streamRuntime.hooks,
