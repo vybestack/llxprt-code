@@ -198,12 +198,64 @@ async function expectNoLive(
   if (live > 0) throw new Error(`${live} admitted objects are still reachable`);
 }
 
+const DEFERRED_ADMISSION_COHORT_SIZE = 32;
+
 async function weakRowsOf(
   rows: AsyncIterable<IContent>,
+  retained?: IContent[],
 ): Promise<Array<WeakRef<object>>> {
   const weak: Array<WeakRef<object>> = [];
-  for await (const row of rows) weak.push(new WeakRef(row));
+  for await (const row of rows) {
+    weak.push(new WeakRef(row));
+    retained?.push(row);
+  }
   return weak;
+}
+
+async function consumeDeferredCohort(
+  admissions: RetainedHistoryAdmissions,
+  retained?: IContent[][],
+): Promise<{
+  weak: Array<WeakRef<object>>;
+  prepared: Array<
+    ReturnType<RetainedHistoryAdmissions['prepareDeferredArray']>
+  >;
+}> {
+  const weak: Array<WeakRef<object>> = [];
+  const prepared: Array<
+    ReturnType<RetainedHistoryAdmissions['prepareDeferredArray']>
+  > = [];
+  for (let index = 0; index < DEFERRED_ADMISSION_COHORT_SIZE; index++) {
+    const admission = admissions.prepareDeferredArray(
+      [imageRow(RED_PNG), imageRow(BLUE_PNG)],
+      {},
+    );
+    if (admission.rows === undefined) throw new Error('rows missing');
+    const retainedRows: IContent[] | undefined =
+      retained === undefined ? undefined : [];
+    const rows = await weakRowsOf(admission.rows, retainedRows);
+    admission.rows = undefined;
+    expect(rows).toHaveLength(2);
+    admission.discardInput();
+    expect(Object.keys(admission.retained)).toStrictEqual(['release']);
+    weak.push(...rows);
+    prepared.push(admission);
+    if (retainedRows !== undefined) retained?.push(retainedRows);
+  }
+  return { weak, prepared };
+}
+
+async function countLiveDeferredRows(
+  refs: ReadonlyArray<WeakRef<object>>,
+): Promise<number> {
+  await collectGarbage();
+  return refs.filter((ref) => ref.deref() !== undefined).length;
+}
+
+function expectBoundedDeferredRows(live: number): void {
+  // JSC's conservative native-stack scan can pin one row after consumption.
+  // A fixed bound across a cohort still rejects retention that grows per input.
+  expect(live).toBeLessThanOrEqual(1);
 }
 
 describe('ChatSession.setHistory disk-backed media ownership', () => {
@@ -327,24 +379,16 @@ describe('deferred array admission ownership handle', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it('holds only a release handle and retains no admitted rows once consumed', async () => {
+  it('holds only release handles and bounds admitted row reachability once consumed', async () => {
     const localStore = new LocalMediaStore({
       rootDirectory: join(directory, 'deferred-media'),
       quotaBytes: 1024 * 1024,
     });
     const admissions = new RetainedHistoryAdmissions(localStore);
-    const prepared = admissions.prepareDeferredArray(
-      [imageRow(RED_PNG), imageRow(BLUE_PNG)],
-      {},
-    );
-    if (prepared.rows === undefined) throw new Error('rows missing');
-    const weak = await weakRowsOf(prepared.rows);
-    prepared.rows = undefined;
-    expect(weak).toHaveLength(2);
-    prepared.discardInput();
-    expect(Object.keys(prepared.retained)).toStrictEqual(['release']);
-    await expectNoLive(weak);
-    await prepared.release();
+    const { weak, prepared } = await consumeDeferredCohort(admissions);
+    expect(weak).toHaveLength(DEFERRED_ADMISSION_COHORT_SIZE * 2);
+    expectBoundedDeferredRows(await countLiveDeferredRows(weak));
+    for (const admission of prepared) await admission.release();
     expect(admissions.all).toHaveLength(0);
   });
 
@@ -354,15 +398,18 @@ describe('deferred array admission ownership handle', () => {
       quotaBytes: 1024 * 1024,
     });
     const admissions = new RetainedHistoryAdmissions(localStore);
-    const prepared = admissions.prepareDeferredArray([imageRow(RED_PNG)], {});
-    if (prepared.rows === undefined) throw new Error('rows missing');
-    const retained: IContent[] = [];
-    for await (const row of prepared.rows) retained.push(row);
-    const weak = retained.map((row) => new WeakRef(row));
-    prepared.rows = undefined;
-    prepared.discardInput();
-    await expect(expectNoLive(weak)).rejects.toThrow('still reachable');
-    expect(retained).toHaveLength(1);
-    await prepared.release();
+    const retained: IContent[][] = [];
+    const { weak, prepared } = await consumeDeferredCohort(
+      admissions,
+      retained,
+    );
+    const live = await countLiveDeferredRows(weak);
+    expect(live).toBeGreaterThanOrEqual(DEFERRED_ADMISSION_COHORT_SIZE);
+    expect(() => expectBoundedDeferredRows(live)).toThrow(
+      'toBeLessThanOrEqual',
+    );
+    expect(retained).toHaveLength(DEFERRED_ADMISSION_COHORT_SIZE);
+    for (const admission of prepared) await admission.release();
+    expect(admissions.all).toHaveLength(0);
   });
 });
