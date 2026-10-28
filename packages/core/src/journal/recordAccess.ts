@@ -169,7 +169,7 @@ export function createRecordAccess(
           : reader,
         offset,
         trailer.durableEnd,
-        metadata && what !== 'ITNODE' ? undefined : prefetchBytes,
+        metadata ? undefined : prefetchBytes,
       );
     } catch (error) {
       if (
