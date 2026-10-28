@@ -51,7 +51,7 @@ function fileCommandFiles(files: FileCommandReads) {
 export function createAppCommandRegistry(
   reads: CommandRegistryReads,
   files: FileCommandReads,
-  ide: Agent['ide'],
+  ide: Pick<Agent['ide'], 'subscribeConnection'>,
   mcp: Pick<Agent['mcp'], 'subscribeStatus'>,
 ): AppCommandRegistry {
   const createBuiltin = createBuiltinCommandLoaderFactory(

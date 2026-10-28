@@ -452,7 +452,17 @@ export type UiRuntimeDeclarationSource = Omit<
 >;
 
 export function buildSessionRuntime(
-  source: StreamRuntimeDeclarationSource,
+  source: Pick<
+    StreamRuntimeDeclarationSource,
+    | 'getSessionId'
+    | 'adoptSessionId'
+    | 'getTargetDir'
+    | 'getProjectRoot'
+    | 'getWorkingDir'
+    | 'getProjectTempDir'
+    | 'getSessionRecordingQueueByteLimit'
+    | 'getLlxprtDir'
+  >,
 ): SessionIdentity {
   return {
     getSessionId: () => source.getSessionId(),
@@ -477,7 +487,17 @@ export function buildModelRuntime(
 }
 
 export function buildShellRuntime(
-  source: StreamRuntimeDeclarationSource,
+  source: Pick<
+    StreamRuntimeDeclarationSource,
+    | 'getShouldUseNodePtyShell'
+    | 'getEnableInteractiveShell'
+    | 'getPtyTerminalWidth'
+    | 'getPtyTerminalHeight'
+    | 'setPtyTerminalSize'
+    | 'getTerminalBackground'
+    | 'getShellReplacement'
+    | 'getShellExecutionConfig'
+  >,
 ): ShellState {
   return {
     getShouldUseNodePtyShell: () => source.getShouldUseNodePtyShell(),
@@ -493,8 +513,31 @@ export function buildShellRuntime(
 }
 
 export function buildFilesRuntime(
-  source: StreamRuntimeDeclarationSource,
-  workspace: Pick<Agent, 'workspace'>,
+  source: Pick<
+    StreamRuntimeDeclarationSource,
+    | 'getFileFilteringOptions'
+    | 'getFileFilteringDisableFuzzySearch'
+    | 'getFileFilteringRespectLlxprtIgnore'
+    | 'getFileFilteringRespectGitIgnore'
+    | 'getEnableRecursiveFileSearch'
+  >,
+  workspace: {
+    workspace: Pick<
+      Agent['workspace'],
+      | 'initializeSearch'
+      | 'search'
+      | 'getGlobExcludes'
+      | 'getReadManyFilesExcludes'
+      | 'shouldIgnoreFile'
+      | 'shouldGitIgnoreFile'
+      | 'shouldLlxprtIgnoreFile'
+      | 'filterFiles'
+      | 'filterFilesWithReport'
+      | 'getDirectories'
+      | 'addDirectory'
+      | 'containsPath'
+    >;
+  },
 ): FileWorkspaceState {
   return {
     initializeSearch: (directory, options) =>
@@ -532,8 +575,22 @@ export function buildFilesRuntime(
 }
 
 export function buildMemoryRuntime(
-  source: StreamRuntimeDeclarationSource,
-  workspace: Pick<Agent, 'memory'>,
+  source: Pick<
+    StreamRuntimeDeclarationSource,
+    'shouldLoadMemoryFromIncludeDirectories'
+  >,
+  workspace: {
+    memory: Pick<
+      Agent['memory'],
+      | 'getMemory'
+      | 'setMemory'
+      | 'setCoreMemory'
+      | 'getFileCount'
+      | 'getCoreFileCount'
+      | 'getFilePaths'
+      | 'refresh'
+    >;
+  },
 ): MemoryState {
   return {
     getUserMemory: () => workspace.memory.getMemory(),
@@ -552,7 +609,13 @@ export function buildMemoryRuntime(
 }
 
 export function buildHooksRuntime(
-  source: StreamRuntimeDeclarationSource,
+  source: Pick<
+    StreamRuntimeDeclarationSource,
+    | 'getEnableHooks'
+    | 'isSkillsSupportEnabled'
+    | 'getEnableHooksUI'
+    | 'isAdminSkillsEnabled'
+  >,
   hooks: Pick<
     Agent['hooks'],
     'triggerSessionEnd' | 'getDisabledHooks' | 'setDisabledHooks'
@@ -570,7 +633,7 @@ export function buildHooksRuntime(
 }
 
 export function buildMcpRuntime(
-  source: StreamRuntimeDeclarationSource,
+  source: Pick<StreamRuntimeDeclarationSource, 'getMcpServerCommand'>,
   mcp: McpUiSelection,
 ): McpState {
   return {
@@ -629,10 +692,9 @@ export function buildAppRuntime(
     | 'isJitContextEnabled'
     | 'updateSystemInstructionIfInitialized'
   >,
-  workspace: Pick<
-    Agent,
-    'ide' | 'getEphemeralSettings' | 'setEphemeralSetting' | 'workspace'
-  > & {
+  workspace: Pick<Agent, 'getEphemeralSettings' | 'setEphemeralSetting'> & {
+    ide: Pick<Agent['ide'], 'isTrustedFolder' | 'setTrustedFolderLive'>;
+    workspace: Pick<Agent['workspace'], 'subagentDefinitions'>;
     tools: Pick<Agent['tools'], 'get'>;
   },
 ): AppStateRuntime {

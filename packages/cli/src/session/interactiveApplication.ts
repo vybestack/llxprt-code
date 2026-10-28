@@ -1,3 +1,4 @@
+import type { InteractiveApplicationInputs } from './interactiveApplicationInputs.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -6,10 +7,7 @@
 import { createIdeCommand } from '../ui/commands/ideCommand.js';
 import { bindIdeCommand } from '../ui/commands/ideCommandHost.js';
 import { generateAutoPrompt } from '../ui/utils/autoPromptGenerator.js';
-import {
-  createWorkspaceCommandOwners,
-  type WorkspaceCommandRuntime,
-} from '../ui/hooks/workspaceCommandOwners.js';
+import { createWorkspaceCommandOwners } from '../ui/hooks/workspaceCommandOwners.js';
 import { bindDirectoryChangeRecording } from '../ui/commands/directoryCommandHost.js';
 import {
   bindChatOwnerOperations,
@@ -60,121 +58,17 @@ import {
 } from '../ui/hooks/credentialRegistrars.js';
 
 import type { AppProps } from '../ui/App.js';
-import type { ReactNode } from 'react';
-import {
-  getProjectHash,
-  type ApprovalMode,
-  type IContent,
-  type RecordingIntegration,
-  type SessionRecordingService,
-} from '@vybestack/llxprt-code-core';
-import type {
-  BrowserResumeRuntime,
-  ChatCommandReads,
-  CommandRegistryReads,
-  ContainerAppReads,
-  ContainerInputReads,
-  ContainerMemoryReads,
-  ContainerRuntimeReads,
-  ContainerSessionReads,
-  ContainerTerminalReads,
-  FileCommandReads,
-  KeyCommandReads,
-} from '../ui/cliCommandPorts.js';
-import type { StreamPolicyReads } from '../ui/inputOwnerBindings.js';
-import type { SlashCommandProcessorPorts } from '../ui/hooks/useSlashCommandProcessorCore.js';
-import type { LayoutRuntime } from '../ui/layouts/DefaultAppLayoutHelpers.js';
-import type { AppDialogsRuntime } from '../ui/containers/AppContainer/hooks/useAppDialogs.js';
-import type { EmojiFilterSettingsSource } from '../ui/utils/iContentToHistoryItems.js';
+
+import { getProjectHash } from '@vybestack/llxprt-code-core';
+
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { LoadedSettings } from '../config/settings.js';
-import type { OperationLifecycleRegistry } from '../ui/hooks/agentStream/operationLifecycle.js';
-import type { MemoryTelemetryController } from '../ui/hooks/memoryTrend/memoryTelemetry.js';
-import type {
-  DetectProviderQuotaOperation,
-  FetchOperation,
-  GetActiveModelNameOperation,
-  GetActiveProviderAliasConfigOperation,
-  GetActiveProviderNameOperation,
-  GetActiveToolFormatStateOperation,
-  GetEphemeralSettingOperation,
-  GetEphemeralSettingsOperation,
-  ListSavedProfilesOperation,
-  ProviderStatusOperation,
-  SaveLoadBalancerProfileOperation,
-  SetActiveModelOperation,
-  SetActiveToolFormatOverrideOperation,
-  SetEphemeralSettingOperation,
-  UpdateActiveProviderApiKeyOperation,
-} from '../ui/contexts/RuntimeContext.js';
-import { type ProviderAliasRefresh } from '../ui/contexts/ProviderAliasRefreshContext.js';
-import { type OAuthControl } from '../ui/contexts/OAuthControlContext.js';
+
 import { type AppContainerProps } from '../ui/AppContainer.js';
 import { bindPolicyRulesReader } from '../ui/hooks/policyRulesReaderHost.js';
 import {
   createCliModelIdentityRuntime,
   resolveContentPrefixIdentity,
 } from '../ui/utils/modelIdentity.js';
-
-export interface InteractiveApplicationInputs {
-  containerApp: ContainerAppReads;
-  containerSession: ContainerSessionReads;
-  containerTerminal: ContainerTerminalReads;
-  containerMemory: ContainerMemoryReads;
-  containerInput: ContainerInputReads;
-  inputPolicy: StreamPolicyReads;
-  commandRegistry: CommandRegistryReads;
-  fileCommands: FileCommandReads;
-  workspaceCommands: WorkspaceCommandRuntime;
-  chatCommands: ChatCommandReads;
-  keyCommands: KeyCommandReads;
-  approval: { getApprovalMode(): ApprovalMode };
-  browserSession: BrowserResumeRuntime;
-  emojiFilter: EmojiFilterSettingsSource;
-  containerRuntime: ContainerRuntimeReads;
-  slashCommandPorts: SlashCommandProcessorPorts;
-  layoutRuntime: LayoutRuntime;
-  dialogsRuntime: AppDialogsRuntime;
-  /**
-   * The single interactive Agent created at the CLI composition root.
-   */
-  agent: Agent;
-  renderRuntime: (children: ReactNode) => ReactNode;
-  detectProviderQuota: DetectProviderQuotaOperation;
-  fetch: FetchOperation;
-  getActiveModelName: GetActiveModelNameOperation;
-  getActiveProviderAliasConfig: GetActiveProviderAliasConfigOperation;
-  getActiveProviderName: GetActiveProviderNameOperation;
-  getActiveToolFormatState: GetActiveToolFormatStateOperation;
-  getEphemeralSetting: GetEphemeralSettingOperation;
-  getEphemeralSettings: GetEphemeralSettingsOperation;
-  listSavedProfiles: ListSavedProfilesOperation;
-  providerStatus: ProviderStatusOperation;
-  saveLoadBalancerProfile: SaveLoadBalancerProfileOperation;
-  setActiveModel: SetActiveModelOperation;
-  setActiveToolFormatOverride: SetActiveToolFormatOverrideOperation;
-  setEphemeralSetting: SetEphemeralSettingOperation;
-  updateActiveProviderApiKey: UpdateActiveProviderApiKeyOperation;
-  providerAliasRefresh: ProviderAliasRefresh;
-  oauthControl: OAuthControl;
-  settings: LoadedSettings;
-  startupWarnings?: string[];
-  resumedHistory?: IContent[];
-  version: string;
-  terminalBackgroundColor?: string;
-  /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */
-  recordingIntegration?: RecordingIntegration;
-  recordingOwner?: 'agent' | 'raw';
-  /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
-  initialRecordingService?: SessionRecordingService;
-  /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
-  initialLockHandle?: AppContainerProps['initialLockHandle'];
-  suppressStartupWelcome?: boolean;
-  /** P12: optional perf operation lifecycle registry (perf enabled only). */
-  operationLifecycle?: OperationLifecycleRegistry;
-  /** P12: optional memory telemetry controller (perf+memory enabled only). */
-  memoryController?: MemoryTelemetryController;
-}
 
 /** Assembles session-owned operations before any UI consumer is mounted. */
 export class InteractiveApplication {
@@ -189,10 +83,10 @@ export class InteractiveApplication {
   }
   private readonly isAgentClientPresent = (): boolean => true;
   private readonly subscribeHistoryTokens: AppContainerProps['subscribeHistoryTokens'] =
-    (publish) => this.props.agent.session.subscribeHistoryTokens(publish);
+    (publish) => this.props.session.subscribeHistoryTokens(publish);
   private readonly connectRecordingHistory: AppContainerProps['connectRecordingHistory'] =
     (recording) =>
-      this.props.agent.session.connectRecordingHistory(() => recording.current);
+      this.props.session.connectRecordingHistory(() => recording.current);
   private readonly readRawBrowserCatalog: AppContainerProps['readRawBrowserCatalog'] =
     async () => {
       const persistence = this.props.browserSession.sessionPersistence;
@@ -214,102 +108,69 @@ export class InteractiveApplication {
     };
   private readonly bindRawBrowserSession: AppContainerProps['bindRawBrowserSession'] =
     (config, swaps, logger) =>
-      bindRawBrowserSession(config, this.props.agent.session, swaps, logger);
+      bindRawBrowserSession(config, this.props.session, swaps, logger);
   readonly #registry: AppCommandRegistry;
   readonly #sessionCommands: ReturnType<
     InteractiveApplication['registerSessionCommands']
   >;
   readonly #history: RegisteredHistoryReads;
   readonly #registration: CredentialCommandRegistration;
-  #recordingPathAgent: Agent | undefined;
-  #readAgentRecordingPath: (() => string | undefined) | undefined;
-  #autoPromptAgent: Agent | undefined;
-  #generateSubagentPrompt:
-    | AppContainerProps['generateSubagentPrompt']
-    | undefined;
   readonly #toolkeys = createToolkeyCommands();
 
-  private readAgentRecordingPath(): () => string | undefined {
-    if (this.#recordingPathAgent !== this.props.agent) {
-      const session = this.props.agent.session;
-      this.#recordingPathAgent = this.props.agent;
-      this.#readAgentRecordingPath = () => session.getRecording().path;
-    }
-    if (this.#readAgentRecordingPath === undefined)
-      throw new Error('Agent recording reader was not initialized');
-    return this.#readAgentRecordingPath;
-  }
+  private readonly readAgentRecordingPath = (): string | undefined =>
+    this.props.session.getRecording().path;
 
   private readonly appendHistory: AppContainerProps['appendHistory'] = (
     ...args
-  ) => this.props.agent.addHistory(...args);
+  ) => this.props.addHistory(...args);
   private readonly readHistory: AppContainerProps['readHistory'] = (...args) =>
-    this.props.agent.getHistory(...args);
+    this.props.getHistory(...args);
   private readonly stream: AppContainerProps['stream'] = (...args) =>
-    this.props.agent.stream(...args);
+    this.props.stream(...args);
   private readonly injectSteer: AppContainerProps['injectSteer'] = (...args) =>
-    this.props.agent.injectSteer(...args);
+    this.props.injectSteer(...args);
   private readonly getProviderContextLimit: AppContainerProps['getProviderContextLimit'] =
-    (...args) => this.props.agent.getProviderContextLimit(...args);
+    (...args) => this.props.getProviderContextLimit(...args);
   private readonly disposeInput: AppContainerProps['disposeInput'] = () =>
-    this.props.agent.dispose();
+    this.props.dispose();
   private readonly readApprovalMode: AppContainerProps['readApprovalMode'] =
-    () => this.props.agent.getApprovalMode();
+    () => this.props.getApprovalMode();
   private readonly setApprovalMode: AppContainerProps['setApprovalMode'] = (
     ...args
-  ) => this.props.agent.setApprovalMode(...args);
+  ) => this.props.setApprovalMode(...args);
   private readonly readProviderMetrics: AppContainerProps['readProviderMetrics'] =
-    () => this.props.agent.providerReads.getActiveProviderMetrics();
+    () => this.props.providerReads.getActiveProviderMetrics();
   private readonly readSessionTokenUsage: AppContainerProps['readSessionTokenUsage'] =
-    () => this.props.agent.providerReads.getSessionTokenUsage();
+    () => this.props.providerReads.getSessionTokenUsage();
   private readonly readPolicyRules: AppContainerProps['readPolicyRules'] = () =>
-    bindPolicyRulesReader(this.props.agent.policy, () =>
+    bindPolicyRulesReader(this.props.policy, () =>
       this.props.approval.getApprovalMode(),
     )();
   private readonly getContentPrefixIdentity: AppContainerProps['getContentPrefixIdentity'] =
     () => {
       try {
         return resolveContentPrefixIdentity(
-          createCliModelIdentityRuntime(this.props.agent),
+          createCliModelIdentityRuntime(this.props),
         );
       } catch {
         return null;
       }
     };
 
-  #generateText: Agent['generate'] | undefined;
-
-  private generateText(): Agent['generate'] {
-    if (this.#autoPromptAgent !== this.props.agent) {
-      const generate = this.props.agent.generate.bind(this.props.agent);
-      this.#generateText = generate;
-      this.#generateSubagentPrompt = (description) =>
-        generateAutoPrompt(description, generate);
-      this.#autoPromptAgent = this.props.agent;
-    }
-    if (this.#generateText === undefined)
-      throw new Error('Text generation operation was not initialized');
-    return this.#generateText;
-  }
-
-  private generateSubagentPrompt(): AppContainerProps['generateSubagentPrompt'] {
-    this.generateText();
-    if (this.#generateSubagentPrompt === undefined)
-      throw new Error('Subagent prompt operation was not initialized');
-    return this.#generateSubagentPrompt;
-  }
+  private readonly generateSubagentPrompt: AppContainerProps['generateSubagentPrompt'] =
+    (description) => generateAutoPrompt(description, this.props.generate);
 
   private registerRegistry() {
     return createAppCommandRegistry(
       this.props.commandRegistry,
       this.props.fileCommands,
-      this.props.agent.ide,
-      this.props.agent.mcp,
+      this.props.ide,
+      this.props.mcp,
     );
   }
 
   private registerSessionCommands() {
-    const a = this.props.agent;
+    const a = this.props;
     const emojiFilter = this.props.emojiFilter;
     const session = a.session;
     const resumeOwnedCommand: ResumeOwnedCommand = (action) => {
@@ -359,37 +220,37 @@ export class InteractiveApplication {
     };
   }
   private readonly readIdeMode: AppContainerProps['readIdeMode'] = () =>
-    this.props.agent.ide.getIdeMode();
+    this.props.ide.getIdeMode();
   private readonly readCurrentIde: AppContainerProps['readCurrentIde'] = () =>
-    this.props.agent.ide.readConnection().currentIde;
+    this.props.ide.readConnection().currentIde;
   private readonly readIdeContext: AppContainerProps['readIdeContext'] = () =>
-    this.props.agent.ide.readContext();
+    this.props.ide.readContext();
   private readonly subscribeIdeContext: AppContainerProps['subscribeIdeContext'] =
-    (listener) => this.props.agent.ide.subscribeContext(listener);
+    (listener) => this.props.ide.subscribeContext(listener);
   private readonly readIdeWorkspaceTrust: AppContainerProps['readIdeWorkspaceTrust'] =
-    () => this.props.agent.ide.readWorkspaceTrust();
+    () => this.props.ide.readWorkspaceTrust();
   private readonly subscribeIdeWorkspaceTrust: AppContainerProps['subscribeIdeWorkspaceTrust'] =
-    (listener) => this.props.agent.ide.subscribeWorkspaceTrust(listener);
+    (listener) => this.props.ide.subscribeWorkspaceTrust(listener);
   private readonly readIdeDisplayName: AppContainerProps['readIdeDisplayName'] =
     () =>
-      this.props.agent.ide.getIdeMode()
-        ? (this.props.agent.ide.readConnection().detectedIdeDisplayName ?? '')
+      this.props.ide.getIdeMode()
+        ? (this.props.ide.readConnection().detectedIdeDisplayName ?? '')
         : '';
   private readonly readIdeAvailable: AppContainerProps['readIdeAvailable'] =
-    () => this.props.agent.ide.readConnection().available;
+    () => this.props.ide.readConnection().available;
   private readonly readIdeDiffingEnabled: AppContainerProps['readIdeDiffingEnabled'] =
     () => {
-      const connection = this.props.agent.ide.readConnection();
+      const connection = this.props.ide.readConnection();
       return connection.available ? connection.diffingEnabled : null;
     };
   private readonly subscribeIdeDiffing: AppContainerProps['subscribeIdeDiffing'] =
-    (listener) => this.props.agent.ide.subscribeConnection(() => listener());
+    (listener) => this.props.ide.subscribeConnection(() => listener());
   private readonly resolveIdeDiff: AppContainerProps['resolveIdeDiff'] = (
     ...args
-  ) => this.props.agent.ide.resolveDiff(...args);
+  ) => this.props.ide.resolveDiff(...args);
   private readonly registerIdeCommand: AppContainerProps['registerIdeCommand'] =
     (addItem) => {
-      const ide = this.props.agent.ide;
+      const ide = this.props.ide;
       return createIdeCommand(
         bindIdeCommand(
           ide.readConnection.bind(ide),
@@ -404,7 +265,7 @@ export class InteractiveApplication {
     };
 
   private registerWorkspaceCommands(): RegisterWorkspaceCommands {
-    const a = this.props.agent;
+    const a = this.props;
     const workspaceRuntime = this.props.workspaceCommands;
     return (add, setMemory, owner, raw) =>
       createWorkspaceCommandOwners({
@@ -456,7 +317,7 @@ export class InteractiveApplication {
       });
   }
   private registerChatCommands(): RegisterChatCommands {
-    const a = this.props.agent;
+    const a = this.props;
     const c = this.props.chatCommands;
     const emojiFilter = this.props.emojiFilter;
     const s = a.session;
@@ -510,8 +371,8 @@ export class InteractiveApplication {
     });
   }
   private registerSubagentCommand(): RegisterSubagentCommand {
-    const a = this.props.agent;
-    const generate = this.generateText();
+    const a = this.props;
+    const generate = this.props.generate;
     return (fuzzy, add) =>
       createSubagentCommand(
         bindSubagentCommand(
@@ -527,7 +388,7 @@ export class InteractiveApplication {
   }
 
   private bindHistory(): RegisteredHistoryReads {
-    const a = this.props.agent;
+    const a = this.props;
     return {
       compressHistory: (...args) => a.compress(...args),
       readRawHistory: () => a.session.readHistorySnapshot()?.messages ?? null,
@@ -540,7 +401,7 @@ export class InteractiveApplication {
     };
   }
   private models() {
-    const { agent: a } = this.props;
+    const a = this.props;
     return createModelRegistration(
       this.props.setActiveModel,
       this.props.getActiveToolFormatState,
@@ -553,7 +414,8 @@ export class InteractiveApplication {
     );
   }
   private profiles() {
-    const { agent: a, oauthControl: oauth, settings } = this.props;
+    const a = this.props;
+    const { oauthControl: oauth, settings } = this.props;
     const b = <O, A extends unknown[], R>(
       owner: O,
       op: (this: O, ...args: A) => R,
@@ -608,7 +470,8 @@ export class InteractiveApplication {
     );
   }
   private mcp() {
-    const { agent: a, settings } = this.props;
+    const a = this.props;
+    const { settings } = this.props;
     const b = <O, A extends unknown[], R>(
       owner: O,
       op: (this: O, ...args: A) => R,
@@ -632,12 +495,8 @@ export class InteractiveApplication {
       );
   }
   private register(): CredentialCommandRegistration {
-    const {
-      agent: a,
-      keyCommands: c,
-      oauthControl: oauth,
-      settings,
-    } = this.props;
+    const { keyCommands: c, oauthControl: oauth, settings } = this.props;
+    const a = this.props;
     const b = <O, A extends unknown[], R>(
       owner: O,
       op: (this: O, ...args: A) => R,
@@ -743,7 +602,7 @@ export class InteractiveApplication {
   private buildContainerProps(
     registerCredentials: CredentialCommandRegistration,
   ): AppProps {
-    const { agent } = this.props;
+    const agent = this.props;
     return {
       ...this.presentationProps(),
       readCurrentIde: this.readCurrentIde,
@@ -778,7 +637,7 @@ export class InteractiveApplication {
       disposeInput: this.disposeInput,
       readApprovalMode: this.readApprovalMode,
       setApprovalMode: this.setApprovalMode,
-      generatePromptContent: this.generateText(),
+      generatePromptContent: this.props.generate,
       readPolicyRules: this.readPolicyRules,
       subagentDefinitions: agent.workspace.subagentDefinitions,
       subagentWrites: agent.workspace.subagentWrites,
@@ -791,8 +650,8 @@ export class InteractiveApplication {
       readSessionTokenUsage: this.readSessionTokenUsage,
       historyReads: this.#history,
       registerCredentials,
-      readAgentRecordingPath: this.readAgentRecordingPath(),
-      generateSubagentPrompt: this.generateSubagentPrompt(),
+      readAgentRecordingPath: this.readAgentRecordingPath,
+      generateSubagentPrompt: this.generateSubagentPrompt,
     };
   }
 

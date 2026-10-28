@@ -36,15 +36,16 @@ import * as Ports from '../ui/cliCommandPorts.js';
 export interface InteractiveUiSources {
   debug: DebugCommandOperations;
   source: UiRuntimeDeclarationSource;
-  agent: Parameters<typeof buildAppRuntime>[1] &
-    Parameters<typeof buildSettingsRuntime>[1] & {
-      hooks: Parameters<typeof buildHooksRuntime>[1];
-      mcp: McpUiSelection;
-      memory: Agent['memory'];
-      getModel: Agent['getModel'];
-      getApprovalMode: Agent['getApprovalMode'];
-      setApprovalMode: Agent['setApprovalMode'];
-    };
+  appOperations: Parameters<typeof buildAppRuntime>[1];
+  modelOperations: Parameters<typeof buildModelRuntime>[0];
+  fileOperations: Parameters<typeof buildFilesRuntime>[1];
+  memoryOperations: Parameters<typeof buildMemoryRuntime>[1];
+  hookOperations: Parameters<typeof buildHooksRuntime>[1];
+  mcpOperations: McpUiSelection;
+  settingOperations: Parameters<typeof buildSettingsRuntime>[1];
+  approvalOperations: Parameters<typeof buildApprovalRuntime>[1];
+  checkpoints: Agent['workspace']['checkpoints'];
+  readEphemeralSetting: Agent['getEphemeralSetting'];
   providerKeys: ProviderKeyStorageLike;
   describeToolConfiguration: () => UiToolRegistryInfo;
   bucketFailover: BucketFailoverRuntime;
@@ -77,23 +78,23 @@ class InteractiveUiAssembly {
 
   constructor(inputs: InteractiveUiSources) {
     this.inputs = inputs;
-    const { source, agent } = inputs;
+    const { source } = inputs;
     this.session = buildSessionRuntime(source);
-    this.model = buildModelRuntime(agent);
+    this.model = buildModelRuntime(inputs.modelOperations);
     this.shell = buildShellRuntime(source);
-    this.files = buildFilesRuntime(source, agent);
-    this.memory = buildMemoryRuntime(source, agent);
-    this.hooks = buildHooksRuntime(source, agent.hooks);
-    this.mcp = buildMcpRuntime(source, agent.mcp);
+    this.files = buildFilesRuntime(source, inputs.fileOperations);
+    this.memory = buildMemoryRuntime(source, inputs.memoryOperations);
+    this.hooks = buildHooksRuntime(source, inputs.hookOperations);
+    this.mcp = buildMcpRuntime(source, inputs.mcpOperations);
     this.settings = buildSettingsRuntime(
       source,
-      agent,
+      inputs.settingOperations,
       inputs.telemetrySettings,
     );
-    this.events = buildAppEventRuntime(agent.mcp);
+    this.events = buildAppEventRuntime(inputs.mcpOperations);
     this.bucketFailover = inputs.bucketFailover;
     this.checkpoint = {
-      checkpoints: agent.workspace.checkpoints,
+      checkpoints: inputs.checkpoints,
       getCheckpointingEnabled: () => source.getCheckpointingEnabled(),
     };
     this.sessionLimits = {
@@ -101,11 +102,11 @@ class InteractiveUiAssembly {
     };
     this.interactive = { isInteractive: () => source.isInteractive() };
     this.ephemeral = {
-      getEphemeralSetting: (key: string) => agent.getEphemeralSetting(key),
+      getEphemeralSetting: (key: string) => inputs.readEphemeralSetting(key),
     };
-    this.approval = buildApprovalRuntime(source, agent);
+    this.approval = buildApprovalRuntime(source, inputs.approvalOperations);
     this.extensions = buildExtensionRuntime(source);
-    this.app = buildAppRuntime(source, agent);
+    this.app = buildAppRuntime(source, inputs.appOperations);
   }
   commands(): Pick<
     Ports.InteractiveCommandPorts,

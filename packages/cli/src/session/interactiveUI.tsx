@@ -1,3 +1,4 @@
+import type { InteractiveApplicationInputs } from './interactiveApplicationInputs.js';
 import { ObservationContext } from '../observation/ObservationContext.js';
 import type { ObservationCallbacks } from '../observation/jspWiring.js';
 import type { TerminalHost } from './terminalHost.js';
@@ -273,7 +274,7 @@ function buildRenderElement(
         slashCommandPorts: commandPorts.slashCommandPorts,
         layoutRuntime: commandPorts.layoutRuntime,
         dialogsRuntime: commandPorts.dialogsRuntime,
-        agent,
+        ...bindApplicationOperations(agent),
         renderRuntime: contextHost.renderRuntime,
         detectProviderQuota: contextHost.detectProviderQuota,
         fetch: contextHost.fetch,
@@ -639,7 +640,16 @@ function startupCommandRuntimes(
   const commandPorts = ports.buildCommandPorts({
     debug: bindDebugCommand(args.debugConfiguration),
     source: args.config,
-    agent: args.agent,
+    appOperations: args.agent,
+    modelOperations: args.agent,
+    fileOperations: args.agent,
+    memoryOperations: args.agent,
+    hookOperations: args.agent.hooks,
+    mcpOperations: args.agent.mcp,
+    settingOperations: args.agent,
+    approvalOperations: args.agent,
+    checkpoints: args.agent.workspace.checkpoints,
+    readEphemeralSetting: args.agent.getEphemeralSetting.bind(args.agent),
     bucketFailover: operations,
     telemetrySettings: args.runtimeSettings,
     providerKeys: args.providerKeys,
@@ -802,4 +812,79 @@ function renderInteractiveShell(
       </ErrorBoundary>
     </React.StrictMode>
   );
+}
+
+function bindApplicationOperations(
+  agent: Pick<
+    InteractiveApplicationInputs,
+    | 'addHistory'
+    | 'getHistory'
+    | 'stream'
+    | 'injectSteer'
+    | 'getProviderContextLimit'
+    | 'dispose'
+    | 'getApprovalMode'
+    | 'setApprovalMode'
+    | 'generate'
+    | 'getModel'
+    | 'getProvider'
+    | 'getCurrentSequenceModel'
+    | 'getActiveProfileName'
+    | 'addDirectoryContext'
+    | 'compress'
+    | 'setProvider'
+    | 'saveProfileSnapshot'
+    | 'deleteProfileByName'
+    | 'setDefaultProfileName'
+    | 'listProviders'
+    | 'session'
+    | 'providerReads'
+    | 'policy'
+    | 'ide'
+    | 'hooks'
+    | 'auth'
+    | 'sessionClient'
+    | 'profiles'
+    | 'workspace'
+    | 'tools'
+    | 'mcp'
+    | 'tasks'
+    | 'metrics'
+  >,
+) {
+  return {
+    addHistory: agent.addHistory.bind(agent),
+    getHistory: agent.getHistory.bind(agent),
+    stream: agent.stream.bind(agent),
+    injectSteer: agent.injectSteer.bind(agent),
+    getProviderContextLimit: agent.getProviderContextLimit.bind(agent),
+    dispose: agent.dispose.bind(agent),
+    getApprovalMode: agent.getApprovalMode.bind(agent),
+    setApprovalMode: agent.setApprovalMode.bind(agent),
+    generate: agent.generate.bind(agent),
+    getModel: agent.getModel.bind(agent),
+    getProvider: agent.getProvider.bind(agent),
+    getCurrentSequenceModel: agent.getCurrentSequenceModel.bind(agent),
+    getActiveProfileName: agent.getActiveProfileName.bind(agent),
+    addDirectoryContext: agent.addDirectoryContext.bind(agent),
+    compress: agent.compress.bind(agent),
+    setProvider: agent.setProvider.bind(agent),
+    saveProfileSnapshot: agent.saveProfileSnapshot.bind(agent),
+    deleteProfileByName: agent.deleteProfileByName.bind(agent),
+    setDefaultProfileName: agent.setDefaultProfileName.bind(agent),
+    listProviders: agent.listProviders.bind(agent),
+    session: agent.session,
+    providerReads: agent.providerReads,
+    policy: agent.policy,
+    ide: agent.ide,
+    hooks: agent.hooks,
+    auth: agent.auth,
+    sessionClient: agent.sessionClient,
+    profiles: agent.profiles,
+    workspace: agent.workspace,
+    tools: agent.tools,
+    mcp: agent.mcp,
+    tasks: agent.tasks,
+    metrics: agent.metrics,
+  };
 }
