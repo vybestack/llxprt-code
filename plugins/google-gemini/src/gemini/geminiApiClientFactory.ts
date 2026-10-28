@@ -5,7 +5,10 @@
  */
 
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createVertex } from '@ai-sdk/google-vertex';
+import { GoogleAuth } from 'google-auth-library';
 import type {
+  LanguageModelV4,
   LanguageModelV4CallOptions,
   LanguageModelV4StreamPart,
 } from '@ai-sdk/provider';
@@ -61,34 +64,64 @@ function toAiSdkBaseUrl(baseUrl: string | undefined): string | undefined {
 export async function createGeminiApiClient(
   options: GeminiApiClientOptions,
 ): Promise<GeminiApiClient> {
+  if (options.vertexai && (!options.project || !options.location))
+    throw new Error('Vertex AI requires explicit project and location');
   const baseURL = toAiSdkBaseUrl(options.httpOptions?.baseUrl);
-  const modelFor = (
+  const googleAuth = options.vertexai
+    ? new GoogleAuth({
+        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+        ...options.googleAuthOptions,
+      })
+    : undefined;
+  const modelFor = async (
     params: GenerateContentParameters,
     tools: LanguageModelV4CallOptions['tools'],
-  ) =>
-    createGoogleGenerativeAI({
+  ): Promise<LanguageModelV4> => {
+    const transport = createPatternPreservingFetch(
+      tools,
+      undefined,
+      createStreamedGeminiFetch(
+        options.requestContents ??
+          async function* () {
+            yield* normaliseContents(params.contents);
+          },
+        params.model,
+        typeof params['systemInstruction'] === 'string'
+          ? params['systemInstruction']
+          : undefined,
+        options.onRequestBytes,
+        options.requestMetadata,
+      ),
+    );
+    if (googleAuth !== undefined) {
+      const authClient = await googleAuth.getClient();
+      const headers = { ...options.httpOptions?.headers };
+      if (
+        authClient.quotaProjectId &&
+        !Object.keys(headers).some(
+          (name) => name.toLowerCase() === 'x-goog-user-project',
+        )
+      )
+        headers['x-goog-user-project'] = authClient.quotaProjectId;
+      return createVertex({
+        apiKey: '',
+        project: options.project,
+        location: options.location,
+        baseURL: options.httpOptions?.baseUrl,
+        headers,
+        googleAuthOptions: { authClient },
+        fetch: transport,
+      }).languageModel(params.model);
+    }
+    return createGoogleGenerativeAI({
       ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
       ...(baseURL !== undefined ? { baseURL } : {}),
       ...(options.httpOptions?.headers !== undefined
         ? { headers: options.httpOptions.headers }
         : {}),
-      fetch: createPatternPreservingFetch(
-        tools,
-        undefined,
-        createStreamedGeminiFetch(
-          options.requestContents ??
-            async function* () {
-              yield* normaliseContents(params.contents);
-            },
-          params.model,
-          typeof params['systemInstruction'] === 'string'
-            ? params['systemInstruction']
-            : undefined,
-          options.onRequestBytes,
-          options.requestMetadata,
-        ),
-      ),
+      fetch: transport,
     }).languageModel(params.model);
+  };
 
   return {
     models: {
@@ -96,7 +129,7 @@ export async function createGeminiApiClient(
         params: GenerateContentParameters,
       ): Promise<GenerateContentResponse> {
         const callOptions = toCallOptions({ ...params, contents: [] });
-        const model = modelFor(params, callOptions.tools);
+        const model = await modelFor(params, callOptions.tools);
         const result = await model.doGenerate(callOptions);
         return toGenerateContentResponse({
           content: result.content,
@@ -113,7 +146,7 @@ export async function createGeminiApiClient(
         params: GenerateContentParameters,
       ): Promise<AsyncIterable<GenerateContentResponse>> {
         const callOptions = toCallOptions({ ...params, contents: [] });
-        const model = modelFor(params, callOptions.tools);
+        const model = await modelFor(params, callOptions.tools);
         const { stream } = await model.doStream(callOptions);
         return streamToGeminiChunks(stream);
       },

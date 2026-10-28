@@ -340,11 +340,23 @@ export class GeminiProvider extends BaseProvider {
         'Vertex AI mode is active but project/location are not configured. Set GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION via environment variables or settings service, or provide GOOGLE_APPLICATION_CREDENTIALS.',
       );
     }
+    const credentialsFile = isVertex
+      ? getSettingOrEnv(settingsService, 'GOOGLE_APPLICATION_CREDENTIALS')
+      : undefined;
     return {
       apiKey: authToken,
       vertexai: isVertex,
+      ...(credentialsFile === undefined
+        ? {}
+        : { googleAuthOptions: { keyFilename: credentialsFile } }),
       ...this.buildVertexAIOptions(isVertex, vertexConfig),
-      httpOptions: baseURL ? { ...httpOptions, baseUrl: baseURL } : httpOptions,
+      httpOptions:
+        baseURL &&
+        (!isVertex ||
+          new URL(baseURL).origin !==
+            'https://generativelanguage.googleapis.com')
+          ? { ...httpOptions, baseUrl: baseURL }
+          : httpOptions,
       ...(onRequestBytes === undefined ? {} : { onRequestBytes }),
     };
   }

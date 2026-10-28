@@ -17,6 +17,7 @@
  * the provider preserves fields it does not itself interpret.
  */
 
+import type { GoogleAuthOptions } from 'google-auth-library';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 /** Schema type discriminants, mirroring the API's `Type` enum values. */
@@ -279,6 +280,7 @@ export interface GeminiApiClientOptions {
   requestContents?: () => AsyncIterable<Content>;
   apiKey?: string;
   vertexai?: boolean;
+  googleAuthOptions?: GoogleAuthOptions;
   project?: string;
   location?: string;
   httpOptions?: HttpOptions;
