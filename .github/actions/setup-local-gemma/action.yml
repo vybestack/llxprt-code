@@ -101,16 +101,39 @@ runs:
         & $exe --version
         if ($LASTEXITCODE -ne 0) { throw "ollama --version failed with exit code $LASTEXITCODE" }
 
+    - name: 'Test model store verification'
+      shell: 'bash'
+      env:
+        ACTION_PATH: '${{ github.action_path }}'
+      run: |
+        set -euo pipefail
+        bun test "$ACTION_PATH/verify-model-store.test.ts"
+
     # ---- Restore the verified model store, start the server, pull on miss -
-    # The store (blobs plus manifest) is cached under a key that names the OS
-    # and the pinned model digest, so a hit is exactly the store that was
-    # digest-verified when it was saved. A hit never contacts the registry.
+    # Blobs and manifests are OS-independent: three OS-specific archives of
+    # this 4.34 GB store compressed to 10.78 GB, exceeding the repo cache quota.
+    # Use one cross-OS archive and a relative path (part of the cache version)
+    # so Linux, macOS and Windows share it. Never restore a different digest.
+    # Parallel cold jobs may all pull; cache/save reserves the immutable key
+    # atomically, so the first verified writer wins. Keeping every job eligible
+    # also lets eval-only runs populate the cache without a producer dependency.
+    # Verify every file before use and save; a hit never contacts the registry.
     - name: 'Restore local Gemma 4 E2B model cache'
       id: 'model-cache'
       uses: 'actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # ratchet:actions/cache/restore@v6
       with:
-        path: '${{ runner.temp }}/ollama-models'
-        key: 'ollama-models-${{ runner.os }}-gemma4-e2b-it-qat-07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c'
+        path: 'tmp/ollama-models'
+        key: 'ollama-models-portable-v1-gemma4-e2b-it-qat-07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c'
+        enableCrossOsArchive: true
+
+    - name: 'Verify restored model store'
+      if: steps.model-cache.outputs.cache-hit == 'true'
+      shell: 'bash'
+      env:
+        ACTION_PATH: '${{ github.action_path }}'
+      run: |
+        set -euo pipefail
+        bun "$ACTION_PATH/verify-model-store.ts" "$GITHUB_WORKSPACE/tmp/ollama-models"
 
     - name: 'Start local Gemma 4 E2B model'
       if: runner.os != 'Windows'
@@ -119,7 +142,7 @@ runs:
         OLLAMA_HOST: '127.0.0.1:12644'
         OLLAMA_CONTEXT_LENGTH: '32768'
         OLLAMA_NUM_PARALLEL: '1'
-        OLLAMA_MODELS: '${{ runner.temp }}/ollama-models'
+        OLLAMA_MODELS: '${{ github.workspace }}/tmp/ollama-models'
         MODEL_CACHE_HIT: '${{ steps.model-cache.outputs.cache-hit }}'
       run: |
         set -euo pipefail
@@ -158,7 +181,7 @@ runs:
         OLLAMA_HOST: '127.0.0.1:12644'
         OLLAMA_CONTEXT_LENGTH: '32768'
         OLLAMA_NUM_PARALLEL: '1'
-        OLLAMA_MODELS: '${{ runner.temp }}\ollama-models'
+        OLLAMA_MODELS: '${{ github.workspace }}\tmp\ollama-models'
         MODEL_CACHE_HIT: '${{ steps.model-cache.outputs.cache-hit }}'
       run: |
         $ErrorActionPreference = 'Stop'
@@ -357,14 +380,25 @@ runs:
           exit 1
         fi
 
-    # Reached only after the pull and the digest check above succeeded and the
-    # model generated; a failed or partial pull is never cached.
+    # Verify the exact manifest and every referenced blob's size and SHA-256.
+    # Reject unreferenced files, partials and symlinks instead of caching them.
+    # Reached only after real inference succeeded; failed pulls are never saved.
+    - name: 'Verify model store before saving'
+      if: steps.model-cache.outputs.cache-hit != 'true'
+      shell: 'bash'
+      env:
+        ACTION_PATH: '${{ github.action_path }}'
+      run: |
+        set -euo pipefail
+        bun "$ACTION_PATH/verify-model-store.ts" "$GITHUB_WORKSPACE/tmp/ollama-models"
+
     - name: 'Save local Gemma 4 E2B model cache'
       if: steps.model-cache.outputs.cache-hit != 'true'
       uses: 'actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # ratchet:actions/cache/save@v6
       with:
-        path: '${{ runner.temp }}/ollama-models'
-        key: 'ollama-models-${{ runner.os }}-gemma4-e2b-it-qat-07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c'
+        path: 'tmp/ollama-models'
+        key: 'ollama-models-portable-v1-gemma4-e2b-it-qat-07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c'
+        enableCrossOsArchive: true
 
     # ---- Provider environment for the tests that follow ------------------
     - name: 'Export local model test environment'
