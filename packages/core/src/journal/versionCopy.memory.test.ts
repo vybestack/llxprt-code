@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
+import { median } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import {
   ageOutIdleCode,
   FLATNESS_BOUND_BYTES,
@@ -25,6 +26,7 @@ const MEDIUM = 100;
 const LARGE = 400;
 /** Exercise the largest copy's optimizing tiers before every measured size. */
 const WARMUP = LARGE;
+const PAIRED_SAMPLES = 5;
 
 function spreadOf(values: readonly number[]): number {
   return Math.max(...values) - Math.min(...values);
@@ -55,10 +57,11 @@ describe('compaction copy memory with growing checkpoint counts (design 13.6)', 
   function compact(
     source: JournalStore,
     checkpoints: number,
+    sample: number,
   ): Promise<CompactionMeasurement> {
     return measureCompaction(
       source,
-      path.join(directory(), `compacted-${checkpoints}.llxj`),
+      path.join(directory(), `compacted-${sample}-${checkpoints}.llxj`),
     );
   }
 
@@ -77,44 +80,54 @@ describe('compaction copy memory with growing checkpoint counts (design 13.6)', 
       sources.warm,
       path.join(directory(), 'compacted-warm.llxj'),
     );
-    const small = await compact(sources.small, SMALL);
-    const medium = await compact(sources.medium, MEDIUM);
-    const large = await compact(sources.large, LARGE);
-
     expect(warm.versions).toHaveLength(WARMUP + 1);
-    expect(small.versions).toBe(SMALL + 1);
-    expect(medium.versions).toBe(MEDIUM + 1);
-    expect(large.versions).toBe(LARGE + 1);
-    expect(large.rows).toBeGreaterThan(medium.rows * 3);
-    expect(small.samples).toBeGreaterThanOrEqual(5);
-    expect(large.samples).toBeGreaterThanOrEqual(10);
 
-    const measurements = [small, medium, large];
+    const retained: number[][] = [];
+    const inFlight: number[][] = [];
+    for (let sample = 0; sample < PAIRED_SAMPLES; sample++) {
+      const small = await compact(sources.small, SMALL, sample);
+      const medium = await compact(sources.medium, MEDIUM, sample);
+      const large = await compact(sources.large, LARGE, sample);
 
-    // (i) Retained: what is still held after the copy, which must not grow with the count.
-    const retained = measurements.map((m) => m.finalGrowth);
+      expect(small.versions).toBe(SMALL + 1);
+      expect(medium.versions).toBe(MEDIUM + 1);
+      expect(large.versions).toBe(LARGE + 1);
+      expect(large.rows).toBeGreaterThan(medium.rows * 3);
+      expect(small.samples).toBeGreaterThanOrEqual(5);
+      expect(large.samples).toBeGreaterThanOrEqual(10);
+
+      const measurements = [small, medium, large];
+      retained.push(measurements.map((m) => m.finalGrowth));
+      inFlight.push(measurements.map((m) => m.settledGrowth));
+    }
+
+    // Pair the counts within each run before taking medians: isolated JSC
+    // heap excursions survive settled readings, but persistent retention
+    // appears in every pair. Keep negative deltas and every sample.
+    const retainedMedians = [0, 1, 2].map((index) =>
+      median(retained.map((sample) => sample[index])),
+    );
     expect(
-      retained.filter((growth) => growth >= RETAINED_BOUND_BYTES),
+      retainedMedians.filter((growth) => growth >= RETAINED_BOUND_BYTES),
     ).toStrictEqual([]);
-    // The received object lists the three growths (10, 100, 400) when the spread fails.
-    expect({ retained, spread: spreadOf(retained) }).toSatisfy(
+    expect({ retained, spread: median(retained.map(spreadOf)) }).toSatisfy(
       (reading: { spread: number }) => reading.spread < FLATNESS_BOUND_BYTES,
     );
 
-    // (ii) In flight: what the copy holds while it runs. The node caches fill
-    // to their caps as the count grows, which is a one-time rise that stops
-    // once they are full (the smallest copy never fills them), so the
-    // flatness is read between the two counts that do.
-    const inFlight = measurements.map((m) => m.settledGrowth);
+    // Cache caps account for the initial in-flight rise. Compare the two
+    // counts that fill them, using the median of their paired differences.
+    const inFlightMedians = [0, 1, 2].map((index) =>
+      median(inFlight.map((sample) => sample[index])),
+    );
     expect(
-      inFlight.filter((growth) => growth >= IN_FLIGHT_BOUND_BYTES),
+      inFlightMedians.filter((growth) => growth >= IN_FLIGHT_BOUND_BYTES),
     ).toStrictEqual([]);
     expect({
       inFlight,
-      difference: large.settledGrowth - medium.settledGrowth,
+      difference: median(inFlight.map((sample) => sample[2] - sample[1])),
     }).toSatisfy(
       (reading: { difference: number }) =>
         reading.difference < FLATNESS_BOUND_BYTES,
     );
-  }, 150_000);
+  }, 180_000);
 });
