@@ -1,11 +1,15 @@
 import { useOwnerSessionAgents } from './__tests__/owner-session-agents.js';
 import { bindOwnerBrowserCatalog } from './browserCatalogHost.js';
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { act, useEffect } from 'react';
 import { readFile, readdir } from 'node:fs/promises';
-import { renderHook, waitFor } from '../../__tests__/render.js';
+import { renderHook } from '../../__tests__/render.js';
+import { createDeferred } from '../../__tests__/async.js';
 import { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
 import {
   type UseSessionBrowserProps,
+  type UseSessionBrowserResult,
   useSessionBrowser,
 } from './useSessionBrowser.js';
 import { Key } from './useKeypress.js';
@@ -31,8 +35,87 @@ const human = (text: string) => ({
   blocks: [{ type: 'text' as const, text }],
 });
 
+function renderBrowser(props: UseSessionBrowserProps): ReturnType<
+  typeof renderHook<UseSessionBrowserResult>
+> & {
+  until(predicate: (state: UseSessionBrowserResult) => boolean): Promise<void>;
+} {
+  const listeners = new Set<() => void>();
+  const browser = renderHook(() => {
+    const state = useSessionBrowser(props);
+    useEffect(() => {
+      for (const notify of listeners) notify();
+    }, [state]);
+    return state;
+  });
+  return {
+    ...browser,
+    until(
+      predicate: (state: UseSessionBrowserResult) => boolean,
+    ): Promise<void> {
+      return new Promise((resolve) => {
+        const notify = (): void => {
+          if (predicate(browser.result.current)) {
+            listeners.delete(notify);
+            resolve();
+          }
+        };
+        listeners.add(notify);
+        notify();
+      });
+    },
+  };
+}
+
 describe('owner session browser', () => {
   const openAgent = useOwnerSessionAgents();
+  it('waits for catalog I/O to complete when the polling clock has already elapsed', async () => {
+    const { agent, config } = await openAgent();
+    await agent.setHistory([human('pending browser source')]);
+    await agent.session.setRecording({ enabled: true });
+    const sourceId = (await agent.session.listSessions()).at(0)?.id;
+    if (!sourceId) throw new Error('Missing source session');
+    await agent.session.setRecording({ enabled: false });
+    const gate = createDeferred<void>();
+    const requested = createDeferred<void>();
+    const browser = renderBrowser({
+      chatsDir: config.projectChatsDir,
+      projectHash: config.projectTempDir.split('/').at(-1) ?? '',
+      currentSessionId: 'another-owner',
+      readCatalog: async () => {
+        requested.resolve();
+        await gate.promise;
+        return {
+          ...(await agent.session.listBrowserTargetsDetailed()),
+          skippedCount: 0,
+          currentSessionId: 'another-owner',
+        };
+      },
+      deleteTarget: async () => {},
+      onSelect: async () => ({ ok: true }),
+      onClose: () => {},
+    });
+    try {
+      await requested.promise;
+      vi.useFakeTimers();
+      const loaded = browser.until((state) => !state.isLoading);
+      await advanceTimersByTimeAsync(1001);
+      expect(browser.result.current.isLoading).toBe(true);
+      vi.useRealTimers();
+      gate.resolve();
+      await loaded;
+      expect(browser.result.current.error).toBeNull();
+      expect(
+        browser.result.current.sessions.some(
+          (row) => row.sessionId === sourceId,
+        ),
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      gate.resolve();
+      browser.unmount();
+    }
+  }, 30000);
   it('lists and deletes a closed source through the Agent without affecting the live owner', async () => {
     const { agent } = await openAgent();
     await agent.setHistory([human('browser deletion source')]);
@@ -61,43 +144,41 @@ describe('owner session browser', () => {
         else await next.session.deleteSession(target.session.sessionId);
       },
     };
-    const browser = renderHook(() =>
-      useSessionBrowser({
-        chatsDir,
-        projectHash: config.projectTempDir.split('/').at(-1) ?? '',
-        currentSessionId: config.getSessionId(),
-        ...catalog,
-        onSelect: async (target) => {
-          await resumeOwnerSession(
-            next.session.resume.bind(next.session),
-            target.kind === 'session'
-              ? target.session.sessionId
-              : target.checkpointId,
-            'allowed',
-            next.session.listBrowserTargetsDetailed.bind(next.session),
-          );
-          return { ok: true };
-        },
-        onClose: () => {},
-      }),
+    const browser = renderBrowser({
+      chatsDir,
+      projectHash: config.projectTempDir.split('/').at(-1) ?? '',
+      currentSessionId: config.getSessionId(),
+      ...catalog,
+      onSelect: async (target) => {
+        await resumeOwnerSession(
+          next.session.resume.bind(next.session),
+          target.kind === 'session'
+            ? target.session.sessionId
+            : target.checkpointId,
+          'allowed',
+          next.session.listBrowserTargetsDetailed.bind(next.session),
+        );
+        return { ok: true };
+      },
+      onClose: () => {},
+    });
+    await browser.until((state) => !state.isLoading);
+    expect(browser.result.current.error).toBeNull();
+    expect(
+      browser.result.current.sessions.some((row) => row.sessionId === sourceId),
+    ).toBe(true);
+    act(() => {
+      browser.result.current.handleKeypress('Tab', key('tab'));
+      browser.result.current.handleKeypress('Delete', key('delete'));
+      browser.result.current.handleKeypress('y', key('y'));
+    });
+    await browser.until(
+      (state) => !state.isLoading && state.deleteConfirmIndex === null,
     );
-    await waitFor(() =>
-      expect(
-        browser.result.current.sessions.some(
-          (row) => row.sessionId === sourceId,
-        ),
-      ).toBe(true),
-    );
-    browser.result.current.handleKeypress('Tab', key('tab'));
-    browser.result.current.handleKeypress('Delete', key('delete'));
-    browser.result.current.handleKeypress('y', key('y'));
-    await waitFor(() =>
-      expect(
-        browser.result.current.sessions.some(
-          (row) => row.sessionId === sourceId,
-        ),
-      ).toBe(false),
-    );
+    expect(browser.result.current.error).toBeNull();
+    expect(
+      browser.result.current.sessions.some((row) => row.sessionId === sourceId),
+    ).toBe(false);
     expect(await readFile(path, 'utf8')).toContain('live owner stays');
     expect(
       (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
@@ -131,39 +212,37 @@ describe('owner session browser', () => {
         else await next.session.deleteSession(target.session.sessionId);
       },
     };
-    const browser = renderHook(() =>
-      useSessionBrowser({
-        chatsDir,
-        projectHash: config.projectTempDir.split('/').at(-1) ?? '',
-        currentSessionId: config.getSessionId(),
-        ...catalog,
-        onSelect: async (target) => {
-          const replay = await resumeOwnerSession(
-            next.session.resume.bind(next.session),
-            target.kind === 'session'
-              ? target.session.sessionId
-              : target.checkpointId,
-            'allowed',
-            next.session.listBrowserTargetsDetailed.bind(next.session),
-          );
-          shown = replay.uiHistory.some(
-            (item) =>
-              item.type === 'user' && item.text === 'browser resume source',
-          );
-          return { ok: true };
-        },
-        onClose: () => {},
-      }),
-    );
-    await waitFor(() =>
-      expect(
-        browser.result.current.sessions.some(
-          (row) => row.sessionId === sourceId,
-        ),
-      ).toBe(true),
-    );
-    browser.result.current.handleKeypress('', key('return'));
-    await waitFor(() => expect(shown).toBe(true));
+    const browser = renderBrowser({
+      chatsDir,
+      projectHash: config.projectTempDir.split('/').at(-1) ?? '',
+      currentSessionId: config.getSessionId(),
+      ...catalog,
+      onSelect: async (target) => {
+        const replay = await resumeOwnerSession(
+          next.session.resume.bind(next.session),
+          target.kind === 'session'
+            ? target.session.sessionId
+            : target.checkpointId,
+          'allowed',
+          next.session.listBrowserTargetsDetailed.bind(next.session),
+        );
+        shown = replay.uiHistory.some(
+          (item) =>
+            item.type === 'user' && item.text === 'browser resume source',
+        );
+        return { ok: true };
+      },
+      onClose: () => {},
+    });
+    await browser.until((state) => !state.isLoading);
+    expect(browser.result.current.error).toBeNull();
+    expect(
+      browser.result.current.sessions.some((row) => row.sessionId === sourceId),
+    ).toBe(true);
+    act(() => browser.result.current.handleKeypress('', key('return')));
+    await browser.until((state) => !state.isResuming);
+    expect(browser.result.current.error).toBeNull();
+    expect(shown).toBe(true);
     expect(
       (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
     ).toHaveLength(1);
