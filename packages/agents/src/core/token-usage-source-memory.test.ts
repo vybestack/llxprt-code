@@ -15,7 +15,16 @@ import {
   shapePending,
 } from './__tests__/support/token-usage-source-fixture.js';
 
-const settled = settledHeap;
+// Start collection outside the observed pull's promise continuation, whose
+// native execution stack can otherwise keep its last iterator result alive.
+function settled(): Promise<number> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      Bun.gc(true);
+      resolve(settledHeap());
+    }, 0);
+  });
+}
 // JSC can keep a just-finished async generator, and the last yielded row,
 // alive across a few collections (stack and continuation roots drain lazily).
 // Keep collecting while any observed reader or row is still reachable, bounded
@@ -93,7 +102,7 @@ class ObservedReader implements AsyncGenerator<IContent, void, unknown> {
   private index = 0;
   private pending: IteratorResult<IContent, void> | undefined;
   constructor(
-    private readonly reader: AsyncGenerator<IContent, void, unknown>,
+    private reader: AsyncGenerator<IContent, void, unknown> | undefined,
     private readonly facts: Census,
   ) {}
   [Symbol.asyncIterator](): AsyncGenerator<IContent, void, unknown> {
@@ -103,12 +112,17 @@ class ObservedReader implements AsyncGenerator<IContent, void, unknown> {
     await this.return();
   }
   next(): Promise<IteratorResult<IContent, void>> {
+    if (this.reader === undefined)
+      return Promise.resolve({ done: true, value: undefined });
     return this.reader.next().then((next) => this.take(next));
   }
   private take(
     next: IteratorResult<IContent, void>,
   ): IteratorResult<IContent, void> | Promise<IteratorResult<IContent, void>> {
-    if (next.done === true) return next;
+    if (next.done === true) {
+      this.reader = undefined;
+      return next;
+    }
     this.facts.rows.push(new WeakRef(next.value));
     if (this.facts.trap === 'rows') this.facts.retainedRows.push(next.value);
     this.pending = next;
@@ -146,10 +160,16 @@ class ObservedReader implements AsyncGenerator<IContent, void, unknown> {
     return next;
   }
   return(): Promise<IteratorResult<IContent, void>> {
-    return this.reader.return();
+    const reader = this.reader;
+    this.reader = undefined;
+    return reader === undefined
+      ? Promise.resolve({ done: true, value: undefined })
+      : reader.return();
   }
   throw(error?: unknown): Promise<IteratorResult<IContent, void>> {
-    return this.reader.throw(error);
+    const reader = this.reader;
+    this.reader = undefined;
+    return reader === undefined ? Promise.reject(error) : reader.throw(error);
   }
 }
 function observed(
@@ -237,11 +257,12 @@ async function warmSourcePath(
   const facts = census('none');
   const ownership = new RowOwnership();
   const snapshot = await makeSnapshot(large, facts, ownership);
+  const source = observed(snapshot, facts);
   try {
     const memory = new RequestShapeTracker();
     for (let send = 0; send < 2; send++)
       await memory.recordSourceRequestShape({
-        requestRows: snapshot,
+        requestRows: source,
         tools: [],
         instructionsText: 'memory instructions',
         countTokens: estimate,
@@ -344,6 +365,56 @@ describe('bounded disk shape release traps', () => {
       await expect(measure(false, 'fallback', estimate, trap)).rejects.toThrow(
         'expect(received)',
       );
+    },
+    120000,
+  );
+});
+
+async function drainObserved(reader: ObservedReader): Promise<void> {
+  for await (const row of reader) void row;
+}
+
+describe('row observation lifetime', () => {
+  it.each([64, 128])(
+    'releases %i observed rows while a completed observer stays reachable',
+    async (count) => {
+      const facts = census('none');
+      const observer = new ObservedReader(
+        (async function* (): AsyncGenerator<IContent, void, unknown> {
+          for (let index = 0; index < count; index++)
+            yield memoryRow(index, false);
+        })(),
+        facts,
+      );
+      await drainObserved(observer);
+      await settledReleasingReaders(facts);
+      expect(live(facts.rows)).toBe(0);
+      expect(await observer.next()).toStrictEqual({
+        done: true,
+        value: undefined,
+      });
+    },
+    120000,
+  );
+  it.each([64, 128])(
+    'still sees all %i rows strongly owned by a retaining observer',
+    async (count) => {
+      const facts = census('rows');
+      const observer = new ObservedReader(
+        (async function* (): AsyncGenerator<IContent, void, unknown> {
+          for (let index = 0; index < count; index++)
+            yield memoryRow(index, false);
+        })(),
+        facts,
+      );
+      await drainObserved(observer);
+      await settledReleasingReaders(facts);
+      expect(live(facts.rows)).toBe(count);
+      expect(facts.retainedRows).toHaveLength(count);
+      expect(await observer.next()).toStrictEqual({
+        done: true,
+        value: undefined,
+      });
     },
     120000,
   );

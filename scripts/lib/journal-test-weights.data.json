@@ -713,6 +713,7 @@
   "packages/agents/src/core/TodoContinuationService.propagation.test.ts": 1,
   "packages/agents/src/core/TodoContinuationService.reminders.test.ts": 2,
   "packages/agents/src/core/TodoContinuationService.todoops.test.ts": 1,
+  "packages/agents/src/core/token-usage-source-memory.test.ts": 58,
   "packages/agents/src/core/TokenUsageLogger.integration.test.ts": 7,
   "packages/agents/src/core/TokenUsageLogger.rawTiming.test.ts": 4,
   "packages/agents/src/core/TokenUsageLogger.test.ts": 1,
