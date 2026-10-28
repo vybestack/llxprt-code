@@ -5,9 +5,11 @@
  */
 
 import os from 'node:os';
-import { createKeyringTokenStore } from '@vybestack/llxprt-code-core/auth-factories.js';
 import type { SandboxConfig } from '@vybestack/llxprt-code-core';
-import { FatalSandboxError } from '@vybestack/llxprt-code-core';
+import {
+  createKeyringTokenStore,
+  FatalSandboxError,
+} from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { CredentialProxyBridgeResult } from './sandbox-ssh.js';
 import {
