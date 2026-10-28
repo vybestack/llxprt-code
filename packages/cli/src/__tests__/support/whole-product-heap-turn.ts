@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import type { WholeProductFixture } from './whole-product-fixture.js';
 import { heapText } from './whole-product-transport.js';
+import { warmupTokenCache } from './warmup-token-cache.js';
 import {
   wholeProductWarmup,
   type WholeProductWarmup,
@@ -53,12 +54,21 @@ export async function heapTurn(
   await fixture.live.session.flushRecording();
 }
 
-export function warmUp(
+export async function warmUp(
   fixture: WholeProductFixture,
 ): Promise<WholeProductWarmup> {
-  return wholeProductWarmup(async (turn, payloadBytes): Promise<void> => {
-    await heapTurn(fixture, turn, payloadBytes);
-    if ((turn + 1) % 50 === 0)
-      process.stdout.write(`W24 warmup completed ${turn + 1}\n`);
-  }, settledHeap);
+  const restore = warmupTokenCache();
+  try {
+    return await wholeProductWarmup(
+      async (turn, payloadBytes): Promise<void> => {
+        if (turn === 500) restore();
+        await heapTurn(fixture, turn, payloadBytes);
+        if ((turn + 1) % 50 === 0)
+          process.stdout.write(`W24 warmup completed ${turn + 1}\n`);
+      },
+      settledHeap,
+    );
+  } finally {
+    restore();
+  }
 }
