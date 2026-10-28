@@ -21,8 +21,6 @@ import * as os from 'node:os';
 import { SecureStore, type KeyringAdapter } from './secure-store.js';
 import {
   ProviderKeyStorage,
-  getProviderKeyStorage,
-  resetProviderKeyStorage,
   validateKeyName,
   KEY_NAME_REGEX,
 } from './provider-key-storage.js';
@@ -490,34 +488,5 @@ describe('ProviderKeyStorage — Encrypted Fallback', () => {
     expect(keys).toStrictEqual(uniqueKeys);
     // Sorted
     expect(keys).toStrictEqual([...keys].sort());
-  });
-});
-
-// ─── Singleton (R11) ─────────────────────────────────────────────────────────
-
-describe('ProviderKeyStorage — Singleton', () => {
-  afterEach(() => {
-    resetProviderKeyStorage();
-  });
-
-  /**
-   * @plan PLAN-20260211-SECURESTORE.P11
-   * @requirement R11.2
-   */
-  it('getProviderKeyStorage returns the same instance on repeated calls', () => {
-    const first = getProviderKeyStorage();
-    const second = getProviderKeyStorage();
-    expect(first).toBe(second);
-  });
-
-  /**
-   * @plan PLAN-20260211-SECURESTORE.P11
-   * @requirement R11.2
-   */
-  it('resetProviderKeyStorage clears the singleton for test isolation', () => {
-    const first = getProviderKeyStorage();
-    resetProviderKeyStorage();
-    const second = getProviderKeyStorage();
-    expect(first).not.toBe(second);
   });
 });

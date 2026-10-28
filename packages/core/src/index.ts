@@ -246,11 +246,7 @@ export type {
   SecureStoreOptions,
   SecureStoreErrorCode,
 } from './storage/secure-store.js';
-export {
-  ProviderKeyStorage,
-  getProviderKeyStorage,
-  resetProviderKeyStorage,
-} from './storage/provider-key-storage.js';
+export { ProviderKeyStorage } from './storage/provider-key-storage.js';
 export * from './storage/local-media-store.js';
 export * from './storage/SessionPersistenceService.js';
 export * from './storage/media-admission-service.js';
