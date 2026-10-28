@@ -488,6 +488,7 @@ describe('runtime boundary production runner', () => {
     });
     expect(restored.absentAmbientSources).toEqual([]);
     expect(restored.findings.map((finding) => finding.rule)).toEqual([
+      'retired-ambient-source',
       'runtime-ambient-delegation',
     ]);
     expect(() =>
