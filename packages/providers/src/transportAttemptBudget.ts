@@ -71,18 +71,19 @@ function acquireBudgetLifecycle(
   return lifecycle;
 }
 
-function createBudgetLifecycle(budget: TransportAttemptBudget): void {
-  Object.defineProperty(budget, BUDGET_LIFECYCLE, { value: { leases: 1 } });
+function createBudgetLifecycle(
+  budget: TransportAttemptBudget,
+): BudgetLifecycle {
+  const lifecycle: BudgetLifecycle = { leases: 1 };
+  Object.defineProperty(budget, BUDGET_LIFECYCLE, { value: lifecycle });
+  return lifecycle;
 }
 
-function releaseBudgetLifecycle(budget: TransportAttemptBudget): () => void {
+function releaseBudgetLifecycle(lifecycle: BudgetLifecycle): () => void {
   let released = false;
   return () => {
     if (released) return;
     released = true;
-    const owned: OwnedTransportAttemptBudget = budget;
-    const lifecycle = owned[BUDGET_LIFECYCLE];
-    if (lifecycle === undefined) return;
     lifecycle.leases -= 1;
   };
 }
@@ -99,7 +100,7 @@ export function attachTransportAttemptBudget(
       return {
         options,
         budget: existing,
-        release: releaseBudgetLifecycle(existing),
+        release: releaseBudgetLifecycle(lifecycle),
       };
     }
   }
@@ -107,7 +108,7 @@ export function attachTransportAttemptBudget(
     limit: normalizeTransportAttemptLimit(limit),
     used: 0,
   };
-  createBudgetLifecycle(budget);
+  const lifecycle = createBudgetLifecycle(budget);
   const requestContext = {
     ...existingContext,
     [TRANSPORT_ATTEMPT_BUDGET_KEY]: budget,
@@ -121,7 +122,7 @@ export function attachTransportAttemptBudget(
       },
     },
     budget,
-    release: releaseBudgetLifecycle(budget),
+    release: releaseBudgetLifecycle(lifecycle),
   };
 }
 
