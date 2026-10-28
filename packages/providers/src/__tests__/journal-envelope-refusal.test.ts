@@ -12,6 +12,8 @@ import {
   WIRE_ROUTES,
 } from './support/wireBodyCapture.js';
 
+const sentence = 'A short sentence with bounded words. ';
+
 const routes = WIRE_ROUTES.filter((route) =>
   [
     'openai-chat-plain',
@@ -31,7 +33,11 @@ describe('native envelope refusal before transport', () => {
             blocks: [
               {
                 type: 'text',
-                text: 'x'.repeat(DEFAULT_HTTP_JSON_ENVELOPE_BYTES + 1),
+                text: sentence.repeat(
+                  Math.ceil(
+                    (DEFAULT_HTTP_JSON_ENVELOPE_BYTES + 1) / sentence.length,
+                  ),
+                ),
               },
             ],
           };
