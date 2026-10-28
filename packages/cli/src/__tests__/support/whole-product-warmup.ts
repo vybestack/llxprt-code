@@ -19,9 +19,13 @@ export async function wholeProductWarmup(
   const samples = [];
   let readings: number[] = [];
   for (let turn = 0; turn < WHOLE_PRODUCT_WARMUP_TURNS; turn++) {
-    await runTurn(turn, turn < 350 ? 4096 : 65_536);
-    if (turn >= 350 && turn % 10 !== 0) readings.push(await readHeap());
-    if ((turn + 1) % 10 !== 0 || turn < 359) continue;
+    // Fill the per-content caches with small rows, then warm three complete
+    // tool/save/compression cycles with the measured 64 KiB payload.
+    await runTurn(turn, turn < 500 ? 4096 : 65_536);
+    // Warm-up readings are diagnostics; baseline and measured-window samples
+    // are collected separately. Only sample the final three warm-up windows.
+    if (turn >= 500 && turn % 10 !== 0) readings.push(await readHeap());
+    if ((turn + 1) % 10 !== 0 || turn < 509) continue;
     samples.push({ turn: turn + 1, heapBytes: median(readings), readings });
     readings = [];
   }
