@@ -44,6 +44,7 @@ import {
   fileTimeoutForFile,
   parseCaseCounts,
   parsePartitionIdentity,
+  requiresFakeEngineExecutables,
   runTestFile,
   runTestFileWithTimeoutRetry,
   selectPartition,
@@ -72,6 +73,31 @@ describe('isTestFile', () => {
     expect(isTestFile('types.d.ts')).toBe(false);
     expect(isTestFile('test-helpers.ts')).toBe(false);
     expect(isTestFile('README.md')).toBe(false);
+  });
+});
+
+describe('Windows sandbox fixture selection', () => {
+  const sandboxFiles = [
+    'src/utils/sandbox-launch-lifecycle.test.ts',
+    'src/utils/sandbox-node-modules-lifecycle.test.ts',
+    'src/utils/sandbox-venv.test.ts',
+    'src/utils/sandbox-dependency-volume-recovery.bun.test.ts',
+  ];
+
+  it.each(sandboxFiles)('prepares fixtures for %s on Windows', (file) => {
+    expect(requiresFakeEngineExecutables([file], 'win32')).toBe(true);
+  });
+
+  it('does not prepare fixtures for non-Windows sandbox runs', () => {
+    expect(requiresFakeEngineExecutables(sandboxFiles, 'darwin')).toBe(false);
+    expect(requiresFakeEngineExecutables(sandboxFiles, 'linux')).toBe(false);
+  });
+
+  it('does not prepare fixtures when the selected partition has no sandbox suites', () => {
+    const files = ['src/probe.test.ts', ...sandboxFiles];
+    const selected = selectPartition(files, { index: 1, count: files.length });
+    expect(requiresFakeEngineExecutables(selected, 'win32')).toBe(false);
+    expect(requiresFakeEngineExecutables([], 'win32')).toBe(false);
   });
 });
 

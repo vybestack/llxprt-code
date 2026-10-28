@@ -58,7 +58,6 @@ import {
   collectStallDiagnostics,
   createStallProbe,
 } from './runner-stall-inspector.js';
-import { prepareFakeEngineExecutables } from './test-utils/fake-engine-executables.js';
 
 process.env.LLXPRT_RUNNING_TESTS = 'true';
 
@@ -136,6 +135,16 @@ function parseConcurrency(): number {
 
 export function isTestFile(fileName: string): boolean {
   return TEST_FILE_PATTERN.test(fileName);
+}
+
+export function requiresFakeEngineExecutables(
+  selectedFiles: readonly string[],
+  platform: NodeJS.Platform,
+): boolean {
+  return (
+    platform === 'win32' &&
+    selectedFiles.some((file) => file.startsWith('src/utils/sandbox-'))
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -622,7 +631,10 @@ async function main(): Promise<void> {
     // Native fixture compilation must not compete with the test worker pool
     // or run inside a suite's hook deadline. Keep these build artifacts out
     // of disposable state directories, whose removal Windows can lock.
-    if (process.platform === 'win32') {
+    if (requiresFakeEngineExecutables(selectedFiles, process.platform)) {
+      const { prepareFakeEngineExecutables } = await import(
+        './test-utils/fake-engine-executables.js'
+      );
       Object.assign(
         isolation.sessionEnv,
         await prepareFakeEngineExecutables(join(root, 'tmp')),
