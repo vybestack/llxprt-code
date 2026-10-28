@@ -121,6 +121,12 @@ function createAgentClient(
   };
   let tools: AgentClientContract['tools'] | undefined;
   return {
+    bindModelNotifications: () => {},
+    bindIdeContext: () => {},
+    bindWorkspaceDefinitions: () => {},
+    bindProviderFiles: () => {},
+    bindTokenization: () => {},
+    bindProviderSelection: () => {},
     get tools() {
       if (tools === undefined)
         throw new Error('Missing fixture tool selection');

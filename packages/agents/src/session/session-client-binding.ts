@@ -64,7 +64,7 @@ function bindClientTokenization(
   client: AgentClientContract,
   tokenizerFactory: RuntimeTokenizerFactory,
 ): void {
-  client.bindTokenization?.(
+  client.bindTokenization(
     (provider, model) => tokenizerFactory.getTokenizer(provider, model),
     Object.freeze({
       estimatePrompt: (request) => tokenizerFactory.estimatePrompt(request),
@@ -91,27 +91,33 @@ export function bindClientModels(
   tokenizer: RuntimeTokenizerFactory,
 ): void {
   bindClientTokenization(client, tokenizer);
-  client.bindProviderSelection?.(
+  client.bindProviderSelection(
     createProviderAdapterFromManager(manager),
     manager,
   );
 }
 
+export type ClientDefinitionBinding =
+  | { readonly kind: 'pending' }
+  | {
+      readonly kind: 'bound';
+      readonly profiles: Parameters<
+        AgentClientContract['bindWorkspaceDefinitions']
+      >[0];
+      readonly subagents: Parameters<
+        AgentClientContract['bindWorkspaceDefinitions']
+      >[1];
+    };
+
 export function bindClientDefinitions(
   client: AgentClientContract,
-  profiles:
-    | Parameters<
-        NonNullable<AgentClientContract['bindWorkspaceDefinitions']>
-      >[0]
-    | undefined,
-  subagents:
-    | Parameters<
-        NonNullable<AgentClientContract['bindWorkspaceDefinitions']>
-      >[1]
-    | undefined,
+  definitions: ClientDefinitionBinding,
 ): void {
-  if (profiles !== undefined && subagents !== undefined)
-    client.bindWorkspaceDefinitions?.(profiles, subagents);
+  if (definitions.kind === 'bound')
+    client.bindWorkspaceDefinitions(
+      definitions.profiles,
+      definitions.subagents,
+    );
 }
 
 export function bindClientSettings(
@@ -122,7 +128,7 @@ export function bindClientSettings(
   sessionId: string,
   requestFetch: NetworkFetch,
 ): void {
-  client.bindModelNotifications?.((listener) =>
+  client.bindModelNotifications((listener) =>
     settingsOwner.subscribeModelChanges(listener),
   );
   client.bindRuntimeSettings(
@@ -221,12 +227,10 @@ export async function acquireSessionClient(
       readTaskSchemaPolicy: assembleTaskSchemaPolicy(settings.settings),
       authority: construction.authority,
       borrowedBus: messageBus,
+      requestInteractiveAuth: (prompt) => oauth.requestInteractiveAuth(prompt),
     },
   );
   try {
-    client.bindInteractiveAuthRequests((prompt) =>
-      oauth.requestInteractiveAuth(prompt),
-    );
     assembleSessionImages(
       client,
       config.getTargetDir(),

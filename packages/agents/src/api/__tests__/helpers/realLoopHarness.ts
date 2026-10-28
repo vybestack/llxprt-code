@@ -141,7 +141,7 @@ function makeScriptedClientContract(
 ): AgentClientContract {
   const tools = new ClientToolSelection();
   return {
-    ...scriptedClientIdentity(),
+    ...scriptedClientBindings(),
     get tools() {
       return tools.read();
     },
@@ -382,11 +382,24 @@ export async function runRealLoopAbort(): Promise<readonly AgenticLoopEvent[]> {
   return events;
 }
 
-function scriptedClientIdentity(): Pick<
+function scriptedClientBindings(): Pick<
   AgentClientContract,
-  'assertConfig' | 'assertProviderManager'
+  | 'assertConfig'
+  | 'assertProviderManager'
+  | 'bindModelNotifications'
+  | 'bindIdeContext'
+  | 'bindWorkspaceDefinitions'
+  | 'bindProviderFiles'
+  | 'bindTokenization'
+  | 'bindProviderSelection'
 > {
   return {
+    bindModelNotifications: () => {},
+    bindIdeContext: () => {},
+    bindWorkspaceDefinitions: () => {},
+    bindProviderFiles: () => {},
+    bindTokenization: () => {},
+    bindProviderSelection: () => {},
     assertConfig: () => {
       throw new Error('Scripted loop client cannot be adopted');
     },

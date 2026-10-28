@@ -372,7 +372,6 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
       bindings.retryOperations,
       bindings.cleanupScope,
     );
-    client.bindInteractiveAuthRequests(bindings.interactiveAuth);
     client.bindMcpRuntime(
       this.#mcp,
       this.#mcp.profileDefinitions,
@@ -468,9 +467,6 @@ function adoptedClientBindings(
   cleanupScope: Parameters<
     SessionClientOwner['clients']['bindProviderFiles']
   >[2];
-  interactiveAuth: Parameters<
-    SessionClientOwner['bindInteractiveAuthRequests']
-  >[0];
 } {
   return {
     files,
@@ -479,7 +475,6 @@ function adoptedClientBindings(
       scope === mainScope
         ? Promise.resolve()
         : cleanupProviderScope(files, scope),
-    interactiveAuth: (prompt) => oauth.requestInteractiveAuth(prompt),
   };
 }
 

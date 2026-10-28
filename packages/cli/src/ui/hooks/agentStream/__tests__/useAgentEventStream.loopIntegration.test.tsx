@@ -358,6 +358,12 @@ function createClientBase(): AgentClientContract {
   let selection: import('@vybestack/llxprt-code-tools').ToolSelection =
     createToolRegistryForTest([]);
   return {
+    bindModelNotifications: () => {},
+    bindIdeContext: () => {},
+    bindWorkspaceDefinitions: () => {},
+    bindProviderFiles: () => {},
+    bindTokenization: () => {},
+    bindProviderSelection: () => {},
     get tools() {
       return selection;
     },

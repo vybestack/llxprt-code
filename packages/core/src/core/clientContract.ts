@@ -170,17 +170,17 @@ export interface AgentChatContract {
  * Core-owned; the concrete AgentClient class implements this.
  */
 export interface AgentClientContract<TLifecycle = never> {
-  bindModelNotifications?(subscribe: SubscribeModelChanges): void;
+  bindModelNotifications(subscribe: SubscribeModelChanges): void;
   readonly tools: ToolSelection;
   bindToolSelection(selection: ToolSelection): void;
   assertConfig(config: Config): void;
   assertProviderManager(manager: RuntimeProviderManager): void;
   bindProviderInvocation(prepare: PrepareProviderInvocation): void;
-  bindIdeContext?(
+  bindIdeContext(
     read: () => IdeContext | undefined,
     enabled: () => boolean,
   ): void;
-  bindWorkspaceDefinitions?(
+  bindWorkspaceDefinitions(
     profiles: Pick<ProfileDefinitionReads, 'loadProfile'>,
     subagents: Pick<SubagentDefinitionReads, 'listSubagents'>,
   ): void;
@@ -192,18 +192,18 @@ export interface AgentClientContract<TLifecycle = never> {
     read: () => ReadonlySettingsSnapshot,
     readGovernance: () => ToolGovernance,
   ): void;
-  bindProviderFiles?(
+  bindProviderFiles(
     lifecycle: TLifecycle,
     composeRetryOperations: (provider: string) => ProviderRetryOperations,
   ): void;
-  bindTokenization?(
+  bindTokenization(
     getTokenizer: RuntimeTokenizerFactory['getTokenizer'],
     promptEstimator: Pick<
       RuntimeTokenizerFactory,
       'estimatePrompt' | 'claimsModel' | 'getEstimatorFamily'
     >,
   ): void;
-  bindProviderSelection?(
+  bindProviderSelection(
     selection: AgentRuntimeProviderAdapter,
     manager: RuntimeProviderManager,
   ): void;

@@ -100,6 +100,9 @@ export async function createCapturedSessionOwner(
       readTaskSchemaPolicy,
       authority: new CredentialAuthority(),
       borrowedBus: messageBus,
+      requestInteractiveAuth: async () => {
+        throw new Error('This fixture has no interactive OAuth host');
+      },
     },
   );
   builtClients.set(owner, built);

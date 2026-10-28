@@ -66,7 +66,7 @@ export class SessionProviderFileBinding {
     >,
   ): void {
     if (this.lifecycle !== undefined && this.retry !== undefined)
-      client.bindProviderFiles?.(this.lifecycle, this.retry);
+      client.bindProviderFiles(this.lifecycle, this.retry);
   }
 
   cleanupScope(scope: string): Promise<void> | undefined {

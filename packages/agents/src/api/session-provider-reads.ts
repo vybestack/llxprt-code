@@ -32,7 +32,7 @@ import type {
 } from './agent.js';
 import { buildProviderInfos, type OwnershipRecord } from './agentBootstrap.js';
 import { AgentExecutionCoordinator } from './agentExecutionCoordinator.js';
-import type { AgentAuth, OAuthPromptHandler } from './config-types.js';
+import type { AgentAuth, AgentConfig } from './config-types.js';
 import { AuthControl } from './control/authControl.js';
 import {
   authStatusForWinner,
@@ -285,7 +285,7 @@ export interface SessionProviderContext {
   readonly ownership: OwnershipRecord;
   readonly runtimeState: AgentRuntimeState;
   readonly initialAuth: AgentAuth | undefined;
-  readonly onOAuthPrompt: OAuthPromptHandler | undefined;
+  readonly onOAuthPrompt: AgentConfig['onOAuthPrompt'];
   readonly coordinator: AgentExecutionCoordinator;
   readonly workspace: WorkspaceControl;
   readonly readRuntimeKind: () => RuntimeKind;

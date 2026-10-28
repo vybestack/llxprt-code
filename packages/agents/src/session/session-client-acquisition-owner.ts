@@ -55,6 +55,7 @@ import {
   captureSessionRuntimeState,
   requireSessionPolicy,
   type SessionClientFactory,
+  type ClientDefinitionBinding,
 } from './session-client-binding.js';
 import {
   OwnedClientLedger,
@@ -94,10 +95,17 @@ export interface SessionClientFactories {
   readonly contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>;
   readonly tokenizerFactory: RuntimeTokenizerFactory;
 }
+export type SessionWorkspaceBinding =
+  | { readonly kind: 'pending' }
+  | {
+      readonly kind: 'bound';
+      readonly workspace: SessionWorkspaceAuthorityPort;
+    };
+
 export interface SessionClientBindings {
   readonly toolCatalog: SessionToolCatalogOwner;
   readonly modelRegistry: ModelRegistry;
-  readonly readWorkspace: () => SessionWorkspaceAuthorityPort | undefined;
+  readonly readWorkspace: () => SessionWorkspaceBinding;
   readonly readPolicy: () => SessionPolicyOwner | undefined;
 }
 export class SessionClientAcquisitionOwner {
@@ -197,8 +205,8 @@ export class SessionClientAcquisitionOwner {
     display: LoopTypes.DisplayCallbacks | undefined,
   ): SessionExecution {
     this.getAgentClient();
-    const workspace = this.bindings.readWorkspace();
-    if (workspace === undefined)
+    const binding = this.bindings.readWorkspace();
+    if (binding.kind === 'pending')
       throw new AgentBootstrapError(
         'Loop construction requires workspace policy composition',
       );
@@ -210,7 +218,7 @@ export class SessionClientAcquisitionOwner {
       requireSessionPolicy(this.bindings.readPolicy()).messageBus,
       this.bindings.toolCatalog.selection,
       () => this.bindings.toolCatalog.readGovernance(),
-      workspace.trust,
+      binding.workspace.trust,
       scheduler,
       approval,
       display,
@@ -363,21 +371,14 @@ export class SessionClientAcquisitionOwner {
       proxyUrl: this.environment.config.getProxy(),
     });
 
-  private profileDefinitions:
-    | Pick<ProfileDefinitionReads, 'loadProfile'>
-    | undefined;
-
-  private subagentDefinitions:
-    | Pick<SubagentDefinitionReads, 'listSubagents'>
-    | undefined;
+  private definitions: ClientDefinitionBinding = { kind: 'pending' };
 
   bindDefinitionReads(
     profiles: Pick<ProfileDefinitionReads, 'loadProfile'>,
     subagents: Pick<SubagentDefinitionReads, 'listSubagents'>,
   ): void {
-    this.profileDefinitions = profiles;
-    this.subagentDefinitions = subagents;
-    this.client.bindWorkspaceDefinitions?.(profiles, subagents);
+    this.definitions = { kind: 'bound', profiles, subagents };
+    this.client.bindWorkspaceDefinitions(profiles, subagents);
   }
 
   /**
@@ -420,14 +421,18 @@ export class SessionClientAcquisitionOwner {
       this.environment.config,
       this.environment.mediaStore,
     );
-    bindClientDefinitions(
-      client,
-      this.profileDefinitions,
-      this.subagentDefinitions,
-    );
-    client.bindIdeContext?.(
-      () => this.bindings.readWorkspace()?.ide.readContext(),
-      () => this.bindings.readWorkspace()?.ide.isEnabled() ?? false,
+    bindClientDefinitions(client, this.definitions);
+    client.bindIdeContext(
+      () => {
+        const binding = this.bindings.readWorkspace();
+        return binding.kind === 'bound'
+          ? binding.workspace.ide.readContext()
+          : undefined;
+      },
+      () => {
+        const binding = this.bindings.readWorkspace();
+        return binding.kind === 'bound' && binding.workspace.ide.isEnabled();
+      },
     );
     client.bindToolSelection(this.bindings.toolCatalog.selection);
     bindTelemetry(
@@ -567,7 +572,10 @@ export class SessionClientAcquisitionOwner {
     return publishWorkspaceInstructions(
       this.client,
       instructions,
-      () => this.bindings.readWorkspace()?.isStopped() === true,
+      () => {
+        const binding = this.bindings.readWorkspace();
+        return binding.kind === 'bound' && binding.workspace.isStopped();
+      },
       (operation) => this.work.enqueueAccepted(operation),
     );
   }

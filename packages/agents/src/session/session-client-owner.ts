@@ -88,7 +88,11 @@ interface ChildTaskComposition {
 
 export class SessionClientOwner {
   readonly clients: SessionClientAcquisitionOwner;
-  private boundWorkspace: SessionMcpBindingPort | undefined;
+  private boundWorkspace:
+    | { readonly kind: 'pending' }
+    | { readonly kind: 'bound'; readonly workspace: SessionMcpBindingPort } = {
+    kind: 'pending',
+  };
   private sessionPolicy: SessionPolicyOwner | undefined;
   readonly subscribeBucketConsent = (
     listener: (request: BucketAuthConsentRequest) => void,
@@ -266,6 +270,7 @@ export class SessionClientOwner {
       readonly readTaskSchemaPolicy: () => RegistryPolicy;
       readonly authority: CredentialAuthority;
       readonly borrowedBus: MessageBus | undefined;
+      readonly requestInteractiveAuth: InteractiveAuthPromptOperation;
     },
   ) {
     const { config, settingsOwner } = environment;
@@ -274,12 +279,18 @@ export class SessionClientOwner {
       config,
       () => settingsOwner.telemetry,
       () => this.messageBus,
-      () => this.boundWorkspace?.trust,
-      (reload) =>
-        this.boundWorkspace?.bindSessionHookReload(
-          this.mcpBindingToken,
-          reload,
-        ),
+      () =>
+        this.boundWorkspace.kind === 'bound'
+          ? this.boundWorkspace.workspace.trust
+          : undefined,
+      (reload) => {
+        if (this.boundWorkspace.kind === 'bound')
+          return this.boundWorkspace.workspace.bindSessionHookReload(
+            this.mcpBindingToken,
+            reload,
+          );
+        return undefined;
+      },
     );
     this.modelRegistry = new ModelRegistry(factories.manager.fetchNetwork);
     factories.manager.bindModelRegistry?.(this.modelRegistry);
@@ -315,15 +326,12 @@ export class SessionClientOwner {
       readonly readTaskSchemaPolicy: () => RegistryPolicy;
       readonly authority: CredentialAuthority;
       readonly borrowedBus: MessageBus | undefined;
+      readonly requestInteractiveAuth: InteractiveAuthPromptOperation;
     },
   ): Promise<SessionClientOwner> {
     const owner = new SessionClientOwner(environment, factories, composition);
     await owner.clients.initializeInitialClientBinding();
     return owner;
-  }
-  private requestInteractiveAuth: InteractiveAuthPromptOperation | undefined;
-  bindInteractiveAuthRequests(operation: InteractiveAuthPromptOperation): void {
-    this.requestInteractiveAuth = operation;
   }
 
   bindWorkspaceInstructions(workspace: WorkspaceMemoryOwner): void {
@@ -339,11 +347,12 @@ export class SessionClientOwner {
     profiles: ProfileDefinitionReads = workspace.profileDefinitions,
     subagents: SubagentDefinitionReads = workspace.subagentDefinitions,
   ): void {
-    if (this.boundWorkspace === workspace) return;
-    if (this.boundWorkspace !== undefined)
+    if (this.boundWorkspace.kind === 'bound') {
+      if (this.boundWorkspace.workspace === workspace) return;
       throw new Error('Session already has workspace policy composition');
-    this.boundWorkspace = workspace;
-    this.clients.currentClient.bindIdeContext?.(
+    }
+    this.boundWorkspace = { kind: 'bound', workspace };
+    this.clients.currentClient.bindIdeContext(
       () => workspace.ide.readContext(),
       () => workspace.ide.isEnabled(),
     );
@@ -430,7 +439,7 @@ export class SessionClientOwner {
           buildAgentClientFactory(),
           {
             messageBus: bus,
-            requestInteractiveAuth: this.requestInteractiveAuth,
+            requestInteractiveAuth: this.composition.requestInteractiveAuth,
             profileReads: profiles,
             subagentReads: subagents,
             telemetry: this.environment.settingsOwner.telemetry,
