@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { RETAINED_ALLOWANCE_BYTES } from '@vybestack/llxprt-code-test-utils/core/retained-growth.js';
-import { bindingMemoryEstimate } from './provider-binding-bridge-memory-probe.js';
+import { bindingMemoryEstimate } from './__tests__/support/provider-binding-bridge-memory-probe.js';
 
 describe('binding production route suspended after durable acknowledgement', () => {
   it('rejects the retaining participant with the same paired estimator', () => {

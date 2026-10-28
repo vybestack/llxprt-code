@@ -21,7 +21,7 @@ function measure(size: number, trap: boolean): z.infer<typeof schema> {
     process.execPath,
     [
       new URL(
-        '../../../../../scripts/tests/provider-binding-bridge-memory-child.ts',
+        '../../../../../../../scripts/tests/provider-binding-bridge-memory-child.ts',
         import.meta.url,
       ).pathname,
       String(size),

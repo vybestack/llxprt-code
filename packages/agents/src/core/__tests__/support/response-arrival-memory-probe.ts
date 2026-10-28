@@ -42,11 +42,11 @@ function measure(
     [
       '--preload',
       new URL(
-        '../../../../scripts/tests/storage-isolation-guard.ts',
+        '../../../../../../scripts/tests/storage-isolation-guard.ts',
         import.meta.url,
       ).pathname,
       new URL(
-        '../../../../scripts/tests/response-arrival-memory-child.ts',
+        '../../../../../../scripts/tests/response-arrival-memory-child.ts',
         import.meta.url,
       ).pathname,
       String(chunks),
