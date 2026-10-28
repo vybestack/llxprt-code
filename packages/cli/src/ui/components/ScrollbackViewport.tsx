@@ -55,7 +55,7 @@ import { HistoryItemDisplay } from './HistoryItemDisplay.js';
 import type { HistoryItemWithoutId } from '../types.js';
 import {
   withJournalToolControls,
-  hasJournalToolApproval,
+  journalApprovals,
 } from '../stores/turn/journal-tool-controls.js';
 import { HistoryBoundaryRow } from './HistoryBoundaryRow.js';
 import {
@@ -258,7 +258,7 @@ function WiredScrollbackRow({
   return (
     <HistoryItemDisplay
       availableTerminalHeight={availableTerminalHeight}
-      item={withJournalToolControls(row.item, pendingToolControls)}
+      item={withJournalToolControls(row.item, pendingToolControls, false)}
       terminalWidth={terminalWidth}
       isPending={false}
       isFocused={isFocused}
@@ -440,9 +440,7 @@ function ViewportFrame({
   wiring: FrameWiring;
 }): React.JSX.Element {
   const lines: React.JSX.Element[] = [];
-  const focusedApprovalKey = frame.rows.find((row) =>
-    hasJournalToolApproval(row.item, wiring.pendingToolControls),
-  )?.key;
+  const approvals = journalApprovals(wiring.pendingToolControls);
   let olderSeq: number | null = null;
   for (const row of frame.rows) {
     if (wiring.range !== undefined && olderSeq !== null && row.seq !== null) {
@@ -472,17 +470,34 @@ function ViewportFrame({
           terminalWidth={wiring.terminalWidth}
           availableTerminalHeight={wiring.availableTerminalHeight}
           pendingToolControls={wiring.pendingToolControls}
-          isFocused={
-            focusedApprovalKey === undefined || focusedApprovalKey === row.key
-          }
+          isFocused={approvals.length === 0}
         />
       ),
     );
     if (row.seq !== null) olderSeq = row.seq;
   }
+  const config = wiring.config;
   return (
     <ViewportWindow state={state} frame={frame} wiring={wiring}>
       {lines}
+      {config !== undefined &&
+        approvals
+          .slice()
+          .reverse()
+          .map((approval, index) => (
+            <HistoryItemDisplay
+              key={JSON.stringify([
+                approval.tools[0].journalIdentity,
+                approval.tools[0].callId,
+              ])}
+              item={{ ...approval, id: -1 }}
+              terminalWidth={wiring.terminalWidth}
+              availableTerminalHeight={wiring.availableTerminalHeight}
+              isPending={true}
+              isFocused={index === approvals.length - 1}
+              config={config}
+            />
+          ))}
     </ViewportWindow>
   );
 }

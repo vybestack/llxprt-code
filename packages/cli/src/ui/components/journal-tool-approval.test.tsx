@@ -122,11 +122,11 @@ async function fixture(root: string) {
     history,
     identity,
     pager,
-    element: (pending: HistoryItemWithoutId[]) => (
+    element: (pending: HistoryItemWithoutId[], viewportLines = 20) => (
       <ScrollbackViewport
         store={pager}
         viewport={viewport}
-        viewportLines={20}
+        viewportLines={viewportLines}
         pollMs={10}
         config={config}
         pendingToolControls={pending}
@@ -142,6 +142,70 @@ async function fixture(root: string) {
 
 describe('mounted journal tool approval', () => {
   const directory = useTempDir('mounted-journal-approval-');
+
+  it('shows and answers a child-journal approval absent from the primary journal', async () => {
+    const f = await fixture(directory());
+    let decision: Outcome | undefined;
+    const child = control(
+      'child-call',
+      { transcriptId: 'child-row', attemptId: 'child-attempt' },
+      async (outcome) => {
+        decision = outcome;
+      },
+    );
+    const view = renderWithProviders(f.element([child]));
+    try {
+      await waitFor(() => expect(view.lastFrame()).toContain('Allow once'));
+      await act(async () => {
+        view.stdin.write(String.fromCharCode(13));
+        await Bun.sleep(30);
+      });
+      expect(decision).toBe(ToolConfirmationOutcome.ProceedOnce);
+      await act(async () => {
+        view.rerender(wrapWithProviders(f.element([])));
+        await Bun.sleep(30);
+      });
+      expect(view.lastFrame()).not.toContain('Allow once');
+    } finally {
+      view.unmount();
+      await f.close();
+    }
+  });
+
+  it('keeps a primary approval answerable after its request leaves the viewport', async () => {
+    const f = await fixture(directory());
+    await f.history.addBatch(
+      Array.from({ length: 30 }, (_, index) => ({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: `Later journal row ${index}` }],
+      })),
+    );
+    await f.history.waitForCommit();
+    for (let page = 0; page < 10; page++) await f.pager.pageForward();
+    const visible = f.pager.getState().rows.slice(-20);
+    expect(visible).toHaveLength(20);
+    expect(visible.every((row) => row.item.type !== 'tool_group')).toBe(true);
+    let decision: Outcome | undefined;
+    const view = renderWithProviders(
+      f.element([
+        control('approval-call', f.identity, async (outcome) => {
+          decision = outcome;
+        }),
+      ]),
+    );
+    try {
+      await waitFor(() => expect(view.lastFrame()).toContain('Allow once'));
+      await act(async () => {
+        view.stdin.write(String.fromCharCode(13));
+        await Bun.sleep(30);
+      });
+      expect(decision).toBe(ToolConfirmationOutcome.ProceedOnce);
+    } finally {
+      view.unmount();
+      await f.close();
+    }
+  });
+
   it('shows a focusable approval at its disk row and removes callbacks after completion', async () => {
     const f = await fixture(directory());
     let decision: Outcome | undefined;

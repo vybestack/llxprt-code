@@ -147,6 +147,38 @@ describe('toolMapping', () => {
       );
     });
 
+    it('names the child on an approval even when a primary Task shares the group', () => {
+      const call: WaitingToolCall = {
+        status: 'awaiting_approval',
+        request: {
+          ...mockRequest,
+          agentId: 'reviewer-abc123',
+          journalIdentity: { transcriptId: '3', attemptId: 'child-attempt' },
+        },
+        tool: mockTool,
+        invocation: mockInvocation,
+        confirmationDetails: {
+          type: 'info',
+          title: 'Approve child tool',
+          prompt: 'Run?',
+          onConfirm: async () => {},
+        },
+      };
+      const primary: ScheduledToolCall = {
+        status: 'scheduled',
+        request: {
+          ...mockRequest,
+          callId: 'task-call',
+          agentId: DEFAULT_AGENT_ID,
+        },
+        tool: mockTool,
+        invocation: mockInvocation,
+      };
+      const display = mapPendingToDisplay([primary, call]);
+      expect(display.agentId).toBe(DEFAULT_AGENT_ID);
+      expect(display.tools[1].name).toBe('reviewer-abc123: Test Tool');
+    });
+
     it('handles a single tool call input', () => {
       const toolCall: ScheduledToolCall = {
         status: 'scheduled',

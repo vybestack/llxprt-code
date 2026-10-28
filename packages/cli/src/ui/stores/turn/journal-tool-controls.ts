@@ -39,22 +39,10 @@ function activeControl(
   return undefined;
 }
 
-export function hasJournalToolApproval(
-  item: HistoryItem,
-  pending: readonly HistoryItemWithoutId[],
-): boolean {
-  return (
-    item.type === 'tool_group' &&
-    item.tools.some(
-      (tool) =>
-        activeControl(tool, pending)?.status === ToolCallStatus.Confirming,
-    )
-  );
-}
-
 export function withJournalToolControls<T extends HistoryItem>(
   item: T,
   pending: readonly HistoryItemWithoutId[],
+  inlineApprovals = true,
 ): T {
   if (item.type !== 'tool_group') return item;
   return {
@@ -68,9 +56,26 @@ export function withJournalToolControls<T extends HistoryItem>(
             name: control.name,
             description: control.description,
             status: control.status,
-            confirmationDetails: control.confirmationDetails,
+            confirmationDetails: inlineApprovals
+              ? control.confirmationDetails
+              : undefined,
             ptyId: control.ptyId,
           };
     }),
   };
+}
+
+/** Approval input stays mounted independently of journal paging and child journals. */
+export function journalApprovals(
+  pending: readonly HistoryItemWithoutId[],
+): Array<Extract<HistoryItemWithoutId, { type: 'tool_group' }>> {
+  return pending.flatMap((item) => {
+    if (item.type !== 'tool_group') return [];
+    return item.tools.flatMap((tool) =>
+      tool.status === ToolCallStatus.Confirming &&
+      tool.confirmationDetails !== undefined
+        ? [{ ...item, tools: [tool] }]
+        : [],
+    );
+  });
 }

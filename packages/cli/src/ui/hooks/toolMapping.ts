@@ -375,7 +375,12 @@ function mapJournalControl(call: TrackedToolCall): IndividualToolCallDisplay[] {
     {
       callId: call.request.callId,
       journalIdentity: call.request.journalIdentity,
-      name: getDisplayName(call),
+      name:
+        call.status === 'awaiting_approval' &&
+        call.request.agentId !== undefined &&
+        call.request.agentId !== DEFAULT_AGENT_ID
+          ? `${call.request.agentId}: ${getDisplayName(call)}`
+          : getDisplayName(call),
       description: getDescription(call),
       status: mapCoreStatusToDisplayStatus(call.status),
       resultDisplay: undefined,

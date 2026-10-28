@@ -267,6 +267,39 @@ describe('Interactive UI (tmux harness)', () => {
     300_000,
   );
 
+  for (const alternate of [false, true]) {
+    runTmuxE2E(
+      `Task child approval names its subagent and completes the main turn (alternate=${alternate})`,
+      () => {
+        const testName = `task-child-approval-${alternate}`;
+        const result = runHarness(
+          'tmux-script.task-approval.fake.json',
+          testName,
+          [],
+          {
+            LLXPRT_UI_TASK_SETTINGS: path.join(
+              projectRoot,
+              alternate
+                ? 'scripts/fixtures/task-approval-settings.json'
+                : 'scripts/system-settings.interactive-ui.json',
+            ),
+          },
+        );
+        assertHarnessSuccess(result);
+        const directory = getArtifactDir(testName);
+        const capture = readdirSync(directory).find((file) =>
+          file.endsWith('-child-approval-screen.txt'),
+        );
+        if (capture === undefined)
+          throw new Error('Missing child approval capture');
+        const pane = readFileSync(path.join(directory, capture), 'utf8');
+        expect(pane).toContain('approval-child-');
+        expect(pane).toContain('Allow once');
+      },
+      300_000,
+    );
+  }
+
   runTmuxE2E(
     'tool approval dialog appears and accepts approval',
     () => {
