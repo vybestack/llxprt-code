@@ -80,13 +80,6 @@ describe('native recording positional failure ownership', () => {
       const { recording, integration, control, reports } = fixture();
       const cause = new Error(`native ${kind} failed`);
       const checkpoint = await recording.createCheckpoint('read target');
-      // Evict the earlier descriptor from the bounded state cache so this
-      // failure exercises physical I/O rather than a cached lookup.
-      for (let index = 0; index < 12; index++) {
-        await recording.createCheckpoint(
-          `${index}:${'checkpoint'.repeat(800)}`,
-        );
-      }
       if (kind === 'read') control.readError = cause;
       else control.flushError = cause;
       const prequeued = recording.renameCheckpoint(

@@ -6,6 +6,7 @@ import { useTempDir } from '../../../journal/__tests__/support/useTempDir.js';
 import type { JournalOpenDependencies } from '../../../journal/journalWriterOpen.js';
 import type { JournalFileHandle } from '../../../journal/positionalFile.js';
 import { TRAILER_RECORD_BYTES } from '../../../journal/trailerRecord.js';
+import { BoundedIdNodeCache } from '../../../journal/idTrieCache.js';
 import { HistoryService } from '../../../services/history/HistoryService.js';
 import { JournalRecordingService } from '../../journalRecordingService.js';
 import { RecordingIntegration } from '../../RecordingIntegration.js';
@@ -110,7 +111,10 @@ export function useNativeFailureIntegration(): () => NativeFailureFixture {
       workspaceDirs: [],
       provider: 'test',
       model: 'test',
-      journal: { journal: failingDependencies(control) },
+      journal: {
+        journal: failingDependencies(control),
+        createCache: () => new BoundedIdNodeCache(0),
+      },
     });
     const history = new HistoryService({});
     const reports = join(directory(), 'reports');

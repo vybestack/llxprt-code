@@ -43,6 +43,7 @@ import {
 /** What a caller may replace: the file seams (tests) and the occurrence planner (the normalizer of phase 5). */
 export interface JournalSessionOptions {
   readonly journal?: Partial<JournalOpenDependencies>;
+  readonly createCache?: JournalStoreDependencies['createCache'];
   readonly tokenUsageCountTokens?: (text: string) => number;
   readonly eagerTokenUsageFacts?: boolean;
   readonly nativeFacts?: NativeFactIndexRegistration;
@@ -66,6 +67,7 @@ function dependenciesWithJournal(
 ): JournalStoreDependencies {
   return {
     journal,
+    createCache: options.createCache,
     idDeps: {
       hasher: sha256KeyHash,
       occurrenceSpace: 'source-with-normalized',
