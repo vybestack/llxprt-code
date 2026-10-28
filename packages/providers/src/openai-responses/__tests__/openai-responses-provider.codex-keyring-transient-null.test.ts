@@ -39,7 +39,8 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../../__tests__/streamCallOptions.js';
+import { withFetchPreconnect } from '../../../../test-utils/src/fetch-test-helpers.js';
 import { OAuthManager } from '../../auth/oauth-manager.js';
 import { registerStandardOAuthProviders } from '../../composition/oauth-provider-registration.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
@@ -262,8 +263,8 @@ describe('Codex requests with transient native-keyring null reads (issue #3965)'
     setEnv('OPENAI_API_KEY', undefined);
     oauthManagers = [];
     root = mkdtempSync(join(tmpdir(), 'codex-keyring-3965-'));
-    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async () =>
-      sseResponse(),
+    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
+      withFetchPreconnect(async () => sseResponse()),
     );
   });
 
