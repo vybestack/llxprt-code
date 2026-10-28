@@ -331,17 +331,7 @@ export class JournalArrivalRecorder {
     const turn = this.running
       .then(async () => {
         await this.mutate(async (group) => {
-          for (const piece of pieces) {
-            if (piece.name === undefined) await group.append(piece);
-            else
-              await group.appendNamed(
-                piece.block,
-                piece.name,
-                piece.bytes,
-                piece.snapshot,
-                piece.replace,
-              );
-          }
+          await this.appendPieces(group, pieces);
         });
       })
       .finally(() => {
@@ -361,13 +351,45 @@ export class JournalArrivalRecorder {
     await this.running;
     this.check();
   }
+  private async appendPieces(
+    group: ArrivalGroup,
+    pieces: readonly ArrivalPiece[],
+  ): Promise<void> {
+    for (const piece of pieces) {
+      if (piece.name === undefined) await group.append(piece);
+      else
+        await group.appendNamed(
+          piece.block,
+          piece.name,
+          piece.bytes,
+          piece.snapshot,
+          piece.replace,
+        );
+    }
+  }
   async endBlock(block: ArrivalBlock): Promise<void> {
-    await this.flush();
-    const error = await this.mutate(async (group) => {
-      const failure = await group.blockError(block);
-      if (failure === undefined) await group.endBlock(block);
-      return failure;
-    });
+    this.check();
+    const pending = this.drainTextBuffer();
+    if (pending !== undefined) await pending;
+    clearTimeout(this.timer);
+    this.timer = undefined;
+    const pieces = this.pending;
+    const bytes = this.pendingBytes;
+    this.pending = [];
+    this.pendingBytes = 0;
+    let error: string | undefined;
+    try {
+      await this.running;
+      error = await this.mutate(async (group) => {
+        await this.appendPieces(group, pieces);
+        const failure = await group.blockError(block);
+        if (failure === undefined) await group.endBlock(block);
+        return failure;
+      });
+    } finally {
+      this.chargedBytes -= bytes + pieces.length * PIECE_CHARGE;
+      this.chargedPieces -= pieces.length;
+    }
     if (error !== undefined) {
       await this.finishAttempt(block, 'error');
       throw new Error(error);

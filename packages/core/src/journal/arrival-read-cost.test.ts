@@ -59,6 +59,8 @@ describe('arrival recording physical read cost', () => {
         }
         const recordingReads = counter.reads - before;
         const depth = Math.ceil(Math.log(size * 2) / Math.log(16));
+        // Two growing map paths, up to two reads per level, plus eight cold reads.
+        // Outcome and membership keys give this fixture at most two keys per row.
         const readBound = 4 * depth + 8;
         expect(recordingReads / size).toBeLessThanOrEqual(readBound);
         expect(lastRowReads).toBeLessThanOrEqual(readBound);
