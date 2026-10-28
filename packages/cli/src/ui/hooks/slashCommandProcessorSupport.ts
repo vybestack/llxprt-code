@@ -17,10 +17,7 @@ import { MessageType } from '../types.js';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import type { BuiltinCommandOwners } from '../../services/BuiltinCommandLoader.js';
 import type { ExtensionUpdateState } from '../state/extensions.js';
-import {
-  slashCommandLogger,
-  type SlashCommandProcessorActions,
-} from './slashCommandProcessor.js';
+import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
 
 interface TodoContextValue {
   todos: Todo[];
@@ -187,35 +184,19 @@ export function useCommandReload(
   reloadCommands: () => void,
   setCommands: (commands: readonly SlashCommand[]) => void,
 ): void {
+  const [failure, setFailure] = useState<{ error: unknown } | null>(null);
   useEffect(() => subscribe(reloadCommands), [subscribe, reloadCommands]);
   useEffect(() => {
     const controller = new AbortController();
-    void publishRegisteredCommands(
-      load,
-      owners,
-      controller.signal,
-      setCommands,
-    );
+    void (async () => {
+      try {
+        const commands = await load(owners, controller.signal);
+        if (!controller.signal.aborted) setCommands(commands);
+      } catch (error) {
+        if (!controller.signal.aborted) setFailure({ error });
+      }
+    })();
     return () => controller.abort();
   }, [owners, load, reloadTrigger, isConfigInitialized, setCommands]);
-}
-
-async function publishRegisteredCommands(
-  load: LoadRegisteredCommands,
-  owners: BuiltinCommandOwners,
-  signal: AbortSignal,
-  setCommands: (commands: readonly SlashCommand[]) => void,
-): Promise<void> {
-  try {
-    const commands = await load(owners, signal);
-    if (!signal.aborted) setCommands(commands);
-  } catch (error) {
-    if (!signal.aborted) {
-      slashCommandLogger.error(
-        () => 'Failed to initialize slash commands',
-        error,
-      );
-      setCommands([]);
-    }
-  }
+  if (failure !== null) throw failure.error;
 }

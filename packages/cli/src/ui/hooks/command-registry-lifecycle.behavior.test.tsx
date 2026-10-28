@@ -4,8 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { act, useState } from 'react';
-import { renderHook, waitFor } from '../../__tests__/render.js';
+import React, { act, useState } from 'react';
+import { Text } from 'ink';
+import { render, renderHook, waitFor } from '../../__tests__/render.js';
+import { ErrorBoundary } from '../components/ErrorBoundary.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { useCommandReload } from './slashCommandProcessorSupport.js';
 import {
@@ -44,6 +46,37 @@ function deferred() {
 }
 
 describe('captured command registry lifecycle', () => {
+  it('surfaces failed discovery through the owning error boundary', async () => {
+    const failure = new Error('Command discovery unavailable');
+    const load = async (): Promise<readonly SlashCommand[]> => {
+      throw failure;
+    };
+    const subscribe = () => undefined;
+    const reload = () => {};
+    const publications: Array<readonly SlashCommand[]> = [];
+    function Registry(): React.ReactElement {
+      useCommandReload(owners, load, subscribe, 0, true, reload, (commands) => {
+        publications.push(commands);
+      });
+      return <Text color="white">Loading commands</Text>;
+    }
+    const mounted = render(
+      <ErrorBoundary
+        fallback={(error) => <Text color="white">{error.message}</Text>}
+      >
+        <Registry />
+      </ErrorBoundary>,
+    );
+    try {
+      await waitFor(() =>
+        expect(mounted.lastFrame()).toContain(failure.message),
+      );
+      expect(publications).toStrictEqual([]);
+    } finally {
+      mounted.unmount();
+    }
+  });
+
   it('does not publish an aborted discovery after a newer registry has loaded', async () => {
     const first = deferred();
     const started = deferred();
