@@ -58,6 +58,7 @@ import {
   collectStallDiagnostics,
   createStallProbe,
 } from './runner-stall-inspector.js';
+import { prepareFakeEngineExecutables } from './test-utils/fake-engine-executables.js';
 
 process.env.LLXPRT_RUNNING_TESTS = 'true';
 
@@ -618,6 +619,15 @@ async function main(): Promise<void> {
   let exitCode = 1;
   let failFast = false;
   try {
+    // Native fixture compilation must not compete with the test worker pool
+    // or run inside a suite's hook deadline. Keep these build artifacts out
+    // of disposable state directories, whose removal Windows can lock.
+    if (process.platform === 'win32') {
+      Object.assign(
+        isolation.sessionEnv,
+        await prepareFakeEngineExecutables(join(root, 'tmp')),
+      );
+    }
     const results: TestResult[] = [];
     let nextIndex = 0;
     let completed = 0;
