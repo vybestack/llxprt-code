@@ -106,7 +106,7 @@ function normalizeExplicitProvider(value: unknown): string | undefined {
  */
 function resolveExplicitProvider(
   config: Config | undefined,
-  settings: RuntimeSettingsState,
+  settings: Pick<RuntimeSettingsState, 'get'>,
   userSettings: UserSettingsView | undefined,
 ): string | undefined {
   // 1. Config provider (set by CLI --provider, --profile-load, or
@@ -259,7 +259,7 @@ function resolveOpenaiBaseUrl(
 }
 
 function resolveAuthOnlyFlag(
-  settingsService: RuntimeSettingsState,
+  settingsService: Pick<RuntimeSettingsState, 'get'>,
   userSettings?: UserSettingsView,
 ): boolean {
   const sessionAuthOnly = coerceAuthOnly(settingsService.get('authOnly'));
@@ -290,7 +290,7 @@ function resolveAuthOnlyFlag(
 
 /** Resolves OpenAI-specific settings from user settings and ephemeral overrides. */
 function resolveOpenaiSettings(
-  settings: RuntimeSettingsState,
+  settings: Pick<RuntimeSettingsState, 'get'>,
   userSettings: UserSettingsView | undefined,
   authOnlyEnabled: boolean,
   allowBrowserEnvironment: boolean,
@@ -419,7 +419,7 @@ function registerAllProviders(
 function activateExplicitProvider(
   manager: ProviderManager,
   config: Config | undefined,
-  settings: RuntimeSettingsState,
+  settings: Pick<RuntimeSettingsState, 'get'>,
   userSettings: UserSettingsView | undefined,
 ): void {
   const explicitProvider = resolveExplicitProvider(
@@ -468,7 +468,7 @@ function tryActivateFakeProvider(
 }
 
 function readOwnerAuthPolicy(
-  settings: RuntimeSettingsState,
+  settings: Pick<RuntimeSettingsState, 'get'>,
 ): SessionAuthPolicy {
   const baseUrl = settings.get('base-url');
   const profile = settings.get('currentProfile');
@@ -507,11 +507,78 @@ export function createOwnedOAuthManager(
   );
 }
 
+interface ProviderRegistrationOptions {
+  readonly config: Config | undefined;
+  readonly providerContributions: ProviderContributionRegistry | undefined;
+  readonly addItem: OAuthUICallback | undefined;
+  readonly authOnlyEnabled: boolean;
+  readonly openaiApiKey: string | undefined;
+  readonly openaiBaseUrl: string | undefined;
+  readonly openaiProviderConfig: IProviderConfig;
+}
+
+interface ProviderPopulationTarget {
+  bindRetryOperations(): void;
+  activateReplay(config: Config | undefined, path: string | undefined): boolean;
+  configure(config: Config): void;
+  registerProviders(options: ProviderRegistrationOptions): void;
+  activateConfigured(
+    config: Config | undefined,
+    settings: Pick<RuntimeSettingsState, 'get'>,
+    user: UserSettingsView | undefined,
+  ): void;
+  attachMessages(callback: OAuthUICallback | undefined): void;
+  bindAliasRefresh(options: ProviderRegistrationOptions): void;
+}
+
+export function createProviderPopulationTarget(
+  manager: ProviderManager,
+  oauth: OAuthManager,
+  tokens: TokenStore,
+): ProviderPopulationTarget {
+  return {
+    bindRetryOperations: () => bindOwnerRetryOperations(manager, oauth),
+    activateReplay: (config, path) =>
+      tryActivateFakeProvider(manager, config, path),
+    configure: (config) => {
+      manager.setConfig(config);
+      configureProviderTokenizer(manager);
+    },
+    registerProviders: (options) =>
+      registerAllProviders(
+        manager,
+        loadProviderAliasEntries(),
+        options.openaiApiKey,
+        options.openaiBaseUrl,
+        options.openaiProviderConfig,
+        oauth,
+        tokens,
+        options.config,
+        options.authOnlyEnabled,
+        options.addItem,
+        options.providerContributions,
+      ),
+    activateConfigured: (config, settings, user) =>
+      activateExplicitProvider(manager, config, settings, user),
+    attachMessages: (callback) =>
+      attachAddItemToOAuthProviders(oauth, callback),
+    bindAliasRefresh: (options) =>
+      registerAliasRefresher(
+        manager,
+        options.openaiApiKey,
+        options.openaiBaseUrl,
+        options.openaiProviderConfig,
+        oauth,
+        options.config,
+        options.authOnlyEnabled,
+        options.providerContributions,
+      ),
+  };
+}
+
 export interface ProviderPopulationInput {
-  readonly manager: ProviderManager;
-  readonly oauthManager: OAuthManager;
-  readonly tokenStore: TokenStore;
-  readonly settings: RuntimeSettingsState;
+  readonly target: ProviderPopulationTarget;
+  readonly readSetting: RuntimeSettingsState['get'];
   readonly fileSystem: IFileSystem;
   readonly configuration:
     | { readonly kind: 'pre-config' }
@@ -534,10 +601,8 @@ export interface ProviderPopulationInput {
 
 export function populateProviderManager(input: ProviderPopulationInput): void {
   const {
-    manager,
-    oauthManager,
-    tokenStore,
-    settings,
+    target,
+    readSetting,
     fileSystem,
     allowBrowser,
     activateConfiguredProvider,
@@ -556,48 +621,30 @@ export function populateProviderManager(input: ProviderPopulationInput): void {
     input.fakeResponses.kind === 'replay'
       ? input.fakeResponses.path
       : undefined;
+  const settings = { get: readSetting };
   const user = resolveUserSettings(fileSystem);
-  bindOwnerRetryOperations(manager, oauthManager);
-  if (tryActivateFakeProvider(manager, config, fakeResponsesPath)) return;
-
-  if (config) {
-    manager.setConfig(config);
-    configureProviderTokenizer(manager);
-  }
+  target.bindRetryOperations();
+  if (target.activateReplay(config, fakeResponsesPath)) return;
+  if (config) target.configure(config);
 
   const authOnlyEnabled = resolveAuthOnlyFlag(settings, user);
   const { openaiApiKey, openaiBaseUrl, openaiProviderConfig } =
     resolveOpenaiSettings(settings, user, authOnlyEnabled, allowBrowser);
 
-  registerAllProviders(
-    manager,
-    loadProviderAliasEntries(),
+  const registration: ProviderRegistrationOptions = {
+    config,
+    providerContributions,
+    addItem,
+    authOnlyEnabled,
     openaiApiKey,
     openaiBaseUrl,
     openaiProviderConfig,
-    oauthManager,
-    tokenStore,
-    config,
-    authOnlyEnabled,
-    addItem,
-    providerContributions,
-  );
-
-  if (activateConfiguredProvider) {
-    activateExplicitProvider(manager, config, settings, user);
-  }
-  attachAddItemToOAuthProviders(oauthManager, addItem);
-
-  registerAliasRefresher(
-    manager,
-    openaiApiKey ?? undefined,
-    openaiBaseUrl ?? undefined,
-    openaiProviderConfig,
-    oauthManager,
-    config,
-    authOnlyEnabled,
-    providerContributions,
-  );
+  };
+  target.registerProviders(registration);
+  if (activateConfiguredProvider)
+    target.activateConfigured(config, settings, user);
+  target.attachMessages(addItem);
+  target.bindAliasRefresh(registration);
 }
 
 function bindOwnerRetryOperations(

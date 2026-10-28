@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createProviderPopulationTarget } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as nodeOs from 'node:os';
@@ -77,10 +78,8 @@ export async function observeFakeProviderRegistration(): Promise<{
       );
       const tokens = oauth.getTokenStore();
       populateProviderManager({
-        manager,
-        oauthManager: oauth,
-        tokenStore: tokens,
-        settings,
+        target: createProviderPopulationTarget(manager, oauth, tokens),
+        readSetting: (key) => settings.get(key),
         fileSystem: new NodeFileSystem(),
         configuration: { kind: 'configured', config },
         contributions: { kind: 'none' },

@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createProviderPopulationTarget } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -194,10 +195,12 @@ describe('provider manager runtime OAuth MessageBus composition', () => {
       undefined,
     );
     populateProviderManager({
-      manager,
-      oauthManager: oauth,
-      tokenStore: oauth.getTokenStore(),
-      settings,
+      target: createProviderPopulationTarget(
+        manager,
+        oauth,
+        oauth.getTokenStore(),
+      ),
+      readSetting: (key) => settings.get(key),
       fileSystem: new NodeFileSystem(),
       configuration: { kind: 'configured', config },
       contributions: { kind: 'none' },

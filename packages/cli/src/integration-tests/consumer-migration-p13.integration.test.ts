@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createProviderPopulationTarget } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import {
   ProviderManager,
   ProviderContentGenerator,
@@ -209,10 +210,8 @@ describe('explicit provider primitive owners', () => {
         managerReleases.push(() => ownedOAuth.dispose());
         transferredTokens = true;
         populateProviderManager({
-          manager,
-          oauthManager: ownedOAuth,
-          tokenStore: tokens,
-          settings: selectedSettings,
+          target: createProviderPopulationTarget(manager, ownedOAuth, tokens),
+          readSetting: (key) => selectedSettings.get(key),
           fileSystem: new NodeFileSystem(),
           configuration: { kind: 'pre-config' },
           contributions: { kind: 'none' },
@@ -364,10 +363,8 @@ describe('explicit provider primitive owners', () => {
         managerReleases.push(() => ownedOAuth2.dispose());
         transferredTokens2 = true;
         populateProviderManager({
-          manager,
-          oauthManager: ownedOAuth2,
-          tokenStore: tokens2,
-          settings: selectedSettings2,
+          target: createProviderPopulationTarget(manager, ownedOAuth2, tokens2),
+          readSetting: (key) => selectedSettings2.get(key),
           fileSystem: new NodeFileSystem(),
           configuration: { kind: 'pre-config' },
           contributions: { kind: 'none' },
@@ -442,10 +439,8 @@ describe('explicit provider primitive owners', () => {
         managerReleases.push(() => ownedOAuth3.dispose());
         transferredTokens3 = true;
         populateProviderManager({
-          manager,
-          oauthManager: ownedOAuth3,
-          tokenStore: tokens3,
-          settings: selectedSettings3,
+          target: createProviderPopulationTarget(manager, ownedOAuth3, tokens3),
+          readSetting: (key) => selectedSettings3.get(key),
           fileSystem: new NodeFileSystem(),
           configuration: { kind: 'pre-config' },
           contributions: { kind: 'none' },
@@ -516,10 +511,8 @@ describe('explicit provider primitive owners', () => {
         managerReleases.push(() => ownedOAuth4.dispose());
         transferredTokens4 = true;
         populateProviderManager({
-          manager,
-          oauthManager: ownedOAuth4,
-          tokenStore: tokens4,
-          settings: selectedSettings4,
+          target: createProviderPopulationTarget(manager, ownedOAuth4, tokens4),
+          readSetting: (key) => selectedSettings4.get(key),
           fileSystem: new NodeFileSystem(),
           configuration: { kind: 'pre-config' },
           contributions: { kind: 'none' },
@@ -607,10 +600,8 @@ describe('explicit provider primitive owners', () => {
         managerReleases.push(() => ownedOAuth5.dispose());
         transferredTokens5 = true;
         populateProviderManager({
-          manager,
-          oauthManager: ownedOAuth5,
-          tokenStore: tokens5,
-          settings: selectedSettings5,
+          target: createProviderPopulationTarget(manager, ownedOAuth5, tokens5),
+          readSetting: (key) => selectedSettings5.get(key),
           fileSystem: new NodeFileSystem(),
           configuration: { kind: 'pre-config' },
           contributions: { kind: 'none' },

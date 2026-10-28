@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createProviderPopulationTarget } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import type { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { createOwnerPolicyEvaluation } from '@vybestack/llxprt-code-core/policy/owner-policy-evaluation.js';
@@ -43,9 +44,13 @@ export interface PreflightResources {
   readonly profileReads: ReturnType<typeof createPreflightOAuthProfileReads>;
 }
 
-export interface PreflightProviders {
-  readonly manager: ProviderManager;
-  readonly oauth: OAuthManager;
+export interface PreflightProviderInputs {
+  readonly host: AgentPreflightHostInput;
+  readonly settings: SettingsService;
+  readonly authority: CredentialAuthority;
+  readonly contributions: ProviderContributionRegistry | undefined;
+  readonly oauthSettings: IOAuthSettingsProvider | undefined;
+  readonly fakeResponses: string | undefined;
 }
 
 export function acquirePreflightResources(
@@ -68,52 +73,58 @@ export function acquirePreflightResources(
   };
 }
 
-export function acquirePreflightProviders(
+export function acquirePreflightManager(
   resources: PreflightResources,
-  inputs: {
-    readonly host: AgentPreflightHostInput;
-    readonly settings: SettingsService;
-    readonly authority: CredentialAuthority;
-    readonly contributions: ProviderContributionRegistry | undefined;
-    readonly oauthSettings: IOAuthSettingsProvider | undefined;
-    readonly fakeResponses: string | undefined;
-  },
-): PreflightProviders {
-  const {
-    host,
-    settings,
-    authority,
-    contributions,
-    oauthSettings,
-    fakeResponses,
-  } = inputs;
-  const manager = acquireRuntimeProviderManager(resources.release, {
+  inputs: PreflightProviderInputs,
+): ProviderManager {
+  return acquireRuntimeProviderManager(resources.release, {
     files: resources.files,
-    proxy: host.proxy,
-    settings,
+    proxy: inputs.host.proxy,
+    settings: inputs.settings,
     config: undefined,
     settingsOwner: undefined,
-    context: capturePreflightRuntimeContext(host, 'pre-config'),
-    authority,
+    context: capturePreflightRuntimeContext(inputs.host, 'pre-config'),
+    authority: inputs.authority,
   });
-  const oauth = acquireRuntimeOAuth(resources.release, {
-    provider: manager,
-    readPolicy: createSessionAuthPolicyReader(settings),
-    authority,
+}
+
+export function acquirePreflightOAuth(
+  manager: ProviderManager,
+  resources: PreflightResources,
+  inputs: PreflightProviderInputs,
+): OAuthManager {
+  return acquireRuntimeOAuth(resources.release, {
+    provider: {
+      getProviderByName: (name) => manager.getProviderByName(name),
+      fetchNetwork: (input, init) => manager.fetchNetwork(input, init),
+      getAuthIdentity: () => manager.getAuthIdentity(),
+    },
+    readPolicy: createSessionAuthPolicyReader(inputs.settings),
+    authority: inputs.authority,
     oauth: {
       suppliedStore: undefined,
-      readSettings: retainOAuthSettings(oauthSettings),
+      readSettings: retainOAuthSettings(inputs.oauthSettings),
       messageBus: resources.bus,
       profileReads: resources.profileReads,
       readIdentity: readProviderAuthIdentity,
       requestInteractiveAuth: undefined,
     },
   });
+}
+
+export function populatePreflightProviders(
+  manager: ProviderManager,
+  oauth: OAuthManager,
+  inputs: PreflightProviderInputs,
+): void {
+  const { contributions, fakeResponses } = inputs;
   populateProviderManager({
-    manager,
-    oauthManager: oauth,
-    tokenStore: oauth.getTokenStore(),
-    settings,
+    target: createProviderPopulationTarget(
+      manager,
+      oauth,
+      oauth.getTokenStore(),
+    ),
+    readSetting: (key) => inputs.settings.get(key),
     fileSystem: new NodeFileSystem(),
     configuration: { kind: 'pre-config' },
     contributions:
@@ -128,5 +139,4 @@ export function acquirePreflightProviders(
         ? { kind: 'disabled' }
         : { kind: 'replay', path: fakeResponses },
   });
-  return { manager, oauth };
 }

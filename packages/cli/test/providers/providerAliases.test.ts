@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createProviderPopulationTarget } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 
 const { ProviderManager: ConcreteProviderManager } = await import(
@@ -154,10 +155,12 @@ describe('explicit provider primitive owners', () => {
         managerReleases.push(() => ownedOAuth.dispose());
         transferredTokens = true;
         populateProviderManager({
-          manager: ownedManager,
-          oauthManager: ownedOAuth,
-          tokenStore: tokens,
-          settings: selectedSettings,
+          target: createProviderPopulationTarget(
+            ownedManager,
+            ownedOAuth,
+            tokens,
+          ),
+          readSetting: (key) => selectedSettings.get(key),
           fileSystem: new NodeFileSystem(),
           configuration:
             selectedConfig === undefined

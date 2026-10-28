@@ -1,3 +1,4 @@
+import { createProviderPopulationTarget } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -136,10 +137,12 @@ describe('Codex effective context limit runtime integration', () => {
   it('updates the live effective limit across Astra, Sol, and Spark model selection', async () => {
     await openCaller(RUNTIME_ID, 'issue3576-session', 'gpt-5.6-sol');
     populateProviderManager({
-      manager,
-      oauthManager: oauth,
-      tokenStore: oauth.getTokenStore(),
-      settings,
+      target: createProviderPopulationTarget(
+        manager,
+        oauth,
+        oauth.getTokenStore(),
+      ),
+      readSetting: (key) => settings.get(key),
       fileSystem: new NodeFileSystem(),
       configuration: { kind: 'configured', config },
       contributions: { kind: 'none' },

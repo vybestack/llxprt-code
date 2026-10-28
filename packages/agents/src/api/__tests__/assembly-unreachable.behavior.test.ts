@@ -28,6 +28,7 @@ const ASSEMBLY_CLASS_NAMES = [
   'ForegroundAssembly',
   'PreferredAgentAssembly',
   'AdoptedAgentAssembly',
+  'AdoptedProviderAssembly',
   'AgentActivationBootstrap',
 ] as const;
 

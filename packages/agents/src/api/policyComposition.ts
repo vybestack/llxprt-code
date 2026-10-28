@@ -22,7 +22,10 @@ import {
   NodeFileSystem,
   type ProviderContributionRegistry,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import { populateProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
+import {
+  populateProviderManager,
+  createProviderPopulationTarget,
+} from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { rethrowAfterCleanup } from '../session/session-client-cleanup.js';
 
@@ -116,10 +119,12 @@ export function registerProvidersOntoManager(
   fakeResponses: string | undefined,
 ): void {
   populateProviderManager({
-    manager: isolatedManager,
-    oauthManager,
-    tokenStore: oauthManager.getTokenStore(),
-    settings: settingsService,
+    target: createProviderPopulationTarget(
+      isolatedManager,
+      oauthManager,
+      oauthManager.getTokenStore(),
+    ),
+    readSetting: (key) => settingsService.get(key),
     fileSystem: new NodeFileSystem(),
     configuration: { kind: 'configured', config },
     contributions:
