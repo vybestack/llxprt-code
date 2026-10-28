@@ -181,14 +181,14 @@ describe('Agent-owned CLI client tools', () => {
     await Promise.all([a.entered.promise, b.entered.promise]);
     expect(a.effects).toStrictEqual(['alpha']);
     expect(b.effects).toStrictEqual(['beta']);
-    await waitFor(() =>
+    await waitFor(() => {
       expect(
         a.hook.result.current[0].map((call) => call.request.callId),
-      ).toStrictEqual(['a']),
-    );
-    expect(
-      b.hook.result.current[0].map((call) => call.request.callId),
-    ).toStrictEqual(['b']);
+      ).toStrictEqual(['a']);
+      expect(
+        b.hook.result.current[0].map((call) => call.request.callId),
+      ).toStrictEqual(['b']);
+    });
     a.hook.unmount();
     let disposed = false;
     const disposal = a.agent.dispose().then(() => {

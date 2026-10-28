@@ -37,6 +37,8 @@ import { parseSamples } from '../memory/sample.ts';
 import { assertBoundedPostClearRetention } from './memory/retention-checkpoints.ts';
 import { withShortUiWorkspace } from '../short-ui-workspace.js';
 import { cleanupScenarioProcessGroup } from '../interactive-ui-process-group.ts';
+import memoryRetentionScript from '../tmux-script.issue3386-memory-retention.fake.json';
+import { synchronizeShellInput } from './interactive-ui-input.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../..');
@@ -83,7 +85,10 @@ function runHarness(
   welcomeState: WelcomeState = 'completed',
   workingDirectory = projectRoot,
 ): HarnessResult {
-  const scriptPath = path.join(projectRoot, 'scripts', scriptName);
+  const scriptPath =
+    scriptName === 'tmux-script.issue3386-memory-retention.fake.json'
+      ? path.join(getArtifactDir(testName), 'synchronized-input.json')
+      : path.join(projectRoot, 'scripts', scriptName);
   const harnessPath = path.join(projectRoot, 'scripts/tmux-harness.ts');
   const artifactDir = getArtifactDir(testName);
   const welcomeConfigPath = path.join(artifactDir, 'welcome-config.json');
@@ -97,6 +102,13 @@ function runHarness(
     );
   }
   artifactDirs.push(artifactDir);
+  if (scriptName === 'tmux-script.issue3386-memory-retention.fake.json') {
+    writeFileSync(
+      scriptPath,
+      JSON.stringify(synchronizeShellInput(memoryRetentionScript), null, 2),
+      'utf8',
+    );
+  }
 
   const result = spawnSync(
     process.execPath,

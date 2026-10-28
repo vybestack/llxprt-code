@@ -45,6 +45,21 @@ describe('bracketed paste decoding (AC4)', () => {
     });
   });
 
+  it('preserves a command after a pending Escape and accepts Enter after decoding settles', () => {
+    const keys: ParsedKey[] = [];
+    const push = createKeypressPipeline((key) => keys.push(key));
+    push('\x1b');
+    push('\x1b[200~/quit\x1b[201~');
+    vi.advanceTimersByTime(200);
+    push('\r');
+    expect(
+      keys.map((key) => [key.name, key.sequence, key.shift]),
+    ).toStrictEqual([
+      ['paste', '/quit', false],
+      ['return', '\r', false],
+    ]);
+  });
+
   it('an empty paste emits no key at all (AC4.2)', () => {
     const keys = feed(['\x1b[200~\x1b[201~']);
     expect(keys).toHaveLength(0);
