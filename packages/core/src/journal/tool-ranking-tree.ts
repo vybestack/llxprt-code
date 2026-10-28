@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { mapRowStream } from './mapped-row-stream.js';
 import { JournalFormatError } from './errors.js';
 import type { IdFactQueries } from './idFactQueries.js';
 import type { IdFactBatch } from './idFactBatch.js';
@@ -25,6 +26,16 @@ export interface ToolRankNode extends ToolRank {
   readonly count: number;
   readonly total: number;
 }
+function projectRank(node: ToolRank): ToolRank {
+  return {
+    id: node.id,
+    label: node.label,
+    ordinal: node.ordinal,
+    block: node.block,
+    score: node.score,
+    saving: node.saving,
+  };
+}
 function view(bytes: Uint8Array): DataView {
   return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }
@@ -50,25 +61,29 @@ export class ToolRankingTree {
     );
   }
 
-  async node(id: number): Promise<ToolRankNode> {
-    if (id === 0) throw new RangeError('Empty tool ranking child');
-    const bytes = await this.facts.getEntry(namespace, this.key(['node', id]));
-    if (bytes?.length !== TOOL_RANK_NODE_BYTES)
-      throw new JournalFormatError('Missing tool ranking node');
-    const data = view(bytes);
-    return {
-      id,
-      label: data.getBigUint64(0, true),
-      ordinal: data.getUint32(8, true),
-      block: data.getUint32(12, true),
-      score: data.getFloat64(16, true),
-      saving: data.getFloat64(24, true),
-      left: data.getUint32(32, true),
-      right: data.getUint32(36, true),
-      height: data.getUint32(40, true),
-      count: data.getUint32(44, true),
-      total: data.getFloat64(48, true),
-    };
+  node(id: number): Promise<ToolRankNode> {
+    if (id === 0)
+      return Promise.reject(new RangeError('Empty tool ranking child'));
+    return this.facts
+      .getEntry(namespace, this.key(['node', id]))
+      .then((bytes) => {
+        if (bytes?.length !== TOOL_RANK_NODE_BYTES)
+          throw new JournalFormatError('Missing tool ranking node');
+        const data = view(bytes);
+        return {
+          id,
+          label: data.getBigUint64(0, true),
+          ordinal: data.getUint32(8, true),
+          block: data.getUint32(12, true),
+          score: data.getFloat64(16, true),
+          saving: data.getFloat64(24, true),
+          left: data.getUint32(32, true),
+          right: data.getUint32(36, true),
+          height: data.getUint32(40, true),
+          count: data.getUint32(44, true),
+          total: data.getFloat64(48, true),
+        };
+      });
   }
   async header(): Promise<{
     root: number;
@@ -95,40 +110,79 @@ export class ToolRankingTree {
       saving: data.getFloat64(12, true),
     };
   }
-  async at(root: number, index: number): Promise<ToolRank> {
+  at(root: number, index: number): Promise<ToolRank> {
     if (!Number.isSafeInteger(index) || index < 0)
-      throw new RangeError('Invalid tool rank');
-    let id = root;
-    let rank = index;
-    while (id !== 0) {
-      const node = await this.node(id);
-      const left = node.left === 0 ? 0 : (await this.node(node.left)).count;
-      if (rank === left) return node;
-      if (rank < left) id = node.left;
-      else {
-        rank -= left + 1;
-        id = node.right;
-      }
-    }
-    throw new RangeError('Tool rank is outside the index');
+      return Promise.reject(new RangeError('Invalid tool rank'));
+    const visit = (id: number, rank: number): Promise<ToolRank> => {
+      if (id === 0)
+        return Promise.reject(new RangeError('Tool rank is outside the index'));
+      return this.node(id).then((node) =>
+        select(id, node.left, node.right, rank),
+      );
+    };
+    const select = (
+      id: number,
+      left: number,
+      right: number,
+      rank: number,
+    ): Promise<ToolRank> => {
+      const count =
+        left === 0
+          ? Promise.resolve(0)
+          : this.node(left).then((node) => node.count);
+      return count.then((size) => {
+        if (rank === size) return this.node(id).then(projectRank);
+        if (rank < size) return visit(left, rank);
+        return visit(right, rank - size - 1);
+      });
+    };
+    return visit(root, index);
   }
-  async *ordered(root: number): AsyncGenerator<ToolRank> {
-    if (root === 0) return;
-    const node = await this.node(root);
-    yield* this.ordered(node.left);
-    yield node;
-    yield* this.ordered(node.right);
+  ordered(root: number): AsyncGenerator<ToolRank, void, unknown> {
+    const pending: Array<{ id: number; emit: boolean }> = [];
+    if (root !== 0) pending.push({ id: root, emit: false });
+    const ids = {
+      [Symbol.asyncIterator]() {
+        return this;
+      },
+      next: (): Promise<IteratorResult<number, void>> => {
+        const advance = (): Promise<IteratorResult<number, void>> => {
+          const next = pending.pop();
+          if (next === undefined)
+            return Promise.resolve({ done: true, value: undefined });
+          if (next.emit)
+            return Promise.resolve({ done: false, value: next.id });
+          return this.node(next.id)
+            .then((node) => {
+              if (node.right !== 0)
+                pending.push({ id: node.right, emit: false });
+              pending.push({ id: node.id, emit: true });
+              if (node.left !== 0) pending.push({ id: node.left, emit: false });
+            })
+            .then(advance);
+        };
+        return advance();
+      },
+      return: (): Promise<IteratorResult<number, void>> => {
+        pending.length = 0;
+        return Promise.resolve({ done: true, value: undefined });
+      },
+    };
+    return mapRowStream(ids, (id) => this.node(id).then(projectRank));
   }
-  async position(label: bigint, block: number): Promise<ToolRank | undefined> {
-    const bytes = await this.facts.getEntry(
-      namespace,
-      this.key(['position', String(label), block]),
-    );
-    if (bytes === undefined) return undefined;
-    if (bytes.length !== 4)
-      throw new JournalFormatError('Invalid tool ranking position');
-    const node = await this.node(view(bytes).getUint32(0, true));
-    return node.label === label && node.block === block ? node : undefined;
+  position(label: bigint, block: number): Promise<ToolRank | undefined> {
+    return this.facts
+      .getEntry(namespace, this.key(['position', String(label), block]))
+      .then((bytes) => {
+        if (bytes === undefined) return undefined;
+        if (bytes.length !== 4)
+          throw new JournalFormatError('Invalid tool ranking position');
+        return this.node(view(bytes).getUint32(0, true)).then((node) =>
+          node.label === label && node.block === block
+            ? projectRank(node)
+            : undefined,
+        );
+      });
   }
 }
 
