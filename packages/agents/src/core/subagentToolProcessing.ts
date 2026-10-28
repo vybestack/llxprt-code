@@ -50,6 +50,11 @@ import {
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { assembleSchedulerOwner } from '../session/assembleSchedulerOwner.js';
+import { persistApprovalLifecycle } from './agenticLoop/approvalLifecycleRecording.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { responseToolIdentity } from './responseArrival.js';
+import type { SchedulerCallbacks } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
+import type { SessionSchedulerOwner } from '../session/sessionSchedulerOwner.js';
 import { isToolNameRestricted } from './hookToolRestrictions.js';
 import { SCOPE_LOCAL_EMIT_TOOL_NAME } from './toolGovernance.js';
 
@@ -522,6 +527,7 @@ export function buildPartsFromCompletedCalls(
 // ---------------------------------------------------------------------------
 
 export interface ProcessFunctionCallsContext {
+  history: Pick<HistoryService, 'appendDisplay'>;
   output: OutputObject;
   outputConfig?: OutputConfig;
   subagentId: string;
@@ -648,6 +654,7 @@ export async function processFunctionCalls(
         isClientInitiated: true,
         prompt_id: promptId,
         agentId: ctx.subagentId,
+        journalIdentity: responseToolIdentity(functionCall),
       };
 
       ctx.logger.debug(
@@ -796,31 +803,36 @@ async function executeNonInteractiveTool(
     };
   }
 
-  const messageBus = ctx.messageBus;
-  const registry = ctx.toolExecutorContext.getToolRegistry();
-  if (registry === undefined) throw new Error('Missing child tool selection');
   const completed = await executeToolCall(
-    (callbacks) => {
-      if (!messageBus)
-        throw new Error('Child tool execution requires its message bus');
-      return assembleSchedulerOwner(ctx.subagentId, {
-        telemetry: ctx.toolExecutorContext.telemetry,
-        config: ctx.config,
-        messageBus,
-        toolRegistry: registry,
-        readApprovalMode: ctx.toolExecutorContext.readApprovalMode,
-        getToolGovernance: () => ctx.toolExecutorContext.readGovernance(),
-        readExecutionPolicy: () =>
-          ctx.toolExecutorContext.readExecutionPolicy(),
-        toolContextInteractiveMode: false,
-        ...callbacks,
-      });
-    },
+    (callbacks) => createNonInteractiveSchedulerOwner(ctx, callbacks),
     requestInfo,
     abortController.signal,
     ctx.hookOwner,
   );
   return { status: completed.status, response: completed.response };
+}
+
+function createNonInteractiveSchedulerOwner(
+  ctx: ProcessFunctionCallsContext,
+  callbacks: SchedulerCallbacks,
+): SessionSchedulerOwner {
+  const messageBus = ctx.messageBus;
+  const registry = ctx.toolExecutorContext.getToolRegistry();
+  if (registry === undefined) throw new Error('Missing child tool selection');
+  if (!messageBus)
+    throw new Error('Child tool execution requires its message bus');
+  return assembleSchedulerOwner(ctx.subagentId, {
+    telemetry: ctx.toolExecutorContext.telemetry,
+    config: ctx.config,
+    messageBus,
+    toolRegistry: registry,
+    readApprovalMode: ctx.toolExecutorContext.readApprovalMode,
+    getToolGovernance: () => ctx.toolExecutorContext.readGovernance(),
+    readExecutionPolicy: () => ctx.toolExecutorContext.readExecutionPolicy(),
+    toolContextInteractiveMode: false,
+    ...callbacks,
+    persistApproval: (record) => persistApprovalLifecycle(record, ctx.history),
+  });
 }
 
 function logToolResult(
