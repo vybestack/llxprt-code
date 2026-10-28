@@ -114,6 +114,7 @@ function StatusBarLeftPrompt(props: InlineContentProps) {
         contextFileNames={props.contextFileNames}
         mcpServers={props.config.getMcpServers()}
         blockedMcpServers={props.config.getBlockedMcpServers()}
+        skillCount={props.config.skillOperations?.list().length ?? 0}
         showToolDescriptions={props.showToolDescriptions}
       />
     );

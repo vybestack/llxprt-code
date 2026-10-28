@@ -39,6 +39,7 @@ import { withShortUiWorkspace } from '../short-ui-workspace.js';
 import { cleanupScenarioProcessGroup } from '../interactive-ui-process-group.ts';
 import memoryRetentionScript from '../tmux-script.issue3386-memory-retention.fake.json' with { type: 'json' };
 import { synchronizeShellInput } from './interactive-ui-input.ts';
+import { assertJournalBorders } from './journal-render-assertions.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../..');
@@ -184,6 +185,57 @@ afterAll(() => {
 });
 
 describe('Interactive UI (tmux harness)', () => {
+  for (const alternate of [false, true]) {
+    for (const [cols, rows] of [
+      [160, 45],
+      [100, 30],
+    ]) {
+      runTmuxE2E(
+        `journal tool groups retain complete borders at ${cols}x${rows} (alternate=${alternate})`,
+        () => {
+          const testName = `journal-render-${cols}-${alternate}`;
+          assertHarnessSuccess(
+            runHarness(
+              'tmux-script.journal-render.fake.json',
+              testName,
+              ['--cols', String(cols), '--rows', String(rows)],
+              alternate
+                ? {
+                    LLXPRT_UI_RENDER_SETTINGS: path.join(
+                      projectRoot,
+                      'scripts/fixtures/journal-render-settings.json',
+                    ),
+                  }
+                : {},
+            ),
+          );
+          const directory = getArtifactDir(testName);
+          const captures = readdirSync(directory).filter((file) =>
+            file.endsWith('-scrollback.txt'),
+          );
+          expect(captures.length).toBeGreaterThanOrEqual(5);
+          for (const file of captures)
+            assertJournalBorders(
+              readFileSync(path.join(directory, file), 'utf8'),
+            );
+          const finalFile = captures.find((file) =>
+            file.endsWith('-final-scrollback.txt'),
+          );
+          if (finalFile === undefined)
+            throw new Error('Missing final transcript capture');
+          const final = readFileSync(path.join(directory, finalFile), 'utf8');
+          expect(final.match(/RENDER_FINAL:/g)).toHaveLength(1);
+          expect(final).not.toMatch(/\| 0 skills?/);
+          expect(final).toMatch(/\b[1-9]\d{0,5} skills/);
+          if (!alternate) {
+            expect(final.match(/Tips for getting started:/g)).toHaveLength(1);
+            expect(final.match(/RENDER-LINE-40/g)).toHaveLength(1);
+          }
+        },
+        300_000,
+      );
+    }
+  }
   runTmuxE2E(
     'clean startup renders a non-blank first frame with the composer',
     () => {
