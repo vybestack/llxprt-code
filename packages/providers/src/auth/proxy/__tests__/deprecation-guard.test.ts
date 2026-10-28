@@ -132,7 +132,6 @@ describe('Deprecation Guards (P36)', () => {
   const projectRoot = path.resolve(__dirname, '../../../../../..');
   const packagesRoot = path.resolve(projectRoot, 'packages');
   const cliSrcRoot = path.join(packagesRoot, 'cli', 'src');
-  const providersSrcRoot = path.join(packagesRoot, 'providers', 'src');
   const providersAuthRoot = path.join(packagesRoot, 'providers', 'src', 'auth');
 
   describe('R2.3: No Direct KeyringTokenStore Instantiation at Consumer Sites', () => {
@@ -234,55 +233,6 @@ describe('Deprecation Guards (P36)', () => {
 
       expect(matches.length).toBe(1);
       expect(matches[0]).toContain('credential-store-factory.ts');
-    });
-
-    it('consumer modules should use the credential factory, not construct stores directly', () => {
-      // Runtime context creation uses a per-owner credential store from the
-      // factory; the provider-manager composition root uses the shared store.
-      // Neither consumer constructs a token store directly.
-      // These are: runtimeContextFactory.ts and providerManagerInstance.ts.
-      // authCommand.ts must consume the registered runtime OAuthManager instead
-      // of creating a partial fallback manager.
-
-      const runtimeMatches = grepFiles(
-        '.createTokenStore(',
-        '*.ts',
-        path.resolve(packagesRoot, 'agents', 'src', 'api'),
-        ['node_modules', 'dist', '__tests__'],
-      );
-
-      const providerMatches = grepFiles(
-        '.createTokenStore(',
-        '*.ts',
-        path.resolve(providersSrcRoot, 'composition'),
-        ['node_modules', 'dist', '__tests__'],
-      );
-
-      const commandMatches = grepFiles(
-        '.createTokenStore(',
-        '*.ts',
-        path.resolve(cliSrcRoot, 'ui/commands'),
-        ['node_modules', 'dist', '__tests__'],
-      );
-
-      // At least one consumer in each category that creates OAuthManager should
-      // use the factory; the auth command should no longer create OAuthManager.
-      const hasRuntimeFactoryImport = runtimeMatches.some((m) =>
-        m.includes('preferred-provider-acquisition.ts'),
-      );
-      const hasProviderFactoryImport = providerMatches.some((m) =>
-        m.includes('providerManagerInstance.ts'),
-      );
-      const commandStillReferencesFactory = commandMatches.some((m) =>
-        m.includes('authCommand.ts'),
-      );
-
-      expect(hasRuntimeFactoryImport).toBe(true);
-      expect(hasProviderFactoryImport).toBe(false);
-      expect(
-        runtimeMatches.some((match) => match.includes('profile-preflight.ts')),
-      ).toBe(true);
-      expect(commandStillReferencesFactory).toBe(false);
     });
   });
 

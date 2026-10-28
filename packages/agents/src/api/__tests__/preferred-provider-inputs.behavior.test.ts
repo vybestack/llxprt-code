@@ -68,6 +68,37 @@ describe('preferred provider primitive selections', () => {
     },
   );
 
+  it('acquires independent credential transports through the supplied authority and retires only its own stores', async () => {
+    const options = {
+      provider: 'openai',
+      model: 'credential-owner-model',
+      workingDir: directory,
+      credentialAuthority: credentials().authority,
+      harness: { includeProcessCwd: false },
+    };
+    const first = await createAgent(options);
+    try {
+      const second = await createAgent(options);
+      try {
+        expect(credentials().snapshot()).toStrictEqual([0, 0]);
+        expect(credentials().keySnapshot()).toStrictEqual([0, 0]);
+        await first.dispose();
+        expect(credentials().snapshot()).toStrictEqual([1, 0]);
+        expect(credentials().keySnapshot()).toStrictEqual([1, 0]);
+        const status = await second.auth.detailedStatus('anthropic');
+        expect(status.oauthEnabled).toBe(true);
+        expect(status.authenticated).toBe(false);
+        expect(await credentials().listProviders(1)).toStrictEqual([]);
+      } finally {
+        await second.dispose();
+      }
+    } finally {
+      await first.dispose();
+    }
+    expect(credentials().snapshot()).toStrictEqual([1, 1]);
+    expect(credentials().keySnapshot()).toStrictEqual([1, 1]);
+  });
+
   it('populates real contributed aliases only on the selected root and retains concrete provider model behavior', async () => {
     const providerContributions = buildProviderContributionRegistry([
       {
