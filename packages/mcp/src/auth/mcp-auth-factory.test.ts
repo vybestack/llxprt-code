@@ -4,17 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import type { OAuthClientMetadata } from '@modelcontextprotocol/sdk/shared/auth.js';
 import type { MCPServerConfig } from '../config/mcpServerConfig.js';
 import type { McpAuthProvider } from './auth-provider.js';
 import type { McpAuthFactoryContribution } from './mcp-auth-factory.js';
-import {
-  buildMcpAuthFactoryRegistry,
-  getRegisteredMcpAuthFactoryRegistry,
-  registerMcpAuthFactories,
-  resetRegisteredMcpAuthFactories,
-} from './mcp-auth-factory.js';
+import { buildMcpAuthFactoryRegistry } from './mcp-auth-factory.js';
 
 const FAKE_CLIENT_METADATA: OAuthClientMetadata = {
   client_name: 'test (fake)',
@@ -62,10 +57,6 @@ function contribution(
 }
 
 describe('buildMcpAuthFactoryRegistry', () => {
-  afterEach(() => {
-    resetRegisteredMcpAuthFactories();
-  });
-
   it('resolves a contributed factory by authProviderType', () => {
     const factory = (config: MCPServerConfig): McpAuthProvider =>
       new FakeAuthProvider(config);
@@ -115,71 +106,5 @@ describe('buildMcpAuthFactoryRegistry', () => {
       (types as string[]).push('injected');
     }).toThrow(TypeError);
     expect(registry.listAuthProviderTypes()).toStrictEqual(['a', 'b']);
-  });
-});
-
-describe('registerMcpAuthFactories', () => {
-  afterEach(() => {
-    resetRegisteredMcpAuthFactories();
-  });
-  it('is empty before anything is registered', () => {
-    const registry = getRegisteredMcpAuthFactoryRegistry();
-
-    expect(
-      registry.getAuthProviderFactory('google_credentials'),
-    ).toBeUndefined();
-    expect(registry.listAuthProviderTypes()).toStrictEqual([]);
-  });
-
-  it('exposes registered contributions through the registered registry', () => {
-    const provider = new FakeAuthProvider();
-    registerMcpAuthFactories([contribution('custom_auth', provider)]);
-
-    const registry = getRegisteredMcpAuthFactoryRegistry();
-    const factory = registry.getAuthProviderFactory('custom_auth');
-    expect(factory).toBeTypeOf('function');
-
-    const config: MCPServerConfig = { url: 'https://example.test' };
-    expect(factory?.(config)).toBe(provider);
-    expect(provider.config).toBe(config);
-  });
-
-  it('replaces a previously registered set with a later registration', () => {
-    const alphaProvider = new FakeAuthProvider();
-    registerMcpAuthFactories([contribution('alpha_auth', alphaProvider)]);
-
-    const betaProvider = new FakeAuthProvider();
-    registerMcpAuthFactories([contribution('beta_auth', betaProvider)]);
-
-    const registry = getRegisteredMcpAuthFactoryRegistry();
-    expect(registry.listAuthProviderTypes()).toStrictEqual(['beta_auth']);
-
-    const betaFactory = registry.getAuthProviderFactory('beta_auth');
-    expect(betaFactory).toBeTypeOf('function');
-
-    const config: MCPServerConfig = { url: 'https://example.test' };
-    expect(betaFactory?.(config)).toBe(betaProvider);
-    expect(betaProvider.config).toBe(config);
-    expect(registry.getAuthProviderFactory('alpha_auth')).toBeUndefined();
-  });
-
-  it('rejects duplicate authProviderTypes at registration time, naming the type', () => {
-    expect(() =>
-      registerMcpAuthFactories([
-        contribution('custom_auth'),
-        contribution('CUSTOM_AUTH'),
-      ]),
-    ).toThrow(/custom_auth/i);
-  });
-
-  it('resets to the empty registry for test isolation', () => {
-    registerMcpAuthFactories([contribution('custom_auth')]);
-    resetRegisteredMcpAuthFactories();
-
-    expect(
-      getRegisteredMcpAuthFactoryRegistry().getAuthProviderFactory(
-        'custom_auth',
-      ),
-    ).toBeUndefined();
   });
 });
