@@ -76,19 +76,19 @@ export async function observeFakeProviderRegistration(): Promise<{
         release,
       );
       const tokens = oauth.getTokenStore();
-      populateProviderManager(
+      populateProviderManager({
         manager,
-        oauth,
-        tokens,
+        oauthManager: oauth,
+        tokenStore: tokens,
         settings,
-        new NodeFileSystem(),
-        config,
-        undefined,
-        undefined,
-        true,
-        true,
-        fixturePath,
-      );
+        fileSystem: new NodeFileSystem(),
+        configuration: { kind: 'configured', config },
+        contributions: { kind: 'none' },
+        messages: { kind: 'none' },
+        allowBrowser: true,
+        activateConfiguredProvider: true,
+        fakeResponses: { kind: 'replay', path: fixturePath },
+      });
       observation = {
         registeredProviderNames: manager.listProviders(),
         activeProviderName: manager.getActiveProviderName(),

@@ -507,19 +507,55 @@ export function createOwnedOAuthManager(
   );
 }
 
-export function populateProviderManager(
-  manager: ProviderManager,
-  oauthManager: OAuthManager,
-  tokenStore: TokenStore,
-  settings: RuntimeSettingsState,
-  fileSystem: IFileSystem,
-  config: Config | undefined,
-  providerContributions: ProviderContributionRegistry | undefined,
-  addItem: OAuthUICallback | undefined,
-  allowBrowser: boolean,
-  activateConfiguredProvider: boolean,
-  fakeResponsesPath: string | undefined,
-): void {
+export interface ProviderPopulationInput {
+  readonly manager: ProviderManager;
+  readonly oauthManager: OAuthManager;
+  readonly tokenStore: TokenStore;
+  readonly settings: RuntimeSettingsState;
+  readonly fileSystem: IFileSystem;
+  readonly configuration:
+    | { readonly kind: 'pre-config' }
+    | { readonly kind: 'configured'; readonly config: Config };
+  readonly contributions:
+    | { readonly kind: 'none' }
+    | {
+        readonly kind: 'supplied';
+        readonly registry: ProviderContributionRegistry;
+      };
+  readonly messages:
+    | { readonly kind: 'none' }
+    | { readonly kind: 'attached'; readonly callback: OAuthUICallback };
+  readonly allowBrowser: boolean;
+  readonly activateConfiguredProvider: boolean;
+  readonly fakeResponses:
+    | { readonly kind: 'disabled' }
+    | { readonly kind: 'replay'; readonly path: string };
+}
+
+export function populateProviderManager(input: ProviderPopulationInput): void {
+  const {
+    manager,
+    oauthManager,
+    tokenStore,
+    settings,
+    fileSystem,
+    allowBrowser,
+    activateConfiguredProvider,
+  } = input;
+  const config =
+    input.configuration.kind === 'configured'
+      ? input.configuration.config
+      : undefined;
+  const providerContributions =
+    input.contributions.kind === 'supplied'
+      ? input.contributions.registry
+      : undefined;
+  const addItem =
+    input.messages.kind === 'attached' ? input.messages.callback : undefined;
+  const fakeResponsesPath =
+    input.fakeResponses.kind === 'replay'
+      ? input.fakeResponses.path
+      : undefined;
   const user = resolveUserSettings(fileSystem);
   bindOwnerRetryOperations(manager, oauthManager);
   if (tryActivateFakeProvider(manager, config, fakeResponsesPath)) return;

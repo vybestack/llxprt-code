@@ -135,19 +135,19 @@ describe('Codex effective context limit runtime integration', () => {
 
   it('updates the live effective limit across Astra, Sol, and Spark model selection', async () => {
     await openCaller(RUNTIME_ID, 'issue3576-session', 'gpt-5.6-sol');
-    populateProviderManager(
+    populateProviderManager({
       manager,
-      oauth,
-      oauth.getTokenStore(),
+      oauthManager: oauth,
+      tokenStore: oauth.getTokenStore(),
       settings,
-      new NodeFileSystem(),
-      config,
-      undefined,
-      undefined,
-      false,
-      true,
-      undefined,
-    );
+      fileSystem: new NodeFileSystem(),
+      configuration: { kind: 'configured', config },
+      contributions: { kind: 'none' },
+      messages: { kind: 'none' },
+      allowBrowser: false,
+      activateConfiguredProvider: true,
+      fakeResponses: { kind: 'disabled' },
+    });
     const runtime = createProviderRuntimeContext({
       runtimeId: RUNTIME_ID,
       metadata: { stage: 'cli-bootstrap' },

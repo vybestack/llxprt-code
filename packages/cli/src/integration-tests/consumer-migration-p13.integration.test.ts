@@ -208,19 +208,22 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth.dispose());
         transferredTokens = true;
-        populateProviderManager(
+        populateProviderManager({
           manager,
-          ownedOAuth,
-          tokens,
-          selectedSettings,
-          new NodeFileSystem(),
-          selectedConfig,
-          undefined,
-          undefined,
-          true,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+          oauthManager: ownedOAuth,
+          tokenStore: tokens,
+          settings: selectedSettings,
+          fileSystem: new NodeFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: true,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         // The manager must be an instance of the concrete ProviderManager class
         expect(manager).toBeInstanceOf(ProviderManager);
@@ -360,19 +363,22 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth2.dispose());
         transferredTokens2 = true;
-        populateProviderManager(
+        populateProviderManager({
           manager,
-          ownedOAuth2,
-          tokens2,
-          selectedSettings2,
-          new NodeFileSystem(),
-          selectedConfig2,
-          undefined,
-          undefined,
-          true,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+          oauthManager: ownedOAuth2,
+          tokenStore: tokens2,
+          settings: selectedSettings2,
+          fileSystem: new NodeFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: true,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         const providerA = createTestProvider('provider-a', 'model-a');
         const providerB = createTestProvider('provider-b', 'model-b');
@@ -435,19 +441,22 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth3.dispose());
         transferredTokens3 = true;
-        populateProviderManager(
+        populateProviderManager({
           manager,
-          ownedOAuth3,
-          tokens3,
-          selectedSettings3,
-          new NodeFileSystem(),
-          selectedConfig3,
-          undefined,
-          undefined,
-          true,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+          oauthManager: ownedOAuth3,
+          tokenStore: tokens3,
+          settings: selectedSettings3,
+          fileSystem: new NodeFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: true,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         // ProviderContentGenerator must be constructable using the
         // concrete ProviderManager from the providers package
@@ -506,19 +515,22 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth4.dispose());
         transferredTokens4 = true;
-        populateProviderManager(
+        populateProviderManager({
           manager,
-          ownedOAuth4,
-          tokens4,
-          selectedSettings4,
-          new NodeFileSystem(),
-          selectedConfig4,
-          undefined,
-          undefined,
-          true,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+          oauthManager: ownedOAuth4,
+          tokenStore: tokens4,
+          settings: selectedSettings4,
+          fileSystem: new NodeFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: true,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         // The concrete ProviderManager from providers must structurally satisfy
         // the core RuntimeProviderManager contract without a shim or adapter
@@ -594,19 +606,22 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth5.dispose());
         transferredTokens5 = true;
-        populateProviderManager(
+        populateProviderManager({
           manager,
-          ownedOAuth5,
-          tokens5,
-          selectedSettings5,
-          new NodeFileSystem(),
-          selectedConfig5,
-          undefined,
-          undefined,
-          true,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+          oauthManager: ownedOAuth5,
+          tokenStore: tokens5,
+          settings: selectedSettings5,
+          fileSystem: new NodeFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: true,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         const testProvider = createTestProvider(
           'factory-provider',

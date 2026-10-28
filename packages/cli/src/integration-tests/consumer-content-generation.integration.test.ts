@@ -327,19 +327,22 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth8.dispose());
         transferredTokens8 = true;
-        populateProviderManager(
+        populateProviderManager({
           manager,
-          ownedOAuth8,
-          tokens8,
-          selectedSettings8,
-          new NodeFileSystem(),
-          selectedConfig8,
-          undefined,
-          undefined,
-          true,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+          oauthManager: ownedOAuth8,
+          tokenStore: tokens8,
+          settings: selectedSettings8,
+          fileSystem: new NodeFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: true,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         const testProvider = createTestProvider('test-provider', 'test-model');
         manager.registerProvider(testProvider);

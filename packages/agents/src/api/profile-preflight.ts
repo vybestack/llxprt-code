@@ -198,19 +198,25 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     );
     const manager = this.#manager;
     const oauth = this.#oauth;
-    populateProviderManager(
+    populateProviderManager({
       manager,
-      oauth,
-      oauth.getTokenStore(),
-      this.#settings,
-      new NodeFileSystem(),
-      undefined,
-      contributions,
-      undefined,
-      false,
-      true,
-      fakeResponses,
-    );
+      oauthManager: oauth,
+      tokenStore: oauth.getTokenStore(),
+      settings: this.#settings,
+      fileSystem: new NodeFileSystem(),
+      configuration: { kind: 'pre-config' },
+      contributions:
+        contributions === undefined
+          ? { kind: 'none' }
+          : { kind: 'supplied', registry: contributions },
+      messages: { kind: 'none' },
+      allowBrowser: false,
+      activateConfiguredProvider: true,
+      fakeResponses:
+        fakeResponses === undefined
+          ? { kind: 'disabled' }
+          : { kind: 'replay', path: fakeResponses },
+    });
   }
 
   retainProviderFile(

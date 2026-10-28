@@ -193,19 +193,19 @@ describe('provider manager runtime OAuth MessageBus composition', () => {
       explicitRelease,
       undefined,
     );
-    populateProviderManager(
+    populateProviderManager({
       manager,
-      oauth,
-      oauth.getTokenStore(),
+      oauthManager: oauth,
+      tokenStore: oauth.getTokenStore(),
       settings,
-      new NodeFileSystem(),
-      config,
-      undefined,
-      undefined,
-      false,
-      true,
-      undefined,
-    );
+      fileSystem: new NodeFileSystem(),
+      configuration: { kind: 'configured', config },
+      contributions: { kind: 'none' },
+      messages: { kind: 'none' },
+      allowBrowser: false,
+      activateConfiguredProvider: true,
+      fakeResponses: { kind: 'disabled' },
+    });
     explicitComplete = true;
     expect(new Set([manager, isolatedManager]).size).toBe(2);
     expect(new Set([oauth, isolatedOAuth]).size).toBe(2);

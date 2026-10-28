@@ -115,17 +115,23 @@ export function registerProvidersOntoManager(
   contributions: ProviderContributionRegistry | undefined,
   fakeResponses: string | undefined,
 ): void {
-  populateProviderManager(
-    isolatedManager,
+  populateProviderManager({
+    manager: isolatedManager,
     oauthManager,
-    oauthManager.getTokenStore(),
-    settingsService,
-    new NodeFileSystem(),
-    config,
-    contributions,
-    undefined,
-    false,
-    false,
-    fakeResponses,
-  );
+    tokenStore: oauthManager.getTokenStore(),
+    settings: settingsService,
+    fileSystem: new NodeFileSystem(),
+    configuration: { kind: 'configured', config },
+    contributions:
+      contributions === undefined
+        ? { kind: 'none' }
+        : { kind: 'supplied', registry: contributions },
+    messages: { kind: 'none' },
+    allowBrowser: false,
+    activateConfiguredProvider: false,
+    fakeResponses:
+      fakeResponses === undefined
+        ? { kind: 'disabled' }
+        : { kind: 'replay', path: fakeResponses },
+  });
 }

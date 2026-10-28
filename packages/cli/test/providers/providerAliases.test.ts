@@ -153,19 +153,25 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth.dispose());
         transferredTokens = true;
-        populateProviderManager(
-          ownedManager,
-          ownedOAuth,
-          tokens,
-          selectedSettings,
-          new NodeFileSystem(),
-          selectedConfig,
-          undefined,
-          undefined,
-          false,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          manager: ownedManager,
+          oauthManager: ownedOAuth,
+          tokenStore: tokens,
+          settings: selectedSettings,
+          fileSystem: new NodeFileSystem(),
+          configuration:
+            selectedConfig === undefined
+              ? { kind: 'pre-config' }
+              : { kind: 'configured', config: selectedConfig },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: false,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
         providerManager = ownedManager;
       });
 
