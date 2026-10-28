@@ -1,3 +1,4 @@
+import { ConfigurationManager } from '@vybestack/llxprt-code-telemetry';
 import { createObservationOwner } from '../observation/jspWiring.js';
 import { createTerminalHost } from './terminalHost.js';
 let terminalHost = createTerminalHost();
@@ -116,6 +117,7 @@ describe('interactive UI key handle ownership', () => {
         producer: null,
         subscribeTodos: () => () => {},
       }).callbacks,
+      debugConfiguration: ConfigurationManager.create(),
       terminalHost,
       providerKeys,
     });
@@ -149,6 +151,7 @@ describe('interactive UI key handle ownership', () => {
           producer: null,
           subscribeTodos: () => () => {},
         }).callbacks,
+        debugConfiguration: ConfigurationManager.create(),
         terminalHost,
         providerKeys,
       });
@@ -246,6 +249,7 @@ describe('interactive UI key handle ownership', () => {
           producer: null,
           subscribeTodos: () => () => {},
         }).callbacks,
+        debugConfiguration: ConfigurationManager.create(),
         terminalHost,
         providerKeys,
       });

@@ -25,7 +25,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import {
   debugLogger,
-  ConfigurationManager,
+  type ConfigurationManager,
   DebugLogger,
 } from '@vybestack/llxprt-code-telemetry';
 import { runExitCleanup } from './utils/cleanup.js';
@@ -47,7 +47,9 @@ export function validateDnsResolutionOrder(
   return defaultValue;
 }
 
-export function configureEarlyDebugLogging(): void {
+export function configureEarlyDebugLogging(
+  configuration: Pick<ConfigurationManager, 'setCliConfig'>,
+): void {
   const bootstrapParsed = parseBootstrapArgs();
   const debugArg = coerceDebugFlag(
     bootstrapParsed.bootstrapArgs.debug ?? undefined,
@@ -57,7 +59,7 @@ export function configureEarlyDebugLogging(): void {
     return;
   }
   const namespaces = typeof debugArg === 'string' ? debugArg : 'llxprt:*';
-  ConfigurationManager.getInstance().setCliConfig({
+  configuration.setCliConfig({
     enabled: true,
     namespaces: namespaces
       .split(',')

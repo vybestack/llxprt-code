@@ -1,3 +1,4 @@
+import { ConfigurationManager } from '@vybestack/llxprt-code-telemetry';
 import { createObservationOwner } from '../observation/jspWiring.js';
 import { createTerminalHost } from '../session/terminalHost.js';
 /**
@@ -22,7 +23,10 @@ import {
 import { InMemoryProviderKeyHandle } from './provider-key-handle-fixture.js';
 
 type WithoutKeys<T> = T extends unknown
-  ? Omit<T, 'providerKeys' | 'terminalHost' | 'observation'>
+  ? Omit<
+      T,
+      'providerKeys' | 'terminalHost' | 'observation' | 'debugConfiguration'
+    >
   : never;
 
 /**
@@ -51,6 +55,7 @@ export function startInteractiveUIForTest(
         producer: null,
         subscribeTodos: () => () => {},
       }).callbacks,
+      debugConfiguration: ConfigurationManager.create(),
       terminalHost: createTerminalHost(),
       providerKeys: new InMemoryProviderKeyHandle(),
     },
@@ -70,6 +75,7 @@ export function commitInteractiveStartupForTest(
       producer: null,
       subscribeTodos: () => () => {},
     }).callbacks,
+    debugConfiguration: ConfigurationManager.create(),
     terminalHost: createTerminalHost(),
     providerKeys: new InMemoryProviderKeyHandle(),
   });

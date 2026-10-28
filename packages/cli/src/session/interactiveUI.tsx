@@ -42,7 +42,8 @@ import { basename } from 'node:path';
 import { type LoadedSettings } from '../config/settings.js';
 import {
   debugLogger,
-  ConfigurationManager,
+  type ConfigurationManager,
+  DebugLogger,
 } from '@vybestack/llxprt-code-telemetry';
 import { getCliVersion } from '../utils/version.js';
 import { enableMouseEvents, disableMouseEvents } from '../ui/utils/mouse.js';
@@ -79,22 +80,26 @@ import { InteractiveContextHost } from '../runtime/InteractiveContextHost.js';
 import { buildInteractiveUiPorts } from './interactiveUiPorts.js';
 import { type InteractiveCommandPorts } from '../ui/cliCommandPorts.js';
 
-function handleError(error: Error, errorInfo: ErrorInfo) {
+function handleError(
+  error: Error,
+  errorInfo: ErrorInfo,
+  logger: Pick<DebugLogger, 'error'>,
+) {
   appendInteractiveUiDebug(
     `error-boundary ${error.message}\n${error.stack ?? ''}\n${errorInfo.componentStack}`,
   );
   // Log to console for debugging
-  debugLogger.error('Application Error:', error);
-  debugLogger.error('Component Stack:', errorInfo.componentStack);
+  logger.error('Application Error:', error);
+  logger.error('Component Stack:', errorInfo.componentStack);
 
   // Special handling for maximum update depth errors
   if (error.message.includes('Maximum update depth exceeded')) {
-    debugLogger.error('\nCRITICAL: RENDER LOOP DETECTED!');
-    debugLogger.error('This is likely caused by:');
-    debugLogger.error('- State updates during render');
-    debugLogger.error('- Incorrect useEffect dependencies');
-    debugLogger.error('- Non-memoized props causing re-renders');
-    debugLogger.error('\nCheck recent changes to React components and hooks.');
+    logger.error('\nCRITICAL: RENDER LOOP DETECTED!');
+    logger.error('This is likely caused by:');
+    logger.error('- State updates during render');
+    logger.error('- Incorrect useEffect dependencies');
+    logger.error('- Non-memoized props causing re-renders');
+    logger.error('\nCheck recent changes to React components and hooks.');
   }
 }
 
@@ -247,7 +252,7 @@ function buildRenderElement(
   const contextHost = new InteractiveContextHost(agent, () =>
     runtimeSettings.readDefaultProfileName(),
   );
-  return renderInteractiveShell(
+  return (
     <AppWrapper
       {...new InteractiveApplication({
         containerApp: commandPorts.containerApp,
@@ -305,8 +310,7 @@ function buildRenderElement(
         operationLifecycle: perfOwner?.registry,
         memoryController: perfOwner?.memoryController ?? undefined,
       }).createAppProps()}
-    />,
-    settings,
+    />
   );
 }
 
@@ -345,6 +349,7 @@ export type InteractiveProviderKeys = ProviderKeyStorageLike & {
 export interface OwnerInteractiveStartup {
   readonly terminalHost: TerminalHost;
   readonly observation: ObservationCallbacks;
+  readonly debugConfiguration: ConfigurationManager;
   readonly providerKeys: InteractiveProviderKeys;
   readonly runtimeSettings: SessionSettingsOperations;
   readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
@@ -360,6 +365,7 @@ export interface OwnerInteractiveStartup {
 export interface RawInteractiveStartup {
   readonly terminalHost: TerminalHost;
   readonly observation: ObservationCallbacks;
+  readonly debugConfiguration: ConfigurationManager;
   readonly providerKeys: InteractiveProviderKeys;
   readonly recordingOwner: 'raw';
   readonly runtimeSettings: SessionSettingsOperations;
@@ -522,6 +528,7 @@ interface StartupTransactionState {
 export type CommitInteractiveStartupArgs = {
   readonly terminalHost: TerminalHost;
   readonly observation: ObservationCallbacks;
+  readonly debugConfiguration: ConfigurationManager;
   readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
   readonly skillOperations?: Pick<
     WorkspaceSkillOperations,
@@ -630,7 +637,7 @@ function startupCommandRuntimes(
   operations: ReturnType<typeof startupBucketOperations>,
 ) {
   const commandPorts = ports.buildCommandPorts({
-    debug: bindDebugCommand(ConfigurationManager.getInstance()),
+    debug: bindDebugCommand(args.debugConfiguration),
     source: args.config,
     agent: args.agent,
     bucketFailover: operations,
@@ -674,23 +681,27 @@ export async function commitInteractiveStartup(
     ports.setupTerminal(renderOptions, args.settings);
 
     state.instance = ports.render(
-      <ObservationContext.Provider value={args.observation}>
-        {buildRenderElement(
-          commandPorts,
-          args.agent,
-          args.runtimeSettings,
-          args.settings,
-          args.startupWarnings,
-          args.version,
-          args.recordingIntegration,
-          args.resumedHistory,
-          args.initialRecordingService,
-          args.initialLockHandle,
-          args.suppressStartupWelcome,
-          args.perfOwner,
-          args.recordingOwner,
-        )}
-      </ObservationContext.Provider>,
+      renderInteractiveShell(
+        <ObservationContext.Provider value={args.observation}>
+          {buildRenderElement(
+            commandPorts,
+            args.agent,
+            args.runtimeSettings,
+            args.settings,
+            args.startupWarnings,
+            args.version,
+            args.recordingIntegration,
+            args.resumedHistory,
+            args.initialRecordingService,
+            args.initialLockHandle,
+            args.suppressStartupWelcome,
+            args.perfOwner,
+            args.recordingOwner,
+          )}
+        </ObservationContext.Provider>,
+        args.settings,
+        new DebugLogger('llxprt:interactive', args.debugConfiguration),
+      ),
       renderOptions,
     );
 
@@ -775,10 +786,16 @@ async function initializeInteractivePresentation(
 function renderInteractiveShell(
   element: React.ReactElement,
   settings: LoadedSettings,
+  logger: Pick<DebugLogger, 'error'>,
 ): React.ReactElement {
+  const errorHandler = {
+    handle(error: Error, info: ErrorInfo): void {
+      handleError(error, info, logger);
+    },
+  };
   return (
     <React.StrictMode>
-      <ErrorBoundary onError={handleError}>
+      <ErrorBoundary onError={errorHandler.handle}>
         <SettingsContext.Provider value={settings}>
           {element}
         </SettingsContext.Provider>

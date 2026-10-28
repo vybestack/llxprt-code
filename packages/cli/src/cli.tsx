@@ -83,7 +83,10 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
 
 import { parseArguments } from './config/cliArgParser.js';
 import { loadSettings, type LoadedSettings } from './config/settings.js';
-import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import {
+  debugLogger,
+  ConfigurationManager,
+} from '@vybestack/llxprt-code-telemetry';
 import { applySandboxBashrc } from './utils/sandbox-bashrc.js';
 import {
   runStartupMigration,
@@ -128,8 +131,10 @@ import {
   constructAgentWithSpinner,
   prepareTerminalSession,
 } from './cliTerminalSession.js';
-import type { ForegroundAdmission } from './cliAgentBootstrap.js';
-import type { SessionSettingsOperations } from './runtime/createRuntimeOwnerFeatures.js';
+import {
+  createForegroundOwner,
+  type ForegroundOwnerOperations,
+} from './session/foregroundOwner.js';
 import { maybeHopIntoSandbox } from './cliSandbox.js';
 import {
   exitAfterSessionListOrDelete,
@@ -271,47 +276,6 @@ function hasExplicitProviderProfileSelector(argv: ParsedCliArgs): boolean {
  * and the telemetry flush and disposal the host itself performs. The rest of
  * the preflight stays with the code that creates and finishes it.
  */
-interface ForegroundOwnerOperations {
-  readonly admission: ForegroundAdmission;
-  readonly runtimeSettings: SessionSettingsOperations;
-  flushTelemetry(): Promise<void>;
-  dispose(): Promise<void>;
-}
-
-/**
- * Projects the preflight onto the operations the foreground session owner
- * calls, so the session host and the terminal session never receive the
- * preflight itself.
- */
-function createForegroundOwner(
-  preflight: AgentProfilePreflight,
-): ForegroundOwnerOperations {
-  return {
-    admission: {
-      admitForegroundAgent: (token, intent, host) =>
-        preflight.admitForegroundAgent(token, intent, host),
-    },
-    runtimeSettings: {
-      logUserPrompt: (config, event) => preflight.logUserPrompt(config, event),
-      logSlashCommand: (config, event) =>
-        preflight.logSlashCommand(config, event),
-      isTelemetryEnabled: () => preflight.isTelemetryEnabled(),
-      flushTelemetry: () => preflight.flushTelemetry(),
-      readNamedParameter: (key) => preflight.readNamedParameter(key),
-      readDefaultProfileName: () => preflight.readDefaultProfileName(),
-      readTelemetrySettings: () => preflight.readTelemetrySettings(),
-      updateTelemetrySettings: (settings) =>
-        preflight.updateTelemetrySettings(settings),
-      readConversationLoggingEnabled: () =>
-        preflight.readConversationLoggingEnabled(),
-      subscribeModelChanges: (listener) =>
-        preflight.subscribeModelChanges(listener),
-    },
-    flushTelemetry: () => preflight.flushTelemetry(),
-    dispose: () => preflight.dispose(),
-  };
-}
-
 /**
  * Construct the SINGLE foreground Agent (#2378) and dispatch the interactive or
  * non-interactive session. The spinner wraps agent construction, which (via
@@ -331,21 +295,33 @@ class ForegroundSessionHost {
       >
     | undefined;
   constructor(
-    private readonly config: Config,
-    private readonly settings: LoadedSettings,
-    private readonly argv: ParsedCliArgs,
-    private readonly workspaceRoot: string,
-    providerActivation: ConfiguredProviderActivationResult,
-    private readonly owner: ForegroundOwnerOperations,
-    private readonly hasPipedInput: boolean,
-    private readonly readStdinData: () => Promise<string>,
-    private readonly bootstrapSelection: BootstrapSelection | null,
-    getMcpAuthProviderFactory: NonNullable<
-      AgentForegroundHost['mcpHost']
-    >['getAuthProviderFactory'],
-    private readonly credentialAuthority: CredentialAuthority,
-    private readonly terminalHost: TerminalHost,
+    private readonly inputs: {
+      config: Config;
+      settings: LoadedSettings;
+      argv: ParsedCliArgs;
+      workspaceRoot: string;
+      providerActivation: ConfiguredProviderActivationResult;
+      owner: ForegroundOwnerOperations;
+      hasPipedInput: boolean;
+      readStdinData: () => Promise<string>;
+      bootstrapSelection: BootstrapSelection | null;
+      getMcpAuthProviderFactory: NonNullable<
+        AgentForegroundHost['mcpHost']
+      >['getAuthProviderFactory'];
+      credentialAuthority: CredentialAuthority;
+      terminalHost: TerminalHost;
+      debugConfiguration: ConfigurationManager;
+    },
   ) {
+    const {
+      config,
+      settings,
+      argv,
+      providerActivation,
+      owner,
+      credentialAuthority,
+      getMcpAuthProviderFactory,
+    } = inputs;
     configureUnicodeSupport(settings.merged.ui.unicode ?? 'auto');
     const receipt = providerActivation.token;
     if (receipt === undefined)
@@ -374,22 +350,22 @@ class ForegroundSessionHost {
     );
     const warnings: string[] = [];
     const { history, observation } = await setupOwnerSessionRecording(
-      this.config,
+      this.inputs.config,
       agent.session,
       agent.session.listBrowserTargetsDetailed.bind(agent.session),
-      this.argv,
-      this.bootstrapSelection,
+      this.inputs.argv,
+      this.inputs.bootstrapSelection,
       warnings,
     );
-    const input = this.config.getQuestion();
+    const input = this.inputs.config.getQuestion();
     await dispatchInteractiveOrNonInteractive(
       input,
       () =>
-        typeof this.config.isInteractive === 'function' &&
-        this.config.isInteractive(),
+        typeof this.inputs.config.isInteractive === 'function' &&
+        this.inputs.config.isInteractive(),
       'agent',
       warnings,
-      () => getUserStartupWarnings(this.settings.merged),
+      () => getUserStartupWarnings(this.inputs.settings.merged),
       async (startupWarnings) => {
         await this.launchInteractive(
           startupWarnings,
@@ -397,27 +373,27 @@ class ForegroundSessionHost {
           observation.callbacks,
         );
       },
-      () => this.config.getOutputFormat(),
+      () => this.inputs.config.getOutputFormat(),
       (initialInput) =>
         runPipedOrPromptSession(
           initialInput,
-          this.hasPipedInput,
-          this.readStdinData,
+          this.inputs.hasPipedInput,
+          this.inputs.readStdinData,
           () => this.validateRun(),
           () => agent.hooks.triggerSessionStart(),
           (reason) => agent.hooks.triggerSessionEnd(reason),
-          (error) => reportNonInteractiveError(this.config, error),
-          () => this.owner.flushTelemetry(),
+          (error) => reportNonInteractiveError(this.inputs.config, error),
+          () => this.inputs.owner.flushTelemetry(),
         ),
     );
-    registerCleanup(() => this.owner.dispose());
+    registerCleanup(() => this.inputs.owner.dispose());
   }
   private async validateRun(): Promise<ValidatedNonInteractiveRun> {
     const agent = await this.#foreground;
     const validated = await validateNonInteractiveAuth(
-      this.settings.merged.useExternalAuth,
-      this.config,
-      this.settings,
+      this.inputs.settings.merged.useExternalAuth,
+      this.inputs.config,
+      this.inputs.settings,
       runExitCleanup,
       agent.hasActiveProvider,
       (key, value) => agent.setEphemeralSetting(key, value),
@@ -466,7 +442,7 @@ class ForegroundSessionHost {
           () => getActiveProviderNameForApiError(validated),
           (provider) => getErrorFallbackModel(validated, provider),
         ),
-        () => this.owner.flushTelemetry(),
+        () => this.inputs.owner.flushTelemetry(),
       ),
       report: (error) => reportNonInteractiveError(validated, error),
     };
@@ -521,21 +497,25 @@ class ForegroundSessionHost {
   ): Promise<void> {
     const agent = await this.#foreground;
     await startInteractiveUI(
-      this.config,
+      this.inputs.config,
       agent,
-      this.settings,
+      this.inputs.settings,
       warnings,
-      this.workspaceRoot,
+      this.inputs.workspaceRoot,
       {
+        debugConfiguration: this.inputs.debugConfiguration,
         observation,
-        terminalHost: this.terminalHost,
-        providerKeys: this.credentialAuthority.createProviderKeyStorage(),
+        terminalHost: this.inputs.terminalHost,
+        providerKeys:
+          this.inputs.credentialAuthority.createProviderKeyStorage(),
         recordingOwner: 'agent',
-        runtimeSettings: this.owner.runtimeSettings,
+        runtimeSettings: this.inputs.owner.runtimeSettings,
         skillOperations: this.#skillOperations,
         restartExtension: this.#restartExtension,
         resumedHistory: history ?? undefined,
-        suppressStartupWelcome: hasExplicitProviderProfileSelector(this.argv),
+        suppressStartupWelcome: hasExplicitProviderProfileSelector(
+          this.inputs.argv,
+        ),
       },
     );
   }
@@ -775,7 +755,8 @@ async function prepareConfiguredTerminalSession(
 export async function main() {
   const capturedEnvPath = captureBootstrapEnvPath();
   const terminalHost = createTerminalHost();
-  configureEarlyDebugLogging();
+  const debugConfiguration = ConfigurationManager.create();
+  configureEarlyDebugLogging(debugConfiguration);
   await handleVersionAndHelpFlags(process.argv.slice(2));
 
   const { cleanupStdio, workspaceRoot, settings, argv, credentialOwner } =
@@ -847,20 +828,22 @@ export async function main() {
     // Cleanup sessions before agent construction.
     await cleanupForegroundSessions(config, settings, preflight);
 
-    await new ForegroundSessionHost(
+    await new ForegroundSessionHost({
       config,
       settings,
       argv,
       workspaceRoot,
       providerActivation,
-      createForegroundOwner(preflight),
+      owner: createForegroundOwner(preflight),
       hasPipedInput,
-      readStdinOnce,
+      readStdinData: readStdinOnce,
       bootstrapSelection,
-      (type) => authFactories.getAuthProviderFactory(type),
-      authority,
+      getMcpAuthProviderFactory: (type) =>
+        authFactories.getAuthProviderFactory(type),
+      credentialAuthority: authority,
       terminalHost,
-    ).run();
+      debugConfiguration,
+    }).run();
     preflightHandedOff = true;
   } finally {
     if (!preflightHandedOff) await preflight.dispose();

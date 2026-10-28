@@ -87,14 +87,14 @@ describe('registered session utility owners', () => {
   it('keeps the registered debug configuration when another configuration is acquired', async () => {
     ConfigurationManager.resetForTesting();
     try {
-      const owner = ConfigurationManager.getInstance();
+      const owner = ConfigurationManager.create();
       owner.setEphemeralConfig({ enabled: false, namespaces: [] });
       const command = await registered('debug', {
         ...createUnconfiguredBuiltinOwners(),
         debugCommand: createDebugCommand(bindDebugCommand(owner)),
       });
       ConfigurationManager.resetForTesting();
-      const sibling = ConfigurationManager.getInstance();
+      const sibling = ConfigurationManager.create();
       sibling.setEphemeralConfig({ enabled: false, namespaces: [] });
       const enable = command.subCommands?.find(
         (entry) => entry.name === 'enable',
