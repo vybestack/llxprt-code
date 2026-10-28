@@ -97,6 +97,7 @@ export class ToolCallPipeline {
           firstTruthyString(accepted.id, `call_${index}`),
         ),
         name: this.normalizeToolName(accepted.name),
+        nameMode: 'replace',
         arguments: accepted.args ?? '',
       },
     };

@@ -31,6 +31,7 @@ export function* completeChatToolArguments(
               sourceId: String(call.index),
               id: block.id,
               name: block.name,
+              nameMode: 'replace',
               arguments: '',
               complete: true,
               replacementArguments: JSON.stringify(block.parameters),

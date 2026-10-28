@@ -13,6 +13,7 @@ import {
 
 function chunks(
   gate: (index: number) => Promise<void>,
+  names: ReadonlyArray<string | undefined> = ['lookup'],
 ): AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk> {
   async function* source(): AsyncGenerator<OpenAI.Chat.Completions.ChatCompletionChunk> {
     for (let index = 0; index < pieces.length; index++) {
@@ -37,7 +38,9 @@ function chunks(
                       }
                     : {}),
                   function: {
-                    ...(index === 0 ? { name: 'lookup' } : {}),
+                    ...(names[index] === undefined
+                      ? {}
+                      : { name: names[index] }),
                     arguments: pieces[index],
                   },
                 },
@@ -63,9 +66,12 @@ function chunks(
 
 describe('OpenAI Chat tool argument disk arrival', () => {
   for (const format of ['openai', 'mistral', 'kimi']) {
-    const factory = (gate: (index: number) => Promise<void>) =>
+    const factory = (
+      gate: (index: number) => Promise<void>,
+      names?: ReadonlyArray<string | undefined>,
+    ) =>
       processStreamingResponse(
-        chunks(gate),
+        chunks(gate, names),
         'test',
         format,
         undefined,
@@ -82,6 +88,14 @@ describe('OpenAI Chat tool argument disk arrival', () => {
       expect(await runDiskArrival(factory, false)).toStrictEqual([
         { ...expected, id: 'hist_tool_frozen' },
       ]);
+    });
+    it(`preserves last-name-wins ${format} parity after raw arguments arrive`, async () => {
+      expect(
+        await runDiskArrival(
+          (gate) => factory(gate, ['wrong_name', 'lookup']),
+          false,
+        ),
+      ).toStrictEqual([{ ...expected, id: 'hist_tool_frozen' }]);
     });
     it(`rejects the retaining ${format} control`, async () => {
       await expect(runDiskArrival(factory, true)).rejects.toThrow(

@@ -4,6 +4,7 @@ export interface ToolArgumentDelta {
   readonly sourceId: string;
   readonly id: string;
   readonly name: string;
+  readonly nameMode?: 'replace';
   readonly arguments: string;
   readonly complete?: boolean;
   readonly replacementArguments?: string;

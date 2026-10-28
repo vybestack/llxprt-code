@@ -146,7 +146,9 @@ class JournalResponseArrival implements ResponseArrival {
       delta.sourceId,
     );
     await this.recorder.appendText(handle, 'id', delta.id, 'snapshot');
-    await this.recorder.appendText(handle, 'name', delta.name, 'snapshot');
+    if (delta.nameMode === 'replace')
+      await this.recorder.replaceField(handle, 'name', delta.name);
+    else await this.recorder.appendText(handle, 'name', delta.name, 'snapshot');
     await this.recorder.appendText(handle, 'parameters', delta.arguments);
     if (delta.replacementArguments !== undefined)
       await this.recorder.replaceField(
