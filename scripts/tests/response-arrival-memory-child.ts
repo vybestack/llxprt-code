@@ -268,9 +268,9 @@ if (mode !== 'direct' && mode !== 'streaming')
 const root = await mkdtemp(join(tmpdir(), 'response-arrival-memory-'));
 const keepAlive = setInterval(() => undefined, 1000);
 try {
-  // Exercise the largest measured path before the baseline so lazy compilation
-  // is not charged only to the large member of each pair.
-  await probe(join(root, 'warm'), 384, false, mode);
+  // Warm every production stage with the small workload; a large warm-up in
+  // every child otherwise dominates the paired measurement's runtime.
+  await probe(join(root, 'warm'), 32, false, mode);
   const result = await probe(
     join(root, 'measured'),
     chunks,
