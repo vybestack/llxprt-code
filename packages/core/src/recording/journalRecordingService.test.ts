@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { fstatSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -6,6 +7,7 @@ import { parseCheckpointDescriptor } from '../journal/checkpointDescriptor.js';
 import { testJournalSeams } from '../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import type { CommitAck } from '../journal/groupWriter.js';
+import type { RowEntry } from '../journal/rowEntry.js';
 import type { IContent } from '../services/history/IContent.js';
 import { JournalSession } from '../services/history/journalSession.js';
 import {
@@ -177,13 +179,32 @@ describe('journal recording service', () => {
     expect(recording.getFilePath()).toBeNull();
   });
 
-  it('keeps session facts when the rows are popped', async () => {
-    const recording = created();
+  it('keeps session facts when the rows are popped and releases the label reader', async () => {
+    const descriptors: number[] = [];
+    const seams = testJournalSeams();
+    const recording = created({
+      journal: {
+        journal: {
+          ...seams.dependencies,
+          open: async (file, flags) => {
+            const handle = await seams.dependencies.open(file, flags);
+            descriptors.push(handle.fd);
+            return handle;
+          },
+        },
+      },
+    });
     const session = await recording.session();
     await session.append([USER, USER]);
     recording.recordSessionMetadata('kept');
     await recording.flush();
-    const first = (await session.store.rows().next()).value!;
+    const rows = session.store.rows();
+    let first: RowEntry;
+    try {
+      first = (await rows.next()).value!;
+    } finally {
+      await rows.return(undefined);
+    }
     await session.store.commit([
       { kind: 'pop', cutLabel: first.label, expectedRemoved: 2 },
     ]);
@@ -191,6 +212,11 @@ describe('journal recording service', () => {
     expect(
       decodeTitleFact((await stateOf(recording, SESSION_KEYS.title))!),
     ).toBe('kept');
+    await recording.dispose();
+    expect(descriptors.length).toBeGreaterThan(0);
+    for (const fd of descriptors) {
+      expect(() => fstatSync(fd)).toThrow('EBADF');
+    }
   });
 
   it('creates a checkpoint of the version it was asked on, and renames it', async () => {
