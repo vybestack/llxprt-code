@@ -273,7 +273,13 @@ export const productionPolicy: AuditPolicy = {
       file: 'packages/providers/src/BaseProvider.ts',
       declaration: 'BaseProvider.activeCallContext',
       reason:
-        'Per-provider call-option scope carries NormalizedGenerateChatOptions during generation; it does not select an active runtime identity. This is the only exemption within the derived ALS roots, including a2a-server request cancellation.',
+        'Per-provider call-option scope carries NormalizedGenerateChatOptions during generation; it does not select an active runtime identity. No other provider ALS declaration is exempt. The derived ALS roots still include a2a-server request cancellation.',
+    },
+    {
+      file: 'packages/core/src/storage/local-media-store-persistence.ts',
+      declaration: 'storeQueueContext',
+      reason:
+        'Process-local media queue ancestry carries only canonical filesystem roots and active-turn flags to reject same-root reentrancy across store instances and aliases. It carries no runtime identity, settings, or services. FIFO tails remain keyed by canonical root; inherited turns become inactive when work settles.',
     },
   ],
 };
