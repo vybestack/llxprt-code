@@ -127,7 +127,7 @@ export function JournalStandardTranscript({
   );
   const responding = useStoreSelector(
     turn.store,
-    (state) => state.streamingState !== StreamingState.Idle,
+    (state) => state.streamingState === StreamingState.Responding,
   );
   const { emission, live, printed } = useJournalEmission(
     store,
