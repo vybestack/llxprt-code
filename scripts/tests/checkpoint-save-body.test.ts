@@ -119,11 +119,10 @@ async function roundTrip(size: number): Promise<void> {
         root,
         checkpointGit,
         agent,
-        checkpointUiHistory,
         () => {},
       );
       const saved = await savedCheckpoint(root);
-      let loadedUi = '';
+      let loadedUi = JSON.stringify(checkpointUiHistory);
       const context = createMockCommandContext();
       context.services.agent = agent;
       if (context.services.config === null)
@@ -134,8 +133,13 @@ async function roundTrip(size: number): Promise<void> {
         getCheckpointingEnabled: () => true,
       };
       context.services.config = runtime;
-      context.ui.loadHistory = (rows) => {
-        loadedUi = JSON.stringify(rows);
+      context.ui.clear = () => {
+        loadedUi = '';
+      };
+      context.ui.loadHistory = () => {
+        throw new Error(
+          'Restore must project journal rows, not reload a UI copy',
+        );
       };
       const outcome = await restoreCommand(runtime)?.action?.(
         context,
@@ -146,7 +150,8 @@ async function roundTrip(size: number): Promise<void> {
         toolName: checkpointTool.request.name,
         toolArgs: checkpointTool.request.args,
       });
-      expect(loadedUi).toBe(JSON.stringify(checkpointUiHistory));
+      expect(loadedUi).toBe('');
+      expect(saved.bytes).not.toContain('"history":');
       const restored = client.getHistoryService();
       if (restored === null) throw new Error('Missing restored history');
       expect([tokenCountBeforeSave, restored.getTotalTokens()]).toStrictEqual([
