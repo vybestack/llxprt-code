@@ -4,7 +4,10 @@ import {
   pairedEstimate,
   RETAINED_ALLOWANCE_BYTES,
 } from '@vybestack/llxprt-code-test-utils/core/retained-growth.js';
-import { pair, recordArrayProof } from './conversation-array-memory-probe.js';
+import {
+  pair,
+  recordArrayProof,
+} from './__tests__/support/conversation-array-memory-probe.js';
 describe('ConversationManager array caller suspended after durable ack', () => {
   it('fails the same estimator when the actual caller keeps its submitted array', () => {
     const estimate = pairedEstimate(

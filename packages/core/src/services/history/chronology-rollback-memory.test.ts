@@ -4,7 +4,7 @@ import {
   pairedEstimate,
   RETAINED_ALLOWANCE_BYTES,
 } from '@vybestack/llxprt-code-test-utils/core/retained-growth.js';
-import { rollbackMemoryPair } from './chronology-rollback-memory-probe.js';
+import { rollbackMemoryPair } from './__tests__/support/chronology-rollback-memory-probe.js';
 
 describe('suspended chronology rollback transaction memory', () => {
   it('keeps 512/8192-row retained growth within the unchanged 1 MiB allowance', () => {

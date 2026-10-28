@@ -19,7 +19,7 @@ function measure(size: number, method: string, trap: boolean): PairedDelta {
     process.execPath,
     [
       new URL(
-        '../../../../../scripts/tests/token-accounting-memory-child.ts',
+        '../../../../../../../scripts/tests/token-accounting-memory-child.ts',
         import.meta.url,
       ).pathname,
       String(size),

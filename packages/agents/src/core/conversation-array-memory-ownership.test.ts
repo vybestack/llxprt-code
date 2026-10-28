@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { measure } from './conversation-array-memory-probe.js';
+import { measure } from './__tests__/support/conversation-array-memory-probe.js';
 describe('ConversationManager array caller suspended after durable ack', () => {
   it('charges caller, stored and returned owners before and after ack against 440/eight MiB', () => {
     const positive = measure(8192, false);
