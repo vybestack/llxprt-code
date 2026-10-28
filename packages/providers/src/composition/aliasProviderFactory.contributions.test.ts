@@ -6,6 +6,7 @@
 import { ProviderManager } from '../ProviderManager.js';
 
 import {
+  createProviderPopulationTarget,
   populateProviderManager,
   createOwnedOAuthManager,
   refreshAliasProviders,
@@ -592,19 +593,20 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth.dispose());
         transferredTokens = true;
-        populateProviderManager(
-          manager,
-          ownedOAuth,
-          tokens,
-          selectedSettings,
-          new NodeFileSystem(),
-          selectedConfig,
-          contributions,
-          undefined,
-          false,
-          false,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(manager, ownedOAuth, tokens),
+          readSetting: (key) => selectedSettings.get(key),
+          fileSystem: new NodeFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'supplied', registry: contributions },
+          messages: { kind: 'none' },
+          allowBrowser: false,
+          activateConfiguredProvider: false,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         expect(
           await modelIds(registeredProvider(manager, 'refresh-alias')),
@@ -683,19 +685,27 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth2.dispose());
         transferredTokens2 = true;
-        populateProviderManager(
-          ownedManager2,
-          ownedOAuth2,
-          tokens2,
-          selectedSettings2,
-          new NodeFileSystem(),
-          selectedConfig2,
-          await createContributions('plugin-a'),
-          undefined,
-          false,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(
+            ownedManager2,
+            ownedOAuth2,
+            tokens2,
+          ),
+          readSetting: (key) => selectedSettings2.get(key),
+          fileSystem: new NodeFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: {
+            kind: 'supplied',
+            registry: await createContributions('plugin-a'),
+          },
+          messages: { kind: 'none' },
+          allowBrowser: false,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
         const selectedSettings3 = new SettingsService();
         const selectedContext3 = { runtimeId: 'shared' };
         const selectedConfig3 = undefined;
@@ -733,19 +743,27 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth3.dispose());
         transferredTokens3 = true;
-        populateProviderManager(
-          ownedManager3,
-          ownedOAuth3,
-          tokens3,
-          selectedSettings3,
-          new NodeFileSystem(),
-          selectedConfig3,
-          await createContributions('plugin-b'),
-          undefined,
-          false,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(
+            ownedManager3,
+            ownedOAuth3,
+            tokens3,
+          ),
+          readSetting: (key) => selectedSettings3.get(key),
+          fileSystem: new NodeFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: {
+            kind: 'supplied',
+            registry: await createContributions('plugin-b'),
+          },
+          messages: { kind: 'none' },
+          allowBrowser: false,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         ownedManager2.refreshAliases();
         expect(

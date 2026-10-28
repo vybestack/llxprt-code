@@ -6,6 +6,7 @@
 import { ProviderManager } from '../ProviderManager.js';
 
 import {
+  createProviderPopulationTarget,
   populateProviderManager,
   createOwnedOAuthManager,
 } from './providerManagerInstance.js';
@@ -161,19 +162,24 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth.dispose());
         transferredTokens = true;
-        populateProviderManager(
-          ownedManager,
-          ownedOAuth,
-          tokens,
-          selectedSettings,
-          new MockFileSystem(),
-          selectedConfig,
-          undefined,
-          undefined,
-          false,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(
+            ownedManager,
+            ownedOAuth,
+            tokens,
+          ),
+          readSetting: (key) => selectedSettings.get(key),
+          fileSystem: new MockFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: false,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         expect(openaiCtor).toHaveBeenCalled();
         const ctorArgs = openaiCtor.mock.calls[0] as unknown[];
@@ -248,19 +254,24 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth2.dispose());
         transferredTokens2 = true;
-        populateProviderManager(
-          ownedManager2,
-          ownedOAuth2,
-          tokens2,
-          selectedSettings2,
-          fs,
-          selectedConfig2,
-          undefined,
-          undefined,
-          false,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(
+            ownedManager2,
+            ownedOAuth2,
+            tokens2,
+          ),
+          readSetting: (key) => selectedSettings2.get(key),
+          fileSystem: fs,
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: false,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         expect(openaiCtor).toHaveBeenCalled();
         const ctorArgs = openaiCtor.mock.calls[0] as unknown[];

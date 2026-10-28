@@ -6,6 +6,7 @@
 import { ProviderManager } from '../ProviderManager.js';
 
 import {
+  createProviderPopulationTarget,
   populateProviderManager,
   createOwnedOAuthManager,
 } from './providerManagerInstance.js';
@@ -93,19 +94,24 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth.dispose());
         transferredTokens = true;
-        populateProviderManager(
-          ownedManager,
-          ownedOAuth,
-          tokens,
-          selectedSettings,
-          options.fileSystem,
-          selectedConfig,
-          undefined,
-          undefined,
-          false,
-          options.activateConfiguredProvider,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(
+            ownedManager,
+            ownedOAuth,
+            tokens,
+          ),
+          readSetting: (key) => selectedSettings.get(key),
+          fileSystem: options.fileSystem,
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: false,
+          activateConfiguredProvider: options.activateConfiguredProvider,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
         const selectedSettings2 = secondStore;
         const selectedContext2 = { runtimeId: 'same-label' };
         const selectedConfig2 = undefined;
@@ -143,19 +149,24 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth2.dispose());
         transferredTokens2 = true;
-        populateProviderManager(
-          ownedManager2,
-          ownedOAuth2,
-          tokens2,
-          selectedSettings2,
-          options.fileSystem,
-          selectedConfig2,
-          undefined,
-          undefined,
-          false,
-          options.activateConfiguredProvider,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(
+            ownedManager2,
+            ownedOAuth2,
+            tokens2,
+          ),
+          readSetting: (key) => selectedSettings2.get(key),
+          fileSystem: options.fileSystem,
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: false,
+          activateConfiguredProvider: options.activateConfiguredProvider,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
         try {
           expect([
             ownedOAuth.isBrowserDisabled(),

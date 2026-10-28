@@ -6,6 +6,7 @@
 import { ProviderManager } from '../ProviderManager.js';
 
 import {
+  createProviderPopulationTarget,
   populateProviderManager,
   createOwnedOAuthManager,
 } from './providerManagerInstance.js';
@@ -110,19 +111,20 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth5.dispose());
         transferredTokens5 = true;
-        populateProviderManager(
-          manager,
-          ownedOAuth5,
-          tokens5,
-          selectedSettings5,
-          new MockFileSystem(),
-          selectedConfig5,
-          undefined,
-          undefined,
-          true,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(manager, ownedOAuth5, tokens5),
+          readSetting: (key) => selectedSettings5.get(key),
+          fileSystem: new MockFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: true,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         // The manager has real providers registered. A typo'd name must throw
         // with the requested name preserved (not silently swallowed).
@@ -169,19 +171,20 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth6.dispose());
         transferredTokens6 = true;
-        populateProviderManager(
-          manager,
-          ownedOAuth6,
-          tokens6,
-          selectedSettings6,
-          new MockFileSystem(),
-          selectedConfig6,
-          undefined,
-          undefined,
-          true,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(manager, ownedOAuth6, tokens6),
+          readSetting: (key) => selectedSettings6.get(key),
+          fileSystem: new MockFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: true,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         // Verify the error preserves the requested name.
         const captured = captureThrown(() =>
@@ -238,19 +241,24 @@ describe('explicit provider primitive owners', () => {
           );
           managerReleases.push(() => ownedOAuth7.dispose());
           transferredTokens7 = true;
-          populateProviderManager(
-            ownedManager7,
-            ownedOAuth7,
-            tokens7,
-            selectedSettings7,
-            new MockFileSystem(),
-            selectedConfig7,
-            undefined,
-            undefined,
-            true,
-            true,
-            process.env.LLXPRT_FAKE_RESPONSES,
-          );
+          populateProviderManager({
+            target: createProviderPopulationTarget(
+              ownedManager7,
+              ownedOAuth7,
+              tokens7,
+            ),
+            readSetting: (key) => selectedSettings7.get(key),
+            fileSystem: new MockFileSystem(),
+            configuration: { kind: 'pre-config' },
+            contributions: { kind: 'none' },
+            messages: { kind: 'none' },
+            allowBrowser: true,
+            activateConfiguredProvider: true,
+            fakeResponses:
+              process.env.LLXPRT_FAKE_RESPONSES === undefined
+                ? { kind: 'disabled' }
+                : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+          });
         });
         expect(captured.error).toBeInstanceOf(Error);
         // The original underlying error must be preserved as `cause`.

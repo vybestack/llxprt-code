@@ -36,6 +36,7 @@ import {
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createProviderPopulationTarget } from './providerManagerInstance.js';
 
 describe('logout ownership', () => {
   const credentials = useOwnedCredentials();
@@ -137,19 +138,21 @@ describe('logout ownership', () => {
         firstSettings,
         firstConfig,
       );
-      populateProviderManager(
-        firstManager,
-        firstOauth,
-        firstOauth.getTokenStore(),
-        firstSettings,
-        new NodeFileSystem(),
-        firstConfig,
-        undefined,
-        undefined,
-        false,
-        true,
-        undefined,
-      );
+      populateProviderManager({
+        target: createProviderPopulationTarget(
+          firstManager,
+          firstOauth,
+          firstOauth.getTokenStore(),
+        ),
+        readSetting: (key) => firstSettings.get(key),
+        fileSystem: new NodeFileSystem(),
+        configuration: { kind: 'configured', config: firstConfig },
+        contributions: { kind: 'none' },
+        messages: { kind: 'none' },
+        allowBrowser: false,
+        activateConfiguredProvider: true,
+        fakeResponses: { kind: 'disabled' },
+      });
     } else
       await prepareOwnedProviderCompletion(
         firstConfig,
@@ -263,19 +266,21 @@ describe('logout ownership', () => {
         secondSettings,
         secondConfig,
       );
-      populateProviderManager(
-        secondManager,
-        secondOauth,
-        secondOauth.getTokenStore(),
-        secondSettings,
-        new NodeFileSystem(),
-        secondConfig,
-        undefined,
-        undefined,
-        false,
-        true,
-        undefined,
-      );
+      populateProviderManager({
+        target: createProviderPopulationTarget(
+          secondManager,
+          secondOauth,
+          secondOauth.getTokenStore(),
+        ),
+        readSetting: (key) => secondSettings.get(key),
+        fileSystem: new NodeFileSystem(),
+        configuration: { kind: 'configured', config: secondConfig },
+        contributions: { kind: 'none' },
+        messages: { kind: 'none' },
+        allowBrowser: false,
+        activateConfiguredProvider: true,
+        fakeResponses: { kind: 'disabled' },
+      });
     } else
       await prepareOwnedProviderCompletion(
         secondConfig,

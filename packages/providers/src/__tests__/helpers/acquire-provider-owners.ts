@@ -9,7 +9,10 @@ import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { ProviderContributionRegistry } from '../../composition/runtimePlugins/types.js';
 import { NodeFileSystem } from '../../composition/IFileSystem.js';
-import { populateProviderManager } from '../../composition/providerManagerInstance.js';
+import {
+  createProviderPopulationTarget,
+  populateProviderManager,
+} from '../../composition/providerManagerInstance.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -145,19 +148,27 @@ export async function prepareOwnedProviderCompletion(
     settings,
     config,
   );
-  populateProviderManager(
-    manager,
-    oauth,
-    oauth.getTokenStore(),
-    settings,
-    new NodeFileSystem(),
-    config,
-    contributions,
-    undefined,
-    false,
-    false,
-    process.env.LLXPRT_FAKE_RESPONSES,
-  );
+  populateProviderManager({
+    target: createProviderPopulationTarget(
+      manager,
+      oauth,
+      oauth.getTokenStore(),
+    ),
+    readSetting: (key) => settings.get(key),
+    fileSystem: new NodeFileSystem(),
+    configuration: { kind: 'configured', config },
+    contributions:
+      contributions === undefined
+        ? { kind: 'none' }
+        : { kind: 'supplied', registry: contributions },
+    messages: { kind: 'none' },
+    allowBrowser: false,
+    activateConfiguredProvider: false,
+    fakeResponses:
+      process.env.LLXPRT_FAKE_RESPONSES === undefined
+        ? { kind: 'disabled' }
+        : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+  });
   manager.setTokenizerFactory(tokenizer);
   manager.setConfig(config);
 }

@@ -6,6 +6,7 @@
 import { ProviderManager } from '../ProviderManager.js';
 
 import {
+  createProviderPopulationTarget,
   populateProviderManager,
   createOwnedOAuthManager,
 } from './providerManagerInstance.js';
@@ -232,19 +233,24 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => oauthManager.dispose());
         transferredTokens = true;
-        populateProviderManager(
-          ownedManager,
-          oauthManager,
-          tokens,
-          selectedSettings,
-          new NodeFileSystem(),
-          selectedConfig,
-          undefined,
-          undefined,
-          false,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(
+            ownedManager,
+            oauthManager,
+            tokens,
+          ),
+          readSetting: (key) => selectedSettings.get(key),
+          fileSystem: new NodeFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: false,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         const registeredClaudecode =
           ensureOAuthProviderRegisteredMock.mock.calls.some(
@@ -347,19 +353,24 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth2.dispose());
         transferredTokens2 = true;
-        populateProviderManager(
-          ownedManager2,
-          ownedOAuth2,
-          tokens2,
-          selectedSettings2,
-          new NodeFileSystem(),
-          selectedConfig2,
-          undefined,
-          undefined,
-          false,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(
+            ownedManager2,
+            ownedOAuth2,
+            tokens2,
+          ),
+          readSetting: (key) => selectedSettings2.get(key),
+          fileSystem: new NodeFileSystem(),
+          configuration: { kind: 'configured', config: selectedConfig2 },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: false,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         // No alias may receive an API key while authOnly is on — not the alias
         // that happens to be registered first, and not the ones that declare
@@ -452,19 +463,24 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth3.dispose());
         transferredTokens3 = true;
-        populateProviderManager(
-          ownedManager3,
-          ownedOAuth3,
-          tokens3,
-          selectedSettings3,
-          new NodeFileSystem(),
-          selectedConfig3,
-          undefined,
-          undefined,
-          false,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(
+            ownedManager3,
+            ownedOAuth3,
+            tokens3,
+          ),
+          readSetting: (key) => selectedSettings3.get(key),
+          fileSystem: new NodeFileSystem(),
+          configuration: { kind: 'configured', config: selectedConfig3 },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: false,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         // Without authOnly, an alias still receives the key its own `apiKeyEnv`
         // names. The family below resolves its key ONLY from that alias-level
@@ -544,19 +560,24 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => oauthManager.dispose());
         transferredTokens4 = true;
-        populateProviderManager(
-          ownedManager4,
-          oauthManager,
-          tokens4,
-          selectedSettings4,
-          new NodeFileSystem(),
-          selectedConfig4,
-          undefined,
-          undefined,
-          false,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(
+            ownedManager4,
+            oauthManager,
+            tokens4,
+          ),
+          readSetting: (key) => selectedSettings4.get(key),
+          fileSystem: new NodeFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: false,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         expect(openaiCtor).toHaveBeenCalled();
         expect(openaivercelCtor).toHaveBeenCalled();

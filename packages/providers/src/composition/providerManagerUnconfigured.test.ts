@@ -6,6 +6,7 @@
 import { ProviderManager } from '../ProviderManager.js';
 
 import {
+  createProviderPopulationTarget,
   populateProviderManager,
   createOwnedOAuthManager,
 } from './providerManagerInstance.js';
@@ -99,19 +100,20 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => oauthManager.dispose());
         transferredTokens = true;
-        populateProviderManager(
-          manager,
-          oauthManager,
-          tokens,
-          selectedSettings,
-          new MockFileSystem(),
-          selectedConfig,
-          undefined,
-          undefined,
-          false,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(manager, oauthManager, tokens),
+          readSetting: (key) => selectedSettings.get(key),
+          fileSystem: new MockFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: false,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
         try {
           expect(manager.getActiveProviderName()).toBe('anthropic');
           expect(foreign.get('activeProvider')).toBe('openai');
@@ -169,19 +171,20 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth2.dispose());
         transferredTokens2 = true;
-        populateProviderManager(
-          manager,
-          ownedOAuth2,
-          tokens2,
-          selectedSettings2,
-          new MockFileSystem(),
-          selectedConfig2,
-          undefined,
-          undefined,
-          true,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(manager, ownedOAuth2, tokens2),
+          readSetting: (key) => selectedSettings2.get(key),
+          fileSystem: new MockFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: true,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
         return manager;
       }
 
@@ -263,19 +266,20 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth3.dispose());
         transferredTokens3 = true;
-        populateProviderManager(
-          manager,
-          ownedOAuth3,
-          tokens3,
-          selectedSettings3,
-          new MockFileSystem(),
-          selectedConfig3,
-          undefined,
-          undefined,
-          true,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(manager, ownedOAuth3, tokens3),
+          readSetting: (key) => selectedSettings3.get(key),
+          fileSystem: new MockFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: true,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         // No provider should be active initially (#2481).
         expect(manager.hasActiveProvider()).toBe(false);
@@ -327,19 +331,20 @@ describe('explicit provider primitive owners', () => {
         );
         managerReleases.push(() => ownedOAuth4.dispose());
         transferredTokens4 = true;
-        populateProviderManager(
-          manager,
-          ownedOAuth4,
-          tokens4,
-          selectedSettings4,
-          new MockFileSystem(),
-          selectedConfig4,
-          undefined,
-          undefined,
-          true,
-          true,
-          process.env.LLXPRT_FAKE_RESPONSES,
-        );
+        populateProviderManager({
+          target: createProviderPopulationTarget(manager, ownedOAuth4, tokens4),
+          readSetting: (key) => selectedSettings4.get(key),
+          fileSystem: new MockFileSystem(),
+          configuration: { kind: 'pre-config' },
+          contributions: { kind: 'none' },
+          messages: { kind: 'none' },
+          allowBrowser: true,
+          activateConfiguredProvider: true,
+          fakeResponses:
+            process.env.LLXPRT_FAKE_RESPONSES === undefined
+              ? { kind: 'disabled' }
+              : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+        });
 
         // When settingsService has activeProvider='openai',
         // createProviderManager must auto-activate it without needing a manual

@@ -6,6 +6,7 @@
 import { ProviderManager } from '../ProviderManager.js';
 
 import {
+  createProviderPopulationTarget,
   populateProviderManager,
   createOwnedOAuthManager,
 } from './providerManagerInstance.js';
@@ -79,19 +80,20 @@ describe('explicit provider primitive owners', () => {
       );
       managerReleases.push(() => ownedOAuth.dispose());
       transferredTokens = true;
-      populateProviderManager(
-        manager,
-        ownedOAuth,
-        tokens,
-        selectedSettings,
-        new NodeFileSystem(),
-        selectedConfig,
-        undefined,
-        undefined,
-        true,
-        true,
-        process.env.LLXPRT_FAKE_RESPONSES,
-      );
+      populateProviderManager({
+        target: createProviderPopulationTarget(manager, ownedOAuth, tokens),
+        readSetting: (key) => selectedSettings.get(key),
+        fileSystem: new NodeFileSystem(),
+        configuration: { kind: 'pre-config' },
+        contributions: { kind: 'none' },
+        messages: { kind: 'none' },
+        allowBrowser: true,
+        activateConfiguredProvider: true,
+        fakeResponses:
+          process.env.LLXPRT_FAKE_RESPONSES === undefined
+            ? { kind: 'disabled' }
+            : { kind: 'replay', path: process.env.LLXPRT_FAKE_RESPONSES },
+      });
       return manager;
     }
 

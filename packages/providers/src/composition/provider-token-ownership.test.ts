@@ -24,6 +24,7 @@ import {
   makeToken,
 } from '../auth/proxy/__tests__/credential-proxy-server-helpers.js';
 import {
+  createProviderPopulationTarget,
   createOwnedOAuthManager,
   populateProviderManager,
 } from './providerManagerInstance.js';
@@ -123,19 +124,20 @@ describe('provider-manager key ownership', () => {
 
       aRetiring.push(() => oauth.dispose());
       transferred = true;
-      populateProviderManager(
-        manager,
-        oauth,
-        tokens,
-        settings,
-        new NodeFileSystem(),
-        config,
-        undefined,
-        undefined,
-        false,
-        true,
-        undefined,
-      );
+      populateProviderManager({
+        target: createProviderPopulationTarget(manager, oauth, tokens),
+        readSetting: (key) => settings.get(key),
+        fileSystem: new NodeFileSystem(),
+        configuration:
+          config === undefined
+            ? { kind: 'pre-config' }
+            : { kind: 'configured', config },
+        contributions: { kind: 'none' },
+        messages: { kind: 'none' },
+        allowBrowser: false,
+        activateConfiguredProvider: true,
+        fakeResponses: { kind: 'disabled' },
+      });
     } catch (primary) {
       await cleanupAfterFailure(primary, closeA);
     }
@@ -186,19 +188,20 @@ describe('provider-manager key ownership', () => {
 
       bRetiring.push(() => oauth.dispose());
       transferred = true;
-      populateProviderManager(
-        manager,
-        oauth,
-        tokens,
-        settings,
-        new NodeFileSystem(),
-        config,
-        undefined,
-        undefined,
-        false,
-        true,
-        undefined,
-      );
+      populateProviderManager({
+        target: createProviderPopulationTarget(manager, oauth, tokens),
+        readSetting: (key) => settings.get(key),
+        fileSystem: new NodeFileSystem(),
+        configuration:
+          config === undefined
+            ? { kind: 'pre-config' }
+            : { kind: 'configured', config },
+        contributions: { kind: 'none' },
+        messages: { kind: 'none' },
+        allowBrowser: false,
+        activateConfiguredProvider: true,
+        fakeResponses: { kind: 'disabled' },
+      });
     } catch (primary) {
       await cleanupAfterFailure(primary, closeB);
     }
@@ -276,19 +279,20 @@ describe('provider-manager token ownership', () => {
       aOAuth = oauth;
       aRetiring.push(() => oauth.dispose());
       transferred = true;
-      populateProviderManager(
-        manager,
-        oauth,
-        tokens,
-        settings,
-        new NodeFileSystem(),
-        config,
-        undefined,
-        undefined,
-        false,
-        true,
-        undefined,
-      );
+      populateProviderManager({
+        target: createProviderPopulationTarget(manager, oauth, tokens),
+        readSetting: (key) => settings.get(key),
+        fileSystem: new NodeFileSystem(),
+        configuration:
+          config === undefined
+            ? { kind: 'pre-config' }
+            : { kind: 'configured', config },
+        contributions: { kind: 'none' },
+        messages: { kind: 'none' },
+        allowBrowser: false,
+        activateConfiguredProvider: true,
+        fakeResponses: { kind: 'disabled' },
+      });
     } catch (primary) {
       await cleanupAfterFailure(primary, closeA);
     }
@@ -338,19 +342,20 @@ describe('provider-manager token ownership', () => {
       bOAuth = oauth;
       bRetiring.push(() => oauth.dispose());
       transferred = true;
-      populateProviderManager(
-        manager,
-        oauth,
-        tokens,
-        settings,
-        new NodeFileSystem(),
-        config,
-        undefined,
-        undefined,
-        false,
-        true,
-        undefined,
-      );
+      populateProviderManager({
+        target: createProviderPopulationTarget(manager, oauth, tokens),
+        readSetting: (key) => settings.get(key),
+        fileSystem: new NodeFileSystem(),
+        configuration:
+          config === undefined
+            ? { kind: 'pre-config' }
+            : { kind: 'configured', config },
+        contributions: { kind: 'none' },
+        messages: { kind: 'none' },
+        allowBrowser: false,
+        activateConfiguredProvider: true,
+        fakeResponses: { kind: 'disabled' },
+      });
     } catch (primary) {
       await cleanupAfterFailure(primary, closeB);
     }
@@ -400,19 +405,20 @@ describe('provider-manager token ownership', () => {
       parentOAuth = oauth;
       parentRetiring.push(() => oauth.dispose());
       transferred = true;
-      populateProviderManager(
-        manager,
-        oauth,
-        tokens,
-        settings,
-        new NodeFileSystem(),
-        config,
-        undefined,
-        undefined,
-        false,
-        true,
-        undefined,
-      );
+      populateProviderManager({
+        target: createProviderPopulationTarget(manager, oauth, tokens),
+        readSetting: (key) => settings.get(key),
+        fileSystem: new NodeFileSystem(),
+        configuration:
+          config === undefined
+            ? { kind: 'pre-config' }
+            : { kind: 'configured', config },
+        contributions: { kind: 'none' },
+        messages: { kind: 'none' },
+        allowBrowser: false,
+        activateConfiguredProvider: true,
+        fakeResponses: { kind: 'disabled' },
+      });
     } catch (primary) {
       await cleanupAfterFailure(primary, closeParent);
     }
@@ -461,19 +467,20 @@ describe('provider-manager token ownership', () => {
 
       replacementRetiring.push(() => oauth.dispose());
       transferred = true;
-      populateProviderManager(
-        manager,
-        oauth,
-        tokens,
-        settings,
-        new NodeFileSystem(),
-        config,
-        undefined,
-        undefined,
-        false,
-        true,
-        undefined,
-      );
+      populateProviderManager({
+        target: createProviderPopulationTarget(manager, oauth, tokens),
+        readSetting: (key) => settings.get(key),
+        fileSystem: new NodeFileSystem(),
+        configuration:
+          config === undefined
+            ? { kind: 'pre-config' }
+            : { kind: 'configured', config },
+        contributions: { kind: 'none' },
+        messages: { kind: 'none' },
+        allowBrowser: false,
+        activateConfiguredProvider: true,
+        fakeResponses: { kind: 'disabled' },
+      });
     } catch (primary) {
       await cleanupAfterFailure(primary, closeReplacement);
     }
@@ -523,19 +530,20 @@ describe('provider-manager token ownership', () => {
       isolatedOAuth = oauth;
       isolatedRetiring.push(() => oauth.dispose());
       transferred = true;
-      populateProviderManager(
-        manager,
-        oauth,
-        tokens,
-        settings,
-        new NodeFileSystem(),
-        config,
-        undefined,
-        undefined,
-        false,
-        true,
-        undefined,
-      );
+      populateProviderManager({
+        target: createProviderPopulationTarget(manager, oauth, tokens),
+        readSetting: (key) => settings.get(key),
+        fileSystem: new NodeFileSystem(),
+        configuration:
+          config === undefined
+            ? { kind: 'pre-config' }
+            : { kind: 'configured', config },
+        contributions: { kind: 'none' },
+        messages: { kind: 'none' },
+        allowBrowser: false,
+        activateConfiguredProvider: true,
+        fakeResponses: { kind: 'disabled' },
+      });
     } catch (primary) {
       await cleanupAfterFailure(primary, closeIsolated);
     }

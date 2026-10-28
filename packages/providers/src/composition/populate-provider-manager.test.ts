@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createProviderPopulationTarget } from './providerManagerInstance.js';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -61,19 +62,23 @@ describe('populateProviderManager', () => {
     contributions: ProviderContributionRegistry | undefined,
     fakeResponsesPath: string | undefined,
   ): void {
-    populateProviderManager(
-      manager,
-      oauth,
-      tokens,
-      settings,
+    populateProviderManager({
+      target: createProviderPopulationTarget(manager, oauth, tokens),
+      readSetting: (key) => settings.get(key),
       fileSystem,
-      undefined,
-      contributions,
-      undefined,
-      false,
-      true,
-      fakeResponsesPath,
-    );
+      configuration: { kind: 'pre-config' },
+      contributions:
+        contributions === undefined
+          ? { kind: 'none' }
+          : { kind: 'supplied', registry: contributions },
+      messages: { kind: 'none' },
+      allowBrowser: false,
+      activateConfiguredProvider: true,
+      fakeResponses:
+        fakeResponsesPath === undefined
+          ? { kind: 'disabled' }
+          : { kind: 'replay', path: fakeResponsesPath },
+    });
   }
 
   it('registers built-in providers and OAuth implementations on the supplied owners', () => {

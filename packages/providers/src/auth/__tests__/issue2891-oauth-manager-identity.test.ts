@@ -1,3 +1,4 @@
+import { createProviderPopulationTarget } from '../../composition/providerManagerInstance.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -229,19 +230,21 @@ describe('issue #2891: provider OAuth identity is owner-bound', () => {
       firstSettings,
       firstConfig,
     );
-    populateProviderManager(
-      firstManager,
-      firstOauth,
-      firstOauth.getTokenStore(),
-      firstSettings,
-      new NodeFileSystem(),
-      firstConfig,
-      undefined,
-      undefined,
-      false,
-      true,
-      undefined,
-    );
+    populateProviderManager({
+      target: createProviderPopulationTarget(
+        firstManager,
+        firstOauth,
+        firstOauth.getTokenStore(),
+      ),
+      readSetting: (key) => firstSettings.get(key),
+      fileSystem: new NodeFileSystem(),
+      configuration: { kind: 'configured', config: firstConfig },
+      contributions: { kind: 'none' },
+      messages: { kind: 'none' },
+      allowBrowser: false,
+      activateConfiguredProvider: true,
+      fakeResponses: { kind: 'disabled' },
+    });
     const boundA = new BoundManagerExposingProvider(
       undefined,
       undefined,
@@ -254,19 +257,21 @@ describe('issue #2891: provider OAuth identity is owner-bound', () => {
         'oauth-identity-second',
         'test-model',
       );
-      populateProviderManager(
-        secondManager,
-        secondOauth,
-        secondOauth.getTokenStore(),
-        secondSettings,
-        new NodeFileSystem(),
-        secondConfig,
-        undefined,
-        undefined,
-        false,
-        true,
-        undefined,
-      );
+      populateProviderManager({
+        target: createProviderPopulationTarget(
+          secondManager,
+          secondOauth,
+          secondOauth.getTokenStore(),
+        ),
+        readSetting: (key) => secondSettings.get(key),
+        fileSystem: new NodeFileSystem(),
+        configuration: { kind: 'configured', config: secondConfig },
+        contributions: { kind: 'none' },
+        messages: { kind: 'none' },
+        allowBrowser: false,
+        activateConfiguredProvider: true,
+        fakeResponses: { kind: 'disabled' },
+      });
       const boundB = new BoundManagerExposingProvider(
         undefined,
         undefined,

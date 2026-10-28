@@ -29,6 +29,7 @@ import {
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createProviderPopulationTarget } from './providerManagerInstance.js';
 
 import { NodeFileSystem } from './IFileSystem.js';
 
@@ -171,19 +172,20 @@ describe('OAuth owner reads before registration', () => {
       ),
     });
     release.acquire('oauth', () => oauth.dispose());
-    populateProviderManager(
-      manager,
-      oauth,
-      tokens,
-      settings,
-      new NodeFileSystem(),
-      attachedConfig,
-      undefined,
-      undefined,
-      false,
-      false,
-      undefined,
-    );
+    populateProviderManager({
+      target: createProviderPopulationTarget(manager, oauth, tokens),
+      readSetting: (key) => settings.get(key),
+      fileSystem: new NodeFileSystem(),
+      configuration:
+        attachedConfig === undefined
+          ? { kind: 'pre-config' }
+          : { kind: 'configured', config: attachedConfig },
+      contributions: { kind: 'none' },
+      messages: { kind: 'none' },
+      allowBrowser: false,
+      activateConfiguredProvider: false,
+      fakeResponses: { kind: 'disabled' },
+    });
     return oauth;
   }
   function isolateOAuth(

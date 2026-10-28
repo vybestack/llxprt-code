@@ -26,6 +26,7 @@ import { ProviderManager } from '../ProviderManager.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import { runCleanupSteps } from './helpers/cleanup.js';
 import {
+  createProviderPopulationTarget,
   createOwnedOAuthManager,
   populateProviderManager,
 } from '../composition/providerManagerInstance.js';
@@ -106,19 +107,17 @@ describe('headless provider-manager construction (issue #1594)', () => {
     headlessOAuth = oauth;
     retiring.push(() => oauth.dispose());
     transferred = true;
-    populateProviderManager(
-      manager,
-      oauth,
-      tokens,
-      settings,
-      mockFileSystem,
-      undefined,
-      undefined,
-      undefined,
-      false,
-      true,
-      undefined,
-    );
+    populateProviderManager({
+      target: createProviderPopulationTarget(manager, oauth, tokens),
+      readSetting: (key) => settings.get(key),
+      fileSystem: mockFileSystem,
+      configuration: { kind: 'pre-config' },
+      contributions: { kind: 'none' },
+      messages: { kind: 'none' },
+      allowBrowser: false,
+      activateConfiguredProvider: true,
+      fakeResponses: { kind: 'disabled' },
+    });
     if (model !== undefined)
       settings.setProviderSetting(provider, 'model', model);
     manager.setActiveProvider(provider);
