@@ -20,10 +20,13 @@ export interface TransportAttemptBudget {
 }
 
 interface BudgetLifecycle {
-  readonly leases: number;
+  leases: number;
 }
 
-const budgetLifecycles = new WeakMap<TransportAttemptBudget, BudgetLifecycle>();
+const BUDGET_LIFECYCLE = Symbol('transportAttemptBudgetLifecycle');
+interface OwnedTransportAttemptBudget extends TransportAttemptBudget {
+  readonly [BUDGET_LIFECYCLE]?: BudgetLifecycle;
+}
 
 function normalizeTransportAttemptLimit(limit: number): number {
   return Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 1;
@@ -61,15 +64,15 @@ export interface AttachedTransportAttemptBudget {
 function acquireBudgetLifecycle(
   budget: TransportAttemptBudget,
 ): BudgetLifecycle | undefined {
-  const lifecycle = budgetLifecycles.get(budget);
+  const owned: OwnedTransportAttemptBudget = budget;
+  const lifecycle = owned[BUDGET_LIFECYCLE];
   if (lifecycle === undefined || lifecycle.leases === 0) return undefined;
-  const acquired = { leases: lifecycle.leases + 1 };
-  budgetLifecycles.set(budget, acquired);
-  return acquired;
+  lifecycle.leases += 1;
+  return lifecycle;
 }
 
 function createBudgetLifecycle(budget: TransportAttemptBudget): void {
-  budgetLifecycles.set(budget, { leases: 1 });
+  Object.defineProperty(budget, BUDGET_LIFECYCLE, { value: { leases: 1 } });
 }
 
 function releaseBudgetLifecycle(budget: TransportAttemptBudget): () => void {
@@ -77,11 +80,10 @@ function releaseBudgetLifecycle(budget: TransportAttemptBudget): () => void {
   return () => {
     if (released) return;
     released = true;
-    const lifecycle = budgetLifecycles.get(budget);
+    const owned: OwnedTransportAttemptBudget = budget;
+    const lifecycle = owned[BUDGET_LIFECYCLE];
     if (lifecycle === undefined) return;
-    budgetLifecycles.set(budget, {
-      leases: Math.max(0, lifecycle.leases - 1),
-    });
+    lifecycle.leases -= 1;
   };
 }
 
