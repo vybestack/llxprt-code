@@ -39,7 +39,7 @@ const requestSchema = z.object({
 });
 
 async function modelWire() {
-  let nextResponseDelayMs = 0;
+  let responseDelayMs = 0;
   let requests: ReadonlyArray<
     z.infer<typeof requestSchema> & { readonly authorization?: string }
   > = [];
@@ -56,8 +56,7 @@ async function modelWire() {
           ...requests,
           { ...captured, authorization: request.headers.authorization },
         ];
-        const delayMs = nextResponseDelayMs;
-        nextResponseDelayMs = 0;
+        const delayMs = responseDelayMs;
         if (delayMs > 0)
           await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
         const chunk = {
@@ -105,8 +104,8 @@ async function modelWire() {
   return {
     url: `http://127.0.0.1:${address.port}/v1`,
     requests: () => requests,
-    delayNext: (ms: number): void => {
-      nextResponseDelayMs = ms;
+    delayResponses: (ms: number): void => {
+      responseDelayMs = ms;
     },
     close: async (): Promise<void> => {
       await new Promise<void>((resolve, reject) => {
@@ -284,22 +283,26 @@ describe('explicit adopted session settings on a shared Config', () => {
         const secondSettings = new SettingsService();
         const first = await adopt(firstSettings);
         const second = await adopt(secondSettings);
+        // Cold prompt/tokenizer setup belongs to acquisition, which the
+        // watchdog also covers. Complete it before testing session ownership.
+        successful(await collect(first.stream('Warm first acquisition')));
+        successful(await collect(second.stream('Warm peer acquisition')));
         firstSettings.set('stream-first-response-timeout-ms', 10);
         secondSettings.set('stream-first-response-timeout-ms', 1000);
-        endpoint.delayNext(150);
+        endpoint.delayResponses(150);
         const firstExpired = await collect(
           first.stream('Expired first response'),
         );
         expect(
           firstExpired.events.filter((event) => event.type === 'idle-timeout'),
         ).toHaveLength(1);
-        endpoint.delayNext(150);
+        endpoint.delayResponses(150);
         successful(await collect(second.stream('Peer still permits response')));
         firstSettings.set('stream-first-response-timeout-ms', 1000);
         secondSettings.set('stream-first-response-timeout-ms', 10);
-        endpoint.delayNext(150);
+        endpoint.delayResponses(150);
         successful(await collect(first.stream('Changed first response')));
-        endpoint.delayNext(150);
+        endpoint.delayResponses(150);
         const secondExpired = await collect(
           second.stream('Changed peer timeout'),
         );
