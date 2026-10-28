@@ -84,6 +84,51 @@ async function* source(
 }
 
 describe('Gemini tool argument disk arrival', () => {
+  it('rejects an exhausted SDK stream with an unfinished tool input', async () => {
+    globalThis.fetch = Object.assign(
+      async (): Promise<Response> =>
+        new Response(
+          `data: ${JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ functionCall: fragments[0] }] } }] })}
+
+`,
+          { headers: { 'content-type': 'text/event-stream' } },
+        ),
+      { preconnect() {} },
+    );
+    await expect(
+      runDiskArrival(async function* () {
+        const client = await createGeminiApiClient({ apiKey: 'test' });
+        const stream = await client.models.generateContentStream({
+          model: 'gemini-3-flash-preview',
+          contents: 'hi',
+        });
+        const mapper = createGeminiResponseMapper();
+        for await (const response of stream) yield* mapper(response);
+      }, false),
+    ).rejects.toThrow('Gemini ended without a completed tool call');
+  });
+  it('records the finalized object when the SDK input is a non-object JSON value', async () => {
+    globalThis.fetch = Object.assign(
+      async (): Promise<Response> =>
+        new Response(
+          `data: ${JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ functionCall: { id: 'call_frozen', name: 'lookup', args: 2 } }] } }] })}
+
+`,
+          { headers: { 'content-type': 'text/event-stream' } },
+        ),
+      { preconnect() {} },
+    );
+    const result = await runDiskArrival(async function* () {
+      const client = await createGeminiApiClient({ apiKey: 'test' });
+      const stream = await client.models.generateContentStream({
+        model: 'gemini-3-flash-preview',
+        contents: 'hi',
+      });
+      const mapper = createGeminiResponseMapper();
+      for await (const response of stream) yield* mapper(response);
+    }, false);
+    expect(result).toStrictEqual([{ ...expected, parameters: {} }]);
+  });
   it('records argument pieces before completion and preserves finalized parity', async () => {
     expect(await runDiskArrival(source, false, prefixes)).toStrictEqual([
       expected,

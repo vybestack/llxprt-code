@@ -179,7 +179,8 @@ function streamPartToChunk(
     }
     case 'tool-call': {
       const started = activeTools.delete(part.toolCallId);
-      const chunk = chunkFromParts(toParts([part]));
+      const parts = toParts([part]);
+      const chunk = chunkFromParts(parts);
       if (started)
         chunk.toolArgumentDelta = {
           sourceId: part.toolCallId,
@@ -187,7 +188,9 @@ function streamPartToChunk(
           name: part.toolName,
           arguments: '',
           complete: true,
-          replacementArguments: part.input,
+          replacementArguments: JSON.stringify(
+            parts[0]?.functionCall?.args ?? {},
+          ),
         };
       return chunk;
     }
