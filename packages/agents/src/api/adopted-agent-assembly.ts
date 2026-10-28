@@ -32,6 +32,7 @@ import {
   configureProviderTokenizer,
   createOAuthProfileReads,
   createRuntimeContentGeneratorFactory,
+  createSessionAuthPolicyReader,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { type SettingsService } from '@vybestack/llxprt-code-settings';
@@ -41,7 +42,8 @@ import { acquireSessionClient } from '../session/session-client-binding.js';
 import { type SessionClientOwner } from '../session/session-client-owner.js';
 import {
   acquireProviderFiles,
-  acquireProviderRuntime,
+  acquireRuntimeProviderManager,
+  acquireRuntimeOAuth,
 } from './provider-runtime-acquisition.js';
 import { registerProvidersOntoManager } from './policyComposition.js';
 import { type Agent } from './agent.js';
@@ -114,30 +116,33 @@ export interface ForegroundAdoptionView {
   finishForeground(): Promise<Agent>;
 }
 
+interface AdoptedProviders {
+  readonly settingsOwner: SessionSettingsOwner;
+  readonly files: ProviderFileLifecycle;
+  readonly manager: ProviderManager;
+  readonly oauth: OAuthManager;
+  readonly tokenizer: RuntimeTokenizerFactory;
+  readonly content: RuntimeContentGeneratorFactory<ContentGenerator>;
+}
+
+interface AdoptedSessionStage {
+  readonly adoption: AdoptionSessionInput;
+  readonly runtimeId: string;
+  readonly fakeResponses: string | undefined;
+  readonly mcp: AdoptedMcpPort;
+  readonly media: SessionMediaOwner | undefined;
+  readonly providers: AdoptedProviders;
+}
+
 /**
  * Adopts the caller's session. It acquires the adopted owners, hands them to the
  * concrete foreground it holds, and keeps nothing of its own after publication.
  */
 export class AdoptedAgentAssembly implements ForegroundAdoptionView {
   readonly #config: Config;
-  #fakeResponses: string | undefined;
   #adoption: AdoptionSessionInput | undefined;
   #lifecycle: AdoptionLifecyclePort | undefined;
-  #settingsService!: SettingsService;
-  #intent!: AgentAdoptionIntent;
-  #mcp!: AdoptedMcpPort;
-  #media: SessionMediaOwner | undefined;
-  #selectedSettings!: SessionSettingsOwner;
-  #files!: ProviderFileLifecycle;
-  #tokenizer!: RuntimeTokenizerFactory;
-  #content!: RuntimeContentGeneratorFactory<ContentGenerator>;
-  #runtimeId!: string;
-  #authority!: CredentialAuthority;
-  #manager!: ProviderManager;
-  #oauth!: OAuthManager;
-  #client!: SessionClientOwner;
   #foreground: ForegroundAssembly | undefined;
-  #agent!: Agent;
   readonly #release = new AcquisitionRelease();
   readonly #construction = new AbortController();
 
@@ -190,18 +195,20 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
   }
 
   async assembleAdoption(): Promise<Agent> {
-    this.#fakeResponses = process.env.LLXPRT_FAKE_RESPONSES;
+    const fakeResponses = process.env.LLXPRT_FAKE_RESPONSES;
     const adoption = this.#adoption;
     const lifecycle = this.#lifecycle;
     if (adoption === undefined || lifecycle === undefined)
       throw new Error('Adoption construction requires its adoption input');
-    this.#settingsService = adoption.settingsService;
-    this.#intent = adoption.intent;
     try {
       lifecycle.validateIdentity();
-      const runtimeId = this.#adoptValidateIntent();
-      await this.#adoptAdoptConfig(runtimeId, adoption.credentialAuthority);
-      return await lifecycle.publish(this.#agent);
+      const runtimeId = this.#adoptValidateIntent(adoption.intent);
+      const agent = await this.#adoptAdoptConfig(
+        adoption,
+        runtimeId,
+        fakeResponses,
+      );
+      return await lifecycle.publish(agent);
     } finally {
       this.#adoption = undefined;
       this.#lifecycle = undefined;
@@ -215,12 +222,12 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
     return foreground;
   }
 
-  #adoptValidateIntent(): string {
+  #adoptValidateIntent(intent: AgentAdoptionIntent): string {
     FromConfigValidatableSchema.parse({
-      sessionId: this.#intent.sessionId,
-      activation: this.#intent.activation,
+      sessionId: intent.sessionId,
+      activation: intent.activation,
     });
-    const runtimeId = this.#intent.sessionId ?? generateRuntimeId();
+    const runtimeId = intent.sessionId ?? generateRuntimeId();
     validateAgentRuntimeId(runtimeId);
     return runtimeId;
   }
@@ -260,380 +267,59 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
   }
 
   async #adoptAdoptConfig(
+    adoption: AdoptionSessionInput,
     runtimeId: string,
-    authority: CredentialAuthority,
-  ): Promise<void> {
-    this.#runtimeId = runtimeId;
-    this.#authority = authority;
-    this.#mcp = await this.#adoptConstructMcp();
+    fakeResponses: string | undefined,
+  ): Promise<Agent> {
+    const mcp = await this.#adoptConstructMcp();
+    let media: SessionMediaOwner | undefined;
+    let providers: AdoptedProviders;
     try {
-      this.#media = acquireAdoptedMedia(this.#config);
-      this.#adoptAcquireProviders();
-      this.#tokenizer = configureProviderTokenizer(this.#manager);
-      this.#content = createRuntimeContentGeneratorFactory();
+      media = acquireAdoptedMedia(this.#config);
+      providers = this.#adoptAcquireProviders(adoption, runtimeId, mcp);
     } catch (primary) {
-      await cleanupFailedAdoption(
+      return cleanupFailedAdoption(
         primary,
         () => this.#release.rollback(),
-        () => this.#mcp.dispose(),
-        this.#media === undefined
-          ? undefined
-          : this.#media.dispose.bind(this.#media),
+        () => mcp.dispose(),
+        media === undefined ? undefined : media.dispose.bind(media),
         undefined,
       );
     }
-    await this.#adoptComplete();
+    return this.#adoptComplete({
+      adoption,
+      runtimeId,
+      fakeResponses,
+      mcp,
+      media,
+      providers,
+    });
   }
 
-  #adoptAcquireProviders(): void {
-    const settingsOwner = new SessionSettingsOwner(this.#settingsService);
-    this.#selectedSettings = settingsOwner;
+  #adoptAcquireProviders(
+    adoption: AdoptionSessionInput,
+    runtimeId: string,
+    mcp: Pick<AdoptedMcpPort, 'messageBus'>,
+  ): AdoptedProviders {
+    const settingsOwner = new SessionSettingsOwner(adoption.settingsService);
     this.#release.acquire('settings', () => settingsOwner.dispose());
     settingsOwner.bindTelemetry(this.#config);
     const config = this.#config;
-    const runtimeId = this.#runtimeId;
-    this.#files = acquireProviderFiles(this.#release, {
+    const files = acquireProviderFiles(this.#release, {
       proxy: config.getProxy(),
       scopeIds: [runtimeId, config.getSessionId()],
     });
-    function acceptProviders(
-      this: AdoptedAgentAssembly,
-      manager: ProviderManager,
-      oauth: OAuthManager,
-    ): void {
-      this.#manager = manager;
-      this.#oauth = oauth;
-    }
-    acquireProviderRuntime(
-      this.#release,
-      {
-        files: this.#files,
-        proxy: config.getProxy(),
-        config,
-        settings: this.#settingsService,
-        settingsOwner,
-        context: adoptionProviderContext(runtimeId),
-        authority: this.#authority,
-      },
-      {
-        suppliedStore: undefined,
-        readSettings: () => createFileOAuthSettingsProvider(),
-        messageBus: this.#mcp.messageBus,
-        profileReads: createOAuthProfileReads(config.profileDirectory),
-        readIdentity: () => ({ runtimeId, runtimeKind: 'agent' }),
-        requestInteractiveAuth: undefined,
-      },
-      acceptProviders.bind(this),
-    );
-  }
-
-  async #adoptComplete(): Promise<void> {
-    let client: SessionClientOwner | undefined;
-    try {
-      this.#client = await acquireAdoptedSession(
-        this.#config,
-        this.#intent,
-        this.#selectedSettings,
-        this.#media,
-        this.#settingsService,
-        this.#manager,
-        this.#oauth,
-        this.#content,
-        this.#tokenizer,
-        this.#files,
-        this.#mcp,
-        this.#authority,
-      );
-      client = this.#client;
-      await this.#adoptInitializeSession();
-      await this.#adoptFinalize();
-    } catch (primary) {
-      await cleanupFailedAdoption(
-        primary,
-        () => this.#release.close(),
-        () => this.#mcp.dispose(),
-        this.#media === undefined
-          ? undefined
-          : this.#media.dispose.bind(this.#media),
-        client?.dispose.bind(client),
-      );
-    }
-  }
-
-  async #adoptInitializeSession(): Promise<void> {
-    const client = this.#client;
-    const bindings = adoptedClientBindings(
-      this.#files,
-      this.#oauth,
-      this.#config.getSessionId(),
-    );
-    client.clients.bindProviderFiles(
-      bindings.files,
-      bindings.retryOperations,
-      bindings.cleanupScope,
-    );
-    client.bindMcpRuntime(
-      this.#mcp,
-      this.#mcp.profileDefinitions,
-      this.#mcp.subagentDefinitions,
-    );
-    if (!client.hasHookComposition()) client.bindHooks();
-    await activateAdoptedProviders(
-      this.#config,
-      this.#selectedSettings,
-      this.#manager,
-      this.#oauth,
-      this.#settingsService,
-      this.#tokenizer,
-      this.#runtimeId,
-      this.#fakeResponses,
-    );
-    await this.#mcp.initialize();
-    await client.initializeTools();
-  }
-
-  async #adoptFinalize(): Promise<void> {
-    await activateAdoptedSession(
-      this.#config,
-      this.#intent,
-      this.#client,
-      this.#settingsService,
-      this.#manager,
-      this.#oauth,
-      this.#selectedSettings,
-    );
-    const parsed: FacadeParsedConfig = {
-      provider:
-        this.#manager.getActiveProviderName() ??
-        this.#config.getProvider() ??
-        '',
-      model:
-        this.#selectedSettings.readSelectedModel() ?? this.#config.getModel(),
-      ...(this.#intent.sessionId === undefined
-        ? {}
-        : { sessionId: this.#intent.sessionId }),
-    };
-    await this.#tokenizer.prepareTokenizer?.(parsed.provider, parsed.model);
-    const handles: AgentSchedulerHandle[] = [];
-    this.#foreground = this.#createForeground();
-    this.assertOpen();
-    this.#agent = await this.#foreground.publish({
-      parsed,
-      baseUrl: admittedEndpoint(this.#settingsService, parsed.provider),
-      handles,
-      scheduler: resolveSchedulerFactory(false, undefined, handles),
-      leaf: facadeInputsForAdopted(
-        this.#mcp,
-        this.#release,
-        this.#runtimeId,
-        handles,
-      ),
+    const manager = acquireRuntimeProviderManager(this.#release, {
+      files,
+      proxy: config.getProxy(),
+      config,
+      settings: adoption.settingsService,
+      settingsOwner,
+      context: adoptionProviderContext(runtimeId),
+      authority: adoption.credentialAuthority,
     });
-  }
-
-  #createForeground(): ForegroundAssembly {
-    const manager: RuntimeProviderManager = this.#manager;
-    const mcp: PublishedMcpPort = this.#mcp;
-    return new ForegroundAssembly(
-      this.#config,
-      {
-        mcp,
-        mediaOwner: this.#media,
-        sessionClient: this.#client,
-        release: closeReleaseScope(this.#release),
-      },
-      { settingsOwner: this.#selectedSettings },
-      { settings: this.#settingsService, manager },
-      { oauth: this.#oauth },
-      this.#construction.signal,
-    );
-  }
-}
-
-/**
- * The provider-file and interactive-auth callbacks the session client keeps for
- * its whole life. Built from owner values at module level so no closure handed
- * to the client shares a scope with the assembly.
- */
-function adoptedClientBindings(
-  files: ProviderFileLifecycle,
-  oauth: OAuthManager,
-  mainScope: string,
-): {
-  files: ProviderFileLifecycle;
-  retryOperations: Parameters<
-    SessionClientOwner['clients']['bindProviderFiles']
-  >[1];
-  cleanupScope: Parameters<
-    SessionClientOwner['clients']['bindProviderFiles']
-  >[2];
-} {
-  return {
-    files,
-    retryOperations: (provider) => oauth.composeRetryOperations(provider),
-    cleanupScope: (scope) =>
-      scope === mainScope
-        ? Promise.resolve()
-        : cleanupProviderScope(files, scope),
-  };
-}
-
-/** The one close capability for a release scope, created outside any asset. */
-function closeReleaseScope(release: AcquisitionRelease): () => Promise<void> {
-  return () => release.close();
-}
-
-async function activateAdoptedProviders(
-  config: Config,
-  selectedSettings: SessionSettingsOwner,
-  manager: ProviderManager,
-  oauth: OAuthManager,
-  settingsService: SettingsService,
-  tokenizer: RuntimeTokenizerFactory,
-  runtimeId: string,
-  fakeResponses: string | undefined,
-): Promise<void> {
-  await selectedSettings.startTelemetry(config);
-  manager.setRetryOperationsFactory((providerName, profileId) =>
-    oauth.composeRetryOperations(
-      providerName,
-      profileId ? { profileId } : undefined,
-    ),
-  );
-  manager.setRuntimeContext(
-    adoptionProviderContext(runtimeId),
-    selectedSettings,
-    settingsService,
-    config,
-  );
-  registerProvidersOntoManager(
-    manager,
-    settingsService,
-    config,
-    oauth,
-    undefined,
-    fakeResponses,
-  );
-  manager.setTokenizerFactory(tokenizer);
-  manager.setConfig(config);
-}
-
-function adoptionProviderContext(runtimeId: string) {
-  return createProviderRuntimeContext({
-    runtimeId,
-    runtimeKind: 'agent',
-    metadata: { source: 'cli-isolated-runtime-factory' },
-  });
-}
-
-async function acquireAdoptedSession(
-  config: Config,
-  intent: AgentAdoptionIntent,
-  selectedSettings: SessionSettingsOwner,
-  media: SessionMediaOwner | undefined,
-  settingsService: SettingsService,
-  manager: RuntimeProviderManager,
-  oauth: OAuthManager,
-  content: RuntimeContentGeneratorFactory<ContentGenerator>,
-  tokenizer: RuntimeTokenizerFactory,
-  files: ProviderFileLifecycle,
-  mcp: SessionWorkspaceReadsPort & { readonly messageBus: MessageBus },
-  authority: CredentialAuthority,
-): Promise<SessionClientOwner> {
-  selectedSettings.initializeProviderSelection(
-    intent.activation?.provider ?? config.getProvider(),
-    intent.activation?.model ?? config.getModel(),
-  );
-  const store = media?.store;
-  if (store === undefined)
-    throw new AgentBootstrapError(
-      'Missing explicit session client media store',
-    );
-  return acquireSessionClient(
-    {
-      config,
-      messageBus: mcp.messageBus,
-      workspacePaths: mcp.workspacePaths,
-      readInstructions: mcp.readInstructions,
-      imageOperation: undefined,
-    },
-    { settings: settingsService, settingsOwner: selectedSettings },
-    manager,
-    oauth,
-    {
-      contentGeneratorFactory: content,
-      tokenizerFactory: tokenizer,
-      providerFiles: files,
-      mediaStore: store,
-      authority,
-      clientFactory: undefined,
-    },
-  );
-}
-
-async function activateAdoptedSession(
-  config: Config,
-  intent: AgentAdoptionIntent,
-  client: SessionClientOwner,
-  settingsService: SettingsService,
-  manager: RuntimeProviderManager,
-  oauth: OAuthManager,
-  selectedSettings: SessionSettingsOwner,
-): Promise<void> {
-  const switchProvider = assembleProviderSwitch(
-    config,
-    settingsService,
-    manager,
-    oauth,
-    () => 'agent',
-    () => client.clients.refreshAuth(),
-    selectedSettings,
-  );
-  const activation = intent.activation;
-  if (activation !== undefined) {
-    const result = await executeProviderActivation(
-      config,
-      activation,
-      switchProvider,
-      settingsService,
-      manager,
-      (method) => client.clients.refreshAuth(method),
-      assembleModelSelection(selectedSettings),
-    );
-    if (result.authFailed) {
-      const underlying = result.authError;
-      throw new AgentBootstrapError(
-        `fromConfig activation failed: ${underlying instanceof Error ? underlying.message : String(underlying)}`,
-        { cause: underlying },
-      );
-    }
-  } else if (!client.clients.conversationBinding.isClientInitialized()) {
-    await client.clients.refreshAuth(undefined);
-  }
-}
-
-function facadeInputsForAdopted(
-  runtime: McpTeardownPort,
-  release: AcquisitionRelease,
-  runtimeId: string,
-  handles: AgentSchedulerHandle[],
-): LeafFacadeValues {
-  const closeRuntime = (): Promise<void> => release.close();
-  const ownership = recordOwnership({
-    injectedSchedulerHandles: handles,
-    disposeMcpRuntime: () => runtime.dispose(),
-  });
-  return {
-    runtimeId,
-    readRuntimeKind: () => 'agent',
-    ownership,
-    sessionIdentityOwnership: 'facade',
-    onOAuthPrompt: undefined,
-    closeRuntime,
-    awaitMcpDiscovery: () => {
-      if (ownership.disposed) throw new Error('MCP facade is closed');
-      return runtime.awaitDiscovery();
-    },
-    closeMcpAdmission: () => runtime.closeAdmission(),
-  };
-}
+    const oauth = acquireRuntimeOAuth(this.#release, {
+      provider: manager,
+      readPolicy: createSessionAuthPolicyReader(adoption.settingsService),
+      authority: adoption.credentialAuthority,
+      oauth: {
