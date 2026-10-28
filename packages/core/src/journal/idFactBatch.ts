@@ -83,6 +83,8 @@ export interface SpillOptions {
   readonly readGroup: ReadGroup;
   /** Pending writes that charge more than this are merged. */
   readonly capBytes?: number;
+  /** Rebuilds may merge independent runs; appends preserve their existing record order. */
+  readonly sortedRuns?: boolean;
 }
 
 export interface BatchSpill extends SpillOptions {
@@ -135,7 +137,9 @@ export class IdFactBatch {
     this.workingRoot = root;
     this.workingReader = reader;
     this.runs =
-      root === 0 && spill !== undefined ? new IdFactRuns(spill) : undefined;
+      root === 0 && spill?.sortedRuns === true
+        ? new IdFactRuns(spill)
+        : undefined;
     const committed: IdEntryView = {
       get: (hash) => {
         if (this.runs !== undefined) return this.runs.lookup(hash);

@@ -267,10 +267,7 @@ export async function buildRebuilt(
     NO_FACT_ROOTS,
     ctx,
     metaReader,
-    {
-      appender,
-      readGroup: ctx.readGroup,
-    },
+    { appender, readGroup: ctx.readGroup, sortedRuns: true },
     mappingSlots,
     kimi,
   );
