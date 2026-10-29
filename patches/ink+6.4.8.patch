@@ -225,9 +225,10 @@ diff --git a/node_modules/ink/build/ink.js b/node_modules/ink/build/ink.js
 index 0dc50a2..208dacf 100644
 --- a/node_modules/ink/build/ink.js
 +++ b/node_modules/ink/build/ink.js
-@@ -21,6 +21,8 @@ import { calculateScroll } from './scroll.js';
+@@ -21,6 +21,9 @@ import { calculateScroll } from './scroll.js';
  import { ResizeObserverEntry } from './resize-observer.js';
  import { Selection } from './selection.js';
++import { internal_resetToStyledCharactersCache } from './measure-text.js';
  const noop = () => { };
 +const MAX_RETAINED_STATIC_OUTPUT_CODE_UNITS = 4 * 1024 * 1024;
 +const MAX_RETAINED_STATIC_OUTPUT_CHUNKS = 1024;
@@ -358,6 +359,16 @@ index 0dc50a2..208dacf 100644
              return;
          }
          // To ensure static output is cleanly rendered before main output, clear main output first
+@@ -401,6 +413,9 @@ export default class Ink {
+         // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+         reconciler.flushSyncWork();
+         instances.delete(this.options.stdout);
++        // Batched terminal rows must not outlive the renderer in this shared cache.
++        // Other roots can repopulate it without changing their rendered output.
++        internal_resetToStyledCharactersCache();
+         if (error instanceof Error) {
+             this.rejectExitPromise(error);
+         }
 diff --git a/node_modules/ink/build/measure-text.d.ts b/node_modules/ink/build/measure-text.d.ts
 index 5619c54..e6b6254 100644
 --- a/node_modules/ink/build/measure-text.d.ts
