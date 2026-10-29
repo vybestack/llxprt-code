@@ -253,6 +253,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     this.settings = options.settings;
     this.chunkBytes = options.chunkBytes;
     this.counters = options.counters;
+    this.orphanBeforeTranscriptId = options.orphanBeforeTranscriptId;
     this.subscription = new JournalPagerSubscription(
       this.filePath,
       (watermark) => this.refreshCommitted(watermark),

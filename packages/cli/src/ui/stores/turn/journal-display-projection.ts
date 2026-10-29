@@ -67,6 +67,22 @@ function presentationResult(
   return toolDisplay.parse(JSON.parse(text));
 }
 
+function presentationStatus(
+  status: string | undefined,
+  original: ToolCallStatus,
+): ToolCallStatus {
+  switch (status) {
+    case 'success':
+      return ToolCallStatus.Success;
+    case 'error':
+      return ToolCallStatus.Error;
+    case 'cancelled':
+      return ToolCallStatus.Canceled;
+    default:
+      return original;
+  }
+}
+
 export async function withToolPresentations(
   reader: NativeJournalPageReader,
   row: NativeJournalEntry,
@@ -102,10 +118,7 @@ export async function withToolPresentations(
       tools.push({
         ...tool,
         journalIdentity,
-        status:
-          presentation.descriptor.status === 'cancelled'
-            ? ToolCallStatus.Canceled
-            : tool.status,
+        status: presentationStatus(presentation.descriptor.status, tool.status),
         resultDisplay,
         name: presentation.descriptor.displayName ?? tool.name,
         description: presentation.descriptor.description ?? tool.description,

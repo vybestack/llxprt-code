@@ -61,6 +61,8 @@ export function useScrollbackBootstrap({
     let disposed = false;
     let path: string | null = null;
     let active: ScrollbackPagerBinding | null = null;
+    let awaitingFirstJournal =
+      recordingSwapCallbacks.getCurrentRecording()?.getFilePath() == null;
     const update = (): void => {
       const nextPath =
         recordingSwapCallbacks.getCurrentRecording()?.getFilePath() ?? null;
@@ -79,6 +81,9 @@ export function useScrollbackBootstrap({
         viewport,
         store: createScrollbackPagerStore({
           filePath: nextPath,
+          // A journal created after mount belongs to the live first turn.
+          // Its approvals must not become resumed-orphan cancellations.
+          orphanBeforeTranscriptId: awaitingFirstJournal ? 0n : undefined,
           emojiFilterMode,
           viewport,
           pageRows: SCROLLBACK_PAGE_ROWS,
@@ -86,6 +91,7 @@ export function useScrollbackBootstrap({
         }),
       };
       active = binding;
+      awaitingFirstJournal = false;
       void binding.store.resumeFromJournal().then(
         () => {
           if (!disposed && active === binding) setPager(binding);

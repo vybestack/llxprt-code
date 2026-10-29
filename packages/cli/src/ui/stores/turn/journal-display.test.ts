@@ -1,10 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
-import { JournalSession } from '@vybestack/llxprt-code-core';
+import {
+  JournalSession,
+  NativeJournalPageReader,
+} from '@vybestack/llxprt-code-core';
 import { JournalDisplayWriter } from '@vybestack/llxprt-code-core/journal/display-recording.js';
 import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
 import { NativeJournalCursor } from './native-journal-cursor.js';
+import { ToolCallStatus } from '../../types.js';
 
 async function page(path: string) {
   const cursor = await NativeJournalCursor.open(path, {}, 16);
@@ -67,6 +71,62 @@ describe('journal presentation projection', () => {
           entry.kind === 'projected' ? [entry.item.text] : [],
         ),
       ).toStrictEqual(['shell prefix before failure']);
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('renders a completed tool presentation before its model response is committed', async () => {
+    const path = join(directory(), 'presentation-before-response.llxj');
+    const session = await JournalSession.create(path);
+    try {
+      await session.append([
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'skill',
+              name: 'activate_skill',
+              parameters: {},
+            },
+          ],
+        },
+      ]);
+      const reader = await NativeJournalPageReader.open(path);
+      const transcriptId = (await reader.entryAt(0)).transcriptId.toString();
+      await reader.close();
+      await new JournalDisplayWriter(session.store).append(
+        {
+          type: 'tool-approval',
+          attemptId: '',
+          callId: 'skill',
+          format: 'json',
+        },
+        JSON.stringify({
+          request: { journalIdentity: { transcriptId, attemptId: '' } },
+          status: 'scheduled',
+        }),
+      );
+      await new JournalDisplayWriter(session.store).append(
+        {
+          type: 'tool-result',
+          attemptId: '',
+          callId: 'skill',
+          format: 'text',
+          status: 'success',
+        },
+        'Skill **pr-creator** activated.',
+      );
+      const entries = await page(path);
+      const tools = entries.flatMap((entry) =>
+        entry.kind === 'projected' && entry.item.type === 'tool_group'
+          ? entry.item.tools
+          : [],
+      );
+      expect(tools).toHaveLength(1);
+      expect(tools[0].status).toBe(ToolCallStatus.Success);
+      expect(tools[0].resultDisplay).toBe('Skill **pr-creator** activated.');
     } finally {
       await session.close();
     }

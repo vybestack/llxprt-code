@@ -1,7 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
-import { JournalSession } from '@vybestack/llxprt-code-core';
+import {
+  JournalSession,
+  NativeJournalPageReader,
+} from '@vybestack/llxprt-code-core';
+import { JournalDisplayWriter } from '@vybestack/llxprt-code-core/journal/display-recording.js';
+import { ToolCallStatus } from '../../../types.js';
 import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
 import { renderHook, waitFor } from '../../../../__tests__/render.js';
 import { LoadedSettings } from '../../../../config/settings.js';
@@ -123,6 +128,63 @@ describe('journal transcript bootstrap', () => {
       });
     } finally {
       mounted.unmount();
+    }
+  });
+
+  it('keeps approvals in a newly materialized live journal pending', async () => {
+    const file = join(directory(), 'live-approval.llxj');
+    let path: string | null = null;
+    const journalSource = source(() => path);
+    const loaded = settings();
+    const mounted = renderHook(() =>
+      useScrollbackBootstrap({
+        settings: loaded,
+        recordingSwapCallbacks: journalSource,
+      }),
+    );
+    const session = await JournalSession.create(file);
+    try {
+      await session.append([
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'skill',
+              name: 'activate_skill',
+              parameters: {},
+            },
+          ],
+        },
+      ]);
+      const reader = await NativeJournalPageReader.open(file);
+      const transcriptId = (await reader.entryAt(0)).transcriptId.toString();
+      await reader.close();
+      await new JournalDisplayWriter(session.store).append(
+        {
+          type: 'tool-approval',
+          attemptId: '',
+          callId: 'skill',
+          format: 'json',
+        },
+        JSON.stringify({
+          request: { journalIdentity: { transcriptId, attemptId: '' } },
+          status: 'awaiting_approval',
+        }),
+      );
+      path = file;
+      await waitFor(() => {
+        const tools = mounted.result.current.pager?.store
+          .getState()
+          .rows.flatMap((row) =>
+            row.item.type === 'tool_group' ? row.item.tools : [],
+          );
+        expect(tools).toHaveLength(1);
+        expect(tools?.[0].status).toBe(ToolCallStatus.Pending);
+      });
+    } finally {
+      mounted.unmount();
+      await session.close();
     }
   });
 

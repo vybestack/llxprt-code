@@ -29,6 +29,7 @@ export interface ScrollbackPagerOptions {
   readonly chunkBytes?: number;
   readonly counters?: JournalReadCounters;
   readonly journal?: NativeJournalReadDependencies;
+  readonly orphanBeforeTranscriptId?: bigint;
 }
 export interface ScrollbackRow {
   readonly key: string;
