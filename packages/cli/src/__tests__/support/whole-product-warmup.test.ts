@@ -30,16 +30,16 @@ describe('whole-product warmup workload', () => {
     it(`warms every turn and the measured payload path with ${growing ? 'growing' : 'flat'} heap readings`, async () => {
       const measured = await measureWarmup(growing);
       expect(measured.turns).toStrictEqual(
-        Array.from({ length: 530 }, (_, index) => index),
+        Array.from({ length: 610 }, (_, index) => index),
       );
       expect(measured.payloadBytes).toStrictEqual([
         ...Array.from({ length: 500 }, () => 4096),
-        ...Array.from({ length: 30 }, () => 65_536),
+        ...Array.from({ length: 110 }, () => 65_536),
       ]);
       expect(measured.result.turns).toBe(measured.turns.length);
       expect(
         measured.result.samples.map((sample) => sample.turn),
-      ).toStrictEqual([510, 520, 530]);
+      ).toStrictEqual([590, 600, 610]);
       expect(
         measured.result.samples.map((sample) => sample.readings.length),
       ).toStrictEqual([9, 9, 9]);
