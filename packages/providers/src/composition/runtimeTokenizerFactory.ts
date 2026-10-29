@@ -34,6 +34,7 @@ import {
   createOfficialRuntimeTokenizer,
 } from '../tokenizers/official/index.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { prepareNeutralTokenCounter } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 
 class RuntimeTokenizerAdapter implements RuntimeTokenizer {
   constructor(
@@ -115,6 +116,7 @@ export function createRuntimeTokenizerFactory(
 
   const registryFactory: RuntimeTokenizerFactory = {
     async prepareTokenizer(providerName, model): Promise<void> {
+      prepareNeutralTokenCounter();
       const resolvedModel = model ?? providerName;
       if (isSanctionedOpenAIO200kModel(resolvedModel)) {
         await prepareGpt56RuntimeTokenizer(

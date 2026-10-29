@@ -6,7 +6,10 @@ import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
  */
 
 import { encoding_for_model } from '@dqbd/tiktoken';
-import { encodingLongTextCounter } from './neutral-long-piece.js';
+import {
+  encodingBpeRanks,
+  encodingLongTextCounter,
+} from './neutral-long-piece.js';
 import { TextDecoder } from 'node:util';
 
 import {
@@ -74,6 +77,11 @@ function encodeText(text: string): Uint32Array | null {
   }
 }
 
+export function prepareNeutralTokenCounter(): void {
+  getEncoder();
+  encodingBpeRanks('o200k_base');
+}
+
 // Token estimation using tiktoken for better accuracy
 export function estimateTokens(text: string): number {
   if (text.length > 512 && !text.includes('<|endof')) {
@@ -82,7 +90,6 @@ export function estimateTokens(text: string): number {
       return encodingLongTextCounter('o200k_base')(
         text,
         (piece) => encoder.encode(piece).length,
-        new Map<string, number>(),
       );
   }
   const encoded = encodeText(text);
