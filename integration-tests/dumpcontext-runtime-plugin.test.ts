@@ -3,23 +3,20 @@ import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
+import { createAgent } from '@vybestack/llxprt-code-agents';
+import { buildProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import {
   HistoryService,
   type HistoryDumpSnapshot,
   type HistoryDumpSource,
 } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import {
-  createIsolatedRuntimeContext,
-  activateIsolatedRuntimeContext,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+import { bindDumpcontextCommand } from '../packages/cli/src/ui/commands/dumpcontextCommandHost.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IModel } from '@vybestack/llxprt-code-providers/IModel.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers/IProvider.js';
 import { createMockCommandContext } from '../packages/cli/src/__tests__/mockCommandContext.js';
-import { bindDumpManager } from '../packages/cli/src/ui/commands/__tests__/dumpcontext-owner-fixture.js';
-import { dumpcontextCommand } from '../packages/cli/src/ui/commands/dumpcontextCommand.js';
+import { createDumpcontextCommand } from '../packages/cli/src/ui/commands/dumpcontextCommand.js';
 import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 
 class WatchedHistory extends HistoryService {
@@ -110,23 +107,42 @@ async function run(
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dump-runtime-plugin-'));
   const cache = spyOn(Storage, 'getGlobalCacheDir').mockReturnValue(root);
   const history = new WatchedHistory();
-  const runtime = createIsolatedRuntimeContext(
-    {
-      runtimeId: `dump-plugin-${count}`,
-      config: new Config({
-        sessionId: `dump-plugin-${count}`,
-        targetDir: root,
-        cwd: root,
-        model: PLUGIN_MODEL,
-        debugMode: false,
-      }),
-    },
-    new SettingsService(),
-  );
+  const agent = await createAgent({
+    provider: PLUGIN_NAME,
+    model: PLUGIN_MODEL,
+    workingDir: root,
+    sessionId: `dump-plugin-${count}`,
+    harness: { includeProcessCwd: false },
+    telemetry: { enabled: false },
+    mcpEnabled: false,
+    skillsSupport: false,
+    providerContributions: buildProviderContributionRegistry([
+      {
+        specifier: 'memory:dump-plugin',
+        manifest: {
+          apiVersion: 1,
+          id: PLUGIN_NAME,
+          providers: [
+            {
+              providerId: PLUGIN_NAME,
+              createProvider: () => provider,
+              builtinAliases: [
+                {
+                  alias: PLUGIN_NAME,
+                  config: {
+                    baseProvider: PLUGIN_NAME,
+                    'requires-auth': false,
+                    defaultModel: PLUGIN_MODEL,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ]),
+  });
   try {
-    runtime.providerManager.registerProvider(provider);
-    await runtime.providerManager.setActiveProvider(PLUGIN_NAME);
-    await activateIsolatedRuntimeContext(runtime);
     await history.addBatch(
       Array.from(
         { length: count },
@@ -138,22 +154,32 @@ async function run(
     );
     await history.waitForCommit();
     const controller = new AbortController();
-    if (cancel) controller.abort(new Error('dump cancelled'));
     const context = createMockCommandContext({
       signal: controller.signal,
-      services: {
-        agent: { agentClient: { getHistoryService: () => history } },
-      },
+      services: { agent },
     });
-    const baseRuntimeApi = { ...context.runtimeApi };
-    bindDumpManager(
-      context,
-      () => baseRuntimeApi,
-      () => runtime.providerManager,
+    const dumpcontextCommand = createDumpcontextCommand(
+      bindDumpcontextCommand({
+        readMode: () => agent.getEphemeralSetting('dumpcontext'),
+        writeMode: (mode) => agent.setEphemeralSetting('dumpcontext', mode),
+        readHistory: async () => {
+          const snapshot = await history.openDumpSnapshot();
+          if (cancel) controller.abort(new Error('dump cancelled'));
+          return snapshot;
+        },
+        readProvider: () =>
+          agent.providerReads.inspection.getProviderDumpMetadata(),
+        readOutputSettings: () => ({}),
+      }),
     );
     if (dumpcontextCommand.action === undefined)
       throw new Error('Missing command');
-    const result = await dumpcontextCommand.action(context, 'now');
+    const result = await Promise.resolve(
+      dumpcontextCommand.action(context, 'now'),
+    ).catch((error: unknown) => {
+      if (!controller.signal.aborted) throw error;
+      return error;
+    });
     const files = await fs
       .readdir(path.join(root, 'dumps'))
       .catch((): string[] => []);
@@ -166,9 +192,7 @@ async function run(
         throw new Error('Invalid dump');
       body = Reflect.get(dump, 'request').body;
     }
-    const model = runtime.providerManager
-      .getActiveProvider()
-      ?.getCurrentModel?.();
+    const model = agent.getModel();
     let expected: unknown;
     await collectJournalRowsForAssertions(history, (rows) => {
       const contents = rows.map(pluginDumpContent);
@@ -182,9 +206,9 @@ async function run(
       expected,
     };
   } finally {
-    history.dispose();
+    await history.dispose();
     cache.mockRestore();
-    await runtime.cleanup();
+    await agent.dispose();
     await fs.rm(root, { recursive: true, force: true });
   }
 }
@@ -216,7 +240,8 @@ describe('dumpcontext runtime plugin lifecycle', () => {
   });
   it('propagates command cancellation and closes the snapshot without a dump', async () => {
     const result = await run(1, new DumpPlugin(), true);
-    expect(JSON.stringify(result.result)).toContain('dump cancelled');
+    expect(result.result).toBeInstanceOf(Error);
+    expect(result.result).toMatchObject({ message: 'dump cancelled' });
     expect(result.closed).toBe(1);
     expect(result.body).toBeUndefined();
   });

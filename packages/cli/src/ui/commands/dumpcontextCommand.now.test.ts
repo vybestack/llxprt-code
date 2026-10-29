@@ -56,6 +56,7 @@ function createOwnedCommandContext(
     configurable: true,
     get: () => getRuntimeApi(),
   });
+  bindDumpManager(context, getRuntimeApi, () => undefined);
   return context;
 }
 

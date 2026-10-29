@@ -43,15 +43,7 @@ async function dumpNow(
   signal: AbortSignal,
 ): Promise<MessageActionReturn> {
   signal.throwIfAborted();
-  const history = await bindings.readHistory();
-  if (history === null) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content:
-        'History is not available. Start a conversation first before dumping context.',
-    };
-  }
+  let history: HistoryDumpSnapshot | null = null;
   try {
     const provider = bindings.readProvider();
     const policy = bindings.readOutputSettings();
@@ -71,6 +63,15 @@ async function dumpNow(
       throw new Error(
         `Provider '${provider.providerName}' cannot build a context dump: install/load the @vybestack/llxprt-plugin-google-gemini runtime plugin and retry.`,
       );
+    }
+    history = await bindings.readHistory();
+    if (history === null) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content:
+          'History is not available. Start a conversation first before dumping context.',
+      };
     }
     const body =
       provider.buildContextDumpBody === undefined
@@ -107,7 +108,7 @@ async function dumpNow(
       content: `Failed to dump context: ${error instanceof Error ? error.message : String(error)}`,
     };
   } finally {
-    await history.close();
+    await history?.close();
   }
 }
 
