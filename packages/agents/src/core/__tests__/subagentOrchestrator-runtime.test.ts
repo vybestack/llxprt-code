@@ -52,6 +52,7 @@ import {
   createRuntimeBundle,
   fakeChildScope,
   fixtureToolSelection,
+  launchForTest,
   makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
 
@@ -60,7 +61,7 @@ const parentSignal = new AbortController().signal;
 const launchChild = (
   orchestrator: SubagentOrchestrator,
   request: Parameters<SubagentOrchestrator['launch']>[0],
-) => orchestrator.launch(request, parentSignal);
+) => launchForTest(orchestrator, request, parentSignal);
 
 describe('SubagentOrchestrator - Runtime Assembly', () => {
   const credentials = useOwnedCredentials();
