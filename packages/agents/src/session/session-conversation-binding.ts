@@ -130,7 +130,7 @@ export class SessionConversationBinding {
           publish(event.totalTokens);
         }
       };
-      const interval = setInterval(() => {
+      const bind = (): void => {
         const history = this.#activeClient.hasChatInitialized()
           ? this.#activeClient.getHistoryService()
           : null;
@@ -142,7 +142,9 @@ export class SessionConversationBinding {
           lastPublished = history.getTotalTokens();
           publish(lastPublished);
         }
-      }, 100);
+      };
+      bind();
+      const interval = setInterval(bind, 100);
       const stop = (): void => {
         clearInterval(interval);
         current?.off('tokensUpdated', changed);

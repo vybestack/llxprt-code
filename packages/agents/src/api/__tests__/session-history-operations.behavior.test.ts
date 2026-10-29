@@ -105,6 +105,8 @@ describe('native session history operation lifetimes', () => {
           peerCounts.push(count);
           deliveries.push({ owner: 'peer', tokens: count });
         });
+        expect(counts).toStrictEqual([1000]);
+        expect(peerCounts).toStrictEqual([1000]);
         await sleep(150);
         expect(counts).toStrictEqual([1000]);
         expect(peerCounts).toStrictEqual([1000]);

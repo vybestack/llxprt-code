@@ -367,6 +367,7 @@ export class ConfirmationCoordinator {
     );
     this.pendingConfirmations.set(correlationId, reqInfo.callId);
     this.pendingOriginalConfirmHandlers.set(correlationId, originalOnConfirm);
+    this.statusMutator.setAwaitingApproval(reqInfo.callId, wrappedDetails);
     void this.onToolNotification(
       this.config,
       wrappedDetails,
@@ -381,7 +382,6 @@ export class ConfirmationCoordinator {
       policyContextWithCallId,
       this.messageBus,
     );
-    this.statusMutator.setAwaitingApproval(reqInfo.callId, wrappedDetails);
     if (
       confirmationDetails.type === 'edit' &&
       confirmationDetails.ideConfirmation
@@ -780,12 +780,12 @@ export class ConfirmationCoordinator {
       ...context,
       callId,
     };
+    this.statusMutator.setAwaitingApproval(callId, updatedDetails);
     publishConfirmationRequest(
       newCorrelationId,
       contextWithCallId,
       this.messageBus,
     );
-    this.statusMutator.setAwaitingApproval(callId, updatedDetails);
 
     this.registerStaleCorrelationId(
       getConfirmationCorrelationId(waitingToolCall.confirmationDetails),

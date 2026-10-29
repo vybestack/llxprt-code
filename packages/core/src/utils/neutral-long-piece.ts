@@ -10,6 +10,43 @@ export type LongTextCounter = (
   unitCache?: Map<string, number>,
 ) => number;
 
+function countShortBatches(
+  value: string,
+  pieces: RegExp,
+  countShort: (text: string) => number,
+  cache: Map<string, number>,
+): number {
+  const matcher = new RegExp(pieces);
+  const measure = (start: number, end: number): number => {
+    const batch = value.slice(start, end);
+    let measured = cache.get(batch);
+    if (measured === undefined) {
+      measured = countShort(batch);
+      if (cache.size < 256) cache.set(batch, measured);
+    }
+    return measured;
+  };
+  let tokens = 0;
+  let start = 0;
+  let position = 0;
+  for (
+    let match = matcher.exec(value);
+    match !== null;
+    match = matcher.exec(value)
+  ) {
+    // Exact codec boundaries let short words share a bounded encoder call.
+    if (matcher.lastIndex - start > 512 && match.index > start) {
+      tokens += measure(start, match.index);
+      start = match.index;
+    }
+    position = matcher.lastIndex;
+  }
+  if (position !== value.length)
+    throw new Error('Tokenizer pattern did not cover short input');
+  if (start < value.length) tokens += measure(start, value.length);
+  return tokens;
+}
+
 /** Reuse the exact rank-ordered merge algorithm with each codec's own assets. */
 export function createLongTextCounter(
   bpeRanks: string,
@@ -38,27 +75,7 @@ export function createLongTextCounter(
     const short = (value: string): number =>
       counted(value, () => {
         if (unitCache === undefined) return countShort(value);
-        const matcher = new RegExp(pieces);
-        let tokens = 0;
-        let position = 0;
-        for (
-          let match = matcher.exec(value);
-          match !== null;
-          match = matcher.exec(value)
-        ) {
-          const piece = match[0];
-          let measured = shortPieces.get(piece);
-          if (measured === undefined) {
-            measured = countShort(piece);
-            // Bound auxiliary entries even for a row of entirely unique words.
-            if (shortPieces.size < 256) shortPieces.set(piece, measured);
-          }
-          tokens += measured;
-          position = matcher.lastIndex;
-        }
-        if (position !== value.length)
-          throw new Error('Tokenizer pattern did not cover short input');
-        return tokens;
+        return countShortBatches(value, pieces, countShort, shortPieces);
       });
     if (text.length <= 512) return short(text);
     const matcher = new RegExp(pieces);
